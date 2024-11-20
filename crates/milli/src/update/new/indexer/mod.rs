@@ -300,7 +300,6 @@ where
                 let span = tracing::trace_span!(target: "indexing::documents::extract", "geo");
                 let _entered = span.enter();
 
-                // let geo_sender = extractor_sender.geo_points();
                 let Some(extractor) = GeoExtractor::new(&rtxn, index, grenad_parameters)? else {
                     break 'geo;
                 };
@@ -322,21 +321,6 @@ where
                     &indexing_context.must_stop_processing,
                 )?;
             }
-
-            // TODO THIS IS TOO MUCH
-            // - [ ] Extract fieldid docid facet number
-            // - [ ] Extract fieldid docid facet string
-            // - [ ] Extract facetid string fst
-            // - [ ] Extract facetid normalized string strings
-
-            // TODO Inverted Indexes again
-            // - [x] Extract fieldid facet isempty docids
-            // - [x] Extract fieldid facet isnull docids
-            // - [x] Extract fieldid facet exists docids
-
-            // TODO This is the normal system
-            // - [x] Extract fieldid facet number docids
-            // - [x] Extract fieldid facet string docids
 
             {
                 let span = tracing::trace_span!(target: "indexing::documents::extract", "FINISH");
