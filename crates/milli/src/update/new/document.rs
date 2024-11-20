@@ -322,10 +322,6 @@ where
     'inject_vectors: {
         let Some(vector_document) = vector_document else { break 'inject_vectors };
 
-        let vectors_fid = fields_ids_map
-            .id_or_insert(RESERVED_VECTORS_FIELD_NAME)
-            .ok_or(UserError::AttributeLimitReached)?;
-
         let mut vectors = BTreeMap::new();
         for res in vector_document.iter_vectors() {
             let (name, entry) = res?;
@@ -349,6 +345,10 @@ where
         if vectors.is_empty() {
             break 'inject_vectors;
         }
+
+        let vectors_fid = fields_ids_map
+            .id_or_insert(RESERVED_VECTORS_FIELD_NAME)
+            .ok_or(UserError::AttributeLimitReached)?;
 
         vectors_value = serde_json::value::to_raw_value(&vectors).unwrap();
         unordered_field_buffer.push((vectors_fid, &vectors_value));
