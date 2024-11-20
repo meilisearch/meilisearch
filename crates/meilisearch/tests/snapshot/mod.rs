@@ -65,7 +65,6 @@ async fn perform_snapshot() {
     let next_task = task.uid() + 1;
     loop {
         let (value, code) = index.get_task(next_task).await;
-        dbg!(&value);
         if code != 404 && value["status"].as_str() == Some("succeeded") {
             break;
         }

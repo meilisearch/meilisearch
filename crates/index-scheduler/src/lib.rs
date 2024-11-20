@@ -948,7 +948,6 @@ impl IndexScheduler {
         processing: &ProcessingTasks,
         query: &Query,
     ) -> Result<RoaringBitmap> {
-        dbg!();
         let mut batches = self.all_batch_ids(rtxn)?;
         if let Some(batch_id) = processing.batch.as_ref().map(|batch| batch.uid) {
             batches.insert(batch_id);
@@ -4160,7 +4159,6 @@ mod tests {
             tasks: [0, 1, 2, 3].into_iter().collect(),
         };
         let task_cancelation = index_scheduler.register(kind, None, false).unwrap();
-        println!("HEEERE");
         handle.advance_n_successful_batches(1);
 
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "start");
