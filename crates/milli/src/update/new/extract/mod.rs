@@ -174,19 +174,16 @@ pub mod perm_json_p {
         }) {
             Selection::Skip
         } else if let Some(selectors) = selectors {
-            selectors
-                .iter()
-                .filter_map(|selector| {
-                    if contained_in(field_name, selector) {
-                        Some(Selection::Select)
-                    } else if contained_in(selector, field_name) {
-                        Some(Selection::Parent)
-                    } else {
-                        None
-                    }
-                })
-                .next()
-                .unwrap_or(Selection::Skip)
+            let mut selection = Selection::Skip;
+            for selector in selectors {
+                if contained_in(field_name, selector) {
+                    selection = Selection::Select;
+                    break;
+                } else if contained_in(selector, field_name) {
+                    selection = Selection::Parent;
+                }
+            }
+            selection
         } else {
             Selection::Select
         }
