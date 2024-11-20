@@ -56,6 +56,8 @@ pub enum InternalError {
     #[error(transparent)]
     SerdeJson(#[from] serde_json::Error),
     #[error(transparent)]
+    BincodeError(#[from] bincode::Error),
+    #[error(transparent)]
     Serialization(#[from] SerializationError),
     #[error(transparent)]
     Store(#[from] MdbError),

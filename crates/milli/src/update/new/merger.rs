@@ -48,8 +48,7 @@ where
     }
 
     let mut file = tempfile::tempfile()?;
-    /// manage error
-    bincode::serialize_into(&mut file, &rtree).unwrap();
+    bincode::serialize_into(&mut file, &rtree).map_err(InternalError::BincodeError)?;
     file.sync_all()?;
 
     let rtree_mmap = unsafe { Mmap::map(&file)? };
