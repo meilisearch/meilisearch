@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize, Serializer};
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
+use crate::batches::BatchId;
 use crate::error::ResponseError;
 use crate::keys::Key;
 use crate::settings::{Settings, Unchecked};
@@ -22,6 +23,7 @@ pub type TaskId = u32;
 #[serde(rename_all = "camelCase")]
 pub struct Task {
     pub uid: TaskId,
+    pub batch_uid: Option<BatchId>,
 
     #[serde(with = "time::serde::rfc3339")]
     pub enqueued_at: OffsetDateTime,
@@ -361,7 +363,9 @@ impl From<&KindWithContent> for Option<Details> {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Sequence)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Sequence, PartialOrd, Ord,
+)]
 #[serde(rename_all = "camelCase")]
 pub enum Status {
     Enqueued,
@@ -420,7 +424,9 @@ impl fmt::Display for ParseTaskStatusError {
 }
 impl std::error::Error for ParseTaskStatusError {}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Sequence)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Sequence, PartialOrd, Ord,
+)]
 #[serde(rename_all = "camelCase")]
 pub enum Kind {
     DocumentAdditionOrUpdate,

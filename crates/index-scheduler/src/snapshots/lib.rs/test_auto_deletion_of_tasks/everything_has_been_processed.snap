@@ -1,9 +1,10 @@
 ---
-source: index-scheduler/src/lib.rs
+source: crates/index-scheduler/src/lib.rs
 ---
 [
   {
     "uid": 6,
+    "batchUid": 6,
     "enqueuedAt": "[date]",
     "startedAt": "[date]",
     "finishedAt": "[date]",

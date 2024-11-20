@@ -1,8 +1,9 @@
 ---
-source: meilisearch/tests/vector/mod.rs
+source: crates/meilisearch/tests/vector/mod.rs
 ---
 {
   "uid": "[uid]",
+  "batchUid": "[batch_uid]",
   "indexUid": "doggo",
   "status": "succeeded",
   "type": "settingsUpdate",

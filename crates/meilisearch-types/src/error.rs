@@ -322,6 +322,7 @@ InvalidTaskReverse                    , InvalidRequest       , BAD_REQUEST ;
 InvalidTaskStatuses                   , InvalidRequest       , BAD_REQUEST ;
 InvalidTaskTypes                      , InvalidRequest       , BAD_REQUEST ;
 InvalidTaskUids                       , InvalidRequest       , BAD_REQUEST  ;
+InvalidBatchUids                      , InvalidRequest       , BAD_REQUEST  ;
 IoError                               , System               , UNPROCESSABLE_ENTITY;
 FeatureNotEnabled                     , InvalidRequest       , BAD_REQUEST ;
 MalformedPayload                      , InvalidRequest       , BAD_REQUEST ;
@@ -343,6 +344,7 @@ NoSpaceLeftOnDevice                   , System               , UNPROCESSABLE_ENT
 PayloadTooLarge                       , InvalidRequest       , PAYLOAD_TOO_LARGE ;
 TooManySearchRequests                 , System               , SERVICE_UNAVAILABLE ;
 TaskNotFound                          , InvalidRequest       , NOT_FOUND ;
+BatchNotFound                         , InvalidRequest       , NOT_FOUND ;
 TooManyOpenFiles                      , System               , UNPROCESSABLE_ENTITY ;
 TooManyVectors                        , InvalidRequest       , BAD_REQUEST ;
 UnretrievableDocument                 , Internal             , BAD_REQUEST ;

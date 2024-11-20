@@ -91,6 +91,7 @@ async fn update_embedder() {
     snapshot!(ret, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "succeeded",
       "type": "settingsUpdate",

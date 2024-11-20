@@ -1,4 +1,5 @@
 mod auth;
+mod batches;
 mod common;
 mod dashboard;
 mod documents;

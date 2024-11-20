@@ -1,10 +1,11 @@
 ---
-source: meilisearch/tests/dumps/mod.rs
+source: crates/meilisearch/tests/dumps/mod.rs
 ---
 {
   "results": [
     {
       "uid": 92,
+      "batchUid": null,
       "indexUid": "rubygems",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",

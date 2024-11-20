@@ -1,9 +1,10 @@
 ---
-source: index-scheduler/src/lib.rs
+source: crates/index-scheduler/src/lib.rs
 ---
 [
   {
     "uid": 2,
+    "batchUid": null,
     "enqueuedAt": "[date]",
     "startedAt": "[date]",
     "finishedAt": "[date]",
@@ -24,6 +25,7 @@ source: index-scheduler/src/lib.rs
   },
   {
     "uid": 3,
+    "batchUid": null,
     "enqueuedAt": "[date]",
     "startedAt": "[date]",
     "finishedAt": "[date]",
@@ -44,6 +46,7 @@ source: index-scheduler/src/lib.rs
   },
   {
     "uid": 4,
+    "batchUid": 2,
     "enqueuedAt": "[date]",
     "startedAt": "[date]",
     "finishedAt": "[date]",

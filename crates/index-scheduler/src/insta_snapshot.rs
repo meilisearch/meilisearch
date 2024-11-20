@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 use std::fmt::Write;
 
+use meilisearch_types::batches::Batch;
 use meilisearch_types::heed::types::{SerdeBincode, SerdeJson, Str};
 use meilisearch_types::heed::{Database, RoTxn};
 use meilisearch_types::milli::{CboRoaringBitmapCodec, RoaringBitmapCodec, BEU32};
@@ -24,6 +25,9 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
         file_store,
         env,
         all_tasks,
+        all_batches,
+        batch_to_tasks_mapping,
+        // task reverse index
         status,
         kind,
         index_tasks,
@@ -31,6 +35,15 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
         enqueued_at,
         started_at,
         finished_at,
+
+        // batch reverse index
+        batch_status,
+        batch_kind,
+        batch_index_tasks,
+        batch_enqueued_at,
+        batch_started_at,
+        batch_finished_at,
+
         index_mapper,
         features: _,
         max_number_of_tasks: _,
@@ -52,10 +65,13 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
 
     let mut snap = String::new();
 
-    let processing_tasks = processing_tasks.read().unwrap().processing.clone();
+    let processing = processing_tasks.read().unwrap().clone();
     snap.push_str(&format!("### Autobatching Enabled = {autobatching_enabled}\n"));
-    snap.push_str("### Processing Tasks:\n");
-    snap.push_str(&snapshot_bitmap(&processing_tasks));
+    snap.push_str(&format!(
+        "### Processing batch {:?}:\n",
+        processing.batch.map(|batch| batch.uid)
+    ));
+    snap.push_str(&snapshot_bitmap(&processing.processing));
     snap.push_str("\n----------------------------------------------------------------------\n");
 
     snap.push_str("### All Tasks:\n");
@@ -92,6 +108,38 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
 
     snap.push_str("### Finished At:\n");
     snap.push_str(&snapshot_date_db(&rtxn, *finished_at));
+    snap.push_str("----------------------------------------------------------------------\n");
+
+    snap.push_str("### All Batches:\n");
+    snap.push_str(&snapshot_all_batches(&rtxn, *all_batches));
+    snap.push_str("----------------------------------------------------------------------\n");
+
+    snap.push_str("### Batch to tasks mapping:\n");
+    snap.push_str(&snapshot_batches_to_tasks_mappings(&rtxn, *batch_to_tasks_mapping));
+    snap.push_str("----------------------------------------------------------------------\n");
+
+    snap.push_str("### Batches Status:\n");
+    snap.push_str(&snapshot_status(&rtxn, *batch_status));
+    snap.push_str("----------------------------------------------------------------------\n");
+
+    snap.push_str("### Batches Kind:\n");
+    snap.push_str(&snapshot_kind(&rtxn, *batch_kind));
+    snap.push_str("----------------------------------------------------------------------\n");
+
+    snap.push_str("### Batches Index Tasks:\n");
+    snap.push_str(&snapshot_index_tasks(&rtxn, *batch_index_tasks));
+    snap.push_str("----------------------------------------------------------------------\n");
+
+    snap.push_str("### Batches Enqueued At:\n");
+    snap.push_str(&snapshot_date_db(&rtxn, *batch_enqueued_at));
+    snap.push_str("----------------------------------------------------------------------\n");
+
+    snap.push_str("### Batches Started At:\n");
+    snap.push_str(&snapshot_date_db(&rtxn, *batch_started_at));
+    snap.push_str("----------------------------------------------------------------------\n");
+
+    snap.push_str("### Batches Finished At:\n");
+    snap.push_str(&snapshot_date_db(&rtxn, *batch_finished_at));
     snap.push_str("----------------------------------------------------------------------\n");
 
     snap.push_str("### File Store:\n");
@@ -131,6 +179,29 @@ pub fn snapshot_all_tasks(rtxn: &RoTxn, db: Database<BEU32, SerdeJson<Task>>) ->
     snap
 }
 
+pub fn snapshot_all_batches(rtxn: &RoTxn, db: Database<BEU32, SerdeJson<Batch>>) -> String {
+    let mut snap = String::new();
+    let iter = db.iter(rtxn).unwrap();
+    for next in iter {
+        let (batch_id, batch) = next.unwrap();
+        snap.push_str(&format!("{batch_id} {}\n", snapshot_batch(&batch)));
+    }
+    snap
+}
+
+pub fn snapshot_batches_to_tasks_mappings(
+    rtxn: &RoTxn,
+    db: Database<BEU32, CboRoaringBitmapCodec>,
+) -> String {
+    let mut snap = String::new();
+    let iter = db.iter(rtxn).unwrap();
+    for next in iter {
+        let (batch_id, tasks) = next.unwrap();
+        snap.push_str(&format!("{batch_id} {}\n", snapshot_bitmap(&tasks)));
+    }
+    snap
+}
+
 pub fn snapshot_date_db(rtxn: &RoTxn, db: Database<BEI128, CboRoaringBitmapCodec>) -> String {
     let mut snap = String::new();
     let iter = db.iter(rtxn).unwrap();
@@ -145,6 +216,7 @@ pub fn snapshot_task(task: &Task) -> String {
     let mut snap = String::new();
     let Task {
         uid,
+        batch_uid,
         enqueued_at: _,
         started_at: _,
         finished_at: _,
@@ -156,6 +228,9 @@ pub fn snapshot_task(task: &Task) -> String {
     } = task;
     snap.push('{');
     snap.push_str(&format!("uid: {uid}, "));
+    if let Some(batch_uid) = batch_uid {
+        snap.push_str(&format!("batch_uid: {batch_uid}, "));
+    }
     snap.push_str(&format!("status: {status}, "));
     if let Some(canceled_by) = canceled_by {
         snap.push_str(&format!("canceled_by: {canceled_by}, "));
@@ -271,6 +346,21 @@ pub fn snapshot_canceled_by(rtxn: &RoTxn, db: Database<BEU32, RoaringBitmapCodec
     }
     snap
 }
+
+pub fn snapshot_batch(batch: &Batch) -> String {
+    let mut snap = String::new();
+    let Batch { uid, details, stats, started_at, finished_at } = batch;
+    if let Some(finished_at) = finished_at {
+        assert!(finished_at > started_at);
+    }
+    snap.push('{');
+    snap.push_str(&format!("uid: {uid}, "));
+    snap.push_str(&format!("details: {}, ", serde_json::to_string(details).unwrap()));
+    snap.push_str(&format!("stats: {}, ", serde_json::to_string(stats).unwrap()));
+    snap.push('}');
+    snap
+}
+
 pub fn snapshot_index_mapper(rtxn: &RoTxn, mapper: &IndexMapper) -> String {
     let mut s = String::new();
     let names = mapper.index_names(rtxn).unwrap();

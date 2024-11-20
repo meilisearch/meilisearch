@@ -1,0 +1,34 @@
+use std::collections::BTreeMap;
+
+use serde::{Deserialize, Serialize};
+use time::OffsetDateTime;
+
+use crate::{
+    task_view::DetailsView,
+    tasks::{Kind, Status},
+};
+
+pub type BatchId = u32;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Batch {
+    pub uid: BatchId,
+
+    pub details: DetailsView,
+    pub stats: BatchStats,
+
+    #[serde(with = "time::serde::rfc3339")]
+    pub started_at: OffsetDateTime,
+    #[serde(with = "time::serde::rfc3339::option")]
+    pub finished_at: Option<OffsetDateTime>,
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchStats {
+    pub total_nb_tasks: BatchId,
+    pub status: BTreeMap<Status, u32>,
+    pub types: BTreeMap<Kind, u32>,
+    pub index_uids: BTreeMap<String, u32>,
+}

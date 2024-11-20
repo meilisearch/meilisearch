@@ -70,6 +70,7 @@ impl CompatV5ToV6 {
 
                 let task = v6::Task {
                     uid: task_view.uid,
+                    batch_uid: None,
                     index_uid: task_view.index_uid,
                     status: match task_view.status {
                         v5::Status::Enqueued => v6::Status::Enqueued,
@@ -449,7 +450,7 @@ pub(crate) mod test {
         // tasks
         let tasks = dump.tasks().unwrap().collect::<Result<Vec<_>>>().unwrap();
         let (tasks, update_files): (Vec<_>, Vec<_>) = tasks.into_iter().unzip();
-        meili_snap::snapshot_hash!(meili_snap::json_string!(tasks), @"41f91d3a94911b2735ec41b07540df5c");
+        meili_snap::snapshot_hash!(meili_snap::json_string!(tasks), @"4b03e23e740b27bfb9d2a1faffe512e2");
         assert_eq!(update_files.len(), 22);
         assert!(update_files[0].is_none()); // the dump creation
         assert!(update_files[1].is_some()); // the enqueued document addition

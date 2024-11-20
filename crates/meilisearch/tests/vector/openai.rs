@@ -365,6 +365,7 @@ async fn it_works() {
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -595,6 +596,7 @@ async fn tokenize_long_text() {
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -651,6 +653,7 @@ async fn bad_api_key() {
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -683,6 +686,7 @@ async fn bad_api_key() {
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "settingsUpdate",
@@ -727,6 +731,7 @@ async fn bad_api_key() {
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "failed",
       "type": "settingsUpdate",
@@ -796,6 +801,7 @@ async fn bad_model() {
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -873,6 +879,7 @@ async fn bad_dimensions() {
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -980,6 +987,7 @@ async fn smaller_dimensions() {
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -1211,6 +1219,7 @@ async fn small_embedding_model() {
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -1441,6 +1450,7 @@ async fn legacy_embedding_model() {
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -1672,6 +1682,7 @@ async fn it_still_works() {
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "doggo",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",

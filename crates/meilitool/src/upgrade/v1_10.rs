@@ -76,13 +76,6 @@ fn update_index_stats(
 ) -> anyhow::Result<()> {
     let ctx = || format!("while updating index stats for index `{index_uid}`");
 
-    let stats: Option<&str> = index_stats
-        .remap_data_type::<Str>()
-        .get(sched_wtxn, &index_uuid)
-        .with_context(ctx)
-        .with_context(|| "While reading value")?;
-    dbg!(stats);
-
     let stats: Option<v1_9::IndexStats> = index_stats
         .remap_data_type::<SerdeJson<v1_9::IndexStats>>()
         .get(sched_wtxn, &index_uuid)
