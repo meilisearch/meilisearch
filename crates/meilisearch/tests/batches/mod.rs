@@ -186,14 +186,14 @@ async fn get_batch_filter_error() {
 
     let (response, code) = server.batches_filter("lol=pied").await;
     assert_eq!(code, 400, "{}", response);
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r#"
     {
-      "message": "Unknown parameter `lol`: expected one of `limit`, `from`, `batchUids`, `uids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt`",
+      "message": "Unknown parameter `lol`: expected one of `limit`, `from`, `reverse`, `batchUids`, `uids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt`",
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad_request"
     }
-    "###);
+    "#);
 
     let (response, code) = server.batches_filter("uids=pied").await;
     assert_eq!(code, 400, "{}", response);
