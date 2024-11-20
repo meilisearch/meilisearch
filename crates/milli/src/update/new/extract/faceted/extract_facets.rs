@@ -183,7 +183,7 @@ impl FacetedDocidsExtractor {
 
         match value {
             // Number
-            // key: fid - level - orderedf64 - orignalf64
+            // key: fid - level - orderedf64 - originalf64
             Value::Number(number) => {
                 let mut ordered = [0u8; 16];
                 if number
@@ -221,7 +221,7 @@ impl FacetedDocidsExtractor {
                 buffer.extend_from_slice(truncated.as_bytes());
                 cache_fn(cached_sorter, &buffer, docid)
             }
-            /// Bool is handled as a string
+            // Bool is handled as a string
             Value::Bool(b) => {
                 let b = if *b { "true" } else { "false" };
                 let mut string = BVec::new_in(doc_alloc);
