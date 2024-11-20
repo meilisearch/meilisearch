@@ -207,7 +207,7 @@ impl FacetedDocidsExtractor {
             }
             // String
             // key: fid - level - truncated_string
-            Value::String(s) => {
+            Value::String(s) if !s.is_empty() => {
                 let mut string = BVec::new_in(doc_alloc);
                 string.extend_from_slice(s.as_bytes());
                 facet_fn(del_add_facet_value, fid, string, FacetKind::String);
@@ -219,6 +219,20 @@ impl FacetedDocidsExtractor {
                 buffer.extend_from_slice(&fid.to_be_bytes());
                 buffer.push(0); // level 0
                 buffer.extend_from_slice(truncated.as_bytes());
+                cache_fn(cached_sorter, &buffer, docid)
+            }
+            /// Bool is handled as a string
+            Value::Bool(b) => {
+                let b = if *b { "true" } else { "false" };
+                let mut string = BVec::new_in(doc_alloc);
+                string.extend_from_slice(b.as_bytes());
+                facet_fn(del_add_facet_value, fid, string, FacetKind::String);
+
+                buffer.clear();
+                buffer.push(FacetKind::String as u8);
+                buffer.extend_from_slice(&fid.to_be_bytes());
+                buffer.push(0); // level 0
+                buffer.extend_from_slice(b.as_bytes());
                 cache_fn(cached_sorter, &buffer, docid)
             }
             // Null
@@ -237,6 +251,12 @@ impl FacetedDocidsExtractor {
                 buffer.extend_from_slice(&fid.to_be_bytes());
                 cache_fn(cached_sorter, &buffer, docid)
             }
+            Value::String(_) => {
+                buffer.clear();
+                buffer.push(FacetKind::Empty as u8);
+                buffer.extend_from_slice(&fid.to_be_bytes());
+                cache_fn(cached_sorter, &buffer, docid)
+            }
             Value::Object(o) if o.is_empty() && depth == perm_json_p::Depth::OnBaseKey => {
                 buffer.clear();
                 buffer.push(FacetKind::Empty as u8);
@@ -244,7 +264,6 @@ impl FacetedDocidsExtractor {
                 cache_fn(cached_sorter, &buffer, docid)
             }
             // Otherwise, do nothing
-            /// TODO: What about Value::Bool?
             _ => Ok(()),
         }
     }
