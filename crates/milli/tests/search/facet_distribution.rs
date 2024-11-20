@@ -25,10 +25,12 @@ fn test_facet_distribution_with_no_facet_values() {
         S("tags"),
     });
     builder.execute(|_| (), || false).unwrap();
+    wtxn.commit().unwrap();
 
     // index documents
     let config = IndexerConfig { max_memory: Some(10 * 1024 * 1024), ..Default::default() };
     let rtxn = index.read_txn().unwrap();
+    let mut wtxn = index.write_txn().unwrap();
     let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let mut new_fields_ids_map = db_fields_ids_map.clone();
 
@@ -66,13 +68,13 @@ fn test_facet_distribution_with_no_facet_values() {
 
     wtxn.commit().unwrap();
 
-    let txn = index.read_txn().unwrap();
-    let mut distrib = FacetDistribution::new(&txn, &index);
+    let rtxn = index.read_txn().unwrap();
+    let mut distrib = FacetDistribution::new(&rtxn, &index);
     distrib.facets(vec![("genres", OrderBy::default())]);
     let result = distrib.execute().unwrap();
     assert_eq!(result["genres"].len(), 0);
 
-    let mut distrib = FacetDistribution::new(&txn, &index);
+    let mut distrib = FacetDistribution::new(&rtxn, &index);
     distrib.facets(vec![("tags", OrderBy::default())]);
     let result = distrib.execute().unwrap();
     assert_eq!(result["tags"].len(), 2);
