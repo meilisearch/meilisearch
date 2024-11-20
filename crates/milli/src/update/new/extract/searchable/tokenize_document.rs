@@ -40,6 +40,12 @@ impl<'a> DocumentTokenizer<'a> {
                     return Err(UserError::AttributeLimitReached.into());
                 };
 
+                if select_field(field_name, self.attribute_to_extract, self.attribute_to_skip)
+                    != Selection::Select
+                {
+                    return Ok(());
+                }
+
                 let position = field_position
                     .entry(field_id)
                     .and_modify(|counter| *counter += MAX_DISTANCE)
@@ -87,30 +93,25 @@ impl<'a> DocumentTokenizer<'a> {
                 Ok(())
             };
 
-            // if the current field is searchable or contains a searchable attribute
-            if select_field(field_name, self.attribute_to_extract, self.attribute_to_skip)
-                != Selection::Skip
-            {
-                // parse json.
-                match serde_json::to_value(value).map_err(InternalError::SerdeJson)? {
-                    Value::Object(object) => seek_leaf_values_in_object(
-                        &object,
-                        self.attribute_to_extract,
-                        self.attribute_to_skip,
-                        field_name,
-                        Depth::OnBaseKey,
-                        &mut tokenize_field,
-                    )?,
-                    Value::Array(array) => seek_leaf_values_in_array(
-                        &array,
-                        self.attribute_to_extract,
-                        self.attribute_to_skip,
-                        field_name,
-                        Depth::OnBaseKey,
-                        &mut tokenize_field,
-                    )?,
-                    value => tokenize_field(field_name, Depth::OnBaseKey, &value)?,
-                }
+            // parse json.
+            match serde_json::to_value(value).map_err(InternalError::SerdeJson)? {
+                Value::Object(object) => seek_leaf_values_in_object(
+                    &object,
+                    None,
+                    &[],
+                    field_name,
+                    Depth::OnBaseKey,
+                    &mut tokenize_field,
+                )?,
+                Value::Array(array) => seek_leaf_values_in_array(
+                    &array,
+                    None,
+                    &[],
+                    field_name,
+                    Depth::OnBaseKey,
+                    &mut tokenize_field,
+                )?,
+                value => tokenize_field(field_name, Depth::OnBaseKey, &value)?,
             }
         }
 

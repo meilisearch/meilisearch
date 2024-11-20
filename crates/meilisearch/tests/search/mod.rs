@@ -1623,15 +1623,14 @@ async fn change_attributes_settings() {
     index
         .search(
             json!({
-                "q": "bobby"
+                "q": "bobby",
+                "attributesToRetrieve": ["id", "doggos"]
             }),
             |response, code| {
                 assert_eq!(code, 200, "{}", response);
                 meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
                 [
                   {
-                    "father": "jean",
-                    "mother": "michelle",
                     "id": 852,
                     "doggos": [
                       {
@@ -1642,15 +1641,7 @@ async fn change_attributes_settings() {
                         "name": "buddy",
                         "age": 4
                       }
-                    ],
-                    "cattos": "pésti",
-                    "_vectors": {
-                      "manual": [
-                        1.0,
-                        2.0,
-                        3.0
-                      ]
-                    }
+                    ]
                   }
                 ]
                 "###);
@@ -1663,15 +1654,14 @@ async fn change_attributes_settings() {
         .search(
             json!({
                 "q": "",
-                "filter": "doggos.age < 5"
+                "filter": "doggos.age < 5",
+                "attributesToRetrieve": ["id", "doggos"]
             }),
             |response, code| {
                 assert_eq!(code, 200, "{}", response);
                 meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
                 [
                   {
-                    "father": "jean",
-                    "mother": "michelle",
                     "id": 852,
                     "doggos": [
                       {
@@ -1682,15 +1672,7 @@ async fn change_attributes_settings() {
                         "name": "buddy",
                         "age": 4
                       }
-                    ],
-                    "cattos": "pésti",
-                    "_vectors": {
-                      "manual": [
-                        1.0,
-                        2.0,
-                        3.0
-                      ]
-                    }
+                    ]
                   }
                 ]
                 "###);

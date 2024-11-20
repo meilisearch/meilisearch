@@ -75,12 +75,12 @@ pub trait SearchableExtractor: Sized + Sync {
         let dictionary = indexing_context.index.dictionary(&rtxn)?;
         let dictionary: Option<Vec<_>> =
             dictionary.as_ref().map(|s| s.iter().map(String::as_str).collect());
-        let builder = tokenizer_builder(
+        let mut builder = tokenizer_builder(
             stop_words.as_ref(),
             allowed_separators.as_deref(),
             dictionary.as_deref(),
         );
-        let tokenizer = builder.into_tokenizer();
+        let tokenizer = builder.build();
 
         let attributes_to_extract = Self::attributes_to_extract(&rtxn, indexing_context.index)?;
         let attributes_to_skip = Self::attributes_to_skip(&rtxn, indexing_context.index)?;
