@@ -948,21 +948,44 @@ impl IndexScheduler {
         processing: &ProcessingTasks,
         query: &Query,
     ) -> Result<RoaringBitmap> {
+        let Query {
+            limit,
+            from,
+            reverse,
+            uids,
+            batch_uids,
+            statuses,
+            types,
+            index_uids,
+            canceled_by,
+            before_enqueued_at,
+            after_enqueued_at,
+            before_started_at,
+            after_started_at,
+            before_finished_at,
+            after_finished_at,
+        } = query;
+
         let mut batches = self.all_batch_ids(rtxn)?;
         if let Some(batch_id) = processing.batch.as_ref().map(|batch| batch.uid) {
             batches.insert(batch_id);
         }
 
-        if let Some(from) = &query.from {
-            batches.remove_range(from.saturating_add(1)..);
+        if let Some(from) = from {
+            let range = if reverse.unwrap_or_default() {
+                u32::MIN..*from
+            } else {
+                from.saturating_add(1)..u32::MAX
+            };
+            batches.remove_range(range);
         }
 
-        if let Some(batch_uids) = &query.batch_uids {
+        if let Some(batch_uids) = &batch_uids {
             let batches_uids = RoaringBitmap::from_iter(batch_uids);
             batches &= batches_uids;
         }
 
-        if let Some(status) = &query.statuses {
+        if let Some(status) = &statuses {
             let mut status_batches = RoaringBitmap::new();
             for status in status {
                 match status {
@@ -985,7 +1008,7 @@ impl IndexScheduler {
             batches &= status_batches;
         }
 
-        if let Some(task_uids) = &query.uids {
+        if let Some(task_uids) = &uids {
             let mut batches_by_task_uids = RoaringBitmap::new();
             for task_uid in task_uids {
                 if let Some(task) = self.get_task(rtxn, *task_uid)? {
@@ -998,7 +1021,7 @@ impl IndexScheduler {
         }
 
         // There is no database for this query, we must retrieve the task queried by the client and ensure it's valid
-        if let Some(canceled_by) = &query.canceled_by {
+        if let Some(canceled_by) = &canceled_by {
             let mut all_canceled_batches = RoaringBitmap::new();
             for cancel_uid in canceled_by {
                 if let Some(task) = self.get_task(rtxn, *cancel_uid)? {
@@ -1021,7 +1044,7 @@ impl IndexScheduler {
             }
         }
 
-        if let Some(kind) = &query.types {
+        if let Some(kind) = &types {
             let mut kind_batches = RoaringBitmap::new();
             for kind in kind {
                 kind_batches |= self.get_batch_kind(rtxn, *kind)?;
@@ -1036,7 +1059,7 @@ impl IndexScheduler {
             batches &= &kind_batches;
         }
 
-        if let Some(index) = &query.index_uids {
+        if let Some(index) = &index_uids {
             let mut index_batches = RoaringBitmap::new();
             for index in index {
                 index_batches |= self.index_batches(rtxn, index)?;
@@ -1077,17 +1100,17 @@ impl IndexScheduler {
                         filtered_processing_batches.clear();
                     }
                 };
-            match (query.after_started_at, query.before_started_at) {
+            match (after_started_at, before_started_at) {
                 (None, None) => (),
                 (None, Some(before)) => {
-                    clear_filtered_processing_batches(Bound::Unbounded, Bound::Excluded(before))
+                    clear_filtered_processing_batches(Bound::Unbounded, Bound::Excluded(*before))
                 }
                 (Some(after), None) => {
-                    clear_filtered_processing_batches(Bound::Excluded(after), Bound::Unbounded)
+                    clear_filtered_processing_batches(Bound::Excluded(*after), Bound::Unbounded)
                 }
                 (Some(after), Some(before)) => clear_filtered_processing_batches(
-                    Bound::Excluded(after),
-                    Bound::Excluded(before),
+                    Bound::Excluded(*after),
+                    Bound::Excluded(*before),
                 ),
             };
 
@@ -1095,8 +1118,8 @@ impl IndexScheduler {
                 rtxn,
                 &mut filtered_non_processing_batches,
                 self.batch_started_at,
-                query.after_started_at,
-                query.before_started_at,
+                *after_started_at,
+                *before_started_at,
             )?;
             filtered_non_processing_batches | filtered_processing_batches
         };
@@ -1105,20 +1128,24 @@ impl IndexScheduler {
             rtxn,
             &mut batches,
             self.batch_enqueued_at,
-            query.after_enqueued_at,
-            query.before_enqueued_at,
+            *after_enqueued_at,
+            *before_enqueued_at,
         )?;
 
         keep_ids_within_datetimes(
             rtxn,
             &mut batches,
             self.batch_finished_at,
-            query.after_finished_at,
-            query.before_finished_at,
+            *after_finished_at,
+            *before_finished_at,
         )?;
 
-        if let Some(limit) = query.limit {
-            batches = batches.into_iter().rev().take(limit as usize).collect();
+        if let Some(limit) = limit {
+            batches = if query.reverse.unwrap_or_default() {
+                batches.into_iter().take(*limit as usize).collect()
+            } else {
+                batches.into_iter().rev().take(*limit as usize).collect()
+            };
         }
 
         Ok(batches)
@@ -1372,11 +1399,16 @@ impl IndexScheduler {
 
         let (batches, total) =
             self.get_batch_ids_from_authorized_indexes(&rtxn, &processing, &query, filters)?;
+        let batches = if query.reverse.unwrap_or_default() {
+            Box::new(batches.into_iter()) as Box<dyn Iterator<Item = u32>>
+        } else {
+            Box::new(batches.into_iter().rev()) as Box<dyn Iterator<Item = u32>>
+        };
 
         let batches = self.get_existing_batches(
             &rtxn,
             &processing,
-            batches.into_iter().rev().take(query.limit.unwrap_or(u32::MAX) as usize),
+            batches.take(query.limit.unwrap_or(u32::MAX) as usize),
         )?;
 
         Ok((batches, total))

@@ -115,6 +115,33 @@ async fn batch_bad_from() {
 }
 
 #[actix_rt::test]
+async fn bask_bad_reverse() {
+    let server = Server::new_shared();
+
+    let (response, code) = server.batches_filter("reverse=doggo").await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(response, @r###"
+    {
+      "message": "Invalid value in parameter `reverse`: could not parse `doggo` as a boolean, expected either `true` or `false`",
+      "code": "invalid_task_reverse",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_task_reverse"
+    }
+    "###);
+
+    let (response, code) = server.batches_filter("reverse=*").await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(response, @r###"
+    {
+      "message": "Invalid value in parameter `reverse`: could not parse `*` as a boolean, expected either `true` or `false`",
+      "code": "invalid_task_reverse",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_task_reverse"
+    }
+    "###);
+}
+
+#[actix_rt::test]
 async fn batch_bad_after_enqueued_at() {
     let server = Server::new_shared();
 

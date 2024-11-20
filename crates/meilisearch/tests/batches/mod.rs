@@ -50,6 +50,44 @@ async fn list_batches() {
 }
 
 #[actix_rt::test]
+async fn list_batches_pagination_and_reverse() {
+    let server = Server::new().await;
+    // First of all we want to create a lot of batches very quickly. The fastest way is to delete a lot of unexisting indexes
+    let mut last_batch = None;
+    for i in 0..10 {
+        let index = server.index(format!("test-{i}"));
+        last_batch = Some(index.create(None).await.0.uid());
+    }
+    server.wait_task(last_batch.unwrap()).await;
+
+    let (response, code) = server.batches_filter("limit=3").await;
+    assert_eq!(code, 200);
+    let results = response["results"].as_array().unwrap();
+    let batch_ids: Vec<_> = results.iter().map(|ret| ret["uid"].as_u64().unwrap()).collect();
+    snapshot!(format!("{batch_ids:?}"), @"[9, 8, 7]");
+
+    let (response, code) = server.batches_filter("limit=3&from=1").await;
+    assert_eq!(code, 200);
+    let results = response["results"].as_array().unwrap();
+    let batch_ids: Vec<_> = results.iter().map(|ret| ret["uid"].as_u64().unwrap()).collect();
+    snapshot!(format!("{batch_ids:?}"), @"[1, 0]");
+
+    // In reversed order
+
+    let (response, code) = server.batches_filter("limit=3&reverse=true").await;
+    assert_eq!(code, 200);
+    let results = response["results"].as_array().unwrap();
+    let batch_ids: Vec<_> = results.iter().map(|ret| ret["uid"].as_u64().unwrap()).collect();
+    snapshot!(format!("{batch_ids:?}"), @"[0, 1, 2]");
+
+    let (response, code) = server.batches_filter("limit=3&from=8&reverse=true").await;
+    assert_eq!(code, 200);
+    let results = response["results"].as_array().unwrap();
+    let batch_ids: Vec<_> = results.iter().map(|ret| ret["uid"].as_u64().unwrap()).collect();
+    snapshot!(format!("{batch_ids:?}"), @"[8, 9]");
+}
+
+#[actix_rt::test]
 async fn list_batches_with_star_filters() {
     let server = Server::new().await;
     let index = server.index("test");
