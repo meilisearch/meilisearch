@@ -3,6 +3,7 @@ use enum_iterator::Sequence;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Sequence)]
 #[repr(u16)]
 pub enum Step {
+    PreparingPayloads,
     ExtractingDocuments,
     ExtractingFacets,
     ExtractingWords,
@@ -20,6 +21,7 @@ pub enum Step {
 impl Step {
     pub fn name(&self) -> &'static str {
         match self {
+            Step::PreparingPayloads => "preparing update file",
             Step::ExtractingDocuments => "extracting documents",
             Step::ExtractingFacets => "extracting facets",
             Step::ExtractingWords => "extracting words",
