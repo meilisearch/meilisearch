@@ -5,6 +5,7 @@ snapshot_kind: text
 ### Autobatching Enabled = true
 ### Processing batch Some(0):
 [0,]
+{uid: 0, details: {"dumpUid":null}, stats: {"totalNbTasks":1,"status":{"enqueued":1},"types":{"dumpCreation":1},"indexUids":{}}, }
 ----------------------------------------------------------------------
 ### All Tasks:
 0 {uid: 0, status: enqueued, details: { dump_uid: None }, kind: DumpCreation { keys: [], instance_uid: None }}

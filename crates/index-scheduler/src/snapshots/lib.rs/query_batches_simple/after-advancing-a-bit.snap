@@ -5,6 +5,7 @@ snapshot_kind: text
 ### Autobatching Enabled = true
 ### Processing batch Some(1):
 [1,]
+{uid: 1, details: {"primaryKey":"sheep"}, stats: {"totalNbTasks":2,"status":{"enqueued":2},"types":{"indexCreation":2},"indexUids":{"doggo":2}}, }
 ----------------------------------------------------------------------
 ### All Tasks:
 0 {uid: 0, batch_uid: 0, status: succeeded, details: { primary_key: Some("mouse") }, kind: IndexCreation { index_uid: "catto", primary_key: Some("mouse") }}

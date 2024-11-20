@@ -5,6 +5,7 @@ snapshot_kind: text
 ### Autobatching Enabled = true
 ### Processing batch Some(0):
 [3,]
+{uid: 0, details: {"matchedTasks":2,"deletedTasks":null,"originalFilter":"test_query"}, stats: {"totalNbTasks":1,"status":{"enqueued":1},"types":{"taskDeletion":1},"indexUids":{}}, }
 ----------------------------------------------------------------------
 ### All Tasks:
 0 {uid: 0, status: enqueued, details: { primary_key: Some("mouse") }, kind: IndexCreation { index_uid: "catto", primary_key: Some("mouse") }}

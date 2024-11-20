@@ -5,6 +5,7 @@ snapshot_kind: text
 ### Autobatching Enabled = true
 ### Processing batch Some(0):
 [0,]
+{uid: 0, details: {"receivedDocuments":2,"indexedDocuments":null}, stats: {"totalNbTasks":2,"status":{"enqueued":2},"types":{"documentAdditionOrUpdate":2},"indexUids":{"doggos":2}}, }
 ----------------------------------------------------------------------
 ### All Tasks:
 0 {uid: 0, status: enqueued, details: { received_documents: 1, indexed_documents: None }, kind: DocumentAdditionOrUpdate { index_uid: "doggos", primary_key: Some("id"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000000, documents_count: 1, allow_index_creation: true }}
