@@ -1343,6 +1343,7 @@ impl IndexScheduler {
                     &rtxn,
                     primary_key.as_deref(),
                     &mut new_fields_ids_map,
+                    &|| must_stop_processing.get(),
                 )?;
 
                 let mut addition = 0;

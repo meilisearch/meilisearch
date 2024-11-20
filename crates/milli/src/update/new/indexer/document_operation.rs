@@ -41,14 +41,18 @@ impl<'pl> DocumentOperation<'pl> {
         self.operations.push(Payload::Deletion(to_delete))
     }
 
-    pub fn into_changes(
+    pub fn into_changes<MSP>(
         self,
         indexer: &'pl Bump,
         index: &Index,
         rtxn: &'pl RoTxn<'pl>,
         primary_key_from_op: Option<&'pl str>,
         new_fields_ids_map: &mut FieldsIdsMap,
-    ) -> Result<(DocumentOperationChanges<'pl>, Vec<PayloadStats>, Option<PrimaryKey<'pl>>)> {
+        must_stop_processing: &MSP,
+    ) -> Result<(DocumentOperationChanges<'pl>, Vec<PayloadStats>, Option<PrimaryKey<'pl>>)>
+    where
+        MSP: Fn() -> bool,
+    {
         let Self { operations, method } = self;
 
         let documents_ids = index.documents_ids(rtxn)?;
@@ -58,6 +62,9 @@ impl<'pl> DocumentOperation<'pl> {
         let mut primary_key = None;
 
         for operation in operations {
+            if (must_stop_processing)() {
+                return Err(InternalError::AbortedIndexation.into());
+            }
             let mut bytes = 0;
             let result = match operation {
                 Payload::Addition(payload) => extract_addition_payload_changes(
