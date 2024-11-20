@@ -2902,48 +2902,50 @@ mod tests {
     fn placeholder_search_should_not_return_deleted_documents() {
         let index = TempIndex::new();
 
-        let mut wtxn = index.write_txn().unwrap();
         index
-            .update_settings_using_wtxn(&mut wtxn, |settings| {
+            .update_settings(|settings| {
                 settings.set_primary_key(S("docid"));
             })
             .unwrap();
 
         index
-            .add_documents_using_wtxn(
-                &mut wtxn,
-                documents!([
-                    { "docid": "1_4",  "label": ["sign"] },
-                    { "docid": "1_5",  "label": ["letter"] },
-                    { "docid": "1_7",  "label": ["abstract","cartoon","design","pattern"] },
-                    { "docid": "1_36", "label": ["drawing","painting","pattern"] },
-                    { "docid": "1_37", "label": ["art","drawing","outdoor"] },
-                    { "docid": "1_38", "label": ["aquarium","art","drawing"] },
-                    { "docid": "1_39", "label": ["abstract"] },
-                    { "docid": "1_40", "label": ["cartoon"] },
-                    { "docid": "1_41", "label": ["art","drawing"] },
-                    { "docid": "1_42", "label": ["art","pattern"] },
-                    { "docid": "1_43", "label": ["abstract","art","drawing","pattern"] },
-                    { "docid": "1_44", "label": ["drawing"] },
-                    { "docid": "1_45", "label": ["art"] },
-                    { "docid": "1_46", "label": ["abstract","colorfulness","pattern"] },
-                    { "docid": "1_47", "label": ["abstract","pattern"] },
-                    { "docid": "1_52", "label": ["abstract","cartoon"] },
-                    { "docid": "1_57", "label": ["abstract","drawing","pattern"] },
-                    { "docid": "1_58", "label": ["abstract","art","cartoon"] },
-                    { "docid": "1_68", "label": ["design"] },
-                    { "docid": "1_69", "label": ["geometry"] },
-                    { "docid": "1_70", "label2": ["geometry", 1.2] },
-                    { "docid": "1_71", "label2": ["design", 2.2] },
-                    { "docid": "1_72", "label2": ["geometry", 1.2] }
-                ]),
-            )
+            .add_documents(documents!([
+                { "docid": "1_4",  "label": ["sign"] },
+                { "docid": "1_5",  "label": ["letter"] },
+                { "docid": "1_7",  "label": ["abstract","cartoon","design","pattern"] },
+                { "docid": "1_36", "label": ["drawing","painting","pattern"] },
+                { "docid": "1_37", "label": ["art","drawing","outdoor"] },
+                { "docid": "1_38", "label": ["aquarium","art","drawing"] },
+                { "docid": "1_39", "label": ["abstract"] },
+                { "docid": "1_40", "label": ["cartoon"] },
+                { "docid": "1_41", "label": ["art","drawing"] },
+                { "docid": "1_42", "label": ["art","pattern"] },
+                { "docid": "1_43", "label": ["abstract","art","drawing","pattern"] },
+                { "docid": "1_44", "label": ["drawing"] },
+                { "docid": "1_45", "label": ["art"] },
+                { "docid": "1_46", "label": ["abstract","colorfulness","pattern"] },
+                { "docid": "1_47", "label": ["abstract","pattern"] },
+                { "docid": "1_52", "label": ["abstract","cartoon"] },
+                { "docid": "1_57", "label": ["abstract","drawing","pattern"] },
+                { "docid": "1_58", "label": ["abstract","art","cartoon"] },
+                { "docid": "1_68", "label": ["design"] },
+                { "docid": "1_69", "label": ["geometry"] },
+                { "docid": "1_70", "label2": ["geometry", 1.2] },
+                { "docid": "1_71", "label2": ["design", 2.2] },
+                { "docid": "1_72", "label2": ["geometry", 1.2] }
+            ]))
             .unwrap();
+
+        let mut wtxn = index.write_txn().unwrap();
 
         let deleted_internal_ids = delete_documents(&mut wtxn, &index, &["1_4"]);
 
+        wtxn.commit().unwrap();
+
         // Placeholder search
-        let results = index.search(&wtxn).execute().unwrap();
+        let rtxn = index.static_read_txn().unwrap();
+
+        let results = index.search(&rtxn).execute().unwrap();
         assert!(!results.documents_ids.is_empty());
         for id in results.documents_ids.iter() {
             assert!(
@@ -2953,55 +2955,54 @@ mod tests {
             );
         }
 
-        wtxn.commit().unwrap();
+        drop(rtxn);
     }
 
     #[test]
     fn search_should_not_return_deleted_documents() {
         let index = TempIndex::new();
 
-        let mut wtxn = index.write_txn().unwrap();
         index
-            .update_settings_using_wtxn(&mut wtxn, |settings| {
+            .update_settings(|settings| {
                 settings.set_primary_key(S("docid"));
             })
             .unwrap();
 
         index
-            .add_documents_using_wtxn(
-                &mut wtxn,
-                documents!([
-                    { "docid": "1_4",  "label": ["sign"] },
-                    { "docid": "1_5",  "label": ["letter"] },
-                    { "docid": "1_7",  "label": ["abstract","cartoon","design","pattern"] },
-                    { "docid": "1_36", "label": ["drawing","painting","pattern"] },
-                    { "docid": "1_37", "label": ["art","drawing","outdoor"] },
-                    { "docid": "1_38", "label": ["aquarium","art","drawing"] },
-                    { "docid": "1_39", "label": ["abstract"] },
-                    { "docid": "1_40", "label": ["cartoon"] },
-                    { "docid": "1_41", "label": ["art","drawing"] },
-                    { "docid": "1_42", "label": ["art","pattern"] },
-                    { "docid": "1_43", "label": ["abstract","art","drawing","pattern"] },
-                    { "docid": "1_44", "label": ["drawing"] },
-                    { "docid": "1_45", "label": ["art"] },
-                    { "docid": "1_46", "label": ["abstract","colorfulness","pattern"] },
-                    { "docid": "1_47", "label": ["abstract","pattern"] },
-                    { "docid": "1_52", "label": ["abstract","cartoon"] },
-                    { "docid": "1_57", "label": ["abstract","drawing","pattern"] },
-                    { "docid": "1_58", "label": ["abstract","art","cartoon"] },
-                    { "docid": "1_68", "label": ["design"] },
-                    { "docid": "1_69", "label": ["geometry"] },
-                    { "docid": "1_70", "label2": ["geometry", 1.2] },
-                    { "docid": "1_71", "label2": ["design", 2.2] },
-                    { "docid": "1_72", "label2": ["geometry", 1.2] }
-                ]),
-            )
+            .add_documents(documents!([
+                { "docid": "1_4",  "label": ["sign"] },
+                { "docid": "1_5",  "label": ["letter"] },
+                { "docid": "1_7",  "label": ["abstract","cartoon","design","pattern"] },
+                { "docid": "1_36", "label": ["drawing","painting","pattern"] },
+                { "docid": "1_37", "label": ["art","drawing","outdoor"] },
+                { "docid": "1_38", "label": ["aquarium","art","drawing"] },
+                { "docid": "1_39", "label": ["abstract"] },
+                { "docid": "1_40", "label": ["cartoon"] },
+                { "docid": "1_41", "label": ["art","drawing"] },
+                { "docid": "1_42", "label": ["art","pattern"] },
+                { "docid": "1_43", "label": ["abstract","art","drawing","pattern"] },
+                { "docid": "1_44", "label": ["drawing"] },
+                { "docid": "1_45", "label": ["art"] },
+                { "docid": "1_46", "label": ["abstract","colorfulness","pattern"] },
+                { "docid": "1_47", "label": ["abstract","pattern"] },
+                { "docid": "1_52", "label": ["abstract","cartoon"] },
+                { "docid": "1_57", "label": ["abstract","drawing","pattern"] },
+                { "docid": "1_58", "label": ["abstract","art","cartoon"] },
+                { "docid": "1_68", "label": ["design"] },
+                { "docid": "1_69", "label": ["geometry"] },
+                { "docid": "1_70", "label2": ["geometry", 1.2] },
+                { "docid": "1_71", "label2": ["design", 2.2] },
+                { "docid": "1_72", "label2": ["geometry", 1.2] }
+            ]))
             .unwrap();
 
+        let mut wtxn = index.write_txn().unwrap();
         let deleted_internal_ids = delete_documents(&mut wtxn, &index, &["1_7", "1_52"]);
+        wtxn.commit().unwrap();
 
         // search for abstract
-        let results = index.search(&wtxn).query("abstract").execute().unwrap();
+        let rtxn = index.read_txn().unwrap();
+        let results = index.search(&rtxn).query("abstract").execute().unwrap();
         assert!(!results.documents_ids.is_empty());
         for id in results.documents_ids.iter() {
             assert!(
@@ -3010,8 +3011,6 @@ mod tests {
                 id
             );
         }
-
-        wtxn.commit().unwrap();
     }
 
     #[test]
