@@ -491,7 +491,6 @@ fn compute_prefix_database(
     wtxn: &mut RwTxn,
     prefix_delta: PrefixDelta,
 ) -> Result<()> {
-    eprintln!("prefix_delta: {:?}", &prefix_delta);
     let PrefixDelta { modified, deleted } = prefix_delta;
     // Compute word prefix docids
     compute_word_prefix_docids(wtxn, index, &modified, &deleted)?;
@@ -609,7 +608,6 @@ fn compute_facet_level_database(
     wtxn: &mut RwTxn,
     facet_field_ids_delta: FacetFieldIdsDelta,
 ) -> Result<()> {
-    eprintln!("facet_field_ids_delta: {:?}", &facet_field_ids_delta);
     if let Some(modified_facet_string_ids) = facet_field_ids_delta.modified_facet_string_ids() {
         let span = tracing::trace_span!(target: "indexing::facet_field_ids", "string");
         let _entered = span.enter();

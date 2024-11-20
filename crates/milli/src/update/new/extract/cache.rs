@@ -160,14 +160,14 @@ impl<'extractor> BalancedCaches<'extractor> {
         let BalancedCaches { hasher: _, alloc, max_memory: _, caches } = self;
 
         if let InnerCaches::Normal(normal_caches) = caches {
-            eprintln!(
+            tracing::trace!(
                 "We are spilling after we allocated {} bytes on thread #{}",
                 alloc.allocated_bytes(),
                 rayon::current_thread_index().unwrap_or(0)
             );
 
             let allocated: usize = normal_caches.caches.iter().map(|m| m.allocation_size()).sum();
-            eprintln!("The last allocated HashMap took {allocated} bytes");
+            tracing::trace!("The last allocated HashMap took {allocated} bytes");
 
             let dummy = NormalCaches { caches: Vec::new() };
             let NormalCaches { caches: cache_maps } = mem::replace(normal_caches, dummy);

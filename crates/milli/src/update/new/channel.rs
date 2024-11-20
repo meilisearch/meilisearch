@@ -202,7 +202,7 @@ impl Drop for ExtractorSender {
         let send_count = *self.send_count.get_mut();
         let writer_contentious_count = *self.writer_contentious_count.get_mut();
         let extractor_contentious_count = *self.extractor_contentious_count.get_mut();
-        eprintln!(
+        tracing::debug!(
             "Extractor channel stats: {send_count} sends, \
             {writer_contentious_count} writer contentions ({}%), \
             {extractor_contentious_count} extractor contentions ({}%)",

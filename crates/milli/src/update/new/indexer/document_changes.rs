@@ -224,10 +224,10 @@ where
     MSP: Fn() -> bool + Sync,
     SP: Fn(Progress) + Sync,
 {
-    eprintln!("We are resetting the extractor allocators");
+    tracing::trace!("We are resetting the extractor allocators");
     // Clean up and reuse the extractor allocs
     for extractor_alloc in extractor_allocs.iter_mut() {
-        eprintln!("\tWith {} bytes resetted", extractor_alloc.0.allocated_bytes());
+        tracing::trace!("\tWith {} bytes reset", extractor_alloc.0.allocated_bytes());
         extractor_alloc.0.reset();
     }
 
