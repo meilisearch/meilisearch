@@ -43,7 +43,7 @@ catto [0,]
 0 {uid: 0, details: {"receivedDocuments":1,"indexedDocuments":0,"matchedTasks":1,"canceledTasks":1,"originalFilter":"test_query"}, stats: {"totalNbTasks":2,"status":{"succeeded":1,"canceled":1},"types":{"documentAdditionOrUpdate":1,"taskCancelation":1},"indexUids":{"catto":1}}, }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:
-0 [1,]
+0 [0,1,]
 ----------------------------------------------------------------------
 ### Batches Status:
 succeeded [0,]
@@ -67,6 +67,5 @@ catto [0,]
 [timestamp] [0,]
 ----------------------------------------------------------------------
 ### File Store:
-00000000-0000-0000-0000-000000000000
 
 ----------------------------------------------------------------------
