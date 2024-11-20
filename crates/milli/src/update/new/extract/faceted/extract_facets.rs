@@ -251,7 +251,7 @@ impl FacetedDocidsExtractor {
                 buffer.extend_from_slice(&fid.to_be_bytes());
                 cache_fn(cached_sorter, &buffer, docid)
             }
-            Value::String(_) => {
+            Value::String(_) if depth == perm_json_p::Depth::OnBaseKey => {
                 buffer.clear();
                 buffer.push(FacetKind::Empty as u8);
                 buffer.extend_from_slice(&fid.to_be_bytes());
