@@ -143,7 +143,14 @@ fn indexing_songs_default(c: &mut Criterion) {
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
-                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .into_changes(
+                        &indexer_alloc,
+                        &index,
+                        &rtxn,
+                        None,
+                        &mut new_fields_ids_map,
+                        &|| false,
+                    )
                     .unwrap();
 
                 indexer::index(
@@ -201,7 +208,14 @@ fn reindexing_songs_default(c: &mut Criterion) {
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
-                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .into_changes(
+                        &indexer_alloc,
+                        &index,
+                        &rtxn,
+                        None,
+                        &mut new_fields_ids_map,
+                        &|| false,
+                    )
                     .unwrap();
 
                 indexer::index(
@@ -237,7 +251,14 @@ fn reindexing_songs_default(c: &mut Criterion) {
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
-                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .into_changes(
+                        &indexer_alloc,
+                        &index,
+                        &rtxn,
+                        None,
+                        &mut new_fields_ids_map,
+                        &|| false,
+                    )
                     .unwrap();
 
                 indexer::index(
@@ -297,7 +318,14 @@ fn deleting_songs_in_batches_default(c: &mut Criterion) {
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
-                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .into_changes(
+                        &indexer_alloc,
+                        &index,
+                        &rtxn,
+                        None,
+                        &mut new_fields_ids_map,
+                        &|| false,
+                    )
                     .unwrap();
 
                 indexer::index(
@@ -365,7 +393,14 @@ fn indexing_songs_in_three_batches_default(c: &mut Criterion) {
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
-                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .into_changes(
+                        &indexer_alloc,
+                        &index,
+                        &rtxn,
+                        None,
+                        &mut new_fields_ids_map,
+                        &|| false,
+                    )
                     .unwrap();
 
                 indexer::index(
@@ -401,7 +436,14 @@ fn indexing_songs_in_three_batches_default(c: &mut Criterion) {
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
-                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .into_changes(
+                        &indexer_alloc,
+                        &index,
+                        &rtxn,
+                        None,
+                        &mut new_fields_ids_map,
+                        &|| false,
+                    )
                     .unwrap();
 
                 indexer::index(
@@ -433,7 +475,14 @@ fn indexing_songs_in_three_batches_default(c: &mut Criterion) {
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
-                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .into_changes(
+                        &indexer_alloc,
+                        &index,
+                        &rtxn,
+                        None,
+                        &mut new_fields_ids_map,
+                        &|| false,
+                    )
                     .unwrap();
 
                 indexer::index(
@@ -492,7 +541,14 @@ fn indexing_songs_without_faceted_numbers(c: &mut Criterion) {
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
-                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .into_changes(
+                        &indexer_alloc,
+                        &index,
+                        &rtxn,
+                        None,
+                        &mut new_fields_ids_map,
+                        &|| false,
+                    )
                     .unwrap();
 
                 indexer::index(
@@ -550,7 +606,14 @@ fn indexing_songs_without_faceted_fields(c: &mut Criterion) {
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
-                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .into_changes(
+                        &indexer_alloc,
+                        &index,
+                        &rtxn,
+                        None,
+                        &mut new_fields_ids_map,
+                        &|| false,
+                    )
                     .unwrap();
 
                 indexer::index(
@@ -608,7 +671,14 @@ fn indexing_wiki(c: &mut Criterion) {
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
-                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .into_changes(
+                        &indexer_alloc,
+                        &index,
+                        &rtxn,
+                        None,
+                        &mut new_fields_ids_map,
+                        &|| false,
+                    )
                     .unwrap();
 
                 indexer::index(
@@ -665,7 +735,14 @@ fn reindexing_wiki(c: &mut Criterion) {
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
-                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .into_changes(
+                        &indexer_alloc,
+                        &index,
+                        &rtxn,
+                        None,
+                        &mut new_fields_ids_map,
+                        &|| false,
+                    )
                     .unwrap();
 
                 indexer::index(
@@ -701,7 +778,14 @@ fn reindexing_wiki(c: &mut Criterion) {
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
-                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .into_changes(
+                        &indexer_alloc,
+                        &index,
+                        &rtxn,
+                        None,
+                        &mut new_fields_ids_map,
+                        &|| false,
+                    )
                     .unwrap();
 
                 indexer::index(
@@ -760,7 +844,14 @@ fn deleting_wiki_in_batches_default(c: &mut Criterion) {
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
-                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .into_changes(
+                        &indexer_alloc,
+                        &index,
+                        &rtxn,
+                        None,
+                        &mut new_fields_ids_map,
+                        &|| false,
+                    )
                     .unwrap();
 
                 indexer::index(
@@ -828,7 +919,14 @@ fn indexing_wiki_in_three_batches(c: &mut Criterion) {
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
-                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .into_changes(
+                        &indexer_alloc,
+                        &index,
+                        &rtxn,
+                        None,
+                        &mut new_fields_ids_map,
+                        &|| false,
+                    )
                     .unwrap();
 
                 indexer::index(
@@ -865,7 +963,14 @@ fn indexing_wiki_in_three_batches(c: &mut Criterion) {
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
-                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .into_changes(
+                        &indexer_alloc,
+                        &index,
+                        &rtxn,
+                        None,
+                        &mut new_fields_ids_map,
+                        &|| false,
+                    )
                     .unwrap();
 
                 indexer::index(
@@ -898,7 +1003,14 @@ fn indexing_wiki_in_three_batches(c: &mut Criterion) {
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
-                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .into_changes(
+                        &indexer_alloc,
+                        &index,
+                        &rtxn,
+                        None,
+                        &mut new_fields_ids_map,
+                        &|| false,
+                    )
                     .unwrap();
 
                 indexer::index(
@@ -956,7 +1068,14 @@ fn indexing_movies_default(c: &mut Criterion) {
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
-                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .into_changes(
+                        &indexer_alloc,
+                        &index,
+                        &rtxn,
+                        None,
+                        &mut new_fields_ids_map,
+                        &|| false,
+                    )
                     .unwrap();
 
                 indexer::index(
@@ -1013,7 +1132,14 @@ fn reindexing_movies_default(c: &mut Criterion) {
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
-                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .into_changes(
+                        &indexer_alloc,
+                        &index,
+                        &rtxn,
+                        None,
+                        &mut new_fields_ids_map,
+                        &|| false,
+                    )
                     .unwrap();
 
                 indexer::index(
@@ -1049,7 +1175,14 @@ fn reindexing_movies_default(c: &mut Criterion) {
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
-                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .into_changes(
+                        &indexer_alloc,
+                        &index,
+                        &rtxn,
+                        None,
+                        &mut new_fields_ids_map,
+                        &|| false,
+                    )
                     .unwrap();
 
                 indexer::index(
@@ -1108,7 +1241,14 @@ fn deleting_movies_in_batches_default(c: &mut Criterion) {
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
-                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .into_changes(
+                        &indexer_alloc,
+                        &index,
+                        &rtxn,
+                        None,
+                        &mut new_fields_ids_map,
+                        &|| false,
+                    )
                     .unwrap();
 
                 indexer::index(
@@ -1211,7 +1351,14 @@ fn indexing_movies_in_three_batches(c: &mut Criterion) {
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
-                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .into_changes(
+                        &indexer_alloc,
+                        &index,
+                        &rtxn,
+                        None,
+                        &mut new_fields_ids_map,
+                        &|| false,
+                    )
                     .unwrap();
 
                 indexer::index(
@@ -1247,7 +1394,14 @@ fn indexing_movies_in_three_batches(c: &mut Criterion) {
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
-                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .into_changes(
+                        &indexer_alloc,
+                        &index,
+                        &rtxn,
+                        None,
+                        &mut new_fields_ids_map,
+                        &|| false,
+                    )
                     .unwrap();
 
                 indexer::index(
@@ -1279,7 +1433,14 @@ fn indexing_movies_in_three_batches(c: &mut Criterion) {
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
-                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .into_changes(
+                        &indexer_alloc,
+                        &index,
+                        &rtxn,
+                        None,
+                        &mut new_fields_ids_map,
+                        &|| false,
+                    )
                     .unwrap();
 
                 indexer::index(
@@ -1360,7 +1521,14 @@ fn indexing_nested_movies_default(c: &mut Criterion) {
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
-                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .into_changes(
+                        &indexer_alloc,
+                        &index,
+                        &rtxn,
+                        None,
+                        &mut new_fields_ids_map,
+                        &|| false,
+                    )
                     .unwrap();
 
                 indexer::index(
@@ -1442,7 +1610,14 @@ fn deleting_nested_movies_in_batches_default(c: &mut Criterion) {
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
-                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .into_changes(
+                        &indexer_alloc,
+                        &index,
+                        &rtxn,
+                        None,
+                        &mut new_fields_ids_map,
+                        &|| false,
+                    )
                     .unwrap();
 
                 indexer::index(
@@ -1516,7 +1691,14 @@ fn indexing_nested_movies_without_faceted_fields(c: &mut Criterion) {
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
-                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .into_changes(
+                        &indexer_alloc,
+                        &index,
+                        &rtxn,
+                        None,
+                        &mut new_fields_ids_map,
+                        &|| false,
+                    )
                     .unwrap();
 
                 indexer::index(
@@ -1574,7 +1756,14 @@ fn indexing_geo(c: &mut Criterion) {
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
-                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .into_changes(
+                        &indexer_alloc,
+                        &index,
+                        &rtxn,
+                        None,
+                        &mut new_fields_ids_map,
+                        &|| false,
+                    )
                     .unwrap();
 
                 indexer::index(
@@ -1631,7 +1820,14 @@ fn reindexing_geo(c: &mut Criterion) {
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
-                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .into_changes(
+                        &indexer_alloc,
+                        &index,
+                        &rtxn,
+                        None,
+                        &mut new_fields_ids_map,
+                        &|| false,
+                    )
                     .unwrap();
 
                 indexer::index(
@@ -1667,7 +1863,14 @@ fn reindexing_geo(c: &mut Criterion) {
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
-                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .into_changes(
+                        &indexer_alloc,
+                        &index,
+                        &rtxn,
+                        None,
+                        &mut new_fields_ids_map,
+                        &|| false,
+                    )
                     .unwrap();
 
                 indexer::index(
@@ -1726,7 +1929,14 @@ fn deleting_geo_in_batches_default(c: &mut Criterion) {
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
-                    .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map)
+                    .into_changes(
+                        &indexer_alloc,
+                        &index,
+                        &rtxn,
+                        None,
+                        &mut new_fields_ids_map,
+                        &|| false,
+                    )
                     .unwrap();
 
                 indexer::index(

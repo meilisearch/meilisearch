@@ -127,6 +127,7 @@ fn main() {
                                     &rtxn,
                                     None,
                                     &mut new_fields_ids_map,
+                                    &|| false,
                                 )
                                 .unwrap();
 

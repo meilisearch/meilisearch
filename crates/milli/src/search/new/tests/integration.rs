@@ -64,8 +64,9 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     indexer.add_documents(&payload).unwrap();
 
     let indexer_alloc = Bump::new();
-    let (document_changes, operation_stats, primary_key) =
-        indexer.into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map).unwrap();
+    let (document_changes, operation_stats, primary_key) = indexer
+        .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map, &|| false)
+        .unwrap();
 
     if let Some(error) = operation_stats.into_iter().find_map(|stat| stat.error) {
         panic!("{error}");

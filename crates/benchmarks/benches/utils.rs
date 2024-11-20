@@ -102,8 +102,9 @@ pub fn base_setup(conf: &Conf) -> Index {
     indexer.add_documents(&documents).unwrap();
 
     let indexer_alloc = Bump::new();
-    let (document_changes, _operation_stats, primary_key) =
-        indexer.into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map).unwrap();
+    let (document_changes, _operation_stats, primary_key) = indexer
+        .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map, &|| false)
+        .unwrap();
 
     indexer::index(
         &mut wtxn,

@@ -1940,7 +1940,14 @@ mod tests {
 
         let indexer_alloc = Bump::new();
         let (_document_changes, operation_stats, _primary_key) = indexer
-            .into_changes(&indexer_alloc, &index.inner, &rtxn, None, &mut new_fields_ids_map)
+            .into_changes(
+                &indexer_alloc,
+                &index.inner,
+                &rtxn,
+                None,
+                &mut new_fields_ids_map,
+                &|| false,
+            )
             .unwrap();
 
         assert_eq!(operation_stats.iter().filter(|ps| ps.error.is_none()).count(), 1);
@@ -2116,7 +2123,14 @@ mod tests {
         indexer.add_documents(&documents).unwrap();
         indexer.delete_documents(&["2"]);
         let (document_changes, _operation_stats, primary_key) = indexer
-            .into_changes(&indexer_alloc, &index.inner, &rtxn, None, &mut new_fields_ids_map)
+            .into_changes(
+                &indexer_alloc,
+                &index.inner,
+                &rtxn,
+                None,
+                &mut new_fields_ids_map,
+                &|| false,
+            )
             .unwrap();
 
         indexer::index(
@@ -2169,7 +2183,14 @@ mod tests {
         let indexer_alloc = Bump::new();
         let embedders = EmbeddingConfigs::default();
         let (document_changes, _operation_stats, primary_key) = indexer
-            .into_changes(&indexer_alloc, &index.inner, &rtxn, None, &mut new_fields_ids_map)
+            .into_changes(
+                &indexer_alloc,
+                &index.inner,
+                &rtxn,
+                None,
+                &mut new_fields_ids_map,
+                &|| false,
+            )
             .unwrap();
 
         indexer::index(
@@ -2213,7 +2234,14 @@ mod tests {
         indexer.add_documents(&documents).unwrap();
 
         let (document_changes, _operation_stats, primary_key) = indexer
-            .into_changes(&indexer_alloc, &index.inner, &rtxn, None, &mut new_fields_ids_map)
+            .into_changes(
+                &indexer_alloc,
+                &index.inner,
+                &rtxn,
+                None,
+                &mut new_fields_ids_map,
+                &|| false,
+            )
             .unwrap();
 
         indexer::index(
@@ -2256,7 +2284,14 @@ mod tests {
         indexer.delete_documents(&["1", "2"]);
 
         let (document_changes, _operation_stats, primary_key) = indexer
-            .into_changes(&indexer_alloc, &index.inner, &rtxn, None, &mut new_fields_ids_map)
+            .into_changes(
+                &indexer_alloc,
+                &index.inner,
+                &rtxn,
+                None,
+                &mut new_fields_ids_map,
+                &|| false,
+            )
             .unwrap();
 
         indexer::index(
@@ -2301,7 +2336,14 @@ mod tests {
         indexer.add_documents(&documents).unwrap();
 
         let (document_changes, _operation_stats, primary_key) = indexer
-            .into_changes(&indexer_alloc, &index.inner, &rtxn, None, &mut new_fields_ids_map)
+            .into_changes(
+                &indexer_alloc,
+                &index.inner,
+                &rtxn,
+                None,
+                &mut new_fields_ids_map,
+                &|| false,
+            )
             .unwrap();
 
         indexer::index(
@@ -2351,7 +2393,14 @@ mod tests {
         indexer.delete_documents(&["1", "2", "1", "2"]);
 
         let (document_changes, _operation_stats, primary_key) = indexer
-            .into_changes(&indexer_alloc, &index.inner, &rtxn, None, &mut new_fields_ids_map)
+            .into_changes(
+                &indexer_alloc,
+                &index.inner,
+                &rtxn,
+                None,
+                &mut new_fields_ids_map,
+                &|| false,
+            )
             .unwrap();
 
         indexer::index(
@@ -2394,7 +2443,14 @@ mod tests {
         indexer.add_documents(&documents).unwrap();
 
         let (document_changes, _operation_stats, primary_key) = indexer
-            .into_changes(&indexer_alloc, &index.inner, &rtxn, None, &mut new_fields_ids_map)
+            .into_changes(
+                &indexer_alloc,
+                &index.inner,
+                &rtxn,
+                None,
+                &mut new_fields_ids_map,
+                &|| false,
+            )
             .unwrap();
 
         indexer::index(
@@ -2437,7 +2493,14 @@ mod tests {
         indexer.add_documents(&documents).unwrap();
 
         let (document_changes, _operation_stats, primary_key) = indexer
-            .into_changes(&indexer_alloc, &index.inner, &rtxn, None, &mut new_fields_ids_map)
+            .into_changes(
+                &indexer_alloc,
+                &index.inner,
+                &rtxn,
+                None,
+                &mut new_fields_ids_map,
+                &|| false,
+            )
             .unwrap();
 
         indexer::index(
@@ -2622,7 +2685,14 @@ mod tests {
 
         // FINISHING
         let (document_changes, _operation_stats, primary_key) = indexer
-            .into_changes(&indexer_alloc, &index.inner, &rtxn, None, &mut new_fields_ids_map)
+            .into_changes(
+                &indexer_alloc,
+                &index.inner,
+                &rtxn,
+                None,
+                &mut new_fields_ids_map,
+                &|| false,
+            )
             .unwrap();
 
         indexer::index(
@@ -2672,7 +2742,14 @@ mod tests {
         indexer.add_documents(&documents).unwrap();
 
         let (document_changes, _operation_stats, primary_key) = indexer
-            .into_changes(&indexer_alloc, &index.inner, &rtxn, None, &mut new_fields_ids_map)
+            .into_changes(
+                &indexer_alloc,
+                &index.inner,
+                &rtxn,
+                None,
+                &mut new_fields_ids_map,
+                &|| false,
+            )
             .unwrap();
 
         indexer::index(
@@ -2719,7 +2796,14 @@ mod tests {
         indexer.add_documents(&documents).unwrap();
 
         let (document_changes, _operation_stats, primary_key) = indexer
-            .into_changes(&indexer_alloc, &index.inner, &rtxn, None, &mut new_fields_ids_map)
+            .into_changes(
+                &indexer_alloc,
+                &index.inner,
+                &rtxn,
+                None,
+                &mut new_fields_ids_map,
+                &|| false,
+            )
             .unwrap();
 
         indexer::index(

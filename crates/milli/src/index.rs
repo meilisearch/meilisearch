@@ -1763,6 +1763,7 @@ pub(crate) mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
+                &|| false,
             )?;
 
             if let Some(error) = operation_stats.into_iter().find_map(|stat| stat.error) {
@@ -1851,6 +1852,7 @@ pub(crate) mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
+                &|| false,
             )?;
 
             if let Some(error) = operation_stats.into_iter().find_map(|stat| stat.error) {
@@ -1923,7 +1925,14 @@ pub(crate) mod tests {
 
         let indexer_alloc = Bump::new();
         let (document_changes, _operation_stats, primary_key) = indexer
-            .into_changes(&indexer_alloc, &index.inner, &rtxn, None, &mut new_fields_ids_map)
+            .into_changes(
+                &indexer_alloc,
+                &index.inner,
+                &rtxn,
+                None,
+                &mut new_fields_ids_map,
+                &|| false,
+            )
             .unwrap();
 
         should_abort.store(true, Relaxed);
