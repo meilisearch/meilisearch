@@ -71,7 +71,7 @@ impl<'pl> DocumentOperation<'pl> {
             if must_stop_processing() {
                 return Err(InternalError::AbortedIndexation.into());
             }
-            send_progress(Progress::from_step_documents(
+            send_progress(Progress::from_step_substep(
                 Step::PreparingPayloads,
                 payload_index as u32,
                 payload_count as u32,
@@ -117,7 +117,7 @@ impl<'pl> DocumentOperation<'pl> {
             operations_stats.push(PayloadStats { document_count, bytes, error });
         }
 
-        send_progress(Progress::from_step_documents(
+        send_progress(Progress::from_step_substep(
             Step::PreparingPayloads,
             payload_count as u32,
             payload_count as u32,

@@ -1246,16 +1246,16 @@ impl IndexScheduler {
                 current_step,
                 finished_steps,
                 total_steps,
-                finished_documents,
-                total_documents,
+                finished_substeps,
+                total_substeps,
             } = processing_tasks.write().unwrap().update_progress(progress);
 
             tracing::info!(
                 current_step,
                 finished_steps,
                 total_steps,
-                finished_documents,
-                total_documents
+                finished_substeps,
+                total_substeps
             );
         };
 

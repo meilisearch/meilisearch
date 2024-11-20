@@ -45,8 +45,8 @@ pub struct TaskProgress {
     pub current_step: &'static str,
     pub finished_steps: u16,
     pub total_steps: u16,
-    pub finished_documents: Option<u32>,
-    pub total_documents: Option<u32>,
+    pub finished_substeps: Option<u32>,
+    pub total_substeps: Option<u32>,
 }
 
 impl Default for TaskProgress {
@@ -61,8 +61,8 @@ impl TaskProgress {
             current_step: "start",
             finished_steps: 0,
             total_steps: 1,
-            finished_documents: None,
-            total_documents: None,
+            finished_substeps: None,
+            total_substeps: None,
         }
     }
 
@@ -78,18 +78,18 @@ impl TaskProgress {
         self.total_steps = progress.total_steps;
 
         if self.finished_steps < progress.finished_steps {
-            self.finished_documents = None;
-            self.total_documents = None;
+            self.finished_substeps = None;
+            self.total_substeps = None;
         }
         self.finished_steps = progress.finished_steps;
-        if let Some((finished_documents, total_documents)) = progress.finished_total_documents {
-            if let Some(task_finished_documents) = self.finished_documents {
-                if task_finished_documents > finished_documents {
+        if let Some((finished_substeps, total_substeps)) = progress.finished_total_substep {
+            if let Some(task_finished_substeps) = self.finished_substeps {
+                if task_finished_substeps > finished_substeps {
                     return *self;
                 }
             }
-            self.finished_documents = Some(finished_documents);
-            self.total_documents = Some(total_documents);
+            self.finished_substeps = Some(finished_substeps);
+            self.total_substeps = Some(total_substeps);
         }
         *self
     }

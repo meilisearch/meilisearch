@@ -253,11 +253,7 @@ where
             }
             let finished_documents = (finished_documents * CHUNK_SIZE) as u32;
 
-            (send_progress)(Progress::from_step_documents(
-                step,
-                finished_documents,
-                total_documents,
-            ));
+            (send_progress)(Progress::from_step_substep(step, finished_documents, total_documents));
 
             // Clean up and reuse the document-specific allocator
             context.doc_alloc.reset();
@@ -276,7 +272,7 @@ where
         },
     )?;
 
-    (send_progress)(Progress::from_step_documents(step, total_documents, total_documents));
+    (send_progress)(Progress::from_step_substep(step, total_documents, total_documents));
 
     Ok(())
 }
@@ -285,7 +281,7 @@ pub struct Progress {
     pub finished_steps: u16,
     pub total_steps: u16,
     pub step_name: &'static str,
-    pub finished_total_documents: Option<(u32, u32)>,
+    pub finished_total_substep: Option<(u32, u32)>,
 }
 
 impl Progress {
@@ -294,12 +290,12 @@ impl Progress {
             finished_steps: step.finished_steps(),
             total_steps: Step::total_steps(),
             step_name: step.name(),
-            finished_total_documents: None,
+            finished_total_substep: None,
         }
     }
-    pub fn from_step_documents(step: Step, finished_documents: u32, total_documents: u32) -> Self {
+    pub fn from_step_substep(step: Step, finished_substep: u32, total_substep: u32) -> Self {
         Self {
-            finished_total_documents: Some((finished_documents, total_documents)),
+            finished_total_substep: Some((finished_substep, total_substep)),
             ..Progress::from_step(step)
         }
     }
