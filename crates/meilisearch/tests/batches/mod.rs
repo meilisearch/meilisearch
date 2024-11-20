@@ -46,7 +46,12 @@ async fn list_batches() {
         .await;
     let (response, code) = index.list_batches().await;
     assert_eq!(code, 200);
-    assert_eq!(response["results"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        response["results"].as_array().unwrap().len(),
+        2,
+        "{}",
+        serde_json::to_string_pretty(&response).unwrap()
+    );
 }
 
 #[actix_rt::test]

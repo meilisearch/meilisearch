@@ -61,9 +61,9 @@ impl ProcessingBatch {
 
     /// Update itself with the content of the task and update the batch id in the task.
     pub fn processing<'a>(&mut self, tasks: impl IntoIterator<Item = &'a mut Task>) {
-        self.stats.total_nb_tasks += 1;
-
         for task in tasks.into_iter() {
+            self.stats.total_nb_tasks += 1;
+
             task.batch_uid = Some(self.uid);
             // We don't store the statuses in the map since they're all enqueued but we must
             // still store them in the stats since that can be displayed.
