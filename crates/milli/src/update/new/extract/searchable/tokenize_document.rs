@@ -5,7 +5,7 @@ use serde_json::Value;
 
 use crate::update::new::document::Document;
 use crate::update::new::extract::perm_json_p::{
-    seek_leaf_values_in_array, seek_leaf_values_in_object, select_field, Depth,
+    seek_leaf_values_in_array, seek_leaf_values_in_object, select_field, Depth, Selection,
 };
 use crate::{
     FieldId, GlobalFieldsIdsMap, InternalError, LocalizedAttributesRule, Result, UserError,
@@ -88,7 +88,9 @@ impl<'a> DocumentTokenizer<'a> {
             };
 
             // if the current field is searchable or contains a searchable attribute
-            if select_field(field_name, self.attribute_to_extract, self.attribute_to_skip) {
+            if select_field(field_name, self.attribute_to_extract, self.attribute_to_skip)
+                != Selection::Skip
+            {
                 // parse json.
                 match serde_json::to_value(value).map_err(InternalError::SerdeJson)? {
                     Value::Object(object) => seek_leaf_values_in_object(

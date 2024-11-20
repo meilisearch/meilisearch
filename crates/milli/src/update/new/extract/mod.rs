@@ -88,25 +88,37 @@ pub mod perm_json_p {
 
             // here if the user only specified `doggo` we need to iterate in all the fields of `doggo`
             // so we check the contained_in on both side
-            let should_continue = select_field(&base_key, selectors, skip_selectors);
-            if should_continue {
+            let selection = select_field(&base_key, selectors, skip_selectors);
+            if selection != Selection::Skip {
                 match value {
-                    Value::Object(object) => seek_leaf_values_in_object(
-                        object,
-                        selectors,
-                        skip_selectors,
-                        &base_key,
-                        Depth::OnBaseKey,
-                        seeker,
-                    ),
-                    Value::Array(array) => seek_leaf_values_in_array(
-                        array,
-                        selectors,
-                        skip_selectors,
-                        &base_key,
-                        Depth::OnBaseKey,
-                        seeker,
-                    ),
+                    Value::Object(object) => {
+                        if selection == Selection::Select {
+                            seeker(&base_key, Depth::OnBaseKey, value)?;
+                        }
+
+                        seek_leaf_values_in_object(
+                            object,
+                            selectors,
+                            skip_selectors,
+                            &base_key,
+                            Depth::OnBaseKey,
+                            seeker,
+                        )
+                    }
+                    Value::Array(array) => {
+                        if selection == Selection::Select {
+                            seeker(&base_key, Depth::OnBaseKey, value)?;
+                        }
+
+                        seek_leaf_values_in_array(
+                            array,
+                            selectors,
+                            skip_selectors,
+                            &base_key,
+                            Depth::OnBaseKey,
+                            seeker,
+                        )
+                    }
                     value => seeker(&base_key, Depth::OnBaseKey, value),
                 }?;
             }
@@ -156,13 +168,37 @@ pub mod perm_json_p {
         field_name: &str,
         selectors: Option<&[&str]>,
         skip_selectors: &[&str],
-    ) -> bool {
-        selectors.map_or(true, |selectors| {
-            selectors.iter().any(|selector| {
-                contained_in(selector, field_name) || contained_in(field_name, selector)
-            })
-        }) && !skip_selectors.iter().any(|skip_selector| {
+    ) -> Selection {
+        if skip_selectors.iter().any(|skip_selector| {
             contained_in(skip_selector, field_name) || contained_in(field_name, skip_selector)
-        })
+        }) {
+            Selection::Skip
+        } else if let Some(selectors) = selectors {
+            selectors
+                .iter()
+                .filter_map(|selector| {
+                    if contained_in(field_name, selector) {
+                        Some(Selection::Select)
+                    } else if contained_in(selector, field_name) {
+                        Some(Selection::Parent)
+                    } else {
+                        None
+                    }
+                })
+                .next()
+                .unwrap_or(Selection::Skip)
+        } else {
+            Selection::Select
+        }
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum Selection {
+        /// The field is a parent of the of a nested field that must be selected
+        Parent,
+        /// The field must be selected
+        Select,
+        /// The field must be skipped
+        Skip,
     }
 }

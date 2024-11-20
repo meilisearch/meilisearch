@@ -24,25 +24,46 @@ pub fn extract_document_facets<'doc>(
             };
 
         // if the current field is searchable or contains a searchable attribute
-        if perm_json_p::select_field(field_name, Some(attributes_to_extract), &[]) {
+        let selection = perm_json_p::select_field(field_name, Some(attributes_to_extract), &[]);
+        if selection != perm_json_p::Selection::Skip {
             // parse json.
             match serde_json::value::to_value(value).map_err(InternalError::SerdeJson)? {
-                Value::Object(object) => perm_json_p::seek_leaf_values_in_object(
-                    &object,
-                    Some(attributes_to_extract),
-                    &[], // skip no attributes
-                    field_name,
-                    perm_json_p::Depth::OnBaseKey,
-                    &mut tokenize_field,
-                )?,
-                Value::Array(array) => perm_json_p::seek_leaf_values_in_array(
-                    &array,
-                    Some(attributes_to_extract),
-                    &[], // skip no attributes
-                    field_name,
-                    perm_json_p::Depth::OnBaseKey,
-                    &mut tokenize_field,
-                )?,
+                Value::Object(object) => {
+                    perm_json_p::seek_leaf_values_in_object(
+                        &object,
+                        Some(attributes_to_extract),
+                        &[], // skip no attributes
+                        field_name,
+                        perm_json_p::Depth::OnBaseKey,
+                        &mut tokenize_field,
+                    )?;
+
+                    if selection == perm_json_p::Selection::Select {
+                        tokenize_field(
+                            field_name,
+                            perm_json_p::Depth::OnBaseKey,
+                            &Value::Object(object),
+                        )?;
+                    }
+                }
+                Value::Array(array) => {
+                    perm_json_p::seek_leaf_values_in_array(
+                        &array,
+                        Some(attributes_to_extract),
+                        &[], // skip no attributes
+                        field_name,
+                        perm_json_p::Depth::OnBaseKey,
+                        &mut tokenize_field,
+                    )?;
+
+                    if selection == perm_json_p::Selection::Select {
+                        tokenize_field(
+                            field_name,
+                            perm_json_p::Depth::OnBaseKey,
+                            &Value::Array(array),
+                        )?;
+                    }
+                }
                 value => tokenize_field(field_name, perm_json_p::Depth::OnBaseKey, &value)?,
             }
         }
