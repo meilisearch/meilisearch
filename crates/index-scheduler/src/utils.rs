@@ -211,9 +211,10 @@ impl IndexScheduler {
         Ok(())
     }
 
-    /// Convert an iterator to a `Vec` of tasks. The tasks MUST exist or a
-    /// `CorruptedTaskQueue` error will be throwed.
-    pub(crate) fn get_existing_tasks_with_processing_batch(
+    /// Convert an iterator to a `Vec` of tasks and edit the `ProcessingBatch` to add the given tasks.
+    ///
+    /// The tasks MUST exist, or a `CorruptedTaskQueue` error will be thrown.
+    pub(crate) fn get_existing_tasks_for_processing_batch(
         &self,
         rtxn: &RoTxn,
         processing_batch: &mut ProcessingBatch,
@@ -232,7 +233,7 @@ impl IndexScheduler {
     }
 
     /// Convert an iterator to a `Vec` of tasks. The tasks MUST exist or a
-    /// `CorruptedTaskQueue` error will be throwed.
+    /// `CorruptedTaskQueue` error will be thrown.
     pub(crate) fn get_existing_tasks(
         &self,
         rtxn: &RoTxn,
@@ -247,7 +248,7 @@ impl IndexScheduler {
     }
 
     /// Convert an iterator to a `Vec` of batches. The batches MUST exist or a
-    /// `CorruptedTaskQueue` error will be throwed.
+    /// `CorruptedTaskQueue` error will be thrown.
     pub(crate) fn get_existing_batches(
         &self,
         rtxn: &RoTxn,

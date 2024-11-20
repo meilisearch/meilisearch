@@ -282,7 +282,7 @@ impl IndexScheduler {
         match batch {
             BatchKind::DocumentClear { ids } => Ok(Some(Batch::IndexOperation {
                 op: IndexOperation::DocumentClear {
-                    tasks: self.get_existing_tasks_with_processing_batch(
+                    tasks: self.get_existing_tasks_for_processing_batch(
                         rtxn,
                         current_batch,
                         ids,
@@ -308,7 +308,7 @@ impl IndexScheduler {
                 }
             }
             BatchKind::DocumentOperation { method, operation_ids, .. } => {
-                let tasks = self.get_existing_tasks_with_processing_batch(
+                let tasks = self.get_existing_tasks_for_processing_batch(
                     rtxn,
                     current_batch,
                     operation_ids,
@@ -359,7 +359,7 @@ impl IndexScheduler {
                 }))
             }
             BatchKind::DocumentDeletion { deletion_ids, includes_by_filter: _ } => {
-                let tasks = self.get_existing_tasks_with_processing_batch(
+                let tasks = self.get_existing_tasks_for_processing_batch(
                     rtxn,
                     current_batch,
                     deletion_ids,
@@ -371,7 +371,7 @@ impl IndexScheduler {
                 }))
             }
             BatchKind::Settings { settings_ids, .. } => {
-                let tasks = self.get_existing_tasks_with_processing_batch(
+                let tasks = self.get_existing_tasks_for_processing_batch(
                     rtxn,
                     current_batch,
                     settings_ids,
@@ -520,7 +520,7 @@ impl IndexScheduler {
             BatchKind::IndexDeletion { ids } => Ok(Some(Batch::IndexDeletion {
                 index_uid,
                 index_has_been_created: must_create_index,
-                tasks: self.get_existing_tasks_with_processing_batch(rtxn, current_batch, ids)?,
+                tasks: self.get_existing_tasks_for_processing_batch(rtxn, current_batch, ids)?,
             })),
             BatchKind::IndexSwap { id } => {
                 let mut task = self.get_task(rtxn, id)?.ok_or(Error::CorruptedTaskQueue)?;
