@@ -50,7 +50,15 @@ fn test_facet_distribution_with_no_facet_values() {
 
     let indexer_alloc = Bump::new();
     let (document_changes, _operation_stats, primary_key) = indexer
-        .into_changes(&indexer_alloc, &index, &rtxn, None, &mut new_fields_ids_map, &|| false)
+        .into_changes(
+            &indexer_alloc,
+            &index,
+            &rtxn,
+            None,
+            &mut new_fields_ids_map,
+            &|| false,
+            &|_progress| (),
+        )
         .unwrap();
 
     indexer::index(

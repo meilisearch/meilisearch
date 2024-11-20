@@ -1764,6 +1764,7 @@ pub(crate) mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
+                &|_progress| (),
             )?;
 
             if let Some(error) = operation_stats.into_iter().find_map(|stat| stat.error) {
@@ -1853,6 +1854,7 @@ pub(crate) mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
+                &|_progress| (),
             )?;
 
             if let Some(error) = operation_stats.into_iter().find_map(|stat| stat.error) {
@@ -1932,6 +1934,7 @@ pub(crate) mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
+                &|_progress| (),
             )
             .unwrap();
 

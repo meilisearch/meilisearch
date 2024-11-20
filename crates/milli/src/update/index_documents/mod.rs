@@ -1947,6 +1947,7 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
+                &|_progress| (),
             )
             .unwrap();
 
@@ -2130,6 +2131,7 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
+                &|_progress| (),
             )
             .unwrap();
 
@@ -2190,6 +2192,7 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
+                &|_progress| (),
             )
             .unwrap();
 
@@ -2241,6 +2244,7 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
+                &|_progress| (),
             )
             .unwrap();
 
@@ -2291,6 +2295,7 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
+                &|_progress| (),
             )
             .unwrap();
 
@@ -2343,6 +2348,7 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
+                &|_progress| (),
             )
             .unwrap();
 
@@ -2400,6 +2406,7 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
+                &|_progress| (),
             )
             .unwrap();
 
@@ -2450,6 +2457,7 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
+                &|_progress| (),
             )
             .unwrap();
 
@@ -2500,6 +2508,7 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
+                &|_progress| (),
             )
             .unwrap();
 
@@ -2692,6 +2701,7 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
+                &|_progress| (),
             )
             .unwrap();
 
@@ -2749,6 +2759,7 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
+                &|_progress| (),
             )
             .unwrap();
 
@@ -2803,6 +2814,7 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
+                &|_progress| (),
             )
             .unwrap();
 

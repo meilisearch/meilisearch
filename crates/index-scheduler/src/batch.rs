@@ -1344,6 +1344,7 @@ impl IndexScheduler {
                     primary_key.as_deref(),
                     &mut new_fields_ids_map,
                     &|| must_stop_processing.get(),
+                    &send_progress,
                 )?;
 
                 let mut addition = 0;
