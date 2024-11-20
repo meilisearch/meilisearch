@@ -69,9 +69,13 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
     snap.push_str(&format!("### Autobatching Enabled = {autobatching_enabled}\n"));
     snap.push_str(&format!(
         "### Processing batch {:?}:\n",
-        processing.batch.map(|batch| batch.uid)
+        processing.batch.as_ref().map(|batch| batch.uid)
     ));
     snap.push_str(&snapshot_bitmap(&processing.processing));
+    if let Some(ref batch) = processing.batch {
+        snap.push('\n');
+        snap.push_str(&snapshot_batch(&batch.to_batch()));
+    }
     snap.push_str("\n----------------------------------------------------------------------\n");
 
     snap.push_str("### All Tasks:\n");

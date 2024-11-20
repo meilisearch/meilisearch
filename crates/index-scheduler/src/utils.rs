@@ -62,10 +62,22 @@ impl ProcessingBatch {
     /// Update itself with the content of the task and update the batch id in the task.
     pub fn processing<'a>(&mut self, tasks: impl IntoIterator<Item = &'a mut Task>) {
         for task in tasks.into_iter() {
+            self.stats.total_nb_tasks += 1;
+
             task.batch_uid = Some(self.uid);
-            // We don't store the statuses since they're all enqueued.
+            // We don't store the statuses in the map since they're all enqueued but we must
+            // still store them in the stats since that can be displayed.
+            *self.stats.status.entry(task.status).or_default() += 1;
+
             self.kinds.insert(task.kind.as_kind());
+            *self.stats.types.entry(task.kind.as_kind()).or_default() += 1;
             self.indexes.extend(task.indexes().iter().map(|s| s.to_string()));
+            if let Some(index_uid) = task.index_uid() {
+                *self.stats.index_uids.entry(index_uid.to_string()).or_default() += 1;
+            }
+            if let Some(ref details) = task.details {
+                self.details.accumulate(&DetailsView::from(details.clone()));
+            }
             if let Some(canceled_by) = task.canceled_by {
                 self.canceled_by.insert(canceled_by);
             }
@@ -82,6 +94,8 @@ impl ProcessingBatch {
 
     /// Must be called once the batch has finished processing.
     pub fn finished(&mut self) {
+        self.details = DetailsView::default();
+        self.stats = BatchStats::default();
         self.finished_at = Some(OffsetDateTime::now_utc());
 
         // Initially we inserted ourselves as a processing batch, that's not the case anymore.
