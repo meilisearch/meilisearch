@@ -6,7 +6,6 @@ use std::marker::PhantomData;
 use bumpalo::Bump;
 use memmap2::Mmap;
 use milli::documents::Error;
-use milli::update::new::TopLevelMap;
 use milli::Object;
 use raw_collections::RawMap;
 use serde::de::{SeqAccess, Visitor};
@@ -212,7 +211,7 @@ pub fn read_csv(input: &File, output: impl io::Write, delimiter: u8) -> Result<u
 
 /// Reads JSON from file and write it in NDJSON in a file checking it along the way.
 pub fn read_json(input: &File, output: impl io::Write) -> Result<u64> {
-    // We memory map to be able to deserialize into a TopLevelMap<'pl> that
+    // We memory map to be able to deserialize into a RawMap that
     // does not allocate when possible and only materialize the first/top level.
     let input = unsafe { Mmap::map(input).map_err(DocumentFormatError::Io)? };
     let mut doc_alloc = Bump::with_capacity(1024 * 1024 * 1024); // 1MiB
@@ -253,16 +252,23 @@ pub fn read_json(input: &File, output: impl io::Write) -> Result<u64> {
 
 /// Reads NDJSON from file and write it in NDJSON in a file checking it along the way.
 pub fn read_ndjson(input: &File, output: impl io::Write) -> Result<u64> {
-    // We memory map to be able to deserialize into a TopLevelMap<'pl> that
+    // We memory map to be able to deserialize into a RawMap that
     // does not allocate when possible and only materialize the first/top level.
     let input = unsafe { Mmap::map(input).map_err(DocumentFormatError::Io)? };
     let mut output = BufWriter::new(output);
 
+    let mut bump = Bump::with_capacity(1024 * 1024);
+
     let mut count = 0;
     for result in serde_json::Deserializer::from_slice(&input).into_iter() {
+        bump.reset();
         count += 1;
         result
-            .and_then(|map: TopLevelMap| to_writer(&mut output, &map))
+            .and_then(|raw: &RawValue| {
+                // try to deserialize as a map
+                let map = RawMap::from_raw_value(raw, &bump)?;
+                to_writer(&mut output, &map)
+            })
             .map_err(|e| DocumentFormatError::from((PayloadType::Ndjson, e)))?;
     }
 

@@ -2,7 +2,6 @@ pub use document_change::{Deletion, DocumentChange, Insertion, Update};
 pub use merger::{
     merge_and_send_docids, merge_and_send_facet_docids, FacetDatabases, FacetFieldIdsDelta,
 };
-pub use top_level_map::{CowStr, TopLevelMap};
 
 use super::del_add::DelAdd;
 use crate::FieldId;
@@ -19,7 +18,6 @@ mod parallel_iterator_ext;
 mod ref_cell_ext;
 pub(crate) mod steps;
 pub(crate) mod thread_local;
-mod top_level_map;
 pub mod vector_document;
 mod word_fst_builder;
 mod words_prefix_docids;
