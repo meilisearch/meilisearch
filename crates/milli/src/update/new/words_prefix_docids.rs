@@ -7,24 +7,31 @@ use heed::types::Bytes;
 use heed::{BytesDecode, Database, Error, RoTxn, RwTxn};
 use rayon::iter::{IntoParallelIterator, ParallelIterator as _};
 use roaring::MultiOps;
-use tempfile::tempfile;
+use tempfile::spooled_tempfile;
 use thread_local::ThreadLocal;
 
 use super::ref_cell_ext::RefCellExt as _;
 use crate::heed_codec::StrBEU16Codec;
+use crate::update::GrenadParameters;
 use crate::{CboRoaringBitmapCodec, Index, Prefix, Result};
 
 struct WordPrefixDocids {
     database: Database<Bytes, CboRoaringBitmapCodec>,
     prefix_database: Database<Bytes, CboRoaringBitmapCodec>,
+    max_memory_by_thread: Option<usize>,
 }
 
 impl WordPrefixDocids {
     fn new(
         database: Database<Bytes, CboRoaringBitmapCodec>,
         prefix_database: Database<Bytes, CboRoaringBitmapCodec>,
+        grenad_parameters: GrenadParameters,
     ) -> WordPrefixDocids {
-        WordPrefixDocids { database, prefix_database }
+        WordPrefixDocids {
+            database,
+            prefix_database,
+            max_memory_by_thread: grenad_parameters.max_memory_by_thread(),
+        }
     }
 
     fn execute(
@@ -51,9 +58,12 @@ impl WordPrefixDocids {
         // of them and *serialize* them into files. There is one file by CPU.
         let local_entries = ThreadLocal::with_capacity(rayon::current_num_threads());
         prefixes.into_par_iter().map(AsRef::as_ref).try_for_each(|prefix| {
-            let refcell = local_entries.get_or_try(|| {
-                tempfile().map(BufWriter::new).map(|f| RefCell::new((Vec::new(), f, Vec::new())))
-            })?;
+            let refcell = local_entries.get_or(|| {
+                let file = BufWriter::new(spooled_tempfile(
+                    self.max_memory_by_thread.unwrap_or(usize::MAX),
+                ));
+                RefCell::new((Vec::new(), file, Vec::new()))
+            });
 
             let mut refmut = refcell.borrow_mut_or_yield();
             let (ref mut index, ref mut file, ref mut buffer) = *refmut;
@@ -144,14 +154,20 @@ unsafe impl<'a, 'rtxn> Sync for FrozenPrefixBitmaps<'a, 'rtxn> {}
 struct WordPrefixIntegerDocids {
     database: Database<Bytes, CboRoaringBitmapCodec>,
     prefix_database: Database<Bytes, CboRoaringBitmapCodec>,
+    max_memory_by_thread: Option<usize>,
 }
 
 impl WordPrefixIntegerDocids {
     fn new(
         database: Database<Bytes, CboRoaringBitmapCodec>,
         prefix_database: Database<Bytes, CboRoaringBitmapCodec>,
+        grenad_parameters: GrenadParameters,
     ) -> WordPrefixIntegerDocids {
-        WordPrefixIntegerDocids { database, prefix_database }
+        WordPrefixIntegerDocids {
+            database,
+            prefix_database,
+            max_memory_by_thread: grenad_parameters.max_memory_by_thread(),
+        }
     }
 
     fn execute(
@@ -178,9 +194,12 @@ impl WordPrefixIntegerDocids {
         // of them and *serialize* them into files. There is one file by CPU.
         let local_entries = ThreadLocal::with_capacity(rayon::current_num_threads());
         prefixes.into_par_iter().map(AsRef::as_ref).try_for_each(|prefix| {
-            let refcell = local_entries.get_or_try(|| {
-                tempfile().map(BufWriter::new).map(|f| RefCell::new((Vec::new(), f, Vec::new())))
-            })?;
+            let refcell = local_entries.get_or(|| {
+                let file = BufWriter::new(spooled_tempfile(
+                    self.max_memory_by_thread.unwrap_or(usize::MAX),
+                ));
+                RefCell::new((Vec::new(), file, Vec::new()))
+            });
 
             let mut refmut = refcell.borrow_mut_or_yield();
             let (ref mut index, ref mut file, ref mut buffer) = *refmut;
@@ -292,10 +311,12 @@ pub fn compute_word_prefix_docids(
     index: &Index,
     prefix_to_compute: &HashSet<Prefix>,
     prefix_to_delete: &HashSet<Prefix>,
+    grenad_parameters: GrenadParameters,
 ) -> Result<()> {
     WordPrefixDocids::new(
         index.word_docids.remap_key_type(),
         index.word_prefix_docids.remap_key_type(),
+        grenad_parameters,
     )
     .execute(wtxn, prefix_to_compute, prefix_to_delete)
 }
@@ -306,10 +327,12 @@ pub fn compute_exact_word_prefix_docids(
     index: &Index,
     prefix_to_compute: &HashSet<Prefix>,
     prefix_to_delete: &HashSet<Prefix>,
+    grenad_parameters: GrenadParameters,
 ) -> Result<()> {
     WordPrefixDocids::new(
         index.exact_word_docids.remap_key_type(),
         index.exact_word_prefix_docids.remap_key_type(),
+        grenad_parameters,
     )
     .execute(wtxn, prefix_to_compute, prefix_to_delete)
 }
@@ -320,10 +343,12 @@ pub fn compute_word_prefix_fid_docids(
     index: &Index,
     prefix_to_compute: &HashSet<Prefix>,
     prefix_to_delete: &HashSet<Prefix>,
+    grenad_parameters: GrenadParameters,
 ) -> Result<()> {
     WordPrefixIntegerDocids::new(
         index.word_fid_docids.remap_key_type(),
         index.word_prefix_fid_docids.remap_key_type(),
+        grenad_parameters,
     )
     .execute(wtxn, prefix_to_compute, prefix_to_delete)
 }
@@ -334,10 +359,12 @@ pub fn compute_word_prefix_position_docids(
     index: &Index,
     prefix_to_compute: &HashSet<Prefix>,
     prefix_to_delete: &HashSet<Prefix>,
+    grenad_parameters: GrenadParameters,
 ) -> Result<()> {
     WordPrefixIntegerDocids::new(
         index.word_position_docids.remap_key_type(),
         index.word_prefix_position_docids.remap_key_type(),
+        grenad_parameters,
     )
     .execute(wtxn, prefix_to_compute, prefix_to_delete)
 }
