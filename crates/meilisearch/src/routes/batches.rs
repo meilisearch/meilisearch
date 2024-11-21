@@ -34,7 +34,7 @@ async fn get_batch(
         }
     };
 
-    let query = index_scheduler::Query { uids: Some(vec![batch_uid]), ..Query::default() };
+    let query = index_scheduler::Query { batch_uids: Some(vec![batch_uid]), ..Query::default() };
     let filters = index_scheduler.filters();
     let (batches, _) = index_scheduler.get_batches_from_authorized_indexes(query, filters)?;
 
