@@ -113,7 +113,10 @@ pub fn to_call_stats<R: std::io::Read>(
 
                 let span = *span;
                 if let Some(parent_id) = span.parent_id {
-                    let (_, _, parent_self_time) = spans.get_mut(&parent_id).unwrap();
+                    let Some((_, _, parent_self_time)) = spans.get_mut(&parent_id) else {
+                        let (c, _) = calls.get_mut(&span.call_id).unwrap();
+                        panic!("parent span not found for span: module_path: {:?}, name: {:?}, target: {:?}", c.module_path.as_deref().unwrap_or_default(), c.name, c.target);
+                    };
                     parent_self_time.add_child_range(self_range.clone())
                 }
                 total_self_time.add_child_range(self_range);
