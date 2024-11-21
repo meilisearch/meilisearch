@@ -4,17 +4,22 @@ pub(crate) mod error;
 mod fields;
 mod template_checker;
 
+use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
+use std::fmt::Debug;
 use std::num::NonZeroUsize;
 use std::ops::Deref;
 
+use bumpalo::Bump;
+use document::ParseableDocument;
 use error::{NewPromptError, RenderPromptError};
+use fields::{BorrowedFields, OwnedFields};
 
 use self::context::Context;
 use self::document::Document;
 use crate::update::del_add::DelAdd;
-use crate::{FieldId, FieldsIdsMap};
+use crate::{FieldId, FieldsIdsMap, GlobalFieldsIdsMap};
 
 pub struct Prompt {
     template: liquid::Template,
@@ -109,14 +114,38 @@ impl Prompt {
         Ok(this)
     }
 
-    pub fn render(
+    pub fn render_document<
+        'a,       // lifetime of the borrow of the document
+        'doc: 'a, // lifetime of the allocator, will live for an entire chunk of documents
+    >(
         &self,
-        document: obkv::KvReaderU16<'_>,
+        document: impl crate::update::new::document::Document<'a> + Debug,
+        field_id_map: &RefCell<GlobalFieldsIdsMap>,
+        doc_alloc: &'doc Bump,
+    ) -> Result<&'doc str, RenderPromptError> {
+        let document = ParseableDocument::new(document, doc_alloc);
+        let fields = BorrowedFields::new(&document, field_id_map, doc_alloc);
+        let context = Context::new(&document, &fields);
+        let mut rendered = bumpalo::collections::Vec::with_capacity_in(
+            self.max_bytes.unwrap_or_else(default_max_bytes).get(),
+            doc_alloc,
+        );
+        self.template
+            .render_to(&mut rendered, &context)
+            .map_err(RenderPromptError::missing_context)?;
+        Ok(std::str::from_utf8(rendered.into_bump_slice())
+            .expect("render can only write UTF-8 because all inputs and processing preserve utf-8"))
+    }
+
+    pub fn render_kvdeladd(
+        &self,
+        document: &obkv::KvReaderU16,
         side: DelAdd,
         field_id_map: &FieldsIdsMapWithMetadata,
     ) -> Result<String, RenderPromptError> {
         let document = Document::new(document, side, field_id_map);
-        let context = Context::new(&document, field_id_map);
+        let fields = OwnedFields::new(&document, field_id_map);
+        let context = Context::new(&document, &fields);
 
         let mut rendered =
             self.template.render(&context).map_err(RenderPromptError::missing_context)?;

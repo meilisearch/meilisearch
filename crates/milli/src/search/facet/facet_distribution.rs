@@ -407,7 +407,7 @@ mod tests {
     use big_s::S;
     use maplit::hashset;
 
-    use crate::documents::documents_batch_reader_from_objects;
+    use crate::documents::mmap_from_objects;
     use crate::index::tests::TempIndex;
     use crate::{milli_snap, FacetDistribution, OrderBy};
 
@@ -416,17 +416,16 @@ mod tests {
         // All the tests here avoid using the code in `facet_distribution_iter` because there aren't
         // enough candidates.
 
-        let mut index = TempIndex::new();
-        index.index_documents_config.autogenerate_docids = true;
+        let index = TempIndex::new();
 
         index
             .update_settings(|settings| settings.set_filterable_fields(hashset! { S("colour") }))
             .unwrap();
 
         let documents = documents!([
-            { "colour": "Blue" },
-            { "colour": "  blue" },
-            { "colour": "RED" }
+            { "id": 0, "colour": "Blue" },
+            { "id": 1, "colour": "  blue" },
+            { "id": 2, "colour": "RED" }
         ]);
 
         index.add_documents(documents).unwrap();
@@ -488,8 +487,7 @@ mod tests {
 
     #[test]
     fn many_candidates_few_facet_values() {
-        let mut index = TempIndex::new_with_map_size(4096 * 10_000);
-        index.index_documents_config.autogenerate_docids = true;
+        let index = TempIndex::new_with_map_size(4096 * 10_000);
 
         index
             .update_settings(|settings| settings.set_filterable_fields(hashset! { S("colour") }))
@@ -500,6 +498,7 @@ mod tests {
         let mut documents = vec![];
         for i in 0..10_000 {
             let document = serde_json::json!({
+                "id": i,
                 "colour": facet_values[i % 5],
             })
             .as_object()
@@ -508,8 +507,7 @@ mod tests {
             documents.push(document);
         }
 
-        let documents = documents_batch_reader_from_objects(documents);
-
+        let documents = mmap_from_objects(documents);
         index.add_documents(documents).unwrap();
 
         let txn = index.read_txn().unwrap();
@@ -574,8 +572,7 @@ mod tests {
 
     #[test]
     fn many_candidates_many_facet_values() {
-        let mut index = TempIndex::new_with_map_size(4096 * 10_000);
-        index.index_documents_config.autogenerate_docids = true;
+        let index = TempIndex::new_with_map_size(4096 * 10_000);
 
         index
             .update_settings(|settings| settings.set_filterable_fields(hashset! { S("colour") }))
@@ -586,6 +583,7 @@ mod tests {
         let mut documents = vec![];
         for i in 0..10_000 {
             let document = serde_json::json!({
+                "id": i,
                 "colour": facet_values[i % 1000],
             })
             .as_object()
@@ -594,8 +592,7 @@ mod tests {
             documents.push(document);
         }
 
-        let documents = documents_batch_reader_from_objects(documents);
-
+        let documents = mmap_from_objects(documents);
         index.add_documents(documents).unwrap();
 
         let txn = index.read_txn().unwrap();
@@ -634,8 +631,7 @@ mod tests {
 
     #[test]
     fn facet_stats() {
-        let mut index = TempIndex::new_with_map_size(4096 * 10_000);
-        index.index_documents_config.autogenerate_docids = true;
+        let index = TempIndex::new_with_map_size(4096 * 10_000);
 
         index
             .update_settings(|settings| settings.set_filterable_fields(hashset! { S("colour") }))
@@ -646,6 +642,7 @@ mod tests {
         let mut documents = vec![];
         for i in 0..1000 {
             let document = serde_json::json!({
+                "id": i,
                 "colour": facet_values[i % 1000],
             })
             .as_object()
@@ -654,8 +651,7 @@ mod tests {
             documents.push(document);
         }
 
-        let documents = documents_batch_reader_from_objects(documents);
-
+        let documents = mmap_from_objects(documents);
         index.add_documents(documents).unwrap();
 
         let txn = index.read_txn().unwrap();
@@ -686,8 +682,7 @@ mod tests {
 
     #[test]
     fn facet_stats_array() {
-        let mut index = TempIndex::new_with_map_size(4096 * 10_000);
-        index.index_documents_config.autogenerate_docids = true;
+        let index = TempIndex::new_with_map_size(4096 * 10_000);
 
         index
             .update_settings(|settings| settings.set_filterable_fields(hashset! { S("colour") }))
@@ -698,6 +693,7 @@ mod tests {
         let mut documents = vec![];
         for i in 0..1000 {
             let document = serde_json::json!({
+                "id": i,
                 "colour": [facet_values[i % 1000], facet_values[i % 1000] + 1000],
             })
             .as_object()
@@ -706,8 +702,7 @@ mod tests {
             documents.push(document);
         }
 
-        let documents = documents_batch_reader_from_objects(documents);
-
+        let documents = mmap_from_objects(documents);
         index.add_documents(documents).unwrap();
 
         let txn = index.read_txn().unwrap();
@@ -738,8 +733,7 @@ mod tests {
 
     #[test]
     fn facet_stats_mixed_array() {
-        let mut index = TempIndex::new_with_map_size(4096 * 10_000);
-        index.index_documents_config.autogenerate_docids = true;
+        let index = TempIndex::new_with_map_size(4096 * 10_000);
 
         index
             .update_settings(|settings| settings.set_filterable_fields(hashset! { S("colour") }))
@@ -750,6 +744,7 @@ mod tests {
         let mut documents = vec![];
         for i in 0..1000 {
             let document = serde_json::json!({
+                "id": i,
                 "colour": [facet_values[i % 1000], format!("{}", facet_values[i % 1000] + 1000)],
             })
             .as_object()
@@ -758,8 +753,7 @@ mod tests {
             documents.push(document);
         }
 
-        let documents = documents_batch_reader_from_objects(documents);
-
+        let documents = mmap_from_objects(documents);
         index.add_documents(documents).unwrap();
 
         let txn = index.read_txn().unwrap();
@@ -790,8 +784,7 @@ mod tests {
 
     #[test]
     fn facet_mixed_values() {
-        let mut index = TempIndex::new_with_map_size(4096 * 10_000);
-        index.index_documents_config.autogenerate_docids = true;
+        let index = TempIndex::new_with_map_size(4096 * 10_000);
 
         index
             .update_settings(|settings| settings.set_filterable_fields(hashset! { S("colour") }))
@@ -803,10 +796,12 @@ mod tests {
         for i in 0..1000 {
             let document = if i % 2 == 0 {
                 serde_json::json!({
+                    "id": i,
                     "colour": [facet_values[i % 1000], facet_values[i % 1000] + 1000],
                 })
             } else {
                 serde_json::json!({
+                    "id": i,
                     "colour": format!("{}", facet_values[i % 1000] + 10000),
                 })
             };
@@ -814,8 +809,7 @@ mod tests {
             documents.push(document);
         }
 
-        let documents = documents_batch_reader_from_objects(documents);
-
+        let documents = mmap_from_objects(documents);
         index.add_documents(documents).unwrap();
 
         let txn = index.read_txn().unwrap();

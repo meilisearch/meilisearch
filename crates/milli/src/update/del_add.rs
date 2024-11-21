@@ -1,7 +1,7 @@
 use obkv::Key;
 
 pub type KvWriterDelAdd<W> = obkv::KvWriter<W, DelAdd>;
-pub type KvReaderDelAdd<'a> = obkv::KvReader<'a, DelAdd>;
+pub type KvReaderDelAdd = obkv::KvReader<DelAdd>;
 
 /// DelAdd defines the new value to add in the database and old value to delete from the database.
 ///
@@ -36,7 +36,7 @@ impl Key for DelAdd {
 /// Addition: put all the values under DelAdd::Addition,
 /// DeletionAndAddition: put all the values under DelAdd::Deletion and DelAdd::Addition,
 pub fn into_del_add_obkv<K: obkv::Key + PartialOrd>(
-    reader: obkv::KvReader<'_, K>,
+    reader: &obkv::KvReader<K>,
     operation: DelAddOperation,
     buffer: &mut Vec<u8>,
 ) -> Result<(), std::io::Error> {
@@ -46,7 +46,7 @@ pub fn into_del_add_obkv<K: obkv::Key + PartialOrd>(
 /// Akin to the [into_del_add_obkv] function but lets you
 /// conditionally define the `DelAdd` variant based on the obkv key.
 pub fn into_del_add_obkv_conditional_operation<K, F>(
-    reader: obkv::KvReader<'_, K>,
+    reader: &obkv::KvReader<K>,
     buffer: &mut Vec<u8>,
     operation: F,
 ) -> std::io::Result<()>
@@ -86,8 +86,8 @@ pub enum DelAddOperation {
 /// putting each deletion obkv's keys under an DelAdd::Deletion
 /// and putting each addition obkv's keys under an DelAdd::Addition
 pub fn del_add_from_two_obkvs<K: obkv::Key + PartialOrd + Ord>(
-    deletion: &obkv::KvReader<'_, K>,
-    addition: &obkv::KvReader<'_, K>,
+    deletion: &obkv::KvReader<K>,
+    addition: &obkv::KvReader<K>,
     buffer: &mut Vec<u8>,
 ) -> Result<(), std::io::Error> {
     use itertools::merge_join_by;
@@ -121,7 +121,7 @@ pub fn del_add_from_two_obkvs<K: obkv::Key + PartialOrd + Ord>(
     writer.finish()
 }
 
-pub fn is_noop_del_add_obkv(del_add: KvReaderDelAdd<'_>) -> bool {
+pub fn is_noop_del_add_obkv(del_add: &KvReaderDelAdd) -> bool {
     del_add.get(DelAdd::Deletion) == del_add.get(DelAdd::Addition)
 }
 
@@ -136,5 +136,5 @@ pub fn deladd_serialize_add_side<'a>(
     obkv: &'a [u8],
     _buffer: &mut Vec<u8>,
 ) -> crate::Result<&'a [u8]> {
-    Ok(KvReaderDelAdd::new(obkv).get(DelAdd::Addition).unwrap_or_default())
+    Ok(KvReaderDelAdd::from_slice(obkv).get(DelAdd::Addition).unwrap_or_default())
 }

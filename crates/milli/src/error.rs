@@ -31,23 +31,23 @@ pub enum Error {
 pub enum InternalError {
     #[error("{}", HeedError::DatabaseClosing)]
     DatabaseClosing,
-    #[error("Missing {} in the {db_name} database.", key.unwrap_or("key"))]
+    #[error("missing {} in the {db_name} database", key.unwrap_or("key"))]
     DatabaseMissingEntry { db_name: &'static str, key: Option<&'static str> },
-    #[error("Missing {key} in the fieldids weights mapping.")]
+    #[error("missing {key} in the fieldids weights mapping")]
     FieldidsWeightsMapMissingEntry { key: FieldId },
     #[error(transparent)]
     FieldIdMapMissingEntry(#[from] FieldIdMapMissingEntry),
-    #[error("Missing {key} in the field id mapping.")]
+    #[error("missing {key} in the field id mapping")]
     FieldIdMappingMissingEntry { key: FieldId },
     #[error(transparent)]
     Fst(#[from] fst::Error),
     #[error(transparent)]
     DocumentsError(#[from] documents::Error),
-    #[error("Invalid compression type have been specified to grenad")]
+    #[error("invalid compression type have been specified to grenad")]
     GrenadInvalidCompressionType,
-    #[error("Invalid grenad file with an invalid version format")]
+    #[error("invalid grenad file with an invalid version format")]
     GrenadInvalidFormatVersion,
-    #[error("Invalid merge while processing {process}")]
+    #[error("invalid merge while processing {process}")]
     IndexingMergingKeys { process: &'static str },
     #[error(transparent)]
     RayonThreadPool(#[from] ThreadPoolBuildError),
@@ -55,6 +55,8 @@ pub enum InternalError {
     PanicInThreadPool(#[from] PanicCatched),
     #[error(transparent)]
     SerdeJson(#[from] serde_json::Error),
+    #[error(transparent)]
+    BincodeError(#[from] bincode::Error),
     #[error(transparent)]
     Serialization(#[from] SerializationError),
     #[error(transparent)]
@@ -122,7 +124,7 @@ and can not be more than 512 bytes.", .document_id.to_string()
     #[error("The `_vectors` field in the document with id: `{document_id}` is not an object. Was expecting an object with a key for each embedder with manually provided vectors, but instead got `{value}`")]
     InvalidVectorsMapType { document_id: String, value: Value },
     #[error("Bad embedder configuration in the document with id: `{document_id}`. {error}")]
-    InvalidVectorsEmbedderConf { document_id: String, error: deserr::errors::JsonError },
+    InvalidVectorsEmbedderConf { document_id: String, error: String },
     #[error("{0}")]
     InvalidFilter(String),
     #[error("Invalid type for filter subexpression: expected: {}, found: {1}.", .0.join(", "))]

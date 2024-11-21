@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use deserr::{take_cf_content, DeserializeError, Deserr, Sequence};
 use obkv::KvReader;
+use serde_json::value::RawValue;
 use serde_json::{from_slice, Value};
 
 use super::Embedding;
@@ -10,6 +11,250 @@ use crate::update::del_add::{DelAdd, KvReaderDelAdd};
 use crate::{DocumentId, FieldId, InternalError, UserError};
 
 pub const RESERVED_VECTORS_FIELD_NAME: &str = "_vectors";
+
+#[derive(serde::Serialize, Debug)]
+#[serde(untagged)]
+pub enum RawVectors<'doc> {
+    Explicit(#[serde(borrow)] RawExplicitVectors<'doc>),
+    ImplicitlyUserProvided(#[serde(borrow)] Option<&'doc RawValue>),
+}
+
+pub enum RawVectorsError {
+    DeserializeSeq { index: usize, error: String },
+    DeserializeKey { error: String },
+    DeserializeRegenerate { error: String },
+    DeserializeEmbeddings { error: String },
+    UnknownField { field: String },
+    MissingRegenerate,
+    WrongKind { kind: &'static str, value: String },
+    Parsing(serde_json::Error),
+}
+
+impl RawVectorsError {
+    pub fn msg(self, embedder_name: &str) -> String {
+        match self {
+            RawVectorsError::DeserializeSeq { index, error } => format!(
+                "Could not parse `._vectors.{embedder_name}[{index}]`: {error}"
+            ),
+            RawVectorsError::DeserializeKey { error } => format!(
+                "Could not parse a field at `._vectors.{embedder_name}`: {error}"
+            ),
+            RawVectorsError::DeserializeRegenerate { error } => format!(
+                "Could not parse `._vectors.{embedder_name}.regenerate`: {error}"
+            ),
+            RawVectorsError::DeserializeEmbeddings { error } => format!(
+                "Could not parse `._vectors.{embedder_name}.embeddings`: {error}"
+            ),
+            RawVectorsError::UnknownField { field } => format!(
+                "Unexpected field `._vectors.{embedder_name}.{field}`\n  \
+                  - note: the allowed fields are `regenerate` and `embeddings`"
+            ),
+            RawVectorsError::MissingRegenerate => format!(
+                "Missing field `._vectors.{embedder_name}.regenerate`\n  \
+                - note: `._vectors.{embedder_name}` must be an array of floats, an array of arrays of floats, or an object with field `regenerate`"
+            ),
+            RawVectorsError::WrongKind { kind, value } => format!(
+                "Expected `._vectors.{embedder_name}` to be an array of floats, an array of arrays of floats, or an object with at least the field `regenerate`, but got the {kind} `{value}`"
+            ),
+            RawVectorsError::Parsing(error) => format!(
+                "Could not parse `._vectors.{embedder_name}`: {error}"
+            ),
+        }
+    }
+}
+
+impl<'doc> RawVectors<'doc> {
+    pub fn from_raw_value(raw: &'doc RawValue) -> Result<Self, RawVectorsError> {
+        use serde::de::Deserializer as _;
+        Ok(match raw.deserialize_any(RawVectorsVisitor).map_err(RawVectorsError::Parsing)?? {
+            RawVectorsVisitorValue::ImplicitNone => RawVectors::ImplicitlyUserProvided(None),
+            RawVectorsVisitorValue::Implicit => RawVectors::ImplicitlyUserProvided(Some(raw)),
+            RawVectorsVisitorValue::Explicit { regenerate, embeddings } => {
+                RawVectors::Explicit(RawExplicitVectors { embeddings, regenerate })
+            }
+        })
+    }
+}
+
+struct RawVectorsVisitor;
+
+enum RawVectorsVisitorValue<'doc> {
+    ImplicitNone,
+    Implicit,
+    Explicit { regenerate: bool, embeddings: Option<&'doc RawValue> },
+}
+
+impl<'doc> serde::de::Visitor<'doc> for RawVectorsVisitor {
+    type Value = std::result::Result<RawVectorsVisitorValue<'doc>, RawVectorsError>;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(formatter, "a map containing at least `regenerate`, or an array of floats`")
+    }
+
+    fn visit_none<E>(self) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(Ok(RawVectorsVisitorValue::ImplicitNone))
+    }
+
+    fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: serde::Deserializer<'doc>,
+    {
+        deserializer.deserialize_any(self)
+    }
+
+    fn visit_unit<E>(self) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(Ok(RawVectorsVisitorValue::ImplicitNone))
+    }
+
+    fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+    where
+        A: serde::de::SeqAccess<'doc>,
+    {
+        let mut index = 0;
+        // must consume all elements or parsing fails
+        loop {
+            match seq.next_element::<&RawValue>() {
+                Ok(Some(_)) => index += 1,
+                Err(error) => {
+                    return Ok(Err(RawVectorsError::DeserializeSeq {
+                        index,
+                        error: error.to_string(),
+                    }))
+                }
+                Ok(None) => break,
+            };
+        }
+        Ok(Ok(RawVectorsVisitorValue::Implicit))
+    }
+
+    fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+    where
+        A: serde::de::MapAccess<'doc>,
+    {
+        let mut regenerate = None;
+        let mut embeddings = None;
+        loop {
+            match map.next_key::<&str>() {
+                Ok(Some("regenerate")) => {
+                    let value: bool = match map.next_value() {
+                        Ok(value) => value,
+                        Err(error) => {
+                            return Ok(Err(RawVectorsError::DeserializeRegenerate {
+                                error: error.to_string(),
+                            }))
+                        }
+                    };
+                    regenerate = Some(value);
+                }
+                Ok(Some("embeddings")) => {
+                    let value: &RawValue = match map.next_value() {
+                        Ok(value) => value,
+                        Err(error) => {
+                            return Ok(Err(RawVectorsError::DeserializeEmbeddings {
+                                error: error.to_string(),
+                            }))
+                        }
+                    };
+                    embeddings = Some(value);
+                }
+                Ok(Some(other)) => {
+                    return Ok(Err(RawVectorsError::UnknownField { field: other.to_string() }))
+                }
+                Ok(None) => break,
+                Err(error) => {
+                    return Ok(Err(RawVectorsError::DeserializeKey { error: error.to_string() }))
+                }
+            }
+        }
+        let Some(regenerate) = regenerate else {
+            return Ok(Err(RawVectorsError::MissingRegenerate));
+        };
+        Ok(Ok(RawVectorsVisitorValue::Explicit { regenerate, embeddings }))
+    }
+
+    fn visit_bool<E>(self, v: bool) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(Err(RawVectorsError::WrongKind { kind: "boolean", value: v.to_string() }))
+    }
+
+    fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(Err(RawVectorsError::WrongKind { kind: "integer", value: v.to_string() }))
+    }
+
+    fn visit_i128<E>(self, v: i128) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(Err(RawVectorsError::WrongKind { kind: "integer", value: v.to_string() }))
+    }
+
+    fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(Err(RawVectorsError::WrongKind { kind: "integer", value: v.to_string() }))
+    }
+
+    fn visit_u128<E>(self, v: u128) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(Err(RawVectorsError::WrongKind { kind: "integer", value: v.to_string() }))
+    }
+
+    fn visit_f64<E>(self, v: f64) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(Err(RawVectorsError::WrongKind { kind: "number", value: v.to_string() }))
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(Err(RawVectorsError::WrongKind { kind: "string", value: v.to_string() }))
+    }
+
+    fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(Err(RawVectorsError::WrongKind { kind: "string", value: v }))
+    }
+
+    fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(Err(RawVectorsError::WrongKind { kind: "bytes", value: format!("{v:?}") }))
+    }
+
+    fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: serde::Deserializer<'doc>,
+    {
+        deserializer.deserialize_any(self)
+    }
+
+    fn visit_enum<A>(self, _data: A) -> Result<Self::Value, A::Error>
+    where
+        A: serde::de::EnumAccess<'doc>,
+    {
+        Ok(Err(RawVectorsError::WrongKind { kind: "enum", value: "a variant".to_string() }))
+    }
+}
 
 #[derive(serde::Serialize, Debug)]
 #[serde(untagged)]
@@ -69,12 +314,36 @@ impl Vectors {
     }
 }
 
+impl<'doc> RawVectors<'doc> {
+    pub fn must_regenerate(&self) -> bool {
+        match self {
+            RawVectors::ImplicitlyUserProvided(_) => false,
+            RawVectors::Explicit(RawExplicitVectors { regenerate, .. }) => *regenerate,
+        }
+    }
+    pub fn embeddings(&self) -> Option<&'doc RawValue> {
+        match self {
+            RawVectors::ImplicitlyUserProvided(embeddings) => *embeddings,
+            RawVectors::Explicit(RawExplicitVectors { embeddings, regenerate: _ }) => *embeddings,
+        }
+    }
+}
+
 #[derive(serde::Serialize, Deserr, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ExplicitVectors {
     #[serde(default)]
     #[deserr(default)]
     pub embeddings: Option<VectorOrArrayOfVectors>,
+    pub regenerate: bool,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct RawExplicitVectors<'doc> {
+    #[serde(borrow)]
+    #[serde(default)]
+    pub embeddings: Option<&'doc RawValue>,
     pub regenerate: bool,
 }
 
@@ -109,14 +378,13 @@ impl ParsedVectorsDiff {
     pub fn new(
         docid: DocumentId,
         embedders_configs: &[IndexEmbeddingConfig],
-        documents_diff: KvReader<'_, FieldId>,
+        documents_diff: &KvReader<FieldId>,
         old_vectors_fid: Option<FieldId>,
         new_vectors_fid: Option<FieldId>,
     ) -> Result<Self, Error> {
         let mut old = match old_vectors_fid
             .and_then(|vectors_fid| documents_diff.get(vectors_fid))
-            .map(KvReaderDelAdd::new)
-            .map(|obkv| to_vector_map(obkv, DelAdd::Deletion))
+            .map(|bytes| to_vector_map(bytes.into(), DelAdd::Deletion))
             .transpose()
         {
             Ok(del) => del,
@@ -143,8 +411,7 @@ impl ParsedVectorsDiff {
             let Some(bytes) = documents_diff.get(new_vectors_fid) else {
                 break 'new VectorsState::NoVectorsFieldInDocument;
             };
-            let obkv = KvReaderDelAdd::new(bytes);
-            match to_vector_map(obkv, DelAdd::Addition)? {
+            match to_vector_map(bytes.into(), DelAdd::Addition)? {
                 Some(new) => VectorsState::Vectors(new),
                 None => VectorsState::NoVectorsFieldInDocument,
             }
@@ -228,7 +495,7 @@ impl Error {
             Error::InvalidEmbedderConf { error } => {
                 crate::Error::UserError(UserError::InvalidVectorsEmbedderConf {
                     document_id,
-                    error,
+                    error: error.to_string(),
                 })
             }
             Error::InternalSerdeJson(error) => {
@@ -239,7 +506,7 @@ impl Error {
 }
 
 fn to_vector_map(
-    obkv: KvReaderDelAdd<'_>,
+    obkv: &KvReaderDelAdd,
     side: DelAdd,
 ) -> Result<Option<BTreeMap<String, Vectors>>, Error> {
     Ok(if let Some(value) = obkv.get(side) {

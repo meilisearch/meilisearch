@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::File;
 use std::io::{Read, Seek};
 
+use either::Either;
 use fxhash::FxHashMap;
 use itertools::Itertools;
 use obkv::{KvReader, KvReaderU16, KvWriter};
@@ -13,10 +14,10 @@ use serde_json::Value;
 use smartstring::SmartString;
 
 use super::helpers::{
-    create_sorter, create_writer, keep_first, obkvs_keep_last_addition_merge_deletions,
-    obkvs_merge_additions_and_deletions, sorter_into_reader, MergeFn,
+    create_sorter, sorter_into_reader, EitherObkvMerge, ObkvsKeepLastAdditionMergeDeletions,
+    ObkvsMergeAdditionsAndDeletions,
 };
-use super::{IndexDocumentsMethod, IndexerConfig};
+use super::{create_writer, IndexDocumentsMethod, IndexerConfig, KeepFirst};
 use crate::documents::{DocumentsBatchIndex, EnrichedDocument, EnrichedDocumentsBatchReader};
 use crate::error::{Error, InternalError, UserError};
 use crate::index::{db_name, main_key};
@@ -26,7 +27,7 @@ use crate::update::del_add::{
 };
 use crate::update::index_documents::GrenadParameters;
 use crate::update::settings::{InnerIndexSettings, InnerIndexSettingsDiff};
-use crate::update::{AvailableDocumentsIds, UpdateIndexingStep};
+use crate::update::{AvailableIds, UpdateIndexingStep};
 use crate::vector::parsed_vectors::{ExplicitVectors, VectorOrArrayOfVectors};
 use crate::vector::settings::WriteBackToDocuments;
 use crate::vector::ArroyWrapper;
@@ -55,13 +56,13 @@ pub struct Transform<'a, 'i> {
 
     indexer_settings: &'a IndexerConfig,
     pub index_documents_method: IndexDocumentsMethod,
-    available_documents_ids: AvailableDocumentsIds,
+    available_documents_ids: AvailableIds,
 
     // Both grenad follows the same format:
     // key | value
     // u32 | 1 byte for the Operation byte, the rest is the obkv of the document stored
-    original_sorter: grenad::Sorter<MergeFn>,
-    flattened_sorter: grenad::Sorter<MergeFn>,
+    original_sorter: grenad::Sorter<EitherObkvMerge>,
+    flattened_sorter: grenad::Sorter<EitherObkvMerge>,
 
     replaced_documents_ids: RoaringBitmap,
     new_documents_ids: RoaringBitmap,
@@ -109,11 +110,13 @@ impl<'a, 'i> Transform<'a, 'i> {
         index_documents_method: IndexDocumentsMethod,
         _autogenerate_docids: bool,
     ) -> Result<Self> {
+        use IndexDocumentsMethod::{ReplaceDocuments, UpdateDocuments};
+
         // We must choose the appropriate merge function for when two or more documents
         // with the same user id must be merged or fully replaced in the same batch.
         let merge_function = match index_documents_method {
-            IndexDocumentsMethod::ReplaceDocuments => obkvs_keep_last_addition_merge_deletions,
-            IndexDocumentsMethod::UpdateDocuments => obkvs_merge_additions_and_deletions,
+            ReplaceDocuments => Either::Left(ObkvsKeepLastAdditionMergeDeletions),
+            UpdateDocuments => Either::Right(ObkvsMergeAdditionsAndDeletions),
         };
 
         // We initialize the sorter with the user indexing settings.
@@ -124,6 +127,7 @@ impl<'a, 'i> Transform<'a, 'i> {
             indexer_settings.chunk_compression_level,
             indexer_settings.max_nb_chunks,
             indexer_settings.max_memory.map(|mem| mem / 2),
+            true,
         );
 
         // We initialize the sorter with the user indexing settings.
@@ -134,6 +138,7 @@ impl<'a, 'i> Transform<'a, 'i> {
             indexer_settings.chunk_compression_level,
             indexer_settings.max_nb_chunks,
             indexer_settings.max_memory.map(|mem| mem / 2),
+            true,
         );
         let documents_ids = index.documents_ids(wtxn)?;
 
@@ -141,7 +146,7 @@ impl<'a, 'i> Transform<'a, 'i> {
             index,
             fields_ids_map: index.fields_ids_map(wtxn)?,
             indexer_settings,
-            available_documents_ids: AvailableDocumentsIds::from_documents_ids(&documents_ids),
+            available_documents_ids: AvailableIds::new(&documents_ids),
             original_sorter,
             flattened_sorter,
             index_documents_method,
@@ -279,21 +284,21 @@ impl<'a, 'i> Transform<'a, 'i> {
                     document_sorter_value_buffer.clear();
                     document_sorter_value_buffer.push(Operation::Addition as u8);
                     into_del_add_obkv(
-                        KvReaderU16::new(base_obkv),
+                        KvReaderU16::from_slice(base_obkv),
                         deladd_operation,
                         &mut document_sorter_value_buffer,
                     )?;
                     self.original_sorter
                         .insert(&document_sorter_key_buffer, &document_sorter_value_buffer)?;
-                    let base_obkv = KvReader::new(base_obkv);
+                    let base_obkv = KvReader::from_slice(base_obkv);
                     if let Some(flattened_obkv) =
-                        Self::flatten_from_fields_ids_map(&base_obkv, &mut self.fields_ids_map)?
+                        Self::flatten_from_fields_ids_map(base_obkv, &mut self.fields_ids_map)?
                     {
                         // we recreate our buffer with the flattened documents
                         document_sorter_value_buffer.clear();
                         document_sorter_value_buffer.push(Operation::Addition as u8);
                         into_del_add_obkv(
-                            KvReaderU16::new(&flattened_obkv),
+                            KvReaderU16::from_slice(&flattened_obkv),
                             deladd_operation,
                             &mut document_sorter_value_buffer,
                         )?;
@@ -312,7 +317,7 @@ impl<'a, 'i> Transform<'a, 'i> {
                 document_sorter_value_buffer.clear();
                 document_sorter_value_buffer.push(Operation::Addition as u8);
                 into_del_add_obkv(
-                    KvReaderU16::new(&obkv_buffer),
+                    KvReaderU16::from_slice(&obkv_buffer),
                     DelAddOperation::Addition,
                     &mut document_sorter_value_buffer,
                 )?;
@@ -320,14 +325,14 @@ impl<'a, 'i> Transform<'a, 'i> {
                 self.original_sorter
                     .insert(&document_sorter_key_buffer, &document_sorter_value_buffer)?;
 
-                let flattened_obkv = KvReader::new(&obkv_buffer);
+                let flattened_obkv = KvReader::from_slice(&obkv_buffer);
                 if let Some(obkv) =
-                    Self::flatten_from_fields_ids_map(&flattened_obkv, &mut self.fields_ids_map)?
+                    Self::flatten_from_fields_ids_map(flattened_obkv, &mut self.fields_ids_map)?
                 {
                     document_sorter_value_buffer.clear();
                     document_sorter_value_buffer.push(Operation::Addition as u8);
                     into_del_add_obkv(
-                        KvReaderU16::new(&obkv),
+                        KvReaderU16::from_slice(&obkv),
                         DelAddOperation::Addition,
                         &mut document_sorter_value_buffer,
                     )?
@@ -357,194 +362,6 @@ impl<'a, 'i> Transform<'a, 'i> {
         Ok(documents_count)
     }
 
-    /// The counter part of `read_documents` that removes documents either from the transform or the database.
-    /// It can be called before, after or in between two calls of the `read_documents`.
-    ///
-    /// It needs to update all the internal datastructure in the transform.
-    /// - If the document is coming from the database -> it's marked as a to_delete document
-    /// - If the document to remove was inserted by the `read_documents` method before AND was present in the db,
-    ///   it's marked as `to_delete` + added into the grenad to ensure we don't reinsert it.
-    /// - If the document to remove was inserted by the `read_documents` method before but was NOT present in the db,
-    ///   it's added into the grenad to ensure we don't insert it + removed from the list of new documents ids.
-    /// - If the document to remove was not present in either the db or the transform we do nothing.
-    #[tracing::instrument(level = "trace", skip_all, target = "indexing::documents")]
-    pub fn remove_documents<FA>(
-        &mut self,
-        mut to_remove: Vec<String>,
-        wtxn: &mut heed::RwTxn<'_>,
-        should_abort: FA,
-    ) -> Result<usize>
-    where
-        FA: Fn() -> bool + Sync,
-    {
-        // there may be duplicates in the documents to remove.
-        to_remove.sort_unstable();
-        to_remove.dedup();
-
-        let external_documents_ids = self.index.external_documents_ids();
-
-        let mut documents_deleted = 0;
-        let mut document_sorter_value_buffer = Vec::new();
-        let mut document_sorter_key_buffer = Vec::new();
-        for to_remove in to_remove {
-            if should_abort() {
-                return Err(Error::InternalError(InternalError::AbortedIndexation));
-            }
-
-            // Check if the document has been added in the current indexing process.
-            let deleted_from_current =
-                match self.new_external_documents_ids_builder.entry((*to_remove).into()) {
-                    // if the document was added in a previous iteration of the transform we make it as deleted in the sorters.
-                    HEntry::Occupied(entry) => {
-                        let docid = *entry.get() as u32;
-                        // Key is the concatenation of the internal docid and the external one.
-                        document_sorter_key_buffer.clear();
-                        document_sorter_key_buffer.extend_from_slice(&docid.to_be_bytes());
-                        document_sorter_key_buffer.extend_from_slice(to_remove.as_bytes());
-                        document_sorter_value_buffer.clear();
-                        document_sorter_value_buffer.push(Operation::Deletion as u8);
-                        obkv::KvWriterU16::new(&mut document_sorter_value_buffer).finish().unwrap();
-                        self.original_sorter
-                            .insert(&document_sorter_key_buffer, &document_sorter_value_buffer)?;
-                        self.flattened_sorter
-                            .insert(docid.to_be_bytes(), &document_sorter_value_buffer)?;
-
-                        // we must NOT update the list of replaced_documents_ids
-                        // Either:
-                        // 1. It's already in it and there is nothing to do
-                        // 2. It wasn't in it because the document was created by a previous batch and since
-                        //    we're removing it there is nothing to do.
-                        self.new_documents_ids.remove(docid);
-                        entry.remove_entry();
-                        true
-                    }
-                    HEntry::Vacant(_) => false,
-                };
-
-            // If the document was already in the db we mark it as a `to_delete` document.
-            // Then we push the document in sorters in deletion mode.
-            let deleted_from_db = match external_documents_ids.get(wtxn, &to_remove)? {
-                Some(docid) => {
-                    self.remove_document_from_db(
-                        docid,
-                        to_remove,
-                        wtxn,
-                        &mut document_sorter_key_buffer,
-                        &mut document_sorter_value_buffer,
-                    )?;
-                    true
-                }
-                None => false,
-            };
-
-            // increase counter only if the document existed somewhere before.
-            if deleted_from_current || deleted_from_db {
-                documents_deleted += 1;
-            }
-        }
-
-        Ok(documents_deleted)
-    }
-
-    /// Removes documents from db using their internal document ids.
-    ///
-    /// # Warning
-    ///
-    /// This function is dangerous and will only work correctly if:
-    ///
-    /// - All the passed ids currently exist in the database
-    /// - No batching using the standards `remove_documents` and `add_documents` took place
-    ///
-    /// TODO: make it impossible to call `remove_documents` or `add_documents` on an instance that calls this function.
-    #[tracing::instrument(level = "trace", skip_all, target = "indexing::details")]
-    pub fn remove_documents_from_db_no_batch<FA>(
-        &mut self,
-        to_remove: &RoaringBitmap,
-        wtxn: &mut heed::RwTxn<'_>,
-        should_abort: FA,
-    ) -> Result<usize>
-    where
-        FA: Fn() -> bool + Sync,
-    {
-        let mut documents_deleted = 0;
-        let mut document_sorter_value_buffer = Vec::new();
-        let mut document_sorter_key_buffer = Vec::new();
-        let external_ids = self.index.external_id_of(wtxn, to_remove.iter())?;
-
-        for (internal_docid, external_docid) in to_remove.iter().zip(external_ids) {
-            let external_docid = external_docid?;
-            if should_abort() {
-                return Err(Error::InternalError(InternalError::AbortedIndexation));
-            }
-            self.remove_document_from_db(
-                internal_docid,
-                external_docid,
-                wtxn,
-                &mut document_sorter_key_buffer,
-                &mut document_sorter_value_buffer,
-            )?;
-
-            documents_deleted += 1;
-        }
-
-        Ok(documents_deleted)
-    }
-
-    fn remove_document_from_db(
-        &mut self,
-        internal_docid: u32,
-        external_docid: String,
-        txn: &heed::RoTxn<'_>,
-        document_sorter_key_buffer: &mut Vec<u8>,
-        document_sorter_value_buffer: &mut Vec<u8>,
-    ) -> Result<()> {
-        self.replaced_documents_ids.insert(internal_docid);
-
-        // fetch the obkv document
-        let original_key = internal_docid;
-        let base_obkv = self
-            .index
-            .documents
-            .remap_data_type::<heed::types::Bytes>()
-            .get(txn, &original_key)?
-            .ok_or(InternalError::DatabaseMissingEntry {
-                db_name: db_name::DOCUMENTS,
-                key: None,
-            })?;
-
-        // Key is the concatenation of the internal docid and the external one.
-        document_sorter_key_buffer.clear();
-        document_sorter_key_buffer.extend_from_slice(&internal_docid.to_be_bytes());
-        document_sorter_key_buffer.extend_from_slice(external_docid.as_bytes());
-        // push it as to delete in the original_sorter
-        document_sorter_value_buffer.clear();
-        document_sorter_value_buffer.push(Operation::Deletion as u8);
-        into_del_add_obkv(
-            KvReaderU16::new(base_obkv),
-            DelAddOperation::Deletion,
-            document_sorter_value_buffer,
-        )?;
-        self.original_sorter.insert(&document_sorter_key_buffer, &document_sorter_value_buffer)?;
-
-        // flatten it and push it as to delete in the flattened_sorter
-        let flattened_obkv = KvReader::new(base_obkv);
-        if let Some(obkv) =
-            Self::flatten_from_fields_ids_map(&flattened_obkv, &mut self.fields_ids_map)?
-        {
-            // we recreate our buffer with the flattened documents
-            document_sorter_value_buffer.clear();
-            document_sorter_value_buffer.push(Operation::Deletion as u8);
-            into_del_add_obkv(
-                KvReaderU16::new(&obkv),
-                DelAddOperation::Deletion,
-                document_sorter_value_buffer,
-            )?;
-        }
-        self.flattened_sorter
-            .insert(internal_docid.to_be_bytes(), &document_sorter_value_buffer)?;
-        Ok(())
-    }
-
     // Flatten a document from the fields ids map contained in self and insert the new
     // created fields. Returns `None` if the document doesn't need to be flattened.
     #[tracing::instrument(
@@ -553,7 +370,7 @@ impl<'a, 'i> Transform<'a, 'i> {
         target = "indexing::transform"
     )]
     fn flatten_from_fields_ids_map(
-        obkv: &KvReader<'_, FieldId>,
+        obkv: &KvReader<FieldId>,
         fields_ids_map: &mut FieldsIdsMap,
     ) -> Result<Option<Vec<u8>>> {
         if obkv
@@ -721,10 +538,10 @@ impl<'a, 'i> Transform<'a, 'i> {
                 total_documents: self.documents_count,
             });
 
-            for (key, value) in KvReader::new(val) {
-                let reader = KvReaderDelAdd::new(value);
+            for (key, value) in KvReader::from_slice(val) {
+                let reader = KvReaderDelAdd::from_slice(value);
                 match (reader.get(DelAdd::Deletion), reader.get(DelAdd::Addition)) {
-                    (None, None) => {}
+                    (None, None) => (),
                     (None, Some(_)) => {
                         // New field
                         let name = self.fields_ids_map.name(key).ok_or(
@@ -803,7 +620,7 @@ impl<'a, 'i> Transform<'a, 'i> {
             fst_new_external_documents_ids_builder.insert(key, value)
         })?;
 
-        let old_inner_settings = InnerIndexSettings::from_index(self.index, wtxn)?;
+        let old_inner_settings = InnerIndexSettings::from_index(self.index, wtxn, None)?;
         let fields_ids_map = self.fields_ids_map;
         let primary_key_id = self.index.primary_key(wtxn)?.and_then(|name| fields_ids_map.id(name));
         let mut new_inner_settings = old_inner_settings.clone();
@@ -838,7 +655,7 @@ impl<'a, 'i> Transform<'a, 'i> {
     /// then fill the provided buffers with delta documents using KvWritterDelAdd.
     #[allow(clippy::too_many_arguments)] // need the vectors + fid, feel free to create a struct xo xo
     fn rebind_existing_document(
-        old_obkv: KvReader<'_, FieldId>,
+        old_obkv: &KvReader<FieldId>,
         settings_diff: &InnerIndexSettingsDiff,
         modified_faceted_fields: &HashSet<String>,
         mut injected_vectors: serde_json::Map<String, serde_json::Value>,
@@ -926,7 +743,7 @@ impl<'a, 'i> Transform<'a, 'i> {
         }
 
         let data = obkv_writer.into_inner()?;
-        let obkv = KvReader::<FieldId>::new(&data);
+        let obkv = KvReader::<FieldId>::from_slice(&data);
 
         if let Some(original_obkv_buffer) = original_obkv_buffer {
             original_obkv_buffer.clear();
@@ -936,8 +753,8 @@ impl<'a, 'i> Transform<'a, 'i> {
         if let Some(flattened_obkv_buffer) = flattened_obkv_buffer {
             // take the non-flattened version if flatten_from_fields_ids_map returns None.
             let mut fields_ids_map = settings_diff.new.fields_ids_map.clone();
-            let flattened = Self::flatten_from_fields_ids_map(&obkv, &mut fields_ids_map)?;
-            let flattened = flattened.as_deref().map_or(obkv, KvReader::new);
+            let flattened = Self::flatten_from_fields_ids_map(obkv, &mut fields_ids_map)?;
+            let flattened = flattened.as_deref().map_or(obkv, KvReader::from_slice);
 
             flattened_obkv_buffer.clear();
             into_del_add_obkv_conditional_operation(flattened, flattened_obkv_buffer, |id| {
@@ -980,11 +797,12 @@ impl<'a, 'i> Transform<'a, 'i> {
         let mut original_sorter = if settings_diff.reindex_vectors() {
             Some(create_sorter(
                 grenad::SortAlgorithm::Stable,
-                keep_first,
+                KeepFirst,
                 self.indexer_settings.chunk_compression_type,
                 self.indexer_settings.chunk_compression_level,
                 self.indexer_settings.max_nb_chunks,
                 self.indexer_settings.max_memory.map(|mem| mem / 2),
+                true,
             ))
         } else {
             None
@@ -1019,11 +837,12 @@ impl<'a, 'i> Transform<'a, 'i> {
             if settings_diff.reindex_searchable() || settings_diff.reindex_facets() {
                 Some(create_sorter(
                     grenad::SortAlgorithm::Stable,
-                    keep_first,
+                    KeepFirst,
                     self.indexer_settings.chunk_compression_type,
                     self.indexer_settings.chunk_compression_level,
                     self.indexer_settings.max_nb_chunks,
                     self.indexer_settings.max_memory.map(|mem| mem / 2),
+                    true,
                 ))
             } else {
                 None
@@ -1137,6 +956,9 @@ fn drop_and_reuse<U, T>(mut vec: Vec<U>) -> Vec<T> {
 
 #[cfg(test)]
 mod test {
+    use grenad::MergeFunction;
+    use obkv::KvReaderU16;
+
     use super::*;
 
     #[test]
@@ -1148,21 +970,21 @@ mod test {
         kv_writer.insert(0_u8, [0]).unwrap();
         let buffer = kv_writer.into_inner().unwrap();
         into_del_add_obkv(
-            KvReaderU16::new(&buffer),
+            KvReaderU16::from_slice(&buffer),
             DelAddOperation::Addition,
             &mut additive_doc_0,
         )
         .unwrap();
         additive_doc_0.insert(0, Operation::Addition as u8);
         into_del_add_obkv(
-            KvReaderU16::new(&buffer),
+            KvReaderU16::from_slice(&buffer),
             DelAddOperation::Deletion,
             &mut deletive_doc_0,
         )
         .unwrap();
         deletive_doc_0.insert(0, Operation::Deletion as u8);
         into_del_add_obkv(
-            KvReaderU16::new(&buffer),
+            KvReaderU16::from_slice(&buffer),
             DelAddOperation::DeletionAndAddition,
             &mut del_add_doc_0,
         )
@@ -1174,7 +996,7 @@ mod test {
         kv_writer.insert(1_u8, [1]).unwrap();
         let buffer = kv_writer.into_inner().unwrap();
         into_del_add_obkv(
-            KvReaderU16::new(&buffer),
+            KvReaderU16::from_slice(&buffer),
             DelAddOperation::Addition,
             &mut additive_doc_1,
         )
@@ -1187,32 +1009,39 @@ mod test {
         kv_writer.insert(1_u8, [1]).unwrap();
         let buffer = kv_writer.into_inner().unwrap();
         into_del_add_obkv(
-            KvReaderU16::new(&buffer),
+            KvReaderU16::from_slice(&buffer),
             DelAddOperation::Addition,
             &mut additive_doc_0_1,
         )
         .unwrap();
         additive_doc_0_1.insert(0, Operation::Addition as u8);
 
-        let ret = obkvs_merge_additions_and_deletions(&[], &[Cow::from(additive_doc_0.as_slice())])
-            .unwrap();
+        let ret = MergeFunction::merge(
+            &ObkvsMergeAdditionsAndDeletions,
+            &[],
+            &[Cow::from(additive_doc_0.as_slice())],
+        )
+        .unwrap();
         assert_eq!(*ret, additive_doc_0);
 
-        let ret = obkvs_merge_additions_and_deletions(
+        let ret = MergeFunction::merge(
+            &ObkvsMergeAdditionsAndDeletions,
             &[],
             &[Cow::from(deletive_doc_0.as_slice()), Cow::from(additive_doc_0.as_slice())],
         )
         .unwrap();
         assert_eq!(*ret, del_add_doc_0);
 
-        let ret = obkvs_merge_additions_and_deletions(
+        let ret = MergeFunction::merge(
+            &ObkvsMergeAdditionsAndDeletions,
             &[],
             &[Cow::from(additive_doc_0.as_slice()), Cow::from(deletive_doc_0.as_slice())],
         )
         .unwrap();
         assert_eq!(*ret, deletive_doc_0);
 
-        let ret = obkvs_merge_additions_and_deletions(
+        let ret = MergeFunction::merge(
+            &ObkvsMergeAdditionsAndDeletions,
             &[],
             &[
                 Cow::from(additive_doc_1.as_slice()),
@@ -1223,21 +1052,24 @@ mod test {
         .unwrap();
         assert_eq!(*ret, del_add_doc_0);
 
-        let ret = obkvs_merge_additions_and_deletions(
+        let ret = MergeFunction::merge(
+            &ObkvsMergeAdditionsAndDeletions,
             &[],
             &[Cow::from(additive_doc_1.as_slice()), Cow::from(additive_doc_0.as_slice())],
         )
         .unwrap();
         assert_eq!(*ret, additive_doc_0_1);
 
-        let ret = obkvs_keep_last_addition_merge_deletions(
+        let ret = MergeFunction::merge(
+            &ObkvsKeepLastAdditionMergeDeletions,
             &[],
             &[Cow::from(additive_doc_1.as_slice()), Cow::from(additive_doc_0.as_slice())],
         )
         .unwrap();
         assert_eq!(*ret, additive_doc_0);
 
-        let ret = obkvs_keep_last_addition_merge_deletions(
+        let ret = MergeFunction::merge(
+            &ObkvsKeepLastAdditionMergeDeletions,
             &[],
             &[
                 Cow::from(deletive_doc_0.as_slice()),

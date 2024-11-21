@@ -122,7 +122,7 @@ impl CboRoaringBitmapCodec {
 
     /// Merges a DelAdd delta into a CboRoaringBitmap.
     pub fn merge_deladd_into<'a>(
-        deladd: KvReaderDelAdd<'_>,
+        deladd: &KvReaderDelAdd,
         previous: &[u8],
         buffer: &'a mut Vec<u8>,
     ) -> io::Result<Option<&'a [u8]>> {

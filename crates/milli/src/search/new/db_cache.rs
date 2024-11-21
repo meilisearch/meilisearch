@@ -3,6 +3,7 @@ use std::collections::hash_map::Entry;
 use std::hash::Hash;
 
 use fxhash::FxHashMap;
+use grenad::MergeFunction;
 use heed::types::Bytes;
 use heed::{BytesEncode, Database, RoTxn};
 use roaring::RoaringBitmap;
@@ -11,7 +12,7 @@ use super::interner::Interned;
 use super::Word;
 use crate::heed_codec::{BytesDecodeOwned, StrBEU16Codec};
 use crate::proximity::ProximityPrecision;
-use crate::update::{merge_cbo_roaring_bitmaps, MergeFn};
+use crate::update::MergeCboRoaringBitmaps;
 use crate::{
     CboRoaringBitmapCodec, CboRoaringBitmapLenCodec, Result, SearchContext, U8StrStrCodec,
 };
@@ -110,19 +111,21 @@ impl<'ctx> DatabaseCache<'ctx> {
             .map_err(Into::into)
     }
 
-    fn get_value_from_keys<'v, K1, KC>(
+    fn get_value_from_keys<'v, K1, KC, MF>(
         txn: &'ctx RoTxn<'_>,
         cache_key: K1,
         db_keys: &'v [KC::EItem],
         cache: &mut FxHashMap<K1, Option<Cow<'ctx, [u8]>>>,
         db: Database<KC, Bytes>,
         universe: Option<&RoaringBitmap>,
-        merger: MergeFn,
+        merger: MF,
     ) -> Result<Option<RoaringBitmap>>
     where
         K1: Copy + Eq + Hash,
         KC: BytesEncode<'v>,
         KC::EItem: Sized,
+        MF: MergeFunction,
+        crate::Error: From<MF::Error>,
     {
         if let Entry::Vacant(entry) = cache.entry(cache_key) {
             let bitmap_ptr: Option<Cow<'ctx, [u8]>> = match db_keys {
@@ -138,7 +141,7 @@ impl<'ctx> DatabaseCache<'ctx> {
                     if bitmaps.is_empty() {
                         None
                     } else {
-                        Some(merger(&[], &bitmaps[..])?)
+                        Some(merger.merge(&[], &bitmaps[..])?)
                     }
                 }
             };
@@ -213,17 +216,17 @@ impl<'ctx> SearchContext<'ctx> {
                 let keys: Vec<_> =
                     restricted_fids.tolerant.iter().map(|(fid, _)| (interned, *fid)).collect();
 
-                DatabaseCache::get_value_from_keys::<_, _>(
+                DatabaseCache::get_value_from_keys(
                     self.txn,
                     word,
                     &keys[..],
                     &mut self.db_cache.word_docids,
                     self.index.word_fid_docids.remap_data_type::<Bytes>(),
                     universe,
-                    merge_cbo_roaring_bitmaps,
+                    MergeCboRoaringBitmaps,
                 )
             }
-            None => DatabaseCache::get_value::<_, _>(
+            None => DatabaseCache::get_value(
                 self.txn,
                 word,
                 self.word_interner.get(word).as_str(),
@@ -245,17 +248,17 @@ impl<'ctx> SearchContext<'ctx> {
                 let keys: Vec<_> =
                     restricted_fids.exact.iter().map(|(fid, _)| (interned, *fid)).collect();
 
-                DatabaseCache::get_value_from_keys::<_, _>(
+                DatabaseCache::get_value_from_keys(
                     self.txn,
                     word,
                     &keys[..],
                     &mut self.db_cache.exact_word_docids,
                     self.index.word_fid_docids.remap_data_type::<Bytes>(),
                     universe,
-                    merge_cbo_roaring_bitmaps,
+                    MergeCboRoaringBitmaps,
                 )
             }
-            None => DatabaseCache::get_value::<_, _>(
+            None => DatabaseCache::get_value(
                 self.txn,
                 word,
                 self.word_interner.get(word).as_str(),
@@ -302,17 +305,17 @@ impl<'ctx> SearchContext<'ctx> {
                 let keys: Vec<_> =
                     restricted_fids.tolerant.iter().map(|(fid, _)| (interned, *fid)).collect();
 
-                DatabaseCache::get_value_from_keys::<_, _>(
+                DatabaseCache::get_value_from_keys(
                     self.txn,
                     prefix,
                     &keys[..],
                     &mut self.db_cache.word_prefix_docids,
                     self.index.word_prefix_fid_docids.remap_data_type::<Bytes>(),
                     universe,
-                    merge_cbo_roaring_bitmaps,
+                    MergeCboRoaringBitmaps,
                 )
             }
-            None => DatabaseCache::get_value::<_, _>(
+            None => DatabaseCache::get_value(
                 self.txn,
                 prefix,
                 self.word_interner.get(prefix).as_str(),
@@ -334,17 +337,17 @@ impl<'ctx> SearchContext<'ctx> {
                 let keys: Vec<_> =
                     restricted_fids.exact.iter().map(|(fid, _)| (interned, *fid)).collect();
 
-                DatabaseCache::get_value_from_keys::<_, _>(
+                DatabaseCache::get_value_from_keys(
                     self.txn,
                     prefix,
                     &keys[..],
                     &mut self.db_cache.exact_word_prefix_docids,
                     self.index.word_prefix_fid_docids.remap_data_type::<Bytes>(),
                     universe,
-                    merge_cbo_roaring_bitmaps,
+                    MergeCboRoaringBitmaps,
                 )
             }
-            None => DatabaseCache::get_value::<_, _>(
+            None => DatabaseCache::get_value(
                 self.txn,
                 prefix,
                 self.word_interner.get(prefix).as_str(),
@@ -405,7 +408,7 @@ impl<'ctx> SearchContext<'ctx> {
 
                 Ok(docids)
             }
-            ProximityPrecision::ByWord => DatabaseCache::get_value::<_, _>(
+            ProximityPrecision::ByWord => DatabaseCache::get_value(
                 self.txn,
                 (proximity, word1, word2),
                 &(
@@ -538,7 +541,7 @@ impl<'ctx> SearchContext<'ctx> {
             return Ok(None);
         }
 
-        DatabaseCache::get_value::<_, _>(
+        DatabaseCache::get_value(
             self.txn,
             (word, fid),
             &(self.word_interner.get(word).as_str(), fid),
@@ -559,7 +562,7 @@ impl<'ctx> SearchContext<'ctx> {
             return Ok(None);
         }
 
-        DatabaseCache::get_value::<_, _>(
+        DatabaseCache::get_value(
             self.txn,
             (word_prefix, fid),
             &(self.word_interner.get(word_prefix).as_str(), fid),
@@ -629,7 +632,7 @@ impl<'ctx> SearchContext<'ctx> {
         word: Interned<String>,
         position: u16,
     ) -> Result<Option<RoaringBitmap>> {
-        DatabaseCache::get_value::<_, _>(
+        DatabaseCache::get_value(
             self.txn,
             (word, position),
             &(self.word_interner.get(word).as_str(), position),
@@ -645,7 +648,7 @@ impl<'ctx> SearchContext<'ctx> {
         word_prefix: Interned<String>,
         position: u16,
     ) -> Result<Option<RoaringBitmap>> {
-        DatabaseCache::get_value::<_, _>(
+        DatabaseCache::get_value(
             self.txn,
             (word_prefix, position),
             &(self.word_interner.get(word_prefix).as_str(), position),

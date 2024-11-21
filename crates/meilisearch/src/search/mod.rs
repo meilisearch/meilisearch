@@ -796,8 +796,10 @@ fn prepare_search<'t>(
                     let span = tracing::trace_span!(target: "search::vector", "embed_one");
                     let _entered = span.enter();
 
+                    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+
                     embedder
-                        .embed_one(query.q.clone().unwrap())
+                        .embed_one(query.q.clone().unwrap(), Some(deadline))
                         .map_err(milli::vector::Error::from)
                         .map_err(milli::Error::from)?
                 }
@@ -1687,7 +1689,7 @@ fn add_non_formatted_ids_to_formatted_options(
 fn make_document(
     displayed_attributes: &BTreeSet<FieldId>,
     field_ids_map: &FieldsIdsMap,
-    obkv: obkv::KvReaderU16,
+    obkv: &obkv::KvReaderU16,
 ) -> Result<Document, MeilisearchHttpError> {
     let mut document = serde_json::Map::new();
 

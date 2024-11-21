@@ -113,9 +113,9 @@ async fn simple_search_single_index() {
             ],
             "_vectors": {
               "manual": [
-                -100.0,
-                340.0,
-                90.0
+                -100,
+                340,
+                90
               ]
             }
           }
@@ -138,9 +138,9 @@ async fn simple_search_single_index() {
             ],
             "_vectors": {
               "manual": [
-                1.0,
-                2.0,
-                54.0
+                1,
+                2,
+                54
               ]
             }
           }
@@ -182,9 +182,9 @@ async fn federation_single_search_single_index() {
           ],
           "_vectors": {
             "manual": [
-              -100.0,
-              340.0,
-              90.0
+              -100,
+              340,
+              90
             ]
           },
           "_federation": {
@@ -305,9 +305,9 @@ async fn federation_two_search_single_index() {
           ],
           "_vectors": {
             "manual": [
-              -100.0,
-              340.0,
-              90.0
+              -100,
+              340,
+              90
             ]
           },
           "_federation": {
@@ -325,9 +325,9 @@ async fn federation_two_search_single_index() {
           ],
           "_vectors": {
             "manual": [
-              1.0,
-              2.0,
-              54.0
+              1,
+              2,
+              54
             ]
           },
           "_federation": {
@@ -480,9 +480,9 @@ async fn simple_search_two_indexes() {
             ],
             "_vectors": {
               "manual": [
-                -100.0,
-                340.0,
-                90.0
+                -100,
+                340,
+                90
               ]
             }
           }
@@ -513,9 +513,9 @@ async fn simple_search_two_indexes() {
             "cattos": "pésti",
             "_vectors": {
               "manual": [
-                1.0,
-                2.0,
-                3.0
+                1,
+                2,
+                3
               ]
             }
           },
@@ -535,9 +535,9 @@ async fn simple_search_two_indexes() {
             ],
             "_vectors": {
               "manual": [
-                1.0,
-                2.0,
-                54.0
+                1,
+                2,
+                54
               ]
             }
           }
@@ -585,9 +585,9 @@ async fn federation_two_search_two_indexes() {
           ],
           "_vectors": {
             "manual": [
-              -100.0,
-              340.0,
-              90.0
+              -100,
+              340,
+              90
             ]
           },
           "_federation": {
@@ -613,9 +613,9 @@ async fn federation_two_search_two_indexes() {
           "cattos": "pésti",
           "_vectors": {
             "manual": [
-              1.0,
-              2.0,
-              3.0
+              1,
+              2,
+              3
             ]
           },
           "_federation": {
@@ -640,9 +640,9 @@ async fn federation_two_search_two_indexes() {
           ],
           "_vectors": {
             "manual": [
-              1.0,
-              2.0,
-              54.0
+              1,
+              2,
+              54
             ]
           },
           "_federation": {
@@ -707,9 +707,9 @@ async fn federation_multiple_search_multiple_indexes() {
           ],
           "_vectors": {
             "manual": [
-              -100.0,
-              340.0,
-              90.0
+              -100,
+              340,
+              90
             ]
           },
           "_federation": {
@@ -735,9 +735,9 @@ async fn federation_multiple_search_multiple_indexes() {
           "cattos": "pésti",
           "_vectors": {
             "manual": [
-              1.0,
-              2.0,
-              3.0
+              1,
+              2,
+              3
             ]
           },
           "_federation": {
@@ -773,9 +773,9 @@ async fn federation_multiple_search_multiple_indexes() {
           ],
           "_vectors": {
             "manual": [
-              1.0,
-              2.0,
-              54.0
+              1,
+              2,
+              54
             ]
           },
           "_federation": {
@@ -793,9 +793,9 @@ async fn federation_multiple_search_multiple_indexes() {
           ],
           "_vectors": {
             "manual": [
-              10.0,
-              -23.0,
-              32.0
+              10,
+              -23,
+              32
             ]
           },
           "_federation": {
@@ -824,9 +824,9 @@ async fn federation_multiple_search_multiple_indexes() {
           ],
           "_vectors": {
             "manual": [
-              10.0,
-              23.0,
-              32.0
+              10,
+              23,
+              32
             ]
           },
           "_federation": {
@@ -869,9 +869,9 @@ async fn federation_multiple_search_multiple_indexes() {
           ],
           "_vectors": {
             "manual": [
-              1.0,
-              2.0,
-              54.0
+              1,
+              2,
+              54
             ]
           },
           "_federation": {
@@ -898,9 +898,9 @@ async fn federation_multiple_search_multiple_indexes() {
           ],
           "_vectors": {
             "manual": [
-              -100.0,
-              231.0,
-              32.0
+              -100,
+              231,
+              32
             ]
           },
           "_federation": {
@@ -1393,9 +1393,9 @@ async fn federation_sort_same_indexes_same_criterion_same_direction() {
           "cattos": "pésti",
           "_vectors": {
             "manual": [
-              1.0,
-              2.0,
-              3.0
+              1,
+              2,
+              3
             ]
           },
           "_federation": {
@@ -1414,9 +1414,9 @@ async fn federation_sort_same_indexes_same_criterion_same_direction() {
           ],
           "_vectors": {
             "manual": [
-              10.0,
-              23.0,
-              32.0
+              10,
+              23,
+              32
             ]
           },
           "_federation": {
@@ -1442,9 +1442,9 @@ async fn federation_sort_same_indexes_same_criterion_same_direction() {
           ],
           "_vectors": {
             "manual": [
-              1.0,
-              2.0,
-              54.0
+              1,
+              2,
+              54
             ]
           },
           "_federation": {
@@ -1474,9 +1474,9 @@ async fn federation_sort_same_indexes_same_criterion_same_direction() {
           ],
           "_vectors": {
             "manual": [
-              10.0,
-              23.0,
-              32.0
+              10,
+              23,
+              32
             ]
           },
           "_federation": {
@@ -1522,9 +1522,9 @@ async fn federation_sort_same_indexes_same_criterion_same_direction() {
           "cattos": "pésti",
           "_vectors": {
             "manual": [
-              1.0,
-              2.0,
-              3.0
+              1,
+              2,
+              3
             ]
           },
           "_federation": {
@@ -1550,9 +1550,9 @@ async fn federation_sort_same_indexes_same_criterion_same_direction() {
           ],
           "_vectors": {
             "manual": [
-              1.0,
-              2.0,
-              54.0
+              1,
+              2,
+              54
             ]
           },
           "_federation": {
@@ -1582,9 +1582,9 @@ async fn federation_sort_same_indexes_same_criterion_same_direction() {
           ],
           "_vectors": {
             "manual": [
-              10.0,
-              23.0,
-              32.0
+              10,
+              23,
+              32
             ]
           },
           "_federation": {
@@ -1716,9 +1716,9 @@ async fn federation_sort_same_indexes_different_criterion_same_direction() {
           "cattos": "pésti",
           "_vectors": {
             "manual": [
-              1.0,
-              2.0,
-              3.0
+              1,
+              2,
+              3
             ]
           },
           "_federation": {
@@ -1748,9 +1748,9 @@ async fn federation_sort_same_indexes_different_criterion_same_direction() {
           ],
           "_vectors": {
             "manual": [
-              10.0,
-              23.0,
-              32.0
+              10,
+              23,
+              32
             ]
           },
           "_federation": {
@@ -1769,9 +1769,9 @@ async fn federation_sort_same_indexes_different_criterion_same_direction() {
           ],
           "_vectors": {
             "manual": [
-              10.0,
-              23.0,
-              32.0
+              10,
+              23,
+              32
             ]
           },
           "_federation": {
@@ -1797,9 +1797,9 @@ async fn federation_sort_same_indexes_different_criterion_same_direction() {
           ],
           "_vectors": {
             "manual": [
-              1.0,
-              2.0,
-              54.0
+              1,
+              2,
+              54
             ]
           },
           "_federation": {
@@ -1845,9 +1845,9 @@ async fn federation_sort_same_indexes_different_criterion_same_direction() {
           ],
           "_vectors": {
             "manual": [
-              1.0,
-              2.0,
-              54.0
+              1,
+              2,
+              54
             ]
           },
           "_federation": {
@@ -1874,9 +1874,9 @@ async fn federation_sort_same_indexes_different_criterion_same_direction() {
           "cattos": "pésti",
           "_vectors": {
             "manual": [
-              1.0,
-              2.0,
-              3.0
+              1,
+              2,
+              3
             ]
           },
           "_federation": {
@@ -1906,9 +1906,9 @@ async fn federation_sort_same_indexes_different_criterion_same_direction() {
           ],
           "_vectors": {
             "manual": [
-              10.0,
-              23.0,
-              32.0
+              10,
+              23,
+              32
             ]
           },
           "_federation": {
@@ -2103,9 +2103,9 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
           ],
           "_vectors": {
             "manual": [
-              1.0,
-              2.0,
-              54.0
+              1,
+              2,
+              54
             ]
           },
           "_federation": {
@@ -2124,9 +2124,9 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
           ],
           "_vectors": {
             "manual": [
-              10.0,
-              -23.0,
-              32.0
+              10,
+              -23,
+              32
             ]
           },
           "_federation": {
@@ -2145,9 +2145,9 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
           ],
           "_vectors": {
             "manual": [
-              -100.0,
-              340.0,
-              90.0
+              -100,
+              340,
+              90
             ]
           },
           "_federation": {
@@ -2166,9 +2166,9 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
           ],
           "_vectors": {
             "manual": [
-              -100.0,
-              231.0,
-              32.0
+              -100,
+              231,
+              32
             ]
           },
           "_federation": {
@@ -2187,9 +2187,9 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
           ],
           "_vectors": {
             "manual": [
-              1.0,
-              2.0,
-              3.0
+              1,
+              2,
+              3
             ]
           },
           "_federation": {
@@ -2228,9 +2228,9 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
           ],
           "_vectors": {
             "manual": [
-              1.0,
-              2.0,
-              54.0
+              1,
+              2,
+              54
             ]
           },
           "_federation": {
@@ -2415,9 +2415,9 @@ async fn federation_sort_different_ranking_rules() {
           ],
           "_vectors": {
             "manual": [
-              1.0,
-              2.0,
-              54.0
+              1,
+              2,
+              54
             ]
           },
           "_federation": {
@@ -2436,9 +2436,9 @@ async fn federation_sort_different_ranking_rules() {
           ],
           "_vectors": {
             "manual": [
-              10.0,
-              -23.0,
-              32.0
+              10,
+              -23,
+              32
             ]
           },
           "_federation": {
@@ -2457,9 +2457,9 @@ async fn federation_sort_different_ranking_rules() {
           ],
           "_vectors": {
             "manual": [
-              -100.0,
-              340.0,
-              90.0
+              -100,
+              340,
+              90
             ]
           },
           "_federation": {
@@ -2478,9 +2478,9 @@ async fn federation_sort_different_ranking_rules() {
           ],
           "_vectors": {
             "manual": [
-              -100.0,
-              231.0,
-              32.0
+              -100,
+              231,
+              32
             ]
           },
           "_federation": {
@@ -2499,9 +2499,9 @@ async fn federation_sort_different_ranking_rules() {
           ],
           "_vectors": {
             "manual": [
-              1.0,
-              2.0,
-              3.0
+              1,
+              2,
+              3
             ]
           },
           "_federation": {
@@ -2716,9 +2716,9 @@ async fn federation_sort_different_indexes_different_criterion_same_direction() 
           ],
           "_vectors": {
             "manual": [
-              1.0,
-              2.0,
-              54.0
+              1,
+              2,
+              54
             ]
           },
           "_federation": {
@@ -2757,9 +2757,9 @@ async fn federation_sort_different_indexes_different_criterion_same_direction() 
           ],
           "_vectors": {
             "manual": [
-              10.0,
-              -23.0,
-              32.0
+              10,
+              -23,
+              32
             ]
           },
           "_federation": {
@@ -2778,9 +2778,9 @@ async fn federation_sort_different_indexes_different_criterion_same_direction() 
           ],
           "_vectors": {
             "manual": [
-              -100.0,
-              340.0,
-              90.0
+              -100,
+              340,
+              90
             ]
           },
           "_federation": {
@@ -2799,9 +2799,9 @@ async fn federation_sort_different_indexes_different_criterion_same_direction() 
           ],
           "_vectors": {
             "manual": [
-              -100.0,
-              231.0,
-              32.0
+              -100,
+              231,
+              32
             ]
           },
           "_federation": {
@@ -2820,9 +2820,9 @@ async fn federation_sort_different_indexes_different_criterion_same_direction() 
           ],
           "_vectors": {
             "manual": [
-              1.0,
-              2.0,
-              3.0
+              1,
+              2,
+              3
             ]
           },
           "_federation": {
@@ -2881,9 +2881,9 @@ async fn federation_sort_different_indexes_different_criterion_same_direction() 
           ],
           "_vectors": {
             "manual": [
-              1.0,
-              2.0,
-              54.0
+              1,
+              2,
+              54
             ]
           },
           "_federation": {
@@ -4346,10 +4346,10 @@ async fn federation_vector_two_indexes() {
 
     let (response, code) = server
         .multi_search(json!({"federation": {}, "queries": [
-        {"indexUid" : "vectors-animal", "vector": [1.0, 0.0, 0.5], "hybrid": {"semanticRatio": 1.0, "embedder": "animal"}},
+        {"indexUid" : "vectors-animal", "vector": [1.0, 0.0, 0.5], "hybrid": {"semanticRatio": 1.0, "embedder": "animal"}, "retrieveVectors": true},
         // joyful and energetic first
-        {"indexUid": "vectors-sentiment", "vector": [0.8, 0.6], "hybrid": {"semanticRatio": 1.0, "embedder": "sentiment"}},
-        {"indexUid": "vectors-sentiment", "q": "dog"},
+        {"indexUid": "vectors-sentiment", "vector": [0.8, 0.6], "hybrid": {"semanticRatio": 1.0, "embedder": "sentiment"}, "retrieveVectors": true},
+        {"indexUid": "vectors-sentiment", "q": "dog", "retrieveVectors": true},
         ]}))
         .await;
     snapshot!(code, @"200 OK");
@@ -4364,7 +4364,16 @@ async fn federation_vector_two_indexes() {
               0.8,
               0.09,
               0.8
-            ]
+            ],
+            "sentiment": {
+              "embeddings": [
+                [
+                  0.800000011920929,
+                  0.30000001192092896
+                ]
+              ],
+              "regenerate": false
+            }
           },
           "_federation": {
             "indexUid": "vectors-sentiment",
@@ -4379,7 +4388,17 @@ async fn federation_vector_two_indexes() {
             "sentiment": [
               0.8,
               0.3
-            ]
+            ],
+            "animal": {
+              "embeddings": [
+                [
+                  0.800000011920929,
+                  0.09000000357627869,
+                  0.800000011920929
+                ]
+              ],
+              "regenerate": false
+            }
           },
           "_federation": {
             "indexUid": "vectors-animal",
@@ -4394,7 +4413,17 @@ async fn federation_vector_two_indexes() {
             "sentiment": [
               -1.0,
               0.1
-            ]
+            ],
+            "animal": {
+              "embeddings": [
+                [
+                  0.8500000238418579,
+                  0.019999999552965164,
+                  0.10000000149011612
+                ]
+              ],
+              "regenerate": false
+            }
           },
           "_federation": {
             "indexUid": "vectors-animal",
@@ -4410,7 +4439,16 @@ async fn federation_vector_two_indexes() {
               0.9,
               0.8,
               0.05
-            ]
+            ],
+            "sentiment": {
+              "embeddings": [
+                [
+                  -0.10000000149011612,
+                  0.550000011920929
+                ]
+              ],
+              "regenerate": false
+            }
           },
           "_federation": {
             "indexUid": "vectors-sentiment",
@@ -4426,7 +4464,16 @@ async fn federation_vector_two_indexes() {
               0.85,
               0.02,
               0.1
-            ]
+            ],
+            "sentiment": {
+              "embeddings": [
+                [
+                  -1.0,
+                  0.10000000149011612
+                ]
+              ],
+              "regenerate": false
+            }
           },
           "_federation": {
             "indexUid": "vectors-sentiment",
@@ -4441,7 +4488,17 @@ async fn federation_vector_two_indexes() {
             "sentiment": [
               -0.2,
               0.65
-            ]
+            ],
+            "animal": {
+              "embeddings": [
+                [
+                  0.800000011920929,
+                  0.8999999761581421,
+                  0.5
+                ]
+              ],
+              "regenerate": false
+            }
           },
           "_federation": {
             "indexUid": "vectors-animal",
@@ -4456,7 +4513,17 @@ async fn federation_vector_two_indexes() {
             "sentiment": [
               -0.1,
               0.55
-            ]
+            ],
+            "animal": {
+              "embeddings": [
+                [
+                  0.8999999761581421,
+                  0.800000011920929,
+                  0.05000000074505806
+                ]
+              ],
+              "regenerate": false
+            }
           },
           "_federation": {
             "indexUid": "vectors-animal",
@@ -4472,7 +4539,16 @@ async fn federation_vector_two_indexes() {
               0.8,
               0.9,
               0.5
-            ]
+            ],
+            "sentiment": {
+              "embeddings": [
+                [
+                  -0.20000000298023224,
+                  0.6499999761581421
+                ]
+              ],
+              "regenerate": false
+            }
           },
           "_federation": {
             "indexUid": "vectors-sentiment",
@@ -4492,8 +4568,8 @@ async fn federation_vector_two_indexes() {
     // hybrid search, distinct embedder
     let (response, code) = server
         .multi_search(json!({"federation": {}, "queries": [
-          {"indexUid" : "vectors-animal", "vector": [1.0, 0.0, 0.5], "hybrid": {"semanticRatio": 1.0, "embedder": "animal"}, "showRankingScore": true},
-          {"indexUid": "vectors-sentiment", "vector": [-1, 0.6], "q": "beagle", "hybrid": {"semanticRatio": 1.0, "embedder": "sentiment"}, "showRankingScore": true},
+          {"indexUid" : "vectors-animal", "vector": [1.0, 0.0, 0.5], "hybrid": {"semanticRatio": 1.0, "embedder": "animal"}, "showRankingScore": true, "retrieveVectors": true},
+          {"indexUid": "vectors-sentiment", "vector": [-1, 0.6], "q": "beagle", "hybrid": {"semanticRatio": 1.0, "embedder": "sentiment"}, "showRankingScore": true, "retrieveVectors": true,},
         ]}))
         .await;
     snapshot!(code, @"200 OK");
@@ -4507,7 +4583,17 @@ async fn federation_vector_two_indexes() {
             "sentiment": [
               0.8,
               0.3
-            ]
+            ],
+            "animal": {
+              "embeddings": [
+                [
+                  0.800000011920929,
+                  0.09000000357627869,
+                  0.800000011920929
+                ]
+              ],
+              "regenerate": false
+            }
           },
           "_federation": {
             "indexUid": "vectors-animal",
@@ -4523,7 +4609,17 @@ async fn federation_vector_two_indexes() {
             "sentiment": [
               -1.0,
               0.1
-            ]
+            ],
+            "animal": {
+              "embeddings": [
+                [
+                  0.8500000238418579,
+                  0.019999999552965164,
+                  0.10000000149011612
+                ]
+              ],
+              "regenerate": false
+            }
           },
           "_federation": {
             "indexUid": "vectors-animal",
@@ -4540,7 +4636,16 @@ async fn federation_vector_two_indexes() {
               0.85,
               0.02,
               0.1
-            ]
+            ],
+            "sentiment": {
+              "embeddings": [
+                [
+                  -1.0,
+                  0.10000000149011612
+                ]
+              ],
+              "regenerate": false
+            }
           },
           "_federation": {
             "indexUid": "vectors-sentiment",
@@ -4557,7 +4662,16 @@ async fn federation_vector_two_indexes() {
               0.8,
               0.9,
               0.5
-            ]
+            ],
+            "sentiment": {
+              "embeddings": [
+                [
+                  -0.20000000298023224,
+                  0.6499999761581421
+                ]
+              ],
+              "regenerate": false
+            }
           },
           "_federation": {
             "indexUid": "vectors-sentiment",
@@ -4573,7 +4687,17 @@ async fn federation_vector_two_indexes() {
             "sentiment": [
               -0.2,
               0.65
-            ]
+            ],
+            "animal": {
+              "embeddings": [
+                [
+                  0.800000011920929,
+                  0.8999999761581421,
+                  0.5
+                ]
+              ],
+              "regenerate": false
+            }
           },
           "_federation": {
             "indexUid": "vectors-animal",
@@ -4589,7 +4713,17 @@ async fn federation_vector_two_indexes() {
             "sentiment": [
               -0.1,
               0.55
-            ]
+            ],
+            "animal": {
+              "embeddings": [
+                [
+                  0.8999999761581421,
+                  0.800000011920929,
+                  0.05000000074505806
+                ]
+              ],
+              "regenerate": false
+            }
           },
           "_federation": {
             "indexUid": "vectors-animal",
@@ -4606,7 +4740,16 @@ async fn federation_vector_two_indexes() {
               0.9,
               0.8,
               0.05
-            ]
+            ],
+            "sentiment": {
+              "embeddings": [
+                [
+                  -0.10000000149011612,
+                  0.550000011920929
+                ]
+              ],
+              "regenerate": false
+            }
           },
           "_federation": {
             "indexUid": "vectors-sentiment",
@@ -4623,7 +4766,16 @@ async fn federation_vector_two_indexes() {
               0.8,
               0.09,
               0.8
-            ]
+            ],
+            "sentiment": {
+              "embeddings": [
+                [
+                  0.800000011920929,
+                  0.30000001192092896
+                ]
+              ],
+              "regenerate": false
+            }
           },
           "_federation": {
             "indexUid": "vectors-sentiment",

@@ -1344,7 +1344,6 @@ async fn error_add_documents_missing_document_id() {
 }
 
 #[actix_rt::test]
-#[should_panic]
 async fn error_document_field_limit_reached_in_one_document() {
     let server = Server::new().await;
     let index = server.index("test");
@@ -1361,7 +1360,7 @@ async fn error_document_field_limit_reached_in_one_document() {
     let documents = json!([big_object]);
 
     let (response, code) = index.update_documents(documents, Some("id")).await;
-    snapshot!(code, @"500 Internal Server Error");
+    snapshot!(code, @"202 Accepted");
 
     let response = index.wait_task(response.uid()).await;
     snapshot!(code, @"202 Accepted");
@@ -1369,16 +1368,22 @@ async fn error_document_field_limit_reached_in_one_document() {
     snapshot!(response,
         @r###"
     {
-      "uid": 1,
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "test",
-      "status": "succeeded",
+      "status": "failed",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
       "details": {
         "receivedDocuments": 1,
-        "indexedDocuments": 1
+        "indexedDocuments": 0
       },
-      "error": null,
+      "error": {
+        "message": "A document cannot contain more than 65,535 fields.",
+        "code": "max_fields_limit_exceeded",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#max_fields_limit_exceeded"
+      },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
@@ -1676,7 +1681,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "The `_geo` field in the document with the id: `11` is not an object. Was expecting an object with the `_geo.lat` and `_geo.lng` fields but instead got `\"foobar\"`.",
+        "message": "The `_geo` field in the document with the id: `\"11\"` is not an object. Was expecting an object with the `_geo.lat` and `_geo.lng` fields but instead got `\"foobar\"`.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -1714,7 +1719,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Could not find latitude nor longitude in the document with the id: `11`. Was expecting `_geo.lat` and `_geo.lng` fields.",
+        "message": "Could not find latitude nor longitude in the document with the id: `\"11\"`. Was expecting `_geo.lat` and `_geo.lng` fields.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -1752,7 +1757,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Could not find latitude nor longitude in the document with the id: `11`. Was expecting `_geo.lat` and `_geo.lng` fields.",
+        "message": "Could not find latitude nor longitude in the document with the id: `\"11\"`. Was expecting `_geo.lat` and `_geo.lng` fields.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -1790,7 +1795,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Could not find longitude in the document with the id: `11`. Was expecting a `_geo.lng` field.",
+        "message": "Could not find longitude in the document with the id: `\"11\"`. Was expecting a `_geo.lng` field.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -1828,7 +1833,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Could not find latitude in the document with the id: `11`. Was expecting a `_geo.lat` field.",
+        "message": "Could not find latitude in the document with the id: `\"11\"`. Was expecting a `_geo.lat` field.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -1866,7 +1871,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Could not find longitude in the document with the id: `11`. Was expecting a `_geo.lng` field.",
+        "message": "Could not find longitude in the document with the id: `\"11\"`. Was expecting a `_geo.lng` field.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -1904,7 +1909,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Could not find latitude in the document with the id: `11`. Was expecting a `_geo.lat` field.",
+        "message": "Could not find latitude in the document with the id: `\"11\"`. Was expecting a `_geo.lat` field.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -1942,7 +1947,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Could not parse latitude nor longitude in the document with the id: `11`. Was expecting finite numbers but instead got `false` and `true`.",
+        "message": "Could not parse latitude nor longitude in the document with the id: `\"11\"`. Was expecting finite numbers but instead got `false` and `true`.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -1980,7 +1985,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Could not find longitude in the document with the id: `11`. Was expecting a `_geo.lng` field.",
+        "message": "Could not find longitude in the document with the id: `\"11\"`. Was expecting a `_geo.lng` field.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -2018,7 +2023,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Could not find latitude in the document with the id: `11`. Was expecting a `_geo.lat` field.",
+        "message": "Could not find latitude in the document with the id: `\"11\"`. Was expecting a `_geo.lat` field.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -2056,7 +2061,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Could not parse latitude nor longitude in the document with the id: `11`. Was expecting finite numbers but instead got `\"doggo\"` and `\"doggo\"`.",
+        "message": "Could not parse latitude nor longitude in the document with the id: `\"11\"`. Was expecting finite numbers but instead got `\"doggo\"` and `\"doggo\"`.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -2094,7 +2099,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "The `_geo` field in the document with the id: `11` contains the following unexpected fields: `{\"doggo\":\"are the best\"}`.",
+        "message": "The `_geo` field in the document with the id: `\"11\"` contains the following unexpected fields: `{\"doggo\":\"are the best\"}`.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -2133,7 +2138,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Could not parse longitude in the document with the id: `12`. Was expecting a finite number but instead got `null`.",
+        "message": "Could not parse longitude in the document with the id: `\"12\"`. Was expecting a finite number but instead got `null`.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -2170,7 +2175,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Could not parse latitude in the document with the id: `12`. Was expecting a finite number but instead got `null`.",
+        "message": "Could not parse latitude in the document with the id: `\"12\"`. Was expecting a finite number but instead got `null`.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -2207,7 +2212,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Could not parse latitude nor longitude in the document with the id: `13`. Was expecting finite numbers but instead got `null` and `null`.",
+        "message": "Could not parse latitude nor longitude in the document with the id: `\"13\"`. Was expecting finite numbers but instead got `null` and `null`.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -2227,7 +2232,7 @@ async fn add_invalid_geo_and_then_settings() {
     let index = server.index("test");
     index.create(Some("id")).await;
 
-    // _geo is not an object
+    // _geo is not a correct object
     let documents = json!([
         {
             "id": "11",
@@ -2257,7 +2262,7 @@ async fn add_invalid_geo_and_then_settings() {
     }
     "###);
 
-    let (ret, code) = index.update_settings(json!({"sortableAttributes": ["_geo"]})).await;
+    let (ret, code) = index.update_settings(json!({ "sortableAttributes": ["_geo"] })).await;
     snapshot!(code, @"202 Accepted");
     let ret = index.wait_task(ret.uid()).await;
     snapshot!(ret, @r###"

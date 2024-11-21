@@ -750,9 +750,9 @@ async fn test_score_details() {
                     ],
                     "_vectors": {
                       "manual": [
-                        -100.0,
-                        231.0,
-                        32.0
+                        -100,
+                        231,
+                        32
                       ]
                     },
                     "_rankingScoreDetails": {
@@ -1543,9 +1543,9 @@ async fn simple_search_with_strange_synonyms() {
                 ],
                 "_vectors": {
                   "manual": [
-                    -100.0,
-                    231.0,
-                    32.0
+                    -100,
+                    231,
+                    32
                   ]
                 }
               }
@@ -1568,9 +1568,9 @@ async fn simple_search_with_strange_synonyms() {
                 ],
                 "_vectors": {
                   "manual": [
-                    -100.0,
-                    231.0,
-                    32.0
+                    -100,
+                    231,
+                    32
                   ]
                 }
               }
@@ -1593,14 +1593,90 @@ async fn simple_search_with_strange_synonyms() {
                 ],
                 "_vectors": {
                   "manual": [
-                    -100.0,
-                    231.0,
-                    32.0
+                    -100,
+                    231,
+                    32
                   ]
                 }
               }
             ]
             "###);
         })
+        .await;
+}
+
+#[actix_rt::test]
+async fn change_attributes_settings() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    index.update_settings(json!({ "searchableAttributes": ["father", "mother"] })).await;
+
+    let documents = NESTED_DOCUMENTS.clone();
+    index.add_documents(json!(documents), None).await;
+    index.wait_task(1).await;
+
+    index.update_settings(json!({ "searchableAttributes": ["father", "mother", "doggos"], "filterableAttributes": ["doggos"] })).await;
+    index.wait_task(2).await;
+
+    // search
+    index
+        .search(
+            json!({
+                "q": "bobby",
+                "attributesToRetrieve": ["id", "doggos"]
+            }),
+            |response, code| {
+                assert_eq!(code, 200, "{}", response);
+                meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+                [
+                  {
+                    "id": 852,
+                    "doggos": [
+                      {
+                        "name": "bobby",
+                        "age": 2
+                      },
+                      {
+                        "name": "buddy",
+                        "age": 4
+                      }
+                    ]
+                  }
+                ]
+                "###);
+            },
+        )
+        .await;
+
+    // filter
+    index
+        .search(
+            json!({
+                "q": "",
+                "filter": "doggos.age < 5",
+                "attributesToRetrieve": ["id", "doggos"]
+            }),
+            |response, code| {
+                assert_eq!(code, 200, "{}", response);
+                meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+                [
+                  {
+                    "id": 852,
+                    "doggos": [
+                      {
+                        "name": "bobby",
+                        "age": 2
+                      },
+                      {
+                        "name": "buddy",
+                        "age": 4
+                      }
+                    ]
+                  }
+                ]
+                "###);
+            },
+        )
         .await;
 }

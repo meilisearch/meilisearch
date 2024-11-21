@@ -1,14 +1,16 @@
 use std::cmp::Reverse;
 use std::collections::HashSet;
-use std::io::Cursor;
+use std::io::Write;
 
 use big_s::S;
+use bumpalo::Bump;
 use either::{Either, Left, Right};
 use heed::EnvOpenOptions;
 use maplit::{btreemap, hashset};
-use milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
-use milli::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
-use milli::{AscDesc, Criterion, DocumentId, Index, Member, Object, TermsMatchingStrategy};
+use milli::update::new::indexer;
+use milli::update::{IndexDocumentsMethod, IndexerConfig, Settings};
+use milli::vector::EmbeddingConfigs;
+use milli::{AscDesc, Criterion, DocumentId, Index, Member, TermsMatchingStrategy};
 use serde::{Deserialize, Deserializer};
 use slice_group_by::GroupBy;
 
@@ -58,30 +60,60 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     });
     builder.set_searchable_fields(vec![S("title"), S("description")]);
     builder.execute(|_| (), || false).unwrap();
+    wtxn.commit().unwrap();
 
     // index documents
     let config = IndexerConfig { max_memory: Some(10 * 1024 * 1024), ..Default::default() };
-    let indexing_config = IndexDocumentsConfig::default();
+    let rtxn = index.read_txn().unwrap();
+    let mut wtxn = index.write_txn().unwrap();
 
-    let builder =
-        IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| (), || false).unwrap();
-    let mut documents_builder = DocumentsBatchBuilder::new(Vec::new());
-    let reader = Cursor::new(CONTENT.as_bytes());
+    let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+    let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-    for result in serde_json::Deserializer::from_reader(reader).into_iter::<Object>() {
-        let object = result.unwrap();
-        documents_builder.append_json_object(&object).unwrap();
-    }
+    let embedders = EmbeddingConfigs::default();
+    let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
 
-    let vector = documents_builder.into_inner().unwrap();
+    let mut file = tempfile::tempfile().unwrap();
+    file.write_all(CONTENT.as_bytes()).unwrap();
+    file.sync_all().unwrap();
+    let payload = unsafe { memmap2::Mmap::map(&file).unwrap() };
 
     // index documents
-    let content = DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap();
-    let (builder, user_error) = builder.add_documents(content).unwrap();
-    user_error.unwrap();
-    builder.execute().unwrap();
+    indexer.add_documents(&payload).unwrap();
+
+    let indexer_alloc = Bump::new();
+    let (document_changes, operation_stats, primary_key) = indexer
+        .into_changes(
+            &indexer_alloc,
+            &index,
+            &rtxn,
+            None,
+            &mut new_fields_ids_map,
+            &|| false,
+            &|_progress| (),
+        )
+        .unwrap();
+
+    if let Some(error) = operation_stats.into_iter().find_map(|stat| stat.error) {
+        panic!("{error}");
+    }
+
+    indexer::index(
+        &mut wtxn,
+        &index,
+        config.grenad_parameters(),
+        &db_fields_ids_map,
+        new_fields_ids_map,
+        primary_key,
+        &document_changes,
+        embedders,
+        &|| false,
+        &|_| (),
+    )
+    .unwrap();
 
     wtxn.commit().unwrap();
+    drop(rtxn);
 
     index
 }

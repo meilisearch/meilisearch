@@ -1,5 +1,5 @@
 ---
-source: crates/index-scheduler/src/lib.rs
+source: crates/crates/index-scheduler/src/lib.rs
 snapshot_kind: text
 ---
 ### Autobatching Enabled = true
@@ -23,7 +23,7 @@ succeeded [0,1,]
 doggos [0,1,2,]
 ----------------------------------------------------------------------
 ### Index Mapper:
-doggos: { number_of_documents: 1, field_distribution: {"_vectors": 1, "breed": 1, "doggo": 1, "id": 1} }
+doggos: { number_of_documents: 1, field_distribution: {"breed": 1, "doggo": 1, "id": 1} }
 
 ----------------------------------------------------------------------
 ### Canceled By:

@@ -1,9 +1,13 @@
+use std::time::Instant;
+
 use rayon::iter::{IntoParallelIterator as _, ParallelIterator as _};
+use rayon::slice::ParallelSlice as _;
 
 use super::error::{EmbedError, EmbedErrorKind, NewEmbedderError, NewEmbedderErrorKind};
 use super::rest::{Embedder as RestEmbedder, EmbedderOptions as RestEmbedderOptions};
-use super::{DistributionShift, Embeddings};
+use super::DistributionShift;
 use crate::error::FaultSource;
+use crate::vector::Embedding;
 use crate::ThreadPoolNoAbort;
 
 #[derive(Debug)]
@@ -75,8 +79,12 @@ impl Embedder {
         Ok(Self { rest_embedder })
     }
 
-    pub fn embed(&self, texts: Vec<String>) -> Result<Vec<Embeddings<f32>>, EmbedError> {
-        match self.rest_embedder.embed(texts) {
+    pub fn embed<S: AsRef<str> + serde::Serialize>(
+        &self,
+        texts: &[S],
+        deadline: Option<Instant>,
+    ) -> Result<Vec<Embedding>, EmbedError> {
+        match self.rest_embedder.embed_ref(texts, deadline) {
             Ok(embeddings) => Ok(embeddings),
             Err(EmbedError { kind: EmbedErrorKind::RestOtherStatusCode(404, error), fault: _ }) => {
                 Err(EmbedError::ollama_model_not_found(error))
@@ -89,10 +97,31 @@ impl Embedder {
         &self,
         text_chunks: Vec<Vec<String>>,
         threads: &ThreadPoolNoAbort,
-    ) -> Result<Vec<Vec<Embeddings<f32>>>, EmbedError> {
+    ) -> Result<Vec<Vec<Embedding>>, EmbedError> {
         threads
             .install(move || {
-                text_chunks.into_par_iter().map(move |chunk| self.embed(chunk)).collect()
+                text_chunks.into_par_iter().map(move |chunk| self.embed(&chunk, None)).collect()
+            })
+            .map_err(|error| EmbedError {
+                kind: EmbedErrorKind::PanicInThreadPool(error),
+                fault: FaultSource::Bug,
+            })?
+    }
+
+    pub(crate) fn embed_chunks_ref(
+        &self,
+        texts: &[&str],
+        threads: &ThreadPoolNoAbort,
+    ) -> Result<Vec<Vec<f32>>, EmbedError> {
+        threads
+            .install(move || {
+                let embeddings: Result<Vec<Vec<Embedding>>, _> = texts
+                    .par_chunks(self.prompt_count_in_chunk_hint())
+                    .map(move |chunk| self.embed(chunk, None))
+                    .collect();
+
+                let embeddings = embeddings?;
+                Ok(embeddings.into_iter().flatten().collect())
             })
             .map_err(|error| EmbedError {
                 kind: EmbedErrorKind::PanicInThreadPool(error),

@@ -1,12 +1,13 @@
-use std::io::Cursor;
-
 use big_s::S;
+use bumpalo::Bump;
 use heed::EnvOpenOptions;
 use maplit::hashset;
-use milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
-use milli::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
+use milli::documents::mmap_from_objects;
+use milli::update::new::indexer;
+use milli::update::{IndexDocumentsMethod, IndexerConfig, Settings};
+use milli::vector::EmbeddingConfigs;
 use milli::{FacetDistribution, Index, Object, OrderBy};
-use serde_json::Deserializer;
+use serde_json::{from_value, json};
 
 #[test]
 fn test_facet_distribution_with_no_facet_values() {
@@ -24,50 +25,65 @@ fn test_facet_distribution_with_no_facet_values() {
         S("tags"),
     });
     builder.execute(|_| (), || false).unwrap();
+    wtxn.commit().unwrap();
 
     // index documents
     let config = IndexerConfig { max_memory: Some(10 * 1024 * 1024), ..Default::default() };
-    let indexing_config = IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
+    let rtxn = index.read_txn().unwrap();
+    let mut wtxn = index.write_txn().unwrap();
+    let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+    let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-    let builder =
-        IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| (), || false).unwrap();
-    let mut documents_builder = DocumentsBatchBuilder::new(Vec::new());
-    let reader = Cursor::new(
-        r#"{
-            "id": 123,
-            "title": "What a week, hu...",
-            "genres": [],
-            "tags": ["blue"]
-        }
-        {
-            "id": 345,
-            "title": "I am the pig!",
-            "tags": ["red"]
-        }"#,
-    );
+    let embedders = EmbeddingConfigs::default();
+    let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
 
-    for result in Deserializer::from_reader(reader).into_iter::<Object>() {
-        let object = result.unwrap();
-        documents_builder.append_json_object(&object).unwrap();
-    }
-
-    let vector = documents_builder.into_inner().unwrap();
+    let doc1: Object = from_value(
+        json!({ "id": 123, "title": "What a week, hu...", "genres": [], "tags": ["blue"] }),
+    )
+    .unwrap();
+    let doc2: Object =
+        from_value(json!({ "id": 345, "title": "I am the pig!", "tags": ["red"] })).unwrap();
+    let documents = mmap_from_objects(vec![doc1, doc2]);
 
     // index documents
-    let content = DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap();
-    let (builder, user_error) = builder.add_documents(content).unwrap();
-    user_error.unwrap();
-    builder.execute().unwrap();
+    indexer.add_documents(&documents).unwrap();
+
+    let indexer_alloc = Bump::new();
+    let (document_changes, _operation_stats, primary_key) = indexer
+        .into_changes(
+            &indexer_alloc,
+            &index,
+            &rtxn,
+            None,
+            &mut new_fields_ids_map,
+            &|| false,
+            &|_progress| (),
+        )
+        .unwrap();
+
+    indexer::index(
+        &mut wtxn,
+        &index,
+        config.grenad_parameters(),
+        &db_fields_ids_map,
+        new_fields_ids_map,
+        primary_key,
+        &document_changes,
+        embedders,
+        &|| false,
+        &|_| (),
+    )
+    .unwrap();
 
     wtxn.commit().unwrap();
 
-    let txn = index.read_txn().unwrap();
-    let mut distrib = FacetDistribution::new(&txn, &index);
+    let rtxn = index.read_txn().unwrap();
+    let mut distrib = FacetDistribution::new(&rtxn, &index);
     distrib.facets(vec![("genres", OrderBy::default())]);
     let result = distrib.execute().unwrap();
     assert_eq!(result["genres"].len(), 0);
 
-    let mut distrib = FacetDistribution::new(&txn, &index);
+    let mut distrib = FacetDistribution::new(&rtxn, &index);
     distrib.facets(vec![("tags", OrderBy::default())]);
     let result = distrib.execute().unwrap();
     assert_eq!(result["tags"].len(), 2);

@@ -1,50 +1,41 @@
 mod enrich;
 mod extract;
 mod helpers;
-mod parallel;
 mod transform;
 mod typed_chunk;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::io::{Read, Seek};
 use std::iter;
 use std::num::NonZeroU32;
-use std::result::Result as StdResult;
 use std::sync::Arc;
 
 use crossbeam_channel::{Receiver, Sender};
+use enrich::enrich_documents_batch;
 use grenad::{Merger, MergerBuilder};
+use hashbrown::HashMap;
 use heed::types::Str;
 use heed::Database;
-use rand::SeedableRng;
-use rayon::iter::{ParallelBridge, ParallelIterator};
-use rhai::{Dynamic, Engine, OptimizationLevel, Scope};
+use rand::SeedableRng as _;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
 use slice_group_by::GroupBy;
 use tracing::debug;
 use typed_chunk::{write_typed_chunk_into_index, ChunkAccumulator, TypedChunk};
 
-use self::enrich::enrich_documents_batch;
 pub use self::enrich::{extract_finite_float_from_value, DocumentId};
-pub use self::helpers::{
-    as_cloneable_grenad, create_sorter, create_writer, fst_stream_into_hashset,
-    fst_stream_into_vec, merge_cbo_roaring_bitmaps, merge_deladd_cbo_roaring_bitmaps,
-    merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap, merge_roaring_bitmaps,
-    valid_lmdb_key, write_sorter_into_database, writer_into_reader, MergeFn,
-};
-use self::helpers::{grenad_obkv_into_chunks, GrenadParameters};
+pub use self::helpers::*;
 pub use self::transform::{Transform, TransformOutput};
-use crate::documents::{obkv_to_object, DocumentsBatchBuilder, DocumentsBatchReader};
-use crate::error::{Error, InternalError, UserError};
+use super::new::StdResult;
+use crate::documents::{obkv_to_object, DocumentsBatchReader};
+use crate::error::{Error, InternalError};
 use crate::thread_pool_no_abort::ThreadPoolNoAbortBuilder;
 pub use crate::update::index_documents::helpers::CursorClonableMmap;
-use crate::update::index_documents::parallel::ImmutableObkvs;
 use crate::update::{
     IndexerConfig, UpdateIndexingStep, WordPrefixDocids, WordPrefixIntegerDocids, WordsPrefixesFst,
 };
 use crate::vector::{ArroyWrapper, EmbeddingConfigs};
-use crate::{CboRoaringBitmapCodec, Index, Object, Result};
+use crate::{CboRoaringBitmapCodec, Index, Result, UserError};
 
 static MERGED_DATABASE_COUNT: usize = 7;
 static PREFIX_DATABASE_COUNT: usize = 4;
@@ -176,203 +167,9 @@ where
         Ok((self, Ok(indexed_documents)))
     }
 
-    #[tracing::instrument(level = "trace", skip_all, target = "indexing::documents")]
-    pub fn edit_documents(
-        self,
-        documents: &RoaringBitmap,
-        context: Option<Object>,
-        code: &str,
-    ) -> Result<(Self, StdResult<(u64, u64), UserError>)> {
-        // Early return when there is no document to edit
-        if documents.is_empty() {
-            return Ok((self, Ok((0, 0))));
-        }
-
-        fn rhaimap_to_object(map: rhai::Map) -> Object {
-            let mut output = Object::new();
-            for (key, value) in map {
-                let value = serde_json::to_value(&value).unwrap();
-                output.insert(key.into(), value);
-            }
-            output
-        }
-
-        // Setup the security and limits of the Engine
-        let mut engine = Engine::new();
-        engine.set_optimization_level(OptimizationLevel::Full);
-        engine.set_max_call_levels(1000);
-        // It is an arbitrary value. We need to let users define this in the settings.
-        engine.set_max_operations(1_000_000);
-        engine.set_max_variables(1000);
-        engine.set_max_functions(30);
-        engine.set_max_expr_depths(100, 1000);
-        engine.set_max_string_size(1024 * 1024 * 1024); // 1 GiB
-        engine.set_max_array_size(10_000);
-        engine.set_max_map_size(10_000);
-
-        let ast = engine.compile(code).map_err(UserError::DocumentEditionCompilationError)?;
-        let fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
-        let primary_key = self.index.primary_key(self.wtxn)?.unwrap();
-        let mut documents_batch_builder = tempfile::tempfile().map(DocumentsBatchBuilder::new)?;
-        let mut documents_to_remove = RoaringBitmap::new();
-
-        let context: Option<Dynamic> = match context {
-            Some(context) => {
-                Some(serde_json::from_value(context.into()).map_err(InternalError::SerdeJson)?)
-            }
-            None => None,
-        };
-
-        enum DocumentEdition {
-            Deleted(crate::DocumentId),
-            Edited(Object),
-            Nothing,
-        }
-
-        let immutable_obkvs = ImmutableObkvs::new(
-            self.wtxn,
-            self.index.documents,
-            fields_ids_map.clone(),
-            documents.clone(),
-        )?;
-
-        let processing = documents.into_iter().par_bridge().map(|docid| {
-            // safety: Both documents *must* exists in the database as
-            //         their IDs comes from the list of documents ids.
-            let rhai_document = immutable_obkvs.rhai_map(docid)?.unwrap();
-            let json_document = immutable_obkvs.json_map(docid)?.unwrap();
-            let document_id = &json_document[primary_key];
-
-            let mut scope = Scope::new();
-            if let Some(context) = context.as_ref().cloned() {
-                scope.push_constant_dynamic("context", context.clone());
-            }
-            scope.push("doc", rhai_document);
-            // That's were the magic happens. We run the user script
-            // which edits "doc" scope variable reprensenting the document
-            // and ignore the output and even the type of it, i.e., Dynamic.
-            let _ = engine
-                .eval_ast_with_scope::<Dynamic>(&mut scope, &ast)
-                .map_err(UserError::DocumentEditionRuntimeError)?;
-
-            match scope.remove::<Dynamic>("doc") {
-                // If the "doc" variable has set to (), we effectively delete the document.
-                Some(doc) if doc.is_unit() => Ok(DocumentEdition::Deleted(docid)),
-                None => unreachable!("missing doc variable from the Rhai scope"),
-                Some(document) => match document.try_cast() {
-                    Some(document) => {
-                        let new_document = rhaimap_to_object(document);
-                        // Note: This condition is not perfect. Sometimes it detect changes
-                        //       like with floating points numbers and consider updating
-                        //       the document even if nothing actually changed.
-                        if json_document != new_document {
-                            if Some(document_id) != new_document.get(primary_key) {
-                                Err(Error::UserError(
-                                    UserError::DocumentEditionCannotModifyPrimaryKey,
-                                ))
-                            } else {
-                                Ok(DocumentEdition::Edited(new_document))
-                            }
-                        } else {
-                            Ok(DocumentEdition::Nothing)
-                        }
-                    }
-                    None => Err(Error::UserError(UserError::DocumentEditionDocumentMustBeObject)),
-                },
-            }
-        });
-
-        rayon_par_bridge::par_bridge(100, processing, |iterator| {
-            for result in iterator {
-                if (self.should_abort)() {
-                    return Err(Error::InternalError(InternalError::AbortedIndexation));
-                }
-
-                match result? {
-                    DocumentEdition::Deleted(docid) => {
-                        documents_to_remove.insert(docid);
-                    }
-                    DocumentEdition::Edited(new_document) => {
-                        documents_batch_builder.append_json_object(&new_document)?;
-                    }
-                    DocumentEdition::Nothing => (),
-                }
-            }
-
-            Ok(())
-        })?;
-
-        let file = documents_batch_builder.into_inner()?;
-        let reader = DocumentsBatchReader::from_reader(file)?;
-
-        let (this, removed) = self.remove_documents_from_db_no_batch(&documents_to_remove)?;
-        let (this, result) = this.add_documents(reader)?;
-
-        Ok((this, result.map(|added| (removed, added))))
-    }
-
     pub fn with_embedders(mut self, embedders: EmbeddingConfigs) -> Self {
         self.embedders = embedders;
         self
-    }
-
-    /// Remove a batch of documents from the current builder.
-    ///
-    /// Returns the number of documents deleted from the builder.
-    #[tracing::instrument(level = "trace", skip_all, target = "indexing::documents")]
-    pub fn remove_documents(
-        mut self,
-        to_delete: Vec<String>,
-    ) -> Result<(Self, StdResult<u64, UserError>)> {
-        // Early return when there is no document to add
-        if to_delete.is_empty() {
-            // Maintains Invariant: remove documents actually always returns Ok for the inner result
-            return Ok((self, Ok(0)));
-        }
-
-        let deleted_documents = self
-            .transform
-            .as_mut()
-            .expect("Invalid document deletion state")
-            .remove_documents(to_delete, self.wtxn, &self.should_abort)?
-            as u64;
-
-        self.deleted_documents += deleted_documents;
-
-        // Maintains Invariant: remove documents actually always returns Ok for the inner result
-        Ok((self, Ok(deleted_documents)))
-    }
-
-    /// Removes documents from db using their internal document ids.
-    ///
-    /// # Warning
-    ///
-    /// This function is dangerous and will only work correctly if:
-    ///
-    /// - All the passed ids currently exist in the database
-    /// - No batching using the standards `remove_documents` and `add_documents` took place
-    ///
-    /// TODO: make it impossible to call `remove_documents` or `add_documents` on an instance that calls this function.
-    #[tracing::instrument(level = "trace", skip_all, target = "indexing::details")]
-    pub fn remove_documents_from_db_no_batch(
-        mut self,
-        to_delete: &RoaringBitmap,
-    ) -> Result<(Self, u64)> {
-        // Early return when there is no document to add
-        if to_delete.is_empty() {
-            return Ok((self, 0));
-        }
-
-        let deleted_documents = self
-            .transform
-            .as_mut()
-            .expect("Invalid document deletion state")
-            .remove_documents_from_db_no_batch(to_delete, self.wtxn, &self.should_abort)?
-            as u64;
-
-        self.deleted_documents += deleted_documents;
-
-        Ok((self, deleted_documents))
     }
 
     #[tracing::instrument(
@@ -512,164 +309,164 @@ where
 
         // Run extraction pipeline in parallel.
         pool.install(|| {
-            let settings_diff_cloned = settings_diff.clone();
-            rayon::spawn(move || {
-                let child_span = tracing::trace_span!(target: "indexing::details", parent: &current_span, "extract_and_send_grenad_chunks");
-                let _enter = child_span.enter();
+                let settings_diff_cloned = settings_diff.clone();
+                rayon::spawn(move || {
+                    let child_span = tracing::trace_span!(target: "indexing::details", parent: &current_span, "extract_and_send_grenad_chunks");
+                    let _enter = child_span.enter();
 
-                // split obkv file into several chunks
-                let original_chunk_iter = match original_documents {
-                    Some(original_documents) => {
-                        grenad_obkv_into_chunks(original_documents,pool_params,documents_chunk_size).map(either::Left)
-                    },
-                    None => Ok(either::Right(iter::empty())),
-                };
+                    // split obkv file into several chunks
+                    let original_chunk_iter = match original_documents {
+                        Some(original_documents) => {
+                            grenad_obkv_into_chunks(original_documents,pool_params,documents_chunk_size).map(either::Left)
+                        },
+                        None => Ok(either::Right(iter::empty())),
+                    };
 
-                // split obkv file into several chunks
-                let flattened_chunk_iter = match flattened_documents {
-                    Some(flattened_documents) => {
-                        grenad_obkv_into_chunks(flattened_documents, pool_params, documents_chunk_size).map(either::Left)
-                    },
-                    None => Ok(either::Right(iter::empty())),
-                };
+                    // split obkv file into several chunks
+                    let flattened_chunk_iter = match flattened_documents {
+                        Some(flattened_documents) => {
+                            grenad_obkv_into_chunks(flattened_documents, pool_params, documents_chunk_size).map(either::Left)
+                        },
+                        None => Ok(either::Right(iter::empty())),
+                    };
 
-                let result = original_chunk_iter.and_then(|original_chunk| {
-                    let flattened_chunk = flattened_chunk_iter?;
-                    // extract all databases from the chunked obkv douments
-                    extract::data_from_obkv_documents(
-                        original_chunk,
-                        flattened_chunk,
-                        pool_params,
-                        lmdb_writer_sx.clone(),
-                        primary_key_id,
-                        embedders_configs.clone(),
-                        settings_diff_cloned,
-                        max_positions_per_attributes,
-                        Arc::new(possible_embedding_mistakes)
-                    )
+                    let result = original_chunk_iter.and_then(|original_chunk| {
+                        let flattened_chunk = flattened_chunk_iter?;
+                        // extract all databases from the chunked obkv douments
+                        extract::data_from_obkv_documents(
+                            original_chunk,
+                            flattened_chunk,
+                            pool_params,
+                            lmdb_writer_sx.clone(),
+                            primary_key_id,
+                            embedders_configs.clone(),
+                            settings_diff_cloned,
+                            max_positions_per_attributes,
+                            Arc::new(possible_embedding_mistakes)
+                        )
+                    });
+
+                    if let Err(e) = result {
+                        let _ = lmdb_writer_sx.send(Err(e));
+                    }
+
+                    // needs to be dropped to avoid channel waiting lock.
+                    drop(lmdb_writer_sx);
                 });
 
-                if let Err(e) = result {
-                    let _ = lmdb_writer_sx.send(Err(e));
-                }
+                (self.progress)(UpdateIndexingStep::MergeDataIntoFinalDatabase {
+                    databases_seen,
+                    total_databases: TOTAL_POSTING_DATABASE_COUNT,
+                });
 
-                // needs to be dropped to avoid channel waiting lock.
-                drop(lmdb_writer_sx);
-            });
-
-            (self.progress)(UpdateIndexingStep::MergeDataIntoFinalDatabase {
-                databases_seen,
-                total_databases: TOTAL_POSTING_DATABASE_COUNT,
-            });
-
-            loop {
-                if (self.should_abort)() {
-                    return Err(Error::InternalError(InternalError::AbortedIndexation));
-                }
-
-                match lmdb_writer_rx.clone().recv_timeout(std::time::Duration::from_millis(500)) {
-                    Err(status) => {
-                        if let Some(typed_chunks) = chunk_accumulator.pop_longest() {
-                            let (docids, is_merged_database) =
-                                write_typed_chunk_into_index(self.wtxn, self.index, &settings_diff, typed_chunks)?;
-                            if !docids.is_empty() {
-                                final_documents_ids |= docids;
-                                let documents_seen_count = final_documents_ids.len();
-                                (self.progress)(UpdateIndexingStep::IndexDocuments {
-                                    documents_seen: documents_seen_count as usize,
-                                    total_documents: documents_count,
-                                });
-                                debug!(documents = documents_seen_count, total = documents_count, "Seen");
-                            }
-                            if is_merged_database {
-                                databases_seen += 1;
-                                (self.progress)(UpdateIndexingStep::MergeDataIntoFinalDatabase {
-                                    databases_seen,
-                                    total_databases: TOTAL_POSTING_DATABASE_COUNT,
-                                });
-                            }
-                        // If no more chunk remains in the chunk accumulator and the channel is disconected, break.
-                        } else if status == crossbeam_channel::RecvTimeoutError::Disconnected {
-                            break;
-                        } else {
-                            rayon::yield_now();
-                        }
+                loop {
+                    if (self.should_abort)() {
+                        return Err(Error::InternalError(InternalError::AbortedIndexation));
                     }
-                    Ok(result) => {
-                        let typed_chunk = match result? {
-                            TypedChunk::WordDocids {
-                                word_docids_reader,
-                                exact_word_docids_reader,
-                                word_fid_docids_reader,
-                            } => {
-                                let cloneable_chunk =
-                                    unsafe { as_cloneable_grenad(&word_docids_reader)? };
-                                let word_docids = word_docids.get_or_insert_with(|| {
-                                    MergerBuilder::new(merge_deladd_cbo_roaring_bitmaps as MergeFn)
-                                });
-                                word_docids.push(cloneable_chunk.into_cursor()?);
-                                let cloneable_chunk =
-                                    unsafe { as_cloneable_grenad(&exact_word_docids_reader)? };
-                                let exact_word_docids =
-                                    exact_word_docids.get_or_insert_with(|| {
-                                        MergerBuilder::new(
-                                            merge_deladd_cbo_roaring_bitmaps as MergeFn,
-                                        )
+
+                    match lmdb_writer_rx.clone().recv_timeout(std::time::Duration::from_millis(500)) {
+                        Err(status) => {
+                            if let Some(typed_chunks) = chunk_accumulator.pop_longest() {
+                                let (docids, is_merged_database) =
+                                    write_typed_chunk_into_index(self.wtxn, self.index, &settings_diff, typed_chunks)?;
+                                if !docids.is_empty() {
+                                    final_documents_ids |= docids;
+                                    let documents_seen_count = final_documents_ids.len();
+                                    (self.progress)(UpdateIndexingStep::IndexDocuments {
+                                        documents_seen: documents_seen_count as usize,
+                                        total_documents: documents_count,
                                     });
-                                exact_word_docids.push(cloneable_chunk.into_cursor()?);
-                                let cloneable_chunk =
-                                    unsafe { as_cloneable_grenad(&word_fid_docids_reader)? };
-                                let word_fid_docids = word_fid_docids.get_or_insert_with(|| {
-                                    MergerBuilder::new(merge_deladd_cbo_roaring_bitmaps as MergeFn)
-                                });
-                                word_fid_docids.push(cloneable_chunk.into_cursor()?);
+                                    debug!(documents = documents_seen_count, total = documents_count, "Seen");
+                                }
+                                if is_merged_database {
+                                    databases_seen += 1;
+                                    (self.progress)(UpdateIndexingStep::MergeDataIntoFinalDatabase {
+                                        databases_seen,
+                                        total_databases: TOTAL_POSTING_DATABASE_COUNT,
+                                    });
+                                }
+                            // If no more chunk remains in the chunk accumulator and the channel is disconected, break.
+                            } else if status == crossbeam_channel::RecvTimeoutError::Disconnected {
+                                break;
+                            } else {
+                                rayon::yield_now();
+                            }
+                        }
+                        Ok(result) => {
+                            let typed_chunk = match result? {
                                 TypedChunk::WordDocids {
                                     word_docids_reader,
                                     exact_word_docids_reader,
                                     word_fid_docids_reader,
-                                }
-                            }
-                            TypedChunk::WordPositionDocids(chunk) => {
-                                let cloneable_chunk = unsafe { as_cloneable_grenad(&chunk)? };
-                                let word_position_docids =
-                                    word_position_docids.get_or_insert_with(|| {
-                                        MergerBuilder::new(
-                                            merge_deladd_cbo_roaring_bitmaps as MergeFn,
-                                        )
+                                } => {
+                                    let cloneable_chunk =
+                                        unsafe { as_cloneable_grenad(&word_docids_reader)? };
+                                    let word_docids = word_docids.get_or_insert_with(|| {
+                                        MergerBuilder::new(MergeDeladdCboRoaringBitmaps)
                                     });
-                                word_position_docids.push(cloneable_chunk.into_cursor()?);
-                                TypedChunk::WordPositionDocids(chunk)
-                            }
-                            TypedChunk::VectorPoints {
-                                expected_dimension,
-                                remove_vectors,
-                                embeddings,
-                                manual_vectors,
-                                embedder_name,
-                                add_to_user_provided,
-                                remove_from_user_provided,
-                            } => {
-                                dimension.insert(embedder_name.clone(), expected_dimension);
+                                    word_docids.push(cloneable_chunk.into_cursor()?);
+                                    let cloneable_chunk =
+                                        unsafe { as_cloneable_grenad(&exact_word_docids_reader)? };
+                                    let exact_word_docids =
+                                        exact_word_docids.get_or_insert_with(|| {
+                                            MergerBuilder::new(
+                                                MergeDeladdCboRoaringBitmaps,
+                                            )
+                                        });
+                                    exact_word_docids.push(cloneable_chunk.into_cursor()?);
+                                    let cloneable_chunk =
+                                        unsafe { as_cloneable_grenad(&word_fid_docids_reader)? };
+                                    let word_fid_docids = word_fid_docids.get_or_insert_with(|| {
+                                        MergerBuilder::new(MergeDeladdCboRoaringBitmaps)
+                                    });
+                                    word_fid_docids.push(cloneable_chunk.into_cursor()?);
+                                    TypedChunk::WordDocids {
+                                        word_docids_reader,
+                                        exact_word_docids_reader,
+                                        word_fid_docids_reader,
+                                    }
+                                }
+                                TypedChunk::WordPositionDocids(chunk) => {
+                                    let cloneable_chunk = unsafe { as_cloneable_grenad(&chunk)? };
+                                    let word_position_docids =
+                                        word_position_docids.get_or_insert_with(|| {
+                                            MergerBuilder::new(
+                                                MergeDeladdCboRoaringBitmaps,
+                                            )
+                                        });
+                                    word_position_docids.push(cloneable_chunk.into_cursor()?);
+                                    TypedChunk::WordPositionDocids(chunk)
+                                }
                                 TypedChunk::VectorPoints {
+                                    expected_dimension,
                                     remove_vectors,
                                     embeddings,
-                                    expected_dimension,
                                     manual_vectors,
                                     embedder_name,
                                     add_to_user_provided,
                                     remove_from_user_provided,
+                                } => {
+                                    dimension.insert(embedder_name.clone(), expected_dimension);
+                                    TypedChunk::VectorPoints {
+                                        remove_vectors,
+                                        embeddings,
+                                        expected_dimension,
+                                        manual_vectors,
+                                        embedder_name,
+                                        add_to_user_provided,
+                                        remove_from_user_provided,
+                                    }
                                 }
-                            }
-                            otherwise => otherwise,
-                        };
+                                otherwise => otherwise,
+                            };
 
-                        chunk_accumulator.insert(typed_chunk);
+                            chunk_accumulator.insert(typed_chunk);
+                        }
                     }
                 }
-            }
 
-            Ok(())
-        }).map_err(InternalError::from)??;
+                Ok(())
+            }).map_err(InternalError::from)??;
 
         // We write the field distribution into the main database
         self.index.put_field_distribution(self.wtxn, &field_distribution)?;
@@ -738,10 +535,10 @@ where
     )]
     pub fn execute_prefix_databases(
         self,
-        word_docids: Option<Merger<CursorClonableMmap, MergeFn>>,
-        exact_word_docids: Option<Merger<CursorClonableMmap, MergeFn>>,
-        word_position_docids: Option<Merger<CursorClonableMmap, MergeFn>>,
-        word_fid_docids: Option<Merger<CursorClonableMmap, MergeFn>>,
+        word_docids: Option<Merger<CursorClonableMmap, MergeDeladdCboRoaringBitmaps>>,
+        exact_word_docids: Option<Merger<CursorClonableMmap, MergeDeladdCboRoaringBitmaps>>,
+        word_position_docids: Option<Merger<CursorClonableMmap, MergeDeladdCboRoaringBitmaps>>,
+        word_fid_docids: Option<Merger<CursorClonableMmap, MergeDeladdCboRoaringBitmaps>>,
     ) -> Result<()>
     where
         FP: Fn(UpdateIndexingStep) + Sync,
@@ -921,7 +718,7 @@ where
 )]
 fn execute_word_prefix_docids(
     txn: &mut heed::RwTxn<'_>,
-    merger: Merger<CursorClonableMmap, MergeFn>,
+    merger: Merger<CursorClonableMmap, MergeDeladdCboRoaringBitmaps>,
     word_docids_db: Database<Str, CboRoaringBitmapCodec>,
     word_prefix_docids_db: Database<Str, CboRoaringBitmapCodec>,
     indexer_config: &IndexerConfig,
@@ -943,17 +740,19 @@ mod tests {
     use std::collections::BTreeMap;
 
     use big_s::S;
+    use bumpalo::Bump;
     use fst::IntoStreamer;
     use heed::RwTxn;
     use maplit::hashset;
 
     use super::*;
-    use crate::documents::documents_batch_reader_from_objects;
+    use crate::documents::mmap_from_objects;
     use crate::index::tests::TempIndex;
     use crate::index::IndexEmbeddingConfig;
     use crate::search::TermsMatchingStrategy;
+    use crate::update::new::indexer;
     use crate::update::Setting;
-    use crate::{db_snap, Filter, Search};
+    use crate::{db_snap, Filter, Search, UserError};
 
     #[test]
     fn simple_document_replacement() {
@@ -1055,100 +854,6 @@ mod tests {
         assert_eq!(doc_iter.next(), Some((1, &br#""benoit""#[..])));
         assert_eq!(doc_iter.next(), Some((2, &b"25"[..])));
         assert_eq!(doc_iter.next(), None);
-        drop(rtxn);
-    }
-
-    #[test]
-    fn not_auto_generated_documents_ids() {
-        let index = TempIndex::new();
-
-        let result = index.add_documents(documents!([
-            { "name": "kevin" },
-            { "name": "kevina" },
-            { "name": "benoit" }
-        ]));
-        assert!(result.is_err());
-
-        // Check that there is no document.
-        let rtxn = index.read_txn().unwrap();
-        let count = index.number_of_documents(&rtxn).unwrap();
-        assert_eq!(count, 0);
-        drop(rtxn);
-    }
-
-    #[test]
-    fn simple_auto_generated_documents_ids() {
-        let mut index = TempIndex::new();
-        index.index_documents_config.autogenerate_docids = true;
-        // First we send 3 documents with ids from 1 to 3.
-        index
-            .add_documents(documents!([
-                { "name": "kevin" },
-                { "name": "kevina" },
-                { "name": "benoit" }
-            ]))
-            .unwrap();
-
-        // Check that there is 3 documents now.
-        let rtxn = index.read_txn().unwrap();
-        let count = index.number_of_documents(&rtxn).unwrap();
-        assert_eq!(count, 3);
-
-        let docs = index.documents(&rtxn, vec![0, 1, 2]).unwrap();
-        let (_id, obkv) = docs.iter().find(|(_id, kv)| kv.get(0) == Some(br#""kevin""#)).unwrap();
-        let kevin_uuid: String = serde_json::from_slice(obkv.get(1).unwrap()).unwrap();
-        drop(rtxn);
-
-        // Second we send 1 document with the generated uuid, to erase the previous ones.
-        index.add_documents(documents!([ { "name": "updated kevin", "id": kevin_uuid } ])).unwrap();
-
-        // Check that there is **always** 3 documents.
-        let rtxn = index.read_txn().unwrap();
-        let count = index.number_of_documents(&rtxn).unwrap();
-        assert_eq!(count, 3);
-
-        // the document 0 has been deleted and reinserted with the id 3
-        let docs = index.documents(&rtxn, vec![1, 2, 0]).unwrap();
-        let kevin_position =
-            docs.iter().position(|(_, d)| d.get(0).unwrap() == br#""updated kevin""#).unwrap();
-        assert_eq!(kevin_position, 2);
-        let (_, doc) = docs[kevin_position];
-
-        // Check that this document is equal to the last
-        // one sent and that an UUID has been generated.
-        assert_eq!(doc.get(0), Some(&br#""updated kevin""#[..]));
-        // This is an UUID, it must be 36 bytes long plus the 2 surrounding string quotes (").
-        assert_eq!(doc.get(1).unwrap().len(), 36 + 2);
-        drop(rtxn);
-    }
-
-    #[test]
-    fn reordered_auto_generated_documents_ids() {
-        let mut index = TempIndex::new();
-
-        // First we send 3 documents with ids from 1 to 3.
-        index
-            .add_documents(documents!([
-                { "id": 1, "name": "kevin" },
-                { "id": 2, "name": "kevina" },
-                { "id": 3, "name": "benoit" }
-            ]))
-            .unwrap();
-
-        // Check that there is 3 documents now.
-        let rtxn = index.read_txn().unwrap();
-        let count = index.number_of_documents(&rtxn).unwrap();
-        assert_eq!(count, 3);
-        drop(rtxn);
-
-        // Second we send 1 document without specifying the id.
-        index.index_documents_config.autogenerate_docids = true;
-        index.add_documents(documents!([ { "name": "new kevin" } ])).unwrap();
-
-        // Check that there is 4 documents now.
-        let rtxn = index.read_txn().unwrap();
-        let count = index.number_of_documents(&rtxn).unwrap();
-        assert_eq!(count, 4);
         drop(rtxn);
     }
 
@@ -1300,7 +1005,7 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             &error.to_string(),
-            r#"Could not find latitude in the document with the id: `0`. Was expecting a `_geo.lat` field."#
+            r#"Could not find latitude in the document with the id: `"0"`. Was expecting a `_geo.lat` field."#
         );
 
         let error = index
@@ -1310,7 +1015,7 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             &error.to_string(),
-            r#"Could not find longitude in the document with the id: `0`. Was expecting a `_geo.lng` field."#
+            r#"Could not find longitude in the document with the id: `"0"`. Was expecting a `_geo.lng` field."#
         );
 
         let error = index
@@ -1320,7 +1025,7 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             &error.to_string(),
-            r#"Could not parse latitude in the document with the id: `0`. Was expecting a finite number but instead got `"lol"`."#
+            r#"Could not parse latitude in the document with the id: `"0"`. Was expecting a finite number but instead got `"lol"`."#
         );
 
         let error = index
@@ -1330,7 +1035,7 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             &error.to_string(),
-            r#"Could not parse latitude in the document with the id: `0`. Was expecting a finite number but instead got `[12,13]`."#
+            r#"Could not parse latitude in the document with the id: `"0"`. Was expecting a finite number but instead got `[12,13]`."#
         );
 
         let error = index
@@ -1340,7 +1045,7 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             &error.to_string(),
-            r#"Could not parse longitude in the document with the id: `0`. Was expecting a finite number but instead got `"hello"`."#
+            r#"Could not parse longitude in the document with the id: `"0"`. Was expecting a finite number but instead got `"hello"`."#
         );
     }
 
@@ -1395,7 +1100,7 @@ mod tests {
             big_object.insert(key, serde_json::Value::from("I am a text!"));
         }
 
-        let documents = documents_batch_reader_from_objects([big_object]);
+        let documents = mmap_from_objects([big_object]);
         index.add_documents(documents).unwrap();
     }
 
@@ -1888,7 +1593,7 @@ mod tests {
                     serde_json::Value::Object(object) => Some(object),
                     _ => None,
                 });
-            documents_batch_reader_from_objects(documents_iter)
+            mmap_from_objects(documents_iter)
         };
         // Index those 200 long documents
         index.add_documents(content).unwrap();
@@ -1934,9 +1639,9 @@ mod tests {
         index.add_documents(doc1).unwrap();
         index.add_documents(doc2).unwrap();
 
-        let wtxn = index.read_txn().unwrap();
+        let rtxn = index.read_txn().unwrap();
 
-        let map = index.external_documents_ids().to_hash_map(&wtxn).unwrap();
+        let map = index.external_documents_ids().to_hash_map(&rtxn).unwrap();
         let ids = map.values().collect::<HashSet<_>>();
 
         assert_eq!(ids.len(), map.len());
@@ -1993,6 +1698,8 @@ mod tests {
 
             let colour_id = index.fields_ids_map(&rtxn).unwrap().id("colour").unwrap();
             let colour_green_id = index.fields_ids_map(&rtxn).unwrap().id("colour.green").unwrap();
+            let colour_green_blue_id =
+                index.fields_ids_map(&rtxn).unwrap().id("colour.green.blue").unwrap();
 
             let bitmap_colour =
                 index.facet_id_exists_docids.get(&rtxn, &colour_id).unwrap().unwrap();
@@ -2001,6 +1708,10 @@ mod tests {
             let bitmap_colour_green =
                 index.facet_id_exists_docids.get(&rtxn, &colour_green_id).unwrap().unwrap();
             assert_eq!(bitmap_colour_green.into_iter().collect::<Vec<_>>(), vec![6, 7]);
+
+            let bitmap_colour_blue =
+                index.facet_id_exists_docids.get(&rtxn, &colour_green_blue_id).unwrap().unwrap();
+            assert_eq!(bitmap_colour_blue.into_iter().collect::<Vec<_>>(), vec![7]);
         };
 
         let faceted_fields = hashset!(S("colour"));
@@ -2217,10 +1928,31 @@ mod tests {
             "title": "something",
         }]};
 
-        index.add_documents(doc1).unwrap();
-        index.add_documents(doc2).unwrap_err();
-        index.add_documents(doc3).unwrap_err();
-        index.add_documents(doc4).unwrap_err();
+        let rtxn = index.inner.read_txn().unwrap();
+        let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
+        let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+        indexer.add_documents(&doc1).unwrap();
+        indexer.add_documents(&doc2).unwrap();
+        indexer.add_documents(&doc3).unwrap();
+        indexer.add_documents(&doc4).unwrap();
+
+        let indexer_alloc = Bump::new();
+        let (_document_changes, operation_stats, _primary_key) = indexer
+            .into_changes(
+                &indexer_alloc,
+                &index.inner,
+                &rtxn,
+                None,
+                &mut new_fields_ids_map,
+                &|| false,
+                &|_progress| (),
+            )
+            .unwrap();
+
+        assert_eq!(operation_stats.iter().filter(|ps| ps.error.is_none()).count(), 1);
+        assert_eq!(operation_stats.iter().filter(|ps| ps.error.is_some()).count(), 3);
     }
 
     #[test]
@@ -2375,34 +2107,47 @@ mod tests {
         index.index_documents_config.update_method = IndexDocumentsMethod::UpdateDocuments;
 
         let mut wtxn = index.write_txn().unwrap();
-        let builder = IndexDocuments::new(
-            &mut wtxn,
-            &index,
-            &index.indexer_config,
-            index.index_documents_config.clone(),
-            |_| (),
-            || false,
-        )
-        .unwrap();
+        let indexer_config = &index.indexer_config;
+        let rtxn = index.inner.read_txn().unwrap();
+        let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
+        let mut new_fields_ids_map = db_fields_ids_map.clone();
 
         let documents = documents!([
             { "id": 1, "doggo": "kevin" },
             { "id": 2, "doggo": { "name": "bob", "age": 20 } },
             { "id": 3, "name": "jean", "age": 25 },
         ]);
-        let (builder, added) = builder.add_documents(documents).unwrap();
-        insta::assert_snapshot!(added.unwrap(), @"3");
 
-        let (builder, removed) = builder.remove_documents(vec![S("2")]).unwrap();
-        insta::assert_snapshot!(removed.unwrap(), @"1");
+        let indexer_alloc = Bump::new();
+        let embedders = EmbeddingConfigs::default();
+        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+        indexer.add_documents(&documents).unwrap();
+        indexer.delete_documents(&["2"]);
+        let (document_changes, _operation_stats, primary_key) = indexer
+            .into_changes(
+                &indexer_alloc,
+                &index.inner,
+                &rtxn,
+                None,
+                &mut new_fields_ids_map,
+                &|| false,
+                &|_progress| (),
+            )
+            .unwrap();
 
-        let addition = builder.execute().unwrap();
-        insta::assert_debug_snapshot!(addition, @r###"
-        DocumentAdditionResult {
-            indexed_documents: 3,
-            number_of_documents: 2,
-        }
-        "###);
+        indexer::index(
+            &mut wtxn,
+            &index.inner,
+            indexer_config.grenad_parameters(),
+            &db_fields_ids_map,
+            new_fields_ids_map,
+            primary_key,
+            &document_changes,
+            embedders,
+            &|| false,
+            &|_| (),
+        )
+        .unwrap();
         wtxn.commit().unwrap();
 
         db_snap!(index, documents, @r###"
@@ -2417,41 +2162,53 @@ mod tests {
         index.index_documents_config.update_method = IndexDocumentsMethod::UpdateDocuments;
 
         let mut wtxn = index.write_txn().unwrap();
-        let builder = IndexDocuments::new(
-            &mut wtxn,
-            &index,
-            &index.indexer_config,
-            index.index_documents_config.clone(),
-            |_| (),
-            || false,
-        )
-        .unwrap();
+        let indexer_config = &index.indexer_config;
+        let rtxn = index.inner.read_txn().unwrap();
+        let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
+        let mut new_fields_ids_map = db_fields_ids_map.clone();
 
         let documents = documents!([
             { "id": 1, "doggo": "kevin" },
             { "id": 2, "doggo": { "name": "bob", "age": 20 } },
             { "id": 3, "name": "jean", "age": 25 },
         ]);
-        let (builder, added) = builder.add_documents(documents).unwrap();
-        insta::assert_snapshot!(added.unwrap(), @"3");
+        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::UpdateDocuments);
+        indexer.add_documents(&documents).unwrap();
 
         let documents = documents!([
             { "id": 2, "catto": "jorts" },
             { "id": 3, "legs": 4 },
         ]);
-        let (builder, added) = builder.add_documents(documents).unwrap();
-        insta::assert_snapshot!(added.unwrap(), @"2");
+        indexer.add_documents(&documents).unwrap();
+        indexer.delete_documents(&["1", "2"]);
 
-        let (builder, removed) = builder.remove_documents(vec![S("1"), S("2")]).unwrap();
-        insta::assert_snapshot!(removed.unwrap(), @"2");
+        let indexer_alloc = Bump::new();
+        let embedders = EmbeddingConfigs::default();
+        let (document_changes, _operation_stats, primary_key) = indexer
+            .into_changes(
+                &indexer_alloc,
+                &index.inner,
+                &rtxn,
+                None,
+                &mut new_fields_ids_map,
+                &|| false,
+                &|_progress| (),
+            )
+            .unwrap();
 
-        let addition = builder.execute().unwrap();
-        insta::assert_debug_snapshot!(addition, @r###"
-        DocumentAdditionResult {
-            indexed_documents: 5,
-            number_of_documents: 1,
-        }
-        "###);
+        indexer::index(
+            &mut wtxn,
+            &index.inner,
+            indexer_config.grenad_parameters(),
+            &db_fields_ids_map,
+            new_fields_ids_map,
+            primary_key,
+            &document_changes,
+            embedders,
+            &|| false,
+            &|_| (),
+        )
+        .unwrap();
         wtxn.commit().unwrap();
 
         db_snap!(index, documents, @r###"
@@ -2461,35 +2218,49 @@ mod tests {
 
     #[test]
     fn add_document_and_in_another_transform_update_and_delete_documents() {
-        let mut index = TempIndex::new();
-        index.index_documents_config.update_method = IndexDocumentsMethod::UpdateDocuments;
+        let index = TempIndex::new();
 
         let mut wtxn = index.write_txn().unwrap();
-        let builder = IndexDocuments::new(
-            &mut wtxn,
-            &index,
-            &index.indexer_config,
-            index.index_documents_config.clone(),
-            |_| (),
-            || false,
-        )
-        .unwrap();
+        let indexer_config = &index.indexer_config;
+        let rtxn = index.inner.read_txn().unwrap();
+        let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
+        let mut new_fields_ids_map = db_fields_ids_map.clone();
 
         let documents = documents!([
             { "id": 1, "doggo": "kevin" },
             { "id": 2, "doggo": { "name": "bob", "age": 20 } },
             { "id": 3, "name": "jean", "age": 25 },
         ]);
-        let (builder, added) = builder.add_documents(documents).unwrap();
-        insta::assert_snapshot!(added.unwrap(), @"3");
+        let indexer_alloc = Bump::new();
+        let embedders = EmbeddingConfigs::default();
+        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::UpdateDocuments);
+        indexer.add_documents(&documents).unwrap();
 
-        let addition = builder.execute().unwrap();
-        insta::assert_debug_snapshot!(addition, @r###"
-        DocumentAdditionResult {
-            indexed_documents: 3,
-            number_of_documents: 3,
-        }
-        "###);
+        let (document_changes, _operation_stats, primary_key) = indexer
+            .into_changes(
+                &indexer_alloc,
+                &index.inner,
+                &rtxn,
+                None,
+                &mut new_fields_ids_map,
+                &|| false,
+                &|_progress| (),
+            )
+            .unwrap();
+
+        indexer::index(
+            &mut wtxn,
+            &index.inner,
+            indexer_config.grenad_parameters(),
+            &db_fields_ids_map,
+            new_fields_ids_map,
+            primary_key,
+            &document_changes,
+            embedders,
+            &|| false,
+            &|_| (),
+        )
+        .unwrap();
         wtxn.commit().unwrap();
 
         db_snap!(index, documents, @r###"
@@ -2501,33 +2272,46 @@ mod tests {
         // A first batch of documents has been inserted
 
         let mut wtxn = index.write_txn().unwrap();
-        let builder = IndexDocuments::new(
-            &mut wtxn,
-            &index,
-            &index.indexer_config,
-            index.index_documents_config.clone(),
-            |_| (),
-            || false,
-        )
-        .unwrap();
+        let indexer_config = &index.indexer_config;
+        let rtxn = index.inner.read_txn().unwrap();
+        let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
+        let mut new_fields_ids_map = db_fields_ids_map.clone();
 
         let documents = documents!([
             { "id": 2, "catto": "jorts" },
             { "id": 3, "legs": 4 },
         ]);
-        let (builder, added) = builder.add_documents(documents).unwrap();
-        insta::assert_snapshot!(added.unwrap(), @"2");
+        let indexer_alloc = Bump::new();
+        let embedders = EmbeddingConfigs::default();
+        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::UpdateDocuments);
+        indexer.add_documents(&documents).unwrap();
+        indexer.delete_documents(&["1", "2"]);
 
-        let (builder, removed) = builder.remove_documents(vec![S("1"), S("2")]).unwrap();
-        insta::assert_snapshot!(removed.unwrap(), @"2");
+        let (document_changes, _operation_stats, primary_key) = indexer
+            .into_changes(
+                &indexer_alloc,
+                &index.inner,
+                &rtxn,
+                None,
+                &mut new_fields_ids_map,
+                &|| false,
+                &|_progress| (),
+            )
+            .unwrap();
 
-        let addition = builder.execute().unwrap();
-        insta::assert_debug_snapshot!(addition, @r###"
-        DocumentAdditionResult {
-            indexed_documents: 2,
-            number_of_documents: 1,
-        }
-        "###);
+        indexer::index(
+            &mut wtxn,
+            &index.inner,
+            indexer_config.grenad_parameters(),
+            &db_fields_ids_map,
+            new_fields_ids_map,
+            primary_key,
+            &document_changes,
+            embedders,
+            &|| false,
+            &|_| (),
+        )
+        .unwrap();
         wtxn.commit().unwrap();
 
         db_snap!(index, documents, @r###"
@@ -2537,37 +2321,50 @@ mod tests {
 
     #[test]
     fn delete_document_and_then_add_documents_in_the_same_transform() {
-        let mut index = TempIndex::new();
-        index.index_documents_config.update_method = IndexDocumentsMethod::UpdateDocuments;
+        let index = TempIndex::new();
 
         let mut wtxn = index.write_txn().unwrap();
-        let builder = IndexDocuments::new(
-            &mut wtxn,
-            &index,
-            &index.indexer_config,
-            index.index_documents_config.clone(),
-            |_| (),
-            || false,
-        )
-        .unwrap();
+        let indexer_config = &index.indexer_config;
+        let rtxn = index.inner.read_txn().unwrap();
+        let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
+        let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-        let (builder, removed) = builder.remove_documents(vec![S("1"), S("2")]).unwrap();
-        insta::assert_snapshot!(removed.unwrap(), @"0");
+        let indexer_alloc = Bump::new();
+        let embedders = EmbeddingConfigs::default();
+        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::UpdateDocuments);
+        indexer.delete_documents(&["1", "2"]);
 
         let documents = documents!([
             { "id": 2, "doggo": { "name": "jean", "age": 20 } },
             { "id": 3, "name": "bob", "age": 25 },
         ]);
-        let (builder, added) = builder.add_documents(documents).unwrap();
-        insta::assert_snapshot!(added.unwrap(), @"2");
+        indexer.add_documents(&documents).unwrap();
 
-        let addition = builder.execute().unwrap();
-        insta::assert_debug_snapshot!(addition, @r###"
-        DocumentAdditionResult {
-            indexed_documents: 2,
-            number_of_documents: 2,
-        }
-        "###);
+        let (document_changes, _operation_stats, primary_key) = indexer
+            .into_changes(
+                &indexer_alloc,
+                &index.inner,
+                &rtxn,
+                None,
+                &mut new_fields_ids_map,
+                &|| false,
+                &|_progress| (),
+            )
+            .unwrap();
+
+        indexer::index(
+            &mut wtxn,
+            &index.inner,
+            indexer_config.grenad_parameters(),
+            &db_fields_ids_map,
+            new_fields_ids_map,
+            primary_key,
+            &document_changes,
+            embedders,
+            &|| false,
+            &|_| (),
+        )
+        .unwrap();
         wtxn.commit().unwrap();
 
         db_snap!(index, documents, @r###"
@@ -2578,43 +2375,54 @@ mod tests {
 
     #[test]
     fn delete_the_same_document_multiple_time() {
-        let mut index = TempIndex::new();
-        index.index_documents_config.update_method = IndexDocumentsMethod::UpdateDocuments;
+        let index = TempIndex::new();
 
         let mut wtxn = index.write_txn().unwrap();
-        let builder = IndexDocuments::new(
-            &mut wtxn,
-            &index,
-            &index.indexer_config,
-            index.index_documents_config.clone(),
-            |_| (),
-            || false,
-        )
-        .unwrap();
+        let indexer_config = &index.indexer_config;
+        let rtxn = index.inner.read_txn().unwrap();
+        let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
+        let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-        let (builder, removed) =
-            builder.remove_documents(vec![S("1"), S("2"), S("1"), S("2")]).unwrap();
-        insta::assert_snapshot!(removed.unwrap(), @"0");
+        let indexer_alloc = Bump::new();
+        let embedders = EmbeddingConfigs::default();
+        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::UpdateDocuments);
+
+        indexer.delete_documents(&["1", "2", "1", "2"]);
 
         let documents = documents!([
             { "id": 1, "doggo": "kevin" },
             { "id": 2, "doggo": { "name": "jean", "age": 20 } },
             { "id": 3, "name": "bob", "age": 25 },
         ]);
-        let (builder, added) = builder.add_documents(documents).unwrap();
-        insta::assert_snapshot!(added.unwrap(), @"3");
+        indexer.add_documents(&documents).unwrap();
 
-        let (builder, removed) =
-            builder.remove_documents(vec![S("1"), S("2"), S("1"), S("2")]).unwrap();
-        insta::assert_snapshot!(removed.unwrap(), @"2");
+        indexer.delete_documents(&["1", "2", "1", "2"]);
 
-        let addition = builder.execute().unwrap();
-        insta::assert_debug_snapshot!(addition, @r###"
-        DocumentAdditionResult {
-            indexed_documents: 3,
-            number_of_documents: 1,
-        }
-        "###);
+        let (document_changes, _operation_stats, primary_key) = indexer
+            .into_changes(
+                &indexer_alloc,
+                &index.inner,
+                &rtxn,
+                None,
+                &mut new_fields_ids_map,
+                &|| false,
+                &|_progress| (),
+            )
+            .unwrap();
+
+        indexer::index(
+            &mut wtxn,
+            &index.inner,
+            indexer_config.grenad_parameters(),
+            &db_fields_ids_map,
+            new_fields_ids_map,
+            primary_key,
+            &document_changes,
+            embedders,
+            &|| false,
+            &|_| (),
+        )
+        .unwrap();
         wtxn.commit().unwrap();
 
         db_snap!(index, documents, @r###"
@@ -2624,33 +2432,48 @@ mod tests {
 
     #[test]
     fn add_document_and_in_another_transform_delete_the_document_then_add_it_again() {
-        let mut index = TempIndex::new();
-        index.index_documents_config.update_method = IndexDocumentsMethod::UpdateDocuments;
+        let index = TempIndex::new();
 
         let mut wtxn = index.write_txn().unwrap();
-        let builder = IndexDocuments::new(
-            &mut wtxn,
-            &index,
-            &index.indexer_config,
-            index.index_documents_config.clone(),
-            |_| (),
-            || false,
-        )
-        .unwrap();
+        let indexer_config = &index.indexer_config;
+        let rtxn = index.inner.read_txn().unwrap();
+        let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
+        let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+        let indexer_alloc = Bump::new();
+        let embedders = EmbeddingConfigs::default();
+        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::UpdateDocuments);
 
         let documents = documents!([
             { "id": 1, "doggo": "kevin" },
         ]);
-        let (builder, added) = builder.add_documents(documents).unwrap();
-        insta::assert_snapshot!(added.unwrap(), @"1");
+        indexer.add_documents(&documents).unwrap();
 
-        let addition = builder.execute().unwrap();
-        insta::assert_debug_snapshot!(addition, @r###"
-        DocumentAdditionResult {
-            indexed_documents: 1,
-            number_of_documents: 1,
-        }
-        "###);
+        let (document_changes, _operation_stats, primary_key) = indexer
+            .into_changes(
+                &indexer_alloc,
+                &index.inner,
+                &rtxn,
+                None,
+                &mut new_fields_ids_map,
+                &|| false,
+                &|_progress| (),
+            )
+            .unwrap();
+
+        indexer::index(
+            &mut wtxn,
+            &index.inner,
+            indexer_config.grenad_parameters(),
+            &db_fields_ids_map,
+            new_fields_ids_map,
+            primary_key,
+            &document_changes,
+            embedders,
+            &|| false,
+            &|_| (),
+        )
+        .unwrap();
         wtxn.commit().unwrap();
 
         db_snap!(index, documents, @r###"
@@ -2660,32 +2483,48 @@ mod tests {
         // A first batch of documents has been inserted
 
         let mut wtxn = index.write_txn().unwrap();
-        let builder = IndexDocuments::new(
-            &mut wtxn,
-            &index,
-            &index.indexer_config,
-            index.index_documents_config.clone(),
-            |_| (),
-            || false,
-        )
-        .unwrap();
+        let indexer_config = &index.indexer_config;
+        let rtxn = index.inner.read_txn().unwrap();
+        let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
+        let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-        let (builder, removed) = builder.remove_documents(vec![S("1")]).unwrap();
-        insta::assert_snapshot!(removed.unwrap(), @"1");
+        let indexer_alloc = Bump::new();
+        let embedders = EmbeddingConfigs::default();
+        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+
+        indexer.delete_documents(&["1"]);
 
         let documents = documents!([
             { "id": 1, "catto": "jorts" },
         ]);
-        let (builder, added) = builder.add_documents(documents).unwrap();
-        insta::assert_snapshot!(added.unwrap(), @"1");
 
-        let addition = builder.execute().unwrap();
-        insta::assert_debug_snapshot!(addition, @r###"
-        DocumentAdditionResult {
-            indexed_documents: 1,
-            number_of_documents: 1,
-        }
-        "###);
+        indexer.add_documents(&documents).unwrap();
+
+        let (document_changes, _operation_stats, primary_key) = indexer
+            .into_changes(
+                &indexer_alloc,
+                &index.inner,
+                &rtxn,
+                None,
+                &mut new_fields_ids_map,
+                &|| false,
+                &|_progress| (),
+            )
+            .unwrap();
+
+        indexer::index(
+            &mut wtxn,
+            &index.inner,
+            indexer_config.grenad_parameters(),
+            &db_fields_ids_map,
+            new_fields_ids_map,
+            primary_key,
+            &document_changes,
+            embedders,
+            &|| false,
+            &|_| (),
+        )
+        .unwrap();
         wtxn.commit().unwrap();
 
         db_snap!(index, documents, @r###"
@@ -2837,33 +2676,48 @@ mod tests {
         println!("--- ENTERING BATCH 1");
 
         let mut wtxn = index.write_txn().unwrap();
+        let indexer_config = &index.indexer_config;
+        let rtxn = index.inner.read_txn().unwrap();
+        let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
+        let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-        let builder = IndexDocuments::new(
-            &mut wtxn,
-            &index,
-            &index.indexer_config,
-            index.index_documents_config.clone(),
-            |_| (),
-            || false,
-        )
-        .unwrap();
+        let indexer_alloc = Bump::new();
+        let embedders = EmbeddingConfigs::default();
+        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
 
         // OP
 
         let documents = documents!([
             { "id": 1, "doggo": "bernese" },
         ]);
-        let (builder, added) = builder.add_documents(documents).unwrap();
-        insta::assert_snapshot!(added.unwrap(), @"1");
+        indexer.add_documents(&documents).unwrap();
 
         // FINISHING
-        let addition = builder.execute().unwrap();
-        insta::assert_debug_snapshot!(addition, @r###"
-        DocumentAdditionResult {
-            indexed_documents: 1,
-            number_of_documents: 1,
-        }
-        "###);
+        let (document_changes, _operation_stats, primary_key) = indexer
+            .into_changes(
+                &indexer_alloc,
+                &index.inner,
+                &rtxn,
+                None,
+                &mut new_fields_ids_map,
+                &|| false,
+                &|_progress| (),
+            )
+            .unwrap();
+
+        indexer::index(
+            &mut wtxn,
+            &index.inner,
+            indexer_config.grenad_parameters(),
+            &db_fields_ids_map,
+            new_fields_ids_map,
+            primary_key,
+            &document_changes,
+            embedders,
+            &|| false,
+            &|_| (),
+        )
+        .unwrap();
         wtxn.commit().unwrap();
 
         db_snap!(index, documents, @r###"
@@ -2881,33 +2735,47 @@ mod tests {
         println!("--- ENTERING BATCH 2");
 
         let mut wtxn = index.write_txn().unwrap();
+        let indexer_config = &index.indexer_config;
+        let rtxn = index.inner.read_txn().unwrap();
+        let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
+        let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-        let builder = IndexDocuments::new(
-            &mut wtxn,
-            &index,
-            &index.indexer_config,
-            index.index_documents_config.clone(),
-            |_| (),
-            || false,
-        )
-        .unwrap();
+        let indexer_alloc = Bump::new();
+        let embedders = EmbeddingConfigs::default();
+        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
 
-        let (builder, removed) = builder.remove_documents(vec![S("1")]).unwrap();
-        insta::assert_snapshot!(removed.unwrap(), @"1");
+        indexer.delete_documents(&["1"]);
 
         let documents = documents!([
             { "id": 0, "catto": "jorts" },
         ]);
-        let (builder, added) = builder.add_documents(documents).unwrap();
-        insta::assert_snapshot!(added.unwrap(), @"1");
+        indexer.add_documents(&documents).unwrap();
 
-        let addition = builder.execute().unwrap();
-        insta::assert_debug_snapshot!(addition, @r###"
-        DocumentAdditionResult {
-            indexed_documents: 1,
-            number_of_documents: 1,
-        }
-        "###);
+        let (document_changes, _operation_stats, primary_key) = indexer
+            .into_changes(
+                &indexer_alloc,
+                &index.inner,
+                &rtxn,
+                None,
+                &mut new_fields_ids_map,
+                &|| false,
+                &|_progress| (),
+            )
+            .unwrap();
+
+        indexer::index(
+            &mut wtxn,
+            &index.inner,
+            indexer_config.grenad_parameters(),
+            &db_fields_ids_map,
+            new_fields_ids_map,
+            primary_key,
+            &document_changes,
+            embedders,
+            &|| false,
+            &|_| (),
+        )
+        .unwrap();
         wtxn.commit().unwrap();
 
         db_snap!(index, documents, @r###"
@@ -2924,30 +2792,45 @@ mod tests {
         println!("--- ENTERING BATCH 3");
 
         let mut wtxn = index.write_txn().unwrap();
+        let indexer_config = &index.indexer_config;
+        let rtxn = index.inner.read_txn().unwrap();
+        let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
+        let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-        let builder = IndexDocuments::new(
-            &mut wtxn,
-            &index,
-            &index.indexer_config,
-            index.index_documents_config.clone(),
-            |_| (),
-            || false,
-        )
-        .unwrap();
+        let indexer_alloc = Bump::new();
+        let embedders = EmbeddingConfigs::default();
+        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
 
         let documents = documents!([
             { "id": 1, "catto": "jorts" },
         ]);
-        let (builder, added) = builder.add_documents(documents).unwrap();
-        insta::assert_snapshot!(added.unwrap(), @"1");
+        indexer.add_documents(&documents).unwrap();
 
-        let addition = builder.execute().unwrap();
-        insta::assert_debug_snapshot!(addition, @r###"
-        DocumentAdditionResult {
-            indexed_documents: 1,
-            number_of_documents: 2,
-        }
-        "###);
+        let (document_changes, _operation_stats, primary_key) = indexer
+            .into_changes(
+                &indexer_alloc,
+                &index.inner,
+                &rtxn,
+                None,
+                &mut new_fields_ids_map,
+                &|| false,
+                &|_progress| (),
+            )
+            .unwrap();
+
+        indexer::index(
+            &mut wtxn,
+            &index.inner,
+            indexer_config.grenad_parameters(),
+            &db_fields_ids_map,
+            new_fields_ids_map,
+            primary_key,
+            &document_changes,
+            embedders,
+            &|| false,
+            &|_| (),
+        )
+        .unwrap();
         wtxn.commit().unwrap();
 
         db_snap!(index, documents, @r###"
@@ -2973,10 +2856,12 @@ mod tests {
             .collect();
 
         // Delete some documents.
-        index.delete_documents_using_wtxn(
-            wtxn,
-            external_ids.iter().map(ToString::to_string).collect(),
-        );
+        index
+            .delete_documents_using_wtxn(
+                wtxn,
+                external_ids.iter().map(ToString::to_string).collect(),
+            )
+            .unwrap();
 
         ids_to_delete
     }
@@ -2996,10 +2881,10 @@ mod tests {
                 ]),
             )
             .unwrap();
+        wtxn.commit().unwrap();
 
-        // delete those documents, ids are synchronous therefore 0, 1, and 2.
-        index.delete_documents_using_wtxn(&mut wtxn, vec![S("0"), S("1"), S("2")]);
-
+        let mut wtxn = index.write_txn().unwrap(); // delete those documents, ids are synchronous therefore 0, 1, and 2.
+        index.delete_documents_using_wtxn(&mut wtxn, vec![S("0"), S("1"), S("2")]).unwrap();
         wtxn.commit().unwrap();
 
         // All these snapshots should be empty since the database was cleared
@@ -3035,9 +2920,8 @@ mod tests {
         wtxn.commit().unwrap();
 
         let mut wtxn = index.write_txn().unwrap();
-
         // Delete not all of the documents but some of them.
-        index.delete_documents_using_wtxn(&mut wtxn, vec![S("0"), S("1")]);
+        index.delete_documents_using_wtxn(&mut wtxn, vec![S("0"), S("1")]).unwrap();
 
         wtxn.commit().unwrap();
 
@@ -3051,14 +2935,15 @@ mod tests {
         let index = TempIndex::new();
 
         let mut wtxn = index.write_txn().unwrap();
-
         index
             .update_settings_using_wtxn(&mut wtxn, |settings| {
                 settings.set_primary_key(S("docid"));
                 settings.set_filterable_fields(hashset! { S("label"), S("label2") });
             })
             .unwrap();
+        wtxn.commit().unwrap();
 
+        let mut wtxn = index.write_txn().unwrap();
         index
             .add_documents_using_wtxn(
                 &mut wtxn,
@@ -3090,14 +2975,17 @@ mod tests {
             )
             .unwrap();
 
-        delete_documents(&mut wtxn, &index, &["1_4", "1_70", "1_72"]);
+        wtxn.commit().unwrap();
 
+        let mut wtxn = index.write_txn().unwrap();
+        delete_documents(&mut wtxn, &index, &["1_4", "1_70", "1_72"]);
+        wtxn.commit().unwrap();
+
+        let rtxn = index.read_txn().unwrap();
         // Placeholder search with filter
         let filter = Filter::from_str("label = sign").unwrap().unwrap();
-        let results = index.search(&wtxn).filter(filter).execute().unwrap();
+        let results = index.search(&rtxn).filter(filter).execute().unwrap();
         assert!(results.documents_ids.is_empty());
-
-        wtxn.commit().unwrap();
 
         db_snap!(index, word_docids);
         db_snap!(index, facet_id_f64_docids);
@@ -3110,48 +2998,50 @@ mod tests {
     fn placeholder_search_should_not_return_deleted_documents() {
         let index = TempIndex::new();
 
-        let mut wtxn = index.write_txn().unwrap();
         index
-            .update_settings_using_wtxn(&mut wtxn, |settings| {
+            .update_settings(|settings| {
                 settings.set_primary_key(S("docid"));
             })
             .unwrap();
 
         index
-            .add_documents_using_wtxn(
-                &mut wtxn,
-                documents!([
-                    { "docid": "1_4",  "label": ["sign"] },
-                    { "docid": "1_5",  "label": ["letter"] },
-                    { "docid": "1_7",  "label": ["abstract","cartoon","design","pattern"] },
-                    { "docid": "1_36", "label": ["drawing","painting","pattern"] },
-                    { "docid": "1_37", "label": ["art","drawing","outdoor"] },
-                    { "docid": "1_38", "label": ["aquarium","art","drawing"] },
-                    { "docid": "1_39", "label": ["abstract"] },
-                    { "docid": "1_40", "label": ["cartoon"] },
-                    { "docid": "1_41", "label": ["art","drawing"] },
-                    { "docid": "1_42", "label": ["art","pattern"] },
-                    { "docid": "1_43", "label": ["abstract","art","drawing","pattern"] },
-                    { "docid": "1_44", "label": ["drawing"] },
-                    { "docid": "1_45", "label": ["art"] },
-                    { "docid": "1_46", "label": ["abstract","colorfulness","pattern"] },
-                    { "docid": "1_47", "label": ["abstract","pattern"] },
-                    { "docid": "1_52", "label": ["abstract","cartoon"] },
-                    { "docid": "1_57", "label": ["abstract","drawing","pattern"] },
-                    { "docid": "1_58", "label": ["abstract","art","cartoon"] },
-                    { "docid": "1_68", "label": ["design"] },
-                    { "docid": "1_69", "label": ["geometry"] },
-                    { "docid": "1_70", "label2": ["geometry", 1.2] },
-                    { "docid": "1_71", "label2": ["design", 2.2] },
-                    { "docid": "1_72", "label2": ["geometry", 1.2] }
-                ]),
-            )
+            .add_documents(documents!([
+                { "docid": "1_4",  "label": ["sign"] },
+                { "docid": "1_5",  "label": ["letter"] },
+                { "docid": "1_7",  "label": ["abstract","cartoon","design","pattern"] },
+                { "docid": "1_36", "label": ["drawing","painting","pattern"] },
+                { "docid": "1_37", "label": ["art","drawing","outdoor"] },
+                { "docid": "1_38", "label": ["aquarium","art","drawing"] },
+                { "docid": "1_39", "label": ["abstract"] },
+                { "docid": "1_40", "label": ["cartoon"] },
+                { "docid": "1_41", "label": ["art","drawing"] },
+                { "docid": "1_42", "label": ["art","pattern"] },
+                { "docid": "1_43", "label": ["abstract","art","drawing","pattern"] },
+                { "docid": "1_44", "label": ["drawing"] },
+                { "docid": "1_45", "label": ["art"] },
+                { "docid": "1_46", "label": ["abstract","colorfulness","pattern"] },
+                { "docid": "1_47", "label": ["abstract","pattern"] },
+                { "docid": "1_52", "label": ["abstract","cartoon"] },
+                { "docid": "1_57", "label": ["abstract","drawing","pattern"] },
+                { "docid": "1_58", "label": ["abstract","art","cartoon"] },
+                { "docid": "1_68", "label": ["design"] },
+                { "docid": "1_69", "label": ["geometry"] },
+                { "docid": "1_70", "label2": ["geometry", 1.2] },
+                { "docid": "1_71", "label2": ["design", 2.2] },
+                { "docid": "1_72", "label2": ["geometry", 1.2] }
+            ]))
             .unwrap();
+
+        let mut wtxn = index.write_txn().unwrap();
 
         let deleted_internal_ids = delete_documents(&mut wtxn, &index, &["1_4"]);
 
+        wtxn.commit().unwrap();
+
         // Placeholder search
-        let results = index.search(&wtxn).execute().unwrap();
+        let rtxn = index.static_read_txn().unwrap();
+
+        let results = index.search(&rtxn).execute().unwrap();
         assert!(!results.documents_ids.is_empty());
         for id in results.documents_ids.iter() {
             assert!(
@@ -3161,55 +3051,54 @@ mod tests {
             );
         }
 
-        wtxn.commit().unwrap();
+        drop(rtxn);
     }
 
     #[test]
     fn search_should_not_return_deleted_documents() {
         let index = TempIndex::new();
 
-        let mut wtxn = index.write_txn().unwrap();
         index
-            .update_settings_using_wtxn(&mut wtxn, |settings| {
+            .update_settings(|settings| {
                 settings.set_primary_key(S("docid"));
             })
             .unwrap();
 
         index
-            .add_documents_using_wtxn(
-                &mut wtxn,
-                documents!([
-                    { "docid": "1_4",  "label": ["sign"] },
-                    { "docid": "1_5",  "label": ["letter"] },
-                    { "docid": "1_7",  "label": ["abstract","cartoon","design","pattern"] },
-                    { "docid": "1_36", "label": ["drawing","painting","pattern"] },
-                    { "docid": "1_37", "label": ["art","drawing","outdoor"] },
-                    { "docid": "1_38", "label": ["aquarium","art","drawing"] },
-                    { "docid": "1_39", "label": ["abstract"] },
-                    { "docid": "1_40", "label": ["cartoon"] },
-                    { "docid": "1_41", "label": ["art","drawing"] },
-                    { "docid": "1_42", "label": ["art","pattern"] },
-                    { "docid": "1_43", "label": ["abstract","art","drawing","pattern"] },
-                    { "docid": "1_44", "label": ["drawing"] },
-                    { "docid": "1_45", "label": ["art"] },
-                    { "docid": "1_46", "label": ["abstract","colorfulness","pattern"] },
-                    { "docid": "1_47", "label": ["abstract","pattern"] },
-                    { "docid": "1_52", "label": ["abstract","cartoon"] },
-                    { "docid": "1_57", "label": ["abstract","drawing","pattern"] },
-                    { "docid": "1_58", "label": ["abstract","art","cartoon"] },
-                    { "docid": "1_68", "label": ["design"] },
-                    { "docid": "1_69", "label": ["geometry"] },
-                    { "docid": "1_70", "label2": ["geometry", 1.2] },
-                    { "docid": "1_71", "label2": ["design", 2.2] },
-                    { "docid": "1_72", "label2": ["geometry", 1.2] }
-                ]),
-            )
+            .add_documents(documents!([
+                { "docid": "1_4",  "label": ["sign"] },
+                { "docid": "1_5",  "label": ["letter"] },
+                { "docid": "1_7",  "label": ["abstract","cartoon","design","pattern"] },
+                { "docid": "1_36", "label": ["drawing","painting","pattern"] },
+                { "docid": "1_37", "label": ["art","drawing","outdoor"] },
+                { "docid": "1_38", "label": ["aquarium","art","drawing"] },
+                { "docid": "1_39", "label": ["abstract"] },
+                { "docid": "1_40", "label": ["cartoon"] },
+                { "docid": "1_41", "label": ["art","drawing"] },
+                { "docid": "1_42", "label": ["art","pattern"] },
+                { "docid": "1_43", "label": ["abstract","art","drawing","pattern"] },
+                { "docid": "1_44", "label": ["drawing"] },
+                { "docid": "1_45", "label": ["art"] },
+                { "docid": "1_46", "label": ["abstract","colorfulness","pattern"] },
+                { "docid": "1_47", "label": ["abstract","pattern"] },
+                { "docid": "1_52", "label": ["abstract","cartoon"] },
+                { "docid": "1_57", "label": ["abstract","drawing","pattern"] },
+                { "docid": "1_58", "label": ["abstract","art","cartoon"] },
+                { "docid": "1_68", "label": ["design"] },
+                { "docid": "1_69", "label": ["geometry"] },
+                { "docid": "1_70", "label2": ["geometry", 1.2] },
+                { "docid": "1_71", "label2": ["design", 2.2] },
+                { "docid": "1_72", "label2": ["geometry", 1.2] }
+            ]))
             .unwrap();
 
+        let mut wtxn = index.write_txn().unwrap();
         let deleted_internal_ids = delete_documents(&mut wtxn, &index, &["1_7", "1_52"]);
+        wtxn.commit().unwrap();
 
         // search for abstract
-        let results = index.search(&wtxn).query("abstract").execute().unwrap();
+        let rtxn = index.read_txn().unwrap();
+        let results = index.search(&rtxn).query("abstract").execute().unwrap();
         assert!(!results.documents_ids.is_empty());
         for id in results.documents_ids.iter() {
             assert!(
@@ -3218,8 +3107,6 @@ mod tests {
                 id
             );
         }
-
-        wtxn.commit().unwrap();
     }
 
     #[test]
@@ -3234,7 +3121,9 @@ mod tests {
                 settings.set_sortable_fields(hashset!(S("_geo")));
             })
             .unwrap();
+        wtxn.commit().unwrap();
 
+        let mut wtxn = index.write_txn().unwrap();
         index.add_documents_using_wtxn(&mut wtxn, documents!([
             { "id": "1",  "city": "Lille",             "_geo": { "lat": 50.6299, "lng": 3.0569 } },
             { "id": "2",  "city": "Mons-en-Barœul",    "_geo": { "lat": 50.6415, "lng": 3.1106 } },
@@ -3257,7 +3146,9 @@ mod tests {
             { "id": "19", "city": "Compiègne",         "_geo": { "lat": 49.4449, "lng": 2.7913 } },
             { "id": "20", "city": "Paris",             "_geo": { "lat": 48.9021, "lng": 2.3708 } }
         ])).unwrap();
+        wtxn.commit().unwrap();
 
+        let mut wtxn = index.write_txn().unwrap();
         let external_ids_to_delete = ["5", "6", "7", "12", "17", "19"];
         let deleted_internal_ids = delete_documents(&mut wtxn, &index, &external_ids_to_delete);
 
@@ -3320,12 +3211,16 @@ mod tests {
                 ]),
             )
             .unwrap();
+        wtxn.commit().unwrap();
 
+        let mut wtxn = index.write_txn().unwrap();
         let deleted_external_ids = ["1_7", "1_52"];
         let deleted_internal_ids = delete_documents(&mut wtxn, &index, &deleted_external_ids);
+        wtxn.commit().unwrap();
 
+        let rtxn = index.read_txn().unwrap();
         // list all documents
-        let results = index.all_documents(&wtxn).unwrap();
+        let results = index.all_documents(&rtxn).unwrap();
         for result in results {
             let (id, _) = result.unwrap();
             assert!(
@@ -3336,7 +3231,7 @@ mod tests {
         }
 
         // list internal document ids
-        let results = index.documents_ids(&wtxn).unwrap();
+        let results = index.documents_ids(&rtxn).unwrap();
         for id in results {
             assert!(
                 !deleted_internal_ids.contains(&id),
@@ -3344,9 +3239,6 @@ mod tests {
                 id
             );
         }
-        wtxn.commit().unwrap();
-
-        let rtxn = index.read_txn().unwrap();
 
         // get internal docids from deleted external document ids
         let results = index.external_documents_ids();
@@ -3364,15 +3256,13 @@ mod tests {
     fn stats_should_not_return_deleted_documents() {
         let index = TempIndex::new();
 
-        let mut wtxn = index.write_txn().unwrap();
-
         index
-            .update_settings_using_wtxn(&mut wtxn, |settings| {
+            .update_settings(|settings| {
                 settings.set_primary_key(S("docid"));
             })
             .unwrap();
 
-        index.add_documents_using_wtxn(&mut wtxn, documents!([
+        index.add_documents(documents!([
             { "docid": "1_4",  "label": ["sign"]},
             { "docid": "1_5",  "label": ["letter"]},
             { "docid": "1_7",  "label": ["abstract","cartoon","design","pattern"], "title": "Mickey Mouse"},
@@ -3395,19 +3285,24 @@ mod tests {
             { "docid": "1_69", "label": ["geometry"]}
         ])).unwrap();
 
+        let mut wtxn = index.write_txn().unwrap();
+
         delete_documents(&mut wtxn, &index, &["1_7", "1_52"]);
+        wtxn.commit().unwrap();
+
+        let rtxn = index.read_txn().unwrap();
 
         // count internal documents
-        let results = index.number_of_documents(&wtxn).unwrap();
+        let results = index.number_of_documents(&rtxn).unwrap();
         assert_eq!(18, results);
 
         // count field distribution
-        let results = index.field_distribution(&wtxn).unwrap();
+        let results = index.field_distribution(&rtxn).unwrap();
         assert_eq!(Some(&18), results.get("label"));
         assert_eq!(Some(&1), results.get("title"));
         assert_eq!(Some(&2), results.get("number"));
 
-        wtxn.commit().unwrap();
+        rtxn.commit().unwrap();
     }
 
     #[test]

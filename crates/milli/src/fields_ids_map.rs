@@ -4,6 +4,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::FieldId;
 
+mod global;
+pub mod metadata;
+pub use global::GlobalFieldsIdsMap;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FieldsIdsMap {
     names_ids: BTreeMap<String, FieldId>,
@@ -94,6 +98,20 @@ impl Default for FieldsIdsMap {
 impl crate::documents::FieldIdMapper for FieldsIdsMap {
     fn id(&self, name: &str) -> Option<FieldId> {
         self.id(name)
+    }
+
+    fn name(&self, id: FieldId) -> Option<&str> {
+        self.name(id)
+    }
+}
+
+pub trait MutFieldIdMapper {
+    fn insert(&mut self, name: &str) -> Option<FieldId>;
+}
+
+impl MutFieldIdMapper for FieldsIdsMap {
+    fn insert(&mut self, name: &str) -> Option<FieldId> {
+        self.insert(name)
     }
 }
 

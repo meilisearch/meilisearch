@@ -3,23 +3,19 @@ use liquid::model::{
 };
 use liquid::{ObjectView, ValueView};
 
-use super::document::Document;
-use super::fields::Fields;
-use super::FieldsIdsMapWithMetadata;
-
 #[derive(Debug, Clone)]
-pub struct Context<'a> {
-    document: &'a Document<'a>,
-    fields: Fields<'a>,
+pub struct Context<'a, D: ObjectView, F: ArrayView> {
+    document: &'a D,
+    fields: &'a F,
 }
 
-impl<'a> Context<'a> {
-    pub fn new(document: &'a Document<'a>, field_id_map: &'a FieldsIdsMapWithMetadata<'a>) -> Self {
-        Self { document, fields: Fields::new(document, field_id_map) }
+impl<'a, D: ObjectView, F: ArrayView> Context<'a, D, F> {
+    pub fn new(document: &'a D, fields: &'a F) -> Self {
+        Self { document, fields }
     }
 }
 
-impl<'a> ObjectView for Context<'a> {
+impl<'a, D: ObjectView, F: ArrayView> ObjectView for Context<'a, D, F> {
     fn as_value(&self) -> &dyn ValueView {
         self
     }
@@ -56,7 +52,7 @@ impl<'a> ObjectView for Context<'a> {
     }
 }
 
-impl<'a> ValueView for Context<'a> {
+impl<'a, D: ObjectView, F: ArrayView> ValueView for Context<'a, D, F> {
     fn as_debug(&self) -> &dyn std::fmt::Debug {
         self
     }

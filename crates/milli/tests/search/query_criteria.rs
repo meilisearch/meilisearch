@@ -1,12 +1,13 @@
 use std::cmp::Reverse;
-use std::io::Cursor;
 
 use big_s::S;
+use bumpalo::Bump;
 use heed::EnvOpenOptions;
 use itertools::Itertools;
 use maplit::hashset;
-use milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
-use milli::update::{IndexDocuments, IndexDocumentsConfig, IndexerConfig, Settings};
+use milli::update::new::indexer;
+use milli::update::{IndexDocumentsMethod, IndexerConfig, Settings};
+use milli::vector::EmbeddingConfigs;
 use milli::{AscDesc, Criterion, Index, Member, Search, SearchResult, TermsMatchingStrategy};
 use rand::Rng;
 use Criterion::*;
@@ -275,14 +276,20 @@ fn criteria_ascdesc() {
     });
     builder.execute(|_| (), || false).unwrap();
 
+    wtxn.commit().unwrap();
+    let mut wtxn = index.write_txn().unwrap();
+    let rtxn = index.read_txn().unwrap();
+
     // index documents
     let config = IndexerConfig { max_memory: Some(10 * 1024 * 1024), ..Default::default() };
-    let indexing_config = IndexDocumentsConfig { autogenerate_docids: true, ..Default::default() };
-    let builder =
-        IndexDocuments::new(&mut wtxn, &index, &config, indexing_config, |_| (), || false).unwrap();
+    let indexer_alloc = Bump::new();
+    let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+    let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-    let mut batch_builder = DocumentsBatchBuilder::new(Vec::new());
+    let embedders = EmbeddingConfigs::default();
+    let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
 
+    let mut file = tempfile::tempfile().unwrap();
     (0..ASC_DESC_CANDIDATES_THRESHOLD + 1).for_each(|_| {
         let mut rng = rand::thread_rng();
 
@@ -304,15 +311,38 @@ fn criteria_ascdesc() {
             _ => panic!(),
         };
 
-        batch_builder.append_json_object(&object).unwrap();
+        serde_json::to_writer(&mut file, &object).unwrap();
     });
 
-    let vector = batch_builder.into_inner().unwrap();
+    file.sync_all().unwrap();
 
-    let reader = DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap();
-    let (builder, user_error) = builder.add_documents(reader).unwrap();
-    user_error.unwrap();
-    builder.execute().unwrap();
+    let payload = unsafe { memmap2::Mmap::map(&file).unwrap() };
+    indexer.add_documents(&payload).unwrap();
+    let (document_changes, _operation_stats, primary_key) = indexer
+        .into_changes(
+            &indexer_alloc,
+            &index,
+            &rtxn,
+            None,
+            &mut new_fields_ids_map,
+            &|| false,
+            &|_progress| (),
+        )
+        .unwrap();
+
+    indexer::index(
+        &mut wtxn,
+        &index,
+        config.grenad_parameters(),
+        &db_fields_ids_map,
+        new_fields_ids_map,
+        primary_key,
+        &document_changes,
+        embedders,
+        &|| false,
+        &|_| (),
+    )
+    .unwrap();
 
     wtxn.commit().unwrap();
 

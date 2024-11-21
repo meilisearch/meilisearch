@@ -13,8 +13,8 @@ pub use builder::DocumentsBatchBuilder;
 pub use enriched::{EnrichedDocument, EnrichedDocumentsBatchCursor, EnrichedDocumentsBatchReader};
 use obkv::KvReader;
 pub use primary_key::{
-    validate_document_id_value, DocumentIdExtractionError, FieldIdMapper, PrimaryKey,
-    DEFAULT_PRIMARY_KEY,
+    validate_document_id_str, validate_document_id_value, DocumentIdExtractionError, FieldIdMapper,
+    PrimaryKey, DEFAULT_PRIMARY_KEY,
 };
 pub use reader::{DocumentsBatchCursor, DocumentsBatchCursorError, DocumentsBatchReader};
 use serde::{Deserialize, Serialize};
@@ -27,7 +27,7 @@ use crate::{FieldId, Object, Result};
 const DOCUMENTS_BATCH_INDEX_KEY: [u8; 8] = u64::MAX.to_be_bytes();
 
 /// Helper function to convert an obkv reader into a JSON object.
-pub fn obkv_to_object(obkv: &KvReader<'_, FieldId>, index: &DocumentsBatchIndex) -> Result<Object> {
+pub fn obkv_to_object(obkv: &KvReader<FieldId>, index: &DocumentsBatchIndex) -> Result<Object> {
     obkv.iter()
         .map(|(field_id, value)| {
             let field_name = index
@@ -76,7 +76,7 @@ impl DocumentsBatchIndex {
         self.0.get_by_right(name).cloned()
     }
 
-    pub fn recreate_json(&self, document: &obkv::KvReaderU16<'_>) -> Result<Object> {
+    pub fn recreate_json(&self, document: &obkv::KvReaderU16) -> Result<Object> {
         let mut map = Object::new();
 
         for (k, v) in document.iter() {
@@ -95,6 +95,10 @@ impl DocumentsBatchIndex {
 impl FieldIdMapper for DocumentsBatchIndex {
     fn id(&self, name: &str) -> Option<FieldId> {
         self.id(name)
+    }
+
+    fn name(&self, id: FieldId) -> Option<&str> {
+        self.name(id)
     }
 }
 
@@ -146,9 +150,31 @@ pub fn objects_from_json_value(json: serde_json::Value) -> Vec<crate::Object> {
 macro_rules! documents {
     ($data:tt) => {{
         let documents = serde_json::json!($data);
-        let documents = $crate::documents::objects_from_json_value(documents);
-        $crate::documents::documents_batch_reader_from_objects(documents)
+        let mut file = tempfile::tempfile().unwrap();
+
+        match documents {
+            serde_json::Value::Array(vec) => {
+                for document in vec {
+                    serde_json::to_writer(&mut file, &document).unwrap();
+                }
+            }
+            serde_json::Value::Object(document) => {
+                serde_json::to_writer(&mut file, &document).unwrap();
+            }
+            _ => unimplemented!("The `documents!` macro only support Objects and Array"),
+        }
+        file.sync_all().unwrap();
+        unsafe { memmap2::Mmap::map(&file).unwrap() }
     }};
+}
+
+pub fn mmap_from_objects(objects: impl IntoIterator<Item = Object>) -> memmap2::Mmap {
+    let mut writer = tempfile::tempfile().map(std::io::BufWriter::new).unwrap();
+    for object in objects {
+        serde_json::to_writer(&mut writer, &object).unwrap();
+    }
+    let file = writer.into_inner().unwrap();
+    unsafe { memmap2::Mmap::map(&file).unwrap() }
 }
 
 pub fn documents_batch_reader_from_objects(
@@ -166,7 +192,7 @@ pub fn documents_batch_reader_from_objects(
 mod test {
     use std::io::Cursor;
 
-    use serde_json::{json, Value};
+    use serde_json::json;
 
     use super::*;
 
@@ -221,53 +247,10 @@ mod test {
     }
 
     #[test]
-    fn test_nested() {
-        let docs_reader = documents!([{
-            "hello": {
-                "toto": ["hello"]
-            }
-        }]);
-
-        let (mut cursor, _) = docs_reader.into_cursor_and_fields_index();
-        let doc = cursor.next_document().unwrap().unwrap();
-        let nested: Value = serde_json::from_slice(doc.get(0).unwrap()).unwrap();
-        assert_eq!(nested, json!({ "toto": ["hello"] }));
-    }
-
-    #[test]
     fn out_of_order_json_fields() {
         let _documents = documents!([
             {"id": 1,"b": 0},
             {"id": 2,"a": 0,"b": 0},
         ]);
-    }
-
-    #[test]
-    fn csv_types_dont_panic() {
-        let csv1_content =
-            "id:number,b:boolean,c,d:number\n1,,,\n2,true,doggo,2\n3,false,the best doggo,-2\n4,,\"Hello, World!\",2.5";
-        let csv1 = csv::Reader::from_reader(Cursor::new(csv1_content));
-
-        let mut builder = DocumentsBatchBuilder::new(Vec::new());
-        builder.append_csv(csv1).unwrap();
-        let vector = builder.into_inner().unwrap();
-
-        DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap();
-    }
-
-    #[test]
-    fn out_of_order_csv_fields() {
-        let csv1_content = "id:number,b\n1,0";
-        let csv1 = csv::Reader::from_reader(Cursor::new(csv1_content));
-
-        let csv2_content = "id:number,a,b\n2,0,0";
-        let csv2 = csv::Reader::from_reader(Cursor::new(csv2_content));
-
-        let mut builder = DocumentsBatchBuilder::new(Vec::new());
-        builder.append_csv(csv1).unwrap();
-        builder.append_csv(csv2).unwrap();
-        let vector = builder.into_inner().unwrap();
-
-        DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap();
     }
 }

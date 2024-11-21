@@ -56,11 +56,12 @@ use meilisearch_types::heed::types::{SerdeBincode, SerdeJson, Str, I128};
 use meilisearch_types::heed::{self, Database, Env, PutFlags, RoTxn, RwTxn};
 use meilisearch_types::milli::documents::DocumentsBatchBuilder;
 use meilisearch_types::milli::index::IndexEmbeddingConfig;
+use meilisearch_types::milli::update::new::indexer::document_changes::Progress;
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::vector::{Embedder, EmbedderOptions, EmbeddingConfigs};
 use meilisearch_types::milli::{self, CboRoaringBitmapCodec, Index, RoaringBitmapCodec, BEU32};
 use meilisearch_types::task_view::TaskView;
-use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
+use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task, TaskProgress};
 use rayon::current_num_threads;
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 use roaring::RoaringBitmap;
@@ -167,12 +168,14 @@ pub struct ProcessingTasks {
     batch: Option<ProcessingBatch>,
     /// The list of tasks ids that are currently running.
     processing: RoaringBitmap,
+    /// The progress on processing tasks
+    progress: Option<TaskProgress>,
 }
 
 impl ProcessingTasks {
     /// Creates an empty `ProcessingAt` struct.
     fn new() -> ProcessingTasks {
-        ProcessingTasks { batch: None, processing: RoaringBitmap::new() }
+        ProcessingTasks { batch: None, processing: RoaringBitmap::new(), progress: None }
     }
 
     /// Stores the currently processing tasks, and the date time at which it started.
@@ -181,11 +184,18 @@ impl ProcessingTasks {
         self.processing = processing;
     }
 
+    fn update_progress(&mut self, progress: Progress) -> TaskProgress {
+        self.progress.get_or_insert_with(TaskProgress::default).update(progress)
+    }
+
     /// Set the processing tasks to an empty list
     fn stop_processing(&mut self) -> Self {
+        self.progress = None;
+
         Self {
             batch: std::mem::take(&mut self.batch),
             processing: std::mem::take(&mut self.processing),
+            progress: None,
         }
     }
 
@@ -768,7 +778,7 @@ impl IndexScheduler {
 
     /// Return the task ids matched by the given query from the index scheduler's point of view.
     pub(crate) fn get_task_ids(&self, rtxn: &RoTxn, query: &Query) -> Result<RoaringBitmap> {
-        let ProcessingTasks { batch: processing_batch, processing: processing_tasks } =
+        let ProcessingTasks { batch: processing_batch, processing: processing_tasks, progress: _ } =
             self.processing_tasks.read().unwrap().clone();
         let Query {
             limit,
@@ -1352,8 +1362,11 @@ impl IndexScheduler {
         let tasks =
             self.get_existing_tasks(&rtxn, tasks.take(query.limit.unwrap_or(u32::MAX) as usize))?;
 
-        let ProcessingTasks { batch, processing } =
+        let ProcessingTasks { batch, processing, progress } =
             self.processing_tasks.read().map_err(|_| Error::CorruptedTaskQueue)?.clone();
+
+        // ignored for now, might be added to batch details later
+        let _ = progress;
 
         let ret = tasks.into_iter();
         if processing.is_empty() || batch.is_none() {
@@ -2290,7 +2303,7 @@ mod tests {
                 dumps_path: tempdir.path().join("dumps"),
                 webhook_url: None,
                 webhook_authorization_header: None,
-                task_db_size: 1000 * 1000, // 1 MB, we don't use MiB on purpose.
+                task_db_size: 1000 * 1000 * 10, // 10 MB, we don't use MiB on purpose.
                 index_base_map_size: 1000 * 1000, // 1 MB, we don't use MiB on purpose.
                 enable_mdb_writemap: false,
                 index_growth_amount: 1000 * 1000 * 1000 * 1000, // 1 TB
@@ -5186,12 +5199,10 @@ mod tests {
         handle.advance_one_successful_batch();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "only_first_task_succeed");
 
-        // The second batch should fail.
-        handle.advance_one_failed_batch();
+        handle.advance_one_successful_batch();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "second_task_fails");
 
-        // The second batch should fail.
-        handle.advance_one_failed_batch();
+        handle.advance_one_successful_batch();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "third_task_fails");
 
         // Is the primary key still what we expect?
@@ -5251,8 +5262,7 @@ mod tests {
         handle.advance_one_successful_batch();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "only_first_task_succeed");
 
-        // The second batch should fail and contains two tasks.
-        handle.advance_one_failed_batch();
+        handle.advance_one_successful_batch();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "second_and_third_tasks_fails");
 
         // Is the primary key still what we expect?
@@ -5331,7 +5341,8 @@ mod tests {
         snapshot!(primary_key, @"id");
 
         // We're trying to `bork` again, but now there is already a primary key set for this index.
-        handle.advance_one_failed_batch();
+        // NOTE: it's marked as successful because the batch didn't fails, it's the individual tasks that failed.
+        handle.advance_one_successful_batch();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "fourth_task_fails");
 
         // Finally the last task should succeed since its primary key is the same as the valid one.
@@ -5491,7 +5502,7 @@ mod tests {
         snapshot!(primary_key.is_none(), @"false");
 
         // The second batch should contains only one task that fails because it tries to update the primary key to `bork`.
-        handle.advance_one_failed_batch();
+        handle.advance_one_successful_batch();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "second_task_fails");
 
         // The third batch should succeed and only contains one task.
@@ -6136,9 +6147,10 @@ mod tests {
 
             let configs = index_scheduler.embedders(configs).unwrap();
             let (hf_embedder, _, _) = configs.get(&simple_hf_name).unwrap();
-            let beagle_embed = hf_embedder.embed_one(S("Intel the beagle best doggo")).unwrap();
-            let lab_embed = hf_embedder.embed_one(S("Max the lab best doggo")).unwrap();
-            let patou_embed = hf_embedder.embed_one(S("kefir the patou best doggo")).unwrap();
+            let beagle_embed =
+                hf_embedder.embed_one(S("Intel the beagle best doggo"), None).unwrap();
+            let lab_embed = hf_embedder.embed_one(S("Max the lab best doggo"), None).unwrap();
+            let patou_embed = hf_embedder.embed_one(S("kefir the patou best doggo"), None).unwrap();
             (fakerest_name, simple_hf_name, beagle_embed, lab_embed, patou_embed)
         };
 

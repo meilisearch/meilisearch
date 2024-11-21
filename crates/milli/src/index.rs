@@ -1251,12 +1251,20 @@ impl Index {
 
     /* documents */
 
+    /// Returns a document by using the document id.
+    pub fn document<'t>(&self, rtxn: &'t RoTxn, id: DocumentId) -> Result<&'t obkv::KvReaderU16> {
+        self.documents
+            .get(rtxn, &id)?
+            .ok_or(UserError::UnknownInternalDocumentId { document_id: id })
+            .map_err(Into::into)
+    }
+
     /// Returns an iterator over the requested documents. The next item will be an error if a document is missing.
     pub fn iter_documents<'a, 't: 'a>(
         &'a self,
         rtxn: &'t RoTxn<'t>,
         ids: impl IntoIterator<Item = DocumentId> + 'a,
-    ) -> Result<impl Iterator<Item = Result<(DocumentId, obkv::KvReaderU16<'t>)>> + 'a> {
+    ) -> Result<impl Iterator<Item = Result<(DocumentId, &'t obkv::KvReaderU16)>> + 'a> {
         Ok(ids.into_iter().map(move |id| {
             let kv = self
                 .documents
@@ -1271,7 +1279,7 @@ impl Index {
         &self,
         rtxn: &'t RoTxn<'t>,
         ids: impl IntoIterator<Item = DocumentId>,
-    ) -> Result<Vec<(DocumentId, obkv::KvReaderU16<'t>)>> {
+    ) -> Result<Vec<(DocumentId, &'t obkv::KvReaderU16)>> {
         self.iter_documents(rtxn, ids)?.collect()
     }
 
@@ -1279,7 +1287,7 @@ impl Index {
     pub fn all_documents<'a, 't: 'a>(
         &'a self,
         rtxn: &'t RoTxn<'t>,
-    ) -> Result<impl Iterator<Item = Result<(DocumentId, obkv::KvReaderU16<'t>)>> + 'a> {
+    ) -> Result<impl Iterator<Item = Result<(DocumentId, &'t obkv::KvReaderU16)>> + 'a> {
         self.iter_documents(rtxn, self.documents_ids(rtxn)?)
     }
 
@@ -1303,7 +1311,7 @@ impl Index {
         })?;
         Ok(self.iter_documents(rtxn, ids)?.map(move |entry| -> Result<_> {
             let (_docid, obkv) = entry?;
-            match primary_key.document_id(&obkv, &fields)? {
+            match primary_key.document_id(obkv, &fields)? {
                 Ok(document_id) => Ok(document_id),
                 Err(_) => Err(InternalError::DocumentsError(
                     crate::documents::Error::InvalidDocumentFormat,
@@ -1638,6 +1646,14 @@ impl Index {
         }
         Ok(res)
     }
+
+    pub fn prefix_settings(&self, _rtxn: &RoTxn<'_>) -> Result<PrefixSettings> {
+        Ok(PrefixSettings {
+            compute_prefixes: true,
+            max_prefix_length: 4,
+            prefix_count_threshold: 100,
+        })
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -1645,6 +1661,13 @@ pub struct IndexEmbeddingConfig {
     pub name: String,
     pub config: EmbeddingConfig,
     pub user_provided: RoaringBitmap,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct PrefixSettings {
+    pub prefix_count_threshold: u64,
+    pub max_prefix_length: usize,
+    pub compute_prefixes: bool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -1657,19 +1680,24 @@ pub(crate) mod tests {
     use std::ops::Deref;
 
     use big_s::S;
+    use bumpalo::Bump;
     use heed::{EnvOpenOptions, RwTxn};
     use maplit::{btreemap, hashset};
+    use memmap2::Mmap;
     use tempfile::TempDir;
 
-    use crate::documents::DocumentsBatchReader;
     use crate::error::{Error, InternalError};
     use crate::index::{DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS};
+    use crate::update::new::indexer;
+    use crate::update::settings::InnerIndexSettings;
     use crate::update::{
-        self, IndexDocuments, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig, Setting,
-        Settings,
+        self, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig, Setting, Settings,
     };
     use crate::vector::settings::{EmbedderSource, EmbeddingSettings};
-    use crate::{db_snap, obkv_to_json, Filter, Index, Search, SearchResult};
+    use crate::vector::EmbeddingConfigs;
+    use crate::{
+        db_snap, obkv_to_json, Filter, Index, Search, SearchResult, ThreadPoolNoAbortBuilder,
+    };
 
     pub(crate) struct TempIndex {
         pub inner: Index,
@@ -1702,35 +1730,67 @@ pub(crate) mod tests {
         pub fn new() -> Self {
             Self::new_with_map_size(4096 * 2000)
         }
-        pub fn add_documents_using_wtxn<'t, R>(
+
+        pub fn add_documents_using_wtxn<'t>(
             &'t self,
             wtxn: &mut RwTxn<'t>,
-            documents: DocumentsBatchReader<R>,
-        ) -> Result<(), crate::error::Error>
-        where
-            R: std::io::Read + std::io::Seek,
-        {
-            let builder = IndexDocuments::new(
-                wtxn,
-                self,
-                &self.indexer_config,
-                self.index_documents_config.clone(),
-                |_| (),
-                || false,
-            )
-            .unwrap();
-            let (builder, user_error) = builder.add_documents(documents).unwrap();
-            user_error?;
-            builder.execute()?;
+            documents: Mmap,
+        ) -> Result<(), crate::error::Error> {
+            let local_pool;
+            let indexer_config = &self.indexer_config;
+            let pool = match &indexer_config.thread_pool {
+                Some(pool) => pool,
+                None => {
+                    local_pool = ThreadPoolNoAbortBuilder::new().build().unwrap();
+                    &local_pool
+                }
+            };
+
+            let rtxn = self.inner.read_txn()?;
+            let db_fields_ids_map = self.inner.fields_ids_map(&rtxn)?;
+            let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+            let embedders =
+                InnerIndexSettings::from_index(&self.inner, &rtxn, None)?.embedding_configs;
+            let mut indexer =
+                indexer::DocumentOperation::new(self.index_documents_config.update_method);
+            indexer.add_documents(&documents).unwrap();
+
+            let indexer_alloc = Bump::new();
+            let (document_changes, operation_stats, primary_key) = indexer.into_changes(
+                &indexer_alloc,
+                &self.inner,
+                &rtxn,
+                None,
+                &mut new_fields_ids_map,
+                &|| false,
+                &|_progress| (),
+            )?;
+
+            if let Some(error) = operation_stats.into_iter().find_map(|stat| stat.error) {
+                return Err(error.into());
+            }
+
+            pool.install(|| {
+                indexer::index(
+                    wtxn,
+                    &self.inner,
+                    indexer_config.grenad_parameters(),
+                    &db_fields_ids_map,
+                    new_fields_ids_map,
+                    primary_key,
+                    &document_changes,
+                    embedders,
+                    &|| false,
+                    &|_| (),
+                )
+            })
+            .unwrap()?;
+
             Ok(())
         }
-        pub fn add_documents<R>(
-            &self,
-            documents: DocumentsBatchReader<R>,
-        ) -> Result<(), crate::error::Error>
-        where
-            R: std::io::Read + std::io::Seek,
-        {
+
+        pub fn add_documents(&self, documents: Mmap) -> Result<(), crate::error::Error> {
             let mut wtxn = self.write_txn().unwrap();
             self.add_documents_using_wtxn(&mut wtxn, documents)?;
             wtxn.commit().unwrap();
@@ -1746,6 +1806,7 @@ pub(crate) mod tests {
             wtxn.commit().unwrap();
             Ok(())
         }
+
         pub fn update_settings_using_wtxn<'t>(
             &'t self,
             wtxn: &mut RwTxn<'t>,
@@ -1761,25 +1822,68 @@ pub(crate) mod tests {
             &'t self,
             wtxn: &mut RwTxn<'t>,
             external_document_ids: Vec<String>,
-        ) {
-            let builder = IndexDocuments::new(
-                wtxn,
-                self,
-                &self.indexer_config,
-                self.index_documents_config.clone(),
-                |_| (),
-                || false,
-            )
-            .unwrap();
-            let (builder, user_error) = builder.remove_documents(external_document_ids).unwrap();
-            user_error.unwrap();
-            builder.execute().unwrap();
+        ) -> Result<(), crate::error::Error> {
+            let local_pool;
+            let indexer_config = &self.indexer_config;
+            let pool = match &indexer_config.thread_pool {
+                Some(pool) => pool,
+                None => {
+                    local_pool = ThreadPoolNoAbortBuilder::new().build().unwrap();
+                    &local_pool
+                }
+            };
+
+            let rtxn = self.inner.read_txn()?;
+            let db_fields_ids_map = self.inner.fields_ids_map(&rtxn)?;
+            let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+            let embedders =
+                InnerIndexSettings::from_index(&self.inner, &rtxn, None)?.embedding_configs;
+
+            let mut indexer =
+                indexer::DocumentOperation::new(self.index_documents_config.update_method);
+            let external_document_ids: Vec<_> =
+                external_document_ids.iter().map(AsRef::as_ref).collect();
+            indexer.delete_documents(external_document_ids.as_slice());
+
+            let indexer_alloc = Bump::new();
+            let (document_changes, operation_stats, primary_key) = indexer.into_changes(
+                &indexer_alloc,
+                &self.inner,
+                &rtxn,
+                None,
+                &mut new_fields_ids_map,
+                &|| false,
+                &|_progress| (),
+            )?;
+
+            if let Some(error) = operation_stats.into_iter().find_map(|stat| stat.error) {
+                return Err(error.into());
+            }
+
+            pool.install(|| {
+                indexer::index(
+                    wtxn,
+                    &self.inner,
+                    indexer_config.grenad_parameters(),
+                    &db_fields_ids_map,
+                    new_fields_ids_map,
+                    primary_key,
+                    &document_changes,
+                    embedders,
+                    &|| false,
+                    &|_| (),
+                )
+            })
+            .unwrap()?;
+
+            Ok(())
         }
 
         pub fn delete_documents(&self, external_document_ids: Vec<String>) {
             let mut wtxn = self.write_txn().unwrap();
 
-            self.delete_documents_using_wtxn(&mut wtxn, external_document_ids);
+            self.delete_documents_using_wtxn(&mut wtxn, external_document_ids).unwrap();
 
             wtxn.commit().unwrap();
         }
@@ -1796,29 +1900,63 @@ pub(crate) mod tests {
 
         let index = TempIndex::new();
         let mut wtxn = index.inner.write_txn().unwrap();
-
         let should_abort = AtomicBool::new(false);
-        let builder = IndexDocuments::new(
-            &mut wtxn,
-            &index.inner,
-            &index.indexer_config,
-            index.index_documents_config.clone(),
-            |_| (),
-            || should_abort.load(Relaxed),
-        )
-        .unwrap();
 
-        let (builder, user_error) = builder
-            .add_documents(documents!([
-                { "id": 1, "name": "kevin" },
-                { "id": 2, "name": "bob", "age": 20 },
-                { "id": 2, "name": "bob", "age": 20 },
-            ]))
+        let local_pool;
+        let indexer_config = &index.indexer_config;
+        let pool = match &indexer_config.thread_pool {
+            Some(pool) => pool,
+            None => {
+                local_pool = ThreadPoolNoAbortBuilder::new().build().unwrap();
+                &local_pool
+            }
+        };
+
+        let rtxn = index.inner.read_txn().unwrap();
+        let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
+        let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+        let embedders = EmbeddingConfigs::default();
+        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+        let payload = documents!([
+            { "id": 1, "name": "kevin" },
+            { "id": 2, "name": "bob", "age": 20 },
+            { "id": 2, "name": "bob", "age": 20 },
+        ]);
+        indexer.add_documents(&payload).unwrap();
+
+        let indexer_alloc = Bump::new();
+        let (document_changes, _operation_stats, primary_key) = indexer
+            .into_changes(
+                &indexer_alloc,
+                &index.inner,
+                &rtxn,
+                None,
+                &mut new_fields_ids_map,
+                &|| false,
+                &|_progress| (),
+            )
             .unwrap();
-        user_error.unwrap();
 
         should_abort.store(true, Relaxed);
-        let err = builder.execute().unwrap_err();
+
+        let err = pool
+            .install(|| {
+                indexer::index(
+                    &mut wtxn,
+                    &index.inner,
+                    indexer_config.grenad_parameters(),
+                    &db_fields_ids_map,
+                    new_fields_ids_map,
+                    primary_key,
+                    &document_changes,
+                    embedders,
+                    &|| should_abort.load(Relaxed),
+                    &|_| (),
+                )
+            })
+            .unwrap()
+            .unwrap_err();
 
         assert!(matches!(err, Error::InternalError(InternalError::AbortedIndexation)));
     }
@@ -2314,7 +2452,16 @@ pub(crate) mod tests {
 
         // And adding lots of documents afterwards instead of just one.
         // These extra subtests don't add much, but it's better than nothing.
-        index.add_documents(documents!([{ "primary_key": 38 }, { "primary_key": 39 }, { "primary_key": 41 }, { "primary_key": 40 }, { "primary_key": 41 }, { "primary_key": 42 }])).unwrap();
+        index
+            .add_documents(documents!([
+                { "primary_key": 38 },
+                { "primary_key": 39 },
+                { "primary_key": 41 },
+                { "primary_key": 40 },
+                { "primary_key": 41 },
+                { "primary_key": 42 },
+            ]))
+            .unwrap();
 
         db_snap!(index, documents_ids, @"[0, 1, 2, 3, 4, 5, ]");
         db_snap!(index, external_documents_ids, 7, @r###"
@@ -2701,7 +2848,7 @@ pub(crate) mod tests {
                 documents!({ "id" : "doggo", "_geo": { "lat": 1, "lng": 2, "doggo": "are the best" }}),
             )
             .unwrap_err();
-        insta::assert_snapshot!(err, @r###"The `_geo` field in the document with the id: `"\"doggo\""` contains the following unexpected fields: `{"doggo":"are the best"}`."###);
+        insta::assert_snapshot!(err, @r###"The `_geo` field in the document with the id: `"doggo"` contains the following unexpected fields: `{"doggo":"are the best"}`."###);
 
         db_snap!(index, geo_faceted_documents_ids); // ensure that no documents were inserted
 
@@ -2711,7 +2858,7 @@ pub(crate) mod tests {
                 documents!({ "id" : "doggo", "_geo": { "lat": 1, "lng": 2, "doggo": "are the best", "and": { "all": ["cats", { "are": "beautiful" } ] } } }),
             )
             .unwrap_err();
-        insta::assert_snapshot!(err, @r###"The `_geo` field in the document with the id: `"\"doggo\""` contains the following unexpected fields: `{"and":{"all":["cats",{"are":"beautiful"}]},"doggo":"are the best"}`."###);
+        insta::assert_snapshot!(err, @r###"The `_geo` field in the document with the id: `"doggo"` contains the following unexpected fields: `{"and":{"all":["cats",{"are":"beautiful"}]},"doggo":"are the best"}`."###);
 
         db_snap!(index, geo_faceted_documents_ids); // ensure that no documents were inserted
     }
@@ -2830,7 +2977,6 @@ pub(crate) mod tests {
         db_snap!(index, fields_ids_map, @r###"
         0   id               |
         1   _vectors         |
-        2   _vectors.doggo   |
         "###);
         db_snap!(index, searchable_fields, @r###"["id"]"###);
         db_snap!(index, fieldids_weights_map, @r###"

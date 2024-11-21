@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 
 use arroy::distances::{BinaryQuantizedCosine, Cosine};
 use arroy::ItemId;
@@ -531,6 +532,10 @@ impl EmbeddingConfigs {
         Self(data)
     }
 
+    pub fn contains(&self, name: &str) -> bool {
+        self.0.contains_key(name)
+    }
+
     /// Get an embedder configuration and template from its name.
     pub fn get(&self, name: &str) -> Option<(Arc<Embedder>, Arc<Prompt>, bool)> {
         self.0.get(name).cloned()
@@ -594,25 +599,25 @@ impl Embedder {
     pub fn embed(
         &self,
         texts: Vec<String>,
-    ) -> std::result::Result<Vec<Embeddings<f32>>, EmbedError> {
+        deadline: Option<Instant>,
+    ) -> std::result::Result<Vec<Embedding>, EmbedError> {
         match self {
             Embedder::HuggingFace(embedder) => embedder.embed(texts),
-            Embedder::OpenAi(embedder) => embedder.embed(texts),
-            Embedder::Ollama(embedder) => embedder.embed(texts),
-            Embedder::UserProvided(embedder) => embedder.embed(texts),
-            Embedder::Rest(embedder) => embedder.embed(texts),
+            Embedder::OpenAi(embedder) => embedder.embed(&texts, deadline),
+            Embedder::Ollama(embedder) => embedder.embed(&texts, deadline),
+            Embedder::UserProvided(embedder) => embedder.embed(&texts),
+            Embedder::Rest(embedder) => embedder.embed(texts, deadline),
         }
     }
 
-    pub fn embed_one(&self, text: String) -> std::result::Result<Embedding, EmbedError> {
-        let mut embeddings = self.embed(vec![text])?;
-        let embeddings = embeddings.pop().ok_or_else(EmbedError::missing_embedding)?;
-        Ok(if embeddings.iter().nth(1).is_some() {
-            tracing::warn!("Ignoring embeddings past the first one in long search query");
-            embeddings.iter().next().unwrap().to_vec()
-        } else {
-            embeddings.into_inner()
-        })
+    pub fn embed_one(
+        &self,
+        text: String,
+        deadline: Option<Instant>,
+    ) -> std::result::Result<Embedding, EmbedError> {
+        let mut embedding = self.embed(vec![text], deadline)?;
+        let embedding = embedding.pop().ok_or_else(EmbedError::missing_embedding)?;
+        Ok(embedding)
     }
 
     /// Embed multiple chunks of texts.
@@ -622,7 +627,7 @@ impl Embedder {
         &self,
         text_chunks: Vec<Vec<String>>,
         threads: &ThreadPoolNoAbort,
-    ) -> std::result::Result<Vec<Vec<Embeddings<f32>>>, EmbedError> {
+    ) -> std::result::Result<Vec<Vec<Embedding>>, EmbedError> {
         match self {
             Embedder::HuggingFace(embedder) => embedder.embed_chunks(text_chunks),
             Embedder::OpenAi(embedder) => embedder.embed_chunks(text_chunks, threads),
@@ -632,13 +637,27 @@ impl Embedder {
         }
     }
 
+    pub fn embed_chunks_ref(
+        &self,
+        texts: &[&str],
+        threads: &ThreadPoolNoAbort,
+    ) -> std::result::Result<Vec<Embedding>, EmbedError> {
+        match self {
+            Embedder::HuggingFace(embedder) => embedder.embed_chunks_ref(texts),
+            Embedder::OpenAi(embedder) => embedder.embed_chunks_ref(texts, threads),
+            Embedder::Ollama(embedder) => embedder.embed_chunks_ref(texts, threads),
+            Embedder::UserProvided(embedder) => embedder.embed_chunks_ref(texts),
+            Embedder::Rest(embedder) => embedder.embed_chunks_ref(texts, threads),
+        }
+    }
+
     /// Indicates the preferred number of chunks to pass to [`Self::embed_chunks`]
     pub fn chunk_count_hint(&self) -> usize {
         match self {
             Embedder::HuggingFace(embedder) => embedder.chunk_count_hint(),
             Embedder::OpenAi(embedder) => embedder.chunk_count_hint(),
             Embedder::Ollama(embedder) => embedder.chunk_count_hint(),
-            Embedder::UserProvided(_) => 1,
+            Embedder::UserProvided(_) => 100,
             Embedder::Rest(embedder) => embedder.chunk_count_hint(),
         }
     }
