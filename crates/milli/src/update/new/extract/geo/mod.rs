@@ -60,9 +60,11 @@ pub struct GeoExtractorData<'extractor> {
     /// point being updated, we first put it in the deleted and then in the inserted.
     removed: bumpalo::collections::Vec<'extractor, ExtractedGeoPoint>,
     inserted: bumpalo::collections::Vec<'extractor, ExtractedGeoPoint>,
-    /// TODO Do the doc
+    /// Contains a packed list of `ExtractedGeoPoint` of the inserted geo points
+    /// data structures if we have spilled to disk.
     spilled_removed: Option<BufWriter<File>>,
-    /// TODO Do the doc
+    /// Contains a packed list of `ExtractedGeoPoint` of the inserted geo points
+    /// data structures if we have spilled to disk.
     spilled_inserted: Option<BufWriter<File>>,
 }
 
