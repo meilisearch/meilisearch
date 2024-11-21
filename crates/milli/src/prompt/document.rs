@@ -160,7 +160,7 @@ impl<'doc, D: DocumentTrait<'doc> + Debug> ObjectView for ParseableDocument<'doc
     }
 
     fn size(&self) -> i64 {
-        self.document.len() as i64
+        self.document.top_level_fields_count() as i64
     }
 
     fn keys<'k>(&'k self) -> Box<dyn Iterator<Item = KStringCow<'k>> + 'k> {

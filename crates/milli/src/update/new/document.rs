@@ -21,11 +21,8 @@ pub trait Document<'doc> {
     /// - The `_vectors` and `_geo` fields are **ignored** by this method, meaning  they are **not returned** by this method.
     fn iter_top_level_fields(&self) -> impl Iterator<Item = Result<(&'doc str, &'doc RawValue)>>;
 
-    fn len(&self) -> usize;
-
-    fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
+    /// Number of top level fields, **excluding** `_vectors` and `_geo`
+    fn top_level_fields_count(&self) -> usize;
 
     /// Get the **top-level** with the specified name, if exists.
     ///
@@ -105,8 +102,15 @@ impl<'t, Mapper: FieldIdMapper> Document<'t> for DocumentFromDb<'t, Mapper> {
         self.field("_geo")
     }
 
-    fn len(&self) -> usize {
-        self.content.iter().count()
+    fn top_level_fields_count(&self) -> usize {
+        let has_vectors_field = self.vectors_field().unwrap_or(None).is_some();
+        let has_geo_field = self.geo_field().unwrap_or(None).is_some();
+        let count = self.content.iter().count();
+        match (has_vectors_field, has_geo_field) {
+            (true, true) => count - 2,
+            (true, false) | (false, true) => count - 1,
+            (false, false) => count,
+        }
     }
 
     fn top_level_field(&self, k: &str) -> Result<Option<&'t RawValue>> {
@@ -162,8 +166,15 @@ impl<'a, 'doc> Document<'doc> for DocumentFromVersions<'a, 'doc> {
         Ok(self.versions.geo_field())
     }
 
-    fn len(&self) -> usize {
-        self.versions.len()
+    fn top_level_fields_count(&self) -> usize {
+        let has_vectors_field = self.vectors_field().unwrap_or(None).is_some();
+        let has_geo_field = self.geo_field().unwrap_or(None).is_some();
+        let count = self.versions.len();
+        match (has_vectors_field, has_geo_field) {
+            (true, true) => count - 2,
+            (true, false) | (false, true) => count - 1,
+            (false, false) => count,
+        }
     }
 
     fn top_level_field(&self, k: &str) -> Result<Option<&'doc RawValue>> {
@@ -243,7 +254,7 @@ impl<'d, 'doc: 'd, 't: 'd, Mapper: FieldIdMapper> Document<'d>
         db.geo_field()
     }
 
-    fn len(&self) -> usize {
+    fn top_level_fields_count(&self) -> usize {
         self.iter_top_level_fields().count()
     }
 
@@ -274,8 +285,8 @@ where
         D::geo_field(self)
     }
 
-    fn len(&self) -> usize {
-        D::len(self)
+    fn top_level_fields_count(&self) -> usize {
+        D::top_level_fields_count(self)
     }
 
     fn top_level_field(&self, k: &str) -> Result<Option<&'doc RawValue>> {
