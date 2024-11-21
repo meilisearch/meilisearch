@@ -241,6 +241,7 @@ impl<'extractor> BalancedCaches<'extractor> {
     }
 }
 
+/// SAFETY: No Thread-Local inside
 unsafe impl MostlySend for BalancedCaches<'_> {}
 
 struct NormalCaches<'extractor> {

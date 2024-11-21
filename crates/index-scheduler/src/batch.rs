@@ -1239,7 +1239,7 @@ impl IndexScheduler {
 
         let started_processing_at = std::time::Instant::now();
         let secs_since_started_processing_at = AtomicU64::new(0);
-        const PRINT_SECS_DELTA: u64 = 1;
+        const PRINT_SECS_DELTA: u64 = 5;
 
         let processing_tasks = self.processing_tasks.clone();
         let must_stop_processing = self.must_stop_processing.clone();
