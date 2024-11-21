@@ -3,7 +3,6 @@ use std::sync::RwLock;
 
 use super::metadata::{FieldIdMapWithMetadata, Metadata};
 use super::MutFieldIdMapper;
-use crate::documents::FieldIdMapper;
 use crate::FieldId;
 
 /// A fields ids map that can be globally updated to add fields
@@ -14,20 +13,10 @@ pub struct GlobalFieldsIdsMap<'indexing> {
 }
 
 #[derive(Debug, Clone)]
-pub struct LocalFieldsIdsMap {
+struct LocalFieldsIdsMap {
     names_ids: BTreeMap<String, FieldId>,
     ids_names: BTreeMap<FieldId, String>,
     metadata: BTreeMap<FieldId, Metadata>,
-}
-
-impl FieldIdMapper for LocalFieldsIdsMap {
-    fn id(&self, name: &str) -> Option<FieldId> {
-        self.id(name)
-    }
-
-    fn name(&self, id: FieldId) -> Option<&str> {
-        self.name(id)
-    }
 }
 
 impl LocalFieldsIdsMap {
@@ -115,10 +104,6 @@ impl<'indexing> GlobalFieldsIdsMap<'indexing> {
         }
 
         self.local.name(id)
-    }
-
-    pub fn local_map(&self) -> &LocalFieldsIdsMap {
-        &self.local
     }
 }
 
