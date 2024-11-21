@@ -24,7 +24,7 @@ flate2 = "1.0.30"
 fst = "0.4.7"
 memmap2 = "0.9.4"
 milli = { path = "../milli" }
-raw-collections = { git = "https://github.com/dureuill/raw-collections.git", version = "0.1.0" }
+raw-collections = { git = "https://github.com/meilisearch/raw-collections.git", version = "0.1.0" }
 roaring = { version = "0.10.6", features = ["serde"] }
 serde = { version = "1.0.204", features = ["derive"] }
 serde-cs = "0.2.4"

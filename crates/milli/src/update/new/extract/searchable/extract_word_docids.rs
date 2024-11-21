@@ -35,7 +35,6 @@ pub struct WordDocidsBalancedCaches<'extractor> {
 unsafe impl<'extractor> MostlySend for WordDocidsBalancedCaches<'extractor> {}
 
 impl<'extractor> WordDocidsBalancedCaches<'extractor> {
-    /// TODO Make sure to give the same max_memory to all of them, without splitting it
     pub fn new_in(buckets: usize, max_memory: Option<usize>, alloc: &'extractor Bump) -> Self {
         Self {
             word_fid_docids: BalancedCaches::new_in(buckets, max_memory, alloc),

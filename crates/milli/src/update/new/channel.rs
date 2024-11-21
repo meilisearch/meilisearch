@@ -87,23 +87,10 @@ pub enum WriterOperation {
 }
 
 pub enum ArroyOperation {
-    /// TODO: call when deleting regular documents
-    DeleteVectors {
-        docid: DocumentId,
-    },
-    SetVectors {
-        docid: DocumentId,
-        embedder_id: u8,
-        embeddings: Vec<Embedding>,
-    },
-    SetVector {
-        docid: DocumentId,
-        embedder_id: u8,
-        embedding: Embedding,
-    },
-    Finish {
-        configs: Vec<IndexEmbeddingConfig>,
-    },
+    DeleteVectors { docid: DocumentId },
+    SetVectors { docid: DocumentId, embedder_id: u8, embeddings: Vec<Embedding> },
+    SetVector { docid: DocumentId, embedder_id: u8, embedding: Embedding },
+    Finish { configs: Vec<IndexEmbeddingConfig> },
 }
 
 pub struct DbOperation {
@@ -334,7 +321,6 @@ impl DocidsSender for FacetDocidsSender<'_> {
     fn write(&self, key: &[u8], value: &[u8]) -> StdResult<(), SendError<()>> {
         let (facet_kind, key) = FacetKind::extract_from_key(key);
         let database = Database::from(facet_kind);
-        // let entry = EntryOperation::Write(KeyValueEntry::from_small_key_value(key, value));
         let entry = match facet_kind {
             // skip level group size
             FacetKind::String | FacetKind::Number => {

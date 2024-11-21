@@ -128,7 +128,6 @@ impl ErrorCode for DocumentFormatError {
     }
 }
 
-// TODO remove that from the place I've borrowed it
 #[derive(Debug)]
 enum AllowedType {
     String,
@@ -213,7 +212,7 @@ pub fn read_csv(input: &File, output: impl io::Write, delimiter: u8) -> Result<u
 
 /// Reads JSON from file and write it in NDJSON in a file checking it along the way.
 pub fn read_json(input: &File, output: impl io::Write) -> Result<u64> {
-    // We memory map to be able to deserailize into a TopLevelMap<'pl> that
+    // We memory map to be able to deserialize into a TopLevelMap<'pl> that
     // does not allocate when possible and only materialize the first/top level.
     let input = unsafe { Mmap::map(input).map_err(DocumentFormatError::Io)? };
     let mut doc_alloc = Bump::with_capacity(1024 * 1024 * 1024); // 1MiB
@@ -254,7 +253,7 @@ pub fn read_json(input: &File, output: impl io::Write) -> Result<u64> {
 
 /// Reads NDJSON from file and write it in NDJSON in a file checking it along the way.
 pub fn read_ndjson(input: &File, output: impl io::Write) -> Result<u64> {
-    // We memory map to be able to deserailize into a TopLevelMap<'pl> that
+    // We memory map to be able to deserialize into a TopLevelMap<'pl> that
     // does not allocate when possible and only materialize the first/top level.
     let input = unsafe { Mmap::map(input).map_err(DocumentFormatError::Io)? };
     let mut output = BufWriter::new(output);

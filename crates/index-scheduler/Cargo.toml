@@ -22,7 +22,7 @@ flate2 = "1.0.30"
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
 page_size = "0.6.0"
-raw-collections = { git = "https://github.com/dureuill/raw-collections.git", version = "0.1.0" }
+raw-collections = { git = "https://github.com/meilisearch/raw-collections.git", version = "0.1.0" }
 rayon = "1.10.0"
 roaring = { version = "0.10.6", features = ["serde"] }
 serde = { version = "1.0.204", features = ["derive"] }

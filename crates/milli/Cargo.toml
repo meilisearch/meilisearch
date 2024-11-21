@@ -95,7 +95,7 @@ ureq = { version = "2.10.0", features = ["json"] }
 url = "2.5.2"
 rayon-par-bridge = "0.1.0"
 hashbrown = "0.15.0"
-raw-collections = { git = "https://github.com/dureuill/raw-collections.git", version = "0.1.0" }
+raw-collections = { git = "https://github.com/meilisearch/raw-collections.git", version = "0.1.0" }
 bumpalo = "3.16.0"
 thread_local = "1.1.8"
 allocator-api2 = "0.2.18"

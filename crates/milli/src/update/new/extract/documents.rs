@@ -140,7 +140,6 @@ impl<'a, 'extractor> Extractor<'extractor> for DocumentsExtractor<'a> {
                     )?;
                     document_extractor_data.docids_delta.insert_add_u32(docid);
                     self.document_sender.uncompressed(docid, external_docid, content).unwrap();
-                    // extracted_dictionary_sender.send(self, dictionary: &[u8]);
                 }
             }
         }

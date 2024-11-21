@@ -137,7 +137,6 @@ impl<'extractor> Extractor<'extractor> for GeoExtractor {
     fn init_data<'doc>(&'doc self, extractor_alloc: &'extractor Bump) -> Result<Self::Data> {
         Ok(RefCell::new(GeoExtractorData {
             removed: bumpalo::collections::Vec::new_in(extractor_alloc),
-            // inserted: Uell::new_in(extractor_alloc),
             inserted: bumpalo::collections::Vec::new_in(extractor_alloc),
             spilled_inserted: None,
             spilled_removed: None,
@@ -242,7 +241,7 @@ impl<'extractor> Extractor<'extractor> for GeoExtractor {
     }
 }
 
-/// Extracts and validate the latitude and latitude from a document geo field.
+/// Extracts and validates the latitude and latitude from a document geo field.
 ///
 /// It can be of the form `{ "lat": 0.0, "lng": "1.0" }`.
 pub fn extract_geo_coordinates(

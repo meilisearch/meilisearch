@@ -102,6 +102,7 @@ impl Metadata {
         rules: &'rules [LocalizedAttributesRule],
     ) -> Option<&'rules [Language]> {
         let localized_attributes_rule_id = self.localized_attributes_rule_id?.get();
+        // - 1: `localized_attributes_rule_id` is NonZero
         let rule = rules.get((localized_attributes_rule_id - 1) as usize).unwrap();
         Some(rule.locales())
     }
@@ -160,6 +161,7 @@ impl MetadataBuilder {
             .iter()
             .flat_map(|v| v.iter())
             .position(|rule| rule.match_str(field))
+            // saturating_add(1): make `id` `NonZero`
             .map(|id| NonZeroU16::new(id.saturating_add(1).try_into().unwrap()).unwrap());
 
         Metadata { searchable, filterable, sortable, localized_attributes_rule_id }

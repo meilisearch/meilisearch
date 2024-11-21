@@ -46,6 +46,7 @@ fn encode_f64_into_ordered_bytes(
     f: f64,
     buffer: &mut [u8; 16],
 ) -> Result<(), InvalidGloballyOrderedFloatError> {
+    // write the globally ordered float
     let bytes = f64_into_bytes(f).ok_or(InvalidGloballyOrderedFloatError { float: f })?;
     buffer[..8].copy_from_slice(&bytes[..]);
     // Then the f64 value just to be able to read it back

@@ -1411,17 +1411,6 @@ impl IndexScheduler {
 
                     tracing::info!(indexing_result = ?addition, processed_in = ?started_processing_at.elapsed(), "document indexing done");
                 }
-                // else if primary_key_has_been_set {
-                //     // Everything failed but we've set a primary key.
-                //     // We need to remove it.
-                //     let mut builder =
-                //         milli::update::Settings::new(index_wtxn, index, indexer_config);
-                //     builder.reset_primary_key();
-                //     builder.execute(
-                //         |indexing_step| tracing::trace!(update = ?indexing_step),
-                //         || must_stop_processing.clone().get(),
-                //     )?;
-                // }
 
                 Ok(tasks)
             }

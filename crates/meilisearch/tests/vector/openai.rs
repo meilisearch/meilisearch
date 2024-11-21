@@ -172,7 +172,7 @@ async fn create_mock_with_template(
                 }))
              }
             }
-            // 3. check API key
+            // 2. check API key
             match req.headers.get("Authorization") {
                 Some(api_key) if api_key == API_KEY_BEARER => {
                     {}

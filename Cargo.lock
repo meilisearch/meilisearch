@@ -4483,7 +4483,7 @@ dependencies = [
 [[package]]
 name = "raw-collections"
 version = "0.1.0"
-source = "git+https://github.com/dureuill/raw-collections.git#15e5d7bdebc0c149b2a28b2454f307c717d07f8a"
+source = "git+https://github.com/meilisearch/raw-collections.git#15e5d7bdebc0c149b2a28b2454f307c717d07f8a"
 dependencies = [
  "allocator-api2",
  "bitpacking",

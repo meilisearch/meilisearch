@@ -1365,6 +1365,7 @@ impl IndexScheduler {
         let ProcessingTasks { batch, processing, progress } =
             self.processing_tasks.read().map_err(|_| Error::CorruptedTaskQueue)?.clone();
 
+        // ignored for now, might be added to batch details later
         let _ = progress;
 
         let ret = tasks.into_iter();
@@ -5198,11 +5199,9 @@ mod tests {
         handle.advance_one_successful_batch();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "only_first_task_succeed");
 
-        // The second batch should fail.
         handle.advance_one_successful_batch();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "second_task_fails");
 
-        // The second batch should fail.
         handle.advance_one_successful_batch();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "third_task_fails");
 
@@ -5263,7 +5262,6 @@ mod tests {
         handle.advance_one_successful_batch();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "only_first_task_succeed");
 
-        // The second batch should fail and contains two tasks.
         handle.advance_one_successful_batch();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "second_and_third_tasks_fails");
 

@@ -253,33 +253,4 @@ mod test {
             {"id": 2,"a": 0,"b": 0},
         ]);
     }
-
-    #[test]
-    fn csv_types_dont_panic() {
-        let csv1_content =
-            "id:number,b:boolean,c,d:number\n1,,,\n2,true,doggo,2\n3,false,the best doggo,-2\n4,,\"Hello, World!\",2.5";
-        let csv1 = csv::Reader::from_reader(Cursor::new(csv1_content));
-
-        let mut builder = DocumentsBatchBuilder::new(Vec::new());
-        builder.append_csv(csv1).unwrap();
-        let vector = builder.into_inner().unwrap();
-
-        DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap();
-    }
-
-    #[test]
-    fn out_of_order_csv_fields() {
-        let csv1_content = "id:number,b\n1,0";
-        let csv1 = csv::Reader::from_reader(Cursor::new(csv1_content));
-
-        let csv2_content = "id:number,a,b\n2,0,0";
-        let csv2 = csv::Reader::from_reader(Cursor::new(csv2_content));
-
-        let mut builder = DocumentsBatchBuilder::new(Vec::new());
-        builder.append_csv(csv1).unwrap();
-        builder.append_csv(csv2).unwrap();
-        let vector = builder.into_inner().unwrap();
-
-        DocumentsBatchReader::from_reader(Cursor::new(vector)).unwrap();
-    }
 }
