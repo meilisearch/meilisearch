@@ -176,7 +176,6 @@ where
                 )?;
 
                 // TODO Word Docids Merger
-                // extractor_sender.send_searchable::<WordDocids>(word_docids).unwrap();
                 {
                     let span = tracing::trace_span!(target: "indexing::documents::merge", "word_docids");
                     let _entered = span.enter();
@@ -190,7 +189,6 @@ where
                 }
 
                 // Word Fid Docids Merging
-                // extractor_sender.send_searchable::<WordFidDocids>(word_fid_docids).unwrap();
                 {
                     let span = tracing::trace_span!(target: "indexing::documents::merge", "word_fid_docids");
                     let _entered = span.enter();
@@ -204,7 +202,6 @@ where
                 }
 
                 // Exact Word Docids Merging
-                // extractor_sender.send_searchable::<ExactWordDocids>(exact_word_docids).unwrap();
                 {
                     let span = tracing::trace_span!(target: "indexing::documents::merge", "exact_word_docids");
                     let _entered = span.enter();
@@ -218,7 +215,6 @@ where
                 }
 
                 // Word Position Docids Merging
-                // extractor_sender.send_searchable::<WordPositionDocids>(word_position_docids).unwrap();
                 {
                     let span = tracing::trace_span!(target: "indexing::documents::merge", "word_position_docids");
                     let _entered = span.enter();
@@ -232,7 +228,6 @@ where
                 }
 
                 // Fid Word Count Docids Merging
-                // extractor_sender.send_searchable::<FidWordCountDocids>(fid_word_count_docids).unwrap();
                 {
                     let span = tracing::trace_span!(target: "indexing::documents::merge", "fid_word_count_docids");
                     let _entered = span.enter();
