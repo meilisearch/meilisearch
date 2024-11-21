@@ -25,7 +25,7 @@ impl SearchableExtractor for WordPairProximityDocidsExtractor {
     }
 
     fn attributes_to_skip<'a>(_rtxn: &'a RoTxn, _index: &'a Index) -> Result<Vec<&'a str>> {
-        Ok(vec!["_geo"])
+        Ok(Vec::new())
     }
 
     // This method is reimplemented to count the number of words in the document in each field

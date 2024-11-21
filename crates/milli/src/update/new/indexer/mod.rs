@@ -103,7 +103,6 @@ where
         // prevent moving the field_distribution and document_ids in the inner closure...
         let field_distribution = &mut field_distribution;
         let document_ids = &mut document_ids;
-        // TODO manage the errors correctly
         let extractor_handle = Builder::new().name(S("indexer-extractors")).spawn_scoped(s, move || {
             let span = tracing::trace_span!(target: "indexing::documents", parent: &indexer_span, "extract");
             let _entered = span.enter();

@@ -415,6 +415,6 @@ impl WordDocidsExtractors {
     }
 
     fn attributes_to_skip<'a>(_rtxn: &'a RoTxn, _index: &'a Index) -> Result<Vec<&'a str>> {
-        Ok(vec!["_geo"])
+        Ok(Vec::new())
     }
 }
