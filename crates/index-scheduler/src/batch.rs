@@ -1329,7 +1329,6 @@ impl IndexScheduler {
                         DocumentOperation::Add(_content_uuid) => {
                             let mmap = content_files_iter.next().unwrap();
                             indexer.add_documents(mmap)?;
-                            // builder = builder.with_embedders(embedders.clone());
                         }
                         DocumentOperation::Delete(document_ids) => {
                             let document_ids: bumpalo::collections::vec::Vec<_> = document_ids
