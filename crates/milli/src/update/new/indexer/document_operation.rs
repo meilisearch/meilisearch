@@ -43,6 +43,7 @@ impl<'pl> DocumentOperation<'pl> {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[tracing::instrument(level = "trace", skip_all, target = "indexing::document_operation")]
     pub fn into_changes<MSP, SP>(
         self,
         indexer: &'pl Bump,
