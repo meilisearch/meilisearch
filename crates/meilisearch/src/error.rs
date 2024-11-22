@@ -4,10 +4,10 @@ use byte_unit::{Byte, UnitType};
 use meilisearch_types::document_formats::{DocumentFormatError, PayloadType};
 use meilisearch_types::error::{Code, ErrorCode, ResponseError};
 use meilisearch_types::index_uid::{IndexUid, IndexUidFormatError};
+use meilisearch_types::milli;
 use meilisearch_types::milli::OrderBy;
 use serde_json::Value;
 use tokio::task::JoinError;
-use meilisearch_types::milli;
 
 #[derive(Debug, thiserror::Error)]
 pub enum MeilisearchHttpError {
@@ -67,7 +67,7 @@ pub enum MeilisearchHttpError {
         Some(name) if !name.is_empty() => format!("Index `{}`: {error}", name),
         _ => format!("{error}")
     })]
-    Milli { error: meilisearch_types::milli::Error, index_name: Option<String> },
+    Milli { error: milli::Error, index_name: Option<String> },
     #[error(transparent)]
     Payload(#[from] PayloadError),
     #[error(transparent)]
@@ -105,7 +105,7 @@ impl ErrorCode for MeilisearchHttpError {
             MeilisearchHttpError::SerdeJson(_) => Code::Internal,
             MeilisearchHttpError::HeedError(_) => Code::Internal,
             MeilisearchHttpError::IndexScheduler(e) => e.error_code(),
-            MeilisearchHttpError::Milli{error, ..} => error.error_code(),
+            MeilisearchHttpError::Milli { error, .. } => error.error_code(),
             MeilisearchHttpError::Payload(e) => e.error_code(),
             MeilisearchHttpError::FileStore(_) => Code::Internal,
             MeilisearchHttpError::DocumentFormat(e) => e.error_code(),

@@ -185,7 +185,8 @@ pub async fn search(
 
     let index = index_scheduler.index(&index_uid)?;
     let features = index_scheduler.features();
-    let search_kind = search_kind(&search_query, &index_scheduler, index_uid.to_string(), &index, features)?;
+    let search_kind =
+        search_kind(&search_query, &index_scheduler, index_uid.to_string(), &index, features)?;
     let permit = search_queue.try_get_search_permit().await?;
     let search_result = tokio::task::spawn_blocking(move || {
         perform_facet_search(

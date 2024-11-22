@@ -1070,7 +1070,7 @@ async fn federation_one_query_error() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Inside `.queries[1]`: Attribute `title` is not filterable. This index does not have configured filterable attributes.\n1:6 title = toto",
+      "message": "Inside `.queries[1]`: Index `nested`: Attribute `title` is not filterable. This index does not have configured filterable attributes.\n1:6 title = toto",
       "code": "invalid_search_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -1102,7 +1102,7 @@ async fn federation_one_query_sort_error() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Inside `.queries[1]`: Attribute `doggos` is not sortable. This index does not have configured sortable attributes.",
+      "message": "Inside `.queries[1]`: Index `nested`: Attribute `doggos` is not sortable. This index does not have configured sortable attributes.",
       "code": "invalid_search_sort",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_sort"
@@ -1166,7 +1166,7 @@ async fn federation_multiple_query_errors() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Inside `.queries[0]`: Attribute `title` is not filterable. This index does not have configured filterable attributes.\n1:6 title = toto",
+      "message": "Inside `.queries[0]`: Index `test`: Attribute `title` is not filterable. This index does not have configured filterable attributes.\n1:6 title = toto",
       "code": "invalid_search_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -1198,7 +1198,7 @@ async fn federation_multiple_query_sort_errors() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Inside `.queries[0]`: Attribute `title` is not sortable. This index does not have configured sortable attributes.",
+      "message": "Inside `.queries[0]`: Index `test`: Attribute `title` is not sortable. This index does not have configured sortable attributes.",
       "code": "invalid_search_sort",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_sort"
@@ -1231,7 +1231,7 @@ async fn federation_multiple_query_errors_interleaved() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Inside `.queries[1]`: Attribute `doggos` is not filterable. This index does not have configured filterable attributes.\n1:7 doggos IN [intel, kefir]",
+      "message": "Inside `.queries[1]`: Index `nested`: Attribute `doggos` is not filterable. This index does not have configured filterable attributes.\n1:7 doggos IN [intel, kefir]",
       "code": "invalid_search_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -1264,7 +1264,7 @@ async fn federation_multiple_query_sort_errors_interleaved() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Inside `.queries[1]`: Attribute `doggos` is not sortable. This index does not have configured sortable attributes.",
+      "message": "Inside `.queries[1]`: Index `nested`: Attribute `doggos` is not sortable. This index does not have configured sortable attributes.",
       "code": "invalid_search_sort",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_sort"

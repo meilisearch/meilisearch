@@ -985,7 +985,7 @@ async fn bad_settings() {
         }
       },
       "error": {
-        "message": "Error while generating embeddings: runtime error: could not determine model dimensions:\n  - test embedding failed with runtime error: error extracting embeddings from the response:\n  - in `response`, while extracting a single \"{{embedding}}\", expected `response` to be an array of numbers, but failed to parse server response:\n  - invalid type: map, expected a sequence",
+        "message": "Index `doggo`: Error while generating embeddings: runtime error: could not determine model dimensions:\n  - test embedding failed with runtime error: error extracting embeddings from the response:\n  - in `response`, while extracting a single \"{{embedding}}\", expected `response` to be an array of numbers, but failed to parse server response:\n  - invalid type: map, expected a sequence",
         "code": "vector_embedding_error",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
@@ -1025,7 +1025,7 @@ async fn bad_settings() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "While embedding documents for embedder `rest`: runtime error: was expecting embeddings of dimension `2`, got embeddings of dimensions `3`",
+        "message": "Index `doggo`: While embedding documents for embedder `rest`: runtime error: was expecting embeddings of dimension `2`, got embeddings of dimensions `3`",
         "code": "vector_embedding_error",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
@@ -1178,7 +1178,7 @@ async fn server_returns_bad_request() {
         }
       },
       "error": {
-        "message": "Error while generating embeddings: runtime error: could not determine model dimensions:\n  - test embedding failed with user error: sent a bad request to embedding server\n  - Hint: check that the `request` in the embedder configuration matches the remote server's API\n  - server replied with `{\"error\":\"Invalid request: invalid type: string \\\"test\\\", expected struct MultipleRequest at line 1 column 6\"}`",
+        "message": "Index `doggo`: Error while generating embeddings: runtime error: could not determine model dimensions:\n  - test embedding failed with user error: sent a bad request to embedding server\n  - Hint: check that the `request` in the embedder configuration matches the remote server's API\n  - server replied with `{\"error\":\"Invalid request: invalid type: string \\\"test\\\", expected struct MultipleRequest at line 1 column 6\"}`",
         "code": "vector_embedding_error",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
@@ -1247,7 +1247,7 @@ async fn server_returns_bad_request() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "While embedding documents for embedder `rest`: user error: sent a bad request to embedding server\n  - Hint: check that the `request` in the embedder configuration matches the remote server's API\n  - server replied with `{\"error\":\"Invalid request: invalid type: string \\\"name: kefir\\\\n\\\", expected struct MultipleRequest at line 1 column 15\"}`",
+        "message": "Index `doggo`: While embedding documents for embedder `rest`: user error: sent a bad request to embedding server\n  - Hint: check that the `request` in the embedder configuration matches the remote server's API\n  - server replied with `{\"error\":\"Invalid request: invalid type: string \\\"name: kefir\\\\n\\\", expected struct MultipleRequest at line 1 column 15\"}`",
         "code": "vector_embedding_error",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
@@ -1306,7 +1306,7 @@ async fn server_returns_bad_response() {
         }
       },
       "error": {
-        "message": "Error while generating embeddings: runtime error: could not determine model dimensions:\n  - test embedding failed with runtime error: error extracting embeddings from the response:\n  - in `response`, while extracting the array of \"{{embedding}}\"s, configuration expects `response` to be an array with at least 1 item(s) but server sent an object with 1 field(s)",
+        "message": "Index `doggo`: Error while generating embeddings: runtime error: could not determine model dimensions:\n  - test embedding failed with runtime error: error extracting embeddings from the response:\n  - in `response`, while extracting the array of \"{{embedding}}\"s, configuration expects `response` to be an array with at least 1 item(s) but server sent an object with 1 field(s)",
         "code": "vector_embedding_error",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
@@ -1362,7 +1362,7 @@ async fn server_returns_bad_response() {
         }
       },
       "error": {
-        "message": "Error while generating embeddings: runtime error: could not determine model dimensions:\n  - test embedding failed with runtime error: error extracting embeddings from the response:\n  - in `response`, while extracting item #0 from the array of \"{{embedding}}\"s, expected `response` to be an array of numbers, but failed to parse server response:\n  - invalid type: map, expected a sequence",
+        "message": "Index `doggo`: Error while generating embeddings: runtime error: could not determine model dimensions:\n  - test embedding failed with runtime error: error extracting embeddings from the response:\n  - in `response`, while extracting item #0 from the array of \"{{embedding}}\"s, expected `response` to be an array of numbers, but failed to parse server response:\n  - invalid type: map, expected a sequence",
         "code": "vector_embedding_error",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
@@ -1414,7 +1414,7 @@ async fn server_returns_bad_response() {
         }
       },
       "error": {
-        "message": "Error while generating embeddings: runtime error: could not determine model dimensions:\n  - test embedding failed with runtime error: error extracting embeddings from the response:\n  - in `response.output`, while extracting a single \"{{embedding}}\", expected `output` to be an array of numbers, but failed to parse server response:\n  - invalid type: map, expected f32",
+        "message": "Index `doggo`: Error while generating embeddings: runtime error: could not determine model dimensions:\n  - test embedding failed with runtime error: error extracting embeddings from the response:\n  - in `response.output`, while extracting a single \"{{embedding}}\", expected `output` to be an array of numbers, but failed to parse server response:\n  - invalid type: map, expected f32",
         "code": "vector_embedding_error",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
@@ -1478,7 +1478,7 @@ async fn server_returns_bad_response() {
         }
       },
       "error": {
-        "message": "Error while generating embeddings: runtime error: could not determine model dimensions:\n  - test embedding failed with runtime error: error extracting embeddings from the response:\n  - in `response.embedding`, while extracting item #0 from the array of \"{{embedding}}\"s, configuration expects `embedding` to be an object with key `data` but server sent an array of size 3",
+        "message": "Index `doggo`: Error while generating embeddings: runtime error: could not determine model dimensions:\n  - test embedding failed with runtime error: error extracting embeddings from the response:\n  - in `response.embedding`, while extracting item #0 from the array of \"{{embedding}}\"s, configuration expects `embedding` to be an object with key `data` but server sent an array of size 3",
         "code": "vector_embedding_error",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
@@ -1542,7 +1542,7 @@ async fn server_returns_bad_response() {
         }
       },
       "error": {
-        "message": "Error while generating embeddings: runtime error: could not determine model dimensions:\n  - test embedding failed with runtime error: error extracting embeddings from the response:\n  - in `response.output[0]`, while extracting a single \"{{embedding}}\", configuration expects key \"embeddings\", which is missing in response\n  - Hint: item #0 inside `output` has key `embedding`, did you mean `response.output[0].embedding` in embedder configuration?",
+        "message": "Index `doggo`: Error while generating embeddings: runtime error: could not determine model dimensions:\n  - test embedding failed with runtime error: error extracting embeddings from the response:\n  - in `response.output[0]`, while extracting a single \"{{embedding}}\", configuration expects key \"embeddings\", which is missing in response\n  - Hint: item #0 inside `output` has key `embedding`, did you mean `response.output[0].embedding` in embedder configuration?",
         "code": "vector_embedding_error",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
@@ -1908,7 +1908,7 @@ async fn server_custom_header() {
         }
       },
       "error": {
-        "message": "Error while generating embeddings: runtime error: could not determine model dimensions:\n  - test embedding failed with user error: could not authenticate against embedding server\n  - server replied with `{\"error\":\"missing header 'my-nonstandard-auth'\"}`\n  - Hint: Check the `apiKey` parameter in the embedder configuration",
+        "message": "Index `doggo`: Error while generating embeddings: runtime error: could not determine model dimensions:\n  - test embedding failed with user error: could not authenticate against embedding server\n  - server replied with `{\"error\":\"missing header 'my-nonstandard-auth'\"}`\n  - Hint: Check the `apiKey` parameter in the embedder configuration",
         "code": "vector_embedding_error",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
@@ -1951,7 +1951,7 @@ async fn server_custom_header() {
         }
       },
       "error": {
-        "message": "Error while generating embeddings: runtime error: could not determine model dimensions:\n  - test embedding failed with user error: could not authenticate against embedding server\n  - server replied with `{\"error\":\"thou shall not pass, Balrog\"}`\n  - Hint: Check the `apiKey` parameter in the embedder configuration",
+        "message": "Index `doggo`: Error while generating embeddings: runtime error: could not determine model dimensions:\n  - test embedding failed with user error: could not authenticate against embedding server\n  - server replied with `{\"error\":\"thou shall not pass, Balrog\"}`\n  - Hint: Check the `apiKey` parameter in the embedder configuration",
         "code": "vector_embedding_error",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
@@ -2099,7 +2099,7 @@ async fn searchable_reindex() {
         ]
       },
       "error": {
-        "message": "While embedding documents for embedder `rest`: error: received unexpected HTTP 404 from embedding server\n  - server replied with `{\"error\":\"text not found\",\"text\":\"breed: patou\\n\"}`",
+        "message": "Index `doggo`: While embedding documents for embedder `rest`: error: received unexpected HTTP 404 from embedding server\n  - server replied with `{\"error\":\"text not found\",\"text\":\"breed: patou\\n\"}`",
         "code": "vector_embedding_error",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#vector_embedding_error"

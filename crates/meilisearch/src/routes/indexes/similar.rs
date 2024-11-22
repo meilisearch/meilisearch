@@ -103,8 +103,13 @@ async fn similar(
 
     let index = index_scheduler.index(&index_uid)?;
 
-    let (embedder_name, embedder, quantized) =
-        SearchKind::embedder(&index_scheduler, index_uid.to_string(), &index, &query.embedder, None)?;
+    let (embedder_name, embedder, quantized) = SearchKind::embedder(
+        &index_scheduler,
+        index_uid.to_string(),
+        &index,
+        &query.embedder,
+        None,
+    )?;
 
     tokio::task::spawn_blocking(move || {
         perform_similar(

@@ -8,9 +8,8 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 use super::IndexStatus::{self, Available, BeingDeleted, Closing, Missing};
+use crate::clamp_to_page_size;
 use crate::lru::{InsertionOutcome, LruMap};
-use crate::{clamp_to_page_size};
-
 /// Keep an internally consistent view of the open indexes in memory.
 ///
 /// This view is made of an LRU cache that will evict the least frequently used indexes when new indexes are opened.

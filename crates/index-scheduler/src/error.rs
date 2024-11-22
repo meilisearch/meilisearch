@@ -1,12 +1,11 @@
 use std::fmt::Display;
 
+use crate::TaskId;
 use meilisearch_types::batches::BatchId;
 use meilisearch_types::error::{Code, ErrorCode};
 use meilisearch_types::tasks::{Kind, Status};
 use meilisearch_types::{heed, milli};
 use thiserror::Error;
-
-use crate::TaskId;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum DateField {
@@ -122,11 +121,11 @@ pub enum Error {
     Dump(#[from] dump::Error),
     #[error(transparent)]
     Heed(#[from] heed::Error),
-    #[error("{}", match .index_name {
-        Some(name) if !name.is_empty() => format!("Index `{}`: {error}", name),
+    #[error("{}", match .index_uid {
+        Some(uid) if !uid.is_empty() => format!("Index `{}`: {error}", uid),
         _ => format!("{error}")
     })]
-    Milli { error: milli::Error, index_name: Option<String> },
+    Milli { error: milli::Error, index_uid: Option<String> },
     #[error("An unexpected crash occurred when processing the task.")]
     ProcessBatchPanicked,
     #[error(transparent)]
@@ -213,8 +212,18 @@ impl Error {
         Self::WithCustomErrorCode(code, Box::new(self))
     }
 
-    pub fn from_milli(error: milli::Error, index_name: Option<String>) -> Self {
-        Self::Milli { error, index_name }
+    pub fn from_milli(err: milli::Error, index_uid: Option<String>) -> Self {
+        match err {
+            milli::Error::UserError(milli::UserError::InvalidFilter(_)) => {
+                Self::Milli { error: err, index_uid }
+                    .with_custom_error_code(Code::InvalidDocumentFilter)
+            }
+            milli::Error::UserError(milli::UserError::InvalidFilterExpression { .. }) => {
+                Self::Milli { error: err, index_uid }
+                    .with_custom_error_code(Code::InvalidDocumentFilter)
+            }
+            _ => Self::Milli { error: err, index_uid },
+        }
     }
 }
 
