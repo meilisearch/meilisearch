@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use tracing::error;
 use uuid::Uuid;
-
+use meilisearch_types::milli;
 use self::index_map::IndexMap;
 use self::IndexStatus::{Available, BeingDeleted, Closing, Missing};
 use crate::uuid_codec::UuidCodec;
@@ -121,7 +121,7 @@ impl IndexStats {
     /// # Parameters
     ///
     /// - rtxn: a RO transaction for the index, obtained from `Index::read_txn()`.
-    pub fn new(index: &Index, rtxn: &RoTxn) -> Result<Self> {
+    pub fn new(index: &Index, rtxn: &RoTxn) -> milli::Result<Self> {
         Ok(IndexStats {
             number_of_documents: index.number_of_documents(rtxn)?,
             database_size: index.on_disk_size()?,
@@ -189,7 +189,7 @@ impl IndexMapper {
                     date,
                     self.enable_mdb_writemap,
                     self.index_base_map_size,
-                )?;
+                ).map_err(|e| Error::from_milli(e, Some(uuid.to_string())))?;
 
                 wtxn.commit()?;
 
@@ -357,7 +357,8 @@ impl IndexMapper {
                     };
                     let index_path = self.base_path.join(uuid.to_string());
                     // take the lock to reopen the environment.
-                    reopen.reopen(&mut self.index_map.write().unwrap(), &index_path)?;
+                    reopen.reopen(&mut self.index_map.write().unwrap(), &index_path)
+                        .map_err(|e| Error::from_milli(e, Some(uuid.to_string())))?;
                     continue;
                 }
                 BeingDeleted => return Err(Error::IndexNotFound(name.to_string())),
@@ -378,7 +379,7 @@ impl IndexMapper {
                                 None,
                                 self.enable_mdb_writemap,
                                 self.index_base_map_size,
-                            )?;
+                            ).map_err(|e| Error::from_milli(e, Some(uuid.to_string())))?;
                         }
                         Available(index) => break index,
                         Closing(_) => {
@@ -459,7 +460,7 @@ impl IndexMapper {
             None => {
                 let index = self.index(rtxn, index_uid)?;
                 let index_rtxn = index.read_txn()?;
-                IndexStats::new(&index, &index_rtxn)
+                IndexStats::new(&index, &index_rtxn).map_err(|e| Error::from_milli(e, Some(uuid.to_string())))
             }
         }
     }

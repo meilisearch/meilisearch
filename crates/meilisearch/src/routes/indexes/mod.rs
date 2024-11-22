@@ -5,7 +5,7 @@ use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::actix_web::{AwebJson, AwebQueryParameter};
 use deserr::{DeserializeError, Deserr, ValuePointerRef};
-use index_scheduler::IndexScheduler;
+use index_scheduler::{Error, IndexScheduler};
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::{immutable_field_error, DeserrJsonError, DeserrQueryParamError};
 use meilisearch_types::error::deserr_codes::*;
@@ -107,7 +107,7 @@ pub async fn list_indexes(
             if !filters.is_index_authorized(uid) {
                 return Ok(None);
             }
-            Ok(Some(IndexView::new(uid.to_string(), index)?))
+            Ok(Some(IndexView::new(uid.to_string(), index).map_err(|e| Error::from_milli(e, Some(uid.to_string())))?))
         })?;
     // Won't cause to open all indexes because IndexView doesn't keep the `Index` opened.
     let indexes: Vec<IndexView> = indexes.into_iter().flatten().collect();

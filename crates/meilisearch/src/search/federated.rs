@@ -560,7 +560,7 @@ pub fn perform_federated_search(
             // use an immediately invoked lambda to capture the result without returning from the function
 
             let res: Result<(), ResponseError> = (|| {
-                let search_kind = search_kind(&query, index_scheduler, &index, features)?;
+                let search_kind = search_kind(&query, index_scheduler, index_uid.to_string(), &index, features)?;
 
                 let canonicalization_kind = match (&search_kind, &query.q) {
                     (SearchKind::SemanticOnly { .. }, _) => {
@@ -636,7 +636,7 @@ pub fn perform_federated_search(
                 search.offset(0);
                 search.limit(required_hit_count);
 
-                let (result, _semantic_hit_count) = super::search_from_kind(search_kind, search)?;
+                let (result, _semantic_hit_count) = super::search_from_kind(index_uid.to_string(), search_kind, search)?;
                 let format = AttributesFormat {
                     attributes_to_retrieve: query.attributes_to_retrieve,
                     retrieve_vectors,
@@ -670,7 +670,8 @@ pub fn perform_federated_search(
 
                 let formatter_builder = HitMaker::formatter_builder(matching_words, tokenizer);
 
-                let hit_maker = HitMaker::new(&index, &rtxn, format, formatter_builder)?;
+                let hit_maker = HitMaker::new(&index, &rtxn, format, formatter_builder)
+                    .map_err(|e| MeilisearchHttpError::from_milli(e, Some(index_uid.to_string())))?;
 
                 results_by_query.push(SearchResultByQuery {
                     federation_options,

@@ -3,13 +3,13 @@ use std::path::Path;
 use std::time::Duration;
 
 use meilisearch_types::heed::{EnvClosingEvent, EnvFlags, EnvOpenOptions};
-use meilisearch_types::milli::Index;
+use meilisearch_types::milli::{Index, Result};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
 use super::IndexStatus::{self, Available, BeingDeleted, Closing, Missing};
 use crate::lru::{InsertionOutcome, LruMap};
-use crate::{clamp_to_page_size, Result};
+use crate::{clamp_to_page_size};
 
 /// Keep an internally consistent view of the open indexes in memory.
 ///

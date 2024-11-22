@@ -243,11 +243,11 @@ pub async fn search_with_url_query(
     let index = index_scheduler.index(&index_uid)?;
     let features = index_scheduler.features();
 
-    let search_kind = search_kind(&query, index_scheduler.get_ref(), &index, features)?;
+    let search_kind = search_kind(&query, index_scheduler.get_ref(), index_uid.to_string(), &index, features)?;
     let retrieve_vector = RetrieveVectors::new(query.retrieve_vectors, features)?;
     let permit = search_queue.try_get_search_permit().await?;
     let search_result = tokio::task::spawn_blocking(move || {
-        perform_search(&index, query, search_kind, retrieve_vector, index_scheduler.features())
+        perform_search(index_uid.to_string(), &index, query, search_kind, retrieve_vector, index_scheduler.features())
     })
     .await;
     permit.drop().await;
@@ -287,12 +287,12 @@ pub async fn search_with_post(
 
     let features = index_scheduler.features();
 
-    let search_kind = search_kind(&query, index_scheduler.get_ref(), &index, features)?;
+    let search_kind = search_kind(&query, index_scheduler.get_ref(), index_uid.to_string(), &index, features)?;
     let retrieve_vectors = RetrieveVectors::new(query.retrieve_vectors, features)?;
 
     let permit = search_queue.try_get_search_permit().await?;
     let search_result = tokio::task::spawn_blocking(move || {
-        perform_search(&index, query, search_kind, retrieve_vectors, index_scheduler.features())
+        perform_search(index_uid.to_string(), &index, query, search_kind, retrieve_vectors, index_scheduler.features())
     })
     .await;
     permit.drop().await;
@@ -314,6 +314,7 @@ pub async fn search_with_post(
 pub fn search_kind(
     query: &SearchQuery,
     index_scheduler: &IndexScheduler,
+    index_uid: String,
     index: &milli::Index,
     features: RoFeatures,
 ) -> Result<SearchKind, ResponseError> {
@@ -332,7 +333,7 @@ pub fn search_kind(
         (None, _, None) => Ok(SearchKind::KeywordOnly),
         // hybrid.semantic_ratio == 1.0 => vector
         (_, Some(HybridQuery { semantic_ratio, embedder }), v) if **semantic_ratio == 1.0 => {
-            SearchKind::semantic(index_scheduler, index, embedder, v.map(|v| v.len()))
+            SearchKind::semantic(index_scheduler, index_uid, index, embedder, v.map(|v| v.len()))
         }
         // hybrid.semantic_ratio == 0.0 => keyword
         (_, Some(HybridQuery { semantic_ratio, embedder: _ }), _) if **semantic_ratio == 0.0 => {
@@ -340,13 +341,14 @@ pub fn search_kind(
         }
         // no query, hybrid, vector => semantic
         (None, Some(HybridQuery { semantic_ratio: _, embedder }), Some(v)) => {
-            SearchKind::semantic(index_scheduler, index, embedder, Some(v.len()))
+            SearchKind::semantic(index_scheduler, index_uid, index, embedder, Some(v.len()))
         }
         // query, no hybrid, no vector => keyword
         (Some(_), None, None) => Ok(SearchKind::KeywordOnly),
         // query, hybrid, maybe vector => hybrid
         (Some(_), Some(HybridQuery { semantic_ratio, embedder }), v) => SearchKind::hybrid(
             index_scheduler,
+            index_uid,
             index,
             embedder,
             **semantic_ratio,

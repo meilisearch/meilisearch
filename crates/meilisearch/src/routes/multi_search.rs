@@ -125,14 +125,16 @@ pub async fn multi_search_with_post(
                         })
                         .with_index(query_index)?;
 
+                    let index_uid_str = index_uid.to_string();
+
                     let search_kind =
-                        search_kind(&query, index_scheduler.get_ref(), &index, features)
+                        search_kind(&query, index_scheduler.get_ref(), index_uid_str.clone(), &index, features)
                             .with_index(query_index)?;
                     let retrieve_vector = RetrieveVectors::new(query.retrieve_vectors, features)
                         .with_index(query_index)?;
 
                     let search_result = tokio::task::spawn_blocking(move || {
-                        perform_search(&index, query, search_kind, retrieve_vector, features)
+                        perform_search(index_uid_str.clone(), &index, query, search_kind, retrieve_vector, features)
                     })
                     .await
                     .with_index(query_index)?;

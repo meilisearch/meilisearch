@@ -122,8 +122,11 @@ pub enum Error {
     Dump(#[from] dump::Error),
     #[error(transparent)]
     Heed(#[from] heed::Error),
-    #[error(transparent)]
-    Milli(#[from] milli::Error),
+    #[error("{}", match .index_name {
+        Some(name) if !name.is_empty() => format!("Index `{}`: {error}", name),
+        _ => format!("{error}")
+    })]
+    Milli { error: milli::Error, index_name: Option<String> },
     #[error("An unexpected crash occurred when processing the task.")]
     ProcessBatchPanicked,
     #[error(transparent)]
@@ -190,7 +193,7 @@ impl Error {
             | Error::AbortedTask
             | Error::Dump(_)
             | Error::Heed(_)
-            | Error::Milli(_)
+            | Error::Milli { .. }
             | Error::ProcessBatchPanicked
             | Error::FileStore(_)
             | Error::IoError(_)
@@ -208,6 +211,10 @@ impl Error {
 
     pub fn with_custom_error_code(self, code: Code) -> Self {
         Self::WithCustomErrorCode(code, Box::new(self))
+    }
+
+    pub fn from_milli(error: milli::Error, index_name: Option<String>) -> Self {
+        Self::Milli { error, index_name }
     }
 }
 
@@ -236,7 +243,7 @@ impl ErrorCode for Error {
             // TODO: not sure of the Code to use
             Error::NoSpaceLeftInTaskQueue => Code::NoSpaceLeftOnDevice,
             Error::Dump(e) => e.error_code(),
-            Error::Milli(e) => e.error_code(),
+            Error::Milli { error, .. } => error.error_code(),
             Error::ProcessBatchPanicked => Code::Internal,
             Error::Heed(e) => e.error_code(),
             Error::HeedTransaction(e) => e.error_code(),
