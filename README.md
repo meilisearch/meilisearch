@@ -46,6 +46,7 @@
 See the list of all our example apps in our [demos repository](https://github.com/meilisearch/demos).
 
 ## ✨ Features
+## By Mudassir Alam
 - **Hybrid search:** Combine the best of both [semantic](https://www.meilisearch.com/docs/learn/experimental/vector_search?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=features) & full-text search to get the most relevant results
 - **Search-as-you-type:** Find & display results in less than 50 milliseconds to provide an intuitive experience
 - **[Typo tolerance](https://www.meilisearch.com/docs/learn/relevancy/typo_tolerance_settings?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=features):** get relevant matches even when queries contain typos and misspellings
@@ -65,6 +66,7 @@ See the list of all our example apps in our [demos repository](https://github.co
 You can consult Meilisearch's documentation at [meilisearch.com/docs](https://www.meilisearch.com/docs/?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=docs).
 
 ## 🚀 Getting started
+## By Mudassir Alam
 
 For basic instructions on how to set up Meilisearch, add documents to an index, and search for documents, take a look at our [documentation](https://www.meilisearch.com/docs?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=get-started) guide.
 
