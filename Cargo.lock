@@ -2270,6 +2270,7 @@ dependencies = [
  "bytemuck",
  "byteorder",
  "either",
+ "rayon",
  "tempfile",
 ]
 
