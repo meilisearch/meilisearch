@@ -28,10 +28,7 @@ flatten-serde-json = { path = "../flatten-serde-json" }
 fst = "0.4.7"
 fxhash = "0.2.1"
 geoutils = "0.5.1"
-grenad = { version = "0.4.7", default-features = false, features = [
-    "rayon",    # TODO Should we keep this feature
-    "tempfile",
-], git = "https://github.com/meilisearch/grenad", branch = "various-improvements" }
+grenad = { version = "0.5.0", default-features = false, features = ["tempfile"] }
 heed = { version = "0.20.3", default-features = false, features = [
     "serde-json",
     "serde-bincode",
@@ -42,7 +39,7 @@ json-depth-checker = { path = "../json-depth-checker" }
 levenshtein_automata = { version = "0.2.1", features = ["fst_automaton"] }
 memchr = "2.5.0"
 memmap2 = "0.9.4"
-obkv = { git = "https://github.com/kerollmops/obkv", branch = "unsized-kvreader" }
+obkv = "0.3.0"
 once_cell = "1.19.0"
 ordered-float = "4.2.1"
 rayon = "1.10.0"

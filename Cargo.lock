@@ -2263,13 +2263,13 @@ checksum = "d2fabcfbdc87f4758337ca535fb41a6d701b65693ce38287d856d1674551ec9b"
 
 [[package]]
 name = "grenad"
-version = "0.4.7"
-source = "git+https://github.com/meilisearch/grenad?branch=various-improvements#58ac87d852413571102f44c5e55ca13509a3f1a0"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0e2ac9baf835ee2a7f0622a5617792ced6f65af25994078c343d429431ef2bbc"
 dependencies = [
  "bytemuck",
  "byteorder",
  "either",
- "rayon",
  "tempfile",
 ]
 
@@ -3912,7 +3912,8 @@ dependencies = [
 [[package]]
 name = "obkv"
 version = "0.3.0"
-source = "git+https://github.com/kerollmops/obkv?branch=unsized-kvreader#ce535874008ecac554f02e0c670e6caf62134d6b"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ae4512a8f418ac322335255a72361b9ac927e106f4d7fe6ab4d8ac59cb01f7a9"
 
 [[package]]
 name = "once_cell"
