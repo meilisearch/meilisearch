@@ -112,7 +112,7 @@ pub enum Database {
     FacetIdIsNullDocids,
     FacetIdIsEmptyDocids,
     FacetIdExistsDocids,
-    FacetIdF64NumberDocids,
+    FacetIdF64Docids,
     FacetIdStringDocids,
     FieldIdDocidFacetStrings,
     FieldIdDocidFacetF64s,
@@ -133,7 +133,7 @@ impl Database {
             Database::FacetIdIsNullDocids => index.facet_id_is_null_docids.remap_types(),
             Database::FacetIdIsEmptyDocids => index.facet_id_is_empty_docids.remap_types(),
             Database::FacetIdExistsDocids => index.facet_id_exists_docids.remap_types(),
-            Database::FacetIdF64NumberDocids => index.facet_id_f64_docids.remap_types(),
+            Database::FacetIdF64Docids => index.facet_id_f64_docids.remap_types(),
             Database::FacetIdStringDocids => index.facet_id_string_docids.remap_types(),
             Database::FieldIdDocidFacetStrings => index.field_id_docid_facet_strings.remap_types(),
             Database::FieldIdDocidFacetF64s => index.field_id_docid_facet_f64s.remap_types(),
@@ -154,7 +154,7 @@ impl Database {
             Database::FacetIdIsNullDocids => db_name::FACET_ID_IS_NULL_DOCIDS,
             Database::FacetIdIsEmptyDocids => db_name::FACET_ID_IS_EMPTY_DOCIDS,
             Database::FacetIdExistsDocids => db_name::FACET_ID_EXISTS_DOCIDS,
-            Database::FacetIdF64NumberDocids => db_name::FACET_ID_F64_DOCIDS,
+            Database::FacetIdF64Docids => db_name::FACET_ID_F64_DOCIDS,
             Database::FacetIdStringDocids => db_name::FACET_ID_STRING_DOCIDS,
             Database::FieldIdDocidFacetStrings => db_name::FIELD_ID_DOCID_FACET_STRINGS,
             Database::FieldIdDocidFacetF64s => db_name::FIELD_ID_DOCID_FACET_F64S,
@@ -165,7 +165,7 @@ impl Database {
 impl From<FacetKind> for Database {
     fn from(value: FacetKind) -> Self {
         match value {
-            FacetKind::Number => Database::FacetIdF64NumberDocids,
+            FacetKind::Number => Database::FacetIdF64Docids,
             FacetKind::String => Database::FacetIdStringDocids,
             FacetKind::Null => Database::FacetIdIsNullDocids,
             FacetKind::Empty => Database::FacetIdIsEmptyDocids,
