@@ -305,7 +305,7 @@ fn create_or_open_index(
     options.map_size(clamp_to_page_size(map_size));
     options.max_readers(1024);
     if enable_mdb_writemap {
-        unsafe { options.flags(EnvFlags::WRITE_MAP) };
+        unsafe { options.flags(EnvFlags::WRITE_MAP | EnvFlags::MAP_ASYNC) };
     }
 
     if let Some((created, updated)) = date {
