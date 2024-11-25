@@ -41,7 +41,7 @@ use crate::update::settings::InnerIndexSettings;
 use crate::update::{FacetsUpdateBulk, GrenadParameters};
 use crate::vector::{ArroyWrapper, EmbeddingConfigs, Embeddings};
 use crate::{
-    FieldsIdsMap, GlobalFieldsIdsMap, Index, InternalError, Result, ThreadPoolNoAbort,
+    Error, FieldsIdsMap, GlobalFieldsIdsMap, Index, InternalError, Result, ThreadPoolNoAbort,
     ThreadPoolNoAbortBuilder, UserError,
 };
 
@@ -356,13 +356,29 @@ where
             match operation {
                 WriterOperation::DbOperation(db_operation) => {
                     let database = db_operation.database(index);
+                    let database_name = db_operation.database_name();
                     match db_operation.entry() {
-                        EntryOperation::Delete(e) => {
-                            if !database.delete(wtxn, e.entry())? {
-                                unreachable!("We tried to delete an unknown key")
+                        EntryOperation::Delete(e) => match database.delete(wtxn, e.entry()) {
+                            Ok(false) => unreachable!("We tried to delete an unknown key"),
+                            Ok(_) => (),
+                            Err(error) => {
+                                return Err(Error::InternalError(InternalError::StoreDeletion {
+                                    database_name,
+                                    key: e.entry().to_owned(),
+                                    error,
+                                }));
+                            }
+                        },
+                        EntryOperation::Write(e) => {
+                            if let Err(error) = database.put(wtxn, e.key(), e.value()) {
+                                return Err(Error::InternalError(InternalError::StorePut {
+                                    database_name,
+                                    key: e.key().to_owned(),
+                                    value_length: e.value().len(),
+                                    error,
+                                }));
                             }
                         }
-                        EntryOperation::Write(e) => database.put(wtxn, e.key(), e.value())?,
                     }
                 }
                 WriterOperation::ArroyOperation(arroy_operation) => match arroy_operation {
