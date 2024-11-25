@@ -17,8 +17,8 @@ use crate::vector::Embedding;
 use crate::{DocumentId, Index};
 
 /// The capacity of the channel is currently in number of messages.
-pub fn extractor_writer_channel(cap: usize) -> (ExtractorSender, WriterReceiver) {
-    let (sender, receiver) = crossbeam_channel::bounded(cap);
+pub fn extractor_writer_channel(_cap: usize) -> (ExtractorSender, WriterReceiver) {
+    let (sender, receiver) = crossbeam_channel::unbounded();
     (
         ExtractorSender {
             sender,
