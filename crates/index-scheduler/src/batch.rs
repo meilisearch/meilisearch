@@ -1024,7 +1024,13 @@ impl IndexScheduler {
 
                 let mut index_wtxn = index.write_txn()?;
                 let tasks = self.apply_index_operation(&mut index_wtxn, &index, op)?;
-                index_wtxn.commit()?;
+
+                {
+                    let span = tracing::trace_span!(target: "indexing::scheduler", "commit");
+                    let _entered = span.enter();
+
+                    index_wtxn.commit()?;
+                }
 
                 // if the update processed successfully, we're going to store the new
                 // stats of the index. Since the tasks have already been processed and
