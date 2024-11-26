@@ -490,6 +490,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
+name = "bbqueue"
+version = "0.5.1"
+source = "git+https://github.com/kerollmops/bbqueue#cbb87cc707b5af415ef203bdaf2443e06ba0d6d4"
+
+[[package]]
 name = "benchmarks"
 version = "1.12.0"
 dependencies = [
@@ -3611,6 +3616,7 @@ version = "1.12.0"
 dependencies = [
  "allocator-api2",
  "arroy 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "bbqueue",
  "big_s",
  "bimap",
  "bincode",
@@ -3623,6 +3629,7 @@ dependencies = [
  "candle-transformers",
  "charabia",
  "concat-arrays",
+ "crossbeam",
  "crossbeam-channel",
  "csv",
  "deserr",

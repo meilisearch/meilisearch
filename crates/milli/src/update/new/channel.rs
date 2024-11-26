@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use crossbeam::sync::{Parker, Unparker};
 use crossbeam_channel::{IntoIter, Receiver, SendError, Sender};
 use heed::types::Bytes;
 use heed::BytesDecode;
@@ -8,6 +9,7 @@ use memmap2::Mmap;
 use roaring::RoaringBitmap;
 
 use super::extract::FacetKind;
+use super::thread_local::{FullySend, ThreadLocal};
 use super::StdResult;
 use crate::heed_codec::facet::{FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec};
 use crate::index::main_key::{GEO_FACETED_DOCUMENTS_IDS_KEY, GEO_RTREE_KEY};
@@ -15,6 +17,50 @@ use crate::index::{db_name, IndexEmbeddingConfig};
 use crate::update::new::KvReaderFieldId;
 use crate::vector::Embedding;
 use crate::{DocumentId, Index};
+
+/// Creates a tuple of producer/receivers to be used by
+/// the extractors and the writer loop.
+///
+/// # Safety
+///
+/// Panics if the number of provided bbqueue is not exactly equal
+/// to the number of available threads in the rayon threadpool.
+pub fn extractor_writer_bbqueue(
+    bbqueue: &[bbqueue::BBBuffer],
+) -> (ExtractorBbqueueSender, WriterBbqueueReceiver) {
+    assert_eq!(
+        bbqueue.len(),
+        rayon::current_num_threads(),
+        "You must provide as many BBBuffer as the available number of threads to extract"
+    );
+
+    let parker = Parker::new();
+    let extractors = ThreadLocal::with_capacity(bbqueue.len());
+    let producers = rayon::broadcast(|bi| {
+        let bbqueue = &bbqueue[bi.index()];
+        let (producer, consumer) = bbqueue.try_split_framed().unwrap();
+        extractors.get_or(|| FullySend(producer));
+        consumer
+    });
+
+    (
+        ExtractorBbqueueSender { inner: extractors, unparker: parker.unparker().clone() },
+        WriterBbqueueReceiver { inner: producers, parker },
+    )
+}
+
+pub struct ExtractorBbqueueSender<'a> {
+    inner: ThreadLocal<FullySend<bbqueue::framed::FrameProducer<'a>>>,
+    /// Used to wake up the receiver thread,
+    /// Used everytime we write something in the producer.
+    unparker: Unparker,
+}
+
+pub struct WriterBbqueueReceiver<'a> {
+    inner: Vec<bbqueue::framed::FrameConsumer<'a>>,
+    /// Used to park when no more work is required
+    parker: Parker,
+}
 
 /// The capacity of the channel is currently in number of messages.
 pub fn extractor_writer_channel(cap: usize) -> (ExtractorSender, WriterReceiver) {

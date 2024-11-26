@@ -98,6 +98,8 @@ allocator-api2 = "0.2.18"
 rustc-hash = "2.0.0"
 uell = "0.1.0"
 enum-iterator = "2.1.0"
+bbqueue = { git = "https://github.com/kerollmops/bbqueue" }
+crossbeam = "0.8.4"
 
 [dev-dependencies]
 mimalloc = { version = "0.1.43", default-features = false }
