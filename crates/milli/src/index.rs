@@ -1693,9 +1693,6 @@ impl Index {
         Ok(PrefixSettings {
             compute_prefixes,
             max_prefix_length: 4,
-            #[cfg(not(test))]
-            prefix_count_threshold: 100,
-            #[cfg(test)]
             prefix_count_threshold: 100,
         })
     }
