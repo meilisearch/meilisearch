@@ -29,8 +29,8 @@ async fn add_docs_and_disable() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    index.add_documents(DOCUMENTS.clone(), None).await;
-    index.wait_task(0).await;
+    let (response, _code) = index.add_documents(DOCUMENTS.clone(), None).await;
+    index.wait_task(response.uid()).await;
 
     let (response, code) = index
         .update_settings(json!({
@@ -39,7 +39,7 @@ async fn add_docs_and_disable() {
         }))
         .await;
     assert_eq!("202", code.as_str(), "{:?}", response);
-    index.wait_task(1).await;
+    index.wait_task(response.uid()).await;
 
     // only 1 document should match
     index
@@ -96,10 +96,10 @@ async fn disable_and_add_docs() {
         }))
         .await;
     assert_eq!("202", code.as_str(), "{:?}", response);
-    index.wait_task(0).await;
+    index.wait_task(response.uid()).await;
 
-    index.add_documents(DOCUMENTS.clone(), None).await;
-    index.wait_task(1).await;
+    let (response, _code) = index.add_documents(DOCUMENTS.clone(), None).await;
+    index.wait_task(response.uid()).await;
 
     // only 1 document should match
     index
@@ -155,10 +155,10 @@ async fn disable_add_docs_and_enable() {
         }))
         .await;
     assert_eq!("202", code.as_str(), "{:?}", response);
-    index.wait_task(0).await;
+    index.wait_task(response.uid()).await;
 
-    index.add_documents(DOCUMENTS.clone(), None).await;
-    index.wait_task(1).await;
+    let (response, _code) = index.add_documents(DOCUMENTS.clone(), None).await;
+    index.wait_task(response.uid()).await;
 
     let (response, code) = index
         .update_settings(json!({
@@ -263,10 +263,10 @@ async fn disable_add_docs_and_reset() {
         }))
         .await;
     assert_eq!("202", code.as_str(), "{:?}", response);
-    index.wait_task(0).await;
+    index.wait_task(response.uid()).await;
 
-    index.add_documents(DOCUMENTS.clone(), None).await;
-    index.wait_task(1).await;
+    let (response, _code) = index.add_documents(DOCUMENTS.clone(), None).await;
+    index.wait_task(response.uid()).await;
 
     let (response, code) = index
         .update_settings(json!({
@@ -370,10 +370,10 @@ async fn default_behavior() {
         }))
         .await;
     assert_eq!("202", code.as_str(), "{:?}", response);
-    index.wait_task(0).await;
+    index.wait_task(response.uid()).await;
 
-    index.add_documents(DOCUMENTS.clone(), None).await;
-    index.wait_task(1).await;
+    let (response, _code) = index.add_documents(DOCUMENTS.clone(), None).await;
+    index.wait_task(response.uid()).await;
 
     // all documents should match
     index

@@ -1690,11 +1690,7 @@ impl Index {
 
     pub fn prefix_settings(&self, rtxn: &RoTxn<'_>) -> Result<PrefixSettings> {
         let compute_prefixes = self.prefix_search(rtxn)?.unwrap_or_default();
-        Ok(PrefixSettings {
-            compute_prefixes,
-            max_prefix_length: 4,
-            prefix_count_threshold: 100,
-        })
+        Ok(PrefixSettings { compute_prefixes, max_prefix_length: 4, prefix_count_threshold: 100 })
     }
 }
 
