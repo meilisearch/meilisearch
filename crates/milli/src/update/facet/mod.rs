@@ -178,7 +178,7 @@ impl<'i> FacetsUpdate<'i> {
                 // We clear the facet search databases.
                 self.index.facet_id_string_fst.clear(wtxn)?;
                 self.index.facet_id_normalized_string_strings.clear(wtxn)?;
-                return Ok(());
+                Ok(())
             }
             Some(data) => index_facet_search(wtxn, data, self.index),
             None => Ok(()),
