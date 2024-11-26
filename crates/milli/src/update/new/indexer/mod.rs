@@ -76,7 +76,11 @@ where
     MSP: Fn() -> bool + Sync,
     SP: Fn(Progress) + Sync,
 {
-    let (extractor_sender, writer_receiver) = extractor_writer_channel(10_000);
+    /// TODO restrict memory and remove this memory from the extractors bum allocators
+    let bbbuffers: Vec<_> = (0..rayon::current_num_threads())
+        .map(|_| bbqueue::BBBuffer::new(100 * 1024 * 1024)) // 100 MiB by thread
+        .collect();
+    let (extractor_sender, writer_receiver) = extractor_writer_bbqueue(&bbbuffers);
     let finished_extraction = AtomicBool::new(false);
 
     let metadata_builder = MetadataBuilder::from_index(index, wtxn)?;
@@ -115,7 +119,7 @@ where
 
             // document but we need to create a function that collects and compresses documents.
             let document_sender = extractor_sender.documents();
-            let document_extractor = DocumentsExtractor::new(&document_sender, embedders);
+            let document_extractor = DocumentsExtractor::new(document_sender, embedders);
             let datastore = ThreadLocal::with_capacity(rayon::current_num_threads());
             {
                 let span = tracing::trace_span!(target: "indexing::documents::extract", parent: &indexer_span, "documents");

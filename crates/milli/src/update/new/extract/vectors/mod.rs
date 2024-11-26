@@ -20,7 +20,7 @@ use crate::{DocumentId, FieldDistribution, InternalError, Result, ThreadPoolNoAb
 
 pub struct EmbeddingExtractor<'a> {
     embedders: &'a EmbeddingConfigs,
-    sender: &'a EmbeddingSender<'a>,
+    sender: EmbeddingSender<'a>,
     possible_embedding_mistakes: PossibleEmbeddingMistakes,
     threads: &'a ThreadPoolNoAbort,
 }
@@ -28,7 +28,7 @@ pub struct EmbeddingExtractor<'a> {
 impl<'a> EmbeddingExtractor<'a> {
     pub fn new(
         embedders: &'a EmbeddingConfigs,
-        sender: &'a EmbeddingSender<'a>,
+        sender: EmbeddingSender<'a>,
         field_distribution: &'a FieldDistribution,
         threads: &'a ThreadPoolNoAbort,
     ) -> Self {
@@ -368,7 +368,7 @@ impl<'a, 'extractor> Chunks<'a, 'extractor> {
         possible_embedding_mistakes: &PossibleEmbeddingMistakes,
         unused_vectors_distribution: &UnusedVectorsDistributionBump,
         threads: &ThreadPoolNoAbort,
-        sender: &EmbeddingSender<'a>,
+        sender: EmbeddingSender<'a>,
         has_manual_generation: Option<&'a str>,
     ) -> Result<()> {
         if let Some(external_docid) = has_manual_generation {

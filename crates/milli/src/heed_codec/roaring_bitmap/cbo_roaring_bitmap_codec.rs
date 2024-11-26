@@ -41,6 +41,25 @@ impl CboRoaringBitmapCodec {
         }
     }
 
+    pub fn serialize_into_writer<W: io::Write>(
+        roaring: &RoaringBitmap,
+        mut writer: W,
+    ) -> io::Result<()> {
+        if roaring.len() <= THRESHOLD as u64 {
+            // If the number of items (u32s) to encode is less than or equal to the threshold
+            // it means that it would weigh the same or less than the RoaringBitmap
+            // header, so we directly encode them using ByteOrder instead.
+            for integer in roaring {
+                writer.write_u32::<NativeEndian>(integer)?;
+            }
+        } else {
+            // Otherwise, we use the classic RoaringBitmapCodec that writes a header.
+            roaring.serialize_into(writer)?;
+        }
+
+        Ok(())
+    }
+
     pub fn deserialize_from(mut bytes: &[u8]) -> io::Result<RoaringBitmap> {
         if bytes.len() <= THRESHOLD * size_of::<u32>() {
             // If there is threshold or less than threshold integers that can fit into this array

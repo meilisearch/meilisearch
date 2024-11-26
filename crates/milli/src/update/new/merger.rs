@@ -19,7 +19,7 @@ pub fn merge_and_send_rtree<'extractor, MSP>(
     datastore: impl IntoIterator<Item = RefCell<GeoExtractorData<'extractor>>>,
     rtxn: &RoTxn,
     index: &Index,
-    geo_sender: GeoSender<'_>,
+    geo_sender: GeoSender<'_, '_>,
     must_stop_processing: &MSP,
 ) -> Result<()>
 where
@@ -62,19 +62,19 @@ where
 }
 
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::merge")]
-pub fn merge_and_send_docids<'extractor, MSP>(
+pub fn merge_and_send_docids<'extractor, MSP, D>(
     mut caches: Vec<BalancedCaches<'extractor>>,
     database: Database<Bytes, Bytes>,
     index: &Index,
-    docids_sender: impl DocidsSender + Sync,
+    docids_sender: WordDocidsSender<D>,
     must_stop_processing: &MSP,
 ) -> Result<()>
 where
     MSP: Fn() -> bool + Sync,
+    D: DatabaseType + Sync,
 {
     transpose_and_freeze_caches(&mut caches)?.into_par_iter().try_for_each(|frozen| {
         let rtxn = index.read_txn()?;
-        let mut buffer = Vec::new();
         if must_stop_processing() {
             return Err(InternalError::AbortedIndexation.into());
         }
@@ -82,8 +82,7 @@ where
             let current = database.get(&rtxn, key)?;
             match merge_cbo_bitmaps(current, del, add)? {
                 Operation::Write(bitmap) => {
-                    let value = cbo_bitmap_serialize_into_vec(&bitmap, &mut buffer);
-                    docids_sender.write(key, value).unwrap();
+                    docids_sender.write(key, &bitmap).unwrap();
                     Ok(())
                 }
                 Operation::Delete => {
@@ -101,21 +100,19 @@ pub fn merge_and_send_facet_docids<'extractor>(
     mut caches: Vec<BalancedCaches<'extractor>>,
     database: FacetDatabases,
     index: &Index,
-    docids_sender: impl DocidsSender + Sync,
+    docids_sender: FacetDocidsSender,
 ) -> Result<FacetFieldIdsDelta> {
     transpose_and_freeze_caches(&mut caches)?
         .into_par_iter()
         .map(|frozen| {
             let mut facet_field_ids_delta = FacetFieldIdsDelta::default();
             let rtxn = index.read_txn()?;
-            let mut buffer = Vec::new();
             merge_caches(frozen, |key, DelAddRoaringBitmap { del, add }| {
                 let current = database.get_cbo_roaring_bytes_value(&rtxn, key)?;
                 match merge_cbo_bitmaps(current, del, add)? {
                     Operation::Write(bitmap) => {
                         facet_field_ids_delta.register_from_key(key);
-                        let value = cbo_bitmap_serialize_into_vec(&bitmap, &mut buffer);
-                        docids_sender.write(key, value).unwrap();
+                        docids_sender.write(key, &bitmap).unwrap();
                         Ok(())
                     }
                     Operation::Delete => {
