@@ -272,8 +272,8 @@ impl Settings<Checked> {
             embedders: Setting::Reset,
             search_cutoff_ms: Setting::Reset,
             localized_attributes: Setting::Reset,
-            facet_search: Setting::NotSet,
-            prefix_search: Setting::NotSet,
+            facet_search: Setting::Reset,
+            prefix_search: Setting::Reset,
             _kind: PhantomData,
         }
     }
