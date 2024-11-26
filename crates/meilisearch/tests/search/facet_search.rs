@@ -41,8 +41,8 @@ async fn simple_facet_search() {
 
     let documents = DOCUMENTS.clone();
     index.update_settings_filterable_attributes(json!(["genres"])).await;
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
+    let (response, _code) = index.add_documents(documents, None).await;
+    index.wait_task(response.uid()).await;
 
     let (response, code) =
         index.facet_search(json!({"facetName": "genres", "facetQuery": "a"})).await;
@@ -65,8 +65,8 @@ async fn advanced_facet_search() {
     let documents = DOCUMENTS.clone();
     index.update_settings_filterable_attributes(json!(["genres"])).await;
     index.update_settings_typo_tolerance(json!({ "enabled": false })).await;
-    index.add_documents(documents, None).await;
-    index.wait_task(2).await;
+    let (response, _code) = index.add_documents(documents, None).await;
+    index.wait_task(response.uid()).await;
 
     let (response, code) =
         index.facet_search(json!({"facetName": "genres", "facetQuery": "adventre"})).await;
@@ -89,8 +89,8 @@ async fn more_advanced_facet_search() {
     let documents = DOCUMENTS.clone();
     index.update_settings_filterable_attributes(json!(["genres"])).await;
     index.update_settings_typo_tolerance(json!({ "disableOnWords": ["adventre"] })).await;
-    index.add_documents(documents, None).await;
-    index.wait_task(2).await;
+    let (response, _code) = index.add_documents(documents, None).await;
+    index.wait_task(response.uid()).await;
 
     let (response, code) =
         index.facet_search(json!({"facetName": "genres", "facetQuery": "adventre"})).await;
@@ -113,8 +113,8 @@ async fn simple_facet_search_with_max_values() {
     let documents = DOCUMENTS.clone();
     index.update_settings_faceting(json!({ "maxValuesPerFacet": 1 })).await;
     index.update_settings_filterable_attributes(json!(["genres"])).await;
-    index.add_documents(documents, None).await;
-    index.wait_task(2).await;
+    let (response, _code) = index.add_documents(documents, None).await;
+    index.wait_task(response.uid()).await;
 
     let (response, code) =
         index.facet_search(json!({"facetName": "genres", "facetQuery": "a"})).await;
@@ -135,8 +135,8 @@ async fn simple_facet_search_by_count_with_max_values() {
         )
         .await;
     index.update_settings_filterable_attributes(json!(["genres"])).await;
-    index.add_documents(documents, None).await;
-    index.wait_task(2).await;
+    let (response, _code) = index.add_documents(documents, None).await;
+    index.wait_task(response.uid()).await;
 
     let (response, code) =
         index.facet_search(json!({"facetName": "genres", "facetQuery": "a"})).await;
@@ -151,8 +151,8 @@ async fn non_filterable_facet_search_error() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (response, _code) = index.add_documents(documents, None).await;
+    index.wait_task(response.uid()).await;
 
     let (response, code) =
         index.facet_search(json!({"facetName": "genres", "facetQuery": "a"})).await;
@@ -170,8 +170,8 @@ async fn facet_search_dont_support_words() {
 
     let documents = DOCUMENTS.clone();
     index.update_settings_filterable_attributes(json!(["genres"])).await;
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
+    let (response, _code) = index.add_documents(documents, None).await;
+    index.wait_task(response.uid()).await;
 
     let (response, code) =
         index.facet_search(json!({"facetName": "genres", "facetQuery": "words"})).await;
@@ -188,8 +188,8 @@ async fn simple_facet_search_with_sort_by_count() {
     let documents = DOCUMENTS.clone();
     index.update_settings_faceting(json!({ "sortFacetValuesBy": { "*": "count" } })).await;
     index.update_settings_filterable_attributes(json!(["genres"])).await;
-    index.add_documents(documents, None).await;
-    index.wait_task(2).await;
+    let (response, _code) = index.add_documents(documents, None).await;
+    index.wait_task(response.uid()).await;
 
     let (response, code) =
         index.facet_search(json!({"facetName": "genres", "facetQuery": "a"})).await;
@@ -199,4 +199,116 @@ async fn simple_facet_search_with_sort_by_count() {
     assert_eq!(hits.len(), 2);
     assert_eq!(hits[0], json!({ "value": "Action", "count": 3 }));
     assert_eq!(hits[1], json!({ "value": "Adventure", "count": 2 }));
+}
+
+#[actix_rt::test]
+async fn add_documents_and_deactivate_facet_search() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let documents = DOCUMENTS.clone();
+    let (response, _code) = index.add_documents(documents, None).await;
+    index.wait_task(response.uid()).await;
+    let (response, code) = index
+        .update_settings(json!({
+            "facetSearch": false,
+            "filterableAttributes": ["genres"],
+        }))
+        .await;
+    assert_eq!("202", code.as_str(), "{:?}", response);
+    index.wait_task(response.uid()).await;
+
+    let (response, code) =
+        index.facet_search(json!({"facetName": "genres", "facetQuery": "a"})).await;
+
+    assert_eq!(code, 200, "{}", response);
+    assert_eq!(dbg!(response)["facetHits"].as_array().unwrap().len(), 0);
+}
+
+#[actix_rt::test]
+async fn deactivate_facet_search_and_add_documents() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (response, code) = index
+        .update_settings(json!({
+            "facetSearch": false,
+            "filterableAttributes": ["genres"],
+        }))
+        .await;
+    assert_eq!("202", code.as_str(), "{:?}", response);
+    index.wait_task(response.uid()).await;
+    let documents = DOCUMENTS.clone();
+    let (response, _code) = index.add_documents(documents, None).await;
+    index.wait_task(response.uid()).await;
+
+    let (response, code) =
+        index.facet_search(json!({"facetName": "genres", "facetQuery": "a"})).await;
+
+    assert_eq!(code, 200, "{}", response);
+    assert_eq!(dbg!(response)["facetHits"].as_array().unwrap().len(), 0);
+}
+
+#[actix_rt::test]
+async fn deactivate_facet_search_add_documents_and_activate_facet_search() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (response, code) = index
+        .update_settings(json!({
+            "facetSearch": false,
+            "filterableAttributes": ["genres"],
+        }))
+        .await;
+    assert_eq!("202", code.as_str(), "{:?}", response);
+    index.wait_task(response.uid()).await;
+    let documents = DOCUMENTS.clone();
+    let (response, _code) = index.add_documents(documents, None).await;
+    index.wait_task(response.uid()).await;
+
+    let (response, code) = index
+        .update_settings(json!({
+            "facetSearch": true,
+        }))
+        .await;
+    assert_eq!("202", code.as_str(), "{:?}", response);
+    index.wait_task(response.uid()).await;
+
+    let (response, code) =
+        index.facet_search(json!({"facetName": "genres", "facetQuery": "a"})).await;
+
+    assert_eq!(code, 200, "{}", response);
+    assert_eq!(dbg!(response)["facetHits"].as_array().unwrap().len(), 2);
+}
+
+#[actix_rt::test]
+async fn deactivate_facet_search_add_documents_and_reset_facet_search() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (response, code) = index
+        .update_settings(json!({
+            "facetSearch": false,
+            "filterableAttributes": ["genres"],
+        }))
+        .await;
+    assert_eq!("202", code.as_str(), "{:?}", response);
+    index.wait_task(response.uid()).await;
+    let documents = DOCUMENTS.clone();
+    let (response, _code) = index.add_documents(documents, None).await;
+    index.wait_task(response.uid()).await;
+
+    let (response, code) = index
+        .update_settings(json!({
+            "facetSearch": serde_json::Value::Null,
+        }))
+        .await;
+    assert_eq!("202", code.as_str(), "{:?}", response);
+    index.wait_task(response.uid()).await;
+
+    let (response, code) =
+        index.facet_search(json!({"facetName": "genres", "facetQuery": "a"})).await;
+
+    assert_eq!(code, 200, "{}", response);
+    assert_eq!(dbg!(response)["facetHits"].as_array().unwrap().len(), 2);
 }

@@ -56,7 +56,7 @@ async fn get_settings() {
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
     let settings = response.as_object().unwrap();
-    assert_eq!(settings.keys().len(), 17);
+    assert_eq!(settings.keys().len(), 19);
     assert_eq!(settings["displayedAttributes"], json!(["*"]));
     assert_eq!(settings["searchableAttributes"], json!(["*"]));
     assert_eq!(settings["filterableAttributes"], json!([]));
@@ -87,6 +87,8 @@ async fn get_settings() {
     );
     assert_eq!(settings["proximityPrecision"], json!("byWord"));
     assert_eq!(settings["searchCutoffMs"], json!(null));
+    assert_eq!(settings["prefixSearch"], json!("indexingTime"));
+    assert_eq!(settings["facetSearch"], json!(true));
 }
 
 #[actix_rt::test]
@@ -199,7 +201,9 @@ async fn secrets_are_hidden_in_settings() {
         }
       },
       "searchCutoffMs": null,
-      "localizedAttributes": null
+      "localizedAttributes": null,
+      "facetSearch": true,
+      "prefixSearch": "indexingTime"
     }
     "###);
 

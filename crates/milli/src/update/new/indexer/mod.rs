@@ -486,7 +486,10 @@ where
 
         (indexing_context.send_progress)(Progress::from_step(Step::PostProcessingFacets));
 
-        compute_facet_search_database(index, wtxn, global_fields_ids_map)?;
+        if index.facet_search(wtxn)? {
+            compute_facet_search_database(index, wtxn, global_fields_ids_map)?;
+        }
+
         compute_facet_level_database(index, wtxn, facet_field_ids_delta)?;
 
         (indexing_context.send_progress)(Progress::from_step(Step::PostProcessingWords));
