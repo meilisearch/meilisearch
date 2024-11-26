@@ -367,3 +367,50 @@ async fn search_on_exact_field() {
         })
         .await;
 }
+
+#[actix_rt::test]
+async fn phrase_search_on_title() {
+    let server = Server::new().await;
+    let documents = json!([
+      { "id": 8, "desc": "Document Review", "title": "Document Review Specialist II" },
+      { "id": 5, "desc": "Document Review", "title": "Document Review Attorney" },
+      { "id": 4, "desc": "Document Review", "title": "Document Review Manager - Cyber Incident Response (Remote)" },
+      { "id": 3, "desc": "Document Review", "title": "Document Review Paralegal" },
+      { "id": 2, "desc": "Document Review", "title": "Document Controller (Saudi National)" },
+      { "id": 1, "desc": "Document Review", "title": "Document Reviewer" },
+      { "id": 7, "desc": "Document Review", "title": "Document Review Specialist II" },
+      { "id": 6, "desc": "Document Review", "title": "Document Review (Entry Level)" }
+    ]);
+    let index = index_with_documents(&server, &documents).await;
+
+    index
+        .search(
+            json!({"q": "\"Document Review\"", "attributesToSearchOn": ["title"], "attributesToRetrieve": ["title"]}),
+            |response, code| {
+                snapshot!(code, @"200 OK");
+                snapshot!(json_string!(response["hits"]), @r###"
+                [
+                  {
+                    "title": "Document Review Specialist II"
+                  },
+                  {
+                    "title": "Document Review Attorney"
+                  },
+                  {
+                    "title": "Document Review Manager - Cyber Incident Response (Remote)"
+                  },
+                  {
+                    "title": "Document Review Paralegal"
+                  },
+                  {
+                    "title": "Document Review Specialist II"
+                  },
+                  {
+                    "title": "Document Review (Entry Level)"
+                  }
+                ]
+                "###);
+            },
+        )
+        .await;
+}
