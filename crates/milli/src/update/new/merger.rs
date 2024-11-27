@@ -249,10 +249,3 @@ fn merge_cbo_bitmaps(
         }
     }
 }
-
-/// TODO Return the slice directly from the serialize_into method
-fn cbo_bitmap_serialize_into_vec<'b>(bitmap: &RoaringBitmap, buffer: &'b mut Vec<u8>) -> &'b [u8] {
-    buffer.clear();
-    CboRoaringBitmapCodec::serialize_into(bitmap, buffer);
-    buffer.as_slice()
-}

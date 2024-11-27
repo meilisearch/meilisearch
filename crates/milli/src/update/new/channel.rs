@@ -382,19 +382,19 @@ impl<'b> ExtractorBbqueueSender<'b> {
     }
 
     pub fn field_id_docid_facet_sender<'a>(&'a self) -> FieldIdDocidFacetSender<'a, 'b> {
-        FieldIdDocidFacetSender(&self)
+        FieldIdDocidFacetSender(self)
     }
 
     pub fn documents<'a>(&'a self) -> DocumentsSender<'a, 'b> {
-        DocumentsSender(&self)
+        DocumentsSender(self)
     }
 
     pub fn embeddings<'a>(&'a self) -> EmbeddingSender<'a, 'b> {
-        EmbeddingSender(&self)
+        EmbeddingSender(self)
     }
 
     pub fn geo<'a>(&'a self) -> GeoSender<'a, 'b> {
-        GeoSender(&self)
+        GeoSender(self)
     }
 
     fn delete_vector(&self, docid: DocumentId) -> crate::Result<()> {
