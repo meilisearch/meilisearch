@@ -1821,6 +1821,7 @@ pub(crate) mod tests {
                 indexer::index(
                     wtxn,
                     &self.inner,
+                    &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     indexer_config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -1911,6 +1912,7 @@ pub(crate) mod tests {
                 indexer::index(
                     wtxn,
                     &self.inner,
+                    &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     indexer_config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -1991,6 +1993,7 @@ pub(crate) mod tests {
                 indexer::index(
                     &mut wtxn,
                     &index.inner,
+                    &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     indexer_config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
