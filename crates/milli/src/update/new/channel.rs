@@ -4,6 +4,7 @@ use std::mem;
 use std::num::NonZeroU16;
 
 use bbqueue::framed::{FrameGrantR, FrameProducer};
+use bbqueue::BBBuffer;
 use bytemuck::{checked, CheckedBitPattern, NoUninit};
 use crossbeam_channel::SendError;
 use heed::types::Bytes;
@@ -25,6 +26,9 @@ use crate::{CboRoaringBitmapCodec, DocumentId, Index};
 /// Creates a tuple of senders/receiver to be used by
 /// the extractors and the writer loop.
 ///
+/// The `bbqueue_capacity` represent the number of bytes allocated
+/// to each BBQueue buffer and is not the sum of all of them.
+///
 /// The `channel_capacity` parameter defines the number of
 /// too-large-to-fit-in-BBQueue entries that can be sent through
 /// a crossbeam channel. This parameter must stay low to make
@@ -40,14 +44,11 @@ use crate::{CboRoaringBitmapCodec, DocumentId, Index};
 /// Panics if the number of provided BBQueues is not exactly equal
 /// to the number of available threads in the rayon threadpool.
 pub fn extractor_writer_bbqueue(
-    bbbuffers: &[bbqueue::BBBuffer],
+    bbbuffers: &mut Vec<BBBuffer>,
+    bbbuffer_capacity: usize,
     channel_capacity: usize,
 ) -> (ExtractorBbqueueSender, WriterBbqueueReceiver) {
-    assert_eq!(
-        bbbuffers.len(),
-        rayon::current_num_threads(),
-        "You must provide as many BBBuffer as the available number of threads to extract"
-    );
+    bbbuffers.resize_with(rayon::current_num_threads(), || BBBuffer::new(bbbuffer_capacity));
 
     let capacity = bbbuffers.first().unwrap().capacity();
     // Read the field description to understand this
@@ -55,12 +56,6 @@ pub fn extractor_writer_bbqueue(
 
     let producers = ThreadLocal::with_capacity(bbbuffers.len());
     let consumers = rayon::broadcast(|bi| {
-        eprintln!(
-            "hello thread #{:?} (#{:?}, #{:?})",
-            bi.index(),
-            std::thread::current().name(),
-            std::thread::current().id(),
-        );
         let bbqueue = &bbbuffers[bi.index()];
         let (producer, consumer) = bbqueue.try_split_framed().unwrap();
         producers.get_or(|| FullySend(RefCell::new(producer)));
@@ -405,15 +400,7 @@ impl<'b> ExtractorBbqueueSender<'b> {
 
     fn delete_vector(&self, docid: DocumentId) -> crate::Result<()> {
         let capacity = self.capacity;
-        let refcell = match self.producers.get() {
-            Some(refcell) => refcell,
-            None => panic!(
-                "hello thread #{:?} (#{:?}, #{:?})",
-                rayon::current_thread_index(),
-                std::thread::current().name(),
-                std::thread::current().id()
-            ),
-        };
+        let refcell = self.producers.get().unwrap();
         let mut producer = refcell.0.borrow_mut_or_yield();
 
         let payload_header = EntryHeader::ArroyDeleteVector(ArroyDeleteVector { docid });
@@ -452,15 +439,7 @@ impl<'b> ExtractorBbqueueSender<'b> {
         embedding: &[f32],
     ) -> crate::Result<()> {
         let capacity = self.capacity;
-        let refcell = match self.producers.get() {
-            Some(refcell) => refcell,
-            None => panic!(
-                "hello thread #{:?} (#{:?}, #{:?})",
-                rayon::current_thread_index(),
-                std::thread::current().name(),
-                std::thread::current().id()
-            ),
-        };
+        let refcell = self.producers.get().unwrap();
         let mut producer = refcell.0.borrow_mut_or_yield();
 
         let payload_header =
@@ -518,15 +497,7 @@ impl<'b> ExtractorBbqueueSender<'b> {
         F: FnOnce(&mut [u8]) -> crate::Result<()>,
     {
         let capacity = self.capacity;
-        let refcell = match self.producers.get() {
-            Some(refcell) => refcell,
-            None => panic!(
-                "hello thread #{:?} (#{:?}, #{:?})",
-                rayon::current_thread_index(),
-                std::thread::current().name(),
-                std::thread::current().id()
-            ),
-        };
+        let refcell = self.producers.get().unwrap();
         let mut producer = refcell.0.borrow_mut_or_yield();
 
         let operation = DbOperation { database, key_length: Some(key_length) };

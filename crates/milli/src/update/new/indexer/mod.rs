@@ -77,17 +77,18 @@ where
     MSP: Fn() -> bool + Sync,
     SP: Fn(Progress) + Sync,
 {
-    /// TODO restrict memory and remove this memory from the extractors bump allocators
-    let bbbuffers: Vec<_> = pool
+    let mut bbbuffers = Vec::new();
+    let finished_extraction = AtomicBool::new(false);
+    let (extractor_sender, mut writer_receiver) = pool
         .install(|| {
-            (0..rayon::current_num_threads())
-                .map(|_| bbqueue::BBBuffer::new(100 * 1024 * 1024)) // 100 MiB by thread
-                .collect()
+            /// TODO restrict memory and remove this memory from the extractors bump allocators
+            extractor_writer_bbqueue(
+                &mut bbbuffers,
+                100 * 1024 * 1024, // 100 MiB
+                1000,
+            )
         })
         .unwrap();
-    let (extractor_sender, mut writer_receiver) =
-        pool.install(|| extractor_writer_bbqueue(&bbbuffers, 1000)).unwrap();
-    let finished_extraction = AtomicBool::new(false);
 
     let metadata_builder = MetadataBuilder::from_index(index, wtxn)?;
     let new_fields_ids_map = FieldIdMapWithMetadata::new(new_fields_ids_map, metadata_builder);
