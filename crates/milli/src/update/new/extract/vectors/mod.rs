@@ -76,7 +76,7 @@ impl<'a, 'extractor> Extractor<'extractor> for EmbeddingExtractor<'a> {
                 context.data,
                 &self.possible_embedding_mistakes,
                 self.threads,
-                self.sender,
+                &self.sender,
                 &context.doc_alloc,
             ))
         }

@@ -62,9 +62,14 @@ pub enum InternalError {
     #[error(transparent)]
     Store(#[from] MdbError),
     #[error("Cannot delete {key:?} from database {database_name}: {error}")]
-    StoreDeletion { database_name: &'static str, key: Vec<u8>, error: heed::Error },
+    StoreDeletion { database_name: &'static str, key: Box<[u8]>, error: heed::Error },
     #[error("Cannot insert {key:?} and value with length {value_length} into database {database_name}: {error}")]
-    StorePut { database_name: &'static str, key: Vec<u8>, value_length: usize, error: heed::Error },
+    StorePut {
+        database_name: &'static str,
+        key: Box<[u8]>,
+        value_length: usize,
+        error: heed::Error,
+    },
     #[error(transparent)]
     Utf8(#[from] str::Utf8Error),
     #[error("An indexation process was explicitly aborted")]

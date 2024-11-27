@@ -40,7 +40,7 @@ use crate::update::new::words_prefix_docids::compute_exact_word_prefix_docids;
 use crate::update::new::{merge_and_send_docids, merge_and_send_facet_docids, FacetDatabases};
 use crate::update::settings::InnerIndexSettings;
 use crate::update::{FacetsUpdateBulk, GrenadParameters};
-use crate::vector::{ArroyWrapper, EmbeddingConfigs, Embeddings};
+use crate::vector::{ArroyWrapper, EmbeddingConfigs};
 use crate::{
     Error, FieldsIdsMap, GlobalFieldsIdsMap, Index, InternalError, Result, ThreadPoolNoAbort,
     ThreadPoolNoAbortBuilder, UserError,
@@ -80,7 +80,7 @@ where
     let bbbuffers: Vec<_> = (0..rayon::current_num_threads())
         .map(|_| bbqueue::BBBuffer::new(100 * 1024 * 1024)) // 100 MiB by thread
         .collect();
-    let (extractor_sender, writer_receiver) = extractor_writer_bbqueue(&bbbuffers);
+    let (extractor_sender, writer_receiver) = extractor_writer_bbqueue(&bbbuffers, 1000);
     let finished_extraction = AtomicBool::new(false);
 
     let metadata_builder = MetadataBuilder::from_index(index, wtxn)?;
@@ -386,7 +386,11 @@ where
             })
             .collect();
 
+        // Used by by the ArroySetVector to copy the embedding into an
+        // aligned memory area, required by arroy to accept a new vector.
+        let mut aligned_embedding = Vec::new();
         let mut arroy_writers = arroy_writers?;
+
         {
             let span = tracing::trace_span!(target: "indexing::write_db", "all");
             let _entered = span.enter();
@@ -394,80 +398,84 @@ where
             let span = tracing::trace_span!(target: "indexing::write_db", "post_merge");
             let mut _entered_post_merge = None;
 
-            for operation in writer_receiver {
+            while let Some(action) = writer_receiver.recv() {
                 if _entered_post_merge.is_none()
                     && finished_extraction.load(std::sync::atomic::Ordering::Relaxed)
                 {
                     _entered_post_merge = Some(span.enter());
                 }
-                match operation {
-                    WriterOperation::DbOperation(db_operation) => {
-                        let database = db_operation.database(index);
-                        let database_name = db_operation.database_name();
-                        match db_operation.entry() {
-                            EntryOperation::Delete(e) => match database.delete(wtxn, e.entry()) {
-                                Ok(false) => unreachable!("We tried to delete an unknown key"),
-                                Ok(_) => (),
-                                Err(error) => {
-                                    return Err(Error::InternalError(
-                                        InternalError::StoreDeletion {
-                                            database_name,
-                                            key: e.entry().to_owned(),
-                                            error,
-                                        },
-                                    ));
-                                }
-                            },
-                            EntryOperation::Write(e) => {
-                                if let Err(error) = database.put(wtxn, e.key(), e.value()) {
-                                    return Err(Error::InternalError(InternalError::StorePut {
-                                        database_name,
-                                        key: e.key().to_owned(),
-                                        value_length: e.value().len(),
-                                        error,
-                                    }));
-                                }
-                            }
+
+                match action {
+                    ReceiverAction::WakeUp => (),
+                    ReceiverAction::LargeEntry { database, key, value } => {
+                        let database_name = database.database_name();
+                        let database = database.database(index);
+                        if let Err(error) = database.put(wtxn, &key, &value) {
+                            return Err(Error::InternalError(InternalError::StorePut {
+                                database_name,
+                                key,
+                                value_length: value.len(),
+                                error,
+                            }));
                         }
                     }
-                    WriterOperation::ArroyOperation(arroy_operation) => match arroy_operation {
-                        ArroyOperation::DeleteVectors { docid } => {
-                            for (
-                                _embedder_index,
-                                (_embedder_name, _embedder, writer, dimensions),
-                            ) in &mut arroy_writers
-                            {
+                }
+
+                while let Some(frame_with_header) = writer_receiver.read() {
+                    match frame_with_header.header() {
+                        EntryHeader::DbOperation(operation) => {
+                            let database_name = operation.database.database_name();
+                            let database = operation.database.database(index);
+                            let frame = frame_with_header.frame();
+                            match operation.key_value(frame) {
+                                (key, Some(value)) => {
+                                    if let Err(error) = database.put(wtxn, key, value) {
+                                        return Err(Error::InternalError(InternalError::StorePut {
+                                            database_name,
+                                            key: key.into(),
+                                            value_length: value.len(),
+                                            error,
+                                        }));
+                                    }
+                                }
+                                (key, None) => match database.delete(wtxn, key) {
+                                    Ok(false) => {
+                                        unreachable!("We tried to delete an unknown key: {key:?}")
+                                    }
+                                    Ok(_) => (),
+                                    Err(error) => {
+                                        return Err(Error::InternalError(
+                                            InternalError::StoreDeletion {
+                                                database_name,
+                                                key: key.into(),
+                                                error,
+                                            },
+                                        ));
+                                    }
+                                },
+                            }
+                        }
+                        EntryHeader::ArroyDeleteVector(ArroyDeleteVector { docid }) => {
+                            for (_index, (_name, _embedder, writer, dimensions)) in &mut arroy_writers {
                                 let dimensions = *dimensions;
                                 writer.del_items(wtxn, dimensions, docid)?;
                             }
                         }
-                        ArroyOperation::SetVectors {
-                            docid,
-                            embedder_id,
-                            embeddings: raw_embeddings,
-                        } => {
-                            let (_, _, writer, dimensions) = arroy_writers
-                                .get(&embedder_id)
-                                .expect("requested a missing embedder");
-
-                            let mut embeddings = Embeddings::new(*dimensions);
-                            for embedding in raw_embeddings {
-                                embeddings.append(embedding).unwrap();
-                            }
-
-                        writer.del_items(wtxn, *dimensions, docid)?;
-                        writer.add_items(wtxn, docid, &embeddings)?;
+                        EntryHeader::ArroySetVector(asv) => {
+                            let ArroySetVector { docid, embedder_id, .. } = asv;
+                            let frame = frame_with_header.frame();
+                            let embedding = asv.read_embedding_into_vec(frame, &mut aligned_embedding);
+                            let (_, _, writer, dimensions) =
+                                arroy_writers.get(&embedder_id).expect("requested a missing embedder");
+                            writer.del_items(wtxn, *dimensions, docid)?;
+                            writer.add_item(wtxn, docid, embedding)?;
+                        }
                     }
-                    ArroyOperation::SetVector { docid, embedder_id, embedding } => {
-                        let (_, _, writer, dimensions) =
-                            arroy_writers.get(&embedder_id).expect("requested a missing embedder");
-                        writer.del_items(wtxn, *dimensions, docid)?;
-                        writer.add_item(wtxn, docid, &embedding)?;
-                    }
-                    _otherwise => unreachable!(),
-                },
+                }
             }
         }
+
+        todo!("read the BBQueue once the channel is closed");
 
         'vectors: {
             let span =
