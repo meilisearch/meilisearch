@@ -1,4 +1,5 @@
 use std::cmp::Ordering;
+use std::sync::atomic::AtomicBool;
 use std::sync::{OnceLock, RwLock};
 use std::thread::{self, Builder};
 
@@ -76,6 +77,7 @@ where
     SP: Fn(Progress) + Sync,
 {
     let (extractor_sender, writer_receiver) = extractor_writer_channel(10_000);
+    let finished_extraction = AtomicBool::new(false);
 
     let metadata_builder = MetadataBuilder::from_index(index, wtxn)?;
     let new_fields_ids_map = FieldIdMapWithMetadata::new(new_fields_ids_map, metadata_builder);
@@ -100,6 +102,7 @@ where
     thread::scope(|s| -> Result<()> {
         let indexer_span = tracing::Span::current();
         let embedders = &embedders;
+        let finished_extraction = &finished_extraction;
         // prevent moving the field_distribution and document_ids in the inner closure...
         let field_distribution = &mut field_distribution;
         let document_ids = &mut document_ids;
@@ -350,6 +353,8 @@ where
 
             (indexing_context.send_progress)(Progress::from_step(Step::WritingToDatabase));
 
+            finished_extraction.store(true, std::sync::atomic::Ordering::Relaxed);
+
             Result::Ok(facet_field_ids_delta)
         })?;
 
@@ -384,7 +389,15 @@ where
             let span = tracing::trace_span!(target: "indexing::write_db", "all");
             let _entered = span.enter();
 
+            let span = tracing::trace_span!(target: "indexing::write_db", "post_merge");
+            let mut _entered_post_merge = None;
+
             for operation in writer_receiver {
+                if _entered_post_merge.is_none()
+                    && finished_extraction.load(std::sync::atomic::Ordering::Relaxed)
+                {
+                    _entered_post_merge = Some(span.enter());
+                }
                 match operation {
                     WriterOperation::DbOperation(db_operation) => {
                         let database = db_operation.database(index);
