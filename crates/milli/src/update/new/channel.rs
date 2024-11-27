@@ -422,6 +422,12 @@ impl<'b> ExtractorBbqueueSender<'b> {
         // We could commit only the used memory.
         grant.commit(total_length);
 
+        // We only send a wake up message when the channel is empty
+        // so that we don't fill the channel with too many WakeUps.
+        if self.sender.is_empty() {
+            self.sender.send(ReceiverAction::WakeUp).unwrap();
+        }
+
         Ok(())
     }
 
@@ -459,6 +465,12 @@ impl<'b> ExtractorBbqueueSender<'b> {
 
         // We could commit only the used memory.
         grant.commit(total_length);
+
+        // We only send a wake up message when the channel is empty
+        // so that we don't fill the channel with too many WakeUps.
+        if self.sender.is_empty() {
+            self.sender.send(ReceiverAction::WakeUp).unwrap();
+        }
 
         Ok(())
     }
@@ -511,6 +523,12 @@ impl<'b> ExtractorBbqueueSender<'b> {
         // We could commit only the used memory.
         grant.commit(total_length);
 
+        // We only send a wake up message when the channel is empty
+        // so that we don't fill the channel with too many WakeUps.
+        if self.sender.is_empty() {
+            self.sender.send(ReceiverAction::WakeUp).unwrap();
+        }
+
         Ok(())
     }
 
@@ -560,6 +578,12 @@ impl<'b> ExtractorBbqueueSender<'b> {
 
         // We could commit only the used memory.
         grant.commit(total_length);
+
+        // We only send a wake up message when the channel is empty
+        // so that we don't fill the channel with too many WakeUps.
+        if self.sender.is_empty() {
+            self.sender.send(ReceiverAction::WakeUp).unwrap();
+        }
 
         Ok(())
     }
