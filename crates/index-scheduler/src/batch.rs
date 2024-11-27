@@ -1351,7 +1351,10 @@ impl IndexScheduler {
                 let pool = match &indexer_config.thread_pool {
                     Some(pool) => pool,
                     None => {
-                        local_pool = ThreadPoolNoAbortBuilder::new().build().unwrap();
+                        local_pool = ThreadPoolNoAbortBuilder::new()
+                            .thread_name(|i| format!("indexing-thread-{i}"))
+                            .build()
+                            .unwrap();
                         &local_pool
                     }
                 };
@@ -1399,21 +1402,19 @@ impl IndexScheduler {
                 }
 
                 if tasks.iter().any(|res| res.error.is_none()) {
-                    pool.install(|| {
-                        indexer::index(
-                            index_wtxn,
-                            index,
-                            indexer_config.grenad_parameters(),
-                            &db_fields_ids_map,
-                            new_fields_ids_map,
-                            primary_key,
-                            &document_changes,
-                            embedders,
-                            &|| must_stop_processing.get(),
-                            &send_progress,
-                        )
-                    })
-                    .unwrap()?;
+                    indexer::index(
+                        index_wtxn,
+                        index,
+                        pool,
+                        indexer_config.grenad_parameters(),
+                        &db_fields_ids_map,
+                        new_fields_ids_map,
+                        primary_key,
+                        &document_changes,
+                        embedders,
+                        &|| must_stop_processing.get(),
+                        &send_progress,
+                    )?;
 
                     tracing::info!(indexing_result = ?addition, processed_in = ?started_processing_at.elapsed(), "document indexing done");
                 }
@@ -1489,34 +1490,34 @@ impl IndexScheduler {
                     let pool = match &indexer_config.thread_pool {
                         Some(pool) => pool,
                         None => {
-                            local_pool = ThreadPoolNoAbortBuilder::new().build().unwrap();
+                            local_pool = ThreadPoolNoAbortBuilder::new()
+                                .thread_name(|i| format!("indexing-thread-{i}"))
+                                .build()
+                                .unwrap();
                             &local_pool
                         }
                     };
 
-                    pool.install(|| {
-                        let indexer =
-                            UpdateByFunction::new(candidates, context.clone(), code.clone());
-                        let document_changes = indexer.into_changes(&primary_key)?;
-                        let embedders = index.embedding_configs(index_wtxn)?;
-                        let embedders = self.embedders(embedders)?;
+                    let indexer = UpdateByFunction::new(candidates, context.clone(), code.clone());
+                    let document_changes =
+                        pool.install(|| indexer.into_changes(&primary_key)).unwrap()?;
 
-                        indexer::index(
-                            index_wtxn,
-                            index,
-                            indexer_config.grenad_parameters(),
-                            &db_fields_ids_map,
-                            new_fields_ids_map,
-                            None, // cannot change primary key in DocumentEdition
-                            &document_changes,
-                            embedders,
-                            &|| must_stop_processing.get(),
-                            &send_progress,
-                        )?;
+                    let embedders = index.embedding_configs(index_wtxn)?;
+                    let embedders = self.embedders(embedders)?;
 
-                        Result::Ok(())
-                    })
-                    .unwrap()?;
+                    indexer::index(
+                        index_wtxn,
+                        index,
+                        pool,
+                        indexer_config.grenad_parameters(),
+                        &db_fields_ids_map,
+                        new_fields_ids_map,
+                        None, // cannot change primary key in DocumentEdition
+                        &document_changes,
+                        embedders,
+                        &|| must_stop_processing.get(),
+                        &send_progress,
+                    )?;
 
                     // tracing::info!(indexing_result = ?addition, processed_in = ?started_processing_at.elapsed(), "document indexing done");
                 }
@@ -1641,7 +1642,10 @@ impl IndexScheduler {
                     let pool = match &indexer_config.thread_pool {
                         Some(pool) => pool,
                         None => {
-                            local_pool = ThreadPoolNoAbortBuilder::new().build().unwrap();
+                            local_pool = ThreadPoolNoAbortBuilder::new()
+                                .thread_name(|i| format!("indexing-thread-{i}"))
+                                .build()
+                                .unwrap();
                             &local_pool
                         }
                     };
@@ -1652,21 +1656,19 @@ impl IndexScheduler {
                     let embedders = index.embedding_configs(index_wtxn)?;
                     let embedders = self.embedders(embedders)?;
 
-                    pool.install(|| {
-                        indexer::index(
-                            index_wtxn,
-                            index,
-                            indexer_config.grenad_parameters(),
-                            &db_fields_ids_map,
-                            new_fields_ids_map,
-                            None, // document deletion never changes primary key
-                            &document_changes,
-                            embedders,
-                            &|| must_stop_processing.get(),
-                            &send_progress,
-                        )
-                    })
-                    .unwrap()?;
+                    indexer::index(
+                        index_wtxn,
+                        index,
+                        pool,
+                        indexer_config.grenad_parameters(),
+                        &db_fields_ids_map,
+                        new_fields_ids_map,
+                        None, // document deletion never changes primary key
+                        &document_changes,
+                        embedders,
+                        &|| must_stop_processing.get(),
+                        &send_progress,
+                    )?;
 
                     // tracing::info!(indexing_result = ?addition, processed_in = ?started_processing_at.elapsed(), "document indexing done");
                 }

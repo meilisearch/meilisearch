@@ -55,6 +55,12 @@ pub fn extractor_writer_bbqueue(
 
     let producers = ThreadLocal::with_capacity(bbbuffers.len());
     let consumers = rayon::broadcast(|bi| {
+        eprintln!(
+            "hello thread #{:?} (#{:?}, #{:?})",
+            bi.index(),
+            std::thread::current().name(),
+            std::thread::current().id(),
+        );
         let bbqueue = &bbbuffers[bi.index()];
         let (producer, consumer) = bbqueue.try_split_framed().unwrap();
         producers.get_or(|| FullySend(RefCell::new(producer)));
@@ -399,7 +405,15 @@ impl<'b> ExtractorBbqueueSender<'b> {
 
     fn delete_vector(&self, docid: DocumentId) -> crate::Result<()> {
         let capacity = self.capacity;
-        let refcell = self.producers.get().unwrap();
+        let refcell = match self.producers.get() {
+            Some(refcell) => refcell,
+            None => panic!(
+                "hello thread #{:?} (#{:?}, #{:?})",
+                rayon::current_thread_index(),
+                std::thread::current().name(),
+                std::thread::current().id()
+            ),
+        };
         let mut producer = refcell.0.borrow_mut_or_yield();
 
         let payload_header = EntryHeader::ArroyDeleteVector(ArroyDeleteVector { docid });
@@ -438,7 +452,15 @@ impl<'b> ExtractorBbqueueSender<'b> {
         embedding: &[f32],
     ) -> crate::Result<()> {
         let capacity = self.capacity;
-        let refcell = self.producers.get().unwrap();
+        let refcell = match self.producers.get() {
+            Some(refcell) => refcell,
+            None => panic!(
+                "hello thread #{:?} (#{:?}, #{:?})",
+                rayon::current_thread_index(),
+                std::thread::current().name(),
+                std::thread::current().id()
+            ),
+        };
         let mut producer = refcell.0.borrow_mut_or_yield();
 
         let payload_header =
@@ -496,7 +518,15 @@ impl<'b> ExtractorBbqueueSender<'b> {
         F: FnOnce(&mut [u8]) -> crate::Result<()>,
     {
         let capacity = self.capacity;
-        let refcell = self.producers.get().unwrap();
+        let refcell = match self.producers.get() {
+            Some(refcell) => refcell,
+            None => panic!(
+                "hello thread #{:?} (#{:?}, #{:?})",
+                rayon::current_thread_index(),
+                std::thread::current().name(),
+                std::thread::current().id()
+            ),
+        };
         let mut producer = refcell.0.borrow_mut_or_yield();
 
         let operation = DbOperation { database, key_length: Some(key_length) };
