@@ -117,7 +117,6 @@ where
 
             let rtxn = index.read_txn()?;
 
-
             // document but we need to create a function that collects and compresses documents.
             let document_sender = extractor_sender.documents();
             let document_extractor = DocumentsExtractor::new(document_sender, embedders);
@@ -180,10 +179,6 @@ where
             }
 
             {
-
-
-
-
                 let WordDocidsCaches {
                     word_docids,
                     word_fid_docids,
@@ -296,7 +291,6 @@ where
             }
 
             'vectors: {
-
                 if index_embeddings.is_empty() {
                     break 'vectors;
                 }
@@ -308,7 +302,14 @@ where
                     let span = tracing::trace_span!(target: "indexing::documents::extract", "vectors");
                     let _entered = span.enter();
 
-                    extract(document_changes, &extractor, indexing_context, &mut extractor_allocs, &datastore, Step::ExtractingEmbeddings)?;
+                    extract(
+                        document_changes,
+                        &extractor,
+                        indexing_context,
+                        &mut extractor_allocs,
+                        &datastore,
+                        Step::ExtractingEmbeddings,
+                    )?;
                 }
                 {
                     let span = tracing::trace_span!(target: "indexing::documents::merge", "vectors");
@@ -357,7 +358,7 @@ where
 
             finished_extraction.store(true, std::sync::atomic::Ordering::Relaxed);
 
-            Result::Ok(facet_field_ids_delta)
+            Result::Ok((facet_field_ids_delta, index_embeddings))
         })?;
 
         let global_fields_ids_map = GlobalFieldsIdsMap::new(&new_fields_ids_map);
@@ -442,6 +443,10 @@ where
             )?;
         }
 
+        (indexing_context.send_progress)(Progress::from_step(Step::WaitingForExtractors));
+
+        let (facet_field_ids_delta, index_embeddings) = extractor_handle.join().unwrap()?;
+
         'vectors: {
             let span =
                 tracing::trace_span!(target: "indexing::vectors", parent: &indexer_span, "build");
@@ -469,10 +474,6 @@ where
 
             index.put_embedding_configs(wtxn, index_embeddings)?;
         }
-
-        (indexing_context.send_progress)(Progress::from_step(Step::WaitingForExtractors));
-
-        let facet_field_ids_delta = extractor_handle.join().unwrap()?;
 
         (indexing_context.send_progress)(Progress::from_step(Step::PostProcessingFacets));
 
