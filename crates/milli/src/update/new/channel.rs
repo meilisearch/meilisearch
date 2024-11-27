@@ -93,6 +93,7 @@ pub struct WriterBbqueueReceiver<'a> {
 }
 
 /// The action to perform on the receiver/writer side.
+#[derive(Debug)]
 pub enum ReceiverAction {
     /// Wake up, you have frames to read for the BBQueue buffers.
     WakeUp,
@@ -599,6 +600,7 @@ impl DatabaseType for WordPositionDocids {
     const DATABASE: Database = Database::WordPositionDocids;
 }
 
+#[derive(Clone, Copy)]
 pub struct WordDocidsSender<'a, 'b, D> {
     sender: &'a ExtractorBbqueueSender<'b>,
     _marker: PhantomData<D>,
@@ -621,6 +623,7 @@ impl<D: DatabaseType> WordDocidsSender<'_, '_, D> {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct FacetDocidsSender<'a, 'b> {
     sender: &'a ExtractorBbqueueSender<'b>,
 }
@@ -667,6 +670,7 @@ impl FacetDocidsSender<'_, '_> {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct FieldIdDocidFacetSender<'a, 'b>(&'a ExtractorBbqueueSender<'b>);
 
 impl FieldIdDocidFacetSender<'_, '_> {
@@ -691,6 +695,7 @@ impl FieldIdDocidFacetSender<'_, '_> {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct DocumentsSender<'a, 'b>(&'a ExtractorBbqueueSender<'b>);
 
 impl DocumentsSender<'_, '_> {
@@ -716,6 +721,7 @@ impl DocumentsSender<'_, '_> {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct EmbeddingSender<'a, 'b>(&'a ExtractorBbqueueSender<'b>);
 
 impl EmbeddingSender<'_, '_> {
@@ -741,6 +747,7 @@ impl EmbeddingSender<'_, '_> {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct GeoSender<'a, 'b>(&'a ExtractorBbqueueSender<'b>);
 
 impl GeoSender<'_, '_> {

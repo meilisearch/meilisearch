@@ -80,7 +80,7 @@ where
     let bbbuffers: Vec<_> = (0..rayon::current_num_threads())
         .map(|_| bbqueue::BBBuffer::new(100 * 1024 * 1024)) // 100 MiB by thread
         .collect();
-    let (extractor_sender, writer_receiver) = extractor_writer_bbqueue(&bbbuffers, 1000);
+    let (extractor_sender, mut writer_receiver) = extractor_writer_bbqueue(&bbbuffers, 1000);
     let finished_extraction = AtomicBool::new(false);
 
     let metadata_builder = MetadataBuilder::from_index(index, wtxn)?;
@@ -302,7 +302,7 @@ where
                 }
 
                 let embedding_sender = extractor_sender.embeddings();
-                let extractor = EmbeddingExtractor::new(embedders, &embedding_sender, field_distribution, request_threads());
+                let extractor = EmbeddingExtractor::new(embedders, embedding_sender, field_distribution, request_threads());
                 let mut datastore = ThreadLocal::with_capacity(rayon::current_num_threads());
                 {
                     let span = tracing::trace_span!(target: "indexing::documents::extract", "vectors");
@@ -363,7 +363,6 @@ where
         let global_fields_ids_map = GlobalFieldsIdsMap::new(&new_fields_ids_map);
 
         let vector_arroy = index.vector_arroy;
-        let mut rng = rand::rngs::StdRng::seed_from_u64(42);
         let indexer_span = tracing::Span::current();
         let arroy_writers: Result<HashMap<_, _>> = embedders
             .inner_as_ref()
@@ -490,6 +489,7 @@ where
                 Step::WritingEmbeddingsToDatabase,
             ));
 
+            let mut rng = rand::rngs::StdRng::seed_from_u64(42);
             for (_index, (_embedder_name, _embedder, writer, dimensions)) in &mut arroy_writers {
                 let dimensions = *dimensions;
                 writer.build_and_quantize(

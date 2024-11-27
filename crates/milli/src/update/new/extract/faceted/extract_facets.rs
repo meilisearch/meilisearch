@@ -25,14 +25,14 @@ use crate::update::new::DocumentChange;
 use crate::update::GrenadParameters;
 use crate::{DocumentId, FieldId, Index, Result, MAX_FACET_VALUE_LENGTH};
 
-pub struct FacetedExtractorData<'a> {
+pub struct FacetedExtractorData<'a, 'b> {
     attributes_to_extract: &'a [&'a str],
-    sender: &'a FieldIdDocidFacetSender<'a>,
+    sender: &'a FieldIdDocidFacetSender<'a, 'b>,
     grenad_parameters: GrenadParameters,
     buckets: usize,
 }
 
-impl<'a, 'extractor> Extractor<'extractor> for FacetedExtractorData<'a> {
+impl<'a, 'b, 'extractor> Extractor<'extractor> for FacetedExtractorData<'a, 'b> {
     type Data = RefCell<BalancedCaches<'extractor>>;
 
     fn init_data(&self, extractor_alloc: &'extractor Bump) -> Result<Self::Data> {
