@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::io::{self, BufWriter};
 use std::marker::PhantomData;
 use std::mem;
 use std::num::NonZeroU16;
@@ -9,7 +10,7 @@ use bytemuck::{checked, CheckedBitPattern, NoUninit};
 use crossbeam_channel::SendError;
 use heed::types::Bytes;
 use heed::BytesDecode;
-use memmap2::Mmap;
+use memmap2::{Mmap, MmapMut};
 use roaring::RoaringBitmap;
 
 use super::extract::FacetKind;
@@ -98,20 +99,63 @@ pub struct WriterBbqueueReceiver<'a> {
 pub enum ReceiverAction {
     /// Wake up, you have frames to read for the BBQueue buffers.
     WakeUp,
-    /// An entry that cannot fit in the BBQueue buffers has been
-    /// written to disk, memory-mapped and must be written in the
-    /// database.
-    LargeEntry {
-        /// The database where the entry must be written.
-        database: Database,
-        /// The key of the entry that must be written in the database.
-        key: Box<[u8]>,
-        /// The large value that must be written.
-        ///
-        /// Note: We can probably use a `File` here and
-        /// use `Database::put_reserved` instead of memory-mapping.
-        value: Mmap,
-    },
+    LargeEntry(LargeEntry),
+    LargeVector(LargeVector),
+    LargeVectors(LargeVectors),
+}
+
+/// An entry that cannot fit in the BBQueue buffers has been
+/// written to disk, memory-mapped and must be written in the
+/// database.
+#[derive(Debug)]
+pub struct LargeEntry {
+    /// The database where the entry must be written.
+    pub database: Database,
+    /// The key of the entry that must be written in the database.
+    pub key: Box<[u8]>,
+    /// The large value that must be written.
+    ///
+    /// Note: We can probably use a `File` here and
+    /// use `Database::put_reserved` instead of memory-mapping.
+    pub value: Mmap,
+}
+
+/// When an embedding is larger than the available
+/// BBQueue space it arrives here.
+#[derive(Debug)]
+pub struct LargeVector {
+    /// The document id associated to the large embedding.
+    pub docid: DocumentId,
+    /// The embedder id in which to insert the large embedding.
+    pub embedder_id: u8,
+    /// The large embedding that must be written.
+    pub embedding: Mmap,
+}
+
+impl LargeVector {
+    pub fn read_embedding(&self) -> &[f32] {
+        bytemuck::cast_slice(&self.embedding)
+    }
+}
+
+/// When embeddings are larger than the available
+/// BBQueue space it arrives here.
+#[derive(Debug)]
+pub struct LargeVectors {
+    /// The document id associated to the large embedding.
+    pub docid: DocumentId,
+    /// The embedder id in which to insert the large embedding.
+    pub embedder_id: u8,
+    /// The dimensions of the embeddings in this payload.
+    pub dimensions: u16,
+    /// The large embedding that must be written.
+    pub embeddings: Mmap,
+}
+
+impl LargeVectors {
+    pub fn read_embeddings(&self) -> impl Iterator<Item = &[f32]> {
+        self.embeddings.chunks_exact(self.dimensions as usize).map(bytemuck::cast_slice)
+    }
 }
 
 impl<'a> WriterBbqueueReceiver<'a> {
@@ -209,12 +253,55 @@ impl ArroySetVector {
     }
 }
 
+#[derive(Debug, Clone, Copy, NoUninit, CheckedBitPattern)]
+#[repr(C)]
+/// The embeddings are in the remaining space and represents
+/// non-aligned [f32] each with dimensions f32s.
+pub struct ArroySetVectors {
+    pub docid: DocumentId,
+    pub dimensions: u16,
+    pub embedder_id: u8,
+    _padding: u8,
+}
+
+impl ArroySetVectors {
+    fn remaining_bytes<'a>(frame: &'a FrameGrantR<'_>) -> &'a [u8] {
+        let skip = EntryHeader::variant_size() + mem::size_of::<Self>();
+        &frame[skip..]
+    }
+
+    // /// The number of embeddings in this payload.
+    // pub fn embedding_count(&self, frame: &FrameGrantR<'_>) -> usize {
+    //     let bytes = Self::remaining_bytes(frame);
+    //     bytes.len().checked_div(self.dimensions as usize).unwrap()
+    // }
+
+    /// Read the embedding at `index` or `None` if out of bounds.
+    pub fn read_embedding_into_vec<'v>(
+        &self,
+        frame: &FrameGrantR<'_>,
+        index: usize,
+        vec: &'v mut Vec<f32>,
+    ) -> Option<&'v [f32]> {
+        vec.clear();
+        let bytes = Self::remaining_bytes(frame);
+        let embedding_size = self.dimensions as usize * mem::size_of::<f32>();
+        let embedding_bytes = bytes.chunks_exact(embedding_size).nth(index)?;
+        embedding_bytes.chunks_exact(mem::size_of::<f32>()).for_each(|bytes| {
+            let f = bytes.try_into().map(f32::from_ne_bytes).unwrap();
+            vec.push(f);
+        });
+        Some(&vec[..])
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 #[repr(u8)]
 pub enum EntryHeader {
     DbOperation(DbOperation),
     ArroyDeleteVector(ArroyDeleteVector),
     ArroySetVector(ArroySetVector),
+    ArroySetVectors(ArroySetVectors),
 }
 
 impl EntryHeader {
@@ -227,6 +314,7 @@ impl EntryHeader {
             EntryHeader::DbOperation(_) => 0,
             EntryHeader::ArroyDeleteVector(_) => 1,
             EntryHeader::ArroySetVector(_) => 2,
+            EntryHeader::ArroySetVectors(_) => 3,
         }
     }
 
@@ -245,11 +333,15 @@ impl EntryHeader {
         Self::variant_size() + mem::size_of::<ArroyDeleteVector>()
     }
 
-    /// The `embedding_length` corresponds to the number of `f32` in the embedding.
-    fn total_set_vector_size(embedding_length: usize) -> usize {
-        Self::variant_size()
-            + mem::size_of::<ArroySetVector>()
-            + embedding_length * mem::size_of::<f32>()
+    /// The `dimensions` corresponds to the number of `f32` in the embedding.
+    fn total_set_vector_size(dimensions: usize) -> usize {
+        Self::variant_size() + mem::size_of::<ArroySetVector>() + dimensions * mem::size_of::<f32>()
+    }
+
+    /// The `dimensions` corresponds to the number of `f32` in the embedding.
+    fn total_set_vectors_size(count: usize, dimensions: usize) -> usize {
+        let embedding_size = dimensions * mem::size_of::<f32>();
+        Self::variant_size() + mem::size_of::<ArroySetVectors>() + embedding_size * count
     }
 
     fn header_size(&self) -> usize {
@@ -257,6 +349,7 @@ impl EntryHeader {
             EntryHeader::DbOperation(op) => mem::size_of_val(op),
             EntryHeader::ArroyDeleteVector(adv) => mem::size_of_val(adv),
             EntryHeader::ArroySetVector(asv) => mem::size_of_val(asv),
+            EntryHeader::ArroySetVectors(asvs) => mem::size_of_val(asvs),
         };
         Self::variant_size() + payload_size
     }
@@ -279,6 +372,11 @@ impl EntryHeader {
                 let header = checked::pod_read_unaligned(header_bytes);
                 EntryHeader::ArroySetVector(header)
             }
+            3 => {
+                let header_bytes = &remaining[..mem::size_of::<ArroySetVectors>()];
+                let header = checked::pod_read_unaligned(header_bytes);
+                EntryHeader::ArroySetVectors(header)
+            }
             id => panic!("invalid variant id: {id}"),
         }
     }
@@ -289,6 +387,7 @@ impl EntryHeader {
             EntryHeader::DbOperation(op) => bytemuck::bytes_of(op),
             EntryHeader::ArroyDeleteVector(adv) => bytemuck::bytes_of(adv),
             EntryHeader::ArroySetVector(asv) => bytemuck::bytes_of(asv),
+            EntryHeader::ArroySetVectors(asvs) => bytemuck::bytes_of(asvs),
         };
         *first = self.variant_id();
         remaining.copy_from_slice(payload_bytes);
@@ -405,7 +504,7 @@ impl<'b> ExtractorBbqueueSender<'b> {
         let payload_header = EntryHeader::ArroyDeleteVector(ArroyDeleteVector { docid });
         let total_length = EntryHeader::total_delete_vector_size();
         if total_length > capacity {
-            unreachable!("entry larger that the BBQueue capacity");
+            panic!("The entry is larger ({total_length} bytes) than the BBQueue capacity ({capacity} bytes)");
         }
 
         // Spin loop to have a frame the size we requested.
@@ -441,11 +540,21 @@ impl<'b> ExtractorBbqueueSender<'b> {
         let refcell = self.producers.get().unwrap();
         let mut producer = refcell.0.borrow_mut_or_yield();
 
-        let payload_header =
-            EntryHeader::ArroySetVector(ArroySetVector { docid, embedder_id, _padding: [0; 3] });
+        let arroy_set_vector = ArroySetVector { docid, embedder_id, _padding: [0; 3] };
+        let payload_header = EntryHeader::ArroySetVector(arroy_set_vector);
         let total_length = EntryHeader::total_set_vector_size(embedding.len());
         if total_length > capacity {
-            unreachable!("entry larger that the BBQueue capacity");
+            let mut embedding_bytes = bytemuck::cast_slice(embedding);
+            let mut value_file = tempfile::tempfile().map(BufWriter::new)?;
+            io::copy(&mut embedding_bytes, &mut value_file)?;
+            let value_file = value_file.into_inner().map_err(|ie| ie.into_error())?;
+            value_file.sync_all()?;
+            let embedding = unsafe { Mmap::map(&value_file)? };
+
+            let large_vector = LargeVector { docid, embedder_id, embedding };
+            self.sender.send(ReceiverAction::LargeVector(large_vector)).unwrap();
+
+            return Ok(());
         }
 
         // Spin loop to have a frame the size we requested.
@@ -457,11 +566,87 @@ impl<'b> ExtractorBbqueueSender<'b> {
             }
         };
 
-        // payload_header.serialize_into(&mut grant);
         let header_size = payload_header.header_size();
         let (header_bytes, remaining) = grant.split_at_mut(header_size);
         payload_header.serialize_into(header_bytes);
         remaining.copy_from_slice(bytemuck::cast_slice(embedding));
+
+        // We could commit only the used memory.
+        grant.commit(total_length);
+
+        // We only send a wake up message when the channel is empty
+        // so that we don't fill the channel with too many WakeUps.
+        if self.sender.is_empty() {
+            self.sender.send(ReceiverAction::WakeUp).unwrap();
+        }
+
+        Ok(())
+    }
+
+    fn set_vectors(
+        &self,
+        docid: u32,
+        embedder_id: u8,
+        embeddings: &[Vec<f32>],
+    ) -> crate::Result<()> {
+        let capacity = self.capacity;
+        let refcell = self.producers.get().unwrap();
+        let mut producer = refcell.0.borrow_mut_or_yield();
+
+        let dimensions = match embeddings.first() {
+            Some(embedding) => embedding.len(),
+            None => return Ok(()),
+        };
+
+        let arroy_set_vector = ArroySetVectors {
+            docid,
+            dimensions: dimensions.try_into().unwrap(),
+            embedder_id,
+            _padding: 0,
+        };
+
+        let payload_header = EntryHeader::ArroySetVectors(arroy_set_vector);
+        let total_length = EntryHeader::total_set_vectors_size(embeddings.len(), dimensions);
+        if total_length > capacity {
+            let mut value_file = tempfile::tempfile().map(BufWriter::new)?;
+            for embedding in embeddings {
+                let mut embedding_bytes = bytemuck::cast_slice(embedding);
+                io::copy(&mut embedding_bytes, &mut value_file)?;
+            }
+
+            let value_file = value_file.into_inner().map_err(|ie| ie.into_error())?;
+            value_file.sync_all()?;
+            let embeddings = unsafe { Mmap::map(&value_file)? };
+
+            let large_vectors = LargeVectors {
+                docid,
+                embedder_id,
+                dimensions: dimensions.try_into().unwrap(),
+                embeddings,
+            };
+
+            self.sender.send(ReceiverAction::LargeVectors(large_vectors)).unwrap();
+
+            return Ok(());
+        }
+
+        // Spin loop to have a frame the size we requested.
+        let mut grant = loop {
+            match producer.grant(total_length) {
+                Ok(grant) => break grant,
+                Err(bbqueue::Error::InsufficientSize) => continue,
+                Err(e) => unreachable!("{e:?}"),
+            }
+        };
+
+        let header_size = payload_header.header_size();
+        let (header_bytes, remaining) = grant.split_at_mut(header_size);
+        payload_header.serialize_into(header_bytes);
+
+        let output_iter = remaining.chunks_exact_mut(dimensions * mem::size_of::<f32>());
+        for (embedding, output) in embeddings.iter().zip(output_iter) {
+            output.copy_from_slice(bytemuck::cast_slice(embedding));
+        }
 
         // We could commit only the used memory.
         grant.commit(total_length);
@@ -502,7 +687,22 @@ impl<'b> ExtractorBbqueueSender<'b> {
         let payload_header = EntryHeader::DbOperation(operation);
         let total_length = EntryHeader::total_key_value_size(key_length, value_length);
         if total_length > capacity {
-            unreachable!("entry larger that the BBQueue capacity");
+            let mut key_buffer = vec![0; key_length.get() as usize].into_boxed_slice();
+            let value_file = tempfile::tempfile()?;
+            value_file.set_len(value_length.try_into().unwrap())?;
+            let mut mmap_mut = unsafe { MmapMut::map_mut(&value_file)? };
+
+            key_value_writer(&mut key_buffer, &mut mmap_mut)?;
+
+            self.sender
+                .send(ReceiverAction::LargeEntry(LargeEntry {
+                    database,
+                    key: key_buffer,
+                    value: mmap_mut.make_read_only()?,
+                }))
+                .unwrap();
+
+            return Ok(());
         }
 
         // Spin loop to have a frame the size we requested.
@@ -559,7 +759,7 @@ impl<'b> ExtractorBbqueueSender<'b> {
         let payload_header = EntryHeader::DbOperation(operation);
         let total_length = EntryHeader::total_key_size(key_length);
         if total_length > capacity {
-            unreachable!("entry larger that the BBQueue capacity");
+            panic!("The entry is larger ({total_length} bytes) than the BBQueue capacity ({capacity} bytes)");
         }
 
         // Spin loop to have a frame the size we requested.
@@ -763,10 +963,7 @@ impl EmbeddingSender<'_, '_> {
         embedder_id: u8,
         embeddings: Vec<Embedding>,
     ) -> crate::Result<()> {
-        for embedding in embeddings {
-            self.set_vector(docid, embedder_id, embedding)?;
-        }
-        Ok(())
+        self.0.set_vectors(docid, embedder_id, &embeddings[..])
     }
 
     pub fn set_vector(
@@ -786,11 +983,11 @@ impl GeoSender<'_, '_> {
     pub fn set_rtree(&self, value: Mmap) -> StdResult<(), SendError<()>> {
         self.0
             .sender
-            .send(ReceiverAction::LargeEntry {
+            .send(ReceiverAction::LargeEntry(LargeEntry {
                 database: Database::Main,
                 key: GEO_RTREE_KEY.to_string().into_bytes().into_boxed_slice(),
                 value,
-            })
+            }))
             .map_err(|_| SendError(()))
     }
 
