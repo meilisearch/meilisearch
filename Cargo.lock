@@ -969,8 +969,9 @@ dependencies = [
 
 [[package]]
 name = "charabia"
-version = "0.9.1"
-source = "git+https://github.com/meilisearch/charabia?branch=mutualize-char-normalizer#f8d8308cdb8db80819be7eeed5652cc4a995cc71"
+version = "0.9.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf8921fe4d53ab8f9e8f9b72ce6f91726cfc40fffab1243d27db406b5e2e9cc2"
 dependencies = [
  "aho-corasick",
  "csv",
@@ -2709,7 +2710,8 @@ checksum = "28b29a3cd74f0f4598934efe3aeba42bae0eb4680554128851ebbecb02af14e6"
 [[package]]
 name = "irg-kvariants"
 version = "0.1.1"
-source = "git+https://github.com/meilisearch/charabia?branch=mutualize-char-normalizer#f8d8308cdb8db80819be7eeed5652cc4a995cc71"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ef2af7c331f2536964a32b78a7d2e0963d78b42f4a76323b16cc7d94b1ddce26"
 dependencies = [
  "csv",
  "once_cell",
@@ -6017,9 +6019,9 @@ dependencies = [
 
 [[package]]
 name = "wana_kana"
-version = "3.0.0"
+version = "4.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "477976a5c56fb7b014795df5a2ce08d2de8bcd4d5980844c5bd3978a7fd1c30b"
+checksum = "a74666202acfcb4f9b995be2e3e9f7f530deb65e05a1407b8d0b30c9c451238a"
 dependencies = [
  "fnv",
  "itertools 0.10.5",
