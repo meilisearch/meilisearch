@@ -1252,19 +1252,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "crossbeam"
-version = "0.8.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1137cd7e7fc0fb5d3c5a8678be38ec56e819125d8d7907411fe24ccb943faca8"
-dependencies = [
- "crossbeam-channel",
- "crossbeam-deque",
- "crossbeam-epoch",
- "crossbeam-queue",
- "crossbeam-utils",
-]
-
-[[package]]
 name = "crossbeam-channel"
 version = "0.5.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2621,7 +2608,7 @@ dependencies = [
  "big_s",
  "bincode",
  "bumpalo",
- "crossbeam",
+ "crossbeam-channel",
  "csv",
  "derive_builder 0.20.0",
  "dump",
@@ -3629,7 +3616,6 @@ dependencies = [
  "candle-transformers",
  "charabia",
  "concat-arrays",
- "crossbeam",
  "crossbeam-channel",
  "csv",
  "deserr",
@@ -4750,8 +4736,9 @@ dependencies = [
 
 [[package]]
 name = "roaring"
-version = "0.10.6"
-source = "git+https://github.com/RoaringBitmap/roaring-rs?branch=clone-iter-slice#8ff028e484fb6192a0acf5a669eaf18c30cada6e"
+version = "0.10.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f81dc953b2244ddd5e7860cb0bb2a790494b898ef321d4aff8e260efab60cc88"
 dependencies = [
  "bytemuck",
  "byteorder",

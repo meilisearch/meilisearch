@@ -407,7 +407,7 @@ pub struct IndexScheduler {
     ///
     /// See [self.breakpoint()](`IndexScheduler::breakpoint`) for an explanation.
     #[cfg(test)]
-    test_breakpoint_sdr: crossbeam::channel::Sender<(Breakpoint, bool)>,
+    test_breakpoint_sdr: crossbeam_channel::Sender<(Breakpoint, bool)>,
 
     /// A list of planned failures within the [`tick`](IndexScheduler::tick) method of the index scheduler.
     ///
@@ -476,7 +476,7 @@ impl IndexScheduler {
     /// Create an index scheduler and start its run loop.
     pub fn new(
         options: IndexSchedulerOptions,
-        #[cfg(test)] test_breakpoint_sdr: crossbeam::channel::Sender<(Breakpoint, bool)>,
+        #[cfg(test)] test_breakpoint_sdr: crossbeam_channel::Sender<(Breakpoint, bool)>,
         #[cfg(test)] planned_failures: Vec<(usize, tests::FailureLocation)>,
     ) -> Result<Self> {
         std::fs::create_dir_all(&options.tasks_path)?;
@@ -2237,7 +2237,7 @@ mod tests {
     use std::time::Instant;
 
     use big_s::S;
-    use crossbeam::channel::RecvTimeoutError;
+    use crossbeam_channel::RecvTimeoutError;
     use file_store::File;
     use insta::assert_json_snapshot;
     use maplit::btreeset;
@@ -2289,7 +2289,7 @@ mod tests {
             configuration: impl Fn(&mut IndexSchedulerOptions),
         ) -> (Self, IndexSchedulerHandle) {
             let tempdir = TempDir::new().unwrap();
-            let (sender, receiver) = crossbeam::channel::bounded(0);
+            let (sender, receiver) = crossbeam_channel::bounded(0);
 
             let indexer_config = IndexerConfig { skip_index_budget: true, ..Default::default() };
 
@@ -2421,7 +2421,7 @@ mod tests {
     pub struct IndexSchedulerHandle {
         _tempdir: TempDir,
         index_scheduler: IndexScheduler,
-        test_breakpoint_rcv: crossbeam::channel::Receiver<(Breakpoint, bool)>,
+        test_breakpoint_rcv: crossbeam_channel::Receiver<(Breakpoint, bool)>,
         last_breakpoint: Breakpoint,
     }
 
