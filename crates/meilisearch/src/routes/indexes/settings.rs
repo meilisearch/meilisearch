@@ -425,7 +425,9 @@ generate_configure!(
     pagination,
     faceting,
     embedders,
-    search_cutoff_ms
+    search_cutoff_ms,
+    facet_search,
+    prefix_search
 );
 
 pub async fn update_all(

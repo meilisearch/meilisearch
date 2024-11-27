@@ -37,6 +37,8 @@ static DEFAULT_SETTINGS_VALUES: Lazy<HashMap<&'static str, Value>> = Lazy::new(|
         }),
     );
     map.insert("search_cutoff_ms", json!(null));
+    map.insert("facet_search", json!(true));
+    map.insert("prefix_search", json!("indexingTime"));
     map
 });
 
@@ -426,7 +428,9 @@ test_setting_routes!(
     synonyms put,
     pagination patch,
     faceting patch,
-    search_cutoff_ms put
+    search_cutoff_ms put,
+    facet_search put,
+    prefix_search put
 );
 
 #[actix_rt::test]
