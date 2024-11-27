@@ -318,7 +318,7 @@ impl<'doc> DelAddFacetValue<'doc> {
         docid: DocumentId,
         sender: &FieldIdDocidFacetSender,
         doc_alloc: &Bump,
-    ) -> std::result::Result<(), crossbeam_channel::SendError<()>> {
+    ) -> crate::Result<()> {
         let mut buffer = bumpalo::collections::Vec::new_in(doc_alloc);
         for ((fid, value), deladd) in self.strings {
             if let Ok(s) = std::str::from_utf8(&value) {
