@@ -442,11 +442,12 @@ where
                         let LargeVectors { docid, embedder_id, .. } = large_vectors;
                         let (_, _, writer, dimensions) =
                             arroy_writers.get(&embedder_id).expect("requested a missing embedder");
-                        writer.del_items(wtxn, *dimensions, docid)?;
                         let mut embeddings = Embeddings::new(*dimensions);
                         for embedding in large_vectors.read_embeddings() {
                             embeddings.push(embedding.to_vec()).unwrap();
                         }
+                        writer.del_items(wtxn, *dimensions, docid)?;
+                        writer.add_items(wtxn, docid, &embeddings)?;
                     }
                 }
 
@@ -607,13 +608,11 @@ fn write_from_bbqueue(
                 let frame = frame_with_header.frame();
                 let (_, _, writer, dimensions) =
                     arroy_writers.get(&embedder_id).expect("requested a missing embedder");
+                let mut embeddings = Embeddings::new(*dimensions);
+                let all_embeddings = asvs.read_all_embeddings_into_vec(frame, aligned_embedding);
+                embeddings.append(all_embeddings.to_vec()).unwrap();
                 writer.del_items(wtxn, *dimensions, docid)?;
-                for index in 0.. {
-                    match asvs.read_embedding_into_vec(frame, index, aligned_embedding) {
-                        Some(embedding) => writer.add_item(wtxn, docid, embedding)?,
-                        None => break,
-                    }
-                }
+                writer.add_items(wtxn, docid, &embeddings)?;
             }
         }
     }

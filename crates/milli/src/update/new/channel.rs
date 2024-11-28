@@ -293,6 +293,20 @@ impl ArroySetVectors {
         });
         Some(&vec[..])
     }
+
+    /// Read all the embeddings and write them into an aligned `f32` Vec.
+    pub fn read_all_embeddings_into_vec<'v>(
+        &self,
+        frame: &FrameGrantR<'_>,
+        vec: &'v mut Vec<f32>,
+    ) -> &'v [f32] {
+        vec.clear();
+        Self::remaining_bytes(frame).chunks_exact(mem::size_of::<f32>()).for_each(|bytes| {
+            let f = bytes.try_into().map(f32::from_ne_bytes).unwrap();
+            vec.push(f);
+        });
+        &vec[..]
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
