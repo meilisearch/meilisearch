@@ -16,7 +16,6 @@ use rand::SeedableRng as _;
 use raw_collections::RawMap;
 use time::OffsetDateTime;
 pub use update_by_function::UpdateByFunction;
-use {LargeEntry, LargeVector};
 
 use super::channel::*;
 use super::extract::*;
@@ -430,14 +429,6 @@ where
                             }));
                         }
                     }
-                    ReceiverAction::LargeVector(large_vector) => {
-                        let embedding = large_vector.read_embedding();
-                        let LargeVector { docid, embedder_id, .. } = large_vector;
-                        let (_, _, writer, dimensions) =
-                            arroy_writers.get(&embedder_id).expect("requested a missing embedder");
-                        writer.del_items(wtxn, *dimensions, docid)?;
-                        writer.add_item(wtxn, docid, embedding)?;
-                    }
                     ReceiverAction::LargeVectors(large_vectors) => {
                         let LargeVectors { docid, embedder_id, .. } = large_vectors;
                         let (_, _, writer, dimensions) =
@@ -592,16 +583,6 @@ fn write_from_bbqueue(
                 for (_index, (_name, _embedder, writer, dimensions)) in arroy_writers {
                     let dimensions = *dimensions;
                     writer.del_items(wtxn, dimensions, docid)?;
-                }
-            }
-            EntryHeader::ArroySetVector(asv) => {
-                let ArroySetVector { docid, embedder_id, .. } = asv;
-                let frame = frame_with_header.frame();
-                let (_, _, writer, dimensions) =
-                    arroy_writers.get(&embedder_id).expect("requested a missing embedder");
-                writer.del_items(wtxn, *dimensions, docid)?;
-                if let Some(embedding) = asv.read_embedding_into_vec(frame, aligned_embedding) {
-                    writer.add_item(wtxn, docid, embedding)?;
                 }
             }
             EntryHeader::ArroySetVectors(asvs) => {
