@@ -146,15 +146,13 @@ pub struct LargeVectors {
     pub docid: DocumentId,
     /// The embedder id in which to insert the large embedding.
     pub embedder_id: u8,
-    /// The dimensions of the embeddings in this payload.
-    pub dimensions: u16,
     /// The large embedding that must be written.
     pub embeddings: Mmap,
 }
 
 impl LargeVectors {
-    pub fn read_embeddings(&self) -> impl Iterator<Item = &[f32]> {
-        self.embeddings.chunks_exact(self.dimensions as usize).map(bytemuck::cast_slice)
+    pub fn read_embeddings(&self, dimensions: usize) -> impl Iterator<Item = &[f32]> {
+        self.embeddings.chunks_exact(dimensions).map(bytemuck::cast_slice)
     }
 }
 
@@ -241,15 +239,18 @@ impl ArroySetVector {
         &self,
         frame: &FrameGrantR<'_>,
         vec: &'v mut Vec<f32>,
-    ) -> &'v [f32] {
+    ) -> Option<&'v [f32]> {
         vec.clear();
         let skip = EntryHeader::variant_size() + mem::size_of::<Self>();
         let bytes = &frame[skip..];
+        if bytes.is_empty() {
+            return None;
+        }
         bytes.chunks_exact(mem::size_of::<f32>()).for_each(|bytes| {
             let f = bytes.try_into().map(f32::from_ne_bytes).unwrap();
             vec.push(f);
         });
-        &vec[..]
+        Some(&vec[..])
     }
 }
 
@@ -259,39 +260,14 @@ impl ArroySetVector {
 /// non-aligned [f32] each with dimensions f32s.
 pub struct ArroySetVectors {
     pub docid: DocumentId,
-    pub dimensions: u16,
     pub embedder_id: u8,
-    _padding: u8,
+    _padding: [u8; 3],
 }
 
 impl ArroySetVectors {
     fn remaining_bytes<'a>(frame: &'a FrameGrantR<'_>) -> &'a [u8] {
         let skip = EntryHeader::variant_size() + mem::size_of::<Self>();
         &frame[skip..]
-    }
-
-    // /// The number of embeddings in this payload.
-    // pub fn embedding_count(&self, frame: &FrameGrantR<'_>) -> usize {
-    //     let bytes = Self::remaining_bytes(frame);
-    //     bytes.len().checked_div(self.dimensions as usize).unwrap()
-    // }
-
-    /// Read the embedding at `index` or `None` if out of bounds.
-    pub fn read_embedding_into_vec<'v>(
-        &self,
-        frame: &FrameGrantR<'_>,
-        index: usize,
-        vec: &'v mut Vec<f32>,
-    ) -> Option<&'v [f32]> {
-        vec.clear();
-        let bytes = Self::remaining_bytes(frame);
-        let embedding_size = self.dimensions as usize * mem::size_of::<f32>();
-        let embedding_bytes = bytes.chunks_exact(embedding_size).nth(index)?;
-        embedding_bytes.chunks_exact(mem::size_of::<f32>()).for_each(|bytes| {
-            let f = bytes.try_into().map(f32::from_ne_bytes).unwrap();
-            vec.push(f);
-        });
-        Some(&vec[..])
     }
 
     /// Read all the embeddings and write them into an aligned `f32` Vec.
@@ -607,18 +583,14 @@ impl<'b> ExtractorBbqueueSender<'b> {
         let refcell = self.producers.get().unwrap();
         let mut producer = refcell.0.borrow_mut_or_yield();
 
+        // If there are no vector we specify the dimensions
+        // to zero to allocate no extra space at all
         let dimensions = match embeddings.first() {
             Some(embedding) => embedding.len(),
-            None => return Ok(()),
+            None => 0,
         };
 
-        let arroy_set_vector = ArroySetVectors {
-            docid,
-            dimensions: dimensions.try_into().unwrap(),
-            embedder_id,
-            _padding: 0,
-        };
-
+        let arroy_set_vector = ArroySetVectors { docid, embedder_id, _padding: [0; 3] };
         let payload_header = EntryHeader::ArroySetVectors(arroy_set_vector);
         let total_length = EntryHeader::total_set_vectors_size(embeddings.len(), dimensions);
         if total_length > capacity {
@@ -632,13 +604,7 @@ impl<'b> ExtractorBbqueueSender<'b> {
             value_file.sync_all()?;
             let embeddings = unsafe { Mmap::map(&value_file)? };
 
-            let large_vectors = LargeVectors {
-                docid,
-                embedder_id,
-                dimensions: dimensions.try_into().unwrap(),
-                embeddings,
-            };
-
+            let large_vectors = LargeVectors { docid, embedder_id, embeddings };
             self.sender.send(ReceiverAction::LargeVectors(large_vectors)).unwrap();
 
             return Ok(());
@@ -657,9 +623,11 @@ impl<'b> ExtractorBbqueueSender<'b> {
         let (header_bytes, remaining) = grant.split_at_mut(header_size);
         payload_header.serialize_into(header_bytes);
 
-        let output_iter = remaining.chunks_exact_mut(dimensions * mem::size_of::<f32>());
-        for (embedding, output) in embeddings.iter().zip(output_iter) {
-            output.copy_from_slice(bytemuck::cast_slice(embedding));
+        if dimensions != 0 {
+            let output_iter = remaining.chunks_exact_mut(dimensions * mem::size_of::<f32>());
+            for (embedding, output) in embeddings.iter().zip(output_iter) {
+                output.copy_from_slice(bytemuck::cast_slice(embedding));
+            }
         }
 
         // We could commit only the used memory.

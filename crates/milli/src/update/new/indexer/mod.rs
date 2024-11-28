@@ -443,7 +443,7 @@ where
                         let (_, _, writer, dimensions) =
                             arroy_writers.get(&embedder_id).expect("requested a missing embedder");
                         let mut embeddings = Embeddings::new(*dimensions);
-                        for embedding in large_vectors.read_embeddings() {
+                        for embedding in large_vectors.read_embeddings(*dimensions) {
                             embeddings.push(embedding.to_vec()).unwrap();
                         }
                         writer.del_items(wtxn, *dimensions, docid)?;
@@ -597,11 +597,12 @@ fn write_from_bbqueue(
             EntryHeader::ArroySetVector(asv) => {
                 let ArroySetVector { docid, embedder_id, .. } = asv;
                 let frame = frame_with_header.frame();
-                let embedding = asv.read_embedding_into_vec(frame, aligned_embedding);
                 let (_, _, writer, dimensions) =
                     arroy_writers.get(&embedder_id).expect("requested a missing embedder");
                 writer.del_items(wtxn, *dimensions, docid)?;
-                writer.add_item(wtxn, docid, embedding)?;
+                if let Some(embedding) = asv.read_embedding_into_vec(frame, aligned_embedding) {
+                    writer.add_item(wtxn, docid, embedding)?;
+                }
             }
             EntryHeader::ArroySetVectors(asvs) => {
                 let ArroySetVectors { docid, embedder_id, .. } = asvs;
