@@ -81,10 +81,12 @@ where
     let finished_extraction = AtomicBool::new(false);
 
     // We compute and remove the allocated BBQueues buffers capacity from the indexing memory.
+    let minimum_capacity = 50 * 1024 * 1024 * pool.current_num_threads(); // 50 MiB
     let (grenad_parameters, total_bbbuffer_capacity) = grenad_parameters.max_memory.map_or(
-        (grenad_parameters, 100 * 1024 * 1024 * pool.current_num_threads()), // 100 MiB by thread by default
+        (grenad_parameters, 2 * minimum_capacity), // 100 MiB by thread by default
         |max_memory| {
-            let total_bbbuffer_capacity = max_memory / (100 / 2); // 2% of the indexing memory
+            // 2% of the indexing memory
+            let total_bbbuffer_capacity = (max_memory / 100 / 2).min(minimum_capacity);
             let new_grenad_parameters = GrenadParameters {
                 max_memory: Some(max_memory - total_bbbuffer_capacity),
                 ..grenad_parameters
