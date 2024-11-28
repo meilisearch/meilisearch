@@ -84,7 +84,7 @@ where
     let (grenad_parameters, total_bbbuffer_capacity) = grenad_parameters.max_memory.map_or(
         (grenad_parameters, 100 * 1024 * 1024 * pool.current_num_threads()), // 100 MiB by thread by default
         |max_memory| {
-            let total_bbbuffer_capacity = max_memory / 10; // 10% of the indexing memory
+            let total_bbbuffer_capacity = max_memory / (100 / 2); // 2% of the indexing memory
             let new_grenad_parameters = GrenadParameters {
                 max_memory: Some(max_memory - total_bbbuffer_capacity),
                 ..grenad_parameters
