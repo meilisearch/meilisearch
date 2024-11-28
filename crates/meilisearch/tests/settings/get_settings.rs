@@ -1,6 +1,186 @@
 use crate::common::Server;
 use crate::json;
 
+macro_rules! test_setting_routes {
+    ($({setting: $setting:ident, update_verb: $update_verb:ident, default_value: $default_value:tt},) *) => {
+        $(
+            mod $setting {
+                use crate::common::Server;
+
+                #[actix_rt::test]
+                async fn get_unexisting_index() {
+                    let server = Server::new().await;
+                    let url = format!("/indexes/test/settings/{}",
+                        stringify!($setting)
+                        .chars()
+                        .map(|c| if c == '_' { '-' } else { c })
+                        .collect::<String>());
+                    let (_response, code) = server.service.get(url).await;
+                    assert_eq!(code, 404);
+                }
+
+                #[actix_rt::test]
+                async fn update_unexisting_index() {
+                    let server = Server::new().await;
+                    let url = format!("/indexes/test/settings/{}",
+                        stringify!($setting)
+                        .chars()
+                        .map(|c| if c == '_' { '-' } else { c })
+                        .collect::<String>());
+                    let (response, code) = server.service.$update_verb(url, serde_json::Value::Null.into()).await;
+                    assert_eq!(code, 202, "{}", response);
+                    server.index("").wait_task(0).await;
+                    let (response, code) = server.index("test").get().await;
+                    assert_eq!(code, 200, "{}", response);
+                }
+
+                #[actix_rt::test]
+                async fn delete_unexisting_index() {
+                    let server = Server::new().await;
+                    let url = format!("/indexes/test/settings/{}",
+                        stringify!($setting)
+                        .chars()
+                        .map(|c| if c == '_' { '-' } else { c })
+                        .collect::<String>());
+                    let (_, code) = server.service.delete(url).await;
+                    assert_eq!(code, 202);
+                    let response = server.index("").wait_task(0).await;
+                    assert_eq!(response["status"], "failed");
+                }
+
+                #[actix_rt::test]
+                async fn get_default() {
+                    let server = Server::new().await;
+                    let index = server.index("test");
+                    let (response, code) = index.create(None).await;
+                    assert_eq!(code, 202, "{}", response);
+                    index.wait_task(0).await;
+                    let url = format!("/indexes/test/settings/{}",
+                        stringify!($setting)
+                        .chars()
+                        .map(|c| if c == '_' { '-' } else { c })
+                        .collect::<String>());
+                    let (response, code) = server.service.get(url).await;
+                    assert_eq!(code, 200, "{}", response);
+                    let expected = crate::json!($default_value);
+                    assert_eq!(expected, response);
+                }
+            }
+        )*
+
+        #[actix_rt::test]
+        async fn all_setting_tested() {
+            let expected = std::collections::BTreeSet::from_iter(meilisearch::routes::indexes::settings::ALL_SETTINGS_NAMES.iter());
+            let tested = std::collections::BTreeSet::from_iter([$(stringify!($setting)),*].iter());
+            let diff: Vec<_> = expected.difference(&tested).collect();
+            assert!(diff.is_empty(), "Not all settings were tested, please add the following settings to the `test_setting_routes!` macro: {:?}", diff);
+        }
+    };
+}
+
+test_setting_routes!(
+    {
+        setting: filterable_attributes,
+        update_verb: put,
+        default_value: []
+    },
+    {
+        setting: displayed_attributes,
+        update_verb: put,
+        default_value: ["*"]
+    },
+    {
+        setting: localized_attributes,
+        update_verb: put,
+        default_value: null
+    },
+    {
+        setting: searchable_attributes,
+        update_verb: put,
+        default_value: ["*"]
+    },
+    {
+        setting: distinct_attribute,
+        update_verb: put,
+        default_value: null
+    },
+    {
+        setting: stop_words,
+        update_verb: put,
+        default_value: []
+    },
+    {
+        setting: separator_tokens,
+        update_verb: put,
+        default_value: []
+    },
+    {
+        setting: non_separator_tokens,
+        update_verb: put,
+        default_value: []
+    },
+    {
+        setting: dictionary,
+        update_verb: put,
+        default_value: []
+    },
+    {
+        setting: ranking_rules,
+        update_verb: put,
+        default_value: ["words", "typo", "proximity", "attribute", "sort", "exactness"]
+    },
+    {
+        setting: synonyms,
+        update_verb: put,
+        default_value: {}
+    },
+    {
+        setting: pagination,
+        update_verb: patch,
+        default_value: {"maxTotalHits": 1000}
+    },
+    {
+        setting: faceting,
+        update_verb: patch,
+        default_value: {"maxValuesPerFacet": 100, "sortFacetValuesBy": {"*": "alpha"}}
+    },
+    {
+        setting: search_cutoff_ms,
+        update_verb: put,
+        default_value: null
+    },
+    {
+        setting: embedders,
+        update_verb: patch,
+        default_value: null
+    },
+    {
+        setting: facet_search,
+        update_verb: put,
+        default_value: true
+    },
+    {
+        setting: prefix_search,
+        update_verb: put,
+        default_value: "indexingTime"
+    },
+    {
+        setting: proximity_precision,
+        update_verb: put,
+        default_value: "byWord"
+    },
+    {
+        setting: sortable_attributes,
+        update_verb: put,
+        default_value: []
+    },
+    {
+        setting: typo_tolerance,
+        update_verb: patch,
+        default_value: {"enabled": true, "minWordSizeForTypos": {"oneTypo": 5, "twoTypos": 9}, "disableOnWords": [], "disableOnAttributes": []}
+    },
+);
+
 #[actix_rt::test]
 async fn get_settings_unexisting_index() {
     let server = Server::new().await;
@@ -302,186 +482,6 @@ async fn error_update_setting_unexisting_index_invalid_uid() {
     }
     "###);
 }
-
-macro_rules! test_setting_routes {
-    ($({setting: $setting:ident, update_verb: $update_verb:ident, default_value: $default_value:tt},) *) => {
-        $(
-            mod $setting {
-                use crate::common::Server;
-
-                #[actix_rt::test]
-                async fn get_unexisting_index() {
-                    let server = Server::new().await;
-                    let url = format!("/indexes/test/settings/{}",
-                        stringify!($setting)
-                        .chars()
-                        .map(|c| if c == '_' { '-' } else { c })
-                        .collect::<String>());
-                    let (_response, code) = server.service.get(url).await;
-                    assert_eq!(code, 404);
-                }
-
-                #[actix_rt::test]
-                async fn update_unexisting_index() {
-                    let server = Server::new().await;
-                    let url = format!("/indexes/test/settings/{}",
-                        stringify!($setting)
-                        .chars()
-                        .map(|c| if c == '_' { '-' } else { c })
-                        .collect::<String>());
-                    let (response, code) = server.service.$update_verb(url, serde_json::Value::Null.into()).await;
-                    assert_eq!(code, 202, "{}", response);
-                    server.index("").wait_task(0).await;
-                    let (response, code) = server.index("test").get().await;
-                    assert_eq!(code, 200, "{}", response);
-                }
-
-                #[actix_rt::test]
-                async fn delete_unexisting_index() {
-                    let server = Server::new().await;
-                    let url = format!("/indexes/test/settings/{}",
-                        stringify!($setting)
-                        .chars()
-                        .map(|c| if c == '_' { '-' } else { c })
-                        .collect::<String>());
-                    let (_, code) = server.service.delete(url).await;
-                    assert_eq!(code, 202);
-                    let response = server.index("").wait_task(0).await;
-                    assert_eq!(response["status"], "failed");
-                }
-
-                #[actix_rt::test]
-                async fn get_default() {
-                    let server = Server::new().await;
-                    let index = server.index("test");
-                    let (response, code) = index.create(None).await;
-                    assert_eq!(code, 202, "{}", response);
-                    index.wait_task(0).await;
-                    let url = format!("/indexes/test/settings/{}",
-                        stringify!($setting)
-                        .chars()
-                        .map(|c| if c == '_' { '-' } else { c })
-                        .collect::<String>());
-                    let (response, code) = server.service.get(url).await;
-                    assert_eq!(code, 200, "{}", response);
-                    let expected = crate::json!($default_value);
-                    assert_eq!(expected, response);
-                }
-            }
-        )*
-
-        #[actix_rt::test]
-        async fn all_setting_tested() {
-            let expected = std::collections::BTreeSet::from_iter(meilisearch::routes::indexes::settings::ALL_SETTINGS_NAMES.iter());
-            let tested = std::collections::BTreeSet::from_iter([$(stringify!($setting)),*].iter());
-            let diff: Vec<_> = expected.difference(&tested).collect();
-            assert!(diff.is_empty(), "Not all settings were tested, please add the following settings to the `test_setting_routes!` macro: {:?}", diff);
-        }
-    };
-}
-
-test_setting_routes!(
-    {
-        setting: filterable_attributes,
-        update_verb: put,
-        default_value: []
-    },
-    {
-        setting: displayed_attributes,
-        update_verb: put,
-        default_value: ["*"]
-    },
-    {
-        setting: localized_attributes,
-        update_verb: put,
-        default_value: null
-    },
-    {
-        setting: searchable_attributes,
-        update_verb: put,
-        default_value: ["*"]
-    },
-    {
-        setting: distinct_attribute,
-        update_verb: put,
-        default_value: null
-    },
-    {
-        setting: stop_words,
-        update_verb: put,
-        default_value: []
-    },
-    {
-        setting: separator_tokens,
-        update_verb: put,
-        default_value: []
-    },
-    {
-        setting: non_separator_tokens,
-        update_verb: put,
-        default_value: []
-    },
-    {
-        setting: dictionary,
-        update_verb: put,
-        default_value: []
-    },
-    {
-        setting: ranking_rules,
-        update_verb: put,
-        default_value: ["words", "typo", "proximity", "attribute", "sort", "exactness"]
-    },
-    {
-        setting: synonyms,
-        update_verb: put,
-        default_value: {}
-    },
-    {
-        setting: pagination,
-        update_verb: patch,
-        default_value: {"maxTotalHits": 1000}
-    },
-    {
-        setting: faceting,
-        update_verb: patch,
-        default_value: {"maxValuesPerFacet": 100, "sortFacetValuesBy": {"*": "alpha"}}
-    },
-    {
-        setting: search_cutoff_ms,
-        update_verb: put,
-        default_value: null
-    },
-    {
-        setting: embedders,
-        update_verb: patch,
-        default_value: null
-    },
-    {
-        setting: facet_search,
-        update_verb: put,
-        default_value: true
-    },
-    {
-        setting: prefix_search,
-        update_verb: put,
-        default_value: "indexingTime"
-    },
-    {
-        setting: proximity_precision,
-        update_verb: put,
-        default_value: "byWord"
-    },
-    {
-        setting: sortable_attributes,
-        update_verb: put,
-        default_value: []
-    },
-    {
-        setting: typo_tolerance,
-        update_verb: patch,
-        default_value: {"enabled": true, "minWordSizeForTypos": {"oneTypo": 5, "twoTypos": 9}, "disableOnWords": [], "disableOnAttributes": []}
-    },
-);
 
 #[actix_rt::test]
 async fn error_set_invalid_ranking_rules() {
