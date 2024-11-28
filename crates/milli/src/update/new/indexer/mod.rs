@@ -79,15 +79,22 @@ where
 {
     let mut bbbuffers = Vec::new();
     let finished_extraction = AtomicBool::new(false);
+
+    // We compute and remove the allocated BBQueues buffers capacity from the indexing memory.
+    let (grenad_parameters, total_bbbuffer_capacity) = grenad_parameters.max_memory.map_or(
+        (grenad_parameters, 100 * 1024 * 1024 * pool.current_num_threads()), // 100 MiB by thread by default
+        |max_memory| {
+            let total_bbbuffer_capacity = max_memory / 10; // 10% of the indexing memory
+            let new_grenad_parameters = GrenadParameters {
+                max_memory: Some(max_memory - total_bbbuffer_capacity),
+                ..grenad_parameters
+            };
+            (new_grenad_parameters, total_bbbuffer_capacity)
+        },
+    );
+
     let (extractor_sender, mut writer_receiver) = pool
-        .install(|| {
-            /// TODO restrict memory and remove this memory from the extractors bump allocators
-            extractor_writer_bbqueue(
-                &mut bbbuffers,
-                100 * 1024 * 1024, // 100 MiB
-                1000,
-            )
-        })
+        .install(|| extractor_writer_bbqueue(&mut bbbuffers, total_bbbuffer_capacity, 1000))
         .unwrap();
 
     let metadata_builder = MetadataBuilder::from_index(index, wtxn)?;

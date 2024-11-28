@@ -27,8 +27,9 @@ use crate::{CboRoaringBitmapCodec, DocumentId, Index};
 /// Creates a tuple of senders/receiver to be used by
 /// the extractors and the writer loop.
 ///
-/// The `bbqueue_capacity` represent the number of bytes allocated
-/// to each BBQueue buffer and is not the sum of all of them.
+/// The `total_bbbuffer_capacity` represent the number of bytes
+/// allocated to all BBQueue buffer. It will be split by the
+/// number of thread.
 ///
 /// The `channel_capacity` parameter defines the number of
 /// too-large-to-fit-in-BBQueue entries that can be sent through
@@ -46,10 +47,12 @@ use crate::{CboRoaringBitmapCodec, DocumentId, Index};
 /// to the number of available threads in the rayon threadpool.
 pub fn extractor_writer_bbqueue(
     bbbuffers: &mut Vec<BBBuffer>,
-    bbbuffer_capacity: usize,
+    total_bbbuffer_capacity: usize,
     channel_capacity: usize,
 ) -> (ExtractorBbqueueSender, WriterBbqueueReceiver) {
-    bbbuffers.resize_with(rayon::current_num_threads(), || BBBuffer::new(bbbuffer_capacity));
+    let current_num_threads = rayon::current_num_threads();
+    let bbbuffer_capacity = total_bbbuffer_capacity.checked_div(current_num_threads).unwrap();
+    bbbuffers.resize_with(current_num_threads, || BBBuffer::new(bbbuffer_capacity));
 
     let capacity = bbbuffers.first().unwrap().capacity();
     // Read the field description to understand this
