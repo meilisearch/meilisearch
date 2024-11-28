@@ -1,61 +1,5 @@
-use std::collections::HashMap;
-
-use once_cell::sync::Lazy;
-
-use crate::common::{Server, Value};
+use crate::common::Server;
 use crate::json;
-
-static DEFAULT_SETTINGS_VALUES: Lazy<HashMap<&'static str, Value>> = Lazy::new(|| {
-    let mut map = HashMap::new();
-    map.insert("displayed_attributes", json!(["*"]));
-    map.insert("searchable_attributes", json!(["*"]));
-    map.insert("localized_attributes", json!(null));
-    map.insert("filterable_attributes", json!([]));
-    map.insert("distinct_attribute", json!(null));
-    map.insert(
-        "ranking_rules",
-        json!(["words", "typo", "proximity", "attribute", "sort", "exactness"]),
-    );
-    map.insert("stop_words", json!([]));
-    map.insert("non_separator_tokens", json!([]));
-    map.insert("separator_tokens", json!([]));
-    map.insert("dictionary", json!([]));
-    map.insert("synonyms", json!({}));
-    map.insert(
-        "faceting",
-        json!({
-            "maxValuesPerFacet": json!(100),
-            "sortFacetValuesBy": {
-                "*": "alpha"
-            }
-        }),
-    );
-    map.insert(
-        "pagination",
-        json!({
-            "maxTotalHits": json!(1000),
-        }),
-    );
-    map.insert("search_cutoff_ms", json!(null));
-    map.insert("embedders", json!(null));
-    map.insert("facet_search", json!(true));
-    map.insert("prefix_search", json!("indexingTime"));
-    map.insert("proximity_precision", json!("byWord"));
-    map.insert("sortable_attributes", json!([]));
-    map.insert(
-        "typo_tolerance",
-        json!({
-            "enabled": true,
-            "minWordSizeForTypos": {
-                "oneTypo": 5,
-                "twoTypos": 9
-            },
-            "disableOnWords": [],
-            "disableOnAttributes": []
-        }),
-    );
-    map
-});
 
 #[actix_rt::test]
 async fn get_settings_unexisting_index() {
@@ -360,11 +304,10 @@ async fn error_update_setting_unexisting_index_invalid_uid() {
 }
 
 macro_rules! test_setting_routes {
-    ($($setting:ident $write_method:ident,) *) => {
+    ($({setting: $setting:ident, update_verb: $update_verb:ident, default_value: $default_value:tt},) *) => {
         $(
             mod $setting {
                 use crate::common::Server;
-                use super::DEFAULT_SETTINGS_VALUES;
 
                 #[actix_rt::test]
                 async fn get_unexisting_index() {
@@ -386,7 +329,7 @@ macro_rules! test_setting_routes {
                         .chars()
                         .map(|c| if c == '_' { '-' } else { c })
                         .collect::<String>());
-                    let (response, code) = server.service.$write_method(url, serde_json::Value::Null.into()).await;
+                    let (response, code) = server.service.$update_verb(url, serde_json::Value::Null.into()).await;
                     assert_eq!(code, 202, "{}", response);
                     server.index("").wait_task(0).await;
                     let (response, code) = server.index("test").get().await;
@@ -421,8 +364,8 @@ macro_rules! test_setting_routes {
                         .collect::<String>());
                     let (response, code) = server.service.get(url).await;
                     assert_eq!(code, 200, "{}", response);
-                    let expected = DEFAULT_SETTINGS_VALUES.get(stringify!($setting)).unwrap();
-                    assert_eq!(expected, &response);
+                    let expected = crate::json!($default_value);
+                    assert_eq!(expected, response);
                 }
             }
         )*
@@ -438,26 +381,106 @@ macro_rules! test_setting_routes {
 }
 
 test_setting_routes!(
-    filterable_attributes put,
-    displayed_attributes put,
-    localized_attributes put,
-    searchable_attributes put,
-    distinct_attribute put,
-    stop_words put,
-    separator_tokens put,
-    non_separator_tokens put,
-    dictionary put,
-    ranking_rules put,
-    synonyms put,
-    pagination patch,
-    faceting patch,
-    search_cutoff_ms put,
-    embedders patch,
-    facet_search put,
-    prefix_search put,
-    proximity_precision put,
-    sortable_attributes put,
-    typo_tolerance patch,
+    {
+        setting: filterable_attributes,
+        update_verb: put,
+        default_value: []
+    },
+    {
+        setting: displayed_attributes,
+        update_verb: put,
+        default_value: ["*"]
+    },
+    {
+        setting: localized_attributes,
+        update_verb: put,
+        default_value: null
+    },
+    {
+        setting: searchable_attributes,
+        update_verb: put,
+        default_value: ["*"]
+    },
+    {
+        setting: distinct_attribute,
+        update_verb: put,
+        default_value: null
+    },
+    {
+        setting: stop_words,
+        update_verb: put,
+        default_value: []
+    },
+    {
+        setting: separator_tokens,
+        update_verb: put,
+        default_value: []
+    },
+    {
+        setting: non_separator_tokens,
+        update_verb: put,
+        default_value: []
+    },
+    {
+        setting: dictionary,
+        update_verb: put,
+        default_value: []
+    },
+    {
+        setting: ranking_rules,
+        update_verb: put,
+        default_value: ["words", "typo", "proximity", "attribute", "sort", "exactness"]
+    },
+    {
+        setting: synonyms,
+        update_verb: put,
+        default_value: {}
+    },
+    {
+        setting: pagination,
+        update_verb: patch,
+        default_value: {"maxTotalHits": 1000}
+    },
+    {
+        setting: faceting,
+        update_verb: patch,
+        default_value: {"maxValuesPerFacet": 100, "sortFacetValuesBy": {"*": "alpha"}}
+    },
+    {
+        setting: search_cutoff_ms,
+        update_verb: put,
+        default_value: null
+    },
+    {
+        setting: embedders,
+        update_verb: patch,
+        default_value: null
+    },
+    {
+        setting: facet_search,
+        update_verb: put,
+        default_value: true
+    },
+    {
+        setting: prefix_search,
+        update_verb: put,
+        default_value: "indexingTime"
+    },
+    {
+        setting: proximity_precision,
+        update_verb: put,
+        default_value: "byWord"
+    },
+    {
+        setting: sortable_attributes,
+        update_verb: put,
+        default_value: []
+    },
+    {
+        setting: typo_tolerance,
+        update_verb: patch,
+        default_value: {"enabled": true, "minWordSizeForTypos": {"oneTypo": 5, "twoTypos": 9}, "disableOnWords": [], "disableOnAttributes": []}
+    },
 );
 
 #[actix_rt::test]
