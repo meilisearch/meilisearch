@@ -37,6 +37,23 @@ static DEFAULT_SETTINGS_VALUES: Lazy<HashMap<&'static str, Value>> = Lazy::new(|
         }),
     );
     map.insert("search_cutoff_ms", json!(null));
+    map.insert("embedders", json!(null));
+    map.insert("facet_search", json!(true));
+    map.insert("prefix_search", json!("indexingTime"));
+    map.insert("proximity_precision", json!("byWord"));
+    map.insert("sortable_attributes", json!([]));
+    map.insert(
+        "typo_tolerance",
+        json!({
+            "enabled": true,
+            "minWordSizeForTypos": {
+                "oneTypo": 5,
+                "twoTypos": 9
+            },
+            "disableOnWords": [],
+            "disableOnAttributes": []
+        }),
+    );
     map
 });
 
@@ -343,7 +360,7 @@ async fn error_update_setting_unexisting_index_invalid_uid() {
 }
 
 macro_rules! test_setting_routes {
-    ($($setting:ident $write_method:ident), *) => {
+    ($($setting:ident $write_method:ident,) *) => {
         $(
             mod $setting {
                 use crate::common::Server;
@@ -409,6 +426,14 @@ macro_rules! test_setting_routes {
                 }
             }
         )*
+
+        #[actix_rt::test]
+        async fn all_setting_tested() {
+            let expected = std::collections::BTreeSet::from_iter(meilisearch::routes::indexes::settings::ALL_SETTINGS_NAMES.iter());
+            let tested = std::collections::BTreeSet::from_iter([$(stringify!($setting)),*].iter());
+            let diff: Vec<_> = expected.difference(&tested).collect();
+            assert!(diff.is_empty(), "Not all settings were tested, please add the following settings to the `test_setting_routes!` macro: {:?}", diff);
+        }
     };
 }
 
@@ -426,7 +451,13 @@ test_setting_routes!(
     synonyms put,
     pagination patch,
     faceting patch,
-    search_cutoff_ms put
+    search_cutoff_ms put,
+    embedders patch,
+    facet_search put,
+    prefix_search put,
+    proximity_precision put,
+    sortable_attributes put,
+    typo_tolerance patch,
 );
 
 #[actix_rt::test]
