@@ -224,7 +224,7 @@ async fn list_batches_status_and_type_filtered() {
 }
 
 #[actix_rt::test]
-async fn get_batch_filter_error() {
+async fn list_batch_filter_error() {
     let server = Server::new().await;
 
     let (response, code) = server.batches_filter("lol=pied").await;

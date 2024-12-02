@@ -1738,17 +1738,18 @@ impl IndexScheduler {
             }
         }
 
-        self.processing_tasks.write().unwrap().stop_processing();
         // We must re-add the canceled task so they're part of the same batch.
-        // processed.processing |= canceled;
         ids |= canceled;
-
         self.write_batch(&mut wtxn, processing_batch, &ids)?;
 
         #[cfg(test)]
         self.maybe_fail(tests::FailureLocation::CommittingWtxn)?;
 
         wtxn.commit().map_err(Error::HeedTransaction)?;
+
+        // We should stop processing AFTER everything is processed and written to disk otherwise, a batch (which only lives in RAM) may appear in the processing task
+        // and then become « not found » for some time until the commit everything is written and the final commit is made.
+        self.processing_tasks.write().unwrap().stop_processing();
 
         // Once the tasks are committed, we should delete all the update files associated ASAP to avoid leaking files in case of a restart
         tracing::debug!("Deleting the update files");
