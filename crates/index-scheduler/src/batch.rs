@@ -441,67 +441,6 @@ impl IndexScheduler {
                     must_create_index,
                 }))
             }
-            BatchKind::SettingsAndDocumentOperation {
-                settings_ids,
-                method,
-                allow_index_creation,
-                primary_key,
-                operation_ids,
-            } => {
-                let settings = self.create_next_batch_index(
-                    rtxn,
-                    index_uid.clone(),
-                    BatchKind::Settings { settings_ids, allow_index_creation },
-                    current_batch,
-                    must_create_index,
-                )?;
-
-                let document_import = self.create_next_batch_index(
-                    rtxn,
-                    index_uid.clone(),
-                    BatchKind::DocumentOperation {
-                        method,
-                        allow_index_creation,
-                        primary_key,
-                        operation_ids,
-                    },
-                    current_batch,
-                    must_create_index,
-                )?;
-
-                match (document_import, settings) {
-                    (
-                        Some(Batch::IndexOperation {
-                            op:
-                                IndexOperation::DocumentOperation {
-                                    primary_key,
-                                    documents_counts,
-                                    operations,
-                                    tasks: document_import_tasks,
-                                    ..
-                                },
-                            ..
-                        }),
-                        Some(Batch::IndexOperation {
-                            op: IndexOperation::Settings { settings, tasks: settings_tasks, .. },
-                            ..
-                        }),
-                    ) => Ok(Some(Batch::IndexOperation {
-                        op: IndexOperation::SettingsAndDocumentOperation {
-                            index_uid,
-                            primary_key,
-                            method,
-                            documents_counts,
-                            operations,
-                            document_import_tasks,
-                            settings,
-                            settings_tasks,
-                        },
-                        must_create_index,
-                    })),
-                    _ => unreachable!(),
-                }
-            }
             BatchKind::IndexCreation { id } => {
                 let mut task = self.get_task(rtxn, id)?.ok_or(Error::CorruptedTaskQueue)?;
                 current_batch.processing(Some(&mut task));

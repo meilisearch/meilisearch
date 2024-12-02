@@ -115,13 +115,6 @@ pub enum BatchKind {
         allow_index_creation: bool,
         settings_ids: Vec<TaskId>,
     },
-    SettingsAndDocumentOperation {
-        settings_ids: Vec<TaskId>,
-        method: IndexDocumentsMethod,
-        allow_index_creation: bool,
-        primary_key: Option<String>,
-        operation_ids: Vec<TaskId>,
-    },
     Settings {
         allow_index_creation: bool,
         settings_ids: Vec<TaskId>,
@@ -146,7 +139,6 @@ impl BatchKind {
         match self {
             BatchKind::DocumentOperation { allow_index_creation, .. }
             | BatchKind::ClearAndSettings { allow_index_creation, .. }
-            | BatchKind::SettingsAndDocumentOperation { allow_index_creation, .. }
             | BatchKind::Settings { allow_index_creation, .. } => Some(*allow_index_creation),
             _ => None,
         }
@@ -154,10 +146,7 @@ impl BatchKind {
 
     fn primary_key(&self) -> Option<Option<&str>> {
         match self {
-            BatchKind::DocumentOperation { primary_key, .. }
-            | BatchKind::SettingsAndDocumentOperation { primary_key, .. } => {
-                Some(primary_key.as_deref())
-            }
+            BatchKind::DocumentOperation { primary_key, .. } => Some(primary_key.as_deref()),
             _ => None,
         }
     }
@@ -275,8 +264,7 @@ impl BatchKind {
                 Break(BatchKind::IndexDeletion { ids })
             }
             (
-                BatchKind::ClearAndSettings { settings_ids: mut ids, allow_index_creation: _, mut other }
-                | BatchKind::SettingsAndDocumentOperation { operation_ids: mut ids, method: _, allow_index_creation: _, primary_key: _, settings_ids: mut other },
+                BatchKind::ClearAndSettings { settings_ids: mut ids, allow_index_creation: _, mut other },
                 K::IndexDeletion,
             ) => {
                 ids.push(id);
@@ -356,15 +344,9 @@ impl BatchKind {
             ) => Break(this),
 
             (
-                BatchKind::DocumentOperation { method, allow_index_creation, primary_key, operation_ids },
+                this @ BatchKind::DocumentOperation { .. },
                 K::Settings { .. },
-            ) => Continue(BatchKind::SettingsAndDocumentOperation {
-                settings_ids: vec![id],
-                method,
-                allow_index_creation,
-                primary_key,
-                operation_ids,
-            }),
+            ) => Break(this),
 
             (BatchKind::DocumentDeletion { mut deletion_ids, includes_by_filter: _ }, K::DocumentClear) => {
                 deletion_ids.push(id);
@@ -477,63 +459,7 @@ impl BatchKind {
                     allow_index_creation,
                 })
             }
-            (
-                BatchKind::SettingsAndDocumentOperation { settings_ids, method: _, mut operation_ids, allow_index_creation, primary_key: _ },
-                K::DocumentClear,
-            ) => {
-                operation_ids.push(id);
-                Continue(BatchKind::ClearAndSettings {
-                    settings_ids,
-                    other: operation_ids,
-                    allow_index_creation,
-                })
-            }
 
-            (
-                BatchKind::SettingsAndDocumentOperation { settings_ids, method: ReplaceDocuments, mut operation_ids, allow_index_creation, primary_key: _},
-                K::DocumentImport { method: ReplaceDocuments, primary_key: pk2, .. },
-            ) => {
-                operation_ids.push(id);
-                Continue(BatchKind::SettingsAndDocumentOperation {
-                    settings_ids,
-                    method: ReplaceDocuments,
-                    allow_index_creation,
-                        primary_key: pk2,
-                    operation_ids,
-                })
-            }
-            (
-                BatchKind::SettingsAndDocumentOperation { settings_ids, method: UpdateDocuments, allow_index_creation, primary_key: _, mut operation_ids },
-                K::DocumentImport { method: UpdateDocuments, primary_key: pk2, .. },
-            ) => {
-                operation_ids.push(id);
-                Continue(BatchKind::SettingsAndDocumentOperation {
-                    settings_ids,
-                    method: UpdateDocuments,
-                    allow_index_creation,
-                    primary_key: pk2,
-                    operation_ids,
-                })
-            }
-            // But we can't batch a settings and a doc op with another doc op
-            // this MUST be AFTER the two previous branch
-            (
-                this @ BatchKind::SettingsAndDocumentOperation { .. },
-                K::DocumentDeletion { .. } | K::DocumentImport { .. },
-            ) => Break(this),
-            (
-                BatchKind::SettingsAndDocumentOperation { mut settings_ids, method, allow_index_creation,primary_key, operation_ids },
-                K::Settings { .. },
-            ) => {
-                settings_ids.push(id);
-                Continue(BatchKind::SettingsAndDocumentOperation {
-                    settings_ids,
-                    method,
-                    allow_index_creation,
-                    primary_key,
-                    operation_ids,
-                })
-            }
             (
                 BatchKind::IndexCreation { .. }
                 | BatchKind::IndexDeletion { .. }
