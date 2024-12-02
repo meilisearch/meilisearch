@@ -1,6 +1,7 @@
 #![cfg_attr(all(test, fuzzing), feature(no_coverage))]
 #![allow(clippy::type_complexity)]
 
+#[cfg(not(windows))]
 #[cfg(test)]
 #[global_allocator]
 pub static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;

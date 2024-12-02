@@ -16,6 +16,7 @@ use rand::seq::SliceRandom;
 use rand_chacha::rand_core::SeedableRng;
 use roaring::RoaringBitmap;
 
+#[cfg(not(windows))]
 #[global_allocator]
 static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
