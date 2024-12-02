@@ -10,7 +10,7 @@ use bbqueue::BBBuffer;
 use bytemuck::{checked, CheckedBitPattern, NoUninit};
 use flume::{RecvTimeoutError, SendError};
 use heed::types::Bytes;
-use heed::BytesDecode;
+use heed::{BytesDecode, MdbError};
 use memmap2::{Mmap, MmapMut};
 use roaring::RoaringBitmap;
 
@@ -23,7 +23,7 @@ use crate::index::db_name;
 use crate::index::main_key::{GEO_FACETED_DOCUMENTS_IDS_KEY, GEO_RTREE_KEY};
 use crate::update::new::KvReaderFieldId;
 use crate::vector::Embedding;
-use crate::{CboRoaringBitmapCodec, DocumentId, Index};
+use crate::{CboRoaringBitmapCodec, DocumentId, Index, InternalError};
 
 /// Creates a tuple of senders/receiver to be used by
 /// the extractors and the writer loop.
@@ -524,7 +524,14 @@ impl<'b> ExtractorBbqueueSender<'b> {
     }
 
     fn write_key_value(&self, database: Database, key: &[u8], value: &[u8]) -> crate::Result<()> {
-        let key_length = NonZeroU16::new(key.len().try_into().unwrap()).unwrap();
+        let key_length = key.len().try_into().ok().and_then(NonZeroU16::new).ok_or_else(|| {
+            InternalError::StorePut {
+                database_name: database.database_name(),
+                key: key.into(),
+                value_length: value.len(),
+                error: MdbError::BadValSize.into(),
+            }
+        })?;
         self.write_key_value_with(database, key_length, value.len(), |key_buffer, value_buffer| {
             key_buffer.copy_from_slice(key);
             value_buffer.copy_from_slice(value);
@@ -587,7 +594,13 @@ impl<'b> ExtractorBbqueueSender<'b> {
     }
 
     fn delete_entry(&self, database: Database, key: &[u8]) -> crate::Result<()> {
-        let key_length = NonZeroU16::new(key.len().try_into().unwrap()).unwrap();
+        let key_length = key.len().try_into().ok().and_then(NonZeroU16::new).ok_or_else(|| {
+            InternalError::StoreDeletion {
+                database_name: database.database_name(),
+                key: key.into(),
+                error: MdbError::BadValSize.into(),
+            }
+        })?;
         self.delete_entry_with(database, key_length, |buffer| {
             buffer.copy_from_slice(key);
             Ok(())
@@ -702,8 +715,15 @@ pub struct WordDocidsSender<'a, 'b, D> {
 
 impl<D: DatabaseType> WordDocidsSender<'_, '_, D> {
     pub fn write(&self, key: &[u8], bitmap: &RoaringBitmap) -> crate::Result<()> {
-        let key_length = NonZeroU16::new(key.len().try_into().unwrap()).unwrap();
         let value_length = CboRoaringBitmapCodec::serialized_size(bitmap);
+        let key_length = key.len().try_into().ok().and_then(NonZeroU16::new).ok_or_else(|| {
+            InternalError::StorePut {
+                database_name: D::DATABASE.database_name(),
+                key: key.into(),
+                value_length,
+                error: MdbError::BadValSize.into(),
+            }
+        })?;
         self.sender.write_key_value_with(
             D::DATABASE,
             key_length,
@@ -731,7 +751,6 @@ impl FacetDocidsSender<'_, '_> {
         let (facet_kind, key) = FacetKind::extract_from_key(key);
         let database = Database::from(facet_kind);
 
-        let key_length = NonZeroU16::new(key.len().try_into().unwrap()).unwrap();
         let value_length = CboRoaringBitmapCodec::serialized_size(bitmap);
         let value_length = match facet_kind {
             // We must take the facet group size into account
@@ -739,6 +758,14 @@ impl FacetDocidsSender<'_, '_> {
             FacetKind::Number | FacetKind::String => value_length + 1,
             FacetKind::Null | FacetKind::Empty | FacetKind::Exists => value_length,
         };
+        let key_length = key.len().try_into().ok().and_then(NonZeroU16::new).ok_or_else(|| {
+            InternalError::StorePut {
+                database_name: database.database_name(),
+                key: key.into(),
+                value_length,
+                error: MdbError::BadValSize.into(),
+            }
+        })?;
 
         self.sender.write_key_value_with(
             database,
@@ -862,12 +889,20 @@ impl GeoSender<'_, '_> {
     }
 
     pub fn set_geo_faceted(&self, bitmap: &RoaringBitmap) -> crate::Result<()> {
-        let key = GEO_FACETED_DOCUMENTS_IDS_KEY.as_bytes();
-        let key_length = NonZeroU16::new(key.len().try_into().unwrap()).unwrap();
+        let database = Database::Main;
         let value_length = bitmap.serialized_size();
+        let key = GEO_FACETED_DOCUMENTS_IDS_KEY.as_bytes();
+        let key_length = key.len().try_into().ok().and_then(NonZeroU16::new).ok_or_else(|| {
+            InternalError::StorePut {
+                database_name: database.database_name(),
+                key: key.into(),
+                value_length,
+                error: MdbError::BadValSize.into(),
+            }
+        })?;
 
         self.0.write_key_value_with(
-            Database::Main,
+            database,
             key_length,
             value_length,
             |key_buffer, value_buffer| {

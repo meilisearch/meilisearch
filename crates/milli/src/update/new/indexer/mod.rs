@@ -432,7 +432,7 @@ where
                         if let Err(error) = database.put(wtxn, &key, &value) {
                             return Err(Error::InternalError(InternalError::StorePut {
                                 database_name,
-                                key,
+                                key: bstr::BString::from(&key[..]),
                                 value_length: value.len(),
                                 error,
                             }));
