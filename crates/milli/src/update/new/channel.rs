@@ -215,7 +215,7 @@ pub struct ArroySetVectors {
 }
 
 impl ArroySetVectors {
-    fn remaining_bytes<'a>(frame: &'a FrameGrantR<'_>) -> &'a [u8] {
+    fn embeddings_bytes<'a>(frame: &'a FrameGrantR<'_>) -> &'a [u8] {
         let skip = EntryHeader::variant_size() + mem::size_of::<Self>();
         &frame[skip..]
     }
@@ -227,7 +227,7 @@ impl ArroySetVectors {
         vec: &'v mut Vec<f32>,
     ) -> &'v [f32] {
         vec.clear();
-        Self::remaining_bytes(frame).chunks_exact(mem::size_of::<f32>()).for_each(|bytes| {
+        Self::embeddings_bytes(frame).chunks_exact(mem::size_of::<f32>()).for_each(|bytes| {
             let f = bytes.try_into().map(f32::from_ne_bytes).unwrap();
             vec.push(f);
         });
