@@ -172,68 +172,10 @@ impl<'a> From<FrameGrantR<'a>> for FrameWithHeader<'a> {
     }
 }
 
-#[derive(Debug, Clone, Copy, NoUninit, CheckedBitPattern)]
-#[repr(C)]
-/// Wether a put of the key/value pair or a delete of the given key.
-pub struct DbOperation {
-    /// The database on which to perform the operation.
-    pub database: Database,
-    /// The key length in the buffer.
-    ///
-    /// If None it means that the buffer is dedicated
-    /// to the key and it is therefore a deletion operation.
-    pub key_length: Option<NonZeroU16>,
-}
-
-impl DbOperation {
-    pub fn key_value<'a>(&self, frame: &'a FrameGrantR<'_>) -> (&'a [u8], Option<&'a [u8]>) {
-        let skip = EntryHeader::variant_size() + mem::size_of::<Self>();
-        match self.key_length {
-            Some(key_length) => {
-                let (key, value) = frame[skip..].split_at(key_length.get() as usize);
-                (key, Some(value))
-            }
-            None => (&frame[skip..], None),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, NoUninit, CheckedBitPattern)]
-#[repr(transparent)]
-pub struct ArroyDeleteVector {
-    pub docid: DocumentId,
-}
-
-#[derive(Debug, Clone, Copy, NoUninit, CheckedBitPattern)]
-#[repr(C)]
-/// The embeddings are in the remaining space and represents
-/// non-aligned [f32] each with dimensions f32s.
-pub struct ArroySetVectors {
-    pub docid: DocumentId,
-    pub embedder_id: u8,
-    _padding: [u8; 3],
-}
-
-impl ArroySetVectors {
-    fn embeddings_bytes<'a>(frame: &'a FrameGrantR<'_>) -> &'a [u8] {
-        let skip = EntryHeader::variant_size() + mem::size_of::<Self>();
-        &frame[skip..]
-    }
-
-    /// Read all the embeddings and write them into an aligned `f32` Vec.
-    pub fn read_all_embeddings_into_vec<'v>(
-        &self,
-        frame: &FrameGrantR<'_>,
-        vec: &'v mut Vec<f32>,
-    ) -> &'v [f32] {
-        let embeddings_bytes = Self::embeddings_bytes(frame);
-        let embeddings_count = embeddings_bytes.len() / mem::size_of::<f32>();
-        vec.resize(embeddings_count, 0.0);
-        bytemuck::cast_slice_mut(vec.as_mut()).copy_from_slice(embeddings_bytes);
-        &vec[..]
-    }
-}
-
+/// A header that is written at the beginning of a bbqueue frame.
+///
+/// Note that the different variants cannot be changed without taking
+/// care of their size in the implementation, like, everywhere.
 #[derive(Debug, Clone, Copy)]
 #[repr(u8)]
 pub enum EntryHeader {
@@ -316,6 +258,68 @@ impl EntryHeader {
         };
         *first = self.variant_id();
         remaining.copy_from_slice(payload_bytes);
+    }
+}
+
+#[derive(Debug, Clone, Copy, NoUninit, CheckedBitPattern)]
+#[repr(C)]
+/// Wether a put of the key/value pair or a delete of the given key.
+pub struct DbOperation {
+    /// The database on which to perform the operation.
+    pub database: Database,
+    /// The key length in the buffer.
+    ///
+    /// If None it means that the buffer is dedicated
+    /// to the key and it is therefore a deletion operation.
+    pub key_length: Option<NonZeroU16>,
+}
+
+impl DbOperation {
+    pub fn key_value<'a>(&self, frame: &'a FrameGrantR<'_>) -> (&'a [u8], Option<&'a [u8]>) {
+        let skip = EntryHeader::variant_size() + mem::size_of::<Self>();
+        match self.key_length {
+            Some(key_length) => {
+                let (key, value) = frame[skip..].split_at(key_length.get() as usize);
+                (key, Some(value))
+            }
+            None => (&frame[skip..], None),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, NoUninit, CheckedBitPattern)]
+#[repr(transparent)]
+pub struct ArroyDeleteVector {
+    pub docid: DocumentId,
+}
+
+#[derive(Debug, Clone, Copy, NoUninit, CheckedBitPattern)]
+#[repr(C)]
+/// The embeddings are in the remaining space and represents
+/// non-aligned [f32] each with dimensions f32s.
+pub struct ArroySetVectors {
+    pub docid: DocumentId,
+    pub embedder_id: u8,
+    _padding: [u8; 3],
+}
+
+impl ArroySetVectors {
+    fn embeddings_bytes<'a>(frame: &'a FrameGrantR<'_>) -> &'a [u8] {
+        let skip = EntryHeader::variant_size() + mem::size_of::<Self>();
+        &frame[skip..]
+    }
+
+    /// Read all the embeddings and write them into an aligned `f32` Vec.
+    pub fn read_all_embeddings_into_vec<'v>(
+        &self,
+        frame: &FrameGrantR<'_>,
+        vec: &'v mut Vec<f32>,
+    ) -> &'v [f32] {
+        let embeddings_bytes = Self::embeddings_bytes(frame);
+        let embeddings_count = embeddings_bytes.len() / mem::size_of::<f32>();
+        vec.resize(embeddings_count, 0.0);
+        bytemuck::cast_slice_mut(vec.as_mut()).copy_from_slice(embeddings_bytes);
+        &vec[..]
     }
 }
 
