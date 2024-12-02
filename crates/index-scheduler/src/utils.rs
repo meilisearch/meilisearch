@@ -106,7 +106,7 @@ impl ProcessingBatch {
         self.stats.total_nb_tasks = 0;
     }
 
-    /// Update the timestamp of the tasks and the inner structure of this sturcture.
+    /// Update the timestamp of the tasks and the inner structure of this structure.
     pub fn update(&mut self, task: &mut Task) {
         // We must re-set this value in case we're dealing with a task that has been added between
         // the `processing` and `finished` state

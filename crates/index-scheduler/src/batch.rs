@@ -104,7 +104,6 @@ pub(crate) enum IndexOperation {
         index_uid: String,
         primary_key: Option<String>,
         method: IndexDocumentsMethod,
-        documents_counts: Vec<u64>,
         operations: Vec<DocumentOperation>,
         tasks: Vec<Task>,
     },
@@ -129,19 +128,6 @@ pub(crate) enum IndexOperation {
     DocumentClearAndSetting {
         index_uid: String,
         cleared_tasks: Vec<Task>,
-
-        // The boolean indicates if it's a settings deletion or creation.
-        settings: Vec<(bool, Settings<Unchecked>)>,
-        settings_tasks: Vec<Task>,
-    },
-    SettingsAndDocumentOperation {
-        index_uid: String,
-
-        primary_key: Option<String>,
-        method: IndexDocumentsMethod,
-        documents_counts: Vec<u64>,
-        operations: Vec<DocumentOperation>,
-        document_import_tasks: Vec<Task>,
 
         // The boolean indicates if it's a settings deletion or creation.
         settings: Vec<(bool, Settings<Unchecked>)>,
@@ -174,12 +160,7 @@ impl Batch {
                 IndexOperation::DocumentEdition { task, .. } => {
                     RoaringBitmap::from_sorted_iter(std::iter::once(task.uid)).unwrap()
                 }
-                IndexOperation::SettingsAndDocumentOperation {
-                    document_import_tasks: tasks,
-                    settings_tasks: other,
-                    ..
-                }
-                | IndexOperation::DocumentClearAndSetting {
+                IndexOperation::DocumentClearAndSetting {
                     cleared_tasks: tasks,
                     settings_tasks: other,
                     ..
@@ -239,8 +220,7 @@ impl IndexOperation {
             | IndexOperation::DocumentDeletion { index_uid, .. }
             | IndexOperation::DocumentClear { index_uid, .. }
             | IndexOperation::Settings { index_uid, .. }
-            | IndexOperation::DocumentClearAndSetting { index_uid, .. }
-            | IndexOperation::SettingsAndDocumentOperation { index_uid, .. } => index_uid,
+            | IndexOperation::DocumentClearAndSetting { index_uid, .. } => index_uid,
         }
     }
 }
@@ -261,9 +241,6 @@ impl fmt::Display for IndexOperation {
             IndexOperation::Settings { .. } => f.write_str("IndexOperation::Settings"),
             IndexOperation::DocumentClearAndSetting { .. } => {
                 f.write_str("IndexOperation::DocumentClearAndSetting")
-            }
-            IndexOperation::SettingsAndDocumentOperation { .. } => {
-                f.write_str("IndexOperation::SettingsAndDocumentOperation")
             }
         }
     }
@@ -330,21 +307,14 @@ impl IndexScheduler {
                     })
                     .flatten();
 
-                let mut documents_counts = Vec::new();
                 let mut operations = Vec::new();
 
                 for task in tasks.iter() {
                     match task.kind {
-                        KindWithContent::DocumentAdditionOrUpdate {
-                            content_file,
-                            documents_count,
-                            ..
-                        } => {
-                            documents_counts.push(documents_count);
+                        KindWithContent::DocumentAdditionOrUpdate { content_file, .. } => {
                             operations.push(DocumentOperation::Add(content_file));
                         }
                         KindWithContent::DocumentDeletion { ref documents_ids, .. } => {
-                            documents_counts.push(documents_ids.len() as u64);
                             operations.push(DocumentOperation::Delete(documents_ids.clone()));
                         }
                         _ => unreachable!(),
@@ -356,7 +326,6 @@ impl IndexScheduler {
                         index_uid,
                         primary_key,
                         method,
-                        documents_counts,
                         operations,
                         tasks,
                     },
@@ -440,67 +409,6 @@ impl IndexScheduler {
                     },
                     must_create_index,
                 }))
-            }
-            BatchKind::SettingsAndDocumentOperation {
-                settings_ids,
-                method,
-                allow_index_creation,
-                primary_key,
-                operation_ids,
-            } => {
-                let settings = self.create_next_batch_index(
-                    rtxn,
-                    index_uid.clone(),
-                    BatchKind::Settings { settings_ids, allow_index_creation },
-                    current_batch,
-                    must_create_index,
-                )?;
-
-                let document_import = self.create_next_batch_index(
-                    rtxn,
-                    index_uid.clone(),
-                    BatchKind::DocumentOperation {
-                        method,
-                        allow_index_creation,
-                        primary_key,
-                        operation_ids,
-                    },
-                    current_batch,
-                    must_create_index,
-                )?;
-
-                match (document_import, settings) {
-                    (
-                        Some(Batch::IndexOperation {
-                            op:
-                                IndexOperation::DocumentOperation {
-                                    primary_key,
-                                    documents_counts,
-                                    operations,
-                                    tasks: document_import_tasks,
-                                    ..
-                                },
-                            ..
-                        }),
-                        Some(Batch::IndexOperation {
-                            op: IndexOperation::Settings { settings, tasks: settings_tasks, .. },
-                            ..
-                        }),
-                    ) => Ok(Some(Batch::IndexOperation {
-                        op: IndexOperation::SettingsAndDocumentOperation {
-                            index_uid,
-                            primary_key,
-                            method,
-                            documents_counts,
-                            operations,
-                            document_import_tasks,
-                            settings,
-                            settings_tasks,
-                        },
-                        must_create_index,
-                    })),
-                    _ => unreachable!(),
-                }
             }
             BatchKind::IndexCreation { id } => {
                 let mut task = self.get_task(rtxn, id)?.ok_or(Error::CorruptedTaskQueue)?;
@@ -1304,7 +1212,6 @@ impl IndexScheduler {
                 index_uid: _,
                 primary_key,
                 method,
-                documents_counts: _,
                 operations,
                 mut tasks,
             } => {
@@ -1692,43 +1599,6 @@ impl IndexScheduler {
                     || must_stop_processing.get(),
                 )?;
 
-                Ok(tasks)
-            }
-            IndexOperation::SettingsAndDocumentOperation {
-                index_uid,
-                primary_key,
-                method,
-                documents_counts,
-                operations,
-                document_import_tasks,
-                settings,
-                settings_tasks,
-            } => {
-                let settings_tasks = self.apply_index_operation(
-                    index_wtxn,
-                    index,
-                    IndexOperation::Settings {
-                        index_uid: index_uid.clone(),
-                        settings,
-                        tasks: settings_tasks,
-                    },
-                )?;
-
-                let mut import_tasks = self.apply_index_operation(
-                    index_wtxn,
-                    index,
-                    IndexOperation::DocumentOperation {
-                        index_uid,
-                        primary_key,
-                        method,
-                        documents_counts,
-                        operations,
-                        tasks: document_import_tasks,
-                    },
-                )?;
-
-                let mut tasks = settings_tasks;
-                tasks.append(&mut import_tasks);
                 Ok(tasks)
             }
             IndexOperation::DocumentClearAndSetting {
