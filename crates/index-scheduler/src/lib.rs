@@ -1752,7 +1752,7 @@ impl IndexScheduler {
         self.processing_tasks.write().unwrap().stop_processing();
 
         // Once the tasks are committed, we should delete all the update files associated ASAP to avoid leaking files in case of a restart
-        // tracing::debug!("Deleting the update files");
+        tracing::debug!("Deleting the update files");
 
         //We take one read transaction **per thread**. Then, every thread is going to pull out new IDs from the roaring bitmap with the help of an atomic shared index into the bitmap
         let idx = AtomicU32::new(0);
