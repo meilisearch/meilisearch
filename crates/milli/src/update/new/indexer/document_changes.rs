@@ -70,7 +70,7 @@ impl<
         F: FnOnce(&'extractor Bump) -> Result<T>,
     {
         let doc_alloc =
-            doc_allocs.get_or(|| FullySend(Cell::new(Bump::with_capacity(1024 * 1024 * 1024))));
+            doc_allocs.get_or(|| FullySend(Cell::new(Bump::with_capacity(1024 * 1024))));
         let doc_alloc = doc_alloc.0.take();
         let fields_ids_map = fields_ids_map_store
             .get_or(|| RefCell::new(GlobalFieldsIdsMap::new(new_fields_ids_map)).into());
