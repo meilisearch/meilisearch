@@ -56,7 +56,7 @@ where
 
     let rtree_mmap = unsafe { Mmap::map(&file)? };
     geo_sender.set_rtree(rtree_mmap).unwrap();
-    geo_sender.set_geo_faceted(&faceted).unwrap();
+    geo_sender.set_geo_faceted(&faceted)?;
 
     Ok(())
 }
@@ -82,11 +82,11 @@ where
             let current = database.get(&rtxn, key)?;
             match merge_cbo_bitmaps(current, del, add)? {
                 Operation::Write(bitmap) => {
-                    docids_sender.write(key, &bitmap).unwrap();
+                    docids_sender.write(key, &bitmap)?;
                     Ok(())
                 }
                 Operation::Delete => {
-                    docids_sender.delete(key).unwrap();
+                    docids_sender.delete(key)?;
                     Ok(())
                 }
                 Operation::Ignore => Ok(()),
@@ -112,12 +112,12 @@ pub fn merge_and_send_facet_docids<'extractor>(
                 match merge_cbo_bitmaps(current, del, add)? {
                     Operation::Write(bitmap) => {
                         facet_field_ids_delta.register_from_key(key);
-                        docids_sender.write(key, &bitmap).unwrap();
+                        docids_sender.write(key, &bitmap)?;
                         Ok(())
                     }
                     Operation::Delete => {
                         facet_field_ids_delta.register_from_key(key);
-                        docids_sender.delete(key).unwrap();
+                        docids_sender.delete(key)?;
                         Ok(())
                     }
                     Operation::Ignore => Ok(()),
