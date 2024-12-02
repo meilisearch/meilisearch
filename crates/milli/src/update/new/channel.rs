@@ -489,7 +489,6 @@ impl<'b> ExtractorBbqueueSender<'b> {
             }
 
             let value_file = value_file.into_inner().map_err(|ie| ie.into_error())?;
-            value_file.sync_all()?;
             let embeddings = unsafe { Mmap::map(&value_file)? };
 
             let large_vectors = LargeVectors { docid, embedder_id, embeddings };
