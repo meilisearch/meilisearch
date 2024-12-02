@@ -415,21 +415,21 @@ fn spill_entry_to_sorter(
     match deladd {
         DelAddRoaringBitmap { del: Some(del), add: None } => {
             cbo_buffer.clear();
-            CboRoaringBitmapCodec::serialize_into(&del, cbo_buffer);
+            CboRoaringBitmapCodec::serialize_into_vec(&del, cbo_buffer);
             value_writer.insert(DelAdd::Deletion, &cbo_buffer)?;
         }
         DelAddRoaringBitmap { del: None, add: Some(add) } => {
             cbo_buffer.clear();
-            CboRoaringBitmapCodec::serialize_into(&add, cbo_buffer);
+            CboRoaringBitmapCodec::serialize_into_vec(&add, cbo_buffer);
             value_writer.insert(DelAdd::Addition, &cbo_buffer)?;
         }
         DelAddRoaringBitmap { del: Some(del), add: Some(add) } => {
             cbo_buffer.clear();
-            CboRoaringBitmapCodec::serialize_into(&del, cbo_buffer);
+            CboRoaringBitmapCodec::serialize_into_vec(&del, cbo_buffer);
             value_writer.insert(DelAdd::Deletion, &cbo_buffer)?;
 
             cbo_buffer.clear();
-            CboRoaringBitmapCodec::serialize_into(&add, cbo_buffer);
+            CboRoaringBitmapCodec::serialize_into_vec(&add, cbo_buffer);
             value_writer.insert(DelAdd::Addition, &cbo_buffer)?;
         }
         DelAddRoaringBitmap { del: None, add: None } => return Ok(()),

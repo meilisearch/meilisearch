@@ -152,7 +152,7 @@ impl CboRoaringBitmapCodec {
             return Ok(None);
         }
 
-        Self::serialize_into(&previous, buffer);
+        Self::serialize_into_vec(&previous, buffer);
         Ok(Some(&buffer[..]))
     }
 }
@@ -178,7 +178,7 @@ impl heed::BytesEncode<'_> for CboRoaringBitmapCodec {
 
     fn bytes_encode(item: &Self::EItem) -> Result<Cow<'_, [u8]>, BoxedError> {
         let mut vec = Vec::with_capacity(Self::serialized_size(item));
-        Self::serialize_into(item, &mut vec);
+        Self::serialize_into_vec(item, &mut vec);
         Ok(Cow::Owned(vec))
     }
 }

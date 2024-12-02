@@ -76,7 +76,7 @@ impl WordPrefixDocids {
                 .union()?;
 
             buffer.clear();
-            CboRoaringBitmapCodec::serialize_into(&output, buffer);
+            CboRoaringBitmapCodec::serialize_into_vec(&output, buffer);
             index.push(PrefixEntry { prefix, serialized_length: buffer.len() });
             file.write_all(buffer)
         })?;
@@ -211,7 +211,7 @@ impl WordPrefixIntegerDocids {
                     .union()?;
 
                 buffer.clear();
-                CboRoaringBitmapCodec::serialize_into(&output, buffer);
+                CboRoaringBitmapCodec::serialize_into_vec(&output, buffer);
                 index.push(PrefixIntegerEntry { prefix, pos, serialized_length: buffer.len() });
                 file.write_all(buffer)?;
             }
