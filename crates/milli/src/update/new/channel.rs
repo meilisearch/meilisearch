@@ -27,9 +27,9 @@ use crate::{CboRoaringBitmapCodec, DocumentId, Index};
 /// Creates a tuple of senders/receiver to be used by
 /// the extractors and the writer loop.
 ///
-/// The `total_bbbuffer_capacity` represent the number of bytes
-/// allocated to all BBQueue buffer. It will be split by the
-/// number of thread.
+/// The `total_bbbuffer_capacity` represents the number of bytes
+/// allocated to all BBQueue buffers. It will be split by the
+/// number of threads.
 ///
 /// The `channel_capacity` parameter defines the number of
 /// too-large-to-fit-in-BBQueue entries that can be sent through
@@ -37,14 +37,9 @@ use crate::{CboRoaringBitmapCodec, DocumentId, Index};
 /// sure we do not use too much memory.
 ///
 /// Note that the channel is also used to wake-up the receiver
-/// wehn new stuff is available in any BBQueue buffer but we send
+/// when new stuff is available in any BBQueue buffer but we send
 /// a message in this queue only if it is empty to avoid filling
 /// the channel *and* the BBQueue.
-///
-/// # Safety
-///
-/// Panics if the number of provided BBQueues is not exactly equal
-/// to the number of available threads in the rayon threadpool.
 pub fn extractor_writer_bbqueue(
     bbbuffers: &mut Vec<BBBuffer>,
     total_bbbuffer_capacity: usize,
@@ -82,7 +77,7 @@ pub struct ExtractorBbqueueSender<'a> {
     /// The capacity of this frame producer, will never be able to store more than that.
     ///
     /// Note that the FrameProducer requires up to 9 bytes to encode the length,
-    /// the capacity has been shrinked accordingly.
+    /// the capacity has been shrunk accordingly.
     ///
     /// <https://docs.rs/bbqueue/latest/bbqueue/framed/index.html#frame-header>
     capacity: usize,
