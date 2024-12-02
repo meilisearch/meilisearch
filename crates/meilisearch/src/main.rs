@@ -26,6 +26,9 @@ use tracing::level_filters::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt as _;
 use tracing_subscriber::Layer;
 
+mod telemetry;
+use telemetry::{init_tracer, OpenTelemetryMiddleware};
+
 #[global_allocator]
 static ALLOC: MiMalloc = MiMalloc;
 
@@ -141,6 +144,8 @@ async fn run_http(
     logs: (LogRouteHandle, LogStderrHandle),
     analytics: Arc<Analytics>,
 ) -> anyhow::Result<()> {
+    init_tracer();
+
     let enable_dashboard = &opt.env == "development";
     let opt_clone = opt.clone();
     let index_scheduler = Data::from(index_scheduler);
@@ -159,7 +164,7 @@ async fn run_http(
     let search_queue = Data::new(search_queue);
 
     let http_server = HttpServer::new(move || {
-        create_app(
+        let app = create_app(
             index_scheduler.clone(),
             auth_controller.clone(),
             search_queue.clone(),
@@ -167,9 +172,10 @@ async fn run_http(
             logs.clone(),
             analytics.clone(),
             enable_dashboard,
-        )
+        );
+
+        app.wrap(OpenTelemetryMiddleware)
     })
-    // Disable signals allows the server to terminate immediately when a user enter CTRL-C
     .disable_signals()
     .keep_alive(KeepAlive::Os);
 

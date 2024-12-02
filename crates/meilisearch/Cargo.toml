@@ -105,6 +105,9 @@ tracing-actix-web = "0.7.11"
 build-info = { version = "1.7.0", path = "../build-info" }
 roaring = "0.10.2"
 mopa-maintained = "0.2.3"
+opentelemetry = "0.27.1"
+opentelemetry_sdk = "0.27.1"
+opentelemetry-stdout = { version = "0.27.0", features = ["trace"] }
 
 [dev-dependencies]
 actix-rt = "2.10.0"
