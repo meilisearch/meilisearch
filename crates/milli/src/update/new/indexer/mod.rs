@@ -417,7 +417,7 @@ where
             let span = tracing::trace_span!(target: "indexing::write_db", "post_merge");
             let mut _entered_post_merge = None;
 
-            while let Some(action) = writer_receiver.recv() {
+            while let Some(action) = writer_receiver.recv_action() {
                 if _entered_post_merge.is_none()
                     && finished_extraction.load(std::sync::atomic::Ordering::Relaxed)
                 {
@@ -556,7 +556,7 @@ fn write_from_bbqueue(
     arroy_writers: &HashMap<u8, (&str, &crate::vector::Embedder, ArroyWrapper, usize)>,
     aligned_embedding: &mut Vec<f32>,
 ) -> crate::Result<()> {
-    while let Some(frame_with_header) = writer_receiver.read() {
+    while let Some(frame_with_header) = writer_receiver.recv_frame() {
         match frame_with_header.header() {
             EntryHeader::DbOperation(operation) => {
                 let database_name = operation.database.database_name();

@@ -136,11 +136,11 @@ impl LargeVectors {
 }
 
 impl<'a> WriterBbqueueReceiver<'a> {
-    pub fn recv(&mut self) -> Option<ReceiverAction> {
+    pub fn recv_action(&mut self) -> Option<ReceiverAction> {
         self.receiver.recv().ok()
     }
 
-    pub fn read(&mut self) -> Option<FrameWithHeader<'a>> {
+    pub fn recv_frame(&mut self) -> Option<FrameWithHeader<'a>> {
         for consumer in &mut self.consumers {
             if let Some(frame) = consumer.read() {
                 return Some(FrameWithHeader::from(frame));
