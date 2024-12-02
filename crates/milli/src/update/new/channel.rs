@@ -226,11 +226,10 @@ impl ArroySetVectors {
         frame: &FrameGrantR<'_>,
         vec: &'v mut Vec<f32>,
     ) -> &'v [f32] {
-        vec.clear();
-        Self::embeddings_bytes(frame).chunks_exact(mem::size_of::<f32>()).for_each(|bytes| {
-            let f = bytes.try_into().map(f32::from_ne_bytes).unwrap();
-            vec.push(f);
-        });
+        let embeddings_bytes = Self::embeddings_bytes(frame);
+        let embeddings_count = embeddings_bytes.len() / mem::size_of::<f32>();
+        vec.resize(embeddings_count, 0.0);
+        bytemuck::cast_slice_mut(vec.as_mut()).copy_from_slice(embeddings_bytes);
         &vec[..]
     }
 }
