@@ -86,9 +86,9 @@ where
         (grenad_parameters, 2 * minimum_capacity), // 100 MiB by thread by default
         |max_memory| {
             // 2% of the indexing memory
-            let total_bbbuffer_capacity = (max_memory / 100 / 2).min(minimum_capacity);
+            let total_bbbuffer_capacity = (max_memory / 100 / 2).max(minimum_capacity);
             let new_grenad_parameters = GrenadParameters {
-                max_memory: Some(max_memory - total_bbbuffer_capacity),
+                max_memory: Some(max_memory.saturating_sub(total_bbbuffer_capacity)),
                 ..grenad_parameters
             };
             (new_grenad_parameters, total_bbbuffer_capacity)
