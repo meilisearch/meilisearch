@@ -24,7 +24,7 @@ meilisearch-types = { path = "../meilisearch-types" }
 page_size = "0.6.0"
 raw-collections = { git = "https://github.com/meilisearch/raw-collections.git", version = "0.1.0" }
 rayon = "1.10.0"
-roaring = { version = "0.10.6", features = ["serde"] }
+roaring = { version = "0.10.7", features = ["serde"] }
 serde = { version = "1.0.204", features = ["derive"] }
 serde_json = { version = "1.0.120", features = ["preserve_order"] }
 synchronoise = "1.0.1"
@@ -45,7 +45,7 @@ bumpalo = "3.16.0"
 [dev-dependencies]
 arroy = "0.5.0"
 big_s = "1.0.2"
-crossbeam = "0.8.4"
+crossbeam-channel = "0.5.13"
 insta = { version = "1.39.0", features = ["json", "redactions"] }
 maplit = "1.0.2"
 meili-snap = { path = "../meili-snap" }

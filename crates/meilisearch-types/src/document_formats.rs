@@ -214,7 +214,7 @@ pub fn read_json(input: &File, output: impl io::Write) -> Result<u64> {
     // We memory map to be able to deserialize into a RawMap that
     // does not allocate when possible and only materialize the first/top level.
     let input = unsafe { Mmap::map(input).map_err(DocumentFormatError::Io)? };
-    let mut doc_alloc = Bump::with_capacity(1024 * 1024 * 1024); // 1MiB
+    let mut doc_alloc = Bump::with_capacity(1024 * 1024); // 1MiB
 
     let mut out = BufWriter::new(output);
     let mut deserializer = serde_json::Deserializer::from_slice(&input);

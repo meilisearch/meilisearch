@@ -490,6 +490,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
+name = "bbqueue"
+version = "0.5.1"
+source = "git+https://github.com/kerollmops/bbqueue#cbb87cc707b5af415ef203bdaf2443e06ba0d6d4"
+
+[[package]]
 name = "benchmarks"
 version = "1.12.0"
 dependencies = [
@@ -1247,19 +1252,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "crossbeam"
-version = "0.8.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1137cd7e7fc0fb5d3c5a8678be38ec56e819125d8d7907411fe24ccb943faca8"
-dependencies = [
- "crossbeam-channel",
- "crossbeam-deque",
- "crossbeam-epoch",
- "crossbeam-queue",
- "crossbeam-utils",
-]
-
-[[package]]
 name = "crossbeam-channel"
 version = "0.5.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1916,6 +1908,15 @@ version = "1.12.0"
 dependencies = [
  "criterion",
  "serde_json",
+]
+
+[[package]]
+name = "flume"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "da0e4dd2a88388a1f4ccc7c9ce104604dab68d9f408dc34cd45823d5a9069095"
+dependencies = [
+ "spin",
 ]
 
 [[package]]
@@ -2616,7 +2617,7 @@ dependencies = [
  "big_s",
  "bincode",
  "bumpalo",
- "crossbeam",
+ "crossbeam-channel",
  "csv",
  "derive_builder 0.20.0",
  "dump",
@@ -3611,6 +3612,7 @@ version = "1.12.0"
 dependencies = [
  "allocator-api2",
  "arroy 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "bbqueue",
  "big_s",
  "bimap",
  "bincode",
@@ -3630,6 +3632,7 @@ dependencies = [
  "enum-iterator",
  "filter-parser",
  "flatten-serde-json",
+ "flume",
  "fst",
  "fxhash",
  "geoutils",
@@ -4743,8 +4746,9 @@ dependencies = [
 
 [[package]]
 name = "roaring"
-version = "0.10.6"
-source = "git+https://github.com/RoaringBitmap/roaring-rs?branch=clone-iter-slice#8ff028e484fb6192a0acf5a669eaf18c30cada6e"
+version = "0.10.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f81dc953b2244ddd5e7860cb0bb2a790494b898ef321d4aff8e260efab60cc88"
 dependencies = [
  "bytemuck",
  "byteorder",
@@ -5186,6 +5190,9 @@ name = "spin"
 version = "0.9.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6980e8d7511241f8acf4aebddbb1ff938df5eebe98691418c4468d0b72a96a67"
+dependencies = [
+ "lock_api",
+]
 
 [[package]]
 name = "spm_precompiled"

@@ -135,6 +135,7 @@ fn main() {
                             indexer::index(
                                 &mut wtxn,
                                 &index,
+                                &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                                 indexer_config.grenad_parameters(),
                                 &db_fields_ids_map,
                                 new_fields_ids_map,

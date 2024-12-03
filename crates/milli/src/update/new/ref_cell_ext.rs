@@ -5,6 +5,7 @@ pub trait RefCellExt<T: ?Sized> {
         &self,
     ) -> std::result::Result<RefMut<'_, T>, std::cell::BorrowMutError>;
 
+    #[track_caller]
     fn borrow_mut_or_yield(&self) -> RefMut<'_, T> {
         self.try_borrow_mut_or_yield().unwrap()
     }

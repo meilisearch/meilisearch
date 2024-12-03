@@ -18,17 +18,17 @@ use crate::vector::error::{
 use crate::vector::{Embedder, Embedding, EmbeddingConfigs};
 use crate::{DocumentId, FieldDistribution, InternalError, Result, ThreadPoolNoAbort, UserError};
 
-pub struct EmbeddingExtractor<'a> {
+pub struct EmbeddingExtractor<'a, 'b> {
     embedders: &'a EmbeddingConfigs,
-    sender: &'a EmbeddingSender<'a>,
+    sender: EmbeddingSender<'a, 'b>,
     possible_embedding_mistakes: PossibleEmbeddingMistakes,
     threads: &'a ThreadPoolNoAbort,
 }
 
-impl<'a> EmbeddingExtractor<'a> {
+impl<'a, 'b> EmbeddingExtractor<'a, 'b> {
     pub fn new(
         embedders: &'a EmbeddingConfigs,
-        sender: &'a EmbeddingSender<'a>,
+        sender: EmbeddingSender<'a, 'b>,
         field_distribution: &'a FieldDistribution,
         threads: &'a ThreadPoolNoAbort,
     ) -> Self {
@@ -43,7 +43,7 @@ pub struct EmbeddingExtractorData<'extractor>(
 
 unsafe impl MostlySend for EmbeddingExtractorData<'_> {}
 
-impl<'a, 'extractor> Extractor<'extractor> for EmbeddingExtractor<'a> {
+impl<'a, 'b, 'extractor> Extractor<'extractor> for EmbeddingExtractor<'a, 'b> {
     type Data = RefCell<EmbeddingExtractorData<'extractor>>;
 
     fn init_data<'doc>(&'doc self, extractor_alloc: &'extractor Bump) -> crate::Result<Self::Data> {
@@ -259,7 +259,7 @@ impl<'a, 'extractor> Extractor<'extractor> for EmbeddingExtractor<'a> {
 // Currently this is the case as:
 // 1. BVec are inside of the bumaplo
 // 2. All other fields are either trivial (u8) or references.
-struct Chunks<'a, 'extractor> {
+struct Chunks<'a, 'b, 'extractor> {
     texts: BVec<'a, &'a str>,
     ids: BVec<'a, DocumentId>,
 
@@ -270,11 +270,11 @@ struct Chunks<'a, 'extractor> {
     possible_embedding_mistakes: &'a PossibleEmbeddingMistakes,
     user_provided: &'a RefCell<EmbeddingExtractorData<'extractor>>,
     threads: &'a ThreadPoolNoAbort,
-    sender: &'a EmbeddingSender<'a>,
+    sender: EmbeddingSender<'a, 'b>,
     has_manual_generation: Option<&'a str>,
 }
 
-impl<'a, 'extractor> Chunks<'a, 'extractor> {
+impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         embedder: &'a Embedder,
@@ -284,7 +284,7 @@ impl<'a, 'extractor> Chunks<'a, 'extractor> {
         user_provided: &'a RefCell<EmbeddingExtractorData<'extractor>>,
         possible_embedding_mistakes: &'a PossibleEmbeddingMistakes,
         threads: &'a ThreadPoolNoAbort,
-        sender: &'a EmbeddingSender<'a>,
+        sender: EmbeddingSender<'a, 'b>,
         doc_alloc: &'a Bump,
     ) -> Self {
         let capacity = embedder.prompt_count_in_chunk_hint() * embedder.chunk_count_hint();
@@ -368,7 +368,7 @@ impl<'a, 'extractor> Chunks<'a, 'extractor> {
         possible_embedding_mistakes: &PossibleEmbeddingMistakes,
         unused_vectors_distribution: &UnusedVectorsDistributionBump,
         threads: &ThreadPoolNoAbort,
-        sender: &EmbeddingSender<'a>,
+        sender: EmbeddingSender<'a, 'b>,
         has_manual_generation: Option<&'a str>,
     ) -> Result<()> {
         if let Some(external_docid) = has_manual_generation {

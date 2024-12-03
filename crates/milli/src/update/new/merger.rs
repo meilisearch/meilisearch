@@ -19,7 +19,7 @@ pub fn merge_and_send_rtree<'extractor, MSP>(
     datastore: impl IntoIterator<Item = RefCell<GeoExtractorData<'extractor>>>,
     rtxn: &RoTxn,
     index: &Index,
-    geo_sender: GeoSender<'_>,
+    geo_sender: GeoSender<'_, '_>,
     must_stop_processing: &MSP,
 ) -> Result<()>
 where
@@ -56,25 +56,25 @@ where
 
     let rtree_mmap = unsafe { Mmap::map(&file)? };
     geo_sender.set_rtree(rtree_mmap).unwrap();
-    geo_sender.set_geo_faceted(&faceted).unwrap();
+    geo_sender.set_geo_faceted(&faceted)?;
 
     Ok(())
 }
 
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::merge")]
-pub fn merge_and_send_docids<'extractor, MSP>(
+pub fn merge_and_send_docids<'extractor, MSP, D>(
     mut caches: Vec<BalancedCaches<'extractor>>,
     database: Database<Bytes, Bytes>,
     index: &Index,
-    docids_sender: impl DocidsSender + Sync,
+    docids_sender: WordDocidsSender<D>,
     must_stop_processing: &MSP,
 ) -> Result<()>
 where
     MSP: Fn() -> bool + Sync,
+    D: DatabaseType + Sync,
 {
     transpose_and_freeze_caches(&mut caches)?.into_par_iter().try_for_each(|frozen| {
         let rtxn = index.read_txn()?;
-        let mut buffer = Vec::new();
         if must_stop_processing() {
             return Err(InternalError::AbortedIndexation.into());
         }
@@ -82,12 +82,11 @@ where
             let current = database.get(&rtxn, key)?;
             match merge_cbo_bitmaps(current, del, add)? {
                 Operation::Write(bitmap) => {
-                    let value = cbo_bitmap_serialize_into_vec(&bitmap, &mut buffer);
-                    docids_sender.write(key, value).unwrap();
+                    docids_sender.write(key, &bitmap)?;
                     Ok(())
                 }
                 Operation::Delete => {
-                    docids_sender.delete(key).unwrap();
+                    docids_sender.delete(key)?;
                     Ok(())
                 }
                 Operation::Ignore => Ok(()),
@@ -101,26 +100,24 @@ pub fn merge_and_send_facet_docids<'extractor>(
     mut caches: Vec<BalancedCaches<'extractor>>,
     database: FacetDatabases,
     index: &Index,
-    docids_sender: impl DocidsSender + Sync,
+    docids_sender: FacetDocidsSender,
 ) -> Result<FacetFieldIdsDelta> {
     transpose_and_freeze_caches(&mut caches)?
         .into_par_iter()
         .map(|frozen| {
             let mut facet_field_ids_delta = FacetFieldIdsDelta::default();
             let rtxn = index.read_txn()?;
-            let mut buffer = Vec::new();
             merge_caches(frozen, |key, DelAddRoaringBitmap { del, add }| {
                 let current = database.get_cbo_roaring_bytes_value(&rtxn, key)?;
                 match merge_cbo_bitmaps(current, del, add)? {
                     Operation::Write(bitmap) => {
                         facet_field_ids_delta.register_from_key(key);
-                        let value = cbo_bitmap_serialize_into_vec(&bitmap, &mut buffer);
-                        docids_sender.write(key, value).unwrap();
+                        docids_sender.write(key, &bitmap)?;
                         Ok(())
                     }
                     Operation::Delete => {
                         facet_field_ids_delta.register_from_key(key);
-                        docids_sender.delete(key).unwrap();
+                        docids_sender.delete(key)?;
                         Ok(())
                     }
                     Operation::Ignore => Ok(()),
@@ -251,11 +248,4 @@ fn merge_cbo_bitmaps(
             }
         }
     }
-}
-
-/// TODO Return the slice directly from the serialize_into method
-fn cbo_bitmap_serialize_into_vec<'b>(bitmap: &RoaringBitmap, buffer: &'b mut Vec<u8>) -> &'b [u8] {
-    buffer.clear();
-    CboRoaringBitmapCodec::serialize_into(bitmap, buffer);
-    buffer.as_slice()
 }
