@@ -98,7 +98,7 @@ allocator-api2 = "0.2.18"
 rustc-hash = "2.0.0"
 uell = "0.1.0"
 enum-iterator = "2.1.0"
-bbqueue = { git = "https://github.com/kerollmops/bbqueue" }
+bbqueue = { git = "https://github.com/meilisearch/bbqueue" }
 flume = { version = "0.11.1", default-features = false }
 
 [dev-dependencies]
