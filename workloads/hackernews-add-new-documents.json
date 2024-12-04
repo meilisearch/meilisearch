@@ -1,0 +1,105 @@
+{
+  "name": "hackernews.add_new_documents",
+  "run_count": 3,
+  "extra_cli_args": [],
+  "assets": {
+      "hackernews-01.ndjson": {
+        "local_location": null,
+        "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/hackernews/modification/01.ndjson",
+        "sha256": "cd3627b86c064d865b6754848ed0e73ef1d8142752a25e5f0765c3a1296dd3ae"
+      },
+      "hackernews-02.ndjson": {
+        "local_location": null,
+        "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/hackernews/modification/02.ndjson",
+        "sha256": "5d533b83bcf992201dace88b4d0c0be8b4df5225c6c4b763582d986844bcc23b"
+      },
+      "hackernews-03.ndjson": {
+        "local_location": null,
+        "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/hackernews/modification/03.ndjson",
+        "sha256": "f5f351a0d04a8a83643ace12cafa2b7ec8ca8cb7d46fd268e5126492a6c66f2a"
+      },
+      "hackernews-04.ndjson": {
+        "local_location": null,
+        "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/hackernews/modification/04.ndjson",
+        "sha256": "ac1915ee7ce53a6718548c255a6cc59969784b2570745dc5b739f714beda291a"
+      },
+      "hackernews-05.ndjson": {
+        "local_location": null,
+        "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/hackernews/modification/05.ndjson",
+        "sha256": "be31d5632602f798e62d1c10c83bdfda2b4deaa068477eacde05fdd247572b82"
+      }
+  },
+  "precommands": [
+    {
+      "route": "indexes/movies/settings",
+      "method": "PATCH",
+      "body": {
+        "inline": {
+          "displayedAttributes": [
+            "title",
+            "by",
+            "score",
+            "time",
+            "text"
+          ],
+          "searchableAttributes": [
+            "title",
+            "text"
+          ],
+          "filterableAttributes": [
+            "by",
+            "kids",
+            "parent"
+          ],
+          "sortableAttributes": [
+            "score",
+            "time"
+          ]
+        }
+      },
+      "synchronous": "WaitForTask"
+    },
+    {
+      "route": "indexes/movies/documents",
+      "method": "POST",
+      "body": {
+        "asset": "hackernews-01.ndjson"
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "indexes/movies/documents",
+      "method": "POST",
+      "body": {
+        "asset": "hackernews-02.ndjson"
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "indexes/movies/documents",
+      "method": "POST",
+      "body": {
+        "asset": "hackernews-03.ndjson"
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "indexes/movies/documents",
+      "method": "POST",
+      "body": {
+        "asset": "hackernews-04.ndjson"
+      },
+      "synchronous": "WaitForTask"
+    }
+  ],
+  "commands": [
+      {
+        "route": "indexes/movies/documents",
+        "method": "POST",
+        "body": {
+          "asset": "hackernews-05.ndjson"
+        },
+        "synchronous": "WaitForTask"
+      }
+  ]
+}
