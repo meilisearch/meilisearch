@@ -661,6 +661,11 @@ where
         if sender.is_disconnected() {
             return Err(Error::InternalError(InternalError::AbortedIndexation));
         }
+
+        // We prefer to yield and allow the writing thread
+        // to do its job, especially beneficial when there
+        // is only one CPU core available.
+        std::thread::yield_now();
     }
 }
 
