@@ -4319,10 +4319,35 @@ mod tests {
         let proc = index_scheduler.processing_tasks.read().unwrap().clone();
 
         let query = Query { statuses: Some(vec![Status::Processing]), ..Default::default() };
-        let (batches, _) = index_scheduler
-            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
+        let (mut batches, _) = index_scheduler
+            .get_batches_from_authorized_indexes(query.clone(), &AuthFilter::default())
             .unwrap();
-        snapshot!(snapshot_bitmap(&batches), @"[0,]"); // only the processing batch in the first tick
+        assert_eq!(batches.len(), 1);
+        batches[0].started_at = OffsetDateTime::UNIX_EPOCH;
+        // Insta cannot snapshot our batches because the batch stats contains an enum as key: https://github.com/mitsuhiko/insta/issues/689
+        let batch = serde_json::to_string_pretty(&batches[0]).unwrap();
+        snapshot!(batch, @r#"
+        {
+          "uid": 0,
+          "details": {
+            "primaryKey": "mouse"
+          },
+          "stats": {
+            "totalNbTasks": 2,
+            "status": {
+              "enqueued": 2
+            },
+            "types": {
+              "indexCreation": 2
+            },
+            "indexUids": {
+              "catto": 2
+            }
+          },
+          "startedAt": "1970-01-01T00:00:00Z",
+          "finishedAt": null
+        }
+        "#);
 
         let query = Query { statuses: Some(vec![Status::Enqueued]), ..Default::default() };
         let (batches, _) = index_scheduler
