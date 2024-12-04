@@ -640,36 +640,24 @@ where
     }
 
     // Then manage the content on the HashMap entries that weren't taken (mem::take).
-    let order_count = 1000;
     while let Some(mut map) = maps.pop() {
-        let mut iter = map.iter_mut();
+        // Make sure we don't try to work with entries already managed by the spilled
+        let mut ordered_entries: Vec<_> =
+            map.iter_mut().filter(|(_, bbbul)| !bbbul.is_empty()).collect();
+        ordered_entries.sort_unstable_by_key(|(key, _)| *key);
 
-        loop {
-            let mut ordered_buffer: Vec<_> = iter.by_ref().take(order_count).collect();
-            ordered_buffer.sort_unstable_by_key(|(key, _)| *key);
+        for (key, bbbul) in ordered_entries {
+            let mut output = DelAddRoaringBitmap::empty();
+            output.union_and_clear_bbbul(bbbul);
 
-            if ordered_buffer.is_empty() {
-                break;
+            for rhs in maps.iter_mut() {
+                if let Some(new) = rhs.get_mut(key) {
+                    output.union_and_clear_bbbul(new);
+                }
             }
 
-            for (key, bbbul) in ordered_buffer {
-                // Make sure we don't try to work with entries already managed by the spilled
-                if bbbul.is_empty() {
-                    continue;
-                }
-
-                let mut output = DelAddRoaringBitmap::empty();
-                output.union_and_clear_bbbul(bbbul);
-
-                for rhs in maps.iter_mut() {
-                    if let Some(new) = rhs.get_mut(key) {
-                        output.union_and_clear_bbbul(new);
-                    }
-                }
-
-                // We send the merged entry outside.
-                (f)(key, output)?;
-            }
+            // We send the merged entry outside.
+            (f)(key, output)?;
         }
     }
 
