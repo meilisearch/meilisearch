@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 use std::io::{BufReader, BufWriter, Read, Seek, Write};
 
 use hashbrown::HashMap;
@@ -37,8 +37,8 @@ impl WordPrefixDocids {
     fn execute(
         self,
         wtxn: &mut heed::RwTxn,
-        prefix_to_compute: &HashSet<Prefix>,
-        prefix_to_delete: &HashSet<Prefix>,
+        prefix_to_compute: &BTreeSet<Prefix>,
+        prefix_to_delete: &BTreeSet<Prefix>,
     ) -> Result<()> {
         delete_prefixes(wtxn, &self.prefix_database, prefix_to_delete)?;
         self.recompute_modified_prefixes(wtxn, prefix_to_compute)
@@ -48,7 +48,7 @@ impl WordPrefixDocids {
     fn recompute_modified_prefixes(
         &self,
         wtxn: &mut RwTxn,
-        prefixes: &HashSet<Prefix>,
+        prefixes: &BTreeSet<Prefix>,
     ) -> Result<()> {
         // We fetch the docids associated to the newly added word prefix fst only.
         // And collect the CboRoaringBitmaps pointers in an HashMap.
@@ -127,7 +127,7 @@ impl<'a, 'rtxn> FrozenPrefixBitmaps<'a, 'rtxn> {
     pub fn from_prefixes(
         database: Database<Bytes, CboRoaringBitmapCodec>,
         rtxn: &'rtxn RoTxn,
-        prefixes: &'a HashSet<Prefix>,
+        prefixes: &'a BTreeSet<Prefix>,
     ) -> heed::Result<Self> {
         let database = database.remap_data_type::<Bytes>();
 
@@ -173,8 +173,8 @@ impl WordPrefixIntegerDocids {
     fn execute(
         self,
         wtxn: &mut heed::RwTxn,
-        prefix_to_compute: &HashSet<Prefix>,
-        prefix_to_delete: &HashSet<Prefix>,
+        prefix_to_compute: &BTreeSet<Prefix>,
+        prefix_to_delete: &BTreeSet<Prefix>,
     ) -> Result<()> {
         delete_prefixes(wtxn, &self.prefix_database, prefix_to_delete)?;
         self.recompute_modified_prefixes(wtxn, prefix_to_compute)
@@ -184,7 +184,7 @@ impl WordPrefixIntegerDocids {
     fn recompute_modified_prefixes(
         &self,
         wtxn: &mut RwTxn,
-        prefixes: &HashSet<Prefix>,
+        prefixes: &BTreeSet<Prefix>,
     ) -> Result<()> {
         // We fetch the docids associated to the newly added word prefix fst only.
         // And collect the CboRoaringBitmaps pointers in an HashMap.
@@ -262,7 +262,7 @@ impl<'a, 'rtxn> FrozenPrefixIntegerBitmaps<'a, 'rtxn> {
     pub fn from_prefixes(
         database: Database<Bytes, CboRoaringBitmapCodec>,
         rtxn: &'rtxn RoTxn,
-        prefixes: &'a HashSet<Prefix>,
+        prefixes: &'a BTreeSet<Prefix>,
     ) -> heed::Result<Self> {
         let database = database.remap_data_type::<Bytes>();
 
@@ -291,7 +291,7 @@ unsafe impl<'a, 'rtxn> Sync for FrozenPrefixIntegerBitmaps<'a, 'rtxn> {}
 fn delete_prefixes(
     wtxn: &mut RwTxn,
     prefix_database: &Database<Bytes, CboRoaringBitmapCodec>,
-    prefixes: &HashSet<Prefix>,
+    prefixes: &BTreeSet<Prefix>,
 ) -> Result<()> {
     // We remove all the entries that are no more required in this word prefix docids database.
     for prefix in prefixes {
@@ -309,8 +309,8 @@ fn delete_prefixes(
 pub fn compute_word_prefix_docids(
     wtxn: &mut RwTxn,
     index: &Index,
-    prefix_to_compute: &HashSet<Prefix>,
-    prefix_to_delete: &HashSet<Prefix>,
+    prefix_to_compute: &BTreeSet<Prefix>,
+    prefix_to_delete: &BTreeSet<Prefix>,
     grenad_parameters: GrenadParameters,
 ) -> Result<()> {
     WordPrefixDocids::new(
@@ -325,8 +325,8 @@ pub fn compute_word_prefix_docids(
 pub fn compute_exact_word_prefix_docids(
     wtxn: &mut RwTxn,
     index: &Index,
-    prefix_to_compute: &HashSet<Prefix>,
-    prefix_to_delete: &HashSet<Prefix>,
+    prefix_to_compute: &BTreeSet<Prefix>,
+    prefix_to_delete: &BTreeSet<Prefix>,
     grenad_parameters: GrenadParameters,
 ) -> Result<()> {
     WordPrefixDocids::new(
@@ -341,8 +341,8 @@ pub fn compute_exact_word_prefix_docids(
 pub fn compute_word_prefix_fid_docids(
     wtxn: &mut RwTxn,
     index: &Index,
-    prefix_to_compute: &HashSet<Prefix>,
-    prefix_to_delete: &HashSet<Prefix>,
+    prefix_to_compute: &BTreeSet<Prefix>,
+    prefix_to_delete: &BTreeSet<Prefix>,
     grenad_parameters: GrenadParameters,
 ) -> Result<()> {
     WordPrefixIntegerDocids::new(
@@ -357,8 +357,8 @@ pub fn compute_word_prefix_fid_docids(
 pub fn compute_word_prefix_position_docids(
     wtxn: &mut RwTxn,
     index: &Index,
-    prefix_to_compute: &HashSet<Prefix>,
-    prefix_to_delete: &HashSet<Prefix>,
+    prefix_to_compute: &BTreeSet<Prefix>,
+    prefix_to_delete: &BTreeSet<Prefix>,
     grenad_parameters: GrenadParameters,
 ) -> Result<()> {
     WordPrefixIntegerDocids::new(
