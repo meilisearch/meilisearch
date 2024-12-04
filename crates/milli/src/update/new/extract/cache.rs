@@ -652,7 +652,7 @@ where
                 break;
             }
 
-            for (key, bbbul) in ordered_buffer.drain(..) {
+            for (key, bbbul) in ordered_buffer {
                 // Make sure we don't try to work with entries already managed by the spilled
                 if bbbul.is_empty() {
                     continue;
