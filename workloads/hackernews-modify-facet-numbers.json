@@ -102,7 +102,7 @@
         "route": "indexes/movies/documents",
         "method": "POST",
         "body": {
-          "asset": "hackernews-01-modified-filters.ndjson"
+          "asset": "hackernews-02-modified-filters.ndjson"
         },
         "synchronous": "WaitForTask"
       }
