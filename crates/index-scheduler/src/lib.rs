@@ -4335,7 +4335,7 @@ mod tests {
           "stats": {
             "totalNbTasks": 2,
             "status": {
-              "enqueued": 2
+              "processing": 2
             },
             "types": {
               "indexCreation": 2
