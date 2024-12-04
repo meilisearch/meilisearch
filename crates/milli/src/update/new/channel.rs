@@ -7,7 +7,7 @@ use std::num::NonZeroU16;
 use std::ops::Range;
 use std::time::Duration;
 
-use bbqueue::framed::{FrameGrantR, FrameGrantW, FrameProducer};
+use bbqueue::framed::{FrameGrantR, FrameProducer};
 use bbqueue::BBBuffer;
 use bytemuck::{checked, CheckedBitPattern, NoUninit};
 use flume::{RecvTimeoutError, SendError};
@@ -454,8 +454,10 @@ impl<'b> ExtractorBbqueueSender<'b> {
         }
 
         // Spin loop to have a frame the size we requested.
-        let mut grant = reserve_grant(&mut producer, total_length, &self.sender)?;
-        payload_header.serialize_into(&mut grant);
+        reserve_and_write_grant(&mut producer, total_length, &self.sender, |grant| {
+            payload_header.serialize_into(grant);
+            Ok(())
+        })?;
 
         // We only send a wake up message when the channel is empty
         // so that we don't fill the channel with too many WakeUps.
@@ -500,18 +502,20 @@ impl<'b> ExtractorBbqueueSender<'b> {
         }
 
         // Spin loop to have a frame the size we requested.
-        let mut grant = reserve_grant(&mut producer, total_length, &self.sender)?;
+        reserve_and_write_grant(&mut producer, total_length, &self.sender, |grant| {
+            let header_size = payload_header.header_size();
+            let (header_bytes, remaining) = grant.split_at_mut(header_size);
+            payload_header.serialize_into(header_bytes);
 
-        let header_size = payload_header.header_size();
-        let (header_bytes, remaining) = grant.split_at_mut(header_size);
-        payload_header.serialize_into(header_bytes);
-
-        if dimensions != 0 {
-            let output_iter = remaining.chunks_exact_mut(dimensions * mem::size_of::<f32>());
-            for (embedding, output) in embeddings.iter().zip(output_iter) {
-                output.copy_from_slice(bytemuck::cast_slice(embedding));
+            if dimensions != 0 {
+                let output_iter = remaining.chunks_exact_mut(dimensions * mem::size_of::<f32>());
+                for (embedding, output) in embeddings.iter().zip(output_iter) {
+                    output.copy_from_slice(bytemuck::cast_slice(embedding));
+                }
             }
-        }
+
+            Ok(())
+        })?;
 
         // We only send a wake up message when the channel is empty
         // so that we don't fill the channel with too many WakeUps.
@@ -575,13 +579,13 @@ impl<'b> ExtractorBbqueueSender<'b> {
         }
 
         // Spin loop to have a frame the size we requested.
-        let mut grant = reserve_grant(&mut producer, total_length, &self.sender)?;
-
-        let header_size = payload_header.header_size();
-        let (header_bytes, remaining) = grant.split_at_mut(header_size);
-        payload_header.serialize_into(header_bytes);
-        let (key_buffer, value_buffer) = remaining.split_at_mut(key_length.get() as usize);
-        key_value_writer(key_buffer, value_buffer)?;
+        reserve_and_write_grant(&mut producer, total_length, &self.sender, |grant| {
+            let header_size = payload_header.header_size();
+            let (header_bytes, remaining) = grant.split_at_mut(header_size);
+            payload_header.serialize_into(header_bytes);
+            let (key_buffer, value_buffer) = remaining.split_at_mut(key_length.get() as usize);
+            key_value_writer(key_buffer, value_buffer)
+        })?;
 
         // We only send a wake up message when the channel is empty
         // so that we don't fill the channel with too many WakeUps.
@@ -629,12 +633,12 @@ impl<'b> ExtractorBbqueueSender<'b> {
         }
 
         // Spin loop to have a frame the size we requested.
-        let mut grant = reserve_grant(&mut producer, total_length, &self.sender)?;
-
-        let header_size = payload_header.header_size();
-        let (header_bytes, remaining) = grant.split_at_mut(header_size);
-        payload_header.serialize_into(header_bytes);
-        key_writer(remaining)?;
+        reserve_and_write_grant(&mut producer, total_length, &self.sender, |grant| {
+            let header_size = payload_header.header_size();
+            let (header_bytes, remaining) = grant.split_at_mut(header_size);
+            payload_header.serialize_into(header_bytes);
+            key_writer(remaining)
+        })?;
 
         // We only send a wake up message when the channel is empty
         // so that we don't fill the channel with too many WakeUps.
@@ -648,18 +652,23 @@ impl<'b> ExtractorBbqueueSender<'b> {
 
 /// Try to reserve a frame grant of `total_length` by spin looping
 /// on the BBQueue buffer and panics if the receiver has been disconnected.
-fn reserve_grant<'b>(
-    producer: &mut FrameProducer<'b>,
+fn reserve_and_write_grant<F>(
+    producer: &mut FrameProducer,
     total_length: usize,
     sender: &flume::Sender<ReceiverAction>,
-) -> crate::Result<FrameGrantW<'b>> {
+    f: F,
+) -> crate::Result<()>
+where
+    F: FnOnce(&mut [u8]) -> crate::Result<()>,
+{
     loop {
         for _ in 0..10_000 {
             match producer.grant(total_length) {
                 Ok(mut grant) => {
                     // We could commit only the used memory.
-                    grant.to_commit(total_length);
-                    return Ok(grant);
+                    f(&mut grant)?;
+                    grant.commit(total_length);
+                    return Ok(());
                 }
                 Err(bbqueue::Error::InsufficientSize) => continue,
                 Err(e) => unreachable!("{e:?}"),
