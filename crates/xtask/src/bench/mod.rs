@@ -82,6 +82,10 @@ pub struct BenchDeriveArgs {
     /// Reason for the benchmark invocation
     #[arg(short, long)]
     reason: Option<String>,
+
+    /// The maximum time in seconds we allow for fetching the task queue before timing out.
+    #[arg(long, default_value_t = 60)]
+    tasks_queue_timeout_secs: u64,
 }
 
 pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
@@ -127,7 +131,7 @@ pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
     let meili_client = Client::new(
         Some("http://127.0.0.1:7700".into()),
         args.master_key.as_deref(),
-        Some(std::time::Duration::from_secs(60)),
+        Some(std::time::Duration::from_secs(args.tasks_queue_timeout_secs)),
     )?;
 
     // enter runtime
