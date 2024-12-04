@@ -459,12 +459,6 @@ impl<'b> ExtractorBbqueueSender<'b> {
             Ok(())
         })?;
 
-        // We only send a wake up message when the channel is empty
-        // so that we don't fill the channel with too many WakeUps.
-        if self.sender.is_empty() {
-            self.sender.send(ReceiverAction::WakeUp).unwrap();
-        }
-
         Ok(())
     }
 
@@ -516,12 +510,6 @@ impl<'b> ExtractorBbqueueSender<'b> {
 
             Ok(())
         })?;
-
-        // We only send a wake up message when the channel is empty
-        // so that we don't fill the channel with too many WakeUps.
-        if self.sender.is_empty() {
-            self.sender.send(ReceiverAction::WakeUp).unwrap();
-        }
 
         Ok(())
     }
@@ -587,12 +575,6 @@ impl<'b> ExtractorBbqueueSender<'b> {
             key_value_writer(key_buffer, value_buffer)
         })?;
 
-        // We only send a wake up message when the channel is empty
-        // so that we don't fill the channel with too many WakeUps.
-        if self.sender.is_empty() {
-            self.sender.send(ReceiverAction::WakeUp).unwrap();
-        }
-
         Ok(())
     }
 
@@ -640,18 +622,13 @@ impl<'b> ExtractorBbqueueSender<'b> {
             key_writer(remaining)
         })?;
 
-        // We only send a wake up message when the channel is empty
-        // so that we don't fill the channel with too many WakeUps.
-        if self.sender.is_empty() {
-            self.sender.send(ReceiverAction::WakeUp).unwrap();
-        }
-
         Ok(())
     }
 }
 
-/// Try to reserve a frame grant of `total_length` by spin looping
-/// on the BBQueue buffer and panics if the receiver has been disconnected.
+/// Try to reserve a frame grant of `total_length` by spin
+/// looping on the BBQueue buffer, panics if the receiver
+/// has been disconnected or send a WakeUp message if necessary.
 fn reserve_and_write_grant<F>(
     producer: &mut FrameProducer,
     total_length: usize,
@@ -668,6 +645,13 @@ where
                     // We could commit only the used memory.
                     f(&mut grant)?;
                     grant.commit(total_length);
+
+                    // We only send a wake up message when the channel is empty
+                    // so that we don't fill the channel with too many WakeUps.
+                    if sender.is_empty() {
+                        sender.send(ReceiverAction::WakeUp).unwrap();
+                    }
+
                     return Ok(());
                 }
                 Err(bbqueue::Error::InsufficientSize) => continue,
