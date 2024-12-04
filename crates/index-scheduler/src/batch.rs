@@ -496,8 +496,7 @@ impl IndexScheduler {
 
         // 5. We make a batch from the unprioritised tasks. Start by taking the next enqueued task.
         let task_id = if let Some(task_id) = enqueued.min() { task_id } else { return Ok(None) };
-        let mut task = self.get_task(rtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
-        current_batch.processing(Some(&mut task));
+        let task = self.get_task(rtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
 
         // If the task is not associated with any index, verify that it is an index swap and
         // create the batch directly. Otherwise, get the index name associated with the task

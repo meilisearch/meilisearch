@@ -4333,15 +4333,15 @@ mod tests {
             "primaryKey": "mouse"
           },
           "stats": {
-            "totalNbTasks": 2,
+            "totalNbTasks": 1,
             "status": {
-              "processing": 2
+              "processing": 1
             },
             "types": {
-              "indexCreation": 2
+              "indexCreation": 1
             },
             "indexUids": {
-              "catto": 2
+              "catto": 1
             }
           },
           "startedAt": "1970-01-01T00:00:00Z",
