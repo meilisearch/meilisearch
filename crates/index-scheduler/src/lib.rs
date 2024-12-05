@@ -1678,9 +1678,10 @@ impl IndexScheduler {
                 tracing::info!("A batch of tasks was successfully completed with {success} successful tasks and {failure} failed tasks.");
             }
             // If we have an abortion error we must stop the tick here and re-schedule tasks.
-            Err(Error::Milli(milli::Error::InternalError(
-                milli::InternalError::AbortedIndexation,
-            )))
+            Err(Error::Milli {
+                error: milli::Error::InternalError(milli::InternalError::AbortedIndexation),
+                ..
+            })
             | Err(Error::AbortedTask) => {
                 #[cfg(test)]
                 self.breakpoint(Breakpoint::AbortedIndexation);
@@ -1699,9 +1700,10 @@ impl IndexScheduler {
             // 2. close the associated environment
             // 3. resize it
             // 4. re-schedule tasks
-            Err(Error::Milli(milli::Error::UserError(
-                milli::UserError::MaxDatabaseSizeReached,
-            ))) if index_uid.is_some() => {
+            Err(Error::Milli {
+                error: milli::Error::UserError(milli::UserError::MaxDatabaseSizeReached),
+                ..
+            }) if index_uid.is_some() => {
                 // fixme: add index_uid to match to avoid the unwrap
                 let index_uid = index_uid.unwrap();
                 // fixme: handle error more gracefully? not sure when this could happen
@@ -1943,6 +1945,7 @@ impl IndexScheduler {
     // TODO: consider using a type alias or a struct embedder/template
     pub fn embedders(
         &self,
+        index_uid: String,
         embedding_configs: Vec<IndexEmbeddingConfig>,
     ) -> Result<EmbeddingConfigs> {
         let res: Result<_> = embedding_configs
@@ -1953,8 +1956,12 @@ impl IndexScheduler {
                      config: milli::vector::EmbeddingConfig { embedder_options, prompt, quantized },
                      ..
                  }| {
-                    let prompt =
-                        Arc::new(prompt.try_into().map_err(meilisearch_types::milli::Error::from)?);
+                    let prompt = Arc::new(
+                        prompt
+                            .try_into()
+                            .map_err(meilisearch_types::milli::Error::from)
+                            .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?,
+                    );
                     // optimistically return existing embedder
                     {
                         let embedders = self.embedders.read().unwrap();
@@ -1970,7 +1977,9 @@ impl IndexScheduler {
                     let embedder = Arc::new(
                         Embedder::new(embedder_options.clone())
                             .map_err(meilisearch_types::milli::vector::Error::from)
-                            .map_err(meilisearch_types::milli::Error::from)?,
+                            .map_err(|err| {
+                                Error::from_milli(err.into(), Some(index_uid.clone()))
+                            })?,
                     );
                     {
                         let mut embedders = self.embedders.write().unwrap();
@@ -6171,7 +6180,7 @@ mod tests {
             insta::assert_json_snapshot!(simple_hf_config.embedder_options);
             let simple_hf_name = name.clone();
 
-            let configs = index_scheduler.embedders(configs).unwrap();
+            let configs = index_scheduler.embedders("doggos".to_string(), configs).unwrap();
             let (hf_embedder, _, _) = configs.get(&simple_hf_name).unwrap();
             let beagle_embed =
                 hf_embedder.embed_one(S("Intel the beagle best doggo"), None).unwrap();

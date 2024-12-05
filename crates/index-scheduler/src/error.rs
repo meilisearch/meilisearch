@@ -1,12 +1,11 @@
 use std::fmt::Display;
 
+use crate::TaskId;
 use meilisearch_types::batches::BatchId;
 use meilisearch_types::error::{Code, ErrorCode};
 use meilisearch_types::tasks::{Kind, Status};
 use meilisearch_types::{heed, milli};
 use thiserror::Error;
-
-use crate::TaskId;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum DateField {
@@ -122,8 +121,11 @@ pub enum Error {
     Dump(#[from] dump::Error),
     #[error(transparent)]
     Heed(#[from] heed::Error),
-    #[error(transparent)]
-    Milli(#[from] milli::Error),
+    #[error("{}", match .index_uid {
+        Some(uid) if !uid.is_empty() => format!("Index `{}`: {error}", uid),
+        _ => format!("{error}")
+    })]
+    Milli { error: milli::Error, index_uid: Option<String> },
     #[error("An unexpected crash occurred when processing the task.")]
     ProcessBatchPanicked,
     #[error(transparent)]
@@ -190,7 +192,7 @@ impl Error {
             | Error::AbortedTask
             | Error::Dump(_)
             | Error::Heed(_)
-            | Error::Milli(_)
+            | Error::Milli { .. }
             | Error::ProcessBatchPanicked
             | Error::FileStore(_)
             | Error::IoError(_)
@@ -208,6 +210,20 @@ impl Error {
 
     pub fn with_custom_error_code(self, code: Code) -> Self {
         Self::WithCustomErrorCode(code, Box::new(self))
+    }
+
+    pub fn from_milli(err: milli::Error, index_uid: Option<String>) -> Self {
+        match err {
+            milli::Error::UserError(milli::UserError::InvalidFilter(_)) => {
+                Self::Milli { error: err, index_uid }
+                    .with_custom_error_code(Code::InvalidDocumentFilter)
+            }
+            milli::Error::UserError(milli::UserError::InvalidFilterExpression { .. }) => {
+                Self::Milli { error: err, index_uid }
+                    .with_custom_error_code(Code::InvalidDocumentFilter)
+            }
+            _ => Self::Milli { error: err, index_uid },
+        }
     }
 }
 
@@ -236,7 +252,7 @@ impl ErrorCode for Error {
             // TODO: not sure of the Code to use
             Error::NoSpaceLeftInTaskQueue => Code::NoSpaceLeftOnDevice,
             Error::Dump(e) => e.error_code(),
-            Error::Milli(e) => e.error_code(),
+            Error::Milli { error, .. } => error.error_code(),
             Error::ProcessBatchPanicked => Code::Internal,
             Error::Heed(e) => e.error_code(),
             Error::HeedTransaction(e) => e.error_code(),

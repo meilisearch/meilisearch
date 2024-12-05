@@ -395,6 +395,7 @@ fn import_dump(
     for index_reader in dump_reader.indexes()? {
         let mut index_reader = index_reader?;
         let metadata = index_reader.metadata();
+        let uid = metadata.uid.clone();
         tracing::info!("Importing index `{}`.", metadata.uid);
 
         let date = Some((metadata.created_at, metadata.updated_at));
@@ -432,7 +433,7 @@ fn import_dump(
         let reader = DocumentsBatchReader::from_reader(reader)?;
 
         let embedder_configs = index.embedding_configs(&wtxn)?;
-        let embedders = index_scheduler.embedders(embedder_configs)?;
+        let embedders = index_scheduler.embedders(uid, embedder_configs)?;
 
         let builder = milli::update::IndexDocuments::new(
             &mut wtxn,
