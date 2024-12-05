@@ -67,7 +67,7 @@ impl ProcessingBatch {
             task.batch_uid = Some(self.uid);
             // We don't store the statuses in the map since they're all enqueued but we must
             // still store them in the stats since that can be displayed.
-            *self.stats.status.entry(task.status).or_default() += 1;
+            *self.stats.status.entry(Status::Processing).or_default() += 1;
 
             self.kinds.insert(task.kind.as_kind());
             *self.stats.types.entry(task.kind.as_kind()).or_default() += 1;
