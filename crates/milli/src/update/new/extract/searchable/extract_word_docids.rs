@@ -8,9 +8,8 @@ use bumpalo::Bump;
 use heed::RoTxn;
 
 use super::tokenize_document::{tokenizer_builder, DocumentTokenizer};
-use crate::update::new::document::Document as _;
 use crate::update::new::extract::cache::BalancedCaches;
-use crate::update::new::extract::perm_json_p::{self, contained_in};
+use crate::update::new::extract::perm_json_p::contained_in;
 use crate::update::new::indexer::document_changes::{
     extract, DocumentChangeContext, DocumentChanges, Extractor, IndexingContext, Progress,
 };
