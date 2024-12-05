@@ -97,6 +97,15 @@ impl FacetedDocidsExtractor {
                 },
             ),
             DocumentChange::Update(inner) => {
+                if !inner.has_changed_for_fields(
+                    Some(attributes_to_extract),
+                    rtxn,
+                    index,
+                    context.db_fields_ids_map,
+                )? {
+                    return Ok(());
+                }
+
                 extract_document_facets(
                     attributes_to_extract,
                     inner.current(rtxn, index, context.db_fields_ids_map)?,

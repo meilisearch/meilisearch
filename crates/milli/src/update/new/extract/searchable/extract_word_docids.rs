@@ -351,6 +351,15 @@ impl WordDocidsExtractors {
                 )?;
             }
             DocumentChange::Update(inner) => {
+                if !inner.has_changed_for_fields(
+                    document_tokenizer.attribute_to_extract,
+                    &context.rtxn,
+                    context.index,
+                    context.db_fields_ids_map,
+                )? {
+                    return Ok(());
+                }
+
                 let mut token_fn = |fname: &str, fid, pos, word: &str| {
                     cached_sorter.insert_del_u32(
                         fid,
