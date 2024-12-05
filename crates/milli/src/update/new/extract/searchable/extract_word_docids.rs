@@ -8,8 +8,9 @@ use bumpalo::Bump;
 use heed::RoTxn;
 
 use super::tokenize_document::{tokenizer_builder, DocumentTokenizer};
+use crate::update::new::document::Document as _;
 use crate::update::new::extract::cache::BalancedCaches;
-use crate::update::new::extract::perm_json_p::contained_in;
+use crate::update::new::extract::perm_json_p::{self, contained_in};
 use crate::update::new::indexer::document_changes::{
     extract, DocumentChangeContext, DocumentChanges, Extractor, IndexingContext, Progress,
 };
@@ -351,6 +352,15 @@ impl WordDocidsExtractors {
                 )?;
             }
             DocumentChange::Update(inner) => {
+                if !inner.has_changed_for_fields(
+                    document_tokenizer.attribute_to_extract,
+                    &context.rtxn,
+                    context.index,
+                    context.db_fields_ids_map,
+                )? {
+                    return Ok(());
+                }
+
                 let mut token_fn = |fname: &str, fid, pos, word: &str| {
                     cached_sorter.insert_del_u32(
                         fid,
