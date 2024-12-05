@@ -1407,6 +1407,13 @@ pub fn perform_facet_search(
         None => TimeBudget::default(),
     };
 
+    if !index.facet_search(&rtxn)? {
+        return Err(ResponseError::from_msg(
+            "The facet search is disabled for this index".to_string(),
+            Code::FacetSearchDisabled,
+        ));
+    }
+
     // In the faceted search context, we want to use the intersection between the locales provided by the user
     // and the locales of the facet string.
     // If the facet string is not localized, we **ignore** the locales provided by the user because the facet data has no locale.

@@ -221,8 +221,15 @@ async fn add_documents_and_deactivate_facet_search() {
     let (response, code) =
         index.facet_search(json!({"facetName": "genres", "facetQuery": "a"})).await;
 
-    assert_eq!(code, 200, "{}", response);
-    assert_eq!(dbg!(response)["facetHits"].as_array().unwrap().len(), 0);
+    assert_eq!(code, 400, "{}", response);
+    snapshot!(response, @r###"
+    {
+      "message": "The facet search is disabled for this index",
+      "code": "facet_search_disabled",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#facet_search_disabled"
+    }
+    "###);
 }
 
 #[actix_rt::test]
@@ -245,8 +252,15 @@ async fn deactivate_facet_search_and_add_documents() {
     let (response, code) =
         index.facet_search(json!({"facetName": "genres", "facetQuery": "a"})).await;
 
-    assert_eq!(code, 200, "{}", response);
-    assert_eq!(dbg!(response)["facetHits"].as_array().unwrap().len(), 0);
+    assert_eq!(code, 400, "{}", response);
+    snapshot!(response, @r###"
+    {
+      "message": "The facet search is disabled for this index",
+      "code": "facet_search_disabled",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#facet_search_disabled"
+    }
+    "###);
 }
 
 #[actix_rt::test]
