@@ -279,7 +279,7 @@ InvalidSearchPage                     , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchQ                        , InvalidRequest       , BAD_REQUEST ;
 InvalidFacetSearchQuery               , InvalidRequest       , BAD_REQUEST ;
 InvalidFacetSearchName                , InvalidRequest       , BAD_REQUEST ;
-InvalidFacetSearchDisabled            , InvalidRequest       , BAD_REQUEST ;
+FacetSearchDisabled                   , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchVector                   , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchShowMatchesPosition      , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchShowRankingScore         , InvalidRequest       , BAD_REQUEST ;

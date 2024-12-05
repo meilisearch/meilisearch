@@ -1410,7 +1410,7 @@ pub fn perform_facet_search(
     if !index.facet_search(&rtxn)? {
         return Err(ResponseError::from_msg(
             "The facet search is disabled for this index".to_string(),
-            Code::InvalidFacetSearchDisabled,
+            Code::FacetSearchDisabled,
         ));
     }
 
