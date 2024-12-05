@@ -9,8 +9,8 @@ use roaring::RoaringBitmap;
 
 use super::channel::*;
 use super::extract::{
-    merge_caches, transpose_and_freeze_caches, BalancedCaches, DelAddRoaringBitmap, FacetKind,
-    GeoExtractorData,
+    merge_caches_sorted, transpose_and_freeze_caches, BalancedCaches, DelAddRoaringBitmap,
+    FacetKind, GeoExtractorData,
 };
 use crate::{CboRoaringBitmapCodec, FieldId, GeoPoint, Index, InternalError, Result};
 
@@ -78,7 +78,7 @@ where
         if must_stop_processing() {
             return Err(InternalError::AbortedIndexation.into());
         }
-        merge_caches(frozen, |key, DelAddRoaringBitmap { del, add }| {
+        merge_caches_sorted(frozen, |key, DelAddRoaringBitmap { del, add }| {
             let current = database.get(&rtxn, key)?;
             match merge_cbo_bitmaps(current, del, add)? {
                 Operation::Write(bitmap) => {
@@ -107,7 +107,7 @@ pub fn merge_and_send_facet_docids<'extractor>(
         .map(|frozen| {
             let mut facet_field_ids_delta = FacetFieldIdsDelta::default();
             let rtxn = index.read_txn()?;
-            merge_caches(frozen, |key, DelAddRoaringBitmap { del, add }| {
+            merge_caches_sorted(frozen, |key, DelAddRoaringBitmap { del, add }| {
                 let current = database.get_cbo_roaring_bytes_value(&rtxn, key)?;
                 match merge_cbo_bitmaps(current, del, add)? {
                     Operation::Write(bitmap) => {

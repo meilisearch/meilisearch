@@ -6,7 +6,9 @@ mod searchable;
 mod vectors;
 
 use bumpalo::Bump;
-pub use cache::{merge_caches, transpose_and_freeze_caches, BalancedCaches, DelAddRoaringBitmap};
+pub use cache::{
+    merge_caches_sorted, transpose_and_freeze_caches, BalancedCaches, DelAddRoaringBitmap,
+};
 pub use documents::*;
 pub use faceted::*;
 pub use geo::*;

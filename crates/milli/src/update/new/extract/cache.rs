@@ -466,12 +466,13 @@ pub fn transpose_and_freeze_caches<'a, 'extractor>(
     Ok(bucket_caches)
 }
 
-/// Merges the caches that must be all associated to the same bucket.
+/// Merges the caches that must be all associated to the same bucket
+/// but make sure to sort the different buckets before performing the merges.
 ///
 /// # Panics
 ///
 /// - If the bucket IDs in these frozen caches are not exactly the same.
-pub fn merge_caches<F>(frozen: Vec<FrozenCache>, mut f: F) -> Result<()>
+pub fn merge_caches_sorted<F>(frozen: Vec<FrozenCache>, mut f: F) -> Result<()>
 where
     F: for<'a> FnMut(&'a [u8], DelAddRoaringBitmap) -> Result<()>,
 {
@@ -543,12 +544,12 @@ where
 
     // Then manage the content on the HashMap entries that weren't taken (mem::take).
     while let Some(mut map) = maps.pop() {
-        for (key, bbbul) in map.iter_mut() {
-            // Make sure we don't try to work with entries already managed by the spilled
-            if bbbul.is_empty() {
-                continue;
-            }
+        // Make sure we don't try to work with entries already managed by the spilled
+        let mut ordered_entries: Vec<_> =
+            map.iter_mut().filter(|(_, bbbul)| !bbbul.is_empty()).collect();
+        ordered_entries.sort_unstable_by_key(|(key, _)| *key);
 
+        for (key, bbbul) in ordered_entries {
             let mut output = DelAddRoaringBitmap::empty();
             output.union_and_clear_bbbul(bbbul);
 
