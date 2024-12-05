@@ -34,7 +34,7 @@ where
         }
 
         let mut frozen = data.into_inner().freeze()?;
-        for result in frozen.iter_and_clear_removed() {
+        for result in frozen.iter_and_clear_removed()? {
             let extracted_geo_point = result?;
             let removed = rtree.remove(&GeoPoint::from(extracted_geo_point));
             debug_assert!(removed.is_some());
@@ -42,7 +42,7 @@ where
             debug_assert!(removed);
         }
 
-        for result in frozen.iter_and_clear_inserted() {
+        for result in frozen.iter_and_clear_inserted()? {
             let extracted_geo_point = result?;
             rtree.insert(GeoPoint::from(extracted_geo_point));
             let inserted = faceted.insert(extracted_geo_point.docid);
