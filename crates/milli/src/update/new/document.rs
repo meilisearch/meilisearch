@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use either::Either;
 use heed::RoTxn;
 use raw_collections::RawMap;
 use serde_json::value::RawValue;
@@ -209,29 +210,34 @@ impl<'d, 'doc: 'd, 't: 'd, Mapper: FieldIdMapper> Document<'d>
     for MergedDocument<'d, 'doc, 't, Mapper>
 {
     fn iter_top_level_fields(&self) -> impl Iterator<Item = Result<(&'d str, &'d RawValue)>> {
-        let mut new_doc_it = self.new_doc.iter_top_level_fields();
-        let mut db_it = self.db.iter().flat_map(|db| db.iter_top_level_fields());
-        let mut seen_fields = BTreeSet::new();
+        match &self.db {
+            Some(db) => {
+                let mut new_doc_it = self.new_doc.iter_top_level_fields();
+                let mut db_it = db.iter_top_level_fields();
+                let mut seen_fields = BTreeSet::new();
 
-        std::iter::from_fn(move || {
-            if let Some(next) = new_doc_it.next() {
-                if let Ok((name, _)) = next {
-                    seen_fields.insert(name);
-                }
-                return Some(next);
-            }
-            loop {
-                match db_it.next()? {
-                    Ok((name, value)) => {
-                        if seen_fields.contains(name) {
-                            continue;
+                Either::Left(std::iter::from_fn(move || {
+                    if let Some(next) = new_doc_it.next() {
+                        if let Ok((name, _)) = next {
+                            seen_fields.insert(name);
                         }
-                        return Some(Ok((name, value)));
+                        return Some(next);
                     }
-                    Err(err) => return Some(Err(err)),
-                }
+                    loop {
+                        match db_it.next()? {
+                            Ok((name, value)) => {
+                                if seen_fields.contains(name) {
+                                    continue;
+                                }
+                                return Some(Ok((name, value)));
+                            }
+                            Err(err) => return Some(Err(err)),
+                        }
+                    }
+                }))
             }
-        })
+            None => Either::Right(self.new_doc.iter_top_level_fields()),
+        }
     }
 
     fn vectors_field(&self) -> Result<Option<&'d RawValue>> {
