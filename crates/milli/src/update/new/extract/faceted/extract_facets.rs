@@ -9,7 +9,7 @@ use heed::RoTxn;
 use serde_json::Value;
 
 use super::super::cache::BalancedCaches;
-use super::facet_document::extract_document_facets;
+use super::facet_document::{extract_document_facets, extract_merged_document_facets};
 use super::FacetKind;
 use crate::heed_codec::facet::OrderedF64Codec;
 use crate::update::del_add::DelAdd;
@@ -106,17 +106,19 @@ impl FacetedDocidsExtractor {
                     return Ok(());
                 }
 
-                extract_document_facets(
+                extract_merged_document_facets(
                     attributes_to_extract,
-                    inner.current(rtxn, index, context.db_fields_ids_map)?,
+                    inner.merged(rtxn, index, context.db_fields_ids_map)?,
                     inner.external_document_id(),
+                    &mut del_add_facet_value,
+                    cached_sorter.deref_mut(),
                     new_fields_ids_map.deref_mut(),
-                    &mut |fid, depth, value| {
+                    &mut |fid, depth, value, del_add_facet_value, cached_sorter| {
                         Self::facet_fn_with_options(
                             &context.doc_alloc,
-                            cached_sorter.deref_mut(),
+                            cached_sorter,
                             BalancedCaches::insert_del_u32,
-                            &mut del_add_facet_value,
+                            del_add_facet_value,
                             DelAddFacetValue::insert_del,
                             docid,
                             fid,
@@ -124,19 +126,12 @@ impl FacetedDocidsExtractor {
                             value,
                         )
                     },
-                )?;
-
-                extract_document_facets(
-                    attributes_to_extract,
-                    inner.merged(rtxn, index, context.db_fields_ids_map)?,
-                    inner.external_document_id(),
-                    new_fields_ids_map.deref_mut(),
-                    &mut |fid, depth, value| {
+                    &mut |fid, depth, value, del_add_facet_value, cached_sorter| {
                         Self::facet_fn_with_options(
                             &context.doc_alloc,
-                            cached_sorter.deref_mut(),
+                            cached_sorter,
                             BalancedCaches::insert_add_u32,
-                            &mut del_add_facet_value,
+                            del_add_facet_value,
                             DelAddFacetValue::insert_add,
                             docid,
                             fid,
@@ -282,7 +277,7 @@ impl FacetedDocidsExtractor {
     }
 }
 
-struct DelAddFacetValue<'doc> {
+pub(crate) struct DelAddFacetValue<'doc> {
     strings: HashMap<(FieldId, BVec<'doc, u8>), DelAdd, hashbrown::DefaultHashBuilder, &'doc Bump>,
     f64s: HashMap<(FieldId, BVec<'doc, u8>), DelAdd, hashbrown::DefaultHashBuilder, &'doc Bump>,
 }
