@@ -203,6 +203,83 @@ impl<'a, 'doc, 't, Mapper: FieldIdMapper> MergedDocument<'a, 'doc, 't, Mapper> {
     pub fn without_db(new_doc: DocumentFromVersions<'a, 'doc>) -> Self {
         Self { new_doc, db: None }
     }
+
+    pub fn iter_merged_top_level_fields<'d>(
+        &self,
+    ) -> impl Iterator<Item = Result<(&'d str, MergedValue<'t, 'doc>)>> + '_
+    where
+        't: 'd,
+        'doc: 'd,
+    {
+        match &self.db {
+            Some(db) => {
+                let mut new_doc_it = self.new_doc.iter_top_level_fields();
+                let mut db_it = db.iter_top_level_fields();
+                let mut seen_fields = BTreeSet::new();
+
+                Either::Left(std::iter::from_fn(move || {
+                    if let Some(next) = new_doc_it.next() {
+                        let (name, updated_value) = match next {
+                            Ok((name, updated_value)) => (name, updated_value),
+                            Err(err) => return Some(Err(err)),
+                        };
+                        seen_fields.insert(name);
+                        let current = match db.top_level_field(name) {
+                            Ok(current) => current,
+                            Err(err) => return Some(Err(err)),
+                        };
+
+                        match current {
+                            Some(current) => {
+                                return Some(Ok((
+                                    name,
+                                    MergedValue::CurrentAndUpdated(current, updated_value),
+                                )))
+                            }
+                            None => return Some(Ok((name, MergedValue::Updated(updated_value)))),
+                        }
+                    }
+                    loop {
+                        match db_it.next()? {
+                            Ok((name, value)) => {
+                                if seen_fields.contains(name) {
+                                    continue;
+                                }
+                                return Some(Ok((name, MergedValue::Current(value))));
+                            }
+                            Err(err) => return Some(Err(err)),
+                        }
+                    }
+                }))
+            }
+            None => Either::Right(self.new_doc.iter_top_level_fields().map(|res| {
+                let (k, v) = res?;
+                Ok((k, MergedValue::Updated(v)))
+            })),
+        }
+    }
+
+    pub fn merged_geo_field(&self) -> Result<Option<MergedValue<'t, 'doc>>> {
+        let db_geo_field = match self.db {
+            Some(db) => db.geo_field()?,
+            None => None,
+        };
+
+        let new_doc_geo_field = self.new_doc.geo_field()?;
+
+        Ok(match (db_geo_field, new_doc_geo_field) {
+            (None, None) => None,
+            (None, Some(new_doc)) => Some(MergedValue::Updated(new_doc)),
+            (Some(db), None) => Some(MergedValue::Current(db)),
+            (Some(db), Some(new_doc)) => Some(MergedValue::CurrentAndUpdated(db, new_doc)),
+        })
+    }
+}
+
+pub enum MergedValue<'t, 'doc> {
+    Current(&'t RawValue),
+    Updated(&'doc RawValue),
+    CurrentAndUpdated(&'t RawValue, &'doc RawValue),
 }
 
 impl<'d, 'doc: 'd, 't: 'd, Mapper: FieldIdMapper> Document<'d>
