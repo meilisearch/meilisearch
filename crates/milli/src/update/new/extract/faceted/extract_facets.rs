@@ -108,7 +108,7 @@ impl FacetedDocidsExtractor {
 
                 extract_merged_document_facets(
                     attributes_to_extract,
-                    inner.merged(rtxn, index, context.db_fields_ids_map)?,
+                    inner.delta(rtxn, index, context.db_fields_ids_map)?,
                     inner.external_document_id(),
                     &mut del_add_facet_value,
                     cached_sorter.deref_mut(),
