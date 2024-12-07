@@ -179,6 +179,26 @@ impl<'a> FilterCondition<'a> {
         }
     }
 
+    pub fn fids(&self, depth: usize) -> Box<dyn Iterator<Item = &Token> + '_> {
+        if depth == 0 {
+            return Box::new(std::iter::empty());
+        }
+        match self {
+            FilterCondition::Condition { fid, .. } | FilterCondition::In { fid, .. } => {
+                Box::new(std::iter::once(fid))
+            }
+            FilterCondition::Not(filter) => {
+                let depth = depth.saturating_sub(1);
+                filter.fids(depth)
+            }
+            FilterCondition::And(subfilters) | FilterCondition::Or(subfilters) => {
+                let depth = depth.saturating_sub(1);
+                Box::new(subfilters.iter().flat_map(move |f| f.fids(depth)))
+            }
+            _ => Box::new(std::iter::empty()),
+        }
+    }
+
     /// Returns the first token found at the specified depth, `None` if no token at this depth.
     pub fn token_at_depth(&self, depth: usize) -> Option<&Token> {
         match self {
@@ -976,6 +996,43 @@ pub mod tests {
         let filter = FilterCondition::parse("account_ids=1 OR account_ids=2 AND account_ids=3 OR account_ids=4 AND account_ids=5 OR account_ids=6").unwrap().unwrap();
         assert!(filter.token_at_depth(2).is_some());
         assert!(filter.token_at_depth(3).is_none());
+    }
+
+    #[test]
+    fn fids() {
+        let filter = Fc::parse("field = value").unwrap().unwrap();
+        let fids: Vec<_> = filter.fids(MAX_FILTER_DEPTH).collect();
+        assert_eq!(fids.len(), 1);
+        assert_eq!(fids[0].value(), "field");
+
+        let filter = Fc::parse("field IN [1, 2, 3]").unwrap().unwrap();
+        let fids: Vec<_> = filter.fids(MAX_FILTER_DEPTH).collect();
+        assert_eq!(fids.len(), 1);
+        assert_eq!(fids[0].value(), "field");
+
+        let filter = Fc::parse("field != value").unwrap().unwrap();
+        let fids: Vec<_> = filter.fids(MAX_FILTER_DEPTH).collect();
+        assert_eq!(fids.len(), 1);
+        assert_eq!(fids[0].value(), "field");
+
+        let filter = Fc::parse("field1 = value1 AND field2 = value2").unwrap().unwrap();
+        let fids: Vec<_> = filter.fids(MAX_FILTER_DEPTH).collect();
+        assert_eq!(fids.len(), 2);
+        assert!(fids[0].value() == "field1");
+        assert!(fids[1].value() == "field2");
+
+        let filter = Fc::parse("field1 = value1 OR field2 = value2").unwrap().unwrap();
+        let fids: Vec<_> = filter.fids(MAX_FILTER_DEPTH).collect();
+        assert_eq!(fids.len(), 2);
+        assert!(fids[0].value() == "field1");
+        assert!(fids[1].value() == "field2");
+
+        let depth = 2;
+        let filter =
+            Fc::parse("field1 = value1 AND (field2 = value2 OR field3 = value3)").unwrap().unwrap();
+        let fids: Vec<_> = filter.fids(depth).collect();
+        assert_eq!(fids.len(), 1);
+        assert_eq!(fids[0].value(), "field1");
     }
 
     #[test]
