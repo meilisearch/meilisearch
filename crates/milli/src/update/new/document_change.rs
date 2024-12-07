@@ -2,7 +2,7 @@ use bumpalo::Bump;
 use heed::RoTxn;
 
 use super::document::{
-    Document as _, DocumentFromDb, DocumentFromVersions, MergedDocument, Versions,
+    DeltaDocument, Document as _, DocumentFromDb, DocumentFromVersions, MergedDocument, Versions,
 };
 use super::extract::perm_json_p;
 use super::vector_document::{
@@ -165,6 +165,15 @@ impl<'doc> Update<'doc> {
                 DocumentFromVersions::new(&self.new),
             )
         }
+    }
+
+    pub fn delta<'t, Mapper: FieldIdMapper>(
+        &self,
+        rtxn: &'t RoTxn,
+        index: &'t Index,
+        mapper: &'t Mapper,
+    ) -> Result<DeltaDocument<'_, 'doc, 't, Mapper>> {
+        DeltaDocument::new(self.docid, rtxn, index, mapper, DocumentFromVersions::new(&self.new))
     }
 
     /// Returns whether the updated version of the document is different from the current version for the passed subset of fields.
