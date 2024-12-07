@@ -65,33 +65,7 @@ impl<'t, Mapper: FieldIdMapper> Copy for DocumentFromDb<'t, Mapper> {}
 
 impl<'t, Mapper: FieldIdMapper> Document<'t> for DocumentFromDb<'t, Mapper> {
     fn iter_top_level_fields(&self) -> impl Iterator<Item = Result<(&'t str, &'t RawValue)>> {
-        let mut it = self.content.iter();
-
-        std::iter::from_fn(move || loop {
-            let (fid, value) = it.next()?;
-            let name = match self.fields_ids_map.name(fid).ok_or(
-                InternalError::FieldIdMapMissingEntry(crate::FieldIdMapMissingEntry::FieldId {
-                    field_id: fid,
-                    process: "getting current document",
-                }),
-            ) {
-                Ok(name) => name,
-                Err(error) => return Some(Err(error.into())),
-            };
-
-            if name == RESERVED_VECTORS_FIELD_NAME || name == "_geo" {
-                continue;
-            }
-
-            let res = (|| {
-                let value =
-                    serde_json::from_slice(value).map_err(crate::InternalError::SerdeJson)?;
-
-                Ok((name, value))
-            })();
-
-            return Some(res);
-        })
+        self.iter_top_level_fields_with_fid().map(|res| res.map(|(_, name, value)| (name, value)))
     }
 
     fn vectors_field(&self) -> Result<Option<&'t RawValue>> {
@@ -139,6 +113,38 @@ impl<'t, Mapper: FieldIdMapper> DocumentFromDb<'t, Mapper> {
         };
         let Some(value) = self.content.get(fid) else { return Ok(None) };
         Ok(Some(serde_json::from_slice(value).map_err(InternalError::SerdeJson)?))
+    }
+
+    pub fn iter_top_level_fields_with_fid(
+        &self,
+    ) -> impl Iterator<Item = Result<(FieldId, &'t str, &'t RawValue)>> + '_ {
+        let mut it = self.content.iter();
+
+        std::iter::from_fn(move || loop {
+            let (fid, value) = it.next()?;
+            let name = match self.fields_ids_map.name(fid).ok_or(
+                InternalError::FieldIdMapMissingEntry(crate::FieldIdMapMissingEntry::FieldId {
+                    field_id: fid,
+                    process: "getting current document",
+                }),
+            ) {
+                Ok(name) => name,
+                Err(error) => return Some(Err(error.into())),
+            };
+
+            if name == RESERVED_VECTORS_FIELD_NAME || name == "_geo" {
+                continue;
+            }
+
+            let res = (|| {
+                let value =
+                    serde_json::from_slice(value).map_err(crate::InternalError::SerdeJson)?;
+
+                Ok((fid, name, value))
+            })();
+
+            return Some(res);
+        })
     }
 }
 
