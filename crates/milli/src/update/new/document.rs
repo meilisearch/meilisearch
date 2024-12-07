@@ -203,6 +203,7 @@ pub struct MergedDocument<'a, 'doc, 't, Mapper: FieldIdMapper> {
 pub struct DeltaDocument<'a, 'doc, 't, Mapper: FieldIdMapper> {
     new_doc: DocumentFromVersions<'a, 'doc>,
     db_doc: Option<DocumentFromDb<'t, Mapper>>,
+    has_deletion: bool,
 }
 
 impl<'a, 'doc, 't, Mapper: FieldIdMapper> DeltaDocument<'a, 'doc, 't, Mapper> {
@@ -212,17 +213,18 @@ impl<'a, 'doc, 't, Mapper: FieldIdMapper> DeltaDocument<'a, 'doc, 't, Mapper> {
         index: &'t Index,
         db_fields_ids_map: &'t Mapper,
         new_doc: DocumentFromVersions<'a, 'doc>,
+        has_deletion: bool,
     ) -> Result<Self> {
         let db_doc = DocumentFromDb::new(docid, rtxn, index, db_fields_ids_map)?;
-        Ok(Self { db_doc, new_doc })
+        Ok(Self { db_doc, new_doc, has_deletion })
     }
 
-    pub fn delta_top_level_fields<'d>(
+    pub fn delta_top_level_fields<'either>(
         &self,
-    ) -> impl Iterator<Item = Result<(&'d str, DeltaValue<'t, 'doc>)>> + '_
+    ) -> impl Iterator<Item = Result<(&'either str, DeltaValue<'either, 't, 'doc>)>> + '_
     where
-        't: 'd,
-        'doc: 'd,
+        't: 'either,
+        'doc: 'either,
     {
         match &self.db_doc {
             // since we'll be returning all db top level fields, it makes more sense to iterate on the db first:
@@ -233,6 +235,7 @@ impl<'a, 'doc, 't, Mapper: FieldIdMapper> DeltaDocument<'a, 'doc, 't, Mapper> {
                 let mut db_iter = db_doc.iter_top_level_fields_with_fid();
                 let fid_map = db_doc.fields_ids_map;
                 let mut seen_fields = RoaringBitmap::new();
+                let has_deletion = self.has_deletion;
 
                 Either::Left(std::iter::from_fn(move || {
                     if let Some(entry) = db_iter.next() {
@@ -248,12 +251,22 @@ impl<'a, 'doc, 't, Mapper: FieldIdMapper> DeltaDocument<'a, 'doc, 't, Mapper> {
 
                         match new_value {
                             Some(new_value) => {
-                                return Some(Ok((
-                                    name,
-                                    DeltaValue::CurrentAndUpdated(db_value, new_value),
-                                )))
+                                if new_value.get() == db_value.get() {
+                                    return Some(Ok((name, DeltaValue::Unchanged(new_value))));
+                                } else {
+                                    return Some(Ok((
+                                        name,
+                                        DeltaValue::Modified(db_value, new_value),
+                                    )));
+                                }
                             }
-                            None => return Some(Ok((name, DeltaValue::Current(db_value)))),
+                            None => {
+                                if has_deletion {
+                                    return Some(Ok((name, DeltaValue::Deleted(db_value))));
+                                } else {
+                                    return Some(Ok((name, DeltaValue::Unchanged(db_value))));
+                                }
+                            }
                         }
                     }
                     {
@@ -266,7 +279,7 @@ impl<'a, 'doc, 't, Mapper: FieldIdMapper> DeltaDocument<'a, 'doc, 't, Mapper> {
                             true
                         })? {
                             Ok((name, new_value)) => {
-                                Some(Ok((name, DeltaValue::Updated(new_value))))
+                                Some(Ok((name, DeltaValue::Inserted(new_value))))
                             }
                             Err(err) => Some(Err(err)),
                         }
@@ -275,12 +288,12 @@ impl<'a, 'doc, 't, Mapper: FieldIdMapper> DeltaDocument<'a, 'doc, 't, Mapper> {
             }
             None => Either::Right(self.new_doc.iter_top_level_fields().map(|res| {
                 let (k, v) = res?;
-                Ok((k, DeltaValue::Updated(v)))
+                Ok((k, DeltaValue::Inserted(v)))
             })),
         }
     }
 
-    pub fn delta_geo_field(&self) -> Result<Option<DeltaValue<'t, 'doc>>> {
+    pub fn delta_geo_field(&self) -> Result<Option<DeltaValue<'_, 't, 'doc>>> {
         let db_geo_field = match self.db_doc {
             Some(db) => db.geo_field()?,
             None => None,
@@ -290,9 +303,13 @@ impl<'a, 'doc, 't, Mapper: FieldIdMapper> DeltaDocument<'a, 'doc, 't, Mapper> {
 
         Ok(match (db_geo_field, new_doc_geo_field) {
             (None, None) => None,
-            (None, Some(new_doc)) => Some(DeltaValue::Updated(new_doc)),
-            (Some(db), None) => Some(DeltaValue::Current(db)),
-            (Some(db), Some(new_doc)) => Some(DeltaValue::CurrentAndUpdated(db, new_doc)),
+            (None, Some(new_doc)) => Some(DeltaValue::Inserted(new_doc)),
+            (Some(db), None) => Some(if self.has_deletion {
+                DeltaValue::Deleted(db)
+            } else {
+                DeltaValue::Unchanged(db)
+            }),
+            (Some(db), Some(new_doc)) => Some(DeltaValue::Modified(db, new_doc)),
         })
     }
 }
@@ -314,10 +331,11 @@ impl<'a, 'doc, 't, Mapper: FieldIdMapper> MergedDocument<'a, 'doc, 't, Mapper> {
     }
 }
 
-pub enum DeltaValue<'t, 'doc> {
-    Current(&'t RawValue),
-    Updated(&'doc RawValue),
-    CurrentAndUpdated(&'t RawValue, &'doc RawValue),
+pub enum DeltaValue<'either, 't: 'either, 'doc: 'either> {
+    Deleted(&'t RawValue),
+    Inserted(&'doc RawValue),
+    Modified(&'t RawValue, &'doc RawValue),
+    Unchanged(&'either RawValue),
 }
 
 impl<'d, 'doc: 'd, 't: 'd, Mapper: FieldIdMapper> Document<'d>

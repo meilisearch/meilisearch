@@ -173,7 +173,14 @@ impl<'doc> Update<'doc> {
         index: &'t Index,
         mapper: &'t Mapper,
     ) -> Result<DeltaDocument<'_, 'doc, 't, Mapper>> {
-        DeltaDocument::new(self.docid, rtxn, index, mapper, DocumentFromVersions::new(&self.new))
+        DeltaDocument::new(
+            self.docid,
+            rtxn,
+            index,
+            mapper,
+            DocumentFromVersions::new(&self.new),
+            self.has_deletion,
+        )
     }
 
     /// Returns whether the updated version of the document is different from the current version for the passed subset of fields.
