@@ -2,7 +2,7 @@ use serde_json::value::RawValue;
 use serde_json::Value;
 
 use super::extract_facets::DelAddFacetValue;
-use crate::update::new::document::{Document, MergedDocument, MergedValue};
+use crate::update::new::document::{DeltaDocument, DeltaValue, Document};
 use crate::update::new::extract::geo::extract_geo_coordinates;
 use crate::update::new::extract::{perm_json_p, BalancedCaches};
 use crate::{FieldId, FieldsIdsMap, GlobalFieldsIdsMap, InternalError, Result, UserError};
@@ -99,7 +99,7 @@ fn extract_document_facet(
 #[allow(clippy::too_many_arguments)]
 pub fn extract_merged_document_facets<'doc, 'del_add_facet_value, 'cache>(
     attributes_to_extract: &[&str],
-    document: MergedDocument<'doc, 'doc, 'doc, FieldsIdsMap>,
+    document: DeltaDocument<'doc, 'doc, 'doc, FieldsIdsMap>,
     external_document_id: &str,
     del_add_facet_value: &mut DelAddFacetValue<'del_add_facet_value>,
     cached_sorter: &mut BalancedCaches<'cache>,
@@ -119,10 +119,10 @@ pub fn extract_merged_document_facets<'doc, 'del_add_facet_value, 'cache>(
         &mut BalancedCaches<'cache>,
     ) -> Result<()>,
 ) -> Result<()> {
-    for res in document.iter_merged_top_level_fields() {
+    for res in document.delta_top_level_fields() {
         let (field_name, value) = res?;
         match value {
-            MergedValue::Current(value) => {
+            DeltaValue::Current(value) => {
                 extract_document_facet(
                     attributes_to_extract,
                     field_id_map,
@@ -133,7 +133,7 @@ pub fn extract_merged_document_facets<'doc, 'del_add_facet_value, 'cache>(
                     value,
                 )?;
             }
-            MergedValue::Updated(value) => {
+            DeltaValue::Updated(value) => {
                 extract_document_facet(
                     attributes_to_extract,
                     field_id_map,
@@ -144,7 +144,7 @@ pub fn extract_merged_document_facets<'doc, 'del_add_facet_value, 'cache>(
                     value,
                 )?;
             }
-            MergedValue::CurrentAndUpdated(current, updated) => {
+            DeltaValue::CurrentAndUpdated(current, updated) => {
                 if current.get() == updated.get() {
                     continue;
                 }
@@ -171,8 +171,8 @@ pub fn extract_merged_document_facets<'doc, 'del_add_facet_value, 'cache>(
     }
 
     if attributes_to_extract.contains(&"_geo") {
-        match document.merged_geo_field()? {
-            Some(MergedValue::Current(current)) => {
+        match document.delta_geo_field()? {
+            Some(DeltaValue::Current(current)) => {
                 extract_geo_facet(
                     external_document_id,
                     current,
@@ -182,7 +182,7 @@ pub fn extract_merged_document_facets<'doc, 'del_add_facet_value, 'cache>(
                     },
                 )?;
             }
-            Some(MergedValue::Updated(updated)) => {
+            Some(DeltaValue::Updated(updated)) => {
                 extract_geo_facet(
                     external_document_id,
                     updated,
@@ -192,7 +192,7 @@ pub fn extract_merged_document_facets<'doc, 'del_add_facet_value, 'cache>(
                     },
                 )?;
             }
-            Some(MergedValue::CurrentAndUpdated(current, updated))
+            Some(DeltaValue::CurrentAndUpdated(current, updated))
                 if current.get() != updated.get() =>
             {
                 extract_geo_facet(
@@ -212,7 +212,7 @@ pub fn extract_merged_document_facets<'doc, 'del_add_facet_value, 'cache>(
                     },
                 )?;
             }
-            None | Some(MergedValue::CurrentAndUpdated(_, _)) => {}
+            None | Some(DeltaValue::CurrentAndUpdated(_, _)) => {}
         }
     }
 
