@@ -1,14 +1,16 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use either::Either;
 use heed::RoTxn;
 use raw_collections::RawMap;
+use roaring::RoaringBitmap;
 use serde_json::value::RawValue;
 
 use super::vector_document::VectorDocument;
 use super::{KvReaderFieldId, KvWriterFieldId};
 use crate::documents::FieldIdMapper;
 use crate::vector::parsed_vectors::RESERVED_VECTORS_FIELD_NAME;
-use crate::{DocumentId, GlobalFieldsIdsMap, Index, InternalError, Result, UserError};
+use crate::{DocumentId, FieldId, GlobalFieldsIdsMap, Index, InternalError, Result, UserError};
 
 /// A view into a document that can represent either the current version from the DB,
 /// the update data from payload or other means, or the merged updated version.
@@ -65,33 +67,7 @@ impl<'t, Mapper: FieldIdMapper> Copy for DocumentFromDb<'t, Mapper> {}
 
 impl<'t, Mapper: FieldIdMapper> Document<'t> for DocumentFromDb<'t, Mapper> {
     fn iter_top_level_fields(&self) -> impl Iterator<Item = Result<(&'t str, &'t RawValue)>> {
-        let mut it = self.content.iter();
-
-        std::iter::from_fn(move || loop {
-            let (fid, value) = it.next()?;
-            let name = match self.fields_ids_map.name(fid).ok_or(
-                InternalError::FieldIdMapMissingEntry(crate::FieldIdMapMissingEntry::FieldId {
-                    field_id: fid,
-                    process: "getting current document",
-                }),
-            ) {
-                Ok(name) => name,
-                Err(error) => return Some(Err(error.into())),
-            };
-
-            if name == RESERVED_VECTORS_FIELD_NAME || name == "_geo" {
-                continue;
-            }
-
-            let res = (|| {
-                let value =
-                    serde_json::from_slice(value).map_err(crate::InternalError::SerdeJson)?;
-
-                Ok((name, value))
-            })();
-
-            return Some(res);
-        })
+        self.iter_top_level_fields_with_fid().map(|res| res.map(|(_, name, value)| (name, value)))
     }
 
     fn vectors_field(&self) -> Result<Option<&'t RawValue>> {
@@ -140,6 +116,38 @@ impl<'t, Mapper: FieldIdMapper> DocumentFromDb<'t, Mapper> {
         let Some(value) = self.content.get(fid) else { return Ok(None) };
         Ok(Some(serde_json::from_slice(value).map_err(InternalError::SerdeJson)?))
     }
+
+    pub fn iter_top_level_fields_with_fid(
+        &self,
+    ) -> impl Iterator<Item = Result<(FieldId, &'t str, &'t RawValue)>> + '_ {
+        let mut it = self.content.iter();
+
+        std::iter::from_fn(move || loop {
+            let (fid, value) = it.next()?;
+            let name = match self.fields_ids_map.name(fid).ok_or(
+                InternalError::FieldIdMapMissingEntry(crate::FieldIdMapMissingEntry::FieldId {
+                    field_id: fid,
+                    process: "getting current document",
+                }),
+            ) {
+                Ok(name) => name,
+                Err(error) => return Some(Err(error.into())),
+            };
+
+            if name == RESERVED_VECTORS_FIELD_NAME || name == "_geo" {
+                continue;
+            }
+
+            let res = (|| {
+                let value =
+                    serde_json::from_slice(value).map_err(crate::InternalError::SerdeJson)?;
+
+                Ok((fid, name, value))
+            })();
+
+            return Some(res);
+        })
+    }
 }
 
 #[derive(Debug)]
@@ -182,10 +190,128 @@ impl<'a, 'doc> Document<'doc> for DocumentFromVersions<'a, 'doc> {
     }
 }
 
+/// A [`Document`] whose fields value are the [`DocumentFromVersions`] value if exists,
+/// or else the [`DocumentFromDb`] value.
 #[derive(Debug)]
 pub struct MergedDocument<'a, 'doc, 't, Mapper: FieldIdMapper> {
     new_doc: DocumentFromVersions<'a, 'doc>,
     db: Option<DocumentFromDb<'t, Mapper>>,
+}
+
+/// A pseudo-document that returns [`DeltaValue`]s.
+#[derive(Debug)]
+pub struct DeltaDocument<'a, 'doc, 't, Mapper: FieldIdMapper> {
+    new_doc: DocumentFromVersions<'a, 'doc>,
+    db_doc: Option<DocumentFromDb<'t, Mapper>>,
+    has_deletion: bool,
+}
+
+impl<'a, 'doc, 't, Mapper: FieldIdMapper> DeltaDocument<'a, 'doc, 't, Mapper> {
+    pub fn new(
+        docid: DocumentId,
+        rtxn: &'t RoTxn,
+        index: &'t Index,
+        db_fields_ids_map: &'t Mapper,
+        new_doc: DocumentFromVersions<'a, 'doc>,
+        has_deletion: bool,
+    ) -> Result<Self> {
+        let db_doc = DocumentFromDb::new(docid, rtxn, index, db_fields_ids_map)?;
+        Ok(Self { db_doc, new_doc, has_deletion })
+    }
+
+    pub fn delta_top_level_fields<'either>(
+        &self,
+    ) -> impl Iterator<Item = Result<(&'either str, DeltaValue<'either, 't, 'doc>)>> + '_
+    where
+        't: 'either,
+        'doc: 'either,
+    {
+        match &self.db_doc {
+            // since we'll be returning all db top level fields, it makes more sense to iterate on the db first:
+            // 1. random field access is faster on RawMap than on obkvs
+            // 2. we can store a roaring of fid instead of btree set of fields
+            Some(db_doc) => {
+                let mut new_doc_it = self.new_doc.iter_top_level_fields();
+                let mut db_iter = db_doc.iter_top_level_fields_with_fid();
+                let fid_map = db_doc.fields_ids_map;
+                let mut seen_fields = RoaringBitmap::new();
+                let has_deletion = self.has_deletion;
+
+                Either::Left(std::iter::from_fn(move || {
+                    if let Some(entry) = db_iter.next() {
+                        let (fid, name, db_value) = match entry {
+                            Ok(entry) => entry,
+                            Err(err) => return Some(Err(err)),
+                        };
+                        seen_fields.insert(fid.into());
+                        let new_value = match self.new_doc.top_level_field(name) {
+                            Ok(new_value) => new_value,
+                            Err(err) => return Some(Err(err)),
+                        };
+
+                        match new_value {
+                            Some(new_value) => {
+                                if new_value.get() == db_value.get() {
+                                    return Some(Ok((name, DeltaValue::Unchanged(new_value))));
+                                } else {
+                                    return Some(Ok((
+                                        name,
+                                        DeltaValue::Modified(db_value, new_value),
+                                    )));
+                                }
+                            }
+                            None => {
+                                if has_deletion {
+                                    return Some(Ok((name, DeltaValue::Deleted(db_value))));
+                                } else {
+                                    return Some(Ok((name, DeltaValue::Unchanged(db_value))));
+                                }
+                            }
+                        }
+                    }
+                    {
+                        match new_doc_it.by_ref().find(|res| {
+                            if let Ok((name, _)) = res {
+                                if let Some(fid) = fid_map.id(name) {
+                                    return !seen_fields.contains(fid.into());
+                                }
+                            }
+                            true
+                        })? {
+                            Ok((name, new_value)) => {
+                                Some(Ok((name, DeltaValue::Inserted(new_value))))
+                            }
+                            Err(err) => Some(Err(err)),
+                        }
+                    }
+                }))
+            }
+            None => Either::Right(self.new_doc.iter_top_level_fields().map(|res| {
+                let (k, v) = res?;
+                Ok((k, DeltaValue::Inserted(v)))
+            })),
+        }
+    }
+
+    pub fn delta_geo_field(&self) -> Result<Option<DeltaValue<'_, 't, 'doc>>> {
+        let db_geo_field = match self.db_doc {
+            Some(db) => db.geo_field()?,
+            None => None,
+        };
+
+        let new_doc_geo_field = self.new_doc.geo_field()?;
+
+        Ok(match (db_geo_field, new_doc_geo_field) {
+            (None, None) => None,
+            (None, Some(new_doc)) => Some(DeltaValue::Inserted(new_doc)),
+            (Some(db), None) => Some(if self.has_deletion {
+                DeltaValue::Deleted(db)
+            } else {
+                DeltaValue::Unchanged(db)
+            }),
+            (Some(db), Some(new_doc)) => Some(DeltaValue::Modified(db, new_doc)),
+        })
+    }
 }
 
 impl<'a, 'doc, 't, Mapper: FieldIdMapper> MergedDocument<'a, 'doc, 't, Mapper> {
@@ -205,33 +331,45 @@ impl<'a, 'doc, 't, Mapper: FieldIdMapper> MergedDocument<'a, 'doc, 't, Mapper> {
     }
 }
 
+pub enum DeltaValue<'either, 't: 'either, 'doc: 'either> {
+    Deleted(&'t RawValue),
+    Inserted(&'doc RawValue),
+    Modified(&'t RawValue, &'doc RawValue),
+    Unchanged(&'either RawValue),
+}
+
 impl<'d, 'doc: 'd, 't: 'd, Mapper: FieldIdMapper> Document<'d>
     for MergedDocument<'d, 'doc, 't, Mapper>
 {
     fn iter_top_level_fields(&self) -> impl Iterator<Item = Result<(&'d str, &'d RawValue)>> {
-        let mut new_doc_it = self.new_doc.iter_top_level_fields();
-        let mut db_it = self.db.iter().flat_map(|db| db.iter_top_level_fields());
-        let mut seen_fields = BTreeSet::new();
+        match &self.db {
+            Some(db) => {
+                let mut new_doc_it = self.new_doc.iter_top_level_fields();
+                let mut db_it = db.iter_top_level_fields();
+                let mut seen_fields = BTreeSet::new();
 
-        std::iter::from_fn(move || {
-            if let Some(next) = new_doc_it.next() {
-                if let Ok((name, _)) = next {
-                    seen_fields.insert(name);
-                }
-                return Some(next);
-            }
-            loop {
-                match db_it.next()? {
-                    Ok((name, value)) => {
-                        if seen_fields.contains(name) {
-                            continue;
+                Either::Left(std::iter::from_fn(move || {
+                    if let Some(next) = new_doc_it.next() {
+                        if let Ok((name, _)) = next {
+                            seen_fields.insert(name);
                         }
-                        return Some(Ok((name, value)));
+                        return Some(next);
                     }
-                    Err(err) => return Some(Err(err)),
-                }
+                    loop {
+                        match db_it.next()? {
+                            Ok((name, value)) => {
+                                if seen_fields.contains(name) {
+                                    continue;
+                                }
+                                return Some(Ok((name, value)));
+                            }
+                            Err(err) => return Some(Err(err)),
+                        }
+                    }
+                }))
             }
-        })
+            None => Either::Right(self.new_doc.iter_top_level_fields()),
+        }
     }
 
     fn vectors_field(&self) -> Result<Option<&'d RawValue>> {
