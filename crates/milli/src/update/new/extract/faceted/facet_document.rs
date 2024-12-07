@@ -104,14 +104,14 @@ pub fn extract_merged_document_facets<'doc, 'del_add_facet_value, 'cache>(
     del_add_facet_value: &mut DelAddFacetValue<'del_add_facet_value>,
     cached_sorter: &mut BalancedCaches<'cache>,
     field_id_map: &mut GlobalFieldsIdsMap,
-    facet_fn_current: &mut impl FnMut(
+    facet_fn_del: &mut impl FnMut(
         FieldId,
         perm_json_p::Depth,
         &Value,
         &mut DelAddFacetValue<'del_add_facet_value>,
         &mut BalancedCaches<'cache>,
     ) -> Result<()>,
-    facet_fn_updated: &mut impl FnMut(
+    facet_fn_add: &mut impl FnMut(
         FieldId,
         perm_json_p::Depth,
         &Value,
@@ -122,37 +122,34 @@ pub fn extract_merged_document_facets<'doc, 'del_add_facet_value, 'cache>(
     for res in document.delta_top_level_fields() {
         let (field_name, value) = res?;
         match value {
-            DeltaValue::Current(value) => {
+            DeltaValue::Deleted(value) => {
                 extract_document_facet(
                     attributes_to_extract,
                     field_id_map,
                     &mut |fid, depth, value| {
-                        facet_fn_current(fid, depth, value, del_add_facet_value, cached_sorter)
+                        facet_fn_del(fid, depth, value, del_add_facet_value, cached_sorter)
                     },
                     field_name,
                     value,
                 )?;
             }
-            DeltaValue::Updated(value) => {
+            DeltaValue::Inserted(value) => {
                 extract_document_facet(
                     attributes_to_extract,
                     field_id_map,
                     &mut |fid, depth, value| {
-                        facet_fn_updated(fid, depth, value, del_add_facet_value, cached_sorter)
+                        facet_fn_add(fid, depth, value, del_add_facet_value, cached_sorter)
                     },
                     field_name,
                     value,
                 )?;
             }
-            DeltaValue::CurrentAndUpdated(current, updated) => {
-                if current.get() == updated.get() {
-                    continue;
-                }
+            DeltaValue::Modified(current, updated) => {
                 extract_document_facet(
                     attributes_to_extract,
                     field_id_map,
                     &mut |fid, depth, value| {
-                        facet_fn_current(fid, depth, value, del_add_facet_value, cached_sorter)
+                        facet_fn_del(fid, depth, value, del_add_facet_value, cached_sorter)
                     },
                     field_name,
                     current,
@@ -161,46 +158,45 @@ pub fn extract_merged_document_facets<'doc, 'del_add_facet_value, 'cache>(
                     attributes_to_extract,
                     field_id_map,
                     &mut |fid, depth, value| {
-                        facet_fn_updated(fid, depth, value, del_add_facet_value, cached_sorter)
+                        facet_fn_add(fid, depth, value, del_add_facet_value, cached_sorter)
                     },
                     field_name,
                     updated,
                 )?;
             }
+            DeltaValue::Unchanged(_) => {}
         }
     }
 
     if attributes_to_extract.contains(&"_geo") {
         match document.delta_geo_field()? {
-            Some(DeltaValue::Current(current)) => {
+            Some(DeltaValue::Deleted(deleted)) => {
+                extract_geo_facet(
+                    external_document_id,
+                    deleted,
+                    field_id_map,
+                    &mut |fid, depth, value| {
+                        facet_fn_del(fid, depth, value, del_add_facet_value, cached_sorter)
+                    },
+                )?;
+            }
+            Some(DeltaValue::Inserted(inserted)) => {
+                extract_geo_facet(
+                    external_document_id,
+                    inserted,
+                    field_id_map,
+                    &mut |fid, depth, value| {
+                        facet_fn_add(fid, depth, value, del_add_facet_value, cached_sorter)
+                    },
+                )?;
+            }
+            Some(DeltaValue::Modified(current, updated)) => {
                 extract_geo_facet(
                     external_document_id,
                     current,
                     field_id_map,
                     &mut |fid, depth, value| {
-                        facet_fn_current(fid, depth, value, del_add_facet_value, cached_sorter)
-                    },
-                )?;
-            }
-            Some(DeltaValue::Updated(updated)) => {
-                extract_geo_facet(
-                    external_document_id,
-                    updated,
-                    field_id_map,
-                    &mut |fid, depth, value| {
-                        facet_fn_updated(fid, depth, value, del_add_facet_value, cached_sorter)
-                    },
-                )?;
-            }
-            Some(DeltaValue::CurrentAndUpdated(current, updated))
-                if current.get() != updated.get() =>
-            {
-                extract_geo_facet(
-                    external_document_id,
-                    current,
-                    field_id_map,
-                    &mut |fid, depth, value| {
-                        facet_fn_current(fid, depth, value, del_add_facet_value, cached_sorter)
+                        facet_fn_del(fid, depth, value, del_add_facet_value, cached_sorter)
                     },
                 )?;
                 extract_geo_facet(
@@ -208,11 +204,11 @@ pub fn extract_merged_document_facets<'doc, 'del_add_facet_value, 'cache>(
                     updated,
                     field_id_map,
                     &mut |fid, depth, value| {
-                        facet_fn_updated(fid, depth, value, del_add_facet_value, cached_sorter)
+                        facet_fn_add(fid, depth, value, del_add_facet_value, cached_sorter)
                     },
                 )?;
             }
-            None | Some(DeltaValue::CurrentAndUpdated(_, _)) => {}
+            None | Some(DeltaValue::Unchanged(_)) => {}
         }
     }
 
