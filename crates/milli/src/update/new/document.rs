@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use either::Either;
 use heed::RoTxn;
 use raw_collections::RawMap;
 use roaring::RoaringBitmap;
