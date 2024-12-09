@@ -654,9 +654,8 @@ impl Opt {
 
 #[derive(Debug, Default, Clone, Parser, Deserialize)]
 pub struct IndexerOpts {
-    /// Specifies the maximum resident memory that Meilisearch can use for indexing.
-    /// By default, Meilisearch limits the RAM usage to 5% of the total available memory.
-    /// Note that the underlying store utilizes memory-mapping and makes use of the rest.
+    /// Sets the maximum amount of RAM Meilisearch can use when indexing. By default, Meilisearch
+    /// uses no more than two thirds of available memory.
     #[clap(long, env = MEILI_MAX_INDEXING_MEMORY, default_value_t)]
     #[serde(default)]
     pub max_indexing_memory: MaxMemory,
@@ -715,7 +714,7 @@ impl TryFrom<&IndexerOpts> for IndexerConfig {
     }
 }
 
-/// A type used to detect the max resident memory available and use 5% of it.
+/// A type used to detect the max memory available and use 2/3 of it.
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 pub struct MaxMemory(Option<Byte>);
 
@@ -729,7 +728,7 @@ impl FromStr for MaxMemory {
 
 impl Default for MaxMemory {
     fn default() -> MaxMemory {
-        MaxMemory(total_memory_bytes().map(|bytes| bytes * 5 / 100).map(Byte::from_u64))
+        MaxMemory(total_memory_bytes().map(|bytes| bytes * 2 / 3).map(Byte::from_u64))
     }
 }
 
