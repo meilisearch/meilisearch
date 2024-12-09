@@ -235,8 +235,12 @@ fn merge_cbo_bitmaps(
         (Some(_current), None, None) => Ok(Operation::Ignore), // but it's strange
         (Some(current), None, Some(add)) => Ok(Operation::Write(current | add)),
         (Some(current), Some(del), add) => {
+            debug_assert!(
+                del.is_subset(&current),
+                "del is not a subset of current, which must be impossible."
+            );
             let output = match add {
-                Some(add) => (&current - del) | add,
+                Some(add) => (&current - (&del - &add)) | (add - del),
                 None => &current - del,
             };
             if output.is_empty() {
