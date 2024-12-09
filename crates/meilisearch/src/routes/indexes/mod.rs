@@ -28,6 +28,7 @@ use crate::Opt;
 pub mod documents;
 pub mod facet_search;
 pub mod search;
+#[cfg(test)]
 mod search_test;
 mod search_analytics;
 pub mod settings;

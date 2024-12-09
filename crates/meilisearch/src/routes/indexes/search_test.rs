@@ -1,4 +1,3 @@
-#[cfg(test)]
 pub mod search_test {
     use crate::routes::indexes::search::fix_sort_query_parameters;
 
