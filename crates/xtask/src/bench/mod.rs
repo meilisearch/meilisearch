@@ -139,7 +139,7 @@ pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
     rt.block_on(async {
         dashboard_client.send_machine_info(&env).await?;
 
-        let commit_message = build_info.commit_msg.context("missing commit message")?.split('\n').next().unwrap();
+        let commit_message = build_info.commit_msg.unwrap_or_default().split('\n').next().unwrap();
         let max_workloads = args.workload_file.len();
         let reason: Option<&str> = args.reason.as_deref();
         let invocation_uuid = dashboard_client.create_invocation(build_info.clone(), commit_message, env, max_workloads, reason).await?;
