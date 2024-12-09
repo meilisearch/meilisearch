@@ -80,6 +80,15 @@ where
     let mut bbbuffers = Vec::new();
     let finished_extraction = AtomicBool::new(false);
 
+    // We reduce the actual memory used to 5%. The reason we do this here and not in Meilisearch
+    // is because we still use the old indexer for the settings and it is highly impacted by the
+    // max memory. So we keep the changes here and will remove these changes once we use the new
+    // indexer to also index settings. Related to #5125 and #5141.
+    let grenad_parameters = GrenadParameters {
+        max_memory: grenad_parameters.max_memory.map(|mm| mm * 5 / 100),
+        ..grenad_parameters
+    };
+
     // We compute and remove the allocated BBQueues buffers capacity from the indexing memory.
     let minimum_capacity = 50 * 1024 * 1024 * pool.current_num_threads(); // 50 MiB
     let (grenad_parameters, total_bbbuffer_capacity) = grenad_parameters.max_memory.map_or(
