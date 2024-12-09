@@ -28,7 +28,7 @@ pub struct WordDocidsBalancedCaches<'extractor> {
     exact_word_docids: BalancedCaches<'extractor>,
     word_position_docids: BalancedCaches<'extractor>,
     fid_word_count_docids: BalancedCaches<'extractor>,
-    fid_word_count: HashMap<FieldId, (usize, usize)>,
+    fid_word_count: HashMap<FieldId, (Option<usize>, Option<usize>)>,
     current_docid: Option<DocumentId>,
 }
 
@@ -85,8 +85,8 @@ impl<'extractor> WordDocidsBalancedCaches<'extractor> {
 
         self.fid_word_count
             .entry(field_id)
-            .and_modify(|(_current_count, new_count)| *new_count += 1)
-            .or_insert((0, 1));
+            .and_modify(|(_current_count, new_count)| *new_count.get_or_insert(0) += 1)
+            .or_insert((None, Some(1)));
         self.current_docid = Some(docid);
 
         Ok(())
@@ -130,8 +130,8 @@ impl<'extractor> WordDocidsBalancedCaches<'extractor> {
 
         self.fid_word_count
             .entry(field_id)
-            .and_modify(|(current_count, _new_count)| *current_count += 1)
-            .or_insert((1, 0));
+            .and_modify(|(current_count, _new_count)| *current_count.get_or_insert(0) += 1)
+            .or_insert((Some(1), None));
 
         self.current_docid = Some(docid);
 
@@ -141,14 +141,18 @@ impl<'extractor> WordDocidsBalancedCaches<'extractor> {
     fn flush_fid_word_count(&mut self, buffer: &mut BumpVec<u8>) -> Result<()> {
         for (fid, (current_count, new_count)) in self.fid_word_count.drain() {
             if current_count != new_count {
-                if current_count <= MAX_COUNTED_WORDS {
+                if let Some(current_count) =
+                    current_count.filter(|current_count| *current_count <= MAX_COUNTED_WORDS)
+                {
                     buffer.clear();
                     buffer.extend_from_slice(&fid.to_be_bytes());
                     buffer.push(current_count as u8);
                     self.fid_word_count_docids
                         .insert_del_u32(buffer, self.current_docid.unwrap())?;
                 }
-                if new_count <= MAX_COUNTED_WORDS {
+                if let Some(new_count) =
+                    new_count.filter(|new_count| *new_count <= MAX_COUNTED_WORDS)
+                {
                     buffer.clear();
                     buffer.extend_from_slice(&fid.to_be_bytes());
                     buffer.push(new_count as u8);
