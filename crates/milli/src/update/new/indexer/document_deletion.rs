@@ -165,7 +165,7 @@ mod test {
             doc_allocs: &doc_allocs,
             fields_ids_map_store: &fields_ids_map_store,
             must_stop_processing: &(|| false),
-            send_progress: &Progress::default(),
+            progress: &Progress::default(),
         };
 
         for _ in 0..3 {

@@ -125,7 +125,7 @@ where
         doc_allocs: &doc_allocs,
         fields_ids_map_store: &fields_ids_map_store,
         must_stop_processing,
-        send_progress,
+        progress: send_progress,
     };
 
     let mut index_embeddings = index.embedding_configs(wtxn)?;
@@ -383,7 +383,7 @@ where
                         &indexing_context.must_stop_processing,
                     )?;
                 }
-                indexing_context.send_progress.update_progress(IndexingStep::WritingToDatabase);
+                indexing_context.progress.update_progress(IndexingStep::WritingToDatabase);
                 finished_extraction.store(true, std::sync::atomic::Ordering::Relaxed);
 
                 Result::Ok((facet_field_ids_delta, index_embeddings))
@@ -483,7 +483,7 @@ where
             )?;
         }
 
-        indexing_context.send_progress.update_progress(IndexingStep::WaitingForExtractors);
+        indexing_context.progress.update_progress(IndexingStep::WaitingForExtractors);
 
         let (facet_field_ids_delta, index_embeddings) = extractor_handle.join().unwrap()?;
 
@@ -496,9 +496,7 @@ where
                 break 'vectors;
             }
 
-            indexing_context
-                .send_progress
-                .update_progress(IndexingStep::WritingEmbeddingsToDatabase);
+            indexing_context.progress.update_progress(IndexingStep::WritingEmbeddingsToDatabase);
             let mut rng = rand::rngs::StdRng::seed_from_u64(42);
             for (_index, (_embedder_name, _embedder, writer, dimensions)) in &mut arroy_writers {
                 let dimensions = *dimensions;
@@ -514,19 +512,19 @@ where
             index.put_embedding_configs(wtxn, index_embeddings)?;
         }
 
-        indexing_context.send_progress.update_progress(IndexingStep::PostProcessingFacets);
+        indexing_context.progress.update_progress(IndexingStep::PostProcessingFacets);
         if index.facet_search(wtxn)? {
             compute_facet_search_database(index, wtxn, global_fields_ids_map)?;
         }
 
         compute_facet_level_database(index, wtxn, facet_field_ids_delta)?;
 
-        indexing_context.send_progress.update_progress(IndexingStep::PostProcessingWords);
+        indexing_context.progress.update_progress(IndexingStep::PostProcessingWords);
         if let Some(prefix_delta) = compute_word_fst(index, wtxn)? {
             compute_prefix_database(index, wtxn, prefix_delta, grenad_parameters)?;
         }
 
-        indexing_context.send_progress.update_progress(IndexingStep::Finalizing);
+        indexing_context.progress.update_progress(IndexingStep::Finalizing);
 
         Ok(()) as Result<_>
     })?;

@@ -144,8 +144,7 @@ pub struct IndexingContext<
     pub doc_allocs: &'indexer ThreadLocal<FullySend<Cell<Bump>>>,
     pub fields_ids_map_store: &'indexer ThreadLocal<FullySend<RefCell<GlobalFieldsIdsMap<'fid>>>>,
     pub must_stop_processing: &'indexer MSP,
-    // TODO: TAMO: Rename field to progress
-    pub send_progress: &'indexer Progress,
+    pub progress: &'indexer Progress,
 }
 
 impl<
@@ -207,7 +206,7 @@ pub fn extract<
         doc_allocs,
         fields_ids_map_store,
         must_stop_processing,
-        send_progress,
+        progress: send_progress,
     }: IndexingContext<'fid, 'indexer, 'index, MSP>,
     extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
     datastore: &'data ThreadLocal<EX::Data>,
