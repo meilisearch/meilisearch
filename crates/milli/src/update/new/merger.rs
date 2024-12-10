@@ -80,16 +80,35 @@ where
         }
         merge_caches_sorted(frozen, |key, DelAddRoaringBitmap { del, add }| {
             let current = database.get(&rtxn, key)?;
-            match merge_cbo_bitmaps(current, del, add)? {
-                Operation::Write(bitmap) => {
+
+            if let (Some(del), Some(current)) = (&del, &current) {
+                let current = CboRoaringBitmapCodec::deserialize_from(current).unwrap();
+                let diff = del - &current;
+                let external_ids = index.external_id_of(&rtxn, &diff).unwrap().into_iter().map(|id| id.unwrap()).collect::<Vec<_>>();
+                if !del.is_subset(&current) {
+                    eprintln!(
+                        "======================== {:?}: {} ->  c: {:?} d: {:?} a: {:?} extra: {:?} extra_external_ids: {:?}",
+                        D::DATABASE,
+                        D::DATABASE.stringify_key(key),
+                        &current,
+                        del,
+                        add,
+                        diff,
+                        external_ids
+                    );
+                }
+            }
+            match merge_cbo_bitmaps(current, del, add) {
+                Ok(Operation::Write(bitmap)) => {
                     docids_sender.write(key, &bitmap)?;
                     Ok(())
                 }
-                Operation::Delete => {
+                Ok(Operation::Delete) => {
                     docids_sender.delete(key)?;
                     Ok(())
                 }
-                Operation::Ignore => Ok(()),
+                Ok(Operation::Ignore) => Ok(()),
+                Err(e) => Err(e),
             }
         })
     })

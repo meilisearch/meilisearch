@@ -21,11 +21,15 @@ use super::ref_cell_ext::RefCellExt;
 use super::thread_local::{FullySend, ThreadLocal};
 use super::StdResult;
 use crate::heed_codec::facet::{FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec};
+use crate::heed_codec::StrBEU16Codec;
 use crate::index::db_name;
 use crate::index::main_key::{GEO_FACETED_DOCUMENTS_IDS_KEY, GEO_RTREE_KEY};
 use crate::update::new::KvReaderFieldId;
 use crate::vector::Embedding;
-use crate::{CboRoaringBitmapCodec, DocumentId, Error, Index, InternalError};
+use crate::{
+    CboRoaringBitmapCodec, DocumentId, Error, FieldIdWordCountCodec, Index, InternalError,
+    U8StrStrCodec,
+};
 
 /// Creates a tuple of senders/receiver to be used by
 /// the extractors and the writer loop.
@@ -401,6 +405,32 @@ impl Database {
             Database::FacetIdStringDocids => db_name::FACET_ID_STRING_DOCIDS,
             Database::FieldIdDocidFacetStrings => db_name::FIELD_ID_DOCID_FACET_STRINGS,
             Database::FieldIdDocidFacetF64s => db_name::FIELD_ID_DOCID_FACET_F64S,
+        }
+    }
+
+    pub fn stringify_key(&self, key: &[u8]) -> String {
+        use heed::types::*;
+
+        match self {
+            Database::WordDocids => format!("{:?}", Str::bytes_decode(key).unwrap()),
+            Database::WordFidDocids => format!("{:?}", StrBEU16Codec::bytes_decode(key).unwrap()),
+            Database::WordPositionDocids => {
+                format!("{:?}", StrBEU16Codec::bytes_decode(key).unwrap())
+            }
+            Database::WordPairProximityDocids => {
+                format!("{:?}", U8StrStrCodec::bytes_decode(key).unwrap())
+            }
+            Database::ExactWordDocids => format!("{:?}", Str::bytes_decode(key).unwrap()),
+            Database::FidWordCountDocids => {
+                format!("{:?}", FieldIdWordCountCodec::bytes_decode(key).unwrap())
+            }
+            Database::FieldIdDocidFacetStrings => {
+                format!("{:?}", FieldDocIdFacetStringCodec::bytes_decode(key).unwrap())
+            }
+            Database::FieldIdDocidFacetF64s => {
+                format!("{:?}", FieldDocIdFacetF64Codec::bytes_decode(key).unwrap())
+            }
+            d => unimplemented!("stringify_key for {:?}", d),
         }
     }
 }
