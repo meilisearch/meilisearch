@@ -250,26 +250,25 @@ pub fn read_json(input: &File, output: impl io::Write) -> Result<u64> {
     }
 }
 
-/// Reads NDJSON from file and write it in NDJSON in a file checking it along the way.
-pub fn read_ndjson(input: &File, output: impl io::Write) -> Result<u64> {
+/// Reads NDJSON from file and checks it.
+pub fn read_ndjson(input: &File) -> Result<u64> {
     // We memory map to be able to deserialize into a RawMap that
     // does not allocate when possible and only materialize the first/top level.
     let input = unsafe { Mmap::map(input).map_err(DocumentFormatError::Io)? };
-    let mut output = BufWriter::new(output);
-
     let mut bump = Bump::with_capacity(1024 * 1024);
 
     let mut count = 0;
     for result in serde_json::Deserializer::from_slice(&input).into_iter() {
         bump.reset();
-        count += 1;
-        result
-            .and_then(|raw: &RawValue| {
+        match result {
+            Ok(raw) => {
                 // try to deserialize as a map
-                let map = RawMap::from_raw_value(raw, &bump)?;
-                to_writer(&mut output, &map)
-            })
-            .map_err(|e| DocumentFormatError::from((PayloadType::Ndjson, e)))?;
+                RawMap::from_raw_value(raw, &bump)
+                    .map_err(|e| DocumentFormatError::from((PayloadType::Ndjson, e)))?;
+                count += 1;
+            }
+            Err(e) => return Err(DocumentFormatError::from((PayloadType::Ndjson, e))),
+        }
     }
 
     Ok(count)
