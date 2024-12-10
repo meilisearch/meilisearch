@@ -2,6 +2,7 @@ use std::ops::ControlFlow;
 
 use bumpalo::Bump;
 use bumparaw_collections::RawVec;
+use rustc_hash::FxBuildHasher;
 use serde::de::{DeserializeSeed, Deserializer as _, Visitor};
 use serde_json::value::RawValue;
 
@@ -394,7 +395,7 @@ impl<'a> Iterator for DeserrRawVecIter<'a> {
 }
 
 pub struct DeserrRawMap<'a> {
-    map: bumparaw_collections::RawMap<'a>,
+    map: bumparaw_collections::RawMap<'a, FxBuildHasher>,
     alloc: &'a Bump,
 }
 

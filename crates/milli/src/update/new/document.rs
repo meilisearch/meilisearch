@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use bumparaw_collections::RawMap;
 use heed::RoTxn;
+use rustc_hash::FxBuildHasher;
 use serde_json::value::RawValue;
 
 use super::vector_document::VectorDocument;
@@ -385,12 +386,12 @@ pub type Entry<'doc> = (&'doc str, &'doc RawValue);
 
 #[derive(Debug)]
 pub struct Versions<'doc> {
-    data: RawMap<'doc>,
+    data: RawMap<'doc, FxBuildHasher>,
 }
 
 impl<'doc> Versions<'doc> {
     pub fn multiple(
-        mut versions: impl Iterator<Item = Result<RawMap<'doc>>>,
+        mut versions: impl Iterator<Item = Result<RawMap<'doc, FxBuildHasher>>>,
     ) -> Result<Option<Self>> {
         let Some(data) = versions.next() else { return Ok(None) };
         let mut data = data?;
@@ -403,7 +404,7 @@ impl<'doc> Versions<'doc> {
         Ok(Some(Self::single(data)))
     }
 
-    pub fn single(version: RawMap<'doc>) -> Self {
+    pub fn single(version: RawMap<'doc, FxBuildHasher>) -> Self {
         Self { data: version }
     }
 

@@ -4,6 +4,7 @@ use bumpalo::Bump;
 use bumparaw_collections::RawMap;
 use deserr::{Deserr, IntoValue};
 use heed::RoTxn;
+use rustc_hash::FxBuildHasher;
 use serde::Serialize;
 use serde_json::value::RawValue;
 
@@ -84,7 +85,7 @@ pub struct VectorDocumentFromDb<'t> {
     docid: DocumentId,
     embedding_config: Vec<IndexEmbeddingConfig>,
     index: &'t Index,
-    vectors_field: Option<RawMap<'t>>,
+    vectors_field: Option<RawMap<'t, FxBuildHasher>>,
     rtxn: &'t RoTxn<'t>,
     doc_alloc: &'t Bump,
 }
@@ -102,9 +103,10 @@ impl<'t> VectorDocumentFromDb<'t> {
         };
         let vectors = document.vectors_field()?;
         let vectors_field = match vectors {
-            Some(vectors) => {
-                Some(RawMap::from_raw_value(vectors, doc_alloc).map_err(InternalError::SerdeJson)?)
-            }
+            Some(vectors) => Some(
+                RawMap::from_raw_value_and_hasher(vectors, FxBuildHasher, doc_alloc)
+                    .map_err(InternalError::SerdeJson)?,
+            ),
             None => None,
         };
 
@@ -220,7 +222,7 @@ fn entry_from_raw_value(
 
 pub struct VectorDocumentFromVersions<'doc> {
     external_document_id: &'doc str,
-    vectors: RawMap<'doc>,
+    vectors: RawMap<'doc, FxBuildHasher>,
     embedders: &'doc EmbeddingConfigs,
 }
 
@@ -233,8 +235,8 @@ impl<'doc> VectorDocumentFromVersions<'doc> {
     ) -> Result<Option<Self>> {
         let document = DocumentFromVersions::new(versions);
         if let Some(vectors_field) = document.vectors_field()? {
-            let vectors =
-                RawMap::from_raw_value(vectors_field, bump).map_err(UserError::SerdeJson)?;
+            let vectors = RawMap::from_raw_value_and_hasher(vectors_field, FxBuildHasher, bump)
+                .map_err(UserError::SerdeJson)?;
             Ok(Some(Self { external_document_id, vectors, embedders }))
         } else {
             Ok(None)

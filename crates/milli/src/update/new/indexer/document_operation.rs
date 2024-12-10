@@ -5,6 +5,7 @@ use hashbrown::hash_map::Entry;
 use heed::RoTxn;
 use memmap2::Mmap;
 use rayon::slice::ParallelSlice;
+use rustc_hash::FxBuildHasher;
 use serde_json::value::RawValue;
 use serde_json::Deserializer;
 
@@ -166,8 +167,9 @@ fn extract_addition_payload_changes<'r, 'pl: 'r>(
 
         // Only guess the primary key if it is the first document
         let retrieved_primary_key = if previous_offset == 0 {
-            let doc =
-                RawMap::from_raw_value(doc, indexer).map(Some).map_err(UserError::SerdeJson)?;
+            let doc = RawMap::from_raw_value_and_hasher(doc, FxBuildHasher, indexer)
+                .map(Some)
+                .map_err(UserError::SerdeJson)?;
 
             let result = retrieve_or_guess_primary_key(
                 rtxn,
@@ -546,7 +548,8 @@ impl MergeChanges for MergeDocumentForReplacement {
             Some(InnerDocOp::Addition(DocumentOffset { content })) => {
                 let document = serde_json::from_slice(content).unwrap();
                 let document =
-                    RawMap::from_raw_value(document, doc_alloc).map_err(UserError::SerdeJson)?;
+                    RawMap::from_raw_value_and_hasher(document, FxBuildHasher, doc_alloc)
+                        .map_err(UserError::SerdeJson)?;
 
                 if is_new {
                     Ok(Some(DocumentChange::Insertion(Insertion::create(
@@ -633,7 +636,8 @@ impl MergeChanges for MergeDocumentForUpdates {
                 };
                 let document = serde_json::from_slice(content).unwrap();
                 let document =
-                    RawMap::from_raw_value(document, doc_alloc).map_err(UserError::SerdeJson)?;
+                    RawMap::from_raw_value_and_hasher(document, FxBuildHasher, doc_alloc)
+                        .map_err(UserError::SerdeJson)?;
 
                 Some(Versions::single(document))
             }
@@ -647,8 +651,9 @@ impl MergeChanges for MergeDocumentForUpdates {
                     };
 
                     let document = serde_json::from_slice(content).unwrap();
-                    let document = RawMap::from_raw_value(document, doc_alloc)
-                        .map_err(UserError::SerdeJson)?;
+                    let document =
+                        RawMap::from_raw_value_and_hasher(document, FxBuildHasher, doc_alloc)
+                            .map_err(UserError::SerdeJson)?;
                     Ok(document)
                 });
                 Versions::multiple(versions)?
