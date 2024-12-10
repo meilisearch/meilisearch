@@ -1734,6 +1734,7 @@ pub(crate) mod tests {
 
     use crate::error::{Error, InternalError};
     use crate::index::{DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS};
+    use crate::progress::Progress;
     use crate::update::new::indexer;
     use crate::update::settings::InnerIndexSettings;
     use crate::update::{
@@ -1810,7 +1811,7 @@ pub(crate) mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )?;
 
             if let Some(error) = operation_stats.into_iter().find_map(|stat| stat.error) {
@@ -1829,7 +1830,7 @@ pub(crate) mod tests {
                     &document_changes,
                     embedders,
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
             })
             .unwrap()?;
@@ -1901,7 +1902,7 @@ pub(crate) mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )?;
 
             if let Some(error) = operation_stats.into_iter().find_map(|stat| stat.error) {
@@ -1920,7 +1921,7 @@ pub(crate) mod tests {
                     &document_changes,
                     embedders,
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
             })
             .unwrap()?;
@@ -1982,7 +1983,7 @@ pub(crate) mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )
             .unwrap();
 
@@ -2001,7 +2002,7 @@ pub(crate) mod tests {
                     &document_changes,
                     embedders,
                     &|| should_abort.load(Relaxed),
-                    &|_| (),
+                    &Progress::default(),
                 )
             })
             .unwrap()

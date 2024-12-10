@@ -10,6 +10,7 @@ use either::Either;
 use fuzzers::Operation;
 use milli::documents::mmap_from_objects;
 use milli::heed::EnvOpenOptions;
+use milli::progress::Progress;
 use milli::update::new::indexer;
 use milli::update::{IndexDocumentsMethod, IndexerConfig};
 use milli::vector::EmbeddingConfigs;
@@ -128,7 +129,7 @@ fn main() {
                                     None,
                                     &mut new_fields_ids_map,
                                     &|| false,
-                                    &|_progress| (),
+                                    Progress::default(),
                                 )
                                 .unwrap();
 
@@ -143,7 +144,7 @@ fn main() {
                                 &document_changes,
                                 embedders,
                                 &|| false,
-                                &|_| (),
+                                &Progress::default(),
                             )
                             .unwrap();
 

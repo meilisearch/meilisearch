@@ -766,6 +766,7 @@ mod tests {
     use crate::documents::mmap_from_objects;
     use crate::index::tests::TempIndex;
     use crate::index::IndexEmbeddingConfig;
+    use crate::progress::Progress;
     use crate::search::TermsMatchingStrategy;
     use crate::update::new::indexer;
     use crate::update::Setting;
@@ -1964,7 +1965,7 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )
             .unwrap();
 
@@ -2148,7 +2149,7 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )
             .unwrap();
 
@@ -2163,7 +2164,7 @@ mod tests {
             &document_changes,
             embedders,
             &|| false,
-            &|_| (),
+            &Progress::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();
@@ -2210,7 +2211,7 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )
             .unwrap();
 
@@ -2225,7 +2226,7 @@ mod tests {
             &document_changes,
             embedders,
             &|| false,
-            &|_| (),
+            &Progress::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();
@@ -2263,7 +2264,7 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )
             .unwrap();
 
@@ -2278,7 +2279,7 @@ mod tests {
             &document_changes,
             embedders,
             &|| false,
-            &|_| (),
+            &Progress::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();
@@ -2315,7 +2316,7 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )
             .unwrap();
 
@@ -2330,7 +2331,7 @@ mod tests {
             &document_changes,
             embedders,
             &|| false,
-            &|_| (),
+            &Progress::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();
@@ -2369,7 +2370,7 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )
             .unwrap();
 
@@ -2384,7 +2385,7 @@ mod tests {
             &document_changes,
             embedders,
             &|| false,
-            &|_| (),
+            &Progress::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();
@@ -2428,7 +2429,7 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )
             .unwrap();
 
@@ -2443,7 +2444,7 @@ mod tests {
             &document_changes,
             embedders,
             &|| false,
-            &|_| (),
+            &Progress::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();
@@ -2480,7 +2481,7 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )
             .unwrap();
 
@@ -2495,7 +2496,7 @@ mod tests {
             &document_changes,
             embedders,
             &|| false,
-            &|_| (),
+            &Progress::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();
@@ -2532,7 +2533,7 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )
             .unwrap();
 
@@ -2547,7 +2548,7 @@ mod tests {
             &document_changes,
             embedders,
             &|| false,
-            &|_| (),
+            &Progress::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();
@@ -2726,7 +2727,7 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )
             .unwrap();
 
@@ -2741,7 +2742,7 @@ mod tests {
             &document_changes,
             embedders,
             &|| false,
-            &|_| (),
+            &Progress::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();
@@ -2785,7 +2786,7 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )
             .unwrap();
 
@@ -2800,7 +2801,7 @@ mod tests {
             &document_changes,
             embedders,
             &|| false,
-            &|_| (),
+            &Progress::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();
@@ -2841,7 +2842,7 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )
             .unwrap();
 
@@ -2856,7 +2857,7 @@ mod tests {
             &document_changes,
             embedders,
             &|| false,
-            &|_| (),
+            &Progress::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();

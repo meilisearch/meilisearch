@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use milli::progress::ProgressView;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
@@ -15,6 +16,8 @@ pub type BatchId = u32;
 pub struct Batch {
     pub uid: BatchId,
 
+    #[serde(skip_deserializing)]
+    pub progress: Option<ProgressView>,
     pub details: DetailsView,
     pub stats: BatchStats,
 

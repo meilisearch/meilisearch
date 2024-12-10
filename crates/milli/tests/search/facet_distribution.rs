@@ -3,6 +3,7 @@ use bumpalo::Bump;
 use heed::EnvOpenOptions;
 use maplit::hashset;
 use milli::documents::mmap_from_objects;
+use milli::progress::Progress;
 use milli::update::new::indexer;
 use milli::update::{IndexDocumentsMethod, IndexerConfig, Settings};
 use milli::vector::EmbeddingConfigs;
@@ -57,7 +58,7 @@ fn test_facet_distribution_with_no_facet_values() {
             None,
             &mut new_fields_ids_map,
             &|| false,
-            &|_progress| (),
+            Progress::default(),
         )
         .unwrap();
 
@@ -72,7 +73,7 @@ fn test_facet_distribution_with_no_facet_values() {
         &document_changes,
         embedders,
         &|| false,
-        &|_| (),
+        &Progress::default(),
     )
     .unwrap();
 

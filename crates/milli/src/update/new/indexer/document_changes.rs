@@ -1,4 +1,5 @@
 use std::cell::{Cell, RefCell};
+use std::sync::atomic::Ordering;
 use std::sync::{Arc, RwLock};
 
 use bumpalo::Bump;
@@ -7,8 +8,9 @@ use rayon::iter::IndexedParallelIterator;
 
 use super::super::document_change::DocumentChange;
 use crate::fields_ids_map::metadata::FieldIdMapWithMetadata;
+use crate::progress::{AtomicDocumentStep, Progress};
 use crate::update::new::parallel_iterator_ext::ParallelIteratorExt as _;
-use crate::update::new::steps::Step;
+use crate::update::new::steps::IndexingStep;
 use crate::update::new::thread_local::{FullySend, MostlySend, ThreadLocal};
 use crate::{FieldsIdsMap, GlobalFieldsIdsMap, Index, InternalError, Result};
 
@@ -133,10 +135,8 @@ pub struct IndexingContext<
     'indexer, // covariant lifetime of objects that are borrowed  during the entire indexing operation
     'index,   // covariant lifetime of the index
     MSP,
-    SP,
 > where
     MSP: Fn() -> bool + Sync,
-    SP: Fn(Progress) + Sync,
 {
     pub index: &'index Index,
     pub db_fields_ids_map: &'indexer FieldsIdsMap,
@@ -144,7 +144,8 @@ pub struct IndexingContext<
     pub doc_allocs: &'indexer ThreadLocal<FullySend<Cell<Bump>>>,
     pub fields_ids_map_store: &'indexer ThreadLocal<FullySend<RefCell<GlobalFieldsIdsMap<'fid>>>>,
     pub must_stop_processing: &'indexer MSP,
-    pub send_progress: &'indexer SP,
+    // TODO: TAMO: Rename field to progress
+    pub send_progress: &'indexer Progress,
 }
 
 impl<
@@ -152,18 +153,15 @@ impl<
         'indexer, // covariant lifetime of objects that are borrowed  during the entire indexing operation
         'index,   // covariant lifetime of the index
         MSP,
-        SP,
     > Copy
     for IndexingContext<
         'fid,     // invariant lifetime of fields ids map
         'indexer, // covariant lifetime of objects that are borrowed  during the entire indexing operation
         'index,   // covariant lifetime of the index
         MSP,
-        SP,
     >
 where
     MSP: Fn() -> bool + Sync,
-    SP: Fn(Progress) + Sync,
 {
 }
 
@@ -172,18 +170,15 @@ impl<
         'indexer, // covariant lifetime of objects that are borrowed  during the entire indexing operation
         'index,   // covariant lifetime of the index
         MSP,
-        SP,
     > Clone
     for IndexingContext<
         'fid,     // invariant lifetime of fields ids map
         'indexer, // covariant lifetime of objects that are borrowed  during the entire indexing operation
         'index,   // covariant lifetime of the index
         MSP,
-        SP,
     >
 where
     MSP: Fn() -> bool + Sync,
-    SP: Fn(Progress) + Sync,
 {
     fn clone(&self) -> Self {
         *self
@@ -202,7 +197,6 @@ pub fn extract<
     EX,
     DC: DocumentChanges<'pl>,
     MSP,
-    SP,
 >(
     document_changes: &DC,
     extractor: &EX,
@@ -214,17 +208,17 @@ pub fn extract<
         fields_ids_map_store,
         must_stop_processing,
         send_progress,
-    }: IndexingContext<'fid, 'indexer, 'index, MSP, SP>,
+    }: IndexingContext<'fid, 'indexer, 'index, MSP>,
     extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
     datastore: &'data ThreadLocal<EX::Data>,
-    step: Step,
+    step: IndexingStep,
 ) -> Result<()>
 where
     EX: Extractor<'extractor>,
     MSP: Fn() -> bool + Sync,
-    SP: Fn(Progress) + Sync,
 {
     tracing::trace!("We are resetting the extractor allocators");
+    send_progress.update_progress(step);
     // Clean up and reuse the extractor allocs
     for extractor_alloc in extractor_allocs.iter_mut() {
         tracing::trace!("\tWith {} bytes reset", extractor_alloc.0.allocated_bytes());
@@ -232,6 +226,8 @@ where
     }
 
     let total_documents = document_changes.len() as u32;
+    let (step, progress_step) = AtomicDocumentStep::new(total_documents);
+    send_progress.update_progress(progress_step);
 
     let pi = document_changes.iter(CHUNK_SIZE);
     pi.enumerate().try_arc_for_each_try_init(
@@ -253,7 +249,7 @@ where
             }
             let finished_documents = (finished_documents * CHUNK_SIZE) as u32;
 
-            (send_progress)(Progress::from_step_substep(step, finished_documents, total_documents));
+            step.store(finished_documents, Ordering::Relaxed);
 
             // Clean up and reuse the document-specific allocator
             context.doc_alloc.reset();
@@ -271,32 +267,7 @@ where
             res
         },
     )?;
-
-    (send_progress)(Progress::from_step_substep(step, total_documents, total_documents));
+    step.store(total_documents, Ordering::Relaxed);
 
     Ok(())
-}
-
-pub struct Progress {
-    pub finished_steps: u16,
-    pub total_steps: u16,
-    pub step_name: &'static str,
-    pub finished_total_substep: Option<(u32, u32)>,
-}
-
-impl Progress {
-    pub fn from_step(step: Step) -> Self {
-        Self {
-            finished_steps: step.finished_steps(),
-            total_steps: Step::total_steps(),
-            step_name: step.name(),
-            finished_total_substep: None,
-        }
-    }
-    pub fn from_step_substep(step: Step, finished_substep: u32, total_substep: u32) -> Self {
-        Self {
-            finished_total_substep: Some((finished_substep, total_substep)),
-            ..Progress::from_step(step)
-        }
-    }
 }

@@ -5,7 +5,7 @@ use std::thread::{self, Builder};
 
 use big_s::S;
 use bumparaw_collections::RawMap;
-use document_changes::{extract, DocumentChanges, IndexingContext, Progress};
+use document_changes::{extract, DocumentChanges, IndexingContext};
 pub use document_deletion::DocumentDeletion;
 pub use document_operation::{DocumentOperation, PayloadStats};
 use hashbrown::HashMap;
@@ -22,7 +22,7 @@ use super::channel::*;
 use super::extract::*;
 use super::facet_search_builder::FacetSearchBuilder;
 use super::merger::FacetFieldIdsDelta;
-use super::steps::Step;
+use super::steps::IndexingStep;
 use super::thread_local::ThreadLocal;
 use super::word_fst_builder::{PrefixData, PrefixDelta, WordFstBuilder};
 use super::words_prefix_docids::{
@@ -33,6 +33,7 @@ use crate::documents::{PrimaryKey, DEFAULT_PRIMARY_KEY};
 use crate::facet::FacetType;
 use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
 use crate::index::main_key::{WORDS_FST_KEY, WORDS_PREFIXES_FST_KEY};
+use crate::progress::Progress;
 use crate::proximity::ProximityPrecision;
 use crate::update::del_add::DelAdd;
 use crate::update::new::extract::EmbeddingExtractor;
@@ -60,7 +61,7 @@ mod update_by_function;
 ///
 /// TODO return stats
 #[allow(clippy::too_many_arguments)] // clippy: 😝
-pub fn index<'pl, 'indexer, 'index, DC, MSP, SP>(
+pub fn index<'pl, 'indexer, 'index, DC, MSP>(
     wtxn: &mut RwTxn,
     index: &'index Index,
     pool: &ThreadPoolNoAbort,
@@ -71,12 +72,11 @@ pub fn index<'pl, 'indexer, 'index, DC, MSP, SP>(
     document_changes: &DC,
     embedders: EmbeddingConfigs,
     must_stop_processing: &'indexer MSP,
-    send_progress: &'indexer SP,
+    send_progress: &'indexer Progress,
 ) -> Result<()>
 where
     DC: DocumentChanges<'pl>,
     MSP: Fn() -> bool + Sync,
-    SP: Fn(Progress) + Sync,
 {
     let mut bbbuffers = Vec::new();
     let finished_extraction = AtomicBool::new(false);
@@ -159,7 +159,7 @@ where
                         indexing_context,
                         &mut extractor_allocs,
                         &datastore,
-                        Step::ExtractingDocuments,
+                        IndexingStep::ExtractingDocuments,
                     )?;
                 }
                 {
@@ -191,7 +191,7 @@ where
                                 indexing_context,
                                 &mut extractor_allocs,
                                 &extractor_sender.field_id_docid_facet_sender(),
-                                Step::ExtractingFacets
+                                IndexingStep::ExtractingFacets
                             )?
                     };
 
@@ -224,7 +224,7 @@ where
                             document_changes,
                             indexing_context,
                             &mut extractor_allocs,
-                            Step::ExtractingWords
+                            IndexingStep::ExtractingWords
                         )?
                     };
 
@@ -302,7 +302,7 @@ where
                             document_changes,
                             indexing_context,
                             &mut extractor_allocs,
-                            Step::ExtractingWordProximity,
+                            IndexingStep::ExtractingWordProximity,
                         )?
                     };
 
@@ -338,7 +338,7 @@ where
                             indexing_context,
                             &mut extractor_allocs,
                             &datastore,
-                            Step::ExtractingEmbeddings,
+                            IndexingStep::ExtractingEmbeddings,
                         )?;
                     }
                     {
@@ -371,7 +371,7 @@ where
                             indexing_context,
                             &mut extractor_allocs,
                             &datastore,
-                            Step::WritingGeoPoints
+                            IndexingStep::WritingGeoPoints
                         )?;
                     }
 
@@ -383,9 +383,7 @@ where
                         &indexing_context.must_stop_processing,
                     )?;
                 }
-
-                (indexing_context.send_progress)(Progress::from_step(Step::WritingToDatabase));
-
+                indexing_context.send_progress.update_progress(IndexingStep::WritingToDatabase);
                 finished_extraction.store(true, std::sync::atomic::Ordering::Relaxed);
 
                 Result::Ok((facet_field_ids_delta, index_embeddings))
@@ -485,7 +483,7 @@ where
             )?;
         }
 
-        (indexing_context.send_progress)(Progress::from_step(Step::WaitingForExtractors));
+        indexing_context.send_progress.update_progress(IndexingStep::WaitingForExtractors);
 
         let (facet_field_ids_delta, index_embeddings) = extractor_handle.join().unwrap()?;
 
@@ -498,10 +496,9 @@ where
                 break 'vectors;
             }
 
-            (indexing_context.send_progress)(Progress::from_step(
-                Step::WritingEmbeddingsToDatabase,
-            ));
-
+            indexing_context
+                .send_progress
+                .update_progress(IndexingStep::WritingEmbeddingsToDatabase);
             let mut rng = rand::rngs::StdRng::seed_from_u64(42);
             for (_index, (_embedder_name, _embedder, writer, dimensions)) in &mut arroy_writers {
                 let dimensions = *dimensions;
@@ -517,21 +514,19 @@ where
             index.put_embedding_configs(wtxn, index_embeddings)?;
         }
 
-        (indexing_context.send_progress)(Progress::from_step(Step::PostProcessingFacets));
-
+        indexing_context.send_progress.update_progress(IndexingStep::PostProcessingFacets);
         if index.facet_search(wtxn)? {
             compute_facet_search_database(index, wtxn, global_fields_ids_map)?;
         }
 
         compute_facet_level_database(index, wtxn, facet_field_ids_delta)?;
 
-        (indexing_context.send_progress)(Progress::from_step(Step::PostProcessingWords));
-
+        indexing_context.send_progress.update_progress(IndexingStep::PostProcessingWords);
         if let Some(prefix_delta) = compute_word_fst(index, wtxn)? {
             compute_prefix_database(index, wtxn, prefix_delta, grenad_parameters)?;
         }
 
-        (indexing_context.send_progress)(Progress::from_step(Step::Finalizing));
+        indexing_context.send_progress.update_progress(IndexingStep::Finalizing);
 
         Ok(()) as Result<_>
     })?;

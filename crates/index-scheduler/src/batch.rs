@@ -22,8 +22,6 @@ use std::ffi::OsStr;
 use std::fmt;
 use std::fs::{self, File};
 use std::io::BufWriter;
-use std::sync::atomic::{self, AtomicU64};
-use std::time::Duration;
 
 use bumpalo::collections::CollectIn;
 use bumpalo::Bump;
@@ -32,6 +30,7 @@ use meilisearch_types::batches::BatchId;
 use meilisearch_types::heed::{RoTxn, RwTxn};
 use meilisearch_types::milli::documents::{obkv_to_object, DocumentsBatchReader, PrimaryKey};
 use meilisearch_types::milli::heed::CompactionOption;
+use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::update::new::indexer::{self, UpdateByFunction};
 use meilisearch_types::milli::update::{
     DocumentAdditionResult, IndexDocumentsMethod, Settings as MilliSettings,
@@ -41,9 +40,7 @@ use meilisearch_types::milli::vector::parsed_vectors::{
 };
 use meilisearch_types::milli::{self, Filter, ThreadPoolNoAbortBuilder};
 use meilisearch_types::settings::{apply_settings_to_builder, Settings, Unchecked};
-use meilisearch_types::tasks::{
-    Details, IndexSwap, Kind, KindWithContent, Status, Task, TaskProgress,
-};
+use meilisearch_types::tasks::{Details, IndexSwap, Kind, KindWithContent, Status, Task};
 use meilisearch_types::{compression, Index, VERSION_FILE_NAME};
 use roaring::RoaringBitmap;
 use time::macros::format_description;
@@ -561,11 +558,12 @@ impl IndexScheduler {
     /// The list of tasks that were processed. The metadata of each task in the returned
     /// list is updated accordingly, with the exception of the its date fields
     /// [`finished_at`](meilisearch_types::tasks::Task::finished_at) and [`started_at`](meilisearch_types::tasks::Task::started_at).
-    #[tracing::instrument(level = "trace", skip(self, batch), target = "indexing::scheduler", fields(batch=batch.to_string()))]
+    #[tracing::instrument(level = "trace", skip(self, batch, progress), target = "indexing::scheduler", fields(batch=batch.to_string()))]
     pub(crate) fn process_batch(
         &self,
         batch: Batch,
         current_batch: &mut ProcessingBatch,
+        progress: Progress,
     ) -> Result<Vec<Task>> {
         #[cfg(test)]
         {
@@ -953,7 +951,7 @@ impl IndexScheduler {
                     .set_currently_updating_index(Some((index_uid.clone(), index.clone())));
 
                 let mut index_wtxn = index.write_txn()?;
-                let tasks = self.apply_index_operation(&mut index_wtxn, &index, op)?;
+                let tasks = self.apply_index_operation(&mut index_wtxn, &index, op, progress)?;
 
                 {
                     let span = tracing::trace_span!(target: "indexing::scheduler", "commit");
@@ -996,6 +994,7 @@ impl IndexScheduler {
                 self.process_batch(
                     Batch::IndexUpdate { index_uid, primary_key, task },
                     current_batch,
+                    progress,
                 )
             }
             Batch::IndexUpdate { index_uid, primary_key, mut task } => {
@@ -1168,7 +1167,7 @@ impl IndexScheduler {
     /// The list of processed tasks.
     #[tracing::instrument(
         level = "trace",
-        skip(self, index_wtxn, index),
+        skip(self, index_wtxn, index, progress),
         target = "indexing::scheduler"
     )]
     fn apply_index_operation<'i>(
@@ -1176,44 +1175,12 @@ impl IndexScheduler {
         index_wtxn: &mut RwTxn<'i>,
         index: &'i Index,
         operation: IndexOperation,
+        progress: Progress,
     ) -> Result<Vec<Task>> {
         let indexer_alloc = Bump::new();
 
         let started_processing_at = std::time::Instant::now();
-        let secs_since_started_processing_at = AtomicU64::new(0);
-        const PRINT_SECS_DELTA: u64 = 5;
-
-        let processing_tasks = self.processing_tasks.clone();
         let must_stop_processing = self.must_stop_processing.clone();
-        let send_progress = |progress| {
-            let now = std::time::Instant::now();
-            let elapsed = secs_since_started_processing_at.load(atomic::Ordering::Relaxed);
-            let previous = started_processing_at + Duration::from_secs(elapsed);
-            let elapsed = now - previous;
-
-            if elapsed.as_secs() < PRINT_SECS_DELTA {
-                return;
-            }
-
-            secs_since_started_processing_at
-                .store((now - started_processing_at).as_secs(), atomic::Ordering::Relaxed);
-
-            let TaskProgress {
-                current_step,
-                finished_steps,
-                total_steps,
-                finished_substeps,
-                total_substeps,
-            } = processing_tasks.write().unwrap().update_progress(progress);
-
-            tracing::info!(
-                current_step,
-                finished_steps,
-                total_steps,
-                finished_substeps,
-                total_substeps
-            );
-        };
 
         match operation {
             IndexOperation::DocumentClear { index_uid, mut tasks } => {
@@ -1308,7 +1275,7 @@ impl IndexScheduler {
                         primary_key.as_deref(),
                         &mut new_fields_ids_map,
                         &|| must_stop_processing.get(),
-                        &send_progress,
+                        progress.clone(),
                     )
                     .map_err(|e| Error::from_milli(e, Some(index_uid.clone())))?;
 
@@ -1356,7 +1323,7 @@ impl IndexScheduler {
                         &document_changes,
                         embedders,
                         &|| must_stop_processing.get(),
-                        &send_progress,
+                        &progress,
                     )
                     .map_err(|e| Error::from_milli(e, Some(index_uid.clone())))?;
 
@@ -1470,7 +1437,7 @@ impl IndexScheduler {
                         &document_changes,
                         embedders,
                         &|| must_stop_processing.get(),
-                        &send_progress,
+                        &progress,
                     )
                     .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?;
 
@@ -1621,7 +1588,7 @@ impl IndexScheduler {
                         &document_changes,
                         embedders,
                         &|| must_stop_processing.get(),
-                        &send_progress,
+                        &progress,
                     )
                     .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?;
 
@@ -1673,12 +1640,14 @@ impl IndexScheduler {
                         index_uid: index_uid.clone(),
                         tasks: cleared_tasks,
                     },
+                    progress.clone(),
                 )?;
 
                 let settings_tasks = self.apply_index_operation(
                     index_wtxn,
                     index,
                     IndexOperation::Settings { index_uid, settings, tasks: settings_tasks },
+                    progress,
                 )?;
 
                 let mut tasks = settings_tasks;
@@ -1702,8 +1671,8 @@ impl IndexScheduler {
 
         let all_task_ids = self.all_task_ids(wtxn)?;
         let mut to_delete_tasks = all_task_ids & matched_tasks;
-        to_delete_tasks -= processing_tasks;
-        to_delete_tasks -= enqueued_tasks;
+        to_delete_tasks -= &**processing_tasks;
+        to_delete_tasks -= &enqueued_tasks;
 
         // 2. We now have a list of tasks to delete, delete them
 

@@ -15,23 +15,22 @@ pub use geo::*;
 pub use searchable::*;
 pub use vectors::EmbeddingExtractor;
 
-use super::indexer::document_changes::{DocumentChanges, IndexingContext, Progress};
-use super::steps::Step;
+use super::indexer::document_changes::{DocumentChanges, IndexingContext};
+use super::steps::IndexingStep;
 use super::thread_local::{FullySend, ThreadLocal};
 use crate::update::GrenadParameters;
 use crate::Result;
 
 pub trait DocidsExtractor {
-    fn run_extraction<'pl, 'fid, 'indexer, 'index, 'extractor, DC: DocumentChanges<'pl>, MSP, SP>(
+    fn run_extraction<'pl, 'fid, 'indexer, 'index, 'extractor, DC: DocumentChanges<'pl>, MSP>(
         grenad_parameters: GrenadParameters,
         document_changes: &DC,
-        indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP, SP>,
+        indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP>,
         extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
-        step: Step,
+        step: IndexingStep,
     ) -> Result<Vec<BalancedCaches<'extractor>>>
     where
-        MSP: Fn() -> bool + Sync,
-        SP: Fn(Progress) + Sync;
+        MSP: Fn() -> bool + Sync;
 }
 
 /// TODO move in permissive json pointer
