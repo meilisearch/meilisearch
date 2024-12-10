@@ -1,4 +1,5 @@
 use crate::utils::ProcessingBatch;
+use enum_iterator::Sequence;
 use meilisearch_types::milli::progress::{AtomicSubStep, NamedStep, Progress, ProgressView, Step};
 use roaring::RoaringBitmap;
 use std::{borrow::Cow, sync::Arc};
@@ -54,39 +55,72 @@ impl ProcessingTasks {
     }
 }
 
-#[repr(u8)]
-#[derive(Copy, Clone)]
-pub enum BatchProgress {
-    ProcessingTasks,
-    WritingTasksToDisk,
-}
-
-impl Step for BatchProgress {
-    fn name(&self) -> Cow<'static, str> {
-        match self {
-            BatchProgress::ProcessingTasks => Cow::Borrowed("processing tasks"),
-            BatchProgress::WritingTasksToDisk => Cow::Borrowed("writing tasks to disk"),
+macro_rules! make_enum_progress {
+    (enum $name:ident: $(- $variant:ident)+ ) => {
+        #[repr(u8)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Sequence)]
+        #[allow(clippy::enum_variant_names)]
+        pub enum $name {
+            $($variant),+
         }
-    }
 
-    fn current(&self) -> u32 {
-        *self as u8 as u32
-    }
+        impl Step for $name {
+            fn name(&self) -> Cow<'static, str> {
+                use convert_case::Casing;
 
-    fn total(&self) -> u32 {
-        2
-    }
+                match self {
+                    $(
+                        $name::$variant => stringify!($variant).from_case(convert_case::Case::Camel).to_case(convert_case::Case::Lower).into()
+                    ),+
+                }
+            }
+
+            fn current(&self) -> u32 {
+                *self as u32
+            }
+
+            fn total(&self) -> u32 {
+                Self::CARDINALITY as u32
+            }
+        }
+    };
 }
 
-#[derive(Default)]
-pub struct Task {}
-
-impl NamedStep for Task {
-    fn name(&self) -> &'static str {
-        "task"
-    }
+macro_rules! make_atomic_progress {
+    ($struct_name:ident alias $atomic_struct_name:ident => $step_name:literal) => {
+        #[derive(Default, Debug, Clone, Copy)]
+        pub struct $struct_name {}
+        impl NamedStep for $struct_name {
+            fn name(&self) -> &'static str {
+                $step_name
+            }
+        }
+        pub type $atomic_struct_name = AtomicSubStep<$struct_name>;
+    };
 }
-pub type AtomicTaskStep = AtomicSubStep<Task>;
+
+make_enum_progress! {
+    enum BatchProgress:
+        - ProcessingTasks
+        - WritingTasksToDisk
+}
+
+make_enum_progress! {
+    enum TaskCancelationProgress:
+        - RetrievingTasks
+        - UpdatingTasks
+}
+
+make_enum_progress! {
+    enum TaskDeletionProgress:
+        - DeletingTasksDateTime
+        - DeletingTasksMetadata
+        - DeletingTasks
+        - DeletingBatches
+}
+
+make_atomic_progress!(Task alias AtomicTaskStep => "task" );
+make_atomic_progress!(Batch alias AtomicBatchStep => "batch" );
 
 #[cfg(test)]
 mod test {
