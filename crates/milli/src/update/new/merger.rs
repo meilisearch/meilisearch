@@ -240,7 +240,7 @@ fn merge_cbo_bitmaps(
                 "del is not a subset of current, which must be impossible."
             );
             let output = match add {
-                Some(add) => (&current - (&del - &add)) | (add - del),
+                Some(add) => (&current - (del - &add)) | add,
                 None => &current - del,
             };
             if output.is_empty() {
