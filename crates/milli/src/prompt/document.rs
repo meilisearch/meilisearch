@@ -9,6 +9,7 @@ use liquid::model::{
     Value as LiquidValue,
 };
 use liquid::{ObjectView, ValueView};
+use rustc_hash::FxBuildHasher;
 use serde_json::value::RawValue;
 
 use crate::update::del_add::{DelAdd, KvReaderDelAdd};
@@ -195,7 +196,7 @@ impl<'doc, D: DocumentTrait<'doc> + Debug> ObjectView for ParseableDocument<'doc
 }
 
 impl<'doc, D: DocumentTrait<'doc> + Debug> ValueView for ParseableDocument<'doc, D> {
-    fn as_debug(&self) -> &dyn fmt::Debug {
+    fn as_debug(&self) -> &dyn Debug {
         self
     }
     fn render(&self) -> liquid::model::DisplayCow<'_> {
@@ -243,14 +244,13 @@ impl<'doc, D: DocumentTrait<'doc> + Debug> ValueView for ParseableDocument<'doc,
     }
 }
 
-#[derive(Debug)]
 struct ParseableValue<'doc> {
-    value: Value<'doc>,
+    value: Value<'doc, FxBuildHasher>,
 }
 
 impl<'doc> ParseableValue<'doc> {
     pub fn new(value: &'doc RawValue, doc_alloc: &'doc Bump) -> Self {
-        let value = Value::from_raw_value(value, doc_alloc).unwrap();
+        let value = Value::from_raw_value_and_hasher(value, FxBuildHasher, doc_alloc).unwrap();
         Self { value }
     }
 
@@ -260,19 +260,19 @@ impl<'doc> ParseableValue<'doc> {
 }
 
 // transparent newtype for implementing ValueView
-#[repr(transparent)]
 #[derive(Debug)]
-struct ParseableMap<'doc>(RawMap<'doc>);
+#[repr(transparent)]
+struct ParseableMap<'doc>(RawMap<'doc, FxBuildHasher>);
 
 // transparent newtype for implementing ValueView
-#[repr(transparent)]
 #[derive(Debug)]
+#[repr(transparent)]
 struct ParseableArray<'doc>(RawVec<'doc>);
 
 impl<'doc> ParseableMap<'doc> {
-    pub fn as_parseable<'a>(map: &'a RawMap<'doc>) -> &'a ParseableMap<'doc> {
+    pub fn as_parseable<'a>(map: &'a RawMap<'doc, FxBuildHasher>) -> &'a ParseableMap<'doc> {
         // SAFETY: repr(transparent)
-        unsafe { &*(map as *const RawMap as *const Self) }
+        unsafe { &*(map as *const RawMap<FxBuildHasher> as *const Self) }
     }
 }
 
@@ -609,6 +609,12 @@ impl<'doc> ValueView for ParseableValue<'doc> {
 
     fn is_nil(&self) -> bool {
         matches!(&self.value, bumparaw_collections::Value::Null)
+    }
+}
+
+impl Debug for ParseableValue<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ParseableValue").field("value", &self.value).finish()
     }
 }
 
