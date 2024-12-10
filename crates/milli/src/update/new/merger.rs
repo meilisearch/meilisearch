@@ -234,21 +234,46 @@ fn merge_cbo_bitmaps(
         (None, Some(_del), Some(add)) => Ok(Operation::Write(add)),
         (Some(_current), None, None) => Ok(Operation::Ignore), // but it's strange
         (Some(current), None, Some(add)) => Ok(Operation::Write(current | add)),
-        (Some(current), Some(del), add) => {
+        (Some(current), Some(mut del), add) => {
             debug_assert!(
                 del.is_subset(&current),
                 "del is not a subset of current, which must be impossible."
             );
             let output = match add {
-                Some(add) => (&current - (del - &add)) | add,
-                None => &current - del,
+                Some(add) => {
+                    del -= &add;
+
+                    if del.is_empty() {
+                        if add.is_subset(&current) {
+                            // no changes, no allocation
+                            None
+                        } else {
+                            // addition
+                            Some(current | add)
+                        }
+                    } else {
+                        if add.is_subset(&current) {
+                            // deletion only, no union
+                            Some(current - del)
+                        } else {
+                            // deletion and addition
+                            Some((current - del) | add)
+                        }
+                    }
+                }
+                // deletion only, no union
+                None => Some(current - del),
             };
-            if output.is_empty() {
-                Ok(Operation::Delete)
-            } else if current == output {
-                Ok(Operation::Ignore)
-            } else {
-                Ok(Operation::Write(output))
+
+            match output {
+                Some(output) => {
+                    if output.is_empty() {
+                        Ok(Operation::Delete)
+                    } else {
+                        Ok(Operation::Write(output))
+                    }
+                }
+                None => Ok(Operation::Ignore),
             }
         }
     }
