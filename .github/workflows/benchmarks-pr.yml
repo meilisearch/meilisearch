@@ -56,7 +56,7 @@ jobs:
           reaction-type: "eyes"
           repo-token: ${{ env.GH_TOKEN }}
 
-      - uses: xt0rted/pull-request-comment-branch@v2
+      - uses: xt0rted/pull-request-comment-branch@v3
         id: comment-branch
         with:
           repo_token: ${{ env.GH_TOKEN }}
