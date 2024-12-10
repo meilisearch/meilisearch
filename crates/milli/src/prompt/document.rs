@@ -3,12 +3,12 @@ use std::collections::BTreeMap;
 use std::fmt::{self, Debug};
 
 use bumpalo::Bump;
+use bumparaw_collections::{RawMap, RawVec, Value};
 use liquid::model::{
     ArrayView, DisplayCow, KString, KStringCow, ObjectRender, ObjectSource, ScalarCow, State,
     Value as LiquidValue,
 };
 use liquid::{ObjectView, ValueView};
-use raw_collections::{RawMap, RawVec};
 use serde_json::value::RawValue;
 
 use crate::update::del_add::{DelAdd, KvReaderDelAdd};
@@ -245,12 +245,12 @@ impl<'doc, D: DocumentTrait<'doc> + Debug> ValueView for ParseableDocument<'doc,
 
 #[derive(Debug)]
 struct ParseableValue<'doc> {
-    value: raw_collections::Value<'doc>,
+    value: Value<'doc>,
 }
 
 impl<'doc> ParseableValue<'doc> {
     pub fn new(value: &'doc RawValue, doc_alloc: &'doc Bump) -> Self {
-        let value = raw_collections::Value::from_raw_value(value, doc_alloc).unwrap();
+        let value = Value::from_raw_value(value, doc_alloc).unwrap();
         Self { value }
     }
 
@@ -447,8 +447,9 @@ impl<'doc> ValueView for ParseableValue<'doc> {
     }
 
     fn render(&self) -> DisplayCow<'_> {
-        use raw_collections::value::Number;
-        use raw_collections::Value;
+        use bumparaw_collections::value::Number;
+        use bumparaw_collections::Value;
+
         match &self.value {
             Value::Null => LiquidValue::Nil.render(),
             Value::Bool(v) => v.render(),
@@ -464,8 +465,9 @@ impl<'doc> ValueView for ParseableValue<'doc> {
     }
 
     fn source(&self) -> DisplayCow<'_> {
-        use raw_collections::value::Number;
-        use raw_collections::Value;
+        use bumparaw_collections::value::Number;
+        use bumparaw_collections::Value;
+
         match &self.value {
             Value::Null => LiquidValue::Nil.source(),
             Value::Bool(v) => ValueView::source(v),
@@ -481,8 +483,9 @@ impl<'doc> ValueView for ParseableValue<'doc> {
     }
 
     fn type_name(&self) -> &'static str {
-        use raw_collections::value::Number;
-        use raw_collections::Value;
+        use bumparaw_collections::value::Number;
+        use bumparaw_collections::Value;
+
         match &self.value {
             Value::Null => LiquidValue::Nil.type_name(),
             Value::Bool(v) => v.type_name(),
@@ -498,7 +501,8 @@ impl<'doc> ValueView for ParseableValue<'doc> {
     }
 
     fn query_state(&self, state: State) -> bool {
-        use raw_collections::Value;
+        use bumparaw_collections::Value;
+
         match &self.value {
             Value::Null => ValueView::query_state(&LiquidValue::Nil, state),
             Value::Bool(v) => ValueView::query_state(v, state),
@@ -515,7 +519,8 @@ impl<'doc> ValueView for ParseableValue<'doc> {
     }
 
     fn to_kstr(&self) -> KStringCow<'_> {
-        use raw_collections::Value;
+        use bumparaw_collections::Value;
+
         match &self.value {
             Value::Null => ValueView::to_kstr(&LiquidValue::Nil),
             Value::Bool(v) => ValueView::to_kstr(v),
@@ -527,12 +532,14 @@ impl<'doc> ValueView for ParseableValue<'doc> {
     }
 
     fn to_value(&self) -> LiquidValue {
-        use raw_collections::Value;
+        use bumparaw_collections::value::Number;
+        use bumparaw_collections::Value;
+
         match &self.value {
             Value::Null => LiquidValue::Nil,
             Value::Bool(v) => LiquidValue::Scalar(liquid::model::ScalarCow::new(*v)),
             Value::Number(number) => match number {
-                raw_collections::value::Number::PosInt(number) => {
+                Number::PosInt(number) => {
                     let number: i64 = match (*number).try_into() {
                         Ok(number) => number,
                         Err(_) => {
@@ -541,12 +548,8 @@ impl<'doc> ValueView for ParseableValue<'doc> {
                     };
                     LiquidValue::Scalar(ScalarCow::new(number))
                 }
-                raw_collections::value::Number::NegInt(number) => {
-                    LiquidValue::Scalar(ScalarCow::new(*number))
-                }
-                raw_collections::value::Number::Finite(number) => {
-                    LiquidValue::Scalar(ScalarCow::new(*number))
-                }
+                Number::NegInt(number) => LiquidValue::Scalar(ScalarCow::new(*number)),
+                Number::Finite(number) => LiquidValue::Scalar(ScalarCow::new(*number)),
             },
             Value::String(s) => LiquidValue::Scalar(liquid::model::ScalarCow::new(s.to_string())),
             Value::Array(raw_vec) => ParseableArray::as_parseable(raw_vec).to_value(),
@@ -555,8 +558,9 @@ impl<'doc> ValueView for ParseableValue<'doc> {
     }
 
     fn as_scalar(&self) -> Option<liquid::model::ScalarCow<'_>> {
-        use raw_collections::value::Number;
-        use raw_collections::Value;
+        use bumparaw_collections::value::Number;
+        use bumparaw_collections::Value;
+
         match &self.value {
             Value::Bool(v) => Some(liquid::model::ScalarCow::new(*v)),
             Value::Number(number) => match number {
@@ -576,34 +580,35 @@ impl<'doc> ValueView for ParseableValue<'doc> {
     }
 
     fn is_scalar(&self) -> bool {
-        use raw_collections::Value;
+        use bumparaw_collections::Value;
+
         matches!(&self.value, Value::Bool(_) | Value::Number(_) | Value::String(_))
     }
 
     fn as_array(&self) -> Option<&dyn liquid::model::ArrayView> {
-        if let raw_collections::Value::Array(array) = &self.value {
+        if let Value::Array(array) = &self.value {
             return Some(ParseableArray::as_parseable(array) as _);
         }
         None
     }
 
     fn is_array(&self) -> bool {
-        matches!(&self.value, raw_collections::Value::Array(_))
+        matches!(&self.value, bumparaw_collections::Value::Array(_))
     }
 
     fn as_object(&self) -> Option<&dyn ObjectView> {
-        if let raw_collections::Value::Object(object) = &self.value {
+        if let Value::Object(object) = &self.value {
             return Some(ParseableMap::as_parseable(object) as _);
         }
         None
     }
 
     fn is_object(&self) -> bool {
-        matches!(&self.value, raw_collections::Value::Object(_))
+        matches!(&self.value, bumparaw_collections::Value::Object(_))
     }
 
     fn is_nil(&self) -> bool {
-        matches!(&self.value, raw_collections::Value::Null)
+        matches!(&self.value, bumparaw_collections::Value::Null)
     }
 }
 

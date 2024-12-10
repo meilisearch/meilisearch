@@ -4,6 +4,7 @@ use std::sync::{OnceLock, RwLock};
 use std::thread::{self, Builder};
 
 use big_s::S;
+use bumparaw_collections::RawMap;
 use document_changes::{extract, DocumentChanges, IndexingContext, Progress};
 pub use document_deletion::DocumentDeletion;
 pub use document_operation::{DocumentOperation, PayloadStats};
@@ -13,7 +14,6 @@ use heed::{RoTxn, RwTxn};
 use itertools::{merge_join_by, EitherOrBoth};
 pub use partial_dump::PartialDump;
 use rand::SeedableRng as _;
-use raw_collections::RawMap;
 use time::OffsetDateTime;
 pub use update_by_function::UpdateByFunction;
 

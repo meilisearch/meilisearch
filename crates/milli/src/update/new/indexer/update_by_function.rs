@@ -1,4 +1,4 @@
-use raw_collections::RawMap;
+use bumparaw_collections::RawMap;
 use rayon::iter::IndexedParallelIterator;
 use rayon::slice::ParallelSlice as _;
 use rhai::{Dynamic, Engine, OptimizationLevel, Scope, AST};

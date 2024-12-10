@@ -1,9 +1,9 @@
 use bumpalo::collections::CollectIn;
 use bumpalo::Bump;
+use bumparaw_collections::RawMap;
 use hashbrown::hash_map::Entry;
 use heed::RoTxn;
 use memmap2::Mmap;
-use raw_collections::RawMap;
 use rayon::slice::ParallelSlice;
 use serde_json::value::RawValue;
 use serde_json::Deserializer;
@@ -545,8 +545,8 @@ impl MergeChanges for MergeDocumentForReplacement {
         match operations.last() {
             Some(InnerDocOp::Addition(DocumentOffset { content })) => {
                 let document = serde_json::from_slice(content).unwrap();
-                let document = raw_collections::RawMap::from_raw_value(document, doc_alloc)
-                    .map_err(UserError::SerdeJson)?;
+                let document =
+                    RawMap::from_raw_value(document, doc_alloc).map_err(UserError::SerdeJson)?;
 
                 if is_new {
                     Ok(Some(DocumentChange::Insertion(Insertion::create(
@@ -632,8 +632,8 @@ impl MergeChanges for MergeDocumentForUpdates {
                     }
                 };
                 let document = serde_json::from_slice(content).unwrap();
-                let document = raw_collections::RawMap::from_raw_value(document, doc_alloc)
-                    .map_err(UserError::SerdeJson)?;
+                let document =
+                    RawMap::from_raw_value(document, doc_alloc).map_err(UserError::SerdeJson)?;
 
                 Some(Versions::single(document))
             }
@@ -647,7 +647,7 @@ impl MergeChanges for MergeDocumentForUpdates {
                     };
 
                     let document = serde_json::from_slice(content).unwrap();
-                    let document = raw_collections::RawMap::from_raw_value(document, doc_alloc)
+                    let document = RawMap::from_raw_value(document, doc_alloc)
                         .map_err(UserError::SerdeJson)?;
                     Ok(document)
                 });

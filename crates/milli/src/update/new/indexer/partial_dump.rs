@@ -1,5 +1,6 @@
 use std::ops::DerefMut;
 
+use bumparaw_collections::RawMap;
 use rayon::iter::IndexedParallelIterator;
 use serde_json::value::RawValue;
 
@@ -75,8 +76,8 @@ where
             self.primary_key.extract_fields_and_docid(document, fields_ids_map, doc_alloc)?;
         let external_document_id = external_document_id.to_de();
 
-        let document = raw_collections::RawMap::from_raw_value(document, doc_alloc)
-            .map_err(InternalError::SerdeJson)?;
+        let document =
+            RawMap::from_raw_value(document, doc_alloc).map_err(InternalError::SerdeJson)?;
 
         let insertion = Insertion::create(docid, external_document_id, Versions::single(document));
         Ok(Some(DocumentChange::Insertion(insertion)))

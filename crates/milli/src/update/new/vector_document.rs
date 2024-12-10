@@ -1,9 +1,9 @@
 use std::collections::BTreeSet;
 
 use bumpalo::Bump;
+use bumparaw_collections::RawMap;
 use deserr::{Deserr, IntoValue};
 use heed::RoTxn;
-use raw_collections::RawMap;
 use serde::Serialize;
 use serde_json::value::RawValue;
 

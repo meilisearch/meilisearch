@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use bumparaw_collections::RawMap;
 use heed::RoTxn;
-use raw_collections::RawMap;
 use serde_json::value::RawValue;
 
 use super::vector_document::VectorDocument;
