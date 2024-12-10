@@ -230,7 +230,7 @@ where
     send_progress.update_progress(progress_step);
 
     let pi = document_changes.iter(CHUNK_SIZE);
-    pi.enumerate().try_arc_for_each_try_init(
+    pi.try_arc_for_each_try_init(
         || {
             DocumentChangeContext::new(
                 index,
@@ -243,13 +243,10 @@ where
                 move |index_alloc| extractor.init_data(index_alloc),
             )
         },
-        |context, (finished_documents, items)| {
+        |context, items| {
             if (must_stop_processing)() {
                 return Err(Arc::new(InternalError::AbortedIndexation.into()));
             }
-            let finished_documents = (finished_documents * CHUNK_SIZE) as u32;
-
-            step.store(finished_documents, Ordering::Relaxed);
 
             // Clean up and reuse the document-specific allocator
             context.doc_alloc.reset();
@@ -260,6 +257,7 @@ where
             });
 
             let res = extractor.process(changes, context).map_err(Arc::new);
+            step.fetch_add(items.as_ref().len() as u32, Ordering::Relaxed);
 
             // send back the doc_alloc in the pool
             context.doc_allocs.get_or_default().0.set(std::mem::take(&mut context.doc_alloc));
