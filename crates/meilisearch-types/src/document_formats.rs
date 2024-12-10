@@ -4,10 +4,10 @@ use std::io::{self, BufWriter};
 use std::marker::PhantomData;
 
 use bumpalo::Bump;
+use bumparaw_collections::RawMap;
 use memmap2::Mmap;
 use milli::documents::Error;
 use milli::Object;
-use raw_collections::RawMap;
 use serde::de::{SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 use serde_json::error::Category;

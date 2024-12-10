@@ -69,12 +69,12 @@ use std::io::BufReader;
 use std::{io, iter, mem};
 
 use bumpalo::Bump;
+use bumparaw_collections::bbbul::{BitPacker, BitPacker4x};
+use bumparaw_collections::map::FrozenMap;
+use bumparaw_collections::{Bbbul, FrozenBbbul};
 use grenad::ReaderCursor;
 use hashbrown::hash_map::RawEntryMut;
 use hashbrown::HashMap;
-use raw_collections::bbbul::{BitPacker, BitPacker4x};
-use raw_collections::map::FrozenMap;
-use raw_collections::{Bbbul, FrozenBbbul};
 use roaring::RoaringBitmap;
 use rustc_hash::FxBuildHasher;
 

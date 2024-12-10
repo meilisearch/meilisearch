@@ -4,6 +4,7 @@ use std::sync::{OnceLock, RwLock};
 use std::thread::{self, Builder};
 
 use big_s::S;
+use bumparaw_collections::RawMap;
 use document_changes::{extract, DocumentChanges, IndexingContext, Progress};
 pub use document_deletion::DocumentDeletion;
 pub use document_operation::{DocumentOperation, PayloadStats};
@@ -13,7 +14,7 @@ use heed::{RoTxn, RwTxn};
 use itertools::{merge_join_by, EitherOrBoth};
 pub use partial_dump::PartialDump;
 use rand::SeedableRng as _;
-use raw_collections::RawMap;
+use rustc_hash::FxBuildHasher;
 use time::OffsetDateTime;
 pub use update_by_function::UpdateByFunction;
 
@@ -776,7 +777,7 @@ pub fn retrieve_or_guess_primary_key<'a>(
     index: &Index,
     new_fields_ids_map: &mut FieldsIdsMap,
     primary_key_from_op: Option<&'a str>,
-    first_document: Option<RawMap<'a>>,
+    first_document: Option<RawMap<'a, FxBuildHasher>>,
 ) -> Result<StdResult<(PrimaryKey<'a>, bool), UserError>> {
     // make sure that we have a declared primary key, either fetching it from the index or attempting to guess it.
 

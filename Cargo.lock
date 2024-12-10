@@ -707,6 +707,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "bumparaw-collections"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4ce682bdc86c2e25ef5cd95881d9d6a1902214eddf74cf9ffea88fe1464377e8"
+dependencies = [
+ "allocator-api2",
+ "bitpacking",
+ "bumpalo",
+ "hashbrown 0.15.1",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "byte-unit"
 version = "5.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2617,6 +2631,7 @@ dependencies = [
  "big_s",
  "bincode",
  "bumpalo",
+ "bumparaw-collections",
  "crossbeam-channel",
  "csv",
  "derive_builder 0.20.0",
@@ -2631,7 +2646,6 @@ dependencies = [
  "meilisearch-types",
  "memmap2",
  "page_size",
- "raw-collections",
  "rayon",
  "roaring",
  "serde",
@@ -3549,6 +3563,7 @@ dependencies = [
  "actix-web",
  "anyhow",
  "bumpalo",
+ "bumparaw-collections",
  "convert_case 0.6.0",
  "csv",
  "deserr",
@@ -3561,7 +3576,6 @@ dependencies = [
  "meili-snap",
  "memmap2",
  "milli",
- "raw-collections",
  "roaring",
  "serde",
  "serde-cs",
@@ -3618,6 +3632,7 @@ dependencies = [
  "bincode",
  "bstr",
  "bumpalo",
+ "bumparaw-collections",
  "bytemuck",
  "byteorder",
  "candle-core",
@@ -3656,7 +3671,6 @@ dependencies = [
  "once_cell",
  "ordered-float",
  "rand",
- "raw-collections",
  "rayon",
  "rayon-par-bridge",
  "rhai",
@@ -4485,19 +4499,6 @@ checksum = "32cb0b9bc82b0a0876c2dd994a7e7a2683d3e7390ca40e6886785ef0c7e3ee31"
 dependencies = [
  "num-traits",
  "rand",
-]
-
-[[package]]
-name = "raw-collections"
-version = "0.1.0"
-source = "git+https://github.com/meilisearch/raw-collections.git#15e5d7bdebc0c149b2a28b2454f307c717d07f8a"
-dependencies = [
- "allocator-api2",
- "bitpacking",
- "bumpalo",
- "hashbrown 0.15.1",
- "serde",
- "serde_json",
 ]
 
 [[package]]
