@@ -94,22 +94,6 @@ pub async fn execute(
 
     let mut tasks = Vec::new();
     for i in 0..workload.run_count {
-        let run_command = match binary_path {
-            Some(binary_path) => tokio::process::Command::new(binary_path),
-            None => {
-                let mut command = tokio::process::Command::new("cargo");
-                command
-                    .arg("run")
-                    .arg("--release")
-                    .arg("-p")
-                    .arg("meilisearch")
-                    .arg("--bin")
-                    .arg("meilisearch")
-                    .arg("--");
-                command
-            }
-        };
-
         tasks.push(
             execute_run(
                 dashboard_client,
@@ -119,7 +103,7 @@ pub async fn execute(
                 master_key,
                 &workload,
                 args,
-                run_command,
+                binary_path,
                 i,
             )
             .await?,
@@ -150,12 +134,28 @@ async fn execute_run(
     master_key: Option<&str>,
     workload: &Workload,
     args: &BenchDeriveArgs,
-    run_command: tokio::process::Command,
+    binary_path: Option<&Path>,
     run_number: u16,
 ) -> anyhow::Result<tokio::task::JoinHandle<anyhow::Result<std::fs::File>>> {
     meili_process::delete_db();
 
-    meili_process::build().await?;
+    let run_command = match binary_path {
+        Some(binary_path) => tokio::process::Command::new(binary_path),
+        None => {
+            meili_process::build().await?;
+            let mut command = tokio::process::Command::new("cargo");
+            command
+                .arg("run")
+                .arg("--release")
+                .arg("-p")
+                .arg("meilisearch")
+                .arg("--bin")
+                .arg("meilisearch")
+                .arg("--");
+            command
+        }
+    };
+
     let meilisearch =
         meili_process::start(meili_client, master_key, workload, &args.asset_folder, run_command)
             .await?;
