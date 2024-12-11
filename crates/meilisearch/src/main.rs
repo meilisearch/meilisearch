@@ -129,6 +129,11 @@ async fn try_main() -> anyhow::Result<()> {
 
     print_launch_resume(&opt, analytics.clone(), config_read_from);
 
+    tokio::spawn(async move {
+        tokio::signal::ctrl_c().await.unwrap();
+        std::process::exit(77);
+    });
+
     run_http(index_scheduler, auth_controller, opt, log_handle, Arc::new(analytics)).await?;
 
     Ok(())
