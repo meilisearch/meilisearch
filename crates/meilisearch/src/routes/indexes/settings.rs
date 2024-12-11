@@ -20,6 +20,14 @@ use crate::Opt;
 #[macro_export]
 macro_rules! make_setting_route {
     ($route:literal, $update_verb:ident, $type:ty, $err_ty:ty, $attr:ident, $camelcase_attr:literal, $analytics:ident) => {
+        #[allow(dead_code)]
+        
+        pub fn verify_field_exists(settings: Settings) {
+            match settings {
+                Settings { $attr: _, .. } => {}
+            }
+        }
+
         pub mod $attr {
             use actix_web::web::Data;
             use actix_web::{web, HttpRequest, HttpResponse, Resource};
