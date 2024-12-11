@@ -15,7 +15,7 @@ use super::super::document_change::DocumentChange;
 use super::document_changes::{DocumentChangeContext, DocumentChanges};
 use super::retrieve_or_guess_primary_key;
 use crate::documents::PrimaryKey;
-use crate::progress::{AtomicDocumentStep, Progress};
+use crate::progress::{AtomicDocumentStep, AtomicPayloadStep, Progress};
 use crate::update::new::document::Versions;
 use crate::update::new::steps::IndexingStep;
 use crate::update::new::thread_local::MostlySend;
@@ -71,7 +71,7 @@ impl<'pl> DocumentOperation<'pl> {
         let mut primary_key = None;
 
         let payload_count = operations.len();
-        let (step, progress_step) = AtomicDocumentStep::new(payload_count as u32);
+        let (step, progress_step) = AtomicPayloadStep::new(payload_count as u32);
         progress.update_progress(progress_step);
 
         for (payload_index, operation) in operations.into_iter().enumerate() {

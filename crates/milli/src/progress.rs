@@ -138,6 +138,7 @@ macro_rules! make_atomic_progress {
 }
 
 make_atomic_progress!(Document alias AtomicDocumentStep => "document" );
+make_atomic_progress!(Payload alias AtomicPayloadStep => "payload" );
 
 #[derive(Debug, Serialize, Clone)]
 pub struct ProgressView {
