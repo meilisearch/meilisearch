@@ -18,27 +18,27 @@ use crate::routes::{get_task_id, is_dry_run, SummarizedTaskView};
 use crate::Opt;
 
 #[allow(dead_code)]
-fn verify_all_settings_fields<FH>(settings: Settings<FH>) {
+fn verify_settings_has_routes<T>(settings: Settings<T>) {
     match settings {
         Settings {
             filterable_attributes: _,
             sortable_attributes: _,
             displayed_attributes: _,
+            localized_attributes: _,
             searchable_attributes: _,
             distinct_attribute: _,
             proximity_precision: _,
-            typo_tolerance: _,
-            faceting: _,
-            pagination: _,
             stop_words: _,
-            synonyms: _,
-            embedders: _,
-            ranking_rules: _,
-            search_cutoff_ms: _,
-            localized_attributes: _,
-            dictionary: _,
             separator_tokens: _,
             non_separator_tokens: _,
+            dictionary: _,
+            synonyms: _,
+            ranking_rules: _,
+            typo_tolerance: _,
+            pagination: _,
+            faceting: _,
+            embedders: _,
+            search_cutoff_ms: _,
             ..
         } => {}
     }
@@ -65,17 +65,11 @@ macro_rules! make_setting_route {
             use $crate::Opt;
             use $crate::routes::{is_dry_run, get_task_id, SummarizedTaskView};
 
-            #[doc(hidden)]
             #[allow(dead_code)]
-            pub struct VerifySettingExists<FH>(std::marker::PhantomData<FH>);
-            #[allow(dead_code)]
-            impl<FH> VerifySettingExists<FH> {
-                const VERIFY: () = {
-                    match None::<Settings<FH>> {
-                        Some(Settings { $attr: _, .. }) => (),
-                        _ => (),
-                    }
-                };
+            fn verify_setting_exists<FH>(settings: meilisearch_types::settings::Settings<FH>) {
+                match settings {
+                    meilisearch_types::settings::Settings { $attr: _, .. } => {}
+                }
             }
 
             pub async fn delete(
