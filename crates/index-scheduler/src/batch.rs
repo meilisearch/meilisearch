@@ -33,7 +33,9 @@ use meilisearch_types::heed::{RoTxn, RwTxn};
 use meilisearch_types::milli::documents::{obkv_to_object, DocumentsBatchReader, PrimaryKey};
 use meilisearch_types::milli::heed::CompactionOption;
 use meilisearch_types::milli::update::new::indexer::{self, UpdateByFunction};
-use meilisearch_types::milli::update::{IndexDocumentsMethod, Settings as MilliSettings};
+use meilisearch_types::milli::update::{
+    DocumentAdditionResult, IndexDocumentsMethod, Settings as MilliSettings,
+};
 use meilisearch_types::milli::vector::parsed_vectors::{
     ExplicitVectors, VectorOrArrayOfVectors, RESERVED_VECTORS_FIELD_NAME,
 };
@@ -1310,9 +1312,9 @@ impl IndexScheduler {
                     )
                     .map_err(|e| Error::from_milli(e, Some(index_uid.clone())))?;
 
-                let mut addition = 0;
+                let mut candidates_count = 0;
                 for (stats, task) in operation_stats.into_iter().zip(&mut tasks) {
-                    addition += stats.document_count;
+                    candidates_count += stats.document_count;
                     match stats.error {
                         Some(error) => {
                             task.status = Status::Failed;
@@ -1357,6 +1359,13 @@ impl IndexScheduler {
                         &send_progress,
                     )
                     .map_err(|e| Error::from_milli(e, Some(index_uid.clone())))?;
+
+                    let addition = DocumentAdditionResult {
+                        indexed_documents: candidates_count,
+                        number_of_documents: index
+                            .number_of_documents(index_wtxn)
+                            .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?,
+                    };
 
                     tracing::info!(indexing_result = ?addition, processed_in = ?started_processing_at.elapsed(), "document indexing done");
                 }
@@ -1436,6 +1445,7 @@ impl IndexScheduler {
                         }
                     };
 
+                    let candidates_count = candidates.len();
                     let indexer = UpdateByFunction::new(candidates, context.clone(), code.clone());
                     let document_changes = pool
                         .install(|| {
@@ -1464,7 +1474,14 @@ impl IndexScheduler {
                     )
                     .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?;
 
-                    // tracing::info!(indexing_result = ?addition, processed_in = ?started_processing_at.elapsed(), "document indexing done");
+                    let addition = DocumentAdditionResult {
+                        indexed_documents: candidates_count,
+                        number_of_documents: index
+                            .number_of_documents(index_wtxn)
+                            .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?,
+                    };
+
+                    tracing::info!(indexing_result = ?addition, processed_in = ?started_processing_at.elapsed(), "document indexing done");
                 }
 
                 match result_count {
@@ -1585,6 +1602,7 @@ impl IndexScheduler {
                     };
 
                     let mut indexer = indexer::DocumentDeletion::new();
+                    let candidates_count = to_delete.len();
                     indexer.delete_documents_by_docids(to_delete);
                     let document_changes = indexer.into_changes(&indexer_alloc, primary_key);
                     let embedders = index
@@ -1607,7 +1625,14 @@ impl IndexScheduler {
                     )
                     .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?;
 
-                    // tracing::info!(indexing_result = ?addition, processed_in = ?started_processing_at.elapsed(), "document indexing done");
+                    let addition = DocumentAdditionResult {
+                        indexed_documents: candidates_count,
+                        number_of_documents: index
+                            .number_of_documents(index_wtxn)
+                            .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?,
+                    };
+
+                    tracing::info!(indexing_result = ?addition, processed_in = ?started_processing_at.elapsed(), "document indexing done");
                 }
 
                 Ok(tasks)
