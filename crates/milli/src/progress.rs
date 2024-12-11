@@ -141,14 +141,16 @@ make_atomic_progress!(Document alias AtomicDocumentStep => "document" );
 make_atomic_progress!(Payload alias AtomicPayloadStep => "payload" );
 
 #[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct ProgressView {
-    steps: Vec<ProgressStepView>,
-    percentage: f32,
+    pub steps: Vec<ProgressStepView>,
+    pub percentage: f32,
 }
 
 #[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct ProgressStepView {
-    name: Cow<'static, str>,
-    finished: u32,
-    total: u32,
+    pub name: Cow<'static, str>,
+    pub finished: u32,
+    pub total: u32,
 }
