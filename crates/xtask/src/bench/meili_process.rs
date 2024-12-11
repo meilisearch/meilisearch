@@ -37,17 +37,8 @@ pub async fn start(
     master_key: Option<&str>,
     workload: &Workload,
     asset_folder: &str,
+    mut command: tokio::process::Command,
 ) -> anyhow::Result<tokio::process::Child> {
-    let mut command = tokio::process::Command::new("cargo");
-    command
-        .arg("run")
-        .arg("--release")
-        .arg("-p")
-        .arg("meilisearch")
-        .arg("--bin")
-        .arg("meilisearch")
-        .arg("--");
-
     command.arg("--db-path").arg("./_xtask_benchmark.ms");
     if let Some(master_key) = master_key {
         command.arg("--master-key").arg(master_key);

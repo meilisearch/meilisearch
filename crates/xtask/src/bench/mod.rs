@@ -86,6 +86,10 @@ pub struct BenchDeriveArgs {
     /// The maximum time in seconds we allow for fetching the task queue before timing out.
     #[arg(long, default_value_t = 60)]
     tasks_queue_timeout_secs: u64,
+
+    /// The path to the binary to run. By default it compiles the binary with cargo.
+    #[arg(long)]
+    binary_path: Option<PathBuf>,
 }
 
 pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
@@ -170,6 +174,7 @@ pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
                     args.master_key.as_deref(),
                     workload,
                     &args,
+                    args.binary_path.as_deref(),
                 )
                 .await?;
 
