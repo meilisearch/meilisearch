@@ -130,6 +130,7 @@ impl<'a, 'b, 'extractor> Extractor<'extractor> for EmbeddingExtractor<'a, 'b> {
                                 );
                             } else if new_vectors.regenerate {
                                 let new_rendered = prompt.render_document(
+                                    update.external_document_id(),
                                     update.current(
                                         &context.rtxn,
                                         context.index,
@@ -139,6 +140,7 @@ impl<'a, 'b, 'extractor> Extractor<'extractor> for EmbeddingExtractor<'a, 'b> {
                                     &context.doc_alloc,
                                 )?;
                                 let old_rendered = prompt.render_document(
+                                    update.external_document_id(),
                                     update.merged(
                                         &context.rtxn,
                                         context.index,
@@ -158,6 +160,7 @@ impl<'a, 'b, 'extractor> Extractor<'extractor> for EmbeddingExtractor<'a, 'b> {
                             }
                         } else if old_vectors.regenerate {
                             let old_rendered = prompt.render_document(
+                                update.external_document_id(),
                                 update.current(
                                     &context.rtxn,
                                     context.index,
@@ -167,6 +170,7 @@ impl<'a, 'b, 'extractor> Extractor<'extractor> for EmbeddingExtractor<'a, 'b> {
                                 &context.doc_alloc,
                             )?;
                             let new_rendered = prompt.render_document(
+                                update.external_document_id(),
                                 update.merged(
                                     &context.rtxn,
                                     context.index,
@@ -216,6 +220,7 @@ impl<'a, 'b, 'extractor> Extractor<'extractor> for EmbeddingExtractor<'a, 'b> {
                                 );
                             } else if new_vectors.regenerate {
                                 let rendered = prompt.render_document(
+                                    insertion.external_document_id(),
                                     insertion.inserted(),
                                     context.new_fields_ids_map,
                                     &context.doc_alloc,
@@ -229,6 +234,7 @@ impl<'a, 'b, 'extractor> Extractor<'extractor> for EmbeddingExtractor<'a, 'b> {
                             }
                         } else {
                             let rendered = prompt.render_document(
+                                insertion.external_document_id(),
                                 insertion.inserted(),
                                 context.new_fields_ids_map,
                                 &context.doc_alloc,
