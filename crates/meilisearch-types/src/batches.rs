@@ -16,7 +16,7 @@ pub type BatchId = u32;
 pub struct Batch {
     pub uid: BatchId,
 
-    #[serde(skip_deserializing)]
+    #[serde(skip)]
     pub progress: Option<ProgressView>,
     pub details: DetailsView,
     pub stats: BatchStats,
