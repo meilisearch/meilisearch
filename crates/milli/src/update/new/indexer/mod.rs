@@ -72,7 +72,7 @@ pub fn index<'pl, 'indexer, 'index, DC, MSP>(
     document_changes: &DC,
     embedders: EmbeddingConfigs,
     must_stop_processing: &'indexer MSP,
-    send_progress: &'indexer Progress,
+    progress: &'indexer Progress,
 ) -> Result<()>
 where
     DC: DocumentChanges<'pl>,
@@ -125,7 +125,7 @@ where
         doc_allocs: &doc_allocs,
         fields_ids_map_store: &fields_ids_map_store,
         must_stop_processing,
-        progress: send_progress,
+        progress,
     };
 
     let mut index_embeddings = index.embedding_configs(wtxn)?;

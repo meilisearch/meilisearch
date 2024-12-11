@@ -206,7 +206,7 @@ pub fn extract<
         doc_allocs,
         fields_ids_map_store,
         must_stop_processing,
-        progress: send_progress,
+        progress,
     }: IndexingContext<'fid, 'indexer, 'index, MSP>,
     extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
     datastore: &'data ThreadLocal<EX::Data>,
@@ -217,7 +217,7 @@ where
     MSP: Fn() -> bool + Sync,
 {
     tracing::trace!("We are resetting the extractor allocators");
-    send_progress.update_progress(step);
+    progress.update_progress(step);
     // Clean up and reuse the extractor allocs
     for extractor_alloc in extractor_allocs.iter_mut() {
         tracing::trace!("\tWith {} bytes reset", extractor_alloc.0.allocated_bytes());
@@ -226,7 +226,7 @@ where
 
     let total_documents = document_changes.len() as u32;
     let (step, progress_step) = AtomicDocumentStep::new(total_documents);
-    send_progress.update_progress(progress_step);
+    progress.update_progress(progress_step);
 
     let pi = document_changes.iter(CHUNK_SIZE);
     pi.try_arc_for_each_try_init(
