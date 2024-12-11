@@ -37,7 +37,7 @@ impl Progress {
         let mut percentage = 0.0;
         let mut prev_factors = 1.0;
 
-        let mut step_view = Vec::new();
+        let mut step_view = Vec::with_capacity(steps.len());
         for (_, step) in steps.iter() {
             prev_factors *= step.total() as f32;
             percentage += step.current() as f32 / prev_factors;
