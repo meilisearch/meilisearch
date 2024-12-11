@@ -65,7 +65,7 @@ pub trait NamedStep: 'static + Send + Sync + Default {
 /// - The name of the step doesn't change
 /// - The total number of steps doesn't change
 pub struct AtomicSubStep<Name: NamedStep> {
-    name: Name,
+    unit_name: Name,
     current: Arc<AtomicU32>,
     total: u32,
 }
@@ -73,13 +73,13 @@ pub struct AtomicSubStep<Name: NamedStep> {
 impl<Name: NamedStep> AtomicSubStep<Name> {
     pub fn new(total: u32) -> (Arc<AtomicU32>, Self) {
         let current = Arc::new(AtomicU32::new(0));
-        (current.clone(), Self { current, total, name: Name::default() })
+        (current.clone(), Self { current, total, unit_name: Name::default() })
     }
 }
 
 impl<Name: NamedStep> Step for AtomicSubStep<Name> {
     fn name(&self) -> Cow<'static, str> {
-        self.name.name().into()
+        self.unit_name.name().into()
     }
 
     fn current(&self) -> u32 {
