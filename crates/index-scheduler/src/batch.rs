@@ -1509,7 +1509,7 @@ impl IndexScheduler {
                     };
 
                     let candidates_count = candidates.len();
-                    progress.update_progress(DocumentEditionProgress::ComputingTheChanges);
+                    progress.update_progress(DocumentEditionProgress::ComputingDocumentChanges);
                     let indexer = UpdateByFunction::new(candidates, context.clone(), code.clone());
                     let document_changes = pool
                         .install(|| {
