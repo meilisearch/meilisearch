@@ -69,6 +69,7 @@ fn convert_update_files(db_path: &Path) -> anyhow::Result<()> {
             "while flushing update file bufwriter for update file {update_file_path:?}"
         ))?;
         let _ = file
+            // atomically replace the obkv file with the rewritten NDJSON file
             .persist(&update_file_path)
             .with_context(|| format!("while persisting update file {update_file_path:?}"))?;
     }
