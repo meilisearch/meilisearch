@@ -695,7 +695,7 @@ impl IndexScheduler {
                 let (atomic, update_file_progress) =
                     AtomicUpdateFileStep::new(enqueued.len() as u32);
                 progress.update_progress(update_file_progress);
-                for task_id in self.get_status(&rtxn, Status::Enqueued)? {
+                for task_id in enqueued {
                     let task = self.get_task(&rtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
                     if let Some(content_uuid) = task.content_uuid() {
                         let src = self.file_store.get_update_path(content_uuid);
