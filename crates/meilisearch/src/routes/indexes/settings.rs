@@ -17,33 +17,6 @@ use crate::extractors::authentication::GuardedData;
 use crate::routes::{get_task_id, is_dry_run, SummarizedTaskView};
 use crate::Opt;
 
-#[allow(dead_code)]
-fn verify_settings_has_routes<T>(settings: Settings<T>) {
-    match settings {
-        Settings {
-            filterable_attributes: _,
-            sortable_attributes: _,
-            displayed_attributes: _,
-            localized_attributes: _,
-            searchable_attributes: _,
-            distinct_attribute: _,
-            proximity_precision: _,
-            stop_words: _,
-            separator_tokens: _,
-            non_separator_tokens: _,
-            dictionary: _,
-            synonyms: _,
-            ranking_rules: _,
-            typo_tolerance: _,
-            pagination: _,
-            faceting: _,
-            embedders: _,
-            search_cutoff_ms: _,
-            ..
-        } => {}
-    }
-}
-
 #[macro_export]
 macro_rules! make_setting_route {
     ($route:literal, $update_verb:ident, $type:ty, $err_ty:ty, $attr:ident, $camelcase_attr:literal, $analytics:ident) => {
