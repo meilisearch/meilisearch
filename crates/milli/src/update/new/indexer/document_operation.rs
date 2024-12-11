@@ -15,7 +15,7 @@ use super::super::document_change::DocumentChange;
 use super::document_changes::{DocumentChangeContext, DocumentChanges};
 use super::retrieve_or_guess_primary_key;
 use crate::documents::PrimaryKey;
-use crate::progress::{AtomicDocumentStep, AtomicPayloadStep, Progress};
+use crate::progress::{AtomicPayloadStep, Progress};
 use crate::update::new::document::Versions;
 use crate::update::new::steps::IndexingStep;
 use crate::update::new::thread_local::MostlySend;
