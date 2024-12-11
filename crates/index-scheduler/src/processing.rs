@@ -119,8 +119,111 @@ make_enum_progress! {
         - DeletingBatches
 }
 
+make_enum_progress! {
+    enum SnapshotCreationProgress:
+        - StartTheSnapshotCreation
+        - SnapshotTheIndexScheduler
+        - SnapshotTheUpdateFiles
+        - SnapshotTheIndexes
+        - SnapshotTheApiKeys
+        - CreateTheTarball
+}
+
+make_enum_progress! {
+    enum DumpCreationProgress:
+        - StartTheDumpCreation
+        - DumpTheApiKeys
+        - DumpTheTasks
+        - DumpTheIndexes
+        - DumpTheExperimentalFeatures
+        - CompressTheDump
+}
+
+make_enum_progress! {
+    enum CreateIndexProgress:
+        - CreatingTheIndex
+}
+
+make_enum_progress! {
+    enum UpdateIndexProgress:
+        - UpdatingTheIndex
+}
+
+make_enum_progress! {
+    enum DeleteIndexProgress:
+        - DeletingTheIndex
+}
+
+make_enum_progress! {
+    enum SwappingTheIndexes:
+        - EnsuringCorrectnessOfTheSwap
+        - SwappingTheIndexes
+}
+
+make_enum_progress! {
+    enum InnerSwappingTwoIndexes:
+        - RetrieveTheTasks
+        - UpdateTheTasks
+        - UpdateTheIndexesMetadata
+}
+
+make_enum_progress! {
+    enum DocumentOperationProgress:
+        - RetrievingConfig
+        - ComputingTheChanges
+        - Indexing
+}
+
+make_enum_progress! {
+    enum DocumentEditionProgress:
+        - RetrievingConfig
+        - ComputingTheChanges
+        - Indexing
+}
+
+make_enum_progress! {
+    enum DocumentDeletionProgress:
+        - RetrievingConfig
+        - DeleteDocuments
+        - Indexing
+}
+
+make_enum_progress! {
+    enum SettingsProgress:
+        - RetrievingAndMergingTheSettings
+        - ApplyTheSettings
+}
+
 make_atomic_progress!(Task alias AtomicTaskStep => "task" );
+make_atomic_progress!(Document alias AtomicDocumentStep => "document" );
 make_atomic_progress!(Batch alias AtomicBatchStep => "batch" );
+make_atomic_progress!(UpdateFile alias AtomicUpdateFileStep => "update file" );
+
+pub struct VariableNameStep {
+    name: String,
+    current: u32,
+    total: u32,
+}
+
+impl VariableNameStep {
+    pub fn new(name: impl Into<String>, current: u32, total: u32) -> Self {
+        Self { name: name.into(), current, total }
+    }
+}
+
+impl Step for VariableNameStep {
+    fn name(&self) -> Cow<'static, str> {
+        self.name.clone().into()
+    }
+
+    fn current(&self) -> u32 {
+        self.current
+    }
+
+    fn total(&self) -> u32 {
+        self.total
+    }
+}
 
 #[cfg(test)]
 mod test {
