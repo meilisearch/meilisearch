@@ -91,16 +91,53 @@ impl<Name: NamedStep> Step for AtomicSubStep<Name> {
     }
 }
 
-#[derive(Default)]
-pub struct Document {}
+#[macro_export]
+macro_rules! make_enum_progress {
+    ($visibility:vis enum $name:ident { $($variant:ident,)+ }) => {
+        #[repr(u8)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Sequence)]
+        #[allow(clippy::enum_variant_names)]
+        $visibility enum $name {
+            $($variant),+
+        }
 
-impl NamedStep for Document {
-    fn name(&self) -> &'static str {
-        "document"
-    }
+        impl Step for $name {
+            fn name(&self) -> Cow<'static, str> {
+                use convert_case::Casing;
+
+                match self {
+                    $(
+                        $name::$variant => stringify!($variant).from_case(convert_case::Case::Camel).to_case(convert_case::Case::Lower).into()
+                    ),+
+                }
+            }
+
+            fn current(&self) -> u32 {
+                *self as u32
+            }
+
+            fn total(&self) -> u32 {
+                Self::CARDINALITY as u32
+            }
+        }
+    };
 }
 
-pub type AtomicDocumentStep = AtomicSubStep<Document>;
+#[macro_export]
+macro_rules! make_atomic_progress {
+    ($struct_name:ident alias $atomic_struct_name:ident => $step_name:literal) => {
+        #[derive(Default, Debug, Clone, Copy)]
+        pub struct $struct_name {}
+        impl NamedStep for $struct_name {
+            fn name(&self) -> &'static str {
+                $step_name
+            }
+        }
+        pub type $atomic_struct_name = AtomicSubStep<$struct_name>;
+    };
+}
+
+make_atomic_progress!(Document alias AtomicDocumentStep => "document" );
 
 #[derive(Debug, Serialize, Clone)]
 pub struct ProgressView {
