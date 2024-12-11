@@ -1,5 +1,6 @@
 mod v1_10;
 mod v1_11;
+mod v1_12;
 mod v1_9;
 
 use std::path::{Path, PathBuf};
@@ -8,6 +9,7 @@ use anyhow::{bail, Context};
 use meilisearch_types::versioning::create_version_file;
 
 use v1_10::v1_9_to_v1_10;
+use v1_12::v1_11_to_v1_12;
 
 use crate::upgrade::v1_11::v1_10_to_v1_11;
 
@@ -22,6 +24,7 @@ impl OfflineUpgrade {
         let upgrade_list = [
             (v1_9_to_v1_10 as fn(&Path) -> Result<(), anyhow::Error>, "1", "10", "0"),
             (v1_10_to_v1_11, "1", "11", "0"),
+            (v1_11_to_v1_12, "1", "12", "0"),
         ];
 
         let (current_major, current_minor, current_patch) = &self.current_version;
@@ -33,6 +36,7 @@ impl OfflineUpgrade {
         ) {
             ("1", "9", _) => 0,
             ("1", "10", _) => 1,
+            ("1", "11", _) => 2,
             _ => {
                 bail!("Unsupported current version {current_major}.{current_minor}.{current_patch}. Can only upgrade from v1.9 and v1.10")
             }
@@ -43,6 +47,7 @@ impl OfflineUpgrade {
         let ends_at = match (target_major.as_str(), target_minor.as_str(), target_patch.as_str()) {
             ("1", "10", _) => 0,
             ("1", "11", _) => 1,
+            ("1", "12", _) => 2,
             (major, _, _) if major.starts_with('v') => {
                 bail!("Target version must not starts with a `v`. Instead of writing `v1.9.0` write `1.9.0` for example.")
             }
