@@ -4308,16 +4308,6 @@ mod tests {
         snapshot!(batch, @r#"
         {
           "uid": 0,
-          "progress": {
-            "steps": [
-              {
-                "name": "processing tasks",
-                "finished": 0,
-                "total": 2
-              }
-            ],
-            "percentage": 0.0
-          },
           "details": {
             "primaryKey": "mouse"
           },
