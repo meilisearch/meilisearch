@@ -9,7 +9,6 @@ use meilisearch_types::milli::update::Setting;
 use meilisearch_types::settings::{settings, SecretPolicy, Settings, Unchecked};
 use meilisearch_types::tasks::KindWithContent;
 use tracing::debug;
-use meilisearch_types::FieldIdMapReader;
 
 use super::settings_analytics::*;
 use crate::analytics::Analytics;
@@ -23,7 +22,7 @@ macro_rules! make_setting_route {
     ($route:literal, $update_verb:ident, $type:ty, $err_ty:ty, $attr:ident, $camelcase_attr:literal, $analytics:ident) => {
         #[allow(dead_code)]
         
-        pub fn verify_field_exists<FH: FieldIdMapReader>(settings: Settings<FH>) {
+        pub fn verify_field_exists_for_$attr<FH>(settings: Settings<FH>) {
             match settings {
                 Settings { $attr: _, .. } => {}
             }
