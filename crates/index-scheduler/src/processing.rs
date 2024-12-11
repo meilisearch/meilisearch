@@ -56,11 +56,11 @@ impl ProcessingTasks {
 }
 
 macro_rules! make_enum_progress {
-    (enum $name:ident: $(- $variant:ident)+ ) => {
+    ($visibility:vis enum $name:ident { $($variant:ident,)+ }) => {
         #[repr(u8)]
         #[derive(Debug, Clone, Copy, PartialEq, Eq, Sequence)]
         #[allow(clippy::enum_variant_names)]
-        pub enum $name {
+        $visibility enum $name {
             $($variant),+
         }
 
@@ -100,98 +100,112 @@ macro_rules! make_atomic_progress {
 }
 
 make_enum_progress! {
-    enum BatchProgress:
-        - ProcessingTasks
-        - WritingTasksToDisk
+    pub enum BatchProgress {
+        ProcessingTasks,
+        WritingTasksToDisk,
+    }
 }
 
 make_enum_progress! {
-    enum TaskCancelationProgress:
-        - RetrievingTasks
-        - UpdatingTasks
+    pub enum TaskCancelationProgress {
+        RetrievingTasks,
+        UpdatingTasks,
+    }
 }
 
 make_enum_progress! {
-    enum TaskDeletionProgress:
-        - DeletingTasksDateTime
-        - DeletingTasksMetadata
-        - DeletingTasks
-        - DeletingBatches
+    pub enum TaskDeletionProgress {
+        DeletingTasksDateTime,
+        DeletingTasksMetadata,
+        DeletingTasks,
+        DeletingBatches,
+    }
 }
 
 make_enum_progress! {
-    enum SnapshotCreationProgress:
-        - StartTheSnapshotCreation
-        - SnapshotTheIndexScheduler
-        - SnapshotTheUpdateFiles
-        - SnapshotTheIndexes
-        - SnapshotTheApiKeys
-        - CreateTheTarball
+    pub enum SnapshotCreationProgress {
+        StartTheSnapshotCreation,
+        SnapshotTheIndexScheduler,
+        SnapshotTheUpdateFiles,
+        SnapshotTheIndexes,
+        SnapshotTheApiKeys,
+        CreateTheTarball,
+    }
 }
 
 make_enum_progress! {
-    enum DumpCreationProgress:
-        - StartTheDumpCreation
-        - DumpTheApiKeys
-        - DumpTheTasks
-        - DumpTheIndexes
-        - DumpTheExperimentalFeatures
-        - CompressTheDump
+    pub enum DumpCreationProgress {
+        StartTheDumpCreation,
+        DumpTheApiKeys,
+        DumpTheTasks,
+        DumpTheIndexes,
+        DumpTheExperimentalFeatures,
+        CompressTheDump,
+    }
 }
 
 make_enum_progress! {
-    enum CreateIndexProgress:
-        - CreatingTheIndex
+    pub enum CreateIndexProgress {
+        CreatingTheIndex,
+    }
 }
 
 make_enum_progress! {
-    enum UpdateIndexProgress:
-        - UpdatingTheIndex
+    pub enum UpdateIndexProgress {
+        UpdatingTheIndex,
+    }
 }
 
 make_enum_progress! {
-    enum DeleteIndexProgress:
-        - DeletingTheIndex
+    pub enum DeleteIndexProgress {
+        DeletingTheIndex,
+    }
 }
 
 make_enum_progress! {
-    enum SwappingTheIndexes:
-        - EnsuringCorrectnessOfTheSwap
-        - SwappingTheIndexes
+    pub enum SwappingTheIndexes {
+        EnsuringCorrectnessOfTheSwap,
+        SwappingTheIndexes,
+    }
 }
 
 make_enum_progress! {
-    enum InnerSwappingTwoIndexes:
-        - RetrieveTheTasks
-        - UpdateTheTasks
-        - UpdateTheIndexesMetadata
+    pub enum InnerSwappingTwoIndexes {
+        RetrieveTheTasks,
+        UpdateTheTasks,
+        UpdateTheIndexesMetadata,
+    }
 }
 
 make_enum_progress! {
-    enum DocumentOperationProgress:
-        - RetrievingConfig
-        - ComputingTheChanges
-        - Indexing
+    pub enum DocumentOperationProgress {
+        RetrievingConfig,
+        ComputingTheChanges,
+        Indexing,
+    }
 }
 
 make_enum_progress! {
-    enum DocumentEditionProgress:
-        - RetrievingConfig
-        - ComputingTheChanges
-        - Indexing
+    pub enum DocumentEditionProgress {
+        RetrievingConfig,
+        ComputingTheChanges,
+        Indexing,
+    }
 }
 
 make_enum_progress! {
-    enum DocumentDeletionProgress:
-        - RetrievingConfig
-        - DeleteDocuments
-        - Indexing
+    pub enum DocumentDeletionProgress {
+        RetrievingConfig,
+        DeleteDocuments,
+        Indexing,
+    }
 }
 
 make_enum_progress! {
-    enum SettingsProgress:
-        - RetrievingAndMergingTheSettings
-        - ApplyTheSettings
+    pub enum SettingsProgress {
+        RetrievingAndMergingTheSettings,
+        ApplyTheSettings,
+    }
 }
 
 make_atomic_progress!(Task alias AtomicTaskStep => "task" );
