@@ -8,6 +8,7 @@ use bumparaw_collections::RawMap;
 use memmap2::Mmap;
 use milli::documents::Error;
 use milli::Object;
+use rustc_hash::FxBuildHasher;
 use serde::de::{SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 use serde_json::error::Category;
@@ -263,7 +264,7 @@ pub fn read_ndjson(input: &File) -> Result<u64> {
         match result {
             Ok(raw) => {
                 // try to deserialize as a map
-                RawMap::from_raw_value(raw, &bump)
+                RawMap::from_raw_value_and_hasher(raw, FxBuildHasher, &bump)
                     .map_err(|e| DocumentFormatError::from((PayloadType::Ndjson, e)))?;
                 count += 1;
             }
