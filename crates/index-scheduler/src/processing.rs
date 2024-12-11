@@ -139,7 +139,7 @@ make_enum_progress! {
 make_enum_progress! {
     pub enum DocumentOperationProgress {
         RetrievingConfig,
-        ComputingTheChanges,
+        ComputingDocumentChanges,
         Indexing,
     }
 }

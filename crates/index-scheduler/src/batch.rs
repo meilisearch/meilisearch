@@ -1359,7 +1359,7 @@ impl IndexScheduler {
                     }
                 };
 
-                progress.update_progress(DocumentOperationProgress::ComputingTheChanges);
+                progress.update_progress(DocumentOperationProgress::ComputingDocumentChanges);
                 let (document_changes, operation_stats, primary_key) = indexer
                     .into_changes(
                         &indexer_alloc,
