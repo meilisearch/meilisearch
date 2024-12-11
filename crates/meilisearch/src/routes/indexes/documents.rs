@@ -624,12 +624,19 @@ async fn document_addition(
                 None => None,
             };
 
-            let documents_count = file.as_ref().map_or(Ok(0), |ntf| {
-                read_ndjson(ntf.as_file()).map_err(MeilisearchHttpError::DocumentFormat)
-            })?;
-            let update_file = file_store::File::from_parts(path, file);
-            update_file.persist()?;
-            Ok(Ok(documents_count))
+            let documents_count = tokio::task::spawn_blocking(move || {
+                let documents_count = file.as_ref().map_or(Ok(0), |ntf| {
+                    read_ndjson(ntf.as_file()).map_err(MeilisearchHttpError::DocumentFormat)
+                })?;
+
+                let update_file = file_store::File::from_parts(path, file);
+                update_file.persist()?;
+
+                Ok(documents_count)
+            })
+            .await?;
+
+            Ok(documents_count)
         }
         PayloadType::Json | PayloadType::Csv { delimiter: _ } => {
             let temp_file = match tempfile() {
