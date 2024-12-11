@@ -20,6 +20,7 @@ use crate::Opt;
 #[macro_export]
 macro_rules! make_setting_route {
     ($route:literal, $update_verb:ident, $type:ty, $err_ty:ty, $attr:ident, $camelcase_attr:literal, $analytics:ident) => {
+        
         pub mod $attr {
             use actix_web::web::Data;
             use actix_web::{web, HttpRequest, HttpResponse, Resource};
@@ -36,6 +37,13 @@ macro_rules! make_setting_route {
             use $crate::extractors::sequential_extractor::SeqHandler;
             use $crate::Opt;
             use $crate::routes::{is_dry_run, get_task_id, SummarizedTaskView};
+
+            #[allow(dead_code)]
+            fn verify_setting_exists<FH>(settings: meilisearch_types::settings::Settings<FH>) {
+                match settings {
+                    meilisearch_types::settings::Settings { $attr: _, .. } => {}
+                }
+            }
 
             pub async fn delete(
                 index_scheduler: GuardedData<
