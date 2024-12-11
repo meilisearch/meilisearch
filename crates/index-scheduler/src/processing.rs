@@ -215,7 +215,7 @@ mod test {
         {
           "steps": [
             {
-              "name": "processing tasks",
+              "currentStep": "processing tasks",
               "finished": 0,
               "total": 2
             }
@@ -228,7 +228,7 @@ mod test {
         {
           "steps": [
             {
-              "name": "writing tasks to disk",
+              "currentStep": "writing tasks to disk",
               "finished": 1,
               "total": 2
             }
@@ -248,12 +248,12 @@ mod test {
         {
           "steps": [
             {
-              "name": "processing tasks",
+              "currentStep": "processing tasks",
               "finished": 0,
               "total": 2
             },
             {
-              "name": "task",
+              "currentStep": "task",
               "finished": 0,
               "total": 10
             }
@@ -266,12 +266,12 @@ mod test {
         {
           "steps": [
             {
-              "name": "processing tasks",
+              "currentStep": "processing tasks",
               "finished": 0,
               "total": 2
             },
             {
-              "name": "task",
+              "currentStep": "task",
               "finished": 6,
               "total": 10
             }
@@ -284,7 +284,7 @@ mod test {
         {
           "steps": [
             {
-              "name": "writing tasks to disk",
+              "currentStep": "writing tasks to disk",
               "finished": 1,
               "total": 2
             }
@@ -299,12 +299,12 @@ mod test {
         {
           "steps": [
             {
-              "name": "writing tasks to disk",
+              "currentStep": "writing tasks to disk",
               "finished": 1,
               "total": 2
             },
             {
-              "name": "task",
+              "currentStep": "task",
               "finished": 4,
               "total": 5
             }

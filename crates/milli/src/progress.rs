@@ -39,7 +39,7 @@ impl Progress {
             percentage += step.current() as f32 / prev_factors;
 
             step_view.push(ProgressStepView {
-                name: step.name(),
+                current_step: step.name(),
                 finished: step.current(),
                 total: step.total(),
             });
@@ -146,7 +146,7 @@ pub struct ProgressView {
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ProgressStepView {
-    pub name: Cow<'static, str>,
+    pub current_step: Cow<'static, str>,
     pub finished: u32,
     pub total: u32,
 }
