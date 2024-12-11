@@ -1,11 +1,12 @@
-use crate::utils::ProcessingBatch;
+use std::borrow::Cow;
+use std::sync::Arc;
+
 use enum_iterator::Sequence;
-use meilisearch_types::milli::{
-    make_atomic_progress, make_enum_progress,
-    progress::{AtomicSubStep, NamedStep, Progress, ProgressView, Step},
-};
+use meilisearch_types::milli::progress::{AtomicSubStep, NamedStep, Progress, ProgressView, Step};
+use meilisearch_types::milli::{make_atomic_progress, make_enum_progress};
 use roaring::RoaringBitmap;
-use std::{borrow::Cow, sync::Arc};
+
+use crate::utils::ProcessingBatch;
 
 #[derive(Clone)]
 pub struct ProcessingTasks {

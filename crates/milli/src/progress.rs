@@ -1,11 +1,7 @@
-use std::{
-    any::TypeId,
-    borrow::Cow,
-    sync::{
-        atomic::{AtomicU32, Ordering},
-        Arc, RwLock,
-    },
-};
+use std::any::TypeId;
+use std::borrow::Cow;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{Arc, RwLock};
 
 use serde::Serialize;
 

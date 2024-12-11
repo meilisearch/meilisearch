@@ -4,10 +4,8 @@ use milli::progress::ProgressView;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
-use crate::{
-    task_view::DetailsView,
-    tasks::{Kind, Status},
-};
+use crate::task_view::DetailsView;
+use crate::tasks::{Kind, Status};
 
 pub type BatchId = u32;
 

@@ -3,10 +3,6 @@ use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use std::{fs, thread};
 
-use self::index_map::IndexMap;
-use self::IndexStatus::{Available, BeingDeleted, Closing, Missing};
-use crate::uuid_codec::UuidCodec;
-use crate::{Error, Result};
 use meilisearch_types::heed::types::{SerdeJson, Str};
 use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn};
 use meilisearch_types::milli;
@@ -16,6 +12,11 @@ use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use tracing::error;
 use uuid::Uuid;
+
+use self::index_map::IndexMap;
+use self::IndexStatus::{Available, BeingDeleted, Closing, Missing};
+use crate::uuid_codec::UuidCodec;
+use crate::{Error, Result};
 
 mod index_map;
 

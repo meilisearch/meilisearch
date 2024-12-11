@@ -1,11 +1,12 @@
 use std::fmt::Display;
 
-use crate::TaskId;
 use meilisearch_types::batches::BatchId;
 use meilisearch_types::error::{Code, ErrorCode};
 use meilisearch_types::tasks::{Kind, Status};
 use meilisearch_types::{heed, milli};
 use thiserror::Error;
+
+use crate::TaskId;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum DateField {

@@ -1,18 +1,13 @@
-use anyhow::bail;
 use std::path::Path;
 
-use anyhow::Context;
-use meilisearch_types::{
-    heed::{
-        types::{SerdeJson, Str},
-        Database, Env, EnvOpenOptions, RoTxn, RwTxn, Unspecified,
-    },
-    milli::index::{db_name, main_key},
-};
-
-use crate::{try_opening_database, try_opening_poly_database, uuid_codec::UuidCodec};
+use anyhow::{bail, Context};
+use meilisearch_types::heed::types::{SerdeJson, Str};
+use meilisearch_types::heed::{Database, Env, EnvOpenOptions, RoTxn, RwTxn, Unspecified};
+use meilisearch_types::milli::index::{db_name, main_key};
 
 use super::v1_9;
+use crate::uuid_codec::UuidCodec;
+use crate::{try_opening_database, try_opening_poly_database};
 
 pub type FieldDistribution = std::collections::BTreeMap<String, u64>;
 

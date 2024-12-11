@@ -2,11 +2,9 @@ use milli::progress::ProgressView;
 use serde::Serialize;
 use time::{Duration, OffsetDateTime};
 
-use crate::{
-    batches::{Batch, BatchId, BatchStats},
-    task_view::DetailsView,
-    tasks::serialize_duration,
-};
+use crate::batches::{Batch, BatchId, BatchStats};
+use crate::task_view::DetailsView;
+use crate::tasks::serialize_duration;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
