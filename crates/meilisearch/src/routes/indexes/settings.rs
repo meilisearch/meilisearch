@@ -17,17 +17,37 @@ use crate::extractors::authentication::GuardedData;
 use crate::routes::{get_task_id, is_dry_run, SummarizedTaskView};
 use crate::Opt;
 
+#[allow(dead_code)]
+fn verify_all_settings_fields<FH>(settings: Settings<FH>) {
+    match settings {
+        Settings {
+            filterable_attributes: _,
+            sortable_attributes: _,
+            displayed_attributes: _,
+            searchable_attributes: _,
+            distinct_attribute: _,
+            proximity_precision: _,
+            typo_tolerance: _,
+            faceting: _,
+            pagination: _,
+            stop_words: _,
+            synonyms: _,
+            embedders: _,
+            ranking_rules: _,
+            search_cutoff_ms: _,
+            localized_attributes: _,
+            dictionary: _,
+            separator_tokens: _,
+            non_separator_tokens: _,
+            ..
+        } => {}
+    }
+}
+
 #[macro_export]
 macro_rules! make_setting_route {
     ($route:literal, $update_verb:ident, $type:ty, $err_ty:ty, $attr:ident, $camelcase_attr:literal, $analytics:ident) => {
-        #[allow(dead_code)]
         
-        pub fn verify_field_exists_for_$attr<FH>(settings: Settings<FH>) {
-            match settings {
-                Settings { $attr: _, .. } => {}
-            }
-        }
-
         pub mod $attr {
             use actix_web::web::Data;
             use actix_web::{web, HttpRequest, HttpResponse, Resource};
@@ -44,6 +64,19 @@ macro_rules! make_setting_route {
             use $crate::extractors::sequential_extractor::SeqHandler;
             use $crate::Opt;
             use $crate::routes::{is_dry_run, get_task_id, SummarizedTaskView};
+
+            #[doc(hidden)]
+            #[allow(dead_code)]
+            pub struct VerifySettingExists<FH>(std::marker::PhantomData<FH>);
+            #[allow(dead_code)]
+            impl<FH> VerifySettingExists<FH> {
+                const VERIFY: () = {
+                    match None::<Settings<FH>> {
+                        Some(Settings { $attr: _, .. }) => (),
+                        _ => (),
+                    }
+                };
+            }
 
             pub async fn delete(
                 index_scheduler: GuardedData<
