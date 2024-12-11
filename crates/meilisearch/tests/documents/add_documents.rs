@@ -1264,15 +1264,18 @@ async fn error_add_documents_bad_document_id() {
     let server = Server::new().await;
     let index = server.index("test");
     index.create(Some("docid")).await;
+
+    // unsupported characters
+
     let documents = json!([
         {
             "docid": "foo & bar",
             "content": "foobar"
         }
     ]);
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
-    let (response, code) = index.get_task(1).await;
+    let (value, _code) = index.add_documents(documents, None).await;
+    index.wait_task(value.uid()).await;
+    let (response, code) = index.get_task(value.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
@@ -1288,7 +1291,81 @@ async fn error_add_documents_bad_document_id() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Document identifier `\"foo & bar\"` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_), and can not be more than 512 bytes.",
+        "message": "Document identifier `\"foo & bar\"` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_), and can not be more than 511 bytes.",
+        "code": "invalid_document_id",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_document_id"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    // More than 512 bytes
+    let documents = json!([
+        {
+            "docid": "a".repeat(600),
+            "content": "foobar"
+        }
+    ]);
+    let (value, _code) = index.add_documents(documents, None).await;
+    index.wait_task(value.uid()).await;
+    let (response, code) = index.get_task(value.uid()).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+      @r###"
+    {
+      "uid": 2,
+      "batchUid": 2,
+      "indexUid": "test",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "error": {
+        "message": "Document identifier `\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_), and can not be more than 511 bytes.",
+        "code": "invalid_document_id",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_document_id"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    // Exactly 512 bytes
+    let documents = json!([
+        {
+            "docid": "a".repeat(512),
+            "content": "foobar"
+        }
+    ]);
+    let (value, _code) = index.add_documents(documents, None).await;
+    index.wait_task(value.uid()).await;
+    let (response, code) = index.get_task(value.uid()).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    @r###"
+    {
+      "uid": 3,
+      "batchUid": 3,
+      "indexUid": "test",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "error": {
+        "message": "Document identifier `\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_), and can not be more than 511 bytes.",
         "code": "invalid_document_id",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_id"

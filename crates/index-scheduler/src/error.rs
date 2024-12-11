@@ -1,11 +1,12 @@
 use std::fmt::Display;
 
-use crate::TaskId;
 use meilisearch_types::batches::BatchId;
 use meilisearch_types::error::{Code, ErrorCode};
 use meilisearch_types::tasks::{Kind, Status};
 use meilisearch_types::{heed, milli};
 use thiserror::Error;
+
+use crate::TaskId;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum DateField {
@@ -103,7 +104,7 @@ pub enum Error {
     )]
     InvalidTaskCanceledBy { canceled_by: String },
     #[error(
-        "{index_uid} is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_), and can not be more than 512 bytes."
+        "{index_uid} is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_), and can not be more than 400 bytes."
     )]
     InvalidIndexUid { index_uid: String },
     #[error("Task `{0}` not found.")]
