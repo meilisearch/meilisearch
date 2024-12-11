@@ -3577,6 +3577,7 @@ dependencies = [
  "memmap2",
  "milli",
  "roaring",
+ "rustc-hash 2.1.0",
  "serde",
  "serde-cs",
  "serde_json",
@@ -3676,7 +3677,7 @@ dependencies = [
  "rhai",
  "roaring",
  "rstar",
- "rustc-hash 2.0.0",
+ "rustc-hash 2.1.0",
  "serde",
  "serde_json",
  "slice-group-by",
@@ -4425,7 +4426,7 @@ dependencies = [
  "bytes",
  "rand",
  "ring",
- "rustc-hash 2.0.0",
+ "rustc-hash 2.1.0",
  "rustls",
  "slab",
  "thiserror",
@@ -4798,9 +4799,9 @@ checksum = "08d43f7aa6b08d49f382cde6a7982047c3426db949b1424bc4b7ec9ae12c6ce2"
 
 [[package]]
 name = "rustc-hash"
-version = "2.0.0"
+version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "583034fd73374156e66797ed8e5b0d5690409c9226b22d87cb7f19821c05d152"
+checksum = "c7fb8039b3032c191086b10f11f319a6e99e1e82889c5cc6046f515c9db1d497"
 
 [[package]]
 name = "rustc_version"
