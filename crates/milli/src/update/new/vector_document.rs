@@ -97,7 +97,8 @@ impl<'t> VectorDocumentFromDb<'t> {
         db_fields_ids_map: &'t Mapper,
         doc_alloc: &'t Bump,
     ) -> Result<Option<Self>> {
-        let Some(document) = DocumentFromDb::new(docid, rtxn, index, db_fields_ids_map)? else {
+        let Some(document) = DocumentFromDb::new(docid, rtxn, index, db_fields_ids_map, doc_alloc)?
+        else {
             return Ok(None);
         };
         let vectors = document.vectors_field()?;

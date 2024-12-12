@@ -64,7 +64,11 @@ impl<'pl> DocumentChanges<'pl> for DocumentDeletionChanges<'pl> {
     where
         'pl: 'doc, // the payload must survive the process calls
     {
-        let current = context.index.document(&context.rtxn, *docid)?;
+        let compressed = context.index.compressed_document(&context.rtxn, *docid)?.unwrap();
+        let current = match context.index.document_decompression_dictionary(&context.rtxn)? {
+            Some(dict) => compressed.decompress_into_bump(&context.doc_alloc, &dict)?,
+            None => compressed.as_non_compressed(),
+        };
 
         let external_document_id = self.primary_key.extract_docid_from_db(
             current,
@@ -162,6 +166,7 @@ mod test {
             index: &index,
             db_fields_ids_map: &db_fields_ids_map,
             new_fields_ids_map: &fields_ids_map,
+            db_document_decompression_dictionary: None,
             doc_allocs: &doc_allocs,
             fields_ids_map_store: &fields_ids_map_store,
             must_stop_processing: &(|| false),

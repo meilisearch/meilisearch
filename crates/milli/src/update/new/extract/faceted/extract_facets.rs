@@ -79,7 +79,7 @@ impl FacetedDocidsExtractor {
         let res = match document_change {
             DocumentChange::Deletion(inner) => extract_document_facets(
                 attributes_to_extract,
-                inner.current(rtxn, index, context.db_fields_ids_map)?,
+                inner.current(rtxn, index, context.db_fields_ids_map, &context.doc_alloc)?,
                 inner.external_document_id(),
                 new_fields_ids_map.deref_mut(),
                 &mut |fid, depth, value| {
@@ -102,13 +102,14 @@ impl FacetedDocidsExtractor {
                     rtxn,
                     index,
                     context.db_fields_ids_map,
+                    &context.doc_alloc,
                 )? {
                     return Ok(());
                 }
 
                 extract_document_facets(
                     attributes_to_extract,
-                    inner.current(rtxn, index, context.db_fields_ids_map)?,
+                    inner.current(rtxn, index, context.db_fields_ids_map, &context.doc_alloc)?,
                     inner.external_document_id(),
                     new_fields_ids_map.deref_mut(),
                     &mut |fid, depth, value| {
@@ -128,7 +129,7 @@ impl FacetedDocidsExtractor {
 
                 extract_document_facets(
                     attributes_to_extract,
-                    inner.merged(rtxn, index, context.db_fields_ids_map)?,
+                    inner.merged(rtxn, index, context.db_fields_ids_map, &context.doc_alloc)?,
                     inner.external_document_id(),
                     new_fields_ids_map.deref_mut(),
                     &mut |fid, depth, value| {

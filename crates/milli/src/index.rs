@@ -1311,11 +1311,8 @@ impl Index {
         &self,
         rtxn: &'t RoTxn,
         id: DocumentId,
-    ) -> Result<CompressedKvReaderU16<'t>> {
-        self.documents
-            .get(rtxn, &id)?
-            .ok_or(UserError::UnknownInternalDocumentId { document_id: id })
-            .map_err(Into::into)
+    ) -> Result<Option<CompressedKvReaderU16<'t>>> {
+        self.documents.get(rtxn, &id).map_err(Into::into)
     }
 
     /// Returns an iterator over the requested compressed documents. The next item will be an error if a document is missing.
@@ -1324,9 +1321,11 @@ impl Index {
         rtxn: &'t RoTxn<'t>,
         ids: impl IntoIterator<Item = DocumentId> + 'a,
     ) -> Result<impl Iterator<Item = Result<(DocumentId, CompressedKvReaderU16<'t>)>> + 'a> {
-        Ok(ids
-            .into_iter()
-            .map(move |id| self.compressed_document(rtxn, id).map(|compressed| (id, compressed))))
+        Ok(ids.into_iter().flat_map(move |id| {
+            self.compressed_document(rtxn, id)
+                .map(|opt| opt.map(|compressed| (id, compressed)))
+                .transpose()
+        }))
     }
 
     /// Returns a [`Vec`] of the requested documents. Returns an error if a document is missing.

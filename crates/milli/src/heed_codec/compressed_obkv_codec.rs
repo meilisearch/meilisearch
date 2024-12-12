@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::io;
 use std::io::ErrorKind;
 
+use bumpalo::Bump;
 use heed::BoxedError;
 use obkv::KvReaderU16;
 use zstd::bulk::{Compressor, Decompressor};
@@ -54,6 +55,17 @@ impl<'a> CompressedKvReaderU16<'a> {
         Ok(KvReaderU16::from_slice(&buffer[..size]))
     }
 
+    pub fn decompress_into_bump<'b>(
+        &self,
+        bump: &'b Bump,
+        dictionary: &DecoderDictionary,
+    ) -> io::Result<&'b KvReaderU16> {
+        /// TODO use a better approch and stop cloning so much.
+        let mut buffer = Vec::new();
+        self.decompress_with(&mut buffer, dictionary)?;
+        Ok(KvReaderU16::from_slice(bump.alloc_slice_copy(&buffer)))
+    }
+
     /// Returns the KvReader like it is not compressed.
     /// Happends when there is no dictionary yet.
     pub fn as_non_compressed(&self) -> &'a KvReaderU16 {
@@ -75,11 +87,16 @@ impl<'a> CompressedKvReaderU16<'a> {
         }
     }
 
-    pub fn decompress_as_owned_with_optinal_dictionary(
+    pub fn into_owned_with_dictionary(
         &self,
-        dictionary: Option<&DecoderDictionary>,
-    ) -> io::Result<Cow<'a, KvReaderU16>> {
-        todo!("Impl owned version of KvReader")
+        dictionary: &DecoderDictionary<'_>,
+    ) -> io::Result<Box<KvReaderU16>> {
+        let mut buffer = Vec::new();
+        let reader = self.decompress_with(&mut buffer, dictionary)?;
+        // Make sure the Vec is exactly the size of the reader
+        let size = reader.as_bytes().len();
+        buffer.resize(size, 0);
+        Ok(buffer.into_boxed_slice().into())
     }
 }
 

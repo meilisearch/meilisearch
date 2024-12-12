@@ -105,7 +105,11 @@ impl<'index> DocumentChanges<'index> for UpdateByFunctionChanges<'index> {
 
         // safety: Both documents *must* exists in the database as
         //         their IDs comes from the list of documents ids.
-        let document = index.document(txn, docid)?;
+        let compressed_document = index.compressed_document(txn, docid)?.unwrap();
+        let document = match index.document_decompression_dictionary(txn)? {
+            Some(dictionary) => compressed_document.decompress_into_bump(doc_alloc, &dictionary)?,
+            None => compressed_document.as_non_compressed(),
+        };
         let rhai_document = obkv_to_rhaimap(document, db_fields_ids_map)?;
         let json_document = all_obkv_to_json(document, db_fields_ids_map)?;
 

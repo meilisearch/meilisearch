@@ -5,6 +5,7 @@ use std::sync::{Arc, RwLock};
 use bumpalo::Bump;
 use heed::RoTxn;
 use rayon::iter::IndexedParallelIterator;
+use zstd::dict::DecoderDictionary;
 
 use super::super::document_change::DocumentChange;
 use crate::fields_ids_map::metadata::FieldIdMapWithMetadata;
@@ -106,7 +107,7 @@ pub trait Extractor<'extractor>: Sync {
     fn process<'doc>(
         &'doc self,
         changes: impl Iterator<Item = Result<DocumentChange<'doc>>>,
-        context: &'doc DocumentChangeContext<Self::Data>,
+        context: &'doc DocumentChangeContext<'_, 'extractor, '_, '_, Self::Data>,
     ) -> Result<()>;
 }
 
@@ -122,8 +123,10 @@ pub trait DocumentChanges<'pl // lifetime of the underlying payload
         self.len() == 0
     }
 
-    fn item_to_document_change<'doc, // lifetime of a single `process` call
-     T: MostlySend>(
+    fn item_to_document_change<
+        'doc,          // lifetime of a single `process` call
+        T: MostlySend,
+    >(
         &'doc self,
         context: &'doc DocumentChangeContext<T>,
         item: &'doc Self::Item,
@@ -141,6 +144,7 @@ pub struct IndexingContext<
 {
     pub index: &'index Index,
     pub db_fields_ids_map: &'indexer FieldsIdsMap,
+    pub db_document_decompression_dictionary: Option<&'indexer DecoderDictionary<'static>>,
     pub new_fields_ids_map: &'fid RwLock<FieldIdMapWithMetadata>,
     pub doc_allocs: &'indexer ThreadLocal<FullySend<Cell<Bump>>>,
     pub fields_ids_map_store: &'indexer ThreadLocal<FullySend<RefCell<GlobalFieldsIdsMap<'fid>>>>,
@@ -204,6 +208,7 @@ pub fn extract<
     IndexingContext {
         index,
         db_fields_ids_map,
+        db_document_decompression_dictionary,
         new_fields_ids_map,
         doc_allocs,
         fields_ids_map_store,

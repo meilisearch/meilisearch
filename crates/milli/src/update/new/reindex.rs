@@ -15,11 +15,13 @@ pub fn field_distribution(index: &Index, wtxn: &mut RwTxn<'_>, progress: &Progre
     progress.update_progress(sub_step);
 
     let docids = index.documents_ids(wtxn)?;
+    let mut doc_alloc = bumpalo::Bump::new();
 
     for docid in docids {
         update_document_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
-        let Some(document) = DocumentFromDb::new(docid, wtxn, index, &field_id_map)? else {
+        let Some(document) = DocumentFromDb::new(docid, wtxn, index, &field_id_map, &doc_alloc)?
+        else {
             continue;
         };
         let geo_iter = document.geo_field().transpose().map(|res| res.map(|rv| ("_geo", rv)));
@@ -31,6 +33,8 @@ pub fn field_distribution(index: &Index, wtxn: &mut RwTxn<'_>, progress: &Progre
                 distribution.insert(field_name.to_owned(), 1);
             }
         }
+
+        doc_alloc.reset();
     }
 
     index.put_field_distribution(wtxn, &distribution)?;

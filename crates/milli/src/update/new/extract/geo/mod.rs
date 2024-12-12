@@ -159,6 +159,7 @@ impl<'extractor> Extractor<'extractor> for GeoExtractor {
         let index = context.index;
         let max_memory = self.grenad_parameters.max_memory_by_thread();
         let db_fields_ids_map = context.db_fields_ids_map;
+        let doc_alloc = &context.doc_alloc;
         let mut data_ref = context.data.borrow_mut_or_yield();
 
         for change in changes {
@@ -174,7 +175,7 @@ impl<'extractor> Extractor<'extractor> for GeoExtractor {
                 DocumentChange::Deletion(deletion) => {
                     let docid = deletion.docid();
                     let external_id = deletion.external_document_id();
-                    let current = deletion.current(rtxn, index, db_fields_ids_map)?;
+                    let current = deletion.current(rtxn, index, db_fields_ids_map, doc_alloc)?;
                     let current_geo = current
                         .geo_field()?
                         .map(|geo| extract_geo_coordinates(external_id, geo))
@@ -189,7 +190,7 @@ impl<'extractor> Extractor<'extractor> for GeoExtractor {
                     }
                 }
                 DocumentChange::Update(update) => {
-                    let current = update.current(rtxn, index, db_fields_ids_map)?;
+                    let current = update.current(rtxn, index, db_fields_ids_map, doc_alloc)?;
                     let external_id = update.external_document_id();
                     let docid = update.docid();
 

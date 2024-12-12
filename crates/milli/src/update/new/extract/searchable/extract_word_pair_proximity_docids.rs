@@ -58,7 +58,8 @@ impl SearchableExtractor for WordPairProximityDocidsExtractor {
         let docid = document_change.docid();
         match document_change {
             DocumentChange::Deletion(inner) => {
-                let document = inner.current(rtxn, index, context.db_fields_ids_map)?;
+                let document =
+                    inner.current(rtxn, index, context.db_fields_ids_map, &context.doc_alloc)?;
                 process_document_tokens(
                     document,
                     document_tokenizer,
@@ -75,11 +76,13 @@ impl SearchableExtractor for WordPairProximityDocidsExtractor {
                     rtxn,
                     index,
                     context.db_fields_ids_map,
+                    &context.doc_alloc,
                 )? {
                     return Ok(());
                 }
 
-                let document = inner.current(rtxn, index, context.db_fields_ids_map)?;
+                let document =
+                    inner.current(rtxn, index, context.db_fields_ids_map, &context.doc_alloc)?;
                 process_document_tokens(
                     document,
                     document_tokenizer,
@@ -89,7 +92,8 @@ impl SearchableExtractor for WordPairProximityDocidsExtractor {
                         del_word_pair_proximity.push(((w1, w2), prox));
                     },
                 )?;
-                let document = inner.merged(rtxn, index, context.db_fields_ids_map)?;
+                let document =
+                    inner.merged(rtxn, index, context.db_fields_ids_map, &context.doc_alloc)?;
                 process_document_tokens(
                     document,
                     document_tokenizer,

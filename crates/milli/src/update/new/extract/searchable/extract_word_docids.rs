@@ -338,7 +338,7 @@ impl WordDocidsExtractors {
                     )
                 };
                 document_tokenizer.tokenize_document(
-                    inner.current(rtxn, index, context.db_fields_ids_map)?,
+                    inner.current(rtxn, index, context.db_fields_ids_map, &context.doc_alloc)?,
                     new_fields_ids_map,
                     &mut token_fn,
                 )?;
@@ -349,6 +349,7 @@ impl WordDocidsExtractors {
                     &context.rtxn,
                     context.index,
                     context.db_fields_ids_map,
+                    &context.doc_alloc,
                 )? {
                     return Ok(());
                 }
@@ -364,7 +365,7 @@ impl WordDocidsExtractors {
                     )
                 };
                 document_tokenizer.tokenize_document(
-                    inner.current(rtxn, index, context.db_fields_ids_map)?,
+                    inner.current(rtxn, index, context.db_fields_ids_map, &context.doc_alloc)?,
                     new_fields_ids_map,
                     &mut token_fn,
                 )?;
@@ -380,7 +381,7 @@ impl WordDocidsExtractors {
                     )
                 };
                 document_tokenizer.tokenize_document(
-                    inner.merged(rtxn, index, context.db_fields_ids_map)?,
+                    inner.merged(rtxn, index, context.db_fields_ids_map, &context.doc_alloc)?,
                     new_fields_ids_map,
                     &mut token_fn,
                 )?;
