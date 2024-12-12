@@ -103,6 +103,8 @@ impl<'indexer> FacetSearchBuilder<'indexer> {
 
     #[tracing::instrument(level = "trace", skip_all, target = "indexing::facet_fst")]
     pub fn merge_and_write(self, index: &Index, wtxn: &mut RwTxn, rtxn: &RoTxn) -> Result<()> {
+        tracing::trace!("merge facet strings for facet search: {:?}", self.registered_facets);
+
         let reader = self.normalized_facet_string_docids_sorter.into_reader_cursors()?;
         let mut builder = grenad::MergerBuilder::new(MergeDeladdBtreesetString);
         builder.extend(reader);
@@ -118,12 +120,15 @@ impl<'indexer> FacetSearchBuilder<'indexer> {
                 BEU16StrCodec::bytes_decode(key).map_err(heed::Error::Encoding)?;
 
             if current_field_id != Some(field_id) {
-                if let Some(fst_merger_builder) = fst_merger_builder {
+                if let (Some(current_field_id), Some(fst_merger_builder)) =
+                    (current_field_id, fst_merger_builder)
+                {
                     let mmap = fst_merger_builder.build(&mut callback)?;
-                    index
-                        .facet_id_string_fst
-                        .remap_data_type::<Bytes>()
-                        .put(wtxn, &field_id, &mmap)?;
+                    index.facet_id_string_fst.remap_data_type::<Bytes>().put(
+                        wtxn,
+                        &current_field_id,
+                        &mmap,
+                    )?;
                 }
 
                 fst = index.facet_id_string_fst.get(rtxn, &field_id)?;
