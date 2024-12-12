@@ -87,7 +87,9 @@ pub struct BenchDeriveArgs {
     #[arg(long, default_value_t = 60)]
     tasks_queue_timeout_secs: u64,
 
-    /// The path to the binary to run. By default it compiles the binary with cargo.
+    /// The path to the binary to run.
+    ///
+    /// If unspecified, runs `cargo run` after building Meilisearch with `cargo build`.
     #[arg(long)]
     binary_path: Option<PathBuf>,
 }
