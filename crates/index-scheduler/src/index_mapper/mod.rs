@@ -106,6 +106,8 @@ pub struct IndexStats {
     /// As the DB backend does not return to the disk the pages that are not currently used by the DB,
     /// this value is typically smaller than `database_size`.
     pub used_database_size: u64,
+    /// The primary key of the index
+    pub primary_key: Option<String>,
     /// Association of every field name with the number of times it occurs in the documents.
     pub field_distribution: FieldDistribution,
     /// Creation date of the index.
@@ -127,6 +129,7 @@ impl IndexStats {
             number_of_documents: index.number_of_documents(rtxn)?,
             database_size: index.on_disk_size()?,
             used_database_size: index.used_size()?,
+            primary_key: index.primary_key(rtxn)?.map(|s| s.to_string()),
             field_distribution: index.field_distribution(rtxn)?,
             created_at: index.created_at(rtxn)?,
             updated_at: index.updated_at(rtxn)?,
