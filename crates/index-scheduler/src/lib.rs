@@ -30,7 +30,7 @@ mod processing;
 mod utils;
 pub mod uuid_codec;
 
-pub type Result<T> = std::result::Result<T, Error>;
+pub type Result<T, E = Error> = std::result::Result<T, E>;
 pub type TaskId = u32;
 
 use std::collections::{BTreeMap, HashMap};
@@ -1121,6 +1121,49 @@ impl IndexScheduler {
         Ok(batches)
     }
 
+    /// Returns the total number of indexes available for the specified filter.
+    /// And a `Vec` of the index_uid + its stats
+    pub fn get_paginated_indexes_stats(
+        &self,
+        filters: &meilisearch_auth::AuthFilter,
+        from: usize,
+        limit: usize,
+    ) -> Result<(usize, Vec<(String, index_mapper::IndexStats)>)> {
+        let rtxn = self.read_txn()?;
+
+        let mut total = 0;
+        let mut iter = self
+            .index_mapper
+            .index_mapping
+            .iter(&rtxn)?
+            // in case of an error we want to keep the value to return it
+            .filter(|ret| {
+                ret.as_ref().map_or(true, |(name, _uuid)| filters.is_index_authorized(name))
+            })
+            .inspect(|_| total += 1)
+            .skip(from);
+        let ret = iter
+            .by_ref()
+            .take(limit)
+            .map(|ret| ret.map_err(Error::from))
+            .map(|ret| {
+                ret.and_then(|(name, uuid)| {
+                    self.index_mapper.index_stats.get(&rtxn, &uuid).map_err(Error::from).and_then(
+                        |stat| {
+                            stat.map(|stat| (name.to_string(), stat))
+                                .ok_or(Error::CorruptedTaskQueue)
+                        },
+                    )
+                })
+            })
+            .collect::<Result<Vec<(String, index_mapper::IndexStats)>>>();
+
+        // We must iterate on the rest of the indexes to compute the total
+        iter.for_each(drop);
+
+        ret.map(|ret| (total, ret))
+    }
+
     /// The returned structure contains:
     /// 1. The name of the property being observed can be `statuses`, `types`, or `indexes`.
     /// 2. The name of the specific data related to the property can be `enqueued` for the `statuses`, `settingsUpdate` for the `types`, or the name of the index for the `indexes`, for example.
@@ -1495,6 +1538,19 @@ impl IndexScheduler {
         let wtxn = self.env.write_txn()?;
         let index = self.index_mapper.create_index(wtxn, name, date)?;
         Ok(index)
+    }
+
+    pub fn refresh_index_stats(&self, name: &str) -> Result<()> {
+        let mut mapper_wtxn = self.env.write_txn()?;
+        let index = self.index_mapper.index(&mapper_wtxn, name)?;
+        let index_rtxn = index.read_txn()?;
+
+        let stats = crate::index_mapper::IndexStats::new(&index, &index_rtxn)
+            .map_err(|e| Error::from_milli(e, Some(name.to_string())))?;
+
+        self.index_mapper.store_stats_of(&mut mapper_wtxn, name, &stats)?;
+        mapper_wtxn.commit()?;
+        Ok(())
     }
 
     /// Create a file and register it in the index scheduler.

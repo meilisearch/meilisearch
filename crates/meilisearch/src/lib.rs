@@ -435,7 +435,7 @@ fn import_dump(
         let reader = DocumentsBatchReader::from_reader(reader)?;
 
         let embedder_configs = index.embedding_configs(&wtxn)?;
-        let embedders = index_scheduler.embedders(uid, embedder_configs)?;
+        let embedders = index_scheduler.embedders(uid.to_string(), embedder_configs)?;
 
         let builder = milli::update::IndexDocuments::new(
             &mut wtxn,
@@ -457,6 +457,8 @@ fn import_dump(
         builder.execute()?;
         wtxn.commit()?;
         tracing::info!("All documents successfully imported.");
+
+        index_scheduler.refresh_index_stats(&uid)?;
     }
 
     let mut index_scheduler_dump = index_scheduler.register_dumped_task()?;
