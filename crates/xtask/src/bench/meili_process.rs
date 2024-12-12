@@ -1,23 +1,56 @@
 use std::collections::BTreeMap;
+use std::time::Duration;
 
 use anyhow::{bail, Context as _};
+use tokio::process::Command;
+use tokio::time;
 
 use super::assets::Asset;
 use super::client::Client;
 use super::workload::Workload;
 
 pub async fn kill(mut meilisearch: tokio::process::Child) {
-    if let Err(error) = meilisearch.kill().await {
-        tracing::warn!(
-            error = &error as &dyn std::error::Error,
-            "while terminating Meilisearch server"
-        )
+    let Some(id) = meilisearch.id() else { return };
+
+    match Command::new("kill").args(["--signal=TERM", &id.to_string()]).spawn() {
+        Ok(mut cmd) => {
+            let Err(error) = cmd.wait().await else { return };
+            tracing::warn!(
+                error = &error as &dyn std::error::Error,
+                "while awaiting the Meilisearch server kill"
+            );
+        }
+        Err(error) => {
+            tracing::warn!(
+                error = &error as &dyn std::error::Error,
+                "while terminating Meilisearch server with a kill -s TERM"
+            );
+            if let Err(error) = meilisearch.kill().await {
+                tracing::warn!(
+                    error = &error as &dyn std::error::Error,
+                    "while terminating Meilisearch server"
+                )
+            }
+            return;
+        }
+    };
+
+    match time::timeout(Duration::from_secs(5), meilisearch.wait()).await {
+        Ok(_) => (),
+        Err(_) => {
+            if let Err(error) = meilisearch.kill().await {
+                tracing::warn!(
+                    error = &error as &dyn std::error::Error,
+                    "while terminating Meilisearch server"
+                )
+            }
+        }
     }
 }
 
 #[tracing::instrument]
 pub async fn build() -> anyhow::Result<()> {
-    let mut command = tokio::process::Command::new("cargo");
+    let mut command = Command::new("cargo");
     command.arg("build").arg("--release").arg("-p").arg("meilisearch");
 
     command.kill_on_drop(true);
@@ -37,17 +70,8 @@ pub async fn start(
     master_key: Option<&str>,
     workload: &Workload,
     asset_folder: &str,
+    mut command: Command,
 ) -> anyhow::Result<tokio::process::Child> {
-    let mut command = tokio::process::Command::new("cargo");
-    command
-        .arg("run")
-        .arg("--release")
-        .arg("-p")
-        .arg("meilisearch")
-        .arg("--bin")
-        .arg("meilisearch")
-        .arg("--");
-
     command.arg("--db-path").arg("./_xtask_benchmark.ms");
     if let Some(master_key) = master_key {
         command.arg("--master-key").arg(master_key);
@@ -86,7 +110,7 @@ async fn wait_for_health(
 
             return Ok(());
         }
-        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        time::sleep(Duration::from_millis(500)).await;
         // check whether the Meilisearch instance exited early (cut the wait)
         if let Some(exit_code) =
             meilisearch.try_wait().context("cannot check Meilisearch server process status")?
