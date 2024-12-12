@@ -1,3 +1,5 @@
+use std::sync::atomic::Ordering;
+
 use bumpalo::collections::CollectIn;
 use bumpalo::Bump;
 use bumparaw_collections::RawMap;
@@ -10,11 +12,12 @@ use serde_json::value::RawValue;
 use serde_json::Deserializer;
 
 use super::super::document_change::DocumentChange;
-use super::document_changes::{DocumentChangeContext, DocumentChanges, Progress};
+use super::document_changes::{DocumentChangeContext, DocumentChanges};
 use super::retrieve_or_guess_primary_key;
 use crate::documents::PrimaryKey;
+use crate::progress::{AtomicPayloadStep, Progress};
 use crate::update::new::document::Versions;
-use crate::update::new::steps::Step;
+use crate::update::new::steps::IndexingStep;
 use crate::update::new::thread_local::MostlySend;
 use crate::update::new::{Deletion, Insertion, Update};
 use crate::update::{AvailableIds, IndexDocumentsMethod};
@@ -45,7 +48,7 @@ impl<'pl> DocumentOperation<'pl> {
 
     #[allow(clippy::too_many_arguments)]
     #[tracing::instrument(level = "trace", skip_all, target = "indexing::document_operation")]
-    pub fn into_changes<MSP, SP>(
+    pub fn into_changes<MSP>(
         self,
         indexer: &'pl Bump,
         index: &Index,
@@ -53,12 +56,12 @@ impl<'pl> DocumentOperation<'pl> {
         primary_key_from_op: Option<&'pl str>,
         new_fields_ids_map: &mut FieldsIdsMap,
         must_stop_processing: &MSP,
-        send_progress: &SP,
+        progress: Progress,
     ) -> Result<(DocumentOperationChanges<'pl>, Vec<PayloadStats>, Option<PrimaryKey<'pl>>)>
     where
         MSP: Fn() -> bool,
-        SP: Fn(Progress),
     {
+        progress.update_progress(IndexingStep::PreparingPayloads);
         let Self { operations, method } = self;
 
         let documents_ids = index.documents_ids(rtxn)?;
@@ -68,16 +71,14 @@ impl<'pl> DocumentOperation<'pl> {
         let mut primary_key = None;
 
         let payload_count = operations.len();
+        let (step, progress_step) = AtomicPayloadStep::new(payload_count as u32);
+        progress.update_progress(progress_step);
 
         for (payload_index, operation) in operations.into_iter().enumerate() {
             if must_stop_processing() {
                 return Err(InternalError::AbortedIndexation.into());
             }
-            send_progress(Progress::from_step_substep(
-                Step::PreparingPayloads,
-                payload_index as u32,
-                payload_count as u32,
-            ));
+            step.store(payload_index as u32, Ordering::Relaxed);
 
             let mut bytes = 0;
             let result = match operation {
@@ -118,12 +119,7 @@ impl<'pl> DocumentOperation<'pl> {
             };
             operations_stats.push(PayloadStats { document_count, bytes, error });
         }
-
-        send_progress(Progress::from_step_substep(
-            Step::PreparingPayloads,
-            payload_count as u32,
-            payload_count as u32,
-        ));
+        step.store(payload_count as u32, Ordering::Relaxed);
 
         // TODO We must drain the HashMap into a Vec because rayon::hash_map::IntoIter: !Clone
         let mut docids_version_offsets: bumpalo::collections::vec::Vec<_> =

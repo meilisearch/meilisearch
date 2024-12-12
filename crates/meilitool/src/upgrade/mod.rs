@@ -7,7 +7,6 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context};
 use meilisearch_types::versioning::create_version_file;
-
 use v1_10::v1_9_to_v1_10;
 use v1_12::v1_11_to_v1_12;
 

@@ -1,7 +1,8 @@
 //! The breaking changes that happened between the v1.11 and the v1.12 are:
 //! - The new indexer changed the update files format from OBKV to ndjson. https://github.com/meilisearch/meilisearch/pull/4900
 
-use std::{io::BufWriter, path::Path};
+use std::io::BufWriter;
+use std::path::Path;
 
 use anyhow::Context;
 use file_store::FileStore;

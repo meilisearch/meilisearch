@@ -7,6 +7,7 @@ use bumpalo::Bump;
 use either::{Either, Left, Right};
 use heed::EnvOpenOptions;
 use maplit::{btreemap, hashset};
+use milli::progress::Progress;
 use milli::update::new::indexer;
 use milli::update::{IndexDocumentsMethod, IndexerConfig, Settings};
 use milli::vector::EmbeddingConfigs;
@@ -90,7 +91,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
             None,
             &mut new_fields_ids_map,
             &|| false,
-            &|_progress| (),
+            Progress::default(),
         )
         .unwrap();
 
@@ -109,7 +110,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
         &document_changes,
         embedders,
         &|| false,
-        &|_| (),
+        &Progress::default(),
     )
     .unwrap();
 

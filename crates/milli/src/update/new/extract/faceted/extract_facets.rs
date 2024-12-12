@@ -16,10 +16,10 @@ use crate::update::del_add::DelAdd;
 use crate::update::new::channel::FieldIdDocidFacetSender;
 use crate::update::new::extract::perm_json_p;
 use crate::update::new::indexer::document_changes::{
-    extract, DocumentChangeContext, DocumentChanges, Extractor, IndexingContext, Progress,
+    extract, DocumentChangeContext, DocumentChanges, Extractor, IndexingContext,
 };
 use crate::update::new::ref_cell_ext::RefCellExt as _;
-use crate::update::new::steps::Step;
+use crate::update::new::steps::IndexingStep;
 use crate::update::new::thread_local::{FullySend, ThreadLocal};
 use crate::update::new::DocumentChange;
 use crate::update::GrenadParameters;
@@ -373,26 +373,16 @@ fn truncate_str(s: &str) -> &str {
 
 impl FacetedDocidsExtractor {
     #[tracing::instrument(level = "trace", skip_all, target = "indexing::extract::faceted")]
-    pub fn run_extraction<
-        'pl,
-        'fid,
-        'indexer,
-        'index,
-        'extractor,
-        DC: DocumentChanges<'pl>,
-        MSP,
-        SP,
-    >(
+    pub fn run_extraction<'pl, 'fid, 'indexer, 'index, 'extractor, DC: DocumentChanges<'pl>, MSP>(
         grenad_parameters: GrenadParameters,
         document_changes: &DC,
-        indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP, SP>,
+        indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP>,
         extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
         sender: &FieldIdDocidFacetSender,
-        step: Step,
+        step: IndexingStep,
     ) -> Result<Vec<BalancedCaches<'extractor>>>
     where
         MSP: Fn() -> bool + Sync,
-        SP: Fn(Progress) + Sync,
     {
         let index = indexing_context.index;
         let rtxn = index.read_txn()?;

@@ -11,10 +11,10 @@ use super::tokenize_document::{tokenizer_builder, DocumentTokenizer};
 use crate::update::new::extract::cache::BalancedCaches;
 use crate::update::new::extract::perm_json_p::contained_in;
 use crate::update::new::indexer::document_changes::{
-    extract, DocumentChangeContext, DocumentChanges, Extractor, IndexingContext, Progress,
+    extract, DocumentChangeContext, DocumentChanges, Extractor, IndexingContext,
 };
 use crate::update::new::ref_cell_ext::RefCellExt as _;
-use crate::update::new::steps::Step;
+use crate::update::new::steps::IndexingStep;
 use crate::update::new::thread_local::{FullySend, MostlySend, ThreadLocal};
 use crate::update::new::DocumentChange;
 use crate::update::GrenadParameters;
@@ -239,25 +239,15 @@ impl<'a, 'extractor> Extractor<'extractor> for WordDocidsExtractorData<'a> {
 pub struct WordDocidsExtractors;
 
 impl WordDocidsExtractors {
-    pub fn run_extraction<
-        'pl,
-        'fid,
-        'indexer,
-        'index,
-        'extractor,
-        DC: DocumentChanges<'pl>,
-        MSP,
-        SP,
-    >(
+    pub fn run_extraction<'pl, 'fid, 'indexer, 'index, 'extractor, DC: DocumentChanges<'pl>, MSP>(
         grenad_parameters: GrenadParameters,
         document_changes: &DC,
-        indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP, SP>,
+        indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP>,
         extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
-        step: Step,
+        step: IndexingStep,
     ) -> Result<WordDocidsCaches<'extractor>>
     where
         MSP: Fn() -> bool + Sync,
-        SP: Fn(Progress) + Sync,
     {
         let index = indexing_context.index;
         let rtxn = index.read_txn()?;

@@ -134,6 +134,7 @@ impl ProcessingBatch {
     pub fn to_batch(&self) -> Batch {
         Batch {
             uid: self.uid,
+            progress: None,
             details: self.details.clone(),
             stats: self.stats.clone(),
             started_at: self.started_at,
@@ -187,6 +188,7 @@ impl IndexScheduler {
             &batch.uid,
             &Batch {
                 uid: batch.uid,
+                progress: None,
                 details: batch.details,
                 stats: batch.stats,
                 started_at: batch.started_at,
@@ -273,7 +275,9 @@ impl IndexScheduler {
             .into_iter()
             .map(|batch_id| {
                 if Some(batch_id) == processing.batch.as_ref().map(|batch| batch.uid) {
-                    Ok(processing.batch.as_ref().unwrap().to_batch())
+                    let mut batch = processing.batch.as_ref().unwrap().to_batch();
+                    batch.progress = processing.get_progress_view();
+                    Ok(batch)
                 } else {
                     self.get_batch(rtxn, batch_id)
                         .and_then(|task| task.ok_or(Error::CorruptedTaskQueue))

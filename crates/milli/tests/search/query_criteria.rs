@@ -5,6 +5,7 @@ use bumpalo::Bump;
 use heed::EnvOpenOptions;
 use itertools::Itertools;
 use maplit::hashset;
+use milli::progress::Progress;
 use milli::update::new::indexer;
 use milli::update::{IndexDocumentsMethod, IndexerConfig, Settings};
 use milli::vector::EmbeddingConfigs;
@@ -326,7 +327,7 @@ fn criteria_ascdesc() {
             None,
             &mut new_fields_ids_map,
             &|| false,
-            &|_progress| (),
+            Progress::default(),
         )
         .unwrap();
 
@@ -341,7 +342,7 @@ fn criteria_ascdesc() {
         &document_changes,
         embedders,
         &|| false,
-        &|_| (),
+        &Progress::default(),
     )
     .unwrap();
 
