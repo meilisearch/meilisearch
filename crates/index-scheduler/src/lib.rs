@@ -26,6 +26,7 @@ mod index_mapper;
 #[cfg(test)]
 mod insta_snapshot;
 mod lru;
+mod processing;
 mod utils;
 pub mod uuid_codec;
 
@@ -56,12 +57,12 @@ use meilisearch_types::heed::types::{SerdeBincode, SerdeJson, Str, I128};
 use meilisearch_types::heed::{self, Database, Env, PutFlags, RoTxn, RwTxn};
 use meilisearch_types::milli::documents::DocumentsBatchBuilder;
 use meilisearch_types::milli::index::IndexEmbeddingConfig;
-use meilisearch_types::milli::update::new::indexer::document_changes::Progress;
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::vector::{Embedder, EmbedderOptions, EmbeddingConfigs};
 use meilisearch_types::milli::{self, CboRoaringBitmapCodec, Index, RoaringBitmapCodec, BEU32};
 use meilisearch_types::task_view::TaskView;
-use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task, TaskProgress};
+use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
+use processing::ProcessingTasks;
 use rayon::current_num_threads;
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 use roaring::RoaringBitmap;
@@ -72,7 +73,8 @@ use utils::{filter_out_references_to_newer_tasks, keep_ids_within_datetimes, map
 use uuid::Uuid;
 
 use crate::index_mapper::IndexMapper;
-use crate::utils::{check_index_swap_validity, clamp_to_page_size, ProcessingBatch};
+use crate::processing::{AtomicTaskStep, BatchProgress};
+use crate::utils::{check_index_swap_validity, clamp_to_page_size};
 
 pub(crate) type BEI128 = I128<BE>;
 
@@ -160,48 +162,6 @@ impl Query {
     // Useful to get the total number of tasks matching a filter.
     pub fn without_limits(self) -> Self {
         Query { limit: None, from: None, ..self }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct ProcessingTasks {
-    batch: Option<ProcessingBatch>,
-    /// The list of tasks ids that are currently running.
-    processing: RoaringBitmap,
-    /// The progress on processing tasks
-    progress: Option<TaskProgress>,
-}
-
-impl ProcessingTasks {
-    /// Creates an empty `ProcessingAt` struct.
-    fn new() -> ProcessingTasks {
-        ProcessingTasks { batch: None, processing: RoaringBitmap::new(), progress: None }
-    }
-
-    /// Stores the currently processing tasks, and the date time at which it started.
-    fn start_processing(&mut self, processing_batch: ProcessingBatch, processing: RoaringBitmap) {
-        self.batch = Some(processing_batch);
-        self.processing = processing;
-    }
-
-    fn update_progress(&mut self, progress: Progress) -> TaskProgress {
-        self.progress.get_or_insert_with(TaskProgress::default).update(progress)
-    }
-
-    /// Set the processing tasks to an empty list
-    fn stop_processing(&mut self) -> Self {
-        self.progress = None;
-
-        Self {
-            batch: std::mem::take(&mut self.batch),
-            processing: std::mem::take(&mut self.processing),
-            progress: None,
-        }
-    }
-
-    /// Returns `true` if there, at least, is one task that is currently processing that we must stop.
-    fn must_cancel_processing_tasks(&self, canceled_tasks: &RoaringBitmap) -> bool {
-        !self.processing.is_disjoint(canceled_tasks)
     }
 }
 
@@ -407,7 +367,7 @@ pub struct IndexScheduler {
     ///
     /// See [self.breakpoint()](`IndexScheduler::breakpoint`) for an explanation.
     #[cfg(test)]
-    test_breakpoint_sdr: crossbeam::channel::Sender<(Breakpoint, bool)>,
+    test_breakpoint_sdr: crossbeam_channel::Sender<(Breakpoint, bool)>,
 
     /// A list of planned failures within the [`tick`](IndexScheduler::tick) method of the index scheduler.
     ///
@@ -476,7 +436,7 @@ impl IndexScheduler {
     /// Create an index scheduler and start its run loop.
     pub fn new(
         options: IndexSchedulerOptions,
-        #[cfg(test)] test_breakpoint_sdr: crossbeam::channel::Sender<(Breakpoint, bool)>,
+        #[cfg(test)] test_breakpoint_sdr: crossbeam_channel::Sender<(Breakpoint, bool)>,
         #[cfg(test)] planned_failures: Vec<(usize, tests::FailureLocation)>,
     ) -> Result<Self> {
         std::fs::create_dir_all(&options.tasks_path)?;
@@ -813,7 +773,7 @@ impl IndexScheduler {
             let mut batch_tasks = RoaringBitmap::new();
             for batch_uid in batch_uids {
                 if processing_batch.as_ref().map_or(false, |batch| batch.uid == *batch_uid) {
-                    batch_tasks |= &processing_tasks;
+                    batch_tasks |= &*processing_tasks;
                 } else {
                     batch_tasks |= self.tasks_in_batch(rtxn, *batch_uid)?;
                 }
@@ -827,13 +787,13 @@ impl IndexScheduler {
                 match status {
                     // special case for Processing tasks
                     Status::Processing => {
-                        status_tasks |= &processing_tasks;
+                        status_tasks |= &*processing_tasks;
                     }
                     status => status_tasks |= &self.get_status(rtxn, *status)?,
                 };
             }
             if !status.contains(&Status::Processing) {
-                tasks -= &processing_tasks;
+                tasks -= &*processing_tasks;
             }
             tasks &= status_tasks;
         }
@@ -882,7 +842,7 @@ impl IndexScheduler {
         // Once we have filtered the two subsets, we put them back together and assign it back to `tasks`.
         tasks = {
             let (mut filtered_non_processing_tasks, mut filtered_processing_tasks) =
-                (&tasks - &processing_tasks, &tasks & &processing_tasks);
+                (&tasks - &*processing_tasks, &tasks & &*processing_tasks);
 
             // special case for Processing tasks
             // A closure that clears the filtered_processing_tasks if their started_at date falls outside the given bounds
@@ -1090,7 +1050,7 @@ impl IndexScheduler {
         // Once we have filtered the two subsets, we put them back together and assign it back to `batches`.
         batches = {
             let (mut filtered_non_processing_batches, mut filtered_processing_batches) =
-                (&batches - &processing.processing, &batches & &processing.processing);
+                (&batches - &*processing.processing, &batches & &*processing.processing);
 
             // special case for Processing batches
             // A closure that clears the filtered_processing_batches if their started_at date falls outside the given bounds
@@ -1440,7 +1400,7 @@ impl IndexScheduler {
 
         // if the task doesn't delete anything and 50% of the task queue is full, we must refuse to enqueue the incomming task
         if !matches!(&kind, KindWithContent::TaskDeletion { tasks, .. } if !tasks.is_empty())
-            && (self.env.non_free_pages_size()? * 100) / self.env.info().map_size as u64 > 50
+            && (self.env.non_free_pages_size()? * 100) / self.env.info().map_size as u64 > 40
         {
             return Err(Error::NoSpaceLeftInTaskQueue);
         }
@@ -1606,7 +1566,8 @@ impl IndexScheduler {
 
         // We reset the must_stop flag to be sure that we don't stop processing tasks
         self.must_stop_processing.reset();
-        self.processing_tasks
+        let progress = self
+            .processing_tasks
             .write()
             .unwrap()
             // We can clone the processing batch here because we don't want its modification to affect the view of the processing batches
@@ -1619,11 +1580,12 @@ impl IndexScheduler {
         let res = {
             let cloned_index_scheduler = self.private_clone();
             let processing_batch = &mut processing_batch;
+            let progress = progress.clone();
             std::thread::scope(|s| {
                 let handle = std::thread::Builder::new()
                     .name(String::from("batch-operation"))
                     .spawn_scoped(s, move || {
-                        cloned_index_scheduler.process_batch(batch, processing_batch)
+                        cloned_index_scheduler.process_batch(batch, processing_batch, progress)
                     })
                     .unwrap();
                 handle.join().unwrap_or(Err(Error::ProcessBatchPanicked))
@@ -1636,6 +1598,7 @@ impl IndexScheduler {
         #[cfg(test)]
         self.maybe_fail(tests::FailureLocation::AcquiringWtxn)?;
 
+        progress.update_progress(BatchProgress::WritingTasksToDisk);
         processing_batch.finished();
         let mut wtxn = self.env.write_txn().map_err(Error::HeedTransaction)?;
         let mut canceled = RoaringBitmap::new();
@@ -1645,12 +1608,15 @@ impl IndexScheduler {
                 #[cfg(test)]
                 self.breakpoint(Breakpoint::ProcessBatchSucceeded);
 
+                let (task_progress, task_progress_obj) = AtomicTaskStep::new(tasks.len() as u32);
+                progress.update_progress(task_progress_obj);
                 let mut success = 0;
                 let mut failure = 0;
                 let mut canceled_by = None;
 
                 #[allow(unused_variables)]
                 for (i, mut task) in tasks.into_iter().enumerate() {
+                    task_progress.fetch_add(1, Ordering::Relaxed);
                     processing_batch.update(&mut task);
                     if task.status == Status::Canceled {
                         canceled.insert(task.uid);
@@ -1678,9 +1644,10 @@ impl IndexScheduler {
                 tracing::info!("A batch of tasks was successfully completed with {success} successful tasks and {failure} failed tasks.");
             }
             // If we have an abortion error we must stop the tick here and re-schedule tasks.
-            Err(Error::Milli(milli::Error::InternalError(
-                milli::InternalError::AbortedIndexation,
-            )))
+            Err(Error::Milli {
+                error: milli::Error::InternalError(milli::InternalError::AbortedIndexation),
+                ..
+            })
             | Err(Error::AbortedTask) => {
                 #[cfg(test)]
                 self.breakpoint(Breakpoint::AbortedIndexation);
@@ -1699,9 +1666,10 @@ impl IndexScheduler {
             // 2. close the associated environment
             // 3. resize it
             // 4. re-schedule tasks
-            Err(Error::Milli(milli::Error::UserError(
-                milli::UserError::MaxDatabaseSizeReached,
-            ))) if index_uid.is_some() => {
+            Err(Error::Milli {
+                error: milli::Error::UserError(milli::UserError::MaxDatabaseSizeReached),
+                ..
+            }) if index_uid.is_some() => {
                 // fixme: add index_uid to match to avoid the unwrap
                 let index_uid = index_uid.unwrap();
                 // fixme: handle error more gracefully? not sure when this could happen
@@ -1716,8 +1684,12 @@ impl IndexScheduler {
             Err(err) => {
                 #[cfg(test)]
                 self.breakpoint(Breakpoint::ProcessBatchFailed);
+                let (task_progress, task_progress_obj) = AtomicTaskStep::new(ids.len() as u32);
+                progress.update_progress(task_progress_obj);
+
                 let error: ResponseError = err.into();
                 for id in ids.iter() {
+                    task_progress.fetch_add(1, Ordering::Relaxed);
                     let mut task = self
                         .get_task(&wtxn, id)
                         .map_err(|e| Error::TaskDatabaseUpdate(Box::new(e)))?
@@ -1738,17 +1710,18 @@ impl IndexScheduler {
             }
         }
 
-        self.processing_tasks.write().unwrap().stop_processing();
         // We must re-add the canceled task so they're part of the same batch.
-        // processed.processing |= canceled;
         ids |= canceled;
-
         self.write_batch(&mut wtxn, processing_batch, &ids)?;
 
         #[cfg(test)]
         self.maybe_fail(tests::FailureLocation::CommittingWtxn)?;
 
         wtxn.commit().map_err(Error::HeedTransaction)?;
+
+        // We should stop processing AFTER everything is processed and written to disk otherwise, a batch (which only lives in RAM) may appear in the processing task
+        // and then become « not found » for some time until the commit everything is written and the final commit is made.
+        self.processing_tasks.write().unwrap().stop_processing();
 
         // Once the tasks are committed, we should delete all the update files associated ASAP to avoid leaking files in case of a restart
         tracing::debug!("Deleting the update files");
@@ -1942,6 +1915,7 @@ impl IndexScheduler {
     // TODO: consider using a type alias or a struct embedder/template
     pub fn embedders(
         &self,
+        index_uid: String,
         embedding_configs: Vec<IndexEmbeddingConfig>,
     ) -> Result<EmbeddingConfigs> {
         let res: Result<_> = embedding_configs
@@ -1952,8 +1926,12 @@ impl IndexScheduler {
                      config: milli::vector::EmbeddingConfig { embedder_options, prompt, quantized },
                      ..
                  }| {
-                    let prompt =
-                        Arc::new(prompt.try_into().map_err(meilisearch_types::milli::Error::from)?);
+                    let prompt = Arc::new(
+                        prompt
+                            .try_into()
+                            .map_err(meilisearch_types::milli::Error::from)
+                            .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?,
+                    );
                     // optimistically return existing embedder
                     {
                         let embedders = self.embedders.read().unwrap();
@@ -1969,7 +1947,9 @@ impl IndexScheduler {
                     let embedder = Arc::new(
                         Embedder::new(embedder_options.clone())
                             .map_err(meilisearch_types::milli::vector::Error::from)
-                            .map_err(meilisearch_types::milli::Error::from)?,
+                            .map_err(|err| {
+                                Error::from_milli(err.into(), Some(index_uid.clone()))
+                            })?,
                     );
                     {
                         let mut embedders = self.embedders.write().unwrap();
@@ -2237,7 +2217,7 @@ mod tests {
     use std::time::Instant;
 
     use big_s::S;
-    use crossbeam::channel::RecvTimeoutError;
+    use crossbeam_channel::RecvTimeoutError;
     use file_store::File;
     use insta::assert_json_snapshot;
     use maplit::btreeset;
@@ -2289,7 +2269,7 @@ mod tests {
             configuration: impl Fn(&mut IndexSchedulerOptions),
         ) -> (Self, IndexSchedulerHandle) {
             let tempdir = TempDir::new().unwrap();
-            let (sender, receiver) = crossbeam::channel::bounded(0);
+            let (sender, receiver) = crossbeam_channel::bounded(0);
 
             let indexer_config = IndexerConfig { skip_index_budget: true, ..Default::default() };
 
@@ -2421,7 +2401,7 @@ mod tests {
     pub struct IndexSchedulerHandle {
         _tempdir: TempDir,
         index_scheduler: IndexScheduler,
-        test_breakpoint_rcv: crossbeam::channel::Receiver<(Breakpoint, bool)>,
+        test_breakpoint_rcv: crossbeam_channel::Receiver<(Breakpoint, bool)>,
         last_breakpoint: Breakpoint,
     }
 
@@ -4318,10 +4298,35 @@ mod tests {
         let proc = index_scheduler.processing_tasks.read().unwrap().clone();
 
         let query = Query { statuses: Some(vec![Status::Processing]), ..Default::default() };
-        let (batches, _) = index_scheduler
-            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
+        let (mut batches, _) = index_scheduler
+            .get_batches_from_authorized_indexes(query.clone(), &AuthFilter::default())
             .unwrap();
-        snapshot!(snapshot_bitmap(&batches), @"[0,]"); // only the processing batch in the first tick
+        assert_eq!(batches.len(), 1);
+        batches[0].started_at = OffsetDateTime::UNIX_EPOCH;
+        // Insta cannot snapshot our batches because the batch stats contains an enum as key: https://github.com/mitsuhiko/insta/issues/689
+        let batch = serde_json::to_string_pretty(&batches[0]).unwrap();
+        snapshot!(batch, @r#"
+        {
+          "uid": 0,
+          "details": {
+            "primaryKey": "mouse"
+          },
+          "stats": {
+            "totalNbTasks": 1,
+            "status": {
+              "processing": 1
+            },
+            "types": {
+              "indexCreation": 1
+            },
+            "indexUids": {
+              "catto": 1
+            }
+          },
+          "startedAt": "1970-01-01T00:00:00Z",
+          "finishedAt": null
+        }
+        "#);
 
         let query = Query { statuses: Some(vec![Status::Enqueued]), ..Default::default() };
         let (batches, _) = index_scheduler
@@ -6145,7 +6150,7 @@ mod tests {
             insta::assert_json_snapshot!(simple_hf_config.embedder_options);
             let simple_hf_name = name.clone();
 
-            let configs = index_scheduler.embedders(configs).unwrap();
+            let configs = index_scheduler.embedders("doggos".to_string(), configs).unwrap();
             let (hf_embedder, _, _) = configs.get(&simple_hf_name).unwrap();
             let beagle_embed =
                 hf_embedder.embed_one(S("Intel the beagle best doggo"), None).unwrap();

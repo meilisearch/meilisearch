@@ -19,7 +19,9 @@ use meilisearch_types::locales::Locale;
 use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::vector::Embedder;
-use meilisearch_types::milli::{FacetValueHit, OrderBy, SearchForFacetValues, TimeBudget};
+use meilisearch_types::milli::{
+    FacetValueHit, InternalError, OrderBy, SearchForFacetValues, TimeBudget,
+};
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
 use milli::tokenizer::{Language, TokenizerBuilder};
@@ -281,35 +283,38 @@ pub enum SearchKind {
 impl SearchKind {
     pub(crate) fn semantic(
         index_scheduler: &index_scheduler::IndexScheduler,
+        index_uid: String,
         index: &Index,
         embedder_name: &str,
         vector_len: Option<usize>,
     ) -> Result<Self, ResponseError> {
         let (embedder_name, embedder, quantized) =
-            Self::embedder(index_scheduler, index, embedder_name, vector_len)?;
+            Self::embedder(index_scheduler, index_uid, index, embedder_name, vector_len)?;
         Ok(Self::SemanticOnly { embedder_name, embedder, quantized })
     }
 
     pub(crate) fn hybrid(
         index_scheduler: &index_scheduler::IndexScheduler,
+        index_uid: String,
         index: &Index,
         embedder_name: &str,
         semantic_ratio: f32,
         vector_len: Option<usize>,
     ) -> Result<Self, ResponseError> {
         let (embedder_name, embedder, quantized) =
-            Self::embedder(index_scheduler, index, embedder_name, vector_len)?;
+            Self::embedder(index_scheduler, index_uid, index, embedder_name, vector_len)?;
         Ok(Self::Hybrid { embedder_name, embedder, quantized, semantic_ratio })
     }
 
     pub(crate) fn embedder(
         index_scheduler: &index_scheduler::IndexScheduler,
+        index_uid: String,
         index: &Index,
         embedder_name: &str,
         vector_len: Option<usize>,
     ) -> Result<(String, Arc<Embedder>, bool), ResponseError> {
         let embedder_configs = index.embedding_configs(&index.read_txn()?)?;
-        let embedders = index_scheduler.embedders(embedder_configs)?;
+        let embedders = index_scheduler.embedders(index_uid, embedder_configs)?;
 
         let (embedder, _, quantized) = embedders
             .get(embedder_name)
@@ -890,6 +895,7 @@ fn prepare_search<'t>(
 }
 
 pub fn perform_search(
+    index_uid: String,
     index: &Index,
     query: SearchQuery,
     search_kind: SearchKind,
@@ -916,7 +922,7 @@ pub fn perform_search(
             used_negative_operator,
         },
         semantic_hit_count,
-    ) = search_from_kind(search_kind, search)?;
+    ) = search_from_kind(index_uid, search_kind, search)?;
 
     let SearchQuery {
         q,
@@ -1069,17 +1075,27 @@ fn compute_facet_distribution_stats<S: AsRef<str>>(
 }
 
 pub fn search_from_kind(
+    index_uid: String,
     search_kind: SearchKind,
     search: milli::Search<'_>,
 ) -> Result<(milli::SearchResult, Option<u32>), MeilisearchHttpError> {
     let (milli_result, semantic_hit_count) = match &search_kind {
-        SearchKind::KeywordOnly => (search.execute()?, None),
+        SearchKind::KeywordOnly => {
+            let results = search
+                .execute()
+                .map_err(|e| MeilisearchHttpError::from_milli(e, Some(index_uid.to_string())))?;
+            (results, None)
+        }
         SearchKind::SemanticOnly { .. } => {
-            let results = search.execute()?;
+            let results = search
+                .execute()
+                .map_err(|e| MeilisearchHttpError::from_milli(e, Some(index_uid.to_string())))?;
             let semantic_hit_count = results.document_scores.len() as u32;
             (results, Some(semantic_hit_count))
         }
-        SearchKind::Hybrid { semantic_ratio, .. } => search.execute_hybrid(*semantic_ratio)?,
+        SearchKind::Hybrid { semantic_ratio, .. } => search
+            .execute_hybrid(*semantic_ratio)
+            .map_err(|e| MeilisearchHttpError::from_milli(e, Some(index_uid)))?,
     };
     Ok((milli_result, semantic_hit_count))
 }
@@ -1181,7 +1197,7 @@ impl<'a> HitMaker<'a> {
         rtxn: &'a RoTxn<'a>,
         format: AttributesFormat,
         mut formatter_builder: MatcherBuilder<'a>,
-    ) -> Result<Self, MeilisearchHttpError> {
+    ) -> milli::Result<Self> {
         formatter_builder.crop_marker(format.crop_marker);
         formatter_builder.highlight_prefix(format.highlight_pre_tag);
         formatter_builder.highlight_suffix(format.highlight_post_tag);
@@ -1276,11 +1292,7 @@ impl<'a> HitMaker<'a> {
         })
     }
 
-    pub fn make_hit(
-        &self,
-        id: u32,
-        score: &[ScoreDetails],
-    ) -> Result<SearchHit, MeilisearchHttpError> {
+    pub fn make_hit(&self, id: u32, score: &[ScoreDetails]) -> milli::Result<SearchHit> {
         let (_, obkv) =
             self.index.iter_documents(self.rtxn, std::iter::once(id))?.next().unwrap()?;
 
@@ -1323,7 +1335,10 @@ impl<'a> HitMaker<'a> {
                     .is_some_and(|conf| conf.user_provided.contains(id));
                 let embeddings =
                     ExplicitVectors { embeddings: Some(vector.into()), regenerate: !user_provided };
-                vectors.insert(name, serde_json::to_value(embeddings)?);
+                vectors.insert(
+                    name,
+                    serde_json::to_value(embeddings).map_err(InternalError::SerdeJson)?,
+                );
             }
             document.insert("_vectors".into(), vectors.into());
         }
@@ -1369,7 +1384,7 @@ fn make_hits<'a>(
     format: AttributesFormat,
     matching_words: milli::MatchingWords,
     documents_ids_scores: impl Iterator<Item = (u32, &'a Vec<ScoreDetails>)> + 'a,
-) -> Result<Vec<SearchHit>, MeilisearchHttpError> {
+) -> milli::Result<Vec<SearchHit>> {
     let mut documents = Vec::new();
 
     let dictionary = index.dictionary(rtxn)?;
@@ -1406,6 +1421,13 @@ pub fn perform_facet_search(
         Some(cutoff) => TimeBudget::new(Duration::from_millis(cutoff)),
         None => TimeBudget::default(),
     };
+
+    if !index.facet_search(&rtxn)? {
+        return Err(ResponseError::from_msg(
+            "The facet search is disabled for this index".to_string(),
+            Code::FacetSearchDisabled,
+        ));
+    }
 
     // In the faceted search context, we want to use the intersection between the locales provided by the user
     // and the locales of the facet string.
@@ -1690,12 +1712,12 @@ fn make_document(
     displayed_attributes: &BTreeSet<FieldId>,
     field_ids_map: &FieldsIdsMap,
     obkv: &obkv::KvReaderU16,
-) -> Result<Document, MeilisearchHttpError> {
+) -> milli::Result<Document> {
     let mut document = serde_json::Map::new();
 
     // recreate the original json
     for (key, value) in obkv.iter() {
-        let value = serde_json::from_slice(value)?;
+        let value = serde_json::from_slice(value).map_err(InternalError::SerdeJson)?;
         let key = field_ids_map.name(key).expect("Missing field name").to_string();
 
         document.insert(key, value);
@@ -1720,7 +1742,7 @@ fn format_fields(
     displayable_ids: &BTreeSet<FieldId>,
     locales: Option<&[Language]>,
     localized_attributes: &[LocalizedAttributesRule],
-) -> Result<(Option<MatchesPosition>, Document), MeilisearchHttpError> {
+) -> milli::Result<(Option<MatchesPosition>, Document)> {
     let mut matches_position = compute_matches.then(BTreeMap::new);
     let mut document = document.clone();
 
@@ -1898,7 +1920,7 @@ fn parse_filter_array(arr: &[Value]) -> Result<Option<Filter>, MeilisearchHttpEr
         }
     }
 
-    Ok(Filter::from_array(ands)?)
+    Filter::from_array(ands).map_err(|e| MeilisearchHttpError::from_milli(e, None))
 }
 
 #[cfg(test)]

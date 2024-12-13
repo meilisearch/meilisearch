@@ -8,7 +8,7 @@ use std::str::FromStr;
 
 use deserr::{DeserializeError, Deserr, ErrorKind, MergeWithError, ValuePointerRef};
 use fst::IntoStreamer;
-use milli::index::IndexEmbeddingConfig;
+use milli::index::{IndexEmbeddingConfig, PrefixSearch};
 use milli::proximity::ProximityPrecision;
 use milli::update::Setting;
 use milli::{Criterion, CriterionError, Index, DEFAULT_VALUES_PER_FACET};
@@ -202,6 +202,12 @@ pub struct Settings<T> {
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsLocalizedAttributes>)]
     pub localized_attributes: Setting<Vec<LocalizedAttributesRuleView>>,
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[deserr(default, error = DeserrJsonError<InvalidSettingsFacetSearch>)]
+    pub facet_search: Setting<bool>,
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[deserr(default, error = DeserrJsonError<InvalidSettingsPrefixSearch>)]
+    pub prefix_search: Setting<PrefixSearchSettings>,
 
     #[serde(skip)]
     #[deserr(skip)]
@@ -266,6 +272,8 @@ impl Settings<Checked> {
             embedders: Setting::Reset,
             search_cutoff_ms: Setting::Reset,
             localized_attributes: Setting::Reset,
+            facet_search: Setting::Reset,
+            prefix_search: Setting::Reset,
             _kind: PhantomData,
         }
     }
@@ -290,6 +298,8 @@ impl Settings<Checked> {
             embedders,
             search_cutoff_ms,
             localized_attributes: localized_attributes_rules,
+            facet_search,
+            prefix_search,
             _kind,
         } = self;
 
@@ -312,6 +322,8 @@ impl Settings<Checked> {
             embedders,
             search_cutoff_ms,
             localized_attributes: localized_attributes_rules,
+            facet_search,
+            prefix_search,
             _kind: PhantomData,
         }
     }
@@ -360,6 +372,8 @@ impl Settings<Unchecked> {
             embedders: self.embedders,
             search_cutoff_ms: self.search_cutoff_ms,
             localized_attributes: self.localized_attributes,
+            facet_search: self.facet_search,
+            prefix_search: self.prefix_search,
             _kind: PhantomData,
         }
     }
@@ -433,6 +447,8 @@ impl Settings<Unchecked> {
                     Setting::Set(this)
                 }
             },
+            prefix_search: other.prefix_search.or(self.prefix_search),
+            facet_search: other.facet_search.or(self.facet_search),
             _kind: PhantomData,
         }
     }
@@ -469,6 +485,8 @@ pub fn apply_settings_to_builder(
         embedders,
         search_cutoff_ms,
         localized_attributes: localized_attributes_rules,
+        facet_search,
+        prefix_search,
         _kind,
     } = settings;
 
@@ -657,6 +675,20 @@ pub fn apply_settings_to_builder(
         Setting::Reset => builder.reset_search_cutoff(),
         Setting::NotSet => (),
     }
+
+    match prefix_search {
+        Setting::Set(prefix_search) => {
+            builder.set_prefix_search(PrefixSearch::from(*prefix_search))
+        }
+        Setting::Reset => builder.reset_prefix_search(),
+        Setting::NotSet => (),
+    }
+
+    match facet_search {
+        Setting::Set(facet_search) => builder.set_facet_search(*facet_search),
+        Setting::Reset => builder.reset_facet_search(),
+        Setting::NotSet => (),
+    }
 }
 
 pub enum SecretPolicy {
@@ -755,6 +787,10 @@ pub fn settings(
 
     let localized_attributes_rules = index.localized_attributes_rules(rtxn)?;
 
+    let prefix_search = index.prefix_search(rtxn)?.map(PrefixSearchSettings::from);
+
+    let facet_search = index.facet_search(rtxn)?;
+
     let mut settings = Settings {
         displayed_attributes: match displayed_attributes {
             Some(attrs) => Setting::Set(attrs),
@@ -791,13 +827,14 @@ pub fn settings(
             Some(rules) => Setting::Set(rules.into_iter().map(|r| r.into()).collect()),
             None => Setting::Reset,
         },
+        prefix_search: Setting::Set(prefix_search.unwrap_or_default()),
+        facet_search: Setting::Set(facet_search),
         _kind: PhantomData,
     };
 
     if let SecretPolicy::HideSecrets = secret_policy {
         settings.hide_secrets()
     }
-
     Ok(settings)
 }
 
@@ -964,6 +1001,32 @@ impl std::ops::Deref for WildcardSetting {
     }
 }
 
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Deserr, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+#[deserr(error = DeserrJsonError<InvalidSettingsPrefixSearch>, rename_all = camelCase, deny_unknown_fields)]
+pub enum PrefixSearchSettings {
+    #[default]
+    IndexingTime,
+    Disabled,
+}
+
+impl From<PrefixSearch> for PrefixSearchSettings {
+    fn from(value: PrefixSearch) -> Self {
+        match value {
+            PrefixSearch::IndexingTime => PrefixSearchSettings::IndexingTime,
+            PrefixSearch::Disabled => PrefixSearchSettings::Disabled,
+        }
+    }
+}
+impl From<PrefixSearchSettings> for PrefixSearch {
+    fn from(value: PrefixSearchSettings) -> Self {
+        match value {
+            PrefixSearchSettings::IndexingTime => PrefixSearch::IndexingTime,
+            PrefixSearchSettings::Disabled => PrefixSearch::Disabled,
+        }
+    }
+}
+
 #[cfg(test)]
 pub(crate) mod test {
     use super::*;
@@ -990,6 +1053,8 @@ pub(crate) mod test {
             embedders: Setting::NotSet,
             localized_attributes: Setting::NotSet,
             search_cutoff_ms: Setting::NotSet,
+            facet_search: Setting::NotSet,
+            prefix_search: Setting::NotSet,
             _kind: PhantomData::<Unchecked>,
         };
 
@@ -1019,6 +1084,8 @@ pub(crate) mod test {
             embedders: Setting::NotSet,
             localized_attributes: Setting::NotSet,
             search_cutoff_ms: Setting::NotSet,
+            facet_search: Setting::NotSet,
+            prefix_search: Setting::NotSet,
             _kind: PhantomData::<Unchecked>,
         };
 

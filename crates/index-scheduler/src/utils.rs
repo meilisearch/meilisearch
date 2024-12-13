@@ -67,7 +67,7 @@ impl ProcessingBatch {
             task.batch_uid = Some(self.uid);
             // We don't store the statuses in the map since they're all enqueued but we must
             // still store them in the stats since that can be displayed.
-            *self.stats.status.entry(task.status).or_default() += 1;
+            *self.stats.status.entry(Status::Processing).or_default() += 1;
 
             self.kinds.insert(task.kind.as_kind());
             *self.stats.types.entry(task.kind.as_kind()).or_default() += 1;
@@ -106,7 +106,7 @@ impl ProcessingBatch {
         self.stats.total_nb_tasks = 0;
     }
 
-    /// Update the timestamp of the tasks and the inner structure of this sturcture.
+    /// Update the timestamp of the tasks and the inner structure of this structure.
     pub fn update(&mut self, task: &mut Task) {
         // We must re-set this value in case we're dealing with a task that has been added between
         // the `processing` and `finished` state
@@ -134,6 +134,7 @@ impl ProcessingBatch {
     pub fn to_batch(&self) -> Batch {
         Batch {
             uid: self.uid,
+            progress: None,
             details: self.details.clone(),
             stats: self.stats.clone(),
             started_at: self.started_at,
@@ -187,6 +188,7 @@ impl IndexScheduler {
             &batch.uid,
             &Batch {
                 uid: batch.uid,
+                progress: None,
                 details: batch.details,
                 stats: batch.stats,
                 started_at: batch.started_at,
@@ -273,7 +275,9 @@ impl IndexScheduler {
             .into_iter()
             .map(|batch_id| {
                 if Some(batch_id) == processing.batch.as_ref().map(|batch| batch.uid) {
-                    Ok(processing.batch.as_ref().unwrap().to_batch())
+                    let mut batch = processing.batch.as_ref().unwrap().to_batch();
+                    batch.progress = processing.get_progress_view();
+                    Ok(batch)
                 } else {
                     self.get_batch(rtxn, batch_id)
                         .and_then(|task| task.ok_or(Error::CorruptedTaskQueue))

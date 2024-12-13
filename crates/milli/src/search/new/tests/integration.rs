@@ -5,6 +5,7 @@ use bumpalo::Bump;
 use heed::EnvOpenOptions;
 use maplit::{btreemap, hashset};
 
+use crate::progress::Progress;
 use crate::update::new::indexer;
 use crate::update::{IndexDocumentsMethod, IndexerConfig, Settings};
 use crate::vector::EmbeddingConfigs;
@@ -72,7 +73,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
             None,
             &mut new_fields_ids_map,
             &|| false,
-            &|_progress| (),
+            Progress::default(),
         )
         .unwrap();
 
@@ -83,6 +84,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     indexer::index(
         &mut wtxn,
         &index,
+        &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
         config.grenad_parameters(),
         &db_fields_ids_map,
         new_fields_ids_map,
@@ -90,7 +92,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
         &document_changes,
         embedders,
         &|| false,
-        &|_| (),
+        &Progress::default(),
     )
     .unwrap();
 

@@ -7,12 +7,12 @@
 use std::path::Path;
 
 use anyhow::Context;
-use meilisearch_types::{
-    heed::{types::Str, Database, EnvOpenOptions},
-    milli::index::db_name,
-};
+use meilisearch_types::heed::types::Str;
+use meilisearch_types::heed::{Database, EnvOpenOptions};
+use meilisearch_types::milli::index::db_name;
 
-use crate::{try_opening_database, try_opening_poly_database, uuid_codec::UuidCodec};
+use crate::uuid_codec::UuidCodec;
+use crate::{try_opening_database, try_opening_poly_database};
 
 pub fn v1_10_to_v1_11(db_path: &Path) -> anyhow::Result<()> {
     println!("Upgrading from v1.10.0 to v1.11.0");

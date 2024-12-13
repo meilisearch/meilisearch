@@ -10,7 +10,8 @@ use meilisearch_types::locales::{Locale, LocalizedAttributesRuleView};
 use meilisearch_types::milli::update::Setting;
 use meilisearch_types::milli::vector::settings::EmbeddingSettings;
 use meilisearch_types::settings::{
-    FacetingSettings, PaginationSettings, ProximityPrecisionView, RankingRuleView, TypoSettings,
+    FacetingSettings, PaginationSettings, PrefixSearchSettings, ProximityPrecisionView,
+    RankingRuleView, TypoSettings,
 };
 use serde::Serialize;
 
@@ -36,6 +37,8 @@ pub struct SettingsAnalytics {
     pub dictionary: DictionaryAnalytics,
     pub separator_tokens: SeparatorTokensAnalytics,
     pub non_separator_tokens: NonSeparatorTokensAnalytics,
+    pub facet_search: FacetSearchAnalytics,
+    pub prefix_search: PrefixSearchAnalytics,
 }
 
 impl Aggregate for SettingsAnalytics {
@@ -182,6 +185,14 @@ impl Aggregate for SettingsAnalytics {
             },
             non_separator_tokens: NonSeparatorTokensAnalytics {
                 total: new.non_separator_tokens.total.or(self.non_separator_tokens.total),
+            },
+            facet_search: FacetSearchAnalytics {
+                set: new.facet_search.set | self.facet_search.set,
+                value: new.facet_search.value.or(self.facet_search.value),
+            },
+            prefix_search: PrefixSearchAnalytics {
+                set: new.prefix_search.set | self.prefix_search.set,
+                value: new.prefix_search.value.or(self.prefix_search.value),
             },
         })
     }
@@ -618,5 +629,37 @@ impl NonSeparatorTokensAnalytics {
 
     pub fn into_settings(self) -> SettingsAnalytics {
         SettingsAnalytics { non_separator_tokens: self, ..Default::default() }
+    }
+}
+
+#[derive(Serialize, Default)]
+pub struct FacetSearchAnalytics {
+    pub set: bool,
+    pub value: Option<bool>,
+}
+
+impl FacetSearchAnalytics {
+    pub fn new(settings: Option<&bool>) -> Self {
+        Self { set: settings.is_some(), value: settings.copied() }
+    }
+
+    pub fn into_settings(self) -> SettingsAnalytics {
+        SettingsAnalytics { facet_search: self, ..Default::default() }
+    }
+}
+
+#[derive(Serialize, Default)]
+pub struct PrefixSearchAnalytics {
+    pub set: bool,
+    pub value: Option<PrefixSearchSettings>,
+}
+
+impl PrefixSearchAnalytics {
+    pub fn new(settings: Option<&PrefixSearchSettings>) -> Self {
+        Self { set: settings.is_some(), value: settings.cloned() }
+    }
+
+    pub fn into_settings(self) -> SettingsAnalytics {
+        SettingsAnalytics { prefix_search: self, ..Default::default() }
     }
 }

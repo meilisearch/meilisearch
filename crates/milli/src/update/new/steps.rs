@@ -1,8 +1,12 @@
+use std::borrow::Cow;
+
 use enum_iterator::Sequence;
 
+use crate::progress::Step;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Sequence)]
-#[repr(u16)]
-pub enum Step {
+#[repr(u8)]
+pub enum IndexingStep {
     PreparingPayloads,
     ExtractingDocuments,
     ExtractingFacets,
@@ -11,37 +15,38 @@ pub enum Step {
     ExtractingEmbeddings,
     WritingGeoPoints,
     WritingToDatabase,
-    WritingEmbeddingsToDatabase,
     WaitingForExtractors,
+    WritingEmbeddingsToDatabase,
     PostProcessingFacets,
     PostProcessingWords,
     Finalizing,
 }
 
-impl Step {
-    pub fn name(&self) -> &'static str {
+impl Step for IndexingStep {
+    fn name(&self) -> Cow<'static, str> {
         match self {
-            Step::PreparingPayloads => "preparing update file",
-            Step::ExtractingDocuments => "extracting documents",
-            Step::ExtractingFacets => "extracting facets",
-            Step::ExtractingWords => "extracting words",
-            Step::ExtractingWordProximity => "extracting word proximity",
-            Step::ExtractingEmbeddings => "extracting embeddings",
-            Step::WritingGeoPoints => "writing geo points",
-            Step::WritingToDatabase => "writing to database",
-            Step::WritingEmbeddingsToDatabase => "writing embeddings to database",
-            Step::WaitingForExtractors => "waiting for extractors",
-            Step::PostProcessingFacets => "post-processing facets",
-            Step::PostProcessingWords => "post-processing words",
-            Step::Finalizing => "finalizing",
+            IndexingStep::PreparingPayloads => "preparing update file",
+            IndexingStep::ExtractingDocuments => "extracting documents",
+            IndexingStep::ExtractingFacets => "extracting facets",
+            IndexingStep::ExtractingWords => "extracting words",
+            IndexingStep::ExtractingWordProximity => "extracting word proximity",
+            IndexingStep::ExtractingEmbeddings => "extracting embeddings",
+            IndexingStep::WritingGeoPoints => "writing geo points",
+            IndexingStep::WritingToDatabase => "writing to database",
+            IndexingStep::WaitingForExtractors => "waiting for extractors",
+            IndexingStep::WritingEmbeddingsToDatabase => "writing embeddings to database",
+            IndexingStep::PostProcessingFacets => "post-processing facets",
+            IndexingStep::PostProcessingWords => "post-processing words",
+            IndexingStep::Finalizing => "finalizing",
         }
+        .into()
     }
 
-    pub fn finished_steps(self) -> u16 {
-        self as u16
+    fn current(&self) -> u32 {
+        *self as u32
     }
 
-    pub const fn total_steps() -> u16 {
-        Self::CARDINALITY as u16
+    fn total(&self) -> u32 {
+        Self::CARDINALITY as u32
     }
 }

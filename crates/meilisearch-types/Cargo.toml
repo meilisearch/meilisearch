@@ -24,8 +24,9 @@ flate2 = "1.0.30"
 fst = "0.4.7"
 memmap2 = "0.9.4"
 milli = { path = "../milli" }
-raw-collections = { git = "https://github.com/meilisearch/raw-collections.git", version = "0.1.0" }
-roaring = { version = "0.10.6", features = ["serde"] }
+bumparaw-collections = "0.1.2"
+roaring = { version = "0.10.7", features = ["serde"] }
+rustc-hash = "2.1.0"
 serde = { version = "1.0.204", features = ["derive"] }
 serde-cs = "0.2.4"
 serde_json = "1.0.120"

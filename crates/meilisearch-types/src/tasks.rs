@@ -4,7 +4,6 @@ use std::fmt::{Display, Write};
 use std::str::FromStr;
 
 use enum_iterator::Sequence;
-use milli::update::new::indexer::document_changes::Progress;
 use milli::update::IndexDocumentsMethod;
 use milli::Object;
 use roaring::RoaringBitmap;
@@ -39,62 +38,6 @@ pub struct Task {
 
     pub status: Status,
     pub kind: KindWithContent,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TaskProgress {
-    pub current_step: &'static str,
-    pub finished_steps: u16,
-    pub total_steps: u16,
-    pub finished_substeps: Option<u32>,
-    pub total_substeps: Option<u32>,
-}
-
-impl Default for TaskProgress {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl TaskProgress {
-    pub fn new() -> Self {
-        Self {
-            current_step: "start",
-            finished_steps: 0,
-            total_steps: 1,
-            finished_substeps: None,
-            total_substeps: None,
-        }
-    }
-
-    pub fn update(&mut self, progress: Progress) -> TaskProgress {
-        if self.finished_steps > progress.finished_steps {
-            return *self;
-        }
-
-        if self.current_step != progress.step_name {
-            self.current_step = progress.step_name
-        }
-
-        self.total_steps = progress.total_steps;
-
-        if self.finished_steps < progress.finished_steps {
-            self.finished_substeps = None;
-            self.total_substeps = None;
-        }
-        self.finished_steps = progress.finished_steps;
-        if let Some((finished_substeps, total_substeps)) = progress.finished_total_substep {
-            if let Some(task_finished_substeps) = self.finished_substeps {
-                if task_finished_substeps > finished_substeps {
-                    return *self;
-                }
-            }
-            self.finished_substeps = Some(finished_substeps);
-            self.total_substeps = Some(total_substeps);
-        }
-        *self
-    }
 }
 
 impl Task {
