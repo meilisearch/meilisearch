@@ -65,11 +65,10 @@ macro_rules! make_setting_route {
             use $crate::routes::{is_dry_run, get_task_id, SummarizedTaskView};
 
             #[allow(dead_code)]
-            fn verify_setting_exists<FH>(settings: meilisearch_types::settings::Settings<FH>) {
-                match settings {
-                    meilisearch_types::settings::Settings { $attr: _, .. } => {}
-                }
-            }
+            const _: () = {
+                let meilisearch_types::settings::Settings { $attr: _, .. } = 
+                    meilisearch_types::settings::Settings::<meilisearch_types::settings::Unchecked>::default();
+            };
 
             pub async fn delete(
                 index_scheduler: GuardedData<
