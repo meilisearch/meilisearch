@@ -49,6 +49,7 @@ pub use self::geo_sort::Strategy as GeoSortStrategy;
 use self::graph_based_ranking_rule::Words;
 use self::interner::Interned;
 use self::vector_sort::VectorSort;
+use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::index::PrefixSearch;
 use crate::localized_attributes_rules::LocalizedFieldIds;
 use crate::score_details::{ScoreDetails, ScoringStrategy};
@@ -863,12 +864,12 @@ fn check_sort_criteria(
                 }
                 .into());
             }
-            Member::Geo(_) if !sortable_fields.contains("_geo") => {
+            Member::Geo(_) if !sortable_fields.contains(RESERVED_GEO_FIELD_NAME) => {
                 let (valid_fields, hidden_fields) =
                     ctx.index.remove_hidden_fields(ctx.txn, sortable_fields)?;
 
                 return Err(UserError::InvalidSortableAttribute {
-                    field: "_geo".to_string(),
+                    field: RESERVED_GEO_FIELD_NAME.to_string(),
                     valid_fields,
                     hidden_fields,
                 }

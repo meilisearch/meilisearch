@@ -10,6 +10,7 @@ use roaring::RoaringBitmap;
 use rstar::RTree;
 use serde::{Deserialize, Serialize};
 
+use crate::constants::RESERVED_VECTORS_FIELD_NAME;
 use crate::documents::PrimaryKey;
 use crate::error::{InternalError, UserError};
 use crate::fields_ids_map::FieldsIdsMap;
@@ -20,7 +21,7 @@ use crate::heed_codec::facet::{
 use crate::heed_codec::{BEU16StrCodec, FstSetCodec, StrBEU16Codec, StrRefCodec};
 use crate::order_by_map::OrderByMap;
 use crate::proximity::ProximityPrecision;
-use crate::vector::parsed_vectors::RESERVED_VECTORS_FIELD_NAME;
+
 use crate::vector::{ArroyWrapper, Embedding, EmbeddingConfig};
 use crate::{
     default_criteria, CboRoaringBitmapCodec, Criterion, DocumentId, ExternalDocumentsIds,
@@ -1732,6 +1733,7 @@ pub(crate) mod tests {
     use memmap2::Mmap;
     use tempfile::TempDir;
 
+    use crate::constants::RESERVED_GEO_FIELD_NAME;
     use crate::error::{Error, InternalError};
     use crate::index::{DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS};
     use crate::progress::Progress;
@@ -2173,16 +2175,16 @@ pub(crate) mod tests {
 
         index
             .update_settings(|settings| {
-                settings.set_filterable_fields(hashset! { S("_geo") });
+                settings.set_filterable_fields(hashset! { S(RESERVED_GEO_FIELD_NAME) });
             })
             .unwrap();
         index
             .add_documents(documents!([
-                { "id": 0, "_geo": { "lat": "0", "lng": "0" } },
-                { "id": 1, "_geo": { "lat": 0, "lng": "-175" } },
-                { "id": 2, "_geo": { "lat": "0", "lng": 175 } },
-                { "id": 3, "_geo": { "lat": 85, "lng": 0 } },
-                { "id": 4, "_geo": { "lat": "-85", "lng": "0" } },
+                { "id": 0, RESERVED_GEO_FIELD_NAME: { "lat": "0", "lng": "0" } },
+                { "id": 1, RESERVED_GEO_FIELD_NAME: { "lat": 0, "lng": "-175" } },
+                { "id": 2, RESERVED_GEO_FIELD_NAME: { "lat": "0", "lng": 175 } },
+                { "id": 3, RESERVED_GEO_FIELD_NAME: { "lat": 85, "lng": 0 } },
+                { "id": 4, RESERVED_GEO_FIELD_NAME: { "lat": "-85", "lng": "0" } },
             ]))
             .unwrap();
 
@@ -2859,19 +2861,24 @@ pub(crate) mod tests {
         index
             .update_settings(|settings| {
                 settings.set_primary_key("id".to_string());
-                settings.set_filterable_fields(HashSet::from(["_geo".to_string()]));
+                settings
+                    .set_filterable_fields(HashSet::from([RESERVED_GEO_FIELD_NAME.to_string()]));
             })
             .unwrap();
 
         // happy path
-        index.add_documents(documents!({ "id" : 5, "_geo": {"lat": 12.0, "lng": 11.0}})).unwrap();
+        index
+            .add_documents(
+                documents!({ "id" : 5, RESERVED_GEO_FIELD_NAME: {"lat": 12.0, "lng": 11.0}}),
+            )
+            .unwrap();
 
         db_snap!(index, geo_faceted_documents_ids);
 
         // both are unparseable, we expect GeoError::BadLatitudeAndLongitude
         let err1 = index
             .add_documents(
-                documents!({ "id" : 6, "_geo": {"lat": "unparseable", "lng": "unparseable"}}),
+                documents!({ "id" : 6, RESERVED_GEO_FIELD_NAME: {"lat": "unparseable", "lng": "unparseable"}}),
             )
             .unwrap_err();
         assert!(matches!(
@@ -2889,13 +2896,14 @@ pub(crate) mod tests {
         index
             .update_settings(|settings| {
                 settings.set_primary_key("id".to_string());
-                settings.set_filterable_fields(HashSet::from(["_geo".to_string()]));
+                settings
+                    .set_filterable_fields(HashSet::from([RESERVED_GEO_FIELD_NAME.to_string()]));
             })
             .unwrap();
 
         let err = index
             .add_documents(
-                documents!({ "id" : "doggo", "_geo": { "lat": 1, "lng": 2, "doggo": "are the best" }}),
+                documents!({ "id" : "doggo", RESERVED_GEO_FIELD_NAME: { "lat": 1, "lng": 2, "doggo": "are the best" }}),
             )
             .unwrap_err();
         insta::assert_snapshot!(err, @r###"The `_geo` field in the document with the id: `"doggo"` contains the following unexpected fields: `{"doggo":"are the best"}`."###);
@@ -2905,7 +2913,7 @@ pub(crate) mod tests {
         // multiple fields and complex values
         let err = index
             .add_documents(
-                documents!({ "id" : "doggo", "_geo": { "lat": 1, "lng": 2, "doggo": "are the best", "and": { "all": ["cats", { "are": "beautiful" } ] } } }),
+                documents!({ "id" : "doggo", RESERVED_GEO_FIELD_NAME: { "lat": 1, "lng": 2, "doggo": "are the best", "and": { "all": ["cats", { "are": "beautiful" } ] } } }),
             )
             .unwrap_err();
         insta::assert_snapshot!(err, @r###"The `_geo` field in the document with the id: `"doggo"` contains the following unexpected fields: `{"and":{"all":["cats",{"are":"beautiful"}]},"doggo":"are the best"}`."###);
