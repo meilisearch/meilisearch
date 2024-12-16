@@ -29,6 +29,8 @@ pub mod documents;
 pub mod facet_search;
 pub mod search;
 mod search_analytics;
+#[cfg(test)]
+mod search_test;
 pub mod settings;
 mod settings_analytics;
 pub mod similar;
