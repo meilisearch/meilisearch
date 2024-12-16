@@ -25,6 +25,7 @@ use crate::Opt;
 /// It also generates a `configure` function that configures the routes for the settings.
 macro_rules! make_setting_routes {
     ($({route: $route:literal, update_verb: $update_verb:ident, value_type: $type:ty, err_type: $err_ty:ty, attr: $attr:ident, camelcase_attr: $camelcase_attr:literal, analytics: $analytics:ident},)*) => {
+
         $(
             make_setting_route!($route, $update_verb, $type, $err_ty, $attr, $camelcase_attr, $analytics);
         )*
@@ -46,7 +47,6 @@ macro_rules! make_setting_routes {
 #[macro_export]
 macro_rules! make_setting_route {
     ($route:literal, $update_verb:ident, $type:ty, $err_ty:ty, $attr:ident, $camelcase_attr:literal, $analytics:ident) => {
-        
         pub mod $attr {
             use actix_web::web::Data;
             use actix_web::{web, HttpRequest, HttpResponse, Resource};
@@ -65,10 +65,10 @@ macro_rules! make_setting_route {
             use $crate::routes::{is_dry_run, get_task_id, SummarizedTaskView};
 
             #[allow(dead_code)]
-            const _: () = {
-                let meilisearch_types::settings::Settings { $attr: _, .. } = 
+            fn verify_setting_exists() {
+                let meilisearch_types::settings::Settings { $attr: _, _kind: _, .. } = 
                     meilisearch_types::settings::Settings::<meilisearch_types::settings::Unchecked>::default();
-            };
+            }
 
             pub async fn delete(
                 index_scheduler: GuardedData<
