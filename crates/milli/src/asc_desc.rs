@@ -6,6 +6,7 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::error::is_reserved_keyword;
 use crate::search::facet::BadGeoError;
 use crate::{CriterionError, Error, UserError};
@@ -175,7 +176,7 @@ impl From<AscDescError> for SortError {
             AscDescError::ReservedKeyword { name } if name.starts_with("_geoPoint") => {
                 SortError::BadGeoPointUsage { name }
             }
-            AscDescError::ReservedKeyword { name } if &name == "_geo" => {
+            AscDescError::ReservedKeyword { name } if &name == RESERVED_GEO_FIELD_NAME => {
                 SortError::ReservedNameForSettings { name }
             }
             AscDescError::ReservedKeyword { name } if name.starts_with("_geoRadius") => {
