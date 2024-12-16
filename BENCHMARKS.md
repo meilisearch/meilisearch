@@ -48,27 +48,6 @@ cargo xtask bench --no-dashboard -- workloads/my_workload_1.json workloads/my_wo
 
 For processing the results, look at [Looking at benchmark results/Without dashboard](#without-dashboard).
 
-#### Sending a workload by hand
-
-Sometimes you want to visualize the metrics of a worlkoad that comes from a custom report.
-It is not quite easy to trick the benchboard in thinking that your report is legitimate but here are the commands you can run to upload your firefox report on a running benchboard.
-
-```bash
-# Name this hostname whatever you want
-echo '{ "hostname": "the-best-place" }' | xh PUT 'http://127.0.0.1:9001/api/v1/machine'
-
-# You'll receive an UUID from this command that we will call $invocation_uuid
-echo '{ "commit": { "sha1": "1234567", "commit_date": "2024-09-05 12:00:12.0 +00:00:00", "message": "A cool message" }, "machine_hostname": "the-best-place", "max_workloads": 1 }' | xh PUT 'http://127.0.0.1:9001/api/v1/invocation'
-
-# Just use UUID from the previous command
-# and you'll receive another UUID that we will call $workload_uuid
-echo '{ "invocation_uuid": "$invocation_uuid", "name": "toto", "max_runs": 1 }' | xh PUT 'http://127.0.0.1:9001/api/v1/workload'
-
-# And now use your $workload_uuid and the content of your firefox report
-# but don't forget to convert your firefox report from JSONLines into an object
-echo '{ "workload_uuid": "$workload_uuid", "data": $REPORT_JSON_DATA }' | xh PUT 'http://127.0.0.1:9001/api/v1/run'
-```
-
 ### In CI
 
 We have dedicated runners to run workloads on CI. Currently, there are three ways of running the CI:
