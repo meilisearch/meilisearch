@@ -30,6 +30,8 @@ use milli::{
 use regex::Regex;
 use serde::Serialize;
 use serde_json::{json, Value};
+#[cfg(test)]
+mod mod_test;
 
 use crate::error::MeilisearchHttpError;
 
@@ -1557,7 +1559,7 @@ pub fn perform_similar(
     Ok(result)
 }
 
-fn insert_geo_distance(sorts: &[String], document: &mut Document) {
+pub fn insert_geo_distance(sorts: &[String], document: &mut Document) {
     lazy_static::lazy_static! {
         static ref GEO_REGEX: Regex =
             Regex::new(r"_geoPoint\(\s*([[:digit:].\-]+)\s*,\s*([[:digit:].\-]+)\s*\)").unwrap();
