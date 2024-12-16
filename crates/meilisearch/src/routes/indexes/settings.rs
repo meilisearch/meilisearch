@@ -63,10 +63,11 @@ macro_rules! make_setting_route {
             use $crate::extractors::sequential_extractor::SeqHandler;
             use $crate::Opt;
             use $crate::routes::{is_dry_run, get_task_id, SummarizedTaskView};
+            use std::marker::PhantomData;
 
             #[allow(dead_code)]
             fn verify_setting_exists() {
-                let meilisearch_types::settings::Settings { $attr: _, _kind: _, .. } = 
+                let meilisearch_types::settings::Settings { $attr: _, .. } = 
                     meilisearch_types::settings::Settings::<meilisearch_types::settings::Unchecked>::default();
             }
 
