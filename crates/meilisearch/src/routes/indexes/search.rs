@@ -356,4 +356,3 @@ pub fn search_kind(
         (_, None, Some(_)) => Err(MeilisearchHttpError::MissingSearchHybrid.into()),
     }
 }
-
