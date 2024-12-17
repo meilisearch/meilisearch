@@ -103,8 +103,10 @@ impl<'a> CompressedKvReaderU16<'a> {
 pub struct CompressedKvWriterU16(Vec<u8>);
 
 impl CompressedKvWriterU16 {
-    // TODO ask for a KvReaderU16 here
-    pub fn new_with_dictionary(input: &[u8], dictionary: &EncoderDictionary) -> io::Result<Self> {
+    pub fn new_with_dictionary(
+        input: &KvReaderU16,
+        dictionary: &EncoderDictionary,
+    ) -> io::Result<Self> {
         let mut compressor = Compressor::with_prepared_dictionary(dictionary)?;
         compressor.compress(input).map(CompressedKvWriterU16)
     }
