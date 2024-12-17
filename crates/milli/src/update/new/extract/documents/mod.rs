@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 
 use bumpalo::Bump;
+pub use compression::retrieve_or_compute_document_compression_dictionary;
 use hashbrown::HashMap;
 
 use super::DelAddRoaringBitmap;
@@ -13,6 +14,8 @@ use crate::update::new::thread_local::FullySend;
 use crate::update::new::DocumentChange;
 use crate::vector::EmbeddingConfigs;
 use crate::Result;
+
+mod compression;
 
 pub struct DocumentsExtractor<'a, 'b> {
     document_sender: DocumentsSender<'a, 'b>,
@@ -51,7 +54,6 @@ impl<'a, 'b, 'extractor> Extractor<'extractor> for DocumentsExtractor<'a, 'b> {
             // **WARNING**: the exclusive borrow on `new_fields_ids_map` needs to be taken **inside** of the `for change in changes` loop
             // Otherwise, `BorrowMutError` will occur for document changes that also need the new_fields_ids_map (e.g.: UpdateByFunction)
             let mut new_fields_ids_map = context.new_fields_ids_map.borrow_mut_or_yield();
-
             let external_docid = change.external_docid().to_owned();
 
             todo!("manage documents compression");

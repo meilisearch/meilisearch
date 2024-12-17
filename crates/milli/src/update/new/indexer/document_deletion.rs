@@ -93,6 +93,7 @@ mod test {
     use std::sync::RwLock;
 
     use bumpalo::Bump;
+    use zstd::dict::DecoderDictionary;
 
     use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
     use crate::index::tests::TempIndex;
@@ -144,7 +145,6 @@ mod test {
         let indexer = Bump::new();
 
         let index = TempIndex::new();
-
         let rtxn = index.read_txn().unwrap();
 
         let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
@@ -152,8 +152,13 @@ mod test {
         let fields_ids_map =
             RwLock::new(FieldIdMapWithMetadata::new(db_fields_ids_map.clone(), metadata_builder));
 
-        let fields_ids_map_store = ThreadLocal::new();
+        let db_document_decompression_dictionary =
+            match index.document_compression_raw_dictionary(&rtxn).unwrap() {
+                Some(dictionary) => Some(zstd::dict::DecoderDictionary::copy(dictionary)),
+                None => None,
+            };
 
+        let fields_ids_map_store = ThreadLocal::new();
         let mut extractor_allocs = ThreadLocal::new();
         let doc_allocs = ThreadLocal::new();
 
@@ -165,8 +170,8 @@ mod test {
         let context = IndexingContext {
             index: &index,
             db_fields_ids_map: &db_fields_ids_map,
+            db_document_decompression_dictionary: db_document_decompression_dictionary.as_ref(),
             new_fields_ids_map: &fields_ids_map,
-            db_document_decompression_dictionary: None,
             doc_allocs: &doc_allocs,
             fields_ids_map_store: &fields_ids_map_store,
             must_stop_processing: &(|| false),

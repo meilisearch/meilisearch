@@ -5,9 +5,8 @@ use std::thread::{self, Builder};
 
 use big_s::S;
 use bumpalo::Bump;
-use document_changes::{
-    extract, DocumentChangeContext, DocumentChanges, Extractor, IndexingContext,
-};
+pub use document_changes::{extract, DocumentChanges, IndexingContext};
+use document_changes::{DocumentChangeContext, Extractor};
 pub use document_deletion::DocumentDeletion;
 pub use document_operation::{DocumentOperation, PayloadStats};
 use hashbrown::HashMap;
@@ -18,13 +17,17 @@ use write::{build_vectors, update_index, write_to_db};
 use zstd::dict::{DecoderDictionary, EncoderDictionary};
 
 use super::document::Document as _;
+use super::extract::*;
 use super::ref_cell_ext::RefCellExt as _;
 use super::steps::IndexingStep;
 use super::thread_local::{FullySend, MostlySend, ThreadLocal};
+
 use super::{channel::*, DocumentChange};
 use crate::documents::PrimaryKey;
 use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
+
 use crate::progress::Progress;
+
 use crate::update::GrenadParameters;
 use crate::vector::{ArroyWrapper, EmbeddingConfigs};
 use crate::{FieldsIdsMap, GlobalFieldsIdsMap, Index, InternalError, Result, ThreadPoolNoAbort};
@@ -120,10 +123,9 @@ where
 
     let document_compression_dictionary = pool
         .install(|| {
-            let rtxn = index.read_txn()?;
-            compute_document_compression_dictionary(
+            retrieve_or_compute_document_compression_dictionary(
                 index,
-                &rtxn,
+                wtxn,
                 document_changes,
                 indexing_context,
                 &mut extractor_allocs,
