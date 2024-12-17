@@ -60,7 +60,6 @@ impl<'a> CompressedKvReaderU16<'a> {
         bump: &'b Bump,
         dictionary: &DecoderDictionary,
     ) -> io::Result<&'b KvReaderU16> {
-        /// TODO use a better approach and stop cloning so much.
         let mut buffer = Vec::new();
         self.decompress_with(&mut buffer, dictionary)?;
         Ok(KvReaderU16::from_slice(bump.alloc_slice_copy(&buffer)))
