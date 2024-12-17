@@ -1,5 +1,6 @@
 use bumpalo::Bump;
 use heed::RoTxn;
+use zstd::dict::DecoderDictionary;
 
 use super::document::{
     Document as _, DocumentFromDb, DocumentFromVersions, MergedDocument, Versions,
@@ -72,9 +73,10 @@ impl<'doc> Deletion<'doc> {
         rtxn: &'a RoTxn,
         index: &'a Index,
         mapper: &'a Mapper,
+        dictionary: Option<&'a DecoderDictionary<'static>>,
         doc_alloc: &'a Bump,
     ) -> Result<DocumentFromDb<'a, Mapper>> {
-        Ok(DocumentFromDb::new(self.docid, rtxn, index, mapper, doc_alloc)?.ok_or(
+        Ok(DocumentFromDb::new(self.docid, rtxn, index, mapper, dictionary, doc_alloc)?.ok_or(
             crate::error::UserError::UnknownInternalDocumentId { document_id: self.docid },
         )?)
     }
@@ -128,9 +130,10 @@ impl<'doc> Update<'doc> {
         rtxn: &'a RoTxn,
         index: &'a Index,
         mapper: &'a Mapper,
+        dictionary: Option<&'a DecoderDictionary<'static>>,
         doc_alloc: &'a Bump,
     ) -> Result<DocumentFromDb<'a, Mapper>> {
-        Ok(DocumentFromDb::new(self.docid, rtxn, index, mapper, doc_alloc)?.ok_or(
+        Ok(DocumentFromDb::new(self.docid, rtxn, index, mapper, dictionary, doc_alloc)?.ok_or(
             crate::error::UserError::UnknownInternalDocumentId { document_id: self.docid },
         )?)
     }
@@ -140,11 +143,13 @@ impl<'doc> Update<'doc> {
         rtxn: &'a RoTxn,
         index: &'a Index,
         mapper: &'a Mapper,
+        dictionary: Option<&'a DecoderDictionary<'static>>,
         doc_alloc: &'a Bump,
     ) -> Result<VectorDocumentFromDb<'a>> {
-        Ok(VectorDocumentFromDb::new(self.docid, index, rtxn, mapper, doc_alloc)?.ok_or(
-            crate::error::UserError::UnknownInternalDocumentId { document_id: self.docid },
-        )?)
+        Ok(VectorDocumentFromDb::new(self.docid, index, rtxn, mapper, dictionary, doc_alloc)?
+            .ok_or(crate::error::UserError::UnknownInternalDocumentId {
+                document_id: self.docid,
+            })?)
     }
 
     pub fn updated(&self) -> DocumentFromVersions<'_, 'doc> {
@@ -156,6 +161,7 @@ impl<'doc> Update<'doc> {
         rtxn: &'t RoTxn,
         index: &'t Index,
         mapper: &'t Mapper,
+        dictionary: Option<&'t DecoderDictionary<'static>>,
         doc_alloc: &'t Bump,
     ) -> Result<MergedDocument<'_, 'doc, 't, Mapper>> {
         if self.has_deletion {
@@ -166,6 +172,7 @@ impl<'doc> Update<'doc> {
                 rtxn,
                 index,
                 mapper,
+                dictionary,
                 doc_alloc,
                 DocumentFromVersions::new(&self.new),
             )
@@ -182,6 +189,7 @@ impl<'doc> Update<'doc> {
         rtxn: &'t RoTxn,
         index: &'t Index,
         mapper: &'t Mapper,
+        dictionary: Option<&'t DecoderDictionary<'static>>,
         doc_alloc: &'t Bump,
     ) -> Result<bool> {
         let mut changed = false;
@@ -198,7 +206,7 @@ impl<'doc> Update<'doc> {
             updated_selected_field_count += 1;
             let current = match cached_current {
                 Some(current) => current,
-                None => self.current(rtxn, index, mapper, doc_alloc)?,
+                None => self.current(rtxn, index, mapper, dictionary, doc_alloc)?,
             };
             let current_value = current.top_level_field(key)?;
             let Some(current_value) = current_value else {
@@ -228,7 +236,7 @@ impl<'doc> Update<'doc> {
         let has_deleted_fields = {
             let current = match cached_current {
                 Some(current) => current,
-                None => self.current(rtxn, index, mapper, doc_alloc)?,
+                None => self.current(rtxn, index, mapper, dictionary, doc_alloc)?,
             };
 
             let mut current_selected_field_count = 0;
@@ -260,6 +268,7 @@ impl<'doc> Update<'doc> {
         rtxn: &'doc RoTxn,
         index: &'doc Index,
         mapper: &'doc Mapper,
+        dictionary: Option<&'doc DecoderDictionary<'static>>,
         doc_alloc: &'doc Bump,
         embedders: &'doc EmbeddingConfigs,
     ) -> Result<Option<MergedVectorDocument<'doc>>> {
@@ -277,6 +286,7 @@ impl<'doc> Update<'doc> {
                 index,
                 rtxn,
                 mapper,
+                dictionary,
                 &self.new,
                 doc_alloc,
                 embedders,

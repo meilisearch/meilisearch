@@ -83,6 +83,7 @@ impl<'a, 'b, 'extractor> Extractor<'extractor> for DocumentsExtractor<'a, 'b> {
                         &context.rtxn,
                         context.index,
                         &context.db_fields_ids_map,
+                        context.db_document_decompression_dictionary,
                         &context.doc_alloc,
                     )?;
                     let geo_iter = content
@@ -106,6 +107,7 @@ impl<'a, 'b, 'extractor> Extractor<'extractor> for DocumentsExtractor<'a, 'b> {
                         &context.rtxn,
                         context.index,
                         &context.db_fields_ids_map,
+                        context.db_document_decompression_dictionary,
                         &context.doc_alloc,
                     )?;
                     let geo_iter = content
@@ -143,12 +145,14 @@ impl<'a, 'b, 'extractor> Extractor<'extractor> for DocumentsExtractor<'a, 'b> {
                         &context.rtxn,
                         context.index,
                         &context.db_fields_ids_map,
+                        context.db_document_decompression_dictionary,
                         &context.doc_alloc,
                     )?;
                     let vector_content = update.merged_vectors(
                         &context.rtxn,
                         context.index,
                         &context.db_fields_ids_map,
+                        context.db_document_decompression_dictionary,
                         &context.doc_alloc,
                         self.embedders,
                     )?;

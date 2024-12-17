@@ -5,6 +5,7 @@ use bumparaw_collections::RawMap;
 use heed::RoTxn;
 use rustc_hash::FxBuildHasher;
 use serde_json::value::RawValue;
+use zstd::dict::DecoderDictionary;
 
 use super::vector_document::VectorDocument;
 use super::{KvReaderFieldId, KvWriterFieldId};
@@ -130,12 +131,12 @@ impl<'t, Mapper: FieldIdMapper> DocumentFromDb<'t, Mapper> {
         rtxn: &'t RoTxn,
         index: &'t Index,
         db_fields_ids_map: &'t Mapper,
+        db_document_decompression_dictionary: Option<&DecoderDictionary<'static>>,
         doc_alloc: &'t Bump,
     ) -> Result<Option<Self>> {
         match index.compressed_document(rtxn, docid)? {
             Some(compressed) => {
-                /// TODO maybe give the dictionary as a parameter
-                let content = match index.document_decompression_dictionary(rtxn)? {
+                let content = match db_document_decompression_dictionary {
                     Some(dictionary) => compressed.decompress_into_bump(doc_alloc, &dictionary)?,
                     None => compressed.as_non_compressed(),
                 };
@@ -206,10 +207,18 @@ impl<'a, 'doc, 't, Mapper: FieldIdMapper> MergedDocument<'a, 'doc, 't, Mapper> {
         rtxn: &'t RoTxn,
         index: &'t Index,
         db_fields_ids_map: &'t Mapper,
+        db_document_decompression_dictionary: Option<&'t DecoderDictionary<'static>>,
         doc_alloc: &'t Bump,
         new_doc: DocumentFromVersions<'a, 'doc>,
     ) -> Result<Self> {
-        let db = DocumentFromDb::new(docid, rtxn, index, db_fields_ids_map, doc_alloc)?;
+        let db = DocumentFromDb::new(
+            docid,
+            rtxn,
+            index,
+            db_fields_ids_map,
+            db_document_decompression_dictionary,
+            doc_alloc,
+        )?;
         Ok(Self { new_doc, db })
     }
 
