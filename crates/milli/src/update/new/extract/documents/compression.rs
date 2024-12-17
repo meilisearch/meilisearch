@@ -5,10 +5,9 @@ use bumpalo::Bump;
 use heed::RwTxn;
 use rayon::iter::{ParallelBridge, ParallelIterator as _};
 use roaring::RoaringBitmap;
-use zstd::bulk::Compressor;
 use zstd::dict::{from_continuous, EncoderDictionary};
 
-use crate::heed_codec::CompressedKvWriterU16;
+use crate::heed_codec::CompressedObkvU16;
 use crate::update::new::document::Document as _;
 use crate::update::new::indexer::document_changes::{
     DocumentChangeContext, DocumentChanges, Extractor, IndexingContext,
@@ -127,7 +126,7 @@ where
                 let compressed_document = index.compressed_document(&rtxn, docid)?.unwrap();
                 // The documents are not compressed with any dictionary at this point.
                 let document = compressed_document.as_non_compressed();
-                let compressed = CompressedKvWriterU16::new_with_dictionary(document, &dictionary)?;
+                let compressed = CompressedObkvU16::with_dictionary(document, &dictionary)?;
                 Ok((docid, compressed)) as crate::Result<_>
             });
 

@@ -65,7 +65,7 @@ impl<'pl> DocumentChanges<'pl> for DocumentDeletionChanges<'pl> {
         'pl: 'doc, // the payload must survive the process calls
     {
         let compressed = context.index.compressed_document(&context.rtxn, *docid)?.unwrap();
-        let current = match context.index.document_decompression_dictionary(&context.rtxn)? {
+        let current = match context.db_document_decompression_dictionary {
             Some(dict) => compressed.decompress_into_bump(&context.doc_alloc, &dict)?,
             None => compressed.as_non_compressed(),
         };
@@ -93,7 +93,6 @@ mod test {
     use std::sync::RwLock;
 
     use bumpalo::Bump;
-    use zstd::dict::DecoderDictionary;
 
     use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
     use crate::index::tests::TempIndex;

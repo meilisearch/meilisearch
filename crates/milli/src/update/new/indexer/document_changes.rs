@@ -28,6 +28,8 @@ pub struct DocumentChangeContext<
     /// The fields ids map as it was at the start of this indexing process. Contains at least all top-level fields from documents
     /// inside of the DB.
     pub db_fields_ids_map: &'indexer FieldsIdsMap,
+    /// The dictionary used to decompress the documents in the database.
+    pub db_document_decompression_dictionary: Option<&'indexer DecoderDictionary<'static>>,
     /// A transaction providing data from the DB before all indexing operations
     pub rtxn: RoTxn<'indexer>,
 
@@ -63,6 +65,7 @@ impl<
     pub fn new<F>(
         index: &'indexer Index,
         db_fields_ids_map: &'indexer FieldsIdsMap,
+        db_document_decompression_dictionary: Option<&'indexer DecoderDictionary<'static>>,
         new_fields_ids_map: &'fid RwLock<FieldIdMapWithMetadata>,
         extractor_allocs: &'extractor ThreadLocal<FullySend<Bump>>,
         doc_allocs: &'doc ThreadLocal<FullySend<Cell<Bump>>>,
@@ -81,14 +84,13 @@ impl<
 
         let fields_ids_map = &fields_ids_map.0;
         let extractor_alloc = extractor_allocs.get_or_default();
-
         let data = datastore.get_or_try(move || init_data(&extractor_alloc.0))?;
 
-        let txn = index.read_txn()?;
         Ok(DocumentChangeContext {
             index,
-            rtxn: txn,
+            rtxn: index.read_txn()?,
             db_fields_ids_map,
+            db_document_decompression_dictionary,
             new_fields_ids_map: fields_ids_map,
             doc_alloc,
             extractor_alloc: &extractor_alloc.0,
@@ -242,6 +244,7 @@ where
             DocumentChangeContext::new(
                 index,
                 db_fields_ids_map,
+                db_document_decompression_dictionary,
                 new_fields_ids_map,
                 extractor_allocs,
                 doc_allocs,

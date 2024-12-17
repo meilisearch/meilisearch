@@ -152,6 +152,7 @@ where
                         indexing_context,
                         indexer_span,
                         extractor_sender,
+                        document_compression_dictionary.as_ref(),
                         embedders,
                         &mut extractor_allocs,
                         finished_extraction,

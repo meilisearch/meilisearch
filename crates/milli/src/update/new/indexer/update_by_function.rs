@@ -95,6 +95,7 @@ impl<'index> DocumentChanges<'index> for UpdateByFunctionChanges<'index> {
         let DocumentChangeContext {
             index,
             db_fields_ids_map,
+            db_document_decompression_dictionary,
             rtxn: txn,
             new_fields_ids_map,
             doc_alloc,
@@ -106,7 +107,7 @@ impl<'index> DocumentChanges<'index> for UpdateByFunctionChanges<'index> {
         // safety: Both documents *must* exists in the database as
         //         their IDs comes from the list of documents ids.
         let compressed_document = index.compressed_document(txn, docid)?.unwrap();
-        let document = match index.document_decompression_dictionary(txn)? {
+        let document = match db_document_decompression_dictionary {
             Some(dictionary) => compressed_document.decompress_into_bump(doc_alloc, &dictionary)?,
             None => compressed_document.as_non_compressed(),
         };

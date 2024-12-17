@@ -5,6 +5,7 @@ use std::sync::OnceLock;
 use bumpalo::Bump;
 use roaring::RoaringBitmap;
 use tracing::Span;
+use zstd::dict::EncoderDictionary;
 
 use super::super::channel::*;
 use super::super::extract::*;
@@ -26,6 +27,7 @@ pub(super) fn extract_all<'pl, 'extractor, DC, MSP>(
     indexing_context: IndexingContext<MSP>,
     indexer_span: Span,
     extractor_sender: ExtractorBbqueueSender,
+    document_compression_dictionary: Option<&'_ EncoderDictionary<'_>>,
     embedders: &EmbeddingConfigs,
     extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
     finished_extraction: &AtomicBool,
@@ -46,7 +48,8 @@ where
 
     // document but we need to create a function that collects and compresses documents.
     let document_sender = extractor_sender.documents();
-    let document_extractor = DocumentsExtractor::new(document_sender, embedders);
+    let document_extractor =
+        DocumentsExtractor::new(document_sender, document_compression_dictionary, embedders);
     let datastore = ThreadLocal::with_capacity(rayon::current_num_threads());
     {
         let span = tracing::trace_span!(target: "indexing::documents::extract", parent: &indexer_span, "documents");

@@ -134,6 +134,7 @@ impl<'t, Mapper: FieldIdMapper> DocumentFromDb<'t, Mapper> {
     ) -> Result<Option<Self>> {
         match index.compressed_document(rtxn, docid)? {
             Some(compressed) => {
+                /// TODO maybe give the dictionary as a parameter
                 let content = match index.document_decompression_dictionary(rtxn)? {
                     Some(dictionary) => compressed.decompress_into_bump(doc_alloc, &dictionary)?,
                     None => compressed.as_non_compressed(),

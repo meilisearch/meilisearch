@@ -28,7 +28,7 @@ pub use self::transform::{Transform, TransformOutput};
 use super::new::StdResult;
 use crate::documents::{obkv_to_object, DocumentsBatchReader};
 use crate::error::{Error, InternalError, UserError};
-use crate::heed_codec::{CompressedKvWriterU16, CompressedObkvCodec};
+use crate::heed_codec::{CompressedObkvCodec, CompressedObkvU16};
 use crate::index::{PrefixSearch, PrefixSettings};
 use crate::thread_pool_no_abort::ThreadPoolNoAbortBuilder;
 pub use crate::update::index_documents::helpers::CursorClonableMmap;
@@ -771,8 +771,8 @@ where
         let mut iter = self.index.documents.iter_mut(self.wtxn)?;
         while let Some(result) = iter.next() {
             let (docid, document) = result?;
-            let document = document.as_non_compressed().as_bytes();
-            let compressed = CompressedKvWriterU16::new_with_dictionary(document, &dictionary)?;
+            let document = document.as_non_compressed();
+            let compressed = CompressedObkvU16::with_dictionary(document, &dictionary)?;
             // safety: the compressed document is entirely owned
             unsafe {
                 iter.put_current_with_options::<CompressedObkvCodec>(

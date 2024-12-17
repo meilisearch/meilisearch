@@ -19,7 +19,7 @@ impl<'a> heed::BytesDecode<'a> for CompressedObkvCodec {
 }
 
 impl heed::BytesEncode<'_> for CompressedObkvCodec {
-    type EItem = CompressedKvWriterU16;
+    type EItem = CompressedObkvU16;
 
     fn bytes_encode(item: &Self::EItem) -> Result<Cow<[u8]>, BoxedError> {
         Ok(Cow::Borrowed(&item.0))
@@ -60,7 +60,7 @@ impl<'a> CompressedKvReaderU16<'a> {
         bump: &'b Bump,
         dictionary: &DecoderDictionary,
     ) -> io::Result<&'b KvReaderU16> {
-        /// TODO use a better approch and stop cloning so much.
+        /// TODO use a better approach and stop cloning so much.
         let mut buffer = Vec::new();
         self.decompress_with(&mut buffer, dictionary)?;
         Ok(KvReaderU16::from_slice(bump.alloc_slice_copy(&buffer)))
@@ -100,15 +100,19 @@ impl<'a> CompressedKvReaderU16<'a> {
     }
 }
 
-pub struct CompressedKvWriterU16(Vec<u8>);
+pub struct CompressedObkvU16(Vec<u8>);
 
-impl CompressedKvWriterU16 {
-    pub fn new_with_dictionary(
+impl CompressedObkvU16 {
+    pub fn with_dictionary(
         input: &KvReaderU16,
         dictionary: &EncoderDictionary,
     ) -> io::Result<Self> {
         let mut compressor = Compressor::with_prepared_dictionary(dictionary)?;
-        compressor.compress(input).map(CompressedKvWriterU16)
+        Self::with_compressor(input, &mut compressor)
+    }
+
+    pub fn with_compressor(input: &KvReaderU16, compressor: &mut Compressor) -> io::Result<Self> {
+        compressor.compress(input.as_bytes()).map(CompressedObkvU16)
     }
 
     pub fn as_bytes(&self) -> &[u8] {

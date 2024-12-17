@@ -7,7 +7,7 @@ use bytemuck::allocation::pod_collect_to_vec;
 use grenad::{MergeFunction, Merger, MergerBuilder};
 use heed::types::Bytes;
 use heed::{BytesDecode, RwTxn};
-use obkv::{KvReader, KvWriter};
+use obkv::{KvReader, KvReaderU16, KvWriter};
 use roaring::RoaringBitmap;
 
 use super::helpers::{
@@ -17,7 +17,7 @@ use super::helpers::{
 };
 use crate::external_documents_ids::{DocumentOperation, DocumentOperationKind};
 use crate::facet::FacetType;
-use crate::heed_codec::CompressedKvWriterU16;
+use crate::heed_codec::CompressedObkvU16;
 use crate::index::db_name::DOCUMENTS;
 use crate::index::IndexEmbeddingConfig;
 use crate::proximity::MAX_DISTANCE;
@@ -212,10 +212,8 @@ pub(crate) fn write_typed_chunk_into_index(
                     let uncompressed_document_bytes = writer.into_inner().unwrap();
                     match dictionary.as_ref() {
                         Some(dictionary) => {
-                            let compressed = CompressedKvWriterU16::new_with_dictionary(
-                                &uncompressed_document_bytes,
-                                dictionary,
-                            )?;
+                            let doc = KvReaderU16::from_slice(&uncompressed_document_bytes);
+                            let compressed = CompressedObkvU16::with_dictionary(&doc, dictionary)?;
                             db.put(wtxn, &docid, compressed.as_bytes())?
                         }
                         None => db.put(wtxn, &docid, &uncompressed_document_bytes)?,
