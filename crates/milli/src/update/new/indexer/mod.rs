@@ -7,6 +7,7 @@ use big_s::S;
 use bumpalo::Bump;
 pub use document_changes::{extract, DocumentChanges, IndexingContext};
 use document_changes::{DocumentChangeContext, Extractor};
+use bumparaw_collections::RawMap;
 pub use document_deletion::DocumentDeletion;
 pub use document_operation::{DocumentOperation, PayloadStats};
 use hashbrown::HashMap;

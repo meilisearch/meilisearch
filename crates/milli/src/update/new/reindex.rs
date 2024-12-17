@@ -1,4 +1,5 @@
 use heed::RwTxn;
+use zstd::dict::DecoderDictionary;
 
 use super::document::{Document, DocumentFromDb};
 use crate::progress::{self, AtomicSubStep, Progress};
@@ -17,10 +18,23 @@ pub fn field_distribution(index: &Index, wtxn: &mut RwTxn<'_>, progress: &Progre
     let docids = index.documents_ids(wtxn)?;
     let mut doc_alloc = bumpalo::Bump::new();
 
+    let db_document_decompression_dictionary =
+        match index.document_compression_raw_dictionary(wtxn)? {
+            Some(raw) => Some(DecoderDictionary::copy(raw)),
+            None => None,
+        };
+
     for docid in docids {
         update_document_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
-        let Some(document) = DocumentFromDb::new(docid, wtxn, index, &field_id_map, &doc_alloc)?
+        let Some(document) = DocumentFromDb::new(
+            docid,
+            wtxn,
+            index,
+            &field_id_map,
+            db_document_decompression_dictionary.as_ref(),
+            &doc_alloc,
+        )?
         else {
             continue;
         };
@@ -38,5 +52,6 @@ pub fn field_distribution(index: &Index, wtxn: &mut RwTxn<'_>, progress: &Progre
     }
 
     index.put_field_distribution(wtxn, &distribution)?;
+
     Ok(())
 }

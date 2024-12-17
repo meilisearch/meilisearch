@@ -7,8 +7,8 @@ use zstd::bulk::Compressor;
 use zstd::dict::EncoderDictionary;
 
 use super::DelAddRoaringBitmap;
-use crate::heed_codec::CompressedObkvU16;
 use crate::constants::RESERVED_GEO_FIELD_NAME;
+use crate::heed_codec::CompressedObkvU16;
 use crate::update::new::channel::DocumentsSender;
 use crate::update::new::document::{write_to_obkv, Document as _};
 use crate::update::new::indexer::document_changes::{DocumentChangeContext, Extractor};
@@ -126,6 +126,7 @@ impl<'a, 'b, 'extractor> Extractor<'extractor> for DocumentsExtractor<'a, 'b> {
                         &context.rtxn,
                         context.index,
                         &context.db_fields_ids_map,
+                        context.db_document_decompression_dictionary,
                         &context.doc_alloc,
                     )?;
                     let geo_iter = content
