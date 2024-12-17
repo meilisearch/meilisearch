@@ -1,6 +1,7 @@
-use crate::search::insert_geo_distance;
 use meilisearch_types::Document;
 use serde_json::json;
+
+use crate::search::insert_geo_distance;
 
 #[test]
 fn test_insert_geo_distance() {
