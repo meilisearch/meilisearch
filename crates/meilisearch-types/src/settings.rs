@@ -249,9 +249,12 @@ pub struct Settings<T> {
     pub localized_attributes: Setting<Vec<LocalizedAttributesRuleView>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsFacetSearch>)]
+    #[schema(value_type = Option<bool>, example = json!(true))]
     pub facet_search: Setting<bool>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsPrefixSearch>)]
+    #[schema(value_type = Option<PrefixSearchSettings>, example = json!("Hemlo"))]
+    // TODO: TAMO
     pub prefix_search: Setting<PrefixSearchSettings>,
 
     #[serde(skip)]
@@ -1046,8 +1049,9 @@ impl std::ops::Deref for WildcardSetting {
     }
 }
 
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Deserr, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Deserr, Serialize, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
 #[deserr(error = DeserrJsonError<InvalidSettingsPrefixSearch>, rename_all = camelCase, deny_unknown_fields)]
 pub enum PrefixSearchSettings {
     #[default]

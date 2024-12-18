@@ -403,7 +403,6 @@ pub struct UpdateIndexRequest {
         )),
     )
 )]
->>>>>>> 0f289a437 (Implements the get and delete tasks route):meilisearch/src/routes/indexes/mod.rs
 pub async fn update_index(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_UPDATE }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,

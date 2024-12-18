@@ -1,6 +1,7 @@
 use milli::Object;
 use serde::{Deserialize, Serialize};
 use time::{Duration, OffsetDateTime};
+use utoipa::ToSchema;
 
 use crate::batches::BatchId;
 use crate::error::ResponseError;
@@ -66,7 +67,7 @@ impl TaskView {
     }
 }
 
-#[derive(Default, Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
+#[derive(Default, Debug, PartialEq, Eq, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DetailsView {
     /// Number of documents received for documentAdditionOrUpdate task.

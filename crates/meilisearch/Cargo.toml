@@ -105,10 +105,10 @@ tracing-actix-web = "0.7.11"
 build-info = { version = "1.7.0", path = "../build-info" }
 roaring = "0.10.7"
 mopa-maintained = "0.2.3"
-utoipa = { version = "5.0.0-rc.0", features = ["actix_extras", "macros", "non_strict_integers", "preserve_order", "uuid", "time", "openapi_extensions"] }
-utoipa-scalar = { version = "0.2.0-rc.0", features = ["actix-web"] }
-utoipa-rapidoc = { version = "4.0.1-rc.0", features = ["actix-web"] }
-utoipa-redoc = { version = "4.0.1-rc.0", features = ["actix-web"] }
+utoipa = { version = "5.2.0", features = ["actix_extras", "macros", "non_strict_integers", "preserve_order", "uuid", "time", "openapi_extensions"] }
+utoipa-scalar = { version = "0.2.0", features = ["actix-web"] }
+utoipa-rapidoc = { version = "5.0.0", features = ["actix-web"] }
+utoipa-redoc = { version = "5.0.0", features = ["actix-web"] }
 
 [dev-dependencies]
 actix-rt = "2.10.0"

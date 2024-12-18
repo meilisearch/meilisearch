@@ -90,7 +90,6 @@ tracing = "0.1.40"
 ureq = { version = "2.10.0", features = ["json"] }
 url = "2.5.2"
 rayon-par-bridge = "0.1.0"
-<<<<<<< HEAD:crates/milli/Cargo.toml
 hashbrown = "0.15.0"
 bumpalo = "3.16.0"
 bumparaw-collections = "0.1.2"
@@ -101,7 +100,7 @@ uell = "0.1.0"
 enum-iterator = "2.1.0"
 bbqueue = { git = "https://github.com/meilisearch/bbqueue" }
 flume = { version = "0.11.1", default-features = false }
-utoipa = { version = "5.0.0-rc.0", features = ["non_strict_integers", "preserve_order", "uuid", "time", "openapi_extensions"] }
+utoipa = { version = "5.0.2", features = ["non_strict_integers", "preserve_order", "uuid", "time", "openapi_extensions"] }
 
 [dev-dependencies]
 mimalloc = { version = "0.1.43", default-features = false }

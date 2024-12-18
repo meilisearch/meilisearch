@@ -20,9 +20,7 @@ use tokio::task;
 use utoipa::{IntoParams, OpenApi, ToSchema};
 
 use super::{get_task_id, is_dry_run, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT};
-use crate::analytics::Analytics;
-use super::{get_task_id, is_dry_run, SummarizedTaskView};
-use crate::analytics::Analytics;
+use crate::analytics::{Aggregate, AggregateMethod, Analytics};
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
@@ -55,8 +53,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 #[into_params(rename_all = "camelCase", parameter_in = Query)]
 pub struct TasksFilterQuery {
     /// Maximum number of results to return.
-    #[deserr(default = Param(DEFAULT_LIMIT), error = DeserrQueryParamError<InvalidTaskLimit>)]
-    #[param(required = false, value_type = u32, example = 12, default = json!(DEFAULT_LIMIT))]
+    #[deserr(default = Param(PAGINATION_DEFAULT_LIMIT as u32), error = DeserrQueryParamError<InvalidTaskLimit>)]
+    #[param(required = false, value_type = u32, example = 12, default = json!(PAGINATION_DEFAULT_LIMIT))]
     pub limit: Param<u32>,
     /// Fetch the next set of results from the given uid.
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskFrom>)]
@@ -66,6 +64,12 @@ pub struct TasksFilterQuery {
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskReverse>)]
     #[param(required = false, value_type = Option<bool>, example = true)]
     pub reverse: Option<Param<bool>>,
+
+    /// Permits to filter tasks by their batch uid. By default, when the `batchUids` query parameter is not set, all task uids are returned. It's possible to specify several batch uids by separating them with the `,` character.
+    #[deserr(default, error = DeserrQueryParamError<InvalidBatchUids>)]
+    #[param(required = false, value_type = Option<BatchId>, example = 12421)]
+    pub batch_uids: OptionStarOrList<BatchId>,
+
     /// Permits to filter tasks by their uid. By default, when the uids query parameter is not set, all task uids are returned. It's possible to specify several uids by separating them with the `,` character.
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskUids>)]
     #[param(required = false, value_type = Option<Vec<u32>>, example = json!([231, 423, 598, "*"]))]
