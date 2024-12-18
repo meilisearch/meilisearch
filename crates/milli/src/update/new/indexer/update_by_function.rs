@@ -108,7 +108,7 @@ impl<'index> DocumentChanges<'index> for UpdateByFunctionChanges<'index> {
         //         their IDs comes from the list of documents ids.
         let compressed_document = index.compressed_document(txn, docid)?.unwrap();
         let document = match db_document_decompression_dictionary {
-            Some(dictionary) => compressed_document.decompress_into_bump(doc_alloc, &dictionary)?,
+            Some(dictionary) => compressed_document.decompress_into_bump(doc_alloc, dictionary)?,
             None => compressed_document.as_non_compressed(),
         };
         let rhai_document = obkv_to_rhaimap(document, db_fields_ids_map)?;

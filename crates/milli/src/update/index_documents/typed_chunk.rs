@@ -213,7 +213,7 @@ pub(crate) fn write_typed_chunk_into_index(
                     match dictionary.as_ref() {
                         Some(dictionary) => {
                             let doc = KvReaderU16::from_slice(&uncompressed_document_bytes);
-                            let compressed = CompressedObkvU16::with_dictionary(&doc, dictionary)?;
+                            let compressed = CompressedObkvU16::with_dictionary(doc, dictionary)?;
                             db.put(wtxn, &docid, compressed.as_bytes())?
                         }
                         None => db.put(wtxn, &docid, &uncompressed_document_bytes)?,

@@ -1370,7 +1370,7 @@ impl Index {
             let (_docid, compressed_obkv) = entry?;
             let obkv = compressed_obkv
                 .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())?;
-            match primary_key.document_id(&obkv, &fields)? {
+            match primary_key.document_id(obkv, &fields)? {
                 Ok(document_id) => Ok(document_id),
                 Err(_) => Err(InternalError::DocumentsError(
                     crate::documents::Error::InvalidDocumentFormat,

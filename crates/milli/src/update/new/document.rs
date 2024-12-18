@@ -137,7 +137,7 @@ impl<'t, Mapper: FieldIdMapper> DocumentFromDb<'t, Mapper> {
         match index.compressed_document(rtxn, docid)? {
             Some(compressed) => {
                 let content = match db_document_decompression_dictionary {
-                    Some(dictionary) => compressed.decompress_into_bump(doc_alloc, &dictionary)?,
+                    Some(dictionary) => compressed.decompress_into_bump(doc_alloc, dictionary)?,
                     None => compressed.as_non_compressed(),
                 };
                 Ok(Some(Self { fields_ids_map: db_fields_ids_map, content }))

@@ -66,7 +66,7 @@ impl<'pl> DocumentChanges<'pl> for DocumentDeletionChanges<'pl> {
     {
         let compressed = context.index.compressed_document(&context.rtxn, *docid)?.unwrap();
         let current = match context.db_document_decompression_dictionary {
-            Some(dict) => compressed.decompress_into_bump(&context.doc_alloc, &dict)?,
+            Some(dict) => compressed.decompress_into_bump(&context.doc_alloc, dict)?,
             None => compressed.as_non_compressed(),
         };
 
@@ -151,11 +151,10 @@ mod test {
         let fields_ids_map =
             RwLock::new(FieldIdMapWithMetadata::new(db_fields_ids_map.clone(), metadata_builder));
 
-        let db_document_decompression_dictionary =
-            match index.document_compression_raw_dictionary(&rtxn).unwrap() {
-                Some(dictionary) => Some(zstd::dict::DecoderDictionary::copy(dictionary)),
-                None => None,
-            };
+        let db_document_decompression_dictionary = index
+            .document_compression_raw_dictionary(&rtxn)
+            .unwrap()
+            .map(zstd::dict::DecoderDictionary::copy);
 
         let fields_ids_map_store = ThreadLocal::new();
         let mut extractor_allocs = ThreadLocal::new();
