@@ -31,6 +31,8 @@ const DICTIONARY_MAX_SIZE: usize = 64_000;
 /// have not already been compressed in the database. If this threshold
 /// is reached, we do not generate a dictionary and continue as is.
 const COMPRESS_LIMIT: usize = 5_000_000;
+/// This is 10KiB.
+const TEN_KIB: usize = 10 * 1024;
 
 /// A function dedicated to use the existing or generate an appropriate
 /// document compression dictionay based on the documents available in
@@ -113,6 +115,16 @@ where
                     "We must have consumed all the documents' \
                     fields but there were some remaining ones"
                 );
+            }
+
+            // We avoid generating a dictionary if most (> 1/3) of the sample sizes are
+            // smaller than 8 bytes, or if the sample data size is smaller than 10KiB.
+            //
+            // <https://github.com/facebook/zstd/blob/0218c8de0fa77bbd87e75f2ea70ba00b93460e15/lib/zdict.h#L190-L209>
+            if sample_sizes.iter().filter(|s| **s < 8).count() > sample_sizes.len() / 3
+                || sample_data.len() < TEN_KIB
+            {
+                return Ok(None);
             }
 
             let dictionary = from_continuous(&sample_data, &sample_sizes, DICTIONARY_MAX_SIZE)?;
