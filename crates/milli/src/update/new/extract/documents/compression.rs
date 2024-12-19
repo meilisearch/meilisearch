@@ -45,6 +45,7 @@ const TEN_KIB: usize = 10 * 1024;
 /// If there are too many documents already in the database and no
 /// compression dictionary we prefer not to generate a dictionary to avoid
 /// compressing all of the documents and potentially blow up disk space.
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::documents")]
 pub fn retrieve_or_compute_document_compression_dictionary<'pl, 'extractor, DC, MSP>(
     index: &Index,
     wtxn: &mut RwTxn<'_>,
