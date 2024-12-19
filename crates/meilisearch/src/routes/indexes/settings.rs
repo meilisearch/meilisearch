@@ -66,7 +66,7 @@ macro_rules! make_setting_route {
 
             #[allow(dead_code)]
             fn verify_setting_exists() {
-                let meilisearch_types::settings::Settings { $attr: _, .. } = 
+                let meilisearch_types::settings::Settings { $attr: _, .. } =
                     meilisearch_types::settings::Settings::<meilisearch_types::settings::Unchecked>::default();
             }
 
