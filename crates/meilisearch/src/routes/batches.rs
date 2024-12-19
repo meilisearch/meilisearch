@@ -74,7 +74,7 @@ async fn get_batches(
     let next = if results.len() == limit as usize { results.pop().map(|t| t.uid) } else { None };
 
     let from = results.first().map(|t| t.uid);
-    let tasks = AllBatches { results, limit: limit.saturating_sub(1) as u32, total, from, next };
+    let tasks = AllBatches { results, limit: limit.saturating_sub(1), total, from, next };
 
     Ok(HttpResponse::Ok().json(tasks))
 }
