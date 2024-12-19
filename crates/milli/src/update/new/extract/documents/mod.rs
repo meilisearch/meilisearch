@@ -166,10 +166,6 @@ impl<'a, 'b, 'extractor> Extractor<'extractor> for DocumentsExtractor<'a, 'b> {
 
                     match document_extractor_data.documents_compressor.as_mut() {
                         Some(compressor) => {
-                            let span =
-                                tracing::trace_span!(target: "indexing::documents", "compress");
-                            let _entered = span.enter();
-
                             let doc = CompressedObkvU16::with_compressor(content, compressor)?;
                             self.document_sender
                                 .write_compressed(docid, external_docid, &doc)
@@ -207,10 +203,6 @@ impl<'a, 'b, 'extractor> Extractor<'extractor> for DocumentsExtractor<'a, 'b> {
                     document_extractor_data.docids_delta.insert_add_u32(docid);
                     match document_extractor_data.documents_compressor.as_mut() {
                         Some(compressor) => {
-                            let span =
-                                tracing::trace_span!(target: "indexing::documents", "compress");
-                            let _entered = span.enter();
-
                             let doc = CompressedObkvU16::with_compressor(content, compressor)?;
                             self.document_sender
                                 .write_compressed(docid, external_docid, &doc)
