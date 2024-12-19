@@ -4,12 +4,12 @@ use std::fmt::{Display, Write};
 use std::str::FromStr;
 
 use enum_iterator::Sequence;
-use milli::update::new::indexer::document_changes::Progress;
 use milli::update::IndexDocumentsMethod;
 use milli::Object;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize, Serializer};
 use time::{Duration, OffsetDateTime};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::batches::BatchId;
@@ -39,62 +39,6 @@ pub struct Task {
 
     pub status: Status,
     pub kind: KindWithContent,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TaskProgress {
-    pub current_step: &'static str,
-    pub finished_steps: u16,
-    pub total_steps: u16,
-    pub finished_substeps: Option<u32>,
-    pub total_substeps: Option<u32>,
-}
-
-impl Default for TaskProgress {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl TaskProgress {
-    pub fn new() -> Self {
-        Self {
-            current_step: "start",
-            finished_steps: 0,
-            total_steps: 1,
-            finished_substeps: None,
-            total_substeps: None,
-        }
-    }
-
-    pub fn update(&mut self, progress: Progress) -> TaskProgress {
-        if self.finished_steps > progress.finished_steps {
-            return *self;
-        }
-
-        if self.current_step != progress.step_name {
-            self.current_step = progress.step_name
-        }
-
-        self.total_steps = progress.total_steps;
-
-        if self.finished_steps < progress.finished_steps {
-            self.finished_substeps = None;
-            self.total_substeps = None;
-        }
-        self.finished_steps = progress.finished_steps;
-        if let Some((finished_substeps, total_substeps)) = progress.finished_total_substep {
-            if let Some(task_finished_substeps) = self.finished_substeps {
-                if task_finished_substeps > finished_substeps {
-                    return *self;
-                }
-            }
-            self.finished_substeps = Some(finished_substeps);
-            self.total_substeps = Some(total_substeps);
-        }
-        *self
-    }
 }
 
 impl Task {
@@ -208,7 +152,7 @@ pub enum KindWithContent {
     SnapshotCreation,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexSwap {
     pub indexes: (String, String),
@@ -420,9 +364,22 @@ impl From<&KindWithContent> for Option<Details> {
     }
 }
 
+/// The status of a task.
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Sequence, PartialOrd, Ord,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    Sequence,
+    PartialOrd,
+    Ord,
+    ToSchema,
 )]
+#[schema(example = json!(Status::Processing))]
 #[serde(rename_all = "camelCase")]
 pub enum Status {
     Enqueued,
@@ -481,10 +438,23 @@ impl fmt::Display for ParseTaskStatusError {
 }
 impl std::error::Error for ParseTaskStatusError {}
 
+/// The type of the task.
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Sequence, PartialOrd, Ord,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    Sequence,
+    PartialOrd,
+    Ord,
+    ToSchema,
 )]
 #[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase", example = json!(enum_iterator::all::<Kind>().collect::<Vec<_>>()))]
 pub enum Kind {
     DocumentAdditionOrUpdate,
     DocumentEdition,
@@ -501,6 +471,10 @@ pub enum Kind {
 }
 
 impl Kind {
+    pub fn all_variants() -> Vec<Self> {
+        enum_iterator::all::<Kind>().collect()
+    }
+
     pub fn related_to_one_index(&self) -> bool {
         match self {
             Kind::DocumentAdditionOrUpdate

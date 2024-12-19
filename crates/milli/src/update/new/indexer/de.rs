@@ -1,6 +1,8 @@
 use std::ops::ControlFlow;
 
 use bumpalo::Bump;
+use bumparaw_collections::RawVec;
+use rustc_hash::FxBuildHasher;
 use serde::de::{DeserializeSeed, Deserializer as _, Visitor};
 use serde_json::value::RawValue;
 
@@ -360,7 +362,7 @@ impl<'a> DeserrRawValue<'a> {
 }
 
 pub struct DeserrRawVec<'a> {
-    vec: raw_collections::RawVec<'a>,
+    vec: RawVec<'a>,
     alloc: &'a Bump,
 }
 
@@ -379,7 +381,7 @@ impl<'a> deserr::Sequence for DeserrRawVec<'a> {
 }
 
 pub struct DeserrRawVecIter<'a> {
-    it: raw_collections::vec::iter::IntoIter<'a>,
+    it: bumparaw_collections::vec::iter::IntoIter<'a>,
     alloc: &'a Bump,
 }
 
@@ -393,7 +395,7 @@ impl<'a> Iterator for DeserrRawVecIter<'a> {
 }
 
 pub struct DeserrRawMap<'a> {
-    map: raw_collections::RawMap<'a>,
+    map: bumparaw_collections::RawMap<'a, FxBuildHasher>,
     alloc: &'a Bump,
 }
 
@@ -416,7 +418,7 @@ impl<'a> deserr::Map for DeserrRawMap<'a> {
 }
 
 pub struct DeserrRawMapIter<'a> {
-    it: raw_collections::map::iter::IntoIter<'a>,
+    it: bumparaw_collections::map::iter::IntoIter<'a>,
     alloc: &'a Bump,
 }
 
@@ -615,7 +617,7 @@ impl<'de> Visitor<'de> for DeserrRawValueVisitor<'de> {
     where
         A: serde::de::SeqAccess<'de>,
     {
-        let mut raw_vec = raw_collections::RawVec::new_in(self.alloc);
+        let mut raw_vec = RawVec::new_in(self.alloc);
         while let Some(next) = seq.next_element()? {
             raw_vec.push(next);
         }

@@ -1,18 +1,18 @@
-use actix_web::{
-    web::{self, Data},
-    HttpResponse,
-};
+use actix_web::web::{self, Data};
+use actix_web::HttpResponse;
 use deserr::actix_web::AwebQueryParameter;
 use index_scheduler::{IndexScheduler, Query};
-use meilisearch_types::{
-    batch_view::BatchView, batches::BatchId, deserr::DeserrQueryParamError, error::ResponseError,
-    keys::actions,
-};
+use meilisearch_types::batch_view::BatchView;
+use meilisearch_types::batches::BatchId;
+use meilisearch_types::deserr::DeserrQueryParamError;
+use meilisearch_types::error::ResponseError;
+use meilisearch_types::keys::actions;
 use serde::Serialize;
 
-use crate::extractors::{authentication::GuardedData, sequential_extractor::SeqHandler};
-
-use super::{tasks::TasksFilterQuery, ActionPolicy};
+use super::tasks::TasksFilterQuery;
+use super::ActionPolicy;
+use crate::extractors::authentication::GuardedData;
+use crate::extractors::sequential_extractor::SeqHandler;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::resource("").route(web::get().to(SeqHandler(get_batches))))
@@ -74,7 +74,7 @@ async fn get_batches(
     let next = if results.len() == limit as usize { results.pop().map(|t| t.uid) } else { None };
 
     let from = results.first().map(|t| t.uid);
-    let tasks = AllBatches { results, limit: limit.saturating_sub(1), total, from, next };
+    let tasks = AllBatches { results, limit: limit.saturating_sub(1) as u32, total, from, next };
 
     Ok(HttpResponse::Ok().json(tasks))
 }

@@ -9,7 +9,7 @@ use crate::{Index, Result, SmallString32};
 pub struct WordsPrefixesFst<'t, 'i> {
     wtxn: &'t mut RwTxn<'i>,
     index: &'i Index,
-    threshold: u32,
+    threshold: usize,
     max_prefix_length: usize,
 }
 
@@ -24,8 +24,8 @@ impl<'t, 'i> WordsPrefixesFst<'t, 'i> {
     ///
     /// Default value is 100. This value must be higher than 50 and will be clamped
     /// to this bound otherwise.
-    pub fn threshold(&mut self, value: u32) -> &mut Self {
-        self.threshold = value.max(50);
+    pub fn threshold(&mut self, value: usize) -> &mut Self {
+        self.threshold = value;
         self
     }
 
@@ -34,7 +34,7 @@ impl<'t, 'i> WordsPrefixesFst<'t, 'i> {
     /// Default value is `4` bytes. This value must be between 1 and 25 will be clamped
     /// to these bounds, otherwise.
     pub fn max_prefix_length(&mut self, value: usize) -> &mut Self {
-        self.max_prefix_length = value.clamp(1, 25);
+        self.max_prefix_length = value;
         self
     }
 

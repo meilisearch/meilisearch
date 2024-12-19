@@ -10,6 +10,7 @@ use bumpalo::Bump;
 use criterion::BenchmarkId;
 use memmap2::Mmap;
 use milli::heed::EnvOpenOptions;
+use milli::progress::Progress;
 use milli::update::new::indexer;
 use milli::update::{IndexDocumentsMethod, IndexerConfig, Settings};
 use milli::vector::EmbeddingConfigs;
@@ -110,13 +111,14 @@ pub fn base_setup(conf: &Conf) -> Index {
             None,
             &mut new_fields_ids_map,
             &|| false,
-            &|_progress| (),
+            Progress::default(),
         )
         .unwrap();
 
     indexer::index(
         &mut wtxn,
         &index,
+        &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
         config.grenad_parameters(),
         &db_fields_ids_map,
         new_fields_ids_map,
@@ -124,7 +126,7 @@ pub fn base_setup(conf: &Conf) -> Index {
         &document_changes,
         EmbeddingConfigs::default(),
         &|| false,
-        &|_| (),
+        &Progress::default(),
     )
     .unwrap();
 

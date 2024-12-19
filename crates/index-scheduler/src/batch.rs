@@ -22,27 +22,26 @@ use std::ffi::OsStr;
 use std::fmt;
 use std::fs::{self, File};
 use std::io::BufWriter;
-use std::sync::atomic::{self, AtomicU64};
-use std::time::Duration;
+use std::sync::atomic::Ordering;
 
 use bumpalo::collections::CollectIn;
 use bumpalo::Bump;
 use dump::IndexMetadata;
 use meilisearch_types::batches::BatchId;
-use meilisearch_types::error::Code;
 use meilisearch_types::heed::{RoTxn, RwTxn};
 use meilisearch_types::milli::documents::{obkv_to_object, DocumentsBatchReader, PrimaryKey};
 use meilisearch_types::milli::heed::CompactionOption;
+use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::update::new::indexer::{self, UpdateByFunction};
-use meilisearch_types::milli::update::{IndexDocumentsMethod, Settings as MilliSettings};
+use meilisearch_types::milli::update::{
+    DocumentAdditionResult, IndexDocumentsMethod, Settings as MilliSettings,
+};
 use meilisearch_types::milli::vector::parsed_vectors::{
     ExplicitVectors, VectorOrArrayOfVectors, RESERVED_VECTORS_FIELD_NAME,
 };
 use meilisearch_types::milli::{self, Filter, ThreadPoolNoAbortBuilder};
 use meilisearch_types::settings::{apply_settings_to_builder, Settings, Unchecked};
-use meilisearch_types::tasks::{
-    Details, IndexSwap, Kind, KindWithContent, Status, Task, TaskProgress,
-};
+use meilisearch_types::tasks::{Details, IndexSwap, Kind, KindWithContent, Status, Task};
 use meilisearch_types::{compression, Index, VERSION_FILE_NAME};
 use roaring::RoaringBitmap;
 use time::macros::format_description;
@@ -50,6 +49,13 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::autobatcher::{self, BatchKind};
+use crate::processing::{
+    AtomicBatchStep, AtomicDocumentStep, AtomicTaskStep, AtomicUpdateFileStep, CreateIndexProgress,
+    DeleteIndexProgress, DocumentDeletionProgress, DocumentEditionProgress,
+    DocumentOperationProgress, DumpCreationProgress, InnerSwappingTwoIndexes, SettingsProgress,
+    SnapshotCreationProgress, SwappingTheIndexes, TaskCancelationProgress, TaskDeletionProgress,
+    UpdateIndexProgress, VariableNameStep,
+};
 use crate::utils::{self, swap_index_uid_in_task, ProcessingBatch};
 use crate::{Error, IndexScheduler, Result, TaskId};
 
@@ -104,7 +110,6 @@ pub(crate) enum IndexOperation {
         index_uid: String,
         primary_key: Option<String>,
         method: IndexDocumentsMethod,
-        documents_counts: Vec<u64>,
         operations: Vec<DocumentOperation>,
         tasks: Vec<Task>,
     },
@@ -129,19 +134,6 @@ pub(crate) enum IndexOperation {
     DocumentClearAndSetting {
         index_uid: String,
         cleared_tasks: Vec<Task>,
-
-        // The boolean indicates if it's a settings deletion or creation.
-        settings: Vec<(bool, Settings<Unchecked>)>,
-        settings_tasks: Vec<Task>,
-    },
-    SettingsAndDocumentOperation {
-        index_uid: String,
-
-        primary_key: Option<String>,
-        method: IndexDocumentsMethod,
-        documents_counts: Vec<u64>,
-        operations: Vec<DocumentOperation>,
-        document_import_tasks: Vec<Task>,
 
         // The boolean indicates if it's a settings deletion or creation.
         settings: Vec<(bool, Settings<Unchecked>)>,
@@ -174,12 +166,7 @@ impl Batch {
                 IndexOperation::DocumentEdition { task, .. } => {
                     RoaringBitmap::from_sorted_iter(std::iter::once(task.uid)).unwrap()
                 }
-                IndexOperation::SettingsAndDocumentOperation {
-                    document_import_tasks: tasks,
-                    settings_tasks: other,
-                    ..
-                }
-                | IndexOperation::DocumentClearAndSetting {
+                IndexOperation::DocumentClearAndSetting {
                     cleared_tasks: tasks,
                     settings_tasks: other,
                     ..
@@ -239,8 +226,7 @@ impl IndexOperation {
             | IndexOperation::DocumentDeletion { index_uid, .. }
             | IndexOperation::DocumentClear { index_uid, .. }
             | IndexOperation::Settings { index_uid, .. }
-            | IndexOperation::DocumentClearAndSetting { index_uid, .. }
-            | IndexOperation::SettingsAndDocumentOperation { index_uid, .. } => index_uid,
+            | IndexOperation::DocumentClearAndSetting { index_uid, .. } => index_uid,
         }
     }
 }
@@ -261,9 +247,6 @@ impl fmt::Display for IndexOperation {
             IndexOperation::Settings { .. } => f.write_str("IndexOperation::Settings"),
             IndexOperation::DocumentClearAndSetting { .. } => {
                 f.write_str("IndexOperation::DocumentClearAndSetting")
-            }
-            IndexOperation::SettingsAndDocumentOperation { .. } => {
-                f.write_str("IndexOperation::SettingsAndDocumentOperation")
             }
         }
     }
@@ -330,21 +313,14 @@ impl IndexScheduler {
                     })
                     .flatten();
 
-                let mut documents_counts = Vec::new();
                 let mut operations = Vec::new();
 
                 for task in tasks.iter() {
                     match task.kind {
-                        KindWithContent::DocumentAdditionOrUpdate {
-                            content_file,
-                            documents_count,
-                            ..
-                        } => {
-                            documents_counts.push(documents_count);
+                        KindWithContent::DocumentAdditionOrUpdate { content_file, .. } => {
                             operations.push(DocumentOperation::Add(content_file));
                         }
                         KindWithContent::DocumentDeletion { ref documents_ids, .. } => {
-                            documents_counts.push(documents_ids.len() as u64);
                             operations.push(DocumentOperation::Delete(documents_ids.clone()));
                         }
                         _ => unreachable!(),
@@ -356,7 +332,6 @@ impl IndexScheduler {
                         index_uid,
                         primary_key,
                         method,
-                        documents_counts,
                         operations,
                         tasks,
                     },
@@ -440,67 +415,6 @@ impl IndexScheduler {
                     },
                     must_create_index,
                 }))
-            }
-            BatchKind::SettingsAndDocumentOperation {
-                settings_ids,
-                method,
-                allow_index_creation,
-                primary_key,
-                operation_ids,
-            } => {
-                let settings = self.create_next_batch_index(
-                    rtxn,
-                    index_uid.clone(),
-                    BatchKind::Settings { settings_ids, allow_index_creation },
-                    current_batch,
-                    must_create_index,
-                )?;
-
-                let document_import = self.create_next_batch_index(
-                    rtxn,
-                    index_uid.clone(),
-                    BatchKind::DocumentOperation {
-                        method,
-                        allow_index_creation,
-                        primary_key,
-                        operation_ids,
-                    },
-                    current_batch,
-                    must_create_index,
-                )?;
-
-                match (document_import, settings) {
-                    (
-                        Some(Batch::IndexOperation {
-                            op:
-                                IndexOperation::DocumentOperation {
-                                    primary_key,
-                                    documents_counts,
-                                    operations,
-                                    tasks: document_import_tasks,
-                                    ..
-                                },
-                            ..
-                        }),
-                        Some(Batch::IndexOperation {
-                            op: IndexOperation::Settings { settings, tasks: settings_tasks, .. },
-                            ..
-                        }),
-                    ) => Ok(Some(Batch::IndexOperation {
-                        op: IndexOperation::SettingsAndDocumentOperation {
-                            index_uid,
-                            primary_key,
-                            method,
-                            documents_counts,
-                            operations,
-                            document_import_tasks,
-                            settings,
-                            settings_tasks,
-                        },
-                        must_create_index,
-                    })),
-                    _ => unreachable!(),
-                }
             }
             BatchKind::IndexCreation { id } => {
                 let mut task = self.get_task(rtxn, id)?.ok_or(Error::CorruptedTaskQueue)?;
@@ -589,7 +503,6 @@ impl IndexScheduler {
         // 5. We make a batch from the unprioritised tasks. Start by taking the next enqueued task.
         let task_id = if let Some(task_id) = enqueued.min() { task_id } else { return Ok(None) };
         let mut task = self.get_task(rtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
-        current_batch.processing(Some(&mut task));
 
         // If the task is not associated with any index, verify that it is an index swap and
         // create the batch directly. Otherwise, get the index name associated with the task
@@ -599,6 +512,7 @@ impl IndexScheduler {
             index_name
         } else {
             assert!(matches!(&task.kind, KindWithContent::IndexSwap { swaps } if swaps.is_empty()));
+            current_batch.processing(Some(&mut task));
             return Ok(Some((Batch::IndexSwap { task }, current_batch)));
         };
 
@@ -652,11 +566,12 @@ impl IndexScheduler {
     /// The list of tasks that were processed. The metadata of each task in the returned
     /// list is updated accordingly, with the exception of the its date fields
     /// [`finished_at`](meilisearch_types::tasks::Task::finished_at) and [`started_at`](meilisearch_types::tasks::Task::started_at).
-    #[tracing::instrument(level = "trace", skip(self, batch), target = "indexing::scheduler", fields(batch=batch.to_string()))]
+    #[tracing::instrument(level = "trace", skip(self, batch, progress), target = "indexing::scheduler", fields(batch=batch.to_string()))]
     pub(crate) fn process_batch(
         &self,
         batch: Batch,
         current_batch: &mut ProcessingBatch,
+        progress: Progress,
     ) -> Result<Vec<Task>> {
         #[cfg(test)]
         {
@@ -676,8 +591,13 @@ impl IndexScheduler {
                     };
 
                 let rtxn = self.env.read_txn()?;
-                let mut canceled_tasks =
-                    self.cancel_matched_tasks(&rtxn, task.uid, current_batch, matched_tasks)?;
+                let mut canceled_tasks = self.cancel_matched_tasks(
+                    &rtxn,
+                    task.uid,
+                    current_batch,
+                    matched_tasks,
+                    &progress,
+                )?;
 
                 task.status = Status::Succeeded;
                 match &mut task.details {
@@ -708,7 +628,8 @@ impl IndexScheduler {
                 }
 
                 let mut wtxn = self.env.write_txn()?;
-                let mut deleted_tasks = self.delete_matched_tasks(&mut wtxn, &matched_tasks)?;
+                let mut deleted_tasks =
+                    self.delete_matched_tasks(&mut wtxn, &matched_tasks, &progress)?;
                 wtxn.commit()?;
 
                 for task in tasks.iter_mut() {
@@ -734,6 +655,8 @@ impl IndexScheduler {
                 Ok(tasks)
             }
             Batch::SnapshotCreation(mut tasks) => {
+                progress.update_progress(SnapshotCreationProgress::StartTheSnapshotCreation);
+
                 fs::create_dir_all(&self.snapshots_path)?;
                 let temp_snapshot_dir = tempfile::tempdir()?;
 
@@ -754,6 +677,7 @@ impl IndexScheduler {
                 // two read operations as the task processing is synchronous.
 
                 // 2.1 First copy the LMDB env of the index-scheduler
+                progress.update_progress(SnapshotCreationProgress::SnapshotTheIndexScheduler);
                 let dst = temp_snapshot_dir.path().join("tasks");
                 fs::create_dir_all(&dst)?;
                 self.env.copy_to_file(dst.join("data.mdb"), CompactionOption::Enabled)?;
@@ -766,27 +690,41 @@ impl IndexScheduler {
                 fs::create_dir_all(&update_files_dir)?;
 
                 // 2.4 Only copy the update files of the enqueued tasks
-                for task_id in self.get_status(&rtxn, Status::Enqueued)? {
+                progress.update_progress(SnapshotCreationProgress::SnapshotTheUpdateFiles);
+                let enqueued = self.get_status(&rtxn, Status::Enqueued)?;
+                let (atomic, update_file_progress) =
+                    AtomicUpdateFileStep::new(enqueued.len() as u32);
+                progress.update_progress(update_file_progress);
+                for task_id in enqueued {
                     let task = self.get_task(&rtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
                     if let Some(content_uuid) = task.content_uuid() {
                         let src = self.file_store.get_update_path(content_uuid);
                         let dst = update_files_dir.join(content_uuid.to_string());
                         fs::copy(src, dst)?;
                     }
+                    atomic.fetch_add(1, Ordering::Relaxed);
                 }
 
                 // 3. Snapshot every indexes
-                for result in self.index_mapper.index_mapping.iter(&rtxn)? {
+                progress.update_progress(SnapshotCreationProgress::SnapshotTheIndexes);
+                let index_mapping = self.index_mapper.index_mapping;
+                let nb_indexes = index_mapping.len(&rtxn)? as u32;
+
+                for (i, result) in index_mapping.iter(&rtxn)?.enumerate() {
                     let (name, uuid) = result?;
+                    progress.update_progress(VariableNameStep::new(name, i as u32, nb_indexes));
                     let index = self.index_mapper.index(&rtxn, name)?;
                     let dst = temp_snapshot_dir.path().join("indexes").join(uuid.to_string());
                     fs::create_dir_all(&dst)?;
-                    index.copy_to_file(dst.join("data.mdb"), CompactionOption::Enabled)?;
+                    index
+                        .copy_to_file(dst.join("data.mdb"), CompactionOption::Enabled)
+                        .map_err(|e| Error::from_milli(e, Some(name.to_string())))?;
                 }
 
                 drop(rtxn);
 
                 // 4. Snapshot the auth LMDB env
+                progress.update_progress(SnapshotCreationProgress::SnapshotTheApiKeys);
                 let dst = temp_snapshot_dir.path().join("auth");
                 fs::create_dir_all(&dst)?;
                 // TODO We can't use the open_auth_store_env function here but we should
@@ -799,6 +737,7 @@ impl IndexScheduler {
                 auth.copy_to_file(dst.join("data.mdb"), CompactionOption::Enabled)?;
 
                 // 5. Copy and tarball the flat snapshot
+                progress.update_progress(SnapshotCreationProgress::CreateTheTarball);
                 // 5.1 Find the original name of the database
                 // TODO find a better way to get this path
                 let mut base_path = self.env.path().to_owned();
@@ -831,6 +770,7 @@ impl IndexScheduler {
                 Ok(tasks)
             }
             Batch::Dump(mut task) => {
+                progress.update_progress(DumpCreationProgress::StartTheDumpCreation);
                 let started_at = OffsetDateTime::now_utc();
                 let (keys, instance_uid) =
                     if let KindWithContent::DumpCreation { keys, instance_uid } = &task.kind {
@@ -841,6 +781,7 @@ impl IndexScheduler {
                 let dump = dump::DumpWriter::new(*instance_uid)?;
 
                 // 1. dump the keys
+                progress.update_progress(DumpCreationProgress::DumpTheApiKeys);
                 let mut dump_keys = dump.create_keys()?;
                 for key in keys {
                     dump_keys.push_key(key)?;
@@ -850,7 +791,13 @@ impl IndexScheduler {
                 let rtxn = self.env.read_txn()?;
 
                 // 2. dump the tasks
+                progress.update_progress(DumpCreationProgress::DumpTheTasks);
                 let mut dump_tasks = dump.create_tasks_queue()?;
+
+                let (atomic, update_task_progress) =
+                    AtomicTaskStep::new(self.all_tasks.len(&rtxn)? as u32);
+                progress.update_progress(update_task_progress);
+
                 for ret in self.all_tasks.iter(&rtxn)? {
                     if self.must_stop_processing.get() {
                         return Err(Error::AbortedTask);
@@ -883,50 +830,84 @@ impl IndexScheduler {
                             let content_file = self.file_store.get_update(content_file)?;
 
                             let reader = DocumentsBatchReader::from_reader(content_file)
-                                .map_err(milli::Error::from)?;
+                                .map_err(|e| Error::from_milli(e.into(), None))?;
 
                             let (mut cursor, documents_batch_index) =
                                 reader.into_cursor_and_fields_index();
 
-                            while let Some(doc) =
-                                cursor.next_document().map_err(milli::Error::from)?
+                            while let Some(doc) = cursor
+                                .next_document()
+                                .map_err(|e| Error::from_milli(e.into(), None))?
                             {
-                                dump_content_file
-                                    .push_document(&obkv_to_object(doc, &documents_batch_index)?)?;
+                                dump_content_file.push_document(
+                                    &obkv_to_object(doc, &documents_batch_index)
+                                        .map_err(|e| Error::from_milli(e, None))?,
+                                )?;
                             }
                             dump_content_file.flush()?;
                         }
                     }
+                    atomic.fetch_add(1, Ordering::Relaxed);
                 }
                 dump_tasks.flush()?;
 
                 // 3. Dump the indexes
+                progress.update_progress(DumpCreationProgress::DumpTheIndexes);
+                let nb_indexes = self.index_mapper.index_mapping.len(&rtxn)? as u32;
+                let mut count = 0;
                 self.index_mapper.try_for_each_index(&rtxn, |uid, index| -> Result<()> {
+                    progress.update_progress(VariableNameStep::new(
+                        uid.to_string(),
+                        count,
+                        nb_indexes,
+                    ));
+                    count += 1;
+
                     let rtxn = index.read_txn()?;
                     let metadata = IndexMetadata {
                         uid: uid.to_owned(),
                         primary_key: index.primary_key(&rtxn)?.map(String::from),
-                        created_at: index.created_at(&rtxn)?,
-                        updated_at: index.updated_at(&rtxn)?,
+                        created_at: index
+                            .created_at(&rtxn)
+                            .map_err(|e| Error::from_milli(e, Some(uid.to_string())))?,
+                        updated_at: index
+                            .updated_at(&rtxn)
+                            .map_err(|e| Error::from_milli(e, Some(uid.to_string())))?,
                     };
                     let mut index_dumper = dump.create_index(uid, &metadata)?;
 
                     let fields_ids_map = index.fields_ids_map(&rtxn)?;
                     let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
-                    let embedding_configs = index.embedding_configs(&rtxn)?;
+                    let embedding_configs = index
+                        .embedding_configs(&rtxn)
+                        .map_err(|e| Error::from_milli(e, Some(uid.to_string())))?;
 
+                    let nb_documents = index
+                        .number_of_documents(&rtxn)
+                        .map_err(|e| Error::from_milli(e, Some(uid.to_string())))?
+                        as u32;
+                    let (atomic, update_document_progress) = AtomicDocumentStep::new(nb_documents);
+                    progress.update_progress(update_document_progress);
+                    let documents = index
+                        .all_documents(&rtxn)
+                        .map_err(|e| Error::from_milli(e, Some(uid.to_string())))?;
                     // 3.1. Dump the documents
-                    for ret in index.all_documents(&rtxn)? {
+                    for ret in documents {
                         if self.must_stop_processing.get() {
                             return Err(Error::AbortedTask);
                         }
 
-                        let (id, doc) = ret?;
+                        let (id, doc) =
+                            ret.map_err(|e| Error::from_milli(e, Some(uid.to_string())))?;
 
-                        let mut document = milli::obkv_to_json(&all_fields, &fields_ids_map, doc)?;
+                        let mut document =
+                            milli::obkv_to_json(&all_fields, &fields_ids_map, doc)
+                                .map_err(|e| Error::from_milli(e, Some(uid.to_string())))?;
 
                         'inject_vectors: {
-                            let embeddings = index.embeddings(&rtxn, id)?;
+                            let embeddings = index
+                                .embeddings(&rtxn, id)
+                                .map_err(|e| Error::from_milli(e, Some(uid.to_string())))?;
 
                             if embeddings.is_empty() {
                                 break 'inject_vectors;
@@ -937,7 +918,7 @@ impl IndexScheduler {
                                 .or_insert(serde_json::Value::Object(Default::default()));
 
                             let serde_json::Value::Object(vectors) = vectors else {
-                                return Err(milli::Error::UserError(
+                                let user_err = milli::Error::UserError(
                                     milli::UserError::InvalidVectorsMapType {
                                         document_id: {
                                             if let Ok(Some(Ok(index))) = index
@@ -951,8 +932,9 @@ impl IndexScheduler {
                                         },
                                         value: vectors.clone(),
                                     },
-                                )
-                                .into());
+                                );
+
+                                return Err(Error::from_milli(user_err, Some(uid.to_string())));
                             };
 
                             for (embedder_name, embeddings) in embeddings {
@@ -975,6 +957,7 @@ impl IndexScheduler {
                         }
 
                         index_dumper.push_document(&document)?;
+                        atomic.fetch_add(1, Ordering::Relaxed);
                     }
 
                     // 3.2. Dump the settings
@@ -982,12 +965,14 @@ impl IndexScheduler {
                         index,
                         &rtxn,
                         meilisearch_types::settings::SecretPolicy::RevealSecrets,
-                    )?;
+                    )
+                    .map_err(|e| Error::from_milli(e, Some(uid.to_string())))?;
                     index_dumper.settings(&settings)?;
                     Ok(())
                 })?;
 
                 // 4. Dump experimental feature settings
+                progress.update_progress(DumpCreationProgress::DumpTheExperimentalFeatures);
                 let features = self.features().runtime_features();
                 dump.create_experimental_features(features)?;
 
@@ -998,6 +983,7 @@ impl IndexScheduler {
                 if self.must_stop_processing.get() {
                     return Err(Error::AbortedTask);
                 }
+                progress.update_progress(DumpCreationProgress::CompressTheDump);
                 let path = self.dumps_path.join(format!("{}.dump", dump_uid));
                 let file = File::create(path)?;
                 dump.persist_to(BufWriter::new(file))?;
@@ -1023,8 +1009,14 @@ impl IndexScheduler {
                     .set_currently_updating_index(Some((index_uid.clone(), index.clone())));
 
                 let mut index_wtxn = index.write_txn()?;
-                let tasks = self.apply_index_operation(&mut index_wtxn, &index, op)?;
-                index_wtxn.commit()?;
+                let tasks = self.apply_index_operation(&mut index_wtxn, &index, op, progress)?;
+
+                {
+                    let span = tracing::trace_span!(target: "indexing::scheduler", "commit");
+                    let _entered = span.enter();
+
+                    index_wtxn.commit()?;
+                }
 
                 // if the update processed successfully, we're going to store the new
                 // stats of the index. Since the tasks have already been processed and
@@ -1032,7 +1024,8 @@ impl IndexScheduler {
                 // the entire batch.
                 let res = || -> Result<()> {
                     let index_rtxn = index.read_txn()?;
-                    let stats = crate::index_mapper::IndexStats::new(&index, &index_rtxn)?;
+                    let stats = crate::index_mapper::IndexStats::new(&index, &index_rtxn)
+                        .map_err(|e| Error::from_milli(e, Some(index_uid.to_string())))?;
                     let mut wtxn = self.env.write_txn()?;
                     self.index_mapper.store_stats_of(&mut wtxn, &index_uid, &stats)?;
                     wtxn.commit()?;
@@ -1050,6 +1043,8 @@ impl IndexScheduler {
                 Ok(tasks)
             }
             Batch::IndexCreation { index_uid, primary_key, task } => {
+                progress.update_progress(CreateIndexProgress::CreatingTheIndex);
+
                 let wtxn = self.env.write_txn()?;
                 if self.index_mapper.exists(&wtxn, &index_uid)? {
                     return Err(Error::IndexAlreadyExists(index_uid));
@@ -1059,9 +1054,11 @@ impl IndexScheduler {
                 self.process_batch(
                     Batch::IndexUpdate { index_uid, primary_key, task },
                     current_batch,
+                    progress,
                 )
             }
             Batch::IndexUpdate { index_uid, primary_key, mut task } => {
+                progress.update_progress(UpdateIndexProgress::UpdatingTheIndex);
                 let rtxn = self.env.read_txn()?;
                 let index = self.index_mapper.index(&rtxn, &index_uid)?;
 
@@ -1074,10 +1071,12 @@ impl IndexScheduler {
                     );
                     builder.set_primary_key(primary_key);
                     let must_stop_processing = self.must_stop_processing.clone();
-                    builder.execute(
-                        |indexing_step| tracing::debug!(update = ?indexing_step),
-                        || must_stop_processing.get(),
-                    )?;
+                    builder
+                        .execute(
+                            |indexing_step| tracing::debug!(update = ?indexing_step),
+                            || must_stop_processing.get(),
+                        )
+                        .map_err(|e| Error::from_milli(e, Some(index_uid.to_string())))?;
                     index_wtxn.commit()?;
                 }
 
@@ -1094,7 +1093,8 @@ impl IndexScheduler {
                 let res = || -> Result<()> {
                     let mut wtxn = self.env.write_txn()?;
                     let index_rtxn = index.read_txn()?;
-                    let stats = crate::index_mapper::IndexStats::new(&index, &index_rtxn)?;
+                    let stats = crate::index_mapper::IndexStats::new(&index, &index_rtxn)
+                        .map_err(|e| Error::from_milli(e, Some(index_uid.clone())))?;
                     self.index_mapper.store_stats_of(&mut wtxn, &index_uid, &stats)?;
                     wtxn.commit()?;
                     Ok(())
@@ -1111,13 +1111,16 @@ impl IndexScheduler {
                 Ok(vec![task])
             }
             Batch::IndexDeletion { index_uid, index_has_been_created, mut tasks } => {
+                progress.update_progress(DeleteIndexProgress::DeletingTheIndex);
                 let wtxn = self.env.write_txn()?;
 
                 // it's possible that the index doesn't exist
                 let number_of_documents = || -> Result<u64> {
                     let index = self.index_mapper.index(&wtxn, &index_uid)?;
                     let index_rtxn = index.read_txn()?;
-                    Ok(index.number_of_documents(&index_rtxn)?)
+                    index
+                        .number_of_documents(&index_rtxn)
+                        .map_err(|e| Error::from_milli(e, Some(index_uid.to_string())))
                 }()
                 .unwrap_or_default();
 
@@ -1142,6 +1145,8 @@ impl IndexScheduler {
                 Ok(tasks)
             }
             Batch::IndexSwap { mut task } => {
+                progress.update_progress(SwappingTheIndexes::EnsuringCorrectnessOfTheSwap);
+
                 let mut wtxn = self.env.write_txn()?;
                 let swaps = if let KindWithContent::IndexSwap { swaps } = &task.kind {
                     swaps
@@ -1168,8 +1173,20 @@ impl IndexScheduler {
                         ));
                     }
                 }
-                for swap in swaps {
-                    self.apply_index_swap(&mut wtxn, task.uid, &swap.indexes.0, &swap.indexes.1)?;
+                progress.update_progress(SwappingTheIndexes::SwappingTheIndexes);
+                for (step, swap) in swaps.iter().enumerate() {
+                    progress.update_progress(VariableNameStep::new(
+                        format!("swapping index {} and {}", swap.indexes.0, swap.indexes.1),
+                        step as u32,
+                        swaps.len() as u32,
+                    ));
+                    self.apply_index_swap(
+                        &mut wtxn,
+                        &progress,
+                        task.uid,
+                        &swap.indexes.0,
+                        &swap.indexes.1,
+                    )?;
                 }
                 wtxn.commit()?;
                 task.status = Status::Succeeded;
@@ -1179,7 +1196,15 @@ impl IndexScheduler {
     }
 
     /// Swap the index `lhs` with the index `rhs`.
-    fn apply_index_swap(&self, wtxn: &mut RwTxn, task_id: u32, lhs: &str, rhs: &str) -> Result<()> {
+    fn apply_index_swap(
+        &self,
+        wtxn: &mut RwTxn,
+        progress: &Progress,
+        task_id: u32,
+        lhs: &str,
+        rhs: &str,
+    ) -> Result<()> {
+        progress.update_progress(InnerSwappingTwoIndexes::RetrieveTheTasks);
         // 1. Verify that both lhs and rhs are existing indexes
         let index_lhs_exists = self.index_mapper.index_exists(wtxn, lhs)?;
         if !index_lhs_exists {
@@ -1197,14 +1222,21 @@ impl IndexScheduler {
         index_rhs_task_ids.remove_range(task_id..);
 
         // 3. before_name -> new_name in the task's KindWithContent
-        for task_id in &index_lhs_task_ids | &index_rhs_task_ids {
+        progress.update_progress(InnerSwappingTwoIndexes::UpdateTheTasks);
+        let tasks_to_update = &index_lhs_task_ids | &index_rhs_task_ids;
+        let (atomic, task_progress) = AtomicTaskStep::new(tasks_to_update.len() as u32);
+        progress.update_progress(task_progress);
+
+        for task_id in tasks_to_update {
             let mut task = self.get_task(wtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
             swap_index_uid_in_task(&mut task, (lhs, rhs));
             self.all_tasks.put(wtxn, &task_id, &task)?;
+            atomic.fetch_add(1, Ordering::Relaxed);
         }
 
         // 4. remove the task from indexuid = before_name
         // 5. add the task to indexuid = after_name
+        progress.update_progress(InnerSwappingTwoIndexes::UpdateTheIndexesMetadata);
         self.update_index(wtxn, lhs, |lhs_tasks| {
             *lhs_tasks -= &index_lhs_task_ids;
             *lhs_tasks |= &index_rhs_task_ids;
@@ -1226,7 +1258,7 @@ impl IndexScheduler {
     /// The list of processed tasks.
     #[tracing::instrument(
         level = "trace",
-        skip(self, index_wtxn, index),
+        skip(self, index_wtxn, index, progress),
         target = "indexing::scheduler"
     )]
     fn apply_index_operation<'i>(
@@ -1234,48 +1266,18 @@ impl IndexScheduler {
         index_wtxn: &mut RwTxn<'i>,
         index: &'i Index,
         operation: IndexOperation,
+        progress: Progress,
     ) -> Result<Vec<Task>> {
         let indexer_alloc = Bump::new();
 
         let started_processing_at = std::time::Instant::now();
-        let secs_since_started_processing_at = AtomicU64::new(0);
-        const PRINT_SECS_DELTA: u64 = 5;
-
-        let processing_tasks = self.processing_tasks.clone();
         let must_stop_processing = self.must_stop_processing.clone();
-        let send_progress = |progress| {
-            let now = std::time::Instant::now();
-            let elapsed = secs_since_started_processing_at.load(atomic::Ordering::Relaxed);
-            let previous = started_processing_at + Duration::from_secs(elapsed);
-            let elapsed = now - previous;
-
-            if elapsed.as_secs() < PRINT_SECS_DELTA {
-                return;
-            }
-
-            secs_since_started_processing_at
-                .store((now - started_processing_at).as_secs(), atomic::Ordering::Relaxed);
-
-            let TaskProgress {
-                current_step,
-                finished_steps,
-                total_steps,
-                finished_substeps,
-                total_substeps,
-            } = processing_tasks.write().unwrap().update_progress(progress);
-
-            tracing::info!(
-                current_step,
-                finished_steps,
-                total_steps,
-                finished_substeps,
-                total_substeps
-            );
-        };
 
         match operation {
-            IndexOperation::DocumentClear { mut tasks, .. } => {
-                let count = milli::update::ClearDocuments::new(index_wtxn, index).execute()?;
+            IndexOperation::DocumentClear { index_uid, mut tasks } => {
+                let count = milli::update::ClearDocuments::new(index_wtxn, index)
+                    .execute()
+                    .map_err(|e| Error::from_milli(e, Some(index_uid)))?;
 
                 let mut first_clear_found = false;
                 for task in &mut tasks {
@@ -1295,13 +1297,13 @@ impl IndexScheduler {
                 Ok(tasks)
             }
             IndexOperation::DocumentOperation {
-                index_uid: _,
+                index_uid,
                 primary_key,
                 method,
-                documents_counts: _,
                 operations,
                 mut tasks,
             } => {
+                progress.update_progress(DocumentOperationProgress::RetrievingConfig);
                 // TODO: at some point, for better efficiency we might want to reuse the bumpalo for successive batches.
                 // this is made difficult by the fact we're doing private clones of the index scheduler and sending it
                 // to a fresh thread.
@@ -1322,13 +1324,17 @@ impl IndexScheduler {
 
                 let mut content_files_iter = content_files.iter();
                 let mut indexer = indexer::DocumentOperation::new(method);
-                let embedders = index.embedding_configs(index_wtxn)?;
-                let embedders = self.embedders(embedders)?;
+                let embedders = index
+                    .embedding_configs(index_wtxn)
+                    .map_err(|e| Error::from_milli(e, Some(index_uid.clone())))?;
+                let embedders = self.embedders(index_uid.clone(), embedders)?;
                 for operation in operations {
                     match operation {
                         DocumentOperation::Add(_content_uuid) => {
                             let mmap = content_files_iter.next().unwrap();
-                            indexer.add_documents(mmap)?;
+                            indexer
+                                .add_documents(mmap)
+                                .map_err(|e| Error::from_milli(e, Some(index_uid.clone())))?;
                         }
                         DocumentOperation::Delete(document_ids) => {
                             let document_ids: bumpalo::collections::vec::Vec<_> = document_ids
@@ -1345,24 +1351,30 @@ impl IndexScheduler {
                 let pool = match &indexer_config.thread_pool {
                     Some(pool) => pool,
                     None => {
-                        local_pool = ThreadPoolNoAbortBuilder::new().build().unwrap();
+                        local_pool = ThreadPoolNoAbortBuilder::new()
+                            .thread_name(|i| format!("indexing-thread-{i}"))
+                            .build()
+                            .unwrap();
                         &local_pool
                     }
                 };
 
-                let (document_changes, operation_stats, primary_key) = indexer.into_changes(
-                    &indexer_alloc,
-                    index,
-                    &rtxn,
-                    primary_key.as_deref(),
-                    &mut new_fields_ids_map,
-                    &|| must_stop_processing.get(),
-                    &send_progress,
-                )?;
+                progress.update_progress(DocumentOperationProgress::ComputingDocumentChanges);
+                let (document_changes, operation_stats, primary_key) = indexer
+                    .into_changes(
+                        &indexer_alloc,
+                        index,
+                        &rtxn,
+                        primary_key.as_deref(),
+                        &mut new_fields_ids_map,
+                        &|| must_stop_processing.get(),
+                        progress.clone(),
+                    )
+                    .map_err(|e| Error::from_milli(e, Some(index_uid.clone())))?;
 
-                let mut addition = 0;
+                let mut candidates_count = 0;
                 for (stats, task) in operation_stats.into_iter().zip(&mut tasks) {
-                    addition += stats.document_count;
+                    candidates_count += stats.document_count;
                     match stats.error {
                         Some(error) => {
                             task.status = Status::Failed;
@@ -1392,29 +1404,38 @@ impl IndexScheduler {
                     }
                 }
 
+                progress.update_progress(DocumentOperationProgress::Indexing);
                 if tasks.iter().any(|res| res.error.is_none()) {
-                    pool.install(|| {
-                        indexer::index(
-                            index_wtxn,
-                            index,
-                            indexer_config.grenad_parameters(),
-                            &db_fields_ids_map,
-                            new_fields_ids_map,
-                            primary_key,
-                            &document_changes,
-                            embedders,
-                            &|| must_stop_processing.get(),
-                            &send_progress,
-                        )
-                    })
-                    .unwrap()?;
+                    indexer::index(
+                        index_wtxn,
+                        index,
+                        pool,
+                        indexer_config.grenad_parameters(),
+                        &db_fields_ids_map,
+                        new_fields_ids_map,
+                        primary_key,
+                        &document_changes,
+                        embedders,
+                        &|| must_stop_processing.get(),
+                        &progress,
+                    )
+                    .map_err(|e| Error::from_milli(e, Some(index_uid.clone())))?;
+
+                    let addition = DocumentAdditionResult {
+                        indexed_documents: candidates_count,
+                        number_of_documents: index
+                            .number_of_documents(index_wtxn)
+                            .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?,
+                    };
 
                     tracing::info!(indexing_result = ?addition, processed_in = ?started_processing_at.elapsed(), "document indexing done");
                 }
 
                 Ok(tasks)
             }
-            IndexOperation::DocumentEdition { mut task, .. } => {
+            IndexOperation::DocumentEdition { index_uid, mut task } => {
+                progress.update_progress(DocumentEditionProgress::RetrievingConfig);
+
                 let (filter, code) = if let KindWithContent::DocumentEdition {
                     filter_expr,
                     context: _,
@@ -1428,16 +1449,11 @@ impl IndexScheduler {
                 };
 
                 let candidates = match filter.as_ref().map(Filter::from_json) {
-                    Some(Ok(Some(filter))) => {
-                        filter.evaluate(index_wtxn, index).map_err(|err| match err {
-                            milli::Error::UserError(milli::UserError::InvalidFilter(_)) => {
-                                Error::from(err).with_custom_error_code(Code::InvalidDocumentFilter)
-                            }
-                            e => e.into(),
-                        })?
-                    }
+                    Some(Ok(Some(filter))) => filter
+                        .evaluate(index_wtxn, index)
+                        .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?,
                     None | Some(Ok(None)) => index.documents_ids(index_wtxn)?,
-                    Some(Err(e)) => return Err(e.into()),
+                    Some(Err(e)) => return Err(Error::from_milli(e, Some(index_uid.clone()))),
                 };
 
                 let (original_filter, context, function) = if let Some(Details::DocumentEdition {
@@ -1472,8 +1488,9 @@ impl IndexScheduler {
                 // candidates not empty => index not empty => a primary key is set
                 let primary_key = index.primary_key(&rtxn)?.unwrap();
 
-                let primary_key = PrimaryKey::new_or_insert(primary_key, &mut new_fields_ids_map)
-                    .map_err(milli::Error::from)?;
+                let primary_key =
+                    PrimaryKey::new_or_insert(primary_key, &mut new_fields_ids_map)
+                        .map_err(|err| Error::from_milli(err.into(), Some(index_uid.clone())))?;
 
                 let result_count = Ok((candidates.len(), candidates.len())) as Result<_>;
 
@@ -1483,36 +1500,53 @@ impl IndexScheduler {
                     let pool = match &indexer_config.thread_pool {
                         Some(pool) => pool,
                         None => {
-                            local_pool = ThreadPoolNoAbortBuilder::new().build().unwrap();
+                            local_pool = ThreadPoolNoAbortBuilder::new()
+                                .thread_name(|i| format!("indexing-thread-{i}"))
+                                .build()
+                                .unwrap();
                             &local_pool
                         }
                     };
 
-                    pool.install(|| {
-                        let indexer =
-                            UpdateByFunction::new(candidates, context.clone(), code.clone());
-                        let document_changes = indexer.into_changes(&primary_key)?;
-                        let embedders = index.embedding_configs(index_wtxn)?;
-                        let embedders = self.embedders(embedders)?;
+                    let candidates_count = candidates.len();
+                    progress.update_progress(DocumentEditionProgress::ComputingDocumentChanges);
+                    let indexer = UpdateByFunction::new(candidates, context.clone(), code.clone());
+                    let document_changes = pool
+                        .install(|| {
+                            indexer
+                                .into_changes(&primary_key)
+                                .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))
+                        })
+                        .unwrap()?;
+                    let embedders = index
+                        .embedding_configs(index_wtxn)
+                        .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?;
+                    let embedders = self.embedders(index_uid.clone(), embedders)?;
 
-                        indexer::index(
-                            index_wtxn,
-                            index,
-                            indexer_config.grenad_parameters(),
-                            &db_fields_ids_map,
-                            new_fields_ids_map,
-                            None, // cannot change primary key in DocumentEdition
-                            &document_changes,
-                            embedders,
-                            &|| must_stop_processing.get(),
-                            &send_progress,
-                        )?;
+                    progress.update_progress(DocumentEditionProgress::Indexing);
+                    indexer::index(
+                        index_wtxn,
+                        index,
+                        pool,
+                        indexer_config.grenad_parameters(),
+                        &db_fields_ids_map,
+                        new_fields_ids_map,
+                        None, // cannot change primary key in DocumentEdition
+                        &document_changes,
+                        embedders,
+                        &|| must_stop_processing.get(),
+                        &progress,
+                    )
+                    .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?;
 
-                        Result::Ok(())
-                    })
-                    .unwrap()?;
+                    let addition = DocumentAdditionResult {
+                        indexed_documents: candidates_count,
+                        number_of_documents: index
+                            .number_of_documents(index_wtxn)
+                            .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?,
+                    };
 
-                    // tracing::info!(indexing_result = ?addition, processed_in = ?started_processing_at.elapsed(), "document indexing done");
+                    tracing::info!(indexing_result = ?addition, processed_in = ?started_processing_at.elapsed(), "document indexing done");
                 }
 
                 match result_count {
@@ -1541,7 +1575,9 @@ impl IndexScheduler {
 
                 Ok(vec![task])
             }
-            IndexOperation::DocumentDeletion { mut tasks, index_uid: _ } => {
+            IndexOperation::DocumentDeletion { mut tasks, index_uid } => {
+                progress.update_progress(DocumentDeletionProgress::RetrievingConfig);
+
                 let mut to_delete = RoaringBitmap::new();
                 let external_documents_ids = index.external_documents_ids();
 
@@ -1562,35 +1598,23 @@ impl IndexScheduler {
                                 deleted_documents: Some(will_be_removed),
                             });
                         }
-                        KindWithContent::DocumentDeletionByFilter { index_uid: _, filter_expr } => {
+                        KindWithContent::DocumentDeletionByFilter { index_uid, filter_expr } => {
                             let before = to_delete.len();
                             let filter = match Filter::from_json(filter_expr) {
                                 Ok(filter) => filter,
                                 Err(err) => {
                                     // theorically, this should be catched by deserr before reaching the index-scheduler and cannot happens
                                     task.status = Status::Failed;
-                                    task.error = match err {
-                                        milli::Error::UserError(
-                                            milli::UserError::InvalidFilterExpression { .. },
-                                        ) => Some(
-                                            Error::from(err)
-                                                .with_custom_error_code(Code::InvalidDocumentFilter)
-                                                .into(),
-                                        ),
-                                        e => Some(e.into()),
-                                    };
+                                    task.error = Some(
+                                        Error::from_milli(err, Some(index_uid.clone())).into(),
+                                    );
                                     None
                                 }
                             };
                             if let Some(filter) = filter {
-                                let candidates =
-                                    filter.evaluate(index_wtxn, index).map_err(|err| match err {
-                                        milli::Error::UserError(
-                                            milli::UserError::InvalidFilter(_),
-                                        ) => Error::from(err)
-                                            .with_custom_error_code(Code::InvalidDocumentFilter),
-                                        e => e.into(),
-                                    });
+                                let candidates = filter
+                                    .evaluate(index_wtxn, index)
+                                    .map_err(|err| Error::from_milli(err, Some(index_uid.clone())));
                                 match candidates {
                                     Ok(candidates) => to_delete |= candidates,
                                     Err(err) => {
@@ -1626,8 +1650,9 @@ impl IndexScheduler {
                 // to_delete not empty => index not empty => primary key set
                 let primary_key = index.primary_key(&rtxn)?.unwrap();
 
-                let primary_key = PrimaryKey::new_or_insert(primary_key, &mut new_fields_ids_map)
-                    .map_err(milli::Error::from)?;
+                let primary_key =
+                    PrimaryKey::new_or_insert(primary_key, &mut new_fields_ids_map)
+                        .map_err(|err| Error::from_milli(err.into(), Some(index_uid.clone())))?;
 
                 if !tasks.iter().all(|res| res.error.is_some()) {
                     let local_pool;
@@ -1635,39 +1660,54 @@ impl IndexScheduler {
                     let pool = match &indexer_config.thread_pool {
                         Some(pool) => pool,
                         None => {
-                            local_pool = ThreadPoolNoAbortBuilder::new().build().unwrap();
+                            local_pool = ThreadPoolNoAbortBuilder::new()
+                                .thread_name(|i| format!("indexing-thread-{i}"))
+                                .build()
+                                .unwrap();
                             &local_pool
                         }
                     };
 
+                    progress.update_progress(DocumentDeletionProgress::DeleteDocuments);
                     let mut indexer = indexer::DocumentDeletion::new();
+                    let candidates_count = to_delete.len();
                     indexer.delete_documents_by_docids(to_delete);
                     let document_changes = indexer.into_changes(&indexer_alloc, primary_key);
-                    let embedders = index.embedding_configs(index_wtxn)?;
-                    let embedders = self.embedders(embedders)?;
+                    let embedders = index
+                        .embedding_configs(index_wtxn)
+                        .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?;
+                    let embedders = self.embedders(index_uid.clone(), embedders)?;
 
-                    pool.install(|| {
-                        indexer::index(
-                            index_wtxn,
-                            index,
-                            indexer_config.grenad_parameters(),
-                            &db_fields_ids_map,
-                            new_fields_ids_map,
-                            None, // document deletion never changes primary key
-                            &document_changes,
-                            embedders,
-                            &|| must_stop_processing.get(),
-                            &send_progress,
-                        )
-                    })
-                    .unwrap()?;
+                    progress.update_progress(DocumentDeletionProgress::Indexing);
+                    indexer::index(
+                        index_wtxn,
+                        index,
+                        pool,
+                        indexer_config.grenad_parameters(),
+                        &db_fields_ids_map,
+                        new_fields_ids_map,
+                        None, // document deletion never changes primary key
+                        &document_changes,
+                        embedders,
+                        &|| must_stop_processing.get(),
+                        &progress,
+                    )
+                    .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?;
 
-                    // tracing::info!(indexing_result = ?addition, processed_in = ?started_processing_at.elapsed(), "document indexing done");
+                    let addition = DocumentAdditionResult {
+                        indexed_documents: candidates_count,
+                        number_of_documents: index
+                            .number_of_documents(index_wtxn)
+                            .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?,
+                    };
+
+                    tracing::info!(indexing_result = ?addition, processed_in = ?started_processing_at.elapsed(), "document indexing done");
                 }
 
                 Ok(tasks)
             }
-            IndexOperation::Settings { index_uid: _, settings, mut tasks } => {
+            IndexOperation::Settings { index_uid, settings, mut tasks } => {
+                progress.update_progress(SettingsProgress::RetrievingAndMergingTheSettings);
                 let indexer_config = self.index_mapper.indexer_config();
                 let mut builder = milli::update::Settings::new(index_wtxn, index, indexer_config);
 
@@ -1681,48 +1721,14 @@ impl IndexScheduler {
                     task.status = Status::Succeeded;
                 }
 
-                builder.execute(
-                    |indexing_step| tracing::debug!(update = ?indexing_step),
-                    || must_stop_processing.get(),
-                )?;
+                progress.update_progress(SettingsProgress::ApplyTheSettings);
+                builder
+                    .execute(
+                        |indexing_step| tracing::debug!(update = ?indexing_step),
+                        || must_stop_processing.get(),
+                    )
+                    .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?;
 
-                Ok(tasks)
-            }
-            IndexOperation::SettingsAndDocumentOperation {
-                index_uid,
-                primary_key,
-                method,
-                documents_counts,
-                operations,
-                document_import_tasks,
-                settings,
-                settings_tasks,
-            } => {
-                let settings_tasks = self.apply_index_operation(
-                    index_wtxn,
-                    index,
-                    IndexOperation::Settings {
-                        index_uid: index_uid.clone(),
-                        settings,
-                        tasks: settings_tasks,
-                    },
-                )?;
-
-                let mut import_tasks = self.apply_index_operation(
-                    index_wtxn,
-                    index,
-                    IndexOperation::DocumentOperation {
-                        index_uid,
-                        primary_key,
-                        method,
-                        documents_counts,
-                        operations,
-                        tasks: document_import_tasks,
-                    },
-                )?;
-
-                let mut tasks = settings_tasks;
-                tasks.append(&mut import_tasks);
                 Ok(tasks)
             }
             IndexOperation::DocumentClearAndSetting {
@@ -1738,12 +1744,14 @@ impl IndexScheduler {
                         index_uid: index_uid.clone(),
                         tasks: cleared_tasks,
                     },
+                    progress.clone(),
                 )?;
 
                 let settings_tasks = self.apply_index_operation(
                     index_wtxn,
                     index,
                     IndexOperation::Settings { index_uid, settings, tasks: settings_tasks },
+                    progress,
                 )?;
 
                 let mut tasks = settings_tasks;
@@ -1760,15 +1768,18 @@ impl IndexScheduler {
         &self,
         wtxn: &mut RwTxn,
         matched_tasks: &RoaringBitmap,
+        progress: &Progress,
     ) -> Result<RoaringBitmap> {
+        progress.update_progress(TaskDeletionProgress::DeletingTasksDateTime);
+
         // 1. Remove from this list the tasks that we are not allowed to delete
         let enqueued_tasks = self.get_status(wtxn, Status::Enqueued)?;
         let processing_tasks = &self.processing_tasks.read().unwrap().processing.clone();
 
         let all_task_ids = self.all_task_ids(wtxn)?;
         let mut to_delete_tasks = all_task_ids & matched_tasks;
-        to_delete_tasks -= processing_tasks;
-        to_delete_tasks -= enqueued_tasks;
+        to_delete_tasks -= &**processing_tasks;
+        to_delete_tasks -= &enqueued_tasks;
 
         // 2. We now have a list of tasks to delete, delete them
 
@@ -1779,6 +1790,8 @@ impl IndexScheduler {
         // The tasks that have been removed *per batches*.
         let mut affected_batches: HashMap<BatchId, RoaringBitmap> = HashMap::new();
 
+        let (atomic_progress, task_progress) = AtomicTaskStep::new(to_delete_tasks.len() as u32);
+        progress.update_progress(task_progress);
         for task_id in to_delete_tasks.iter() {
             let task = self.get_task(wtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
 
@@ -1802,22 +1815,35 @@ impl IndexScheduler {
             if let Some(batch_uid) = task.batch_uid {
                 affected_batches.entry(batch_uid).or_default().insert(task_id);
             }
+            atomic_progress.fetch_add(1, Ordering::Relaxed);
         }
 
+        progress.update_progress(TaskDeletionProgress::DeletingTasksMetadata);
+        let (atomic_progress, task_progress) = AtomicTaskStep::new(
+            (affected_indexes.len() + affected_statuses.len() + affected_kinds.len()) as u32,
+        );
+        progress.update_progress(task_progress);
         for index in affected_indexes.iter() {
             self.update_index(wtxn, index, |bitmap| *bitmap -= &to_delete_tasks)?;
+            atomic_progress.fetch_add(1, Ordering::Relaxed);
         }
 
         for status in affected_statuses.iter() {
             self.update_status(wtxn, *status, |bitmap| *bitmap -= &to_delete_tasks)?;
+            atomic_progress.fetch_add(1, Ordering::Relaxed);
         }
 
         for kind in affected_kinds.iter() {
             self.update_kind(wtxn, *kind, |bitmap| *bitmap -= &to_delete_tasks)?;
+            atomic_progress.fetch_add(1, Ordering::Relaxed);
         }
 
+        progress.update_progress(TaskDeletionProgress::DeletingTasks);
+        let (atomic_progress, task_progress) = AtomicTaskStep::new(to_delete_tasks.len() as u32);
+        progress.update_progress(task_progress);
         for task in to_delete_tasks.iter() {
             self.all_tasks.delete(wtxn, &task)?;
+            atomic_progress.fetch_add(1, Ordering::Relaxed);
         }
         for canceled_by in affected_canceled_by {
             if let Some(mut tasks) = self.canceled_by.get(wtxn, &canceled_by)? {
@@ -1829,6 +1855,9 @@ impl IndexScheduler {
                 }
             }
         }
+        progress.update_progress(TaskDeletionProgress::DeletingBatches);
+        let (atomic_progress, batch_progress) = AtomicBatchStep::new(affected_batches.len() as u32);
+        progress.update_progress(batch_progress);
         for (batch_id, to_delete_tasks) in affected_batches {
             if let Some(mut tasks) = self.batch_to_tasks_mapping.get(wtxn, &batch_id)? {
                 tasks -= &to_delete_tasks;
@@ -1870,6 +1899,7 @@ impl IndexScheduler {
                     }
                 }
             }
+            atomic_progress.fetch_add(1, Ordering::Relaxed);
         }
 
         Ok(to_delete_tasks)
@@ -1884,21 +1914,36 @@ impl IndexScheduler {
         cancel_task_id: TaskId,
         current_batch: &mut ProcessingBatch,
         matched_tasks: &RoaringBitmap,
+        progress: &Progress,
     ) -> Result<Vec<Task>> {
+        progress.update_progress(TaskCancelationProgress::RetrievingTasks);
+
         // 1. Remove from this list the tasks that we are not allowed to cancel
         //    Notice that only the _enqueued_ ones are cancelable and we should
         //    have already aborted the indexation of the _processing_ ones
         let cancelable_tasks = self.get_status(rtxn, Status::Enqueued)?;
         let tasks_to_cancel = cancelable_tasks & matched_tasks;
 
-        // 2. We now have a list of tasks to cancel, cancel them
-        let mut tasks = self.get_existing_tasks(rtxn, tasks_to_cancel.iter())?;
+        let (task_progress, progress_obj) = AtomicTaskStep::new(tasks_to_cancel.len() as u32);
+        progress.update_progress(progress_obj);
 
+        // 2. We now have a list of tasks to cancel, cancel them
+        let mut tasks = self.get_existing_tasks(
+            rtxn,
+            tasks_to_cancel.iter().inspect(|_| {
+                task_progress.fetch_add(1, Ordering::Relaxed);
+            }),
+        )?;
+
+        progress.update_progress(TaskCancelationProgress::UpdatingTasks);
+        let (task_progress, progress_obj) = AtomicTaskStep::new(tasks_to_cancel.len() as u32);
+        progress.update_progress(progress_obj);
         for task in tasks.iter_mut() {
             task.status = Status::Canceled;
             task.canceled_by = Some(cancel_task_id);
             task.details = task.details.as_ref().map(|d| d.to_failed());
             current_batch.processing(Some(task));
+            task_progress.fetch_add(1, Ordering::Relaxed);
         }
 
         Ok(tasks)

@@ -1264,15 +1264,18 @@ async fn error_add_documents_bad_document_id() {
     let server = Server::new().await;
     let index = server.index("test");
     index.create(Some("docid")).await;
+
+    // unsupported characters
+
     let documents = json!([
         {
             "docid": "foo & bar",
             "content": "foobar"
         }
     ]);
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
-    let (response, code) = index.get_task(1).await;
+    let (value, _code) = index.add_documents(documents, None).await;
+    index.wait_task(value.uid()).await;
+    let (response, code) = index.get_task(value.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
@@ -1288,7 +1291,81 @@ async fn error_add_documents_bad_document_id() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Document identifier `\"foo & bar\"` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_), and can not be more than 512 bytes.",
+        "message": "Document identifier `\"foo & bar\"` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_), and can not be more than 511 bytes.",
+        "code": "invalid_document_id",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_document_id"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    // More than 512 bytes
+    let documents = json!([
+        {
+            "docid": "a".repeat(600),
+            "content": "foobar"
+        }
+    ]);
+    let (value, _code) = index.add_documents(documents, None).await;
+    index.wait_task(value.uid()).await;
+    let (response, code) = index.get_task(value.uid()).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+      @r###"
+    {
+      "uid": 2,
+      "batchUid": 2,
+      "indexUid": "test",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "error": {
+        "message": "Document identifier `\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_), and can not be more than 511 bytes.",
+        "code": "invalid_document_id",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_document_id"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    // Exactly 512 bytes
+    let documents = json!([
+        {
+            "docid": "a".repeat(512),
+            "content": "foobar"
+        }
+    ]);
+    let (value, _code) = index.add_documents(documents, None).await;
+    index.wait_task(value.uid()).await;
+    let (response, code) = index.get_task(value.uid()).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    @r###"
+    {
+      "uid": 3,
+      "batchUid": 3,
+      "indexUid": "test",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "error": {
+        "message": "Document identifier `\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_), and can not be more than 511 bytes.",
         "code": "invalid_document_id",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_id"
@@ -1681,7 +1758,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "The `_geo` field in the document with the id: `\"11\"` is not an object. Was expecting an object with the `_geo.lat` and `_geo.lng` fields but instead got `\"foobar\"`.",
+        "message": "Index `test`: The `_geo` field in the document with the id: `\"11\"` is not an object. Was expecting an object with the `_geo.lat` and `_geo.lng` fields but instead got `\"foobar\"`.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -1719,7 +1796,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Could not find latitude nor longitude in the document with the id: `\"11\"`. Was expecting `_geo.lat` and `_geo.lng` fields.",
+        "message": "Index `test`: Could not find latitude nor longitude in the document with the id: `\"11\"`. Was expecting `_geo.lat` and `_geo.lng` fields.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -1757,7 +1834,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Could not find latitude nor longitude in the document with the id: `\"11\"`. Was expecting `_geo.lat` and `_geo.lng` fields.",
+        "message": "Index `test`: Could not find latitude nor longitude in the document with the id: `\"11\"`. Was expecting `_geo.lat` and `_geo.lng` fields.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -1795,7 +1872,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Could not find longitude in the document with the id: `\"11\"`. Was expecting a `_geo.lng` field.",
+        "message": "Index `test`: Could not find longitude in the document with the id: `\"11\"`. Was expecting a `_geo.lng` field.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -1833,7 +1910,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Could not find latitude in the document with the id: `\"11\"`. Was expecting a `_geo.lat` field.",
+        "message": "Index `test`: Could not find latitude in the document with the id: `\"11\"`. Was expecting a `_geo.lat` field.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -1871,7 +1948,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Could not find longitude in the document with the id: `\"11\"`. Was expecting a `_geo.lng` field.",
+        "message": "Index `test`: Could not find longitude in the document with the id: `\"11\"`. Was expecting a `_geo.lng` field.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -1909,7 +1986,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Could not find latitude in the document with the id: `\"11\"`. Was expecting a `_geo.lat` field.",
+        "message": "Index `test`: Could not find latitude in the document with the id: `\"11\"`. Was expecting a `_geo.lat` field.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -1947,7 +2024,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Could not parse latitude nor longitude in the document with the id: `\"11\"`. Was expecting finite numbers but instead got `false` and `true`.",
+        "message": "Index `test`: Could not parse latitude nor longitude in the document with the id: `\"11\"`. Was expecting finite numbers but instead got `false` and `true`.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -1985,7 +2062,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Could not find longitude in the document with the id: `\"11\"`. Was expecting a `_geo.lng` field.",
+        "message": "Index `test`: Could not find longitude in the document with the id: `\"11\"`. Was expecting a `_geo.lng` field.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -2023,7 +2100,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Could not find latitude in the document with the id: `\"11\"`. Was expecting a `_geo.lat` field.",
+        "message": "Index `test`: Could not find latitude in the document with the id: `\"11\"`. Was expecting a `_geo.lat` field.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -2061,7 +2138,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Could not parse latitude nor longitude in the document with the id: `\"11\"`. Was expecting finite numbers but instead got `\"doggo\"` and `\"doggo\"`.",
+        "message": "Index `test`: Could not parse latitude nor longitude in the document with the id: `\"11\"`. Was expecting finite numbers but instead got `\"doggo\"` and `\"doggo\"`.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -2099,7 +2176,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "The `_geo` field in the document with the id: `\"11\"` contains the following unexpected fields: `{\"doggo\":\"are the best\"}`.",
+        "message": "Index `test`: The `_geo` field in the document with the id: `\"11\"` contains the following unexpected fields: `{\"doggo\":\"are the best\"}`.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -2138,7 +2215,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Could not parse longitude in the document with the id: `\"12\"`. Was expecting a finite number but instead got `null`.",
+        "message": "Index `test`: Could not parse longitude in the document with the id: `\"12\"`. Was expecting a finite number but instead got `null`.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -2175,7 +2252,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Could not parse latitude in the document with the id: `\"12\"`. Was expecting a finite number but instead got `null`.",
+        "message": "Index `test`: Could not parse latitude in the document with the id: `\"12\"`. Was expecting a finite number but instead got `null`.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -2212,7 +2289,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Could not parse latitude nor longitude in the document with the id: `\"13\"`. Was expecting finite numbers but instead got `null` and `null`.",
+        "message": "Index `test`: Could not parse latitude nor longitude in the document with the id: `\"13\"`. Was expecting finite numbers but instead got `null` and `null`.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -2279,7 +2356,7 @@ async fn add_invalid_geo_and_then_settings() {
         ]
       },
       "error": {
-        "message": "Could not parse latitude in the document with the id: `\"11\"`. Was expecting a finite number but instead got `null`.",
+        "message": "Index `test`: Could not parse latitude in the document with the id: `\"11\"`. Was expecting a finite number but instead got `null`.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"

@@ -3,6 +3,7 @@ use std::convert::Infallible;
 use std::fmt::Write;
 use std::{io, str};
 
+use bstr::BString;
 use heed::{Error as HeedError, MdbError};
 use rayon::ThreadPoolBuildError;
 use rhai::EvalAltResult;
@@ -61,6 +62,10 @@ pub enum InternalError {
     Serialization(#[from] SerializationError),
     #[error(transparent)]
     Store(#[from] MdbError),
+    #[error("Cannot delete {key:?} from database {database_name}: {error}")]
+    StoreDeletion { database_name: &'static str, key: BString, error: heed::Error },
+    #[error("Cannot insert {key:?} and value with length {value_length} into database {database_name}: {error}")]
+    StorePut { database_name: &'static str, key: BString, value_length: usize, error: heed::Error },
     #[error(transparent)]
     Utf8(#[from] str::Utf8Error),
     #[error("An indexation process was explicitly aborted")]
@@ -109,7 +114,7 @@ pub enum UserError {
         "Document identifier `{}` is invalid. \
 A document identifier can be of type integer or string, \
 only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_), \
-and can not be more than 512 bytes.", .document_id.to_string()
+and can not be more than 511 bytes.", .document_id.to_string()
     )]
     InvalidDocumentId { document_id: Value },
     #[error("Invalid facet distribution, {}", format_invalid_filter_distribution(.invalid_facets_name, .valid_facets_name))]

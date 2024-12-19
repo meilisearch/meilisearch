@@ -5,7 +5,7 @@ snapshot_kind: text
 ### Autobatching Enabled = true
 ### Processing batch Some(1):
 [1,]
-{uid: 1, details: {"receivedDocuments":2,"indexedDocuments":null}, stats: {"totalNbTasks":2,"status":{"enqueued":2},"types":{"documentAdditionOrUpdate":2},"indexUids":{"beavero":2}}, }
+{uid: 1, details: {"receivedDocuments":1,"indexedDocuments":null}, stats: {"totalNbTasks":1,"status":{"processing":1},"types":{"documentAdditionOrUpdate":1},"indexUids":{"beavero":1}}, }
 ----------------------------------------------------------------------
 ### All Tasks:
 0 {uid: 0, batch_uid: 0, status: succeeded, details: { received_documents: 1, indexed_documents: Some(1) }, kind: DocumentAdditionOrUpdate { index_uid: "catto", primary_key: None, method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000000, documents_count: 1, allow_index_creation: true }}

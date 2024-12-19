@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 use std::io::BufWriter;
 
 use fst::{Set, SetBuilder, Streamer};
@@ -75,18 +75,18 @@ pub struct PrefixData {
 
 #[derive(Debug)]
 pub struct PrefixDelta {
-    pub modified: HashSet<Prefix>,
-    pub deleted: HashSet<Prefix>,
+    pub modified: BTreeSet<Prefix>,
+    pub deleted: BTreeSet<Prefix>,
 }
 
 struct PrefixFstBuilder {
-    prefix_count_threshold: u64,
+    prefix_count_threshold: usize,
     max_prefix_length: usize,
     /// TODO: Replace the full memory allocation
     prefix_fst_builders: Vec<SetBuilder<Vec<u8>>>,
     current_prefix: Vec<Prefix>,
-    current_prefix_count: Vec<u64>,
-    modified_prefixes: HashSet<Prefix>,
+    current_prefix_count: Vec<usize>,
+    modified_prefixes: BTreeSet<Prefix>,
     current_prefix_is_modified: Vec<bool>,
 }
 
@@ -95,7 +95,7 @@ impl PrefixFstBuilder {
         let PrefixSettings { prefix_count_threshold, max_prefix_length, compute_prefixes } =
             prefix_settings;
 
-        if !compute_prefixes {
+        if compute_prefixes != crate::index::PrefixSearch::IndexingTime {
             return None;
         }
 
@@ -110,7 +110,7 @@ impl PrefixFstBuilder {
             prefix_fst_builders,
             current_prefix: vec![Prefix::new(); max_prefix_length],
             current_prefix_count: vec![0; max_prefix_length],
-            modified_prefixes: HashSet::new(),
+            modified_prefixes: BTreeSet::new(),
             current_prefix_is_modified: vec![false; max_prefix_length],
         })
     }
@@ -180,7 +180,7 @@ impl PrefixFstBuilder {
         let prefix_fst_mmap = unsafe { Mmap::map(&prefix_fst_file)? };
         let new_prefix_fst = Set::new(&prefix_fst_mmap)?;
         let old_prefix_fst = index.words_prefixes_fst(rtxn)?;
-        let mut deleted_prefixes = HashSet::new();
+        let mut deleted_prefixes = BTreeSet::new();
         {
             let mut deleted_prefixes_stream = old_prefix_fst.op().add(&new_prefix_fst).difference();
             while let Some(prefix) = deleted_prefixes_stream.next() {

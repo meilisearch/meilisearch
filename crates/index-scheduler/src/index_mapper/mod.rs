@@ -5,6 +5,7 @@ use std::{fs, thread};
 
 use meilisearch_types::heed::types::{SerdeJson, Str};
 use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn};
+use meilisearch_types::milli;
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::{FieldDistribution, Index};
 use serde::{Deserialize, Serialize};
@@ -121,7 +122,7 @@ impl IndexStats {
     /// # Parameters
     ///
     /// - rtxn: a RO transaction for the index, obtained from `Index::read_txn()`.
-    pub fn new(index: &Index, rtxn: &RoTxn) -> Result<Self> {
+    pub fn new(index: &Index, rtxn: &RoTxn) -> milli::Result<Self> {
         Ok(IndexStats {
             number_of_documents: index.number_of_documents(rtxn)?,
             database_size: index.on_disk_size()?,
@@ -183,13 +184,18 @@ impl IndexMapper {
                 // Error if the UUIDv4 somehow already exists in the map, since it should be fresh.
                 // This is very unlikely to happen in practice.
                 // TODO: it would be better to lazily create the index. But we need an Index::open function for milli.
-                let index = self.index_map.write().unwrap().create(
-                    &uuid,
-                    &index_path,
-                    date,
-                    self.enable_mdb_writemap,
-                    self.index_base_map_size,
-                )?;
+                let index = self
+                    .index_map
+                    .write()
+                    .unwrap()
+                    .create(
+                        &uuid,
+                        &index_path,
+                        date,
+                        self.enable_mdb_writemap,
+                        self.index_base_map_size,
+                    )
+                    .map_err(|e| Error::from_milli(e, Some(uuid.to_string())))?;
 
                 wtxn.commit()?;
 
@@ -357,7 +363,9 @@ impl IndexMapper {
                     };
                     let index_path = self.base_path.join(uuid.to_string());
                     // take the lock to reopen the environment.
-                    reopen.reopen(&mut self.index_map.write().unwrap(), &index_path)?;
+                    reopen
+                        .reopen(&mut self.index_map.write().unwrap(), &index_path)
+                        .map_err(|e| Error::from_milli(e, Some(uuid.to_string())))?;
                     continue;
                 }
                 BeingDeleted => return Err(Error::IndexNotFound(name.to_string())),
@@ -372,13 +380,15 @@ impl IndexMapper {
                         Missing => {
                             let index_path = self.base_path.join(uuid.to_string());
 
-                            break index_map.create(
-                                &uuid,
-                                &index_path,
-                                None,
-                                self.enable_mdb_writemap,
-                                self.index_base_map_size,
-                            )?;
+                            break index_map
+                                .create(
+                                    &uuid,
+                                    &index_path,
+                                    None,
+                                    self.enable_mdb_writemap,
+                                    self.index_base_map_size,
+                                )
+                                .map_err(|e| Error::from_milli(e, Some(uuid.to_string())))?;
                         }
                         Available(index) => break index,
                         Closing(_) => {
@@ -460,6 +470,7 @@ impl IndexMapper {
                 let index = self.index(rtxn, index_uid)?;
                 let index_rtxn = index.read_txn()?;
                 IndexStats::new(&index, &index_rtxn)
+                    .map_err(|e| Error::from_milli(e, Some(uuid.to_string())))
             }
         }
     }

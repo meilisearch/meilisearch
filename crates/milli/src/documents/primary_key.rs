@@ -280,7 +280,7 @@ fn starts_with(selector: &str, key: &str) -> bool {
 
 pub fn validate_document_id_str(document_id: &str) -> Option<&str> {
     if document_id.is_empty()
-        || document_id.len() > 512
+        || document_id.len() >= 512
         || !document_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
     {
         None

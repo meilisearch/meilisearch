@@ -667,14 +667,23 @@ impl<'a, 'i> Transform<'a, 'i> {
         let is_primary_key = |id: FieldId| -> bool { settings_diff.primary_key_id == Some(id) };
 
         // If only a faceted field has been added, keep only this field.
-        let must_reindex_facets = settings_diff.reindex_facets();
-        let necessary_faceted_field = |id: FieldId| -> bool {
-            let field_name = settings_diff.new.fields_ids_map.name(id).unwrap();
-            must_reindex_facets
-                && modified_faceted_fields
-                    .iter()
-                    .any(|long| is_faceted_by(long, field_name) || is_faceted_by(field_name, long))
-        };
+        let global_facet_settings_changed = settings_diff.global_facet_settings_changed();
+        let facet_fids_changed = settings_diff.facet_fids_changed();
+        let necessary_faceted_field =
+            |id: FieldId| -> bool {
+                let field_name = settings_diff.new.fields_ids_map.name(id).unwrap();
+                if global_facet_settings_changed {
+                    settings_diff.new.user_defined_faceted_fields.iter().any(|long| {
+                        is_faceted_by(long, field_name) || is_faceted_by(field_name, long)
+                    })
+                } else if facet_fids_changed {
+                    modified_faceted_fields.iter().any(|long| {
+                        is_faceted_by(long, field_name) || is_faceted_by(field_name, long)
+                    })
+                } else {
+                    false
+                }
+            };
 
         // Alway provide all fields when vectors are involved because
         // we need the fields for the prompt/templating.

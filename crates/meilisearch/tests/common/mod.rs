@@ -52,6 +52,25 @@ impl Value {
         }
         self
     }
+
+    /// Return `true` if the `status` field is set to `failed`.
+    /// Panic if the `status` field doesn't exists.
+    #[track_caller]
+    pub fn is_fail(&self) -> bool {
+        if !self["status"].is_string() {
+            panic!("Called `is_fail` on {}", serde_json::to_string_pretty(&self.0).unwrap());
+        }
+        self["status"] == serde_json::Value::String(String::from("failed"))
+    }
+
+    // Panic if the json doesn't contain the `status` field set to "succeeded"
+    #[track_caller]
+    pub fn failed(&self) -> &Self {
+        if !self.is_fail() {
+            panic!("Called failed on {}", serde_json::to_string_pretty(&self.0).unwrap());
+        }
+        self
+    }
 }
 
 impl From<serde_json::Value> for Value {

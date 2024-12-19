@@ -49,6 +49,7 @@ pub use self::geo_sort::Strategy as GeoSortStrategy;
 use self::graph_based_ranking_rule::Words;
 use self::interner::Interned;
 use self::vector_sort::VectorSort;
+use crate::index::PrefixSearch;
 use crate::localized_attributes_rules::LocalizedFieldIds;
 use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::search::new::distinct::apply_distinct_rule;
@@ -68,6 +69,7 @@ pub struct SearchContext<'ctx> {
     pub term_interner: Interner<QueryTerm>,
     pub phrase_docids: PhraseDocIdsCache,
     pub restricted_fids: Option<RestrictedFids>,
+    pub prefix_search: PrefixSearch,
 }
 
 impl<'ctx> SearchContext<'ctx> {
@@ -85,6 +87,8 @@ impl<'ctx> SearchContext<'ctx> {
             }
         }
 
+        let prefix_search = index.prefix_search(txn)?.unwrap_or_default();
+
         Ok(Self {
             index,
             txn,
@@ -94,7 +98,12 @@ impl<'ctx> SearchContext<'ctx> {
             term_interner: <_>::default(),
             phrase_docids: <_>::default(),
             restricted_fids: None,
+            prefix_search,
         })
+    }
+
+    pub fn is_prefix_search_allowed(&self) -> bool {
+        self.prefix_search != PrefixSearch::Disabled
     }
 
     pub fn attributes_to_search_on(

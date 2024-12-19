@@ -10,6 +10,7 @@ use itertools::{EitherOrBoth, Itertools};
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use time::OffsetDateTime;
+use utoipa::{PartialSchema, ToSchema};
 
 use super::del_add::DelAddOperation;
 use super::index_documents::{IndexDocumentsConfig, Transform};
@@ -17,7 +18,8 @@ use super::IndexerConfig;
 use crate::criterion::Criterion;
 use crate::error::UserError;
 use crate::index::{
-    IndexEmbeddingConfig, DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS,
+    IndexEmbeddingConfig, PrefixSearch, DEFAULT_MIN_WORD_LEN_ONE_TYPO,
+    DEFAULT_MIN_WORD_LEN_TWO_TYPOS,
 };
 use crate::order_by_map::OrderByMap;
 use crate::prompt::default_max_bytes;
@@ -37,6 +39,18 @@ pub enum Setting<T> {
     Set(T),
     Reset,
     NotSet,
+}
+
+impl<T: ToSchema> ToSchema for Setting<T> {
+    fn name() -> std::borrow::Cow<'static, str> {
+        T::name()
+    }
+}
+
+impl<T: PartialSchema> PartialSchema for Setting<T> {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+        T::schema()
+    }
 }
 
 impl<T, E> Deserr<E> for Setting<T>
@@ -177,6 +191,8 @@ pub struct Settings<'a, 't, 'i> {
     embedder_settings: Setting<BTreeMap<String, Setting<EmbeddingSettings>>>,
     search_cutoff: Setting<u64>,
     localized_attributes_rules: Setting<Vec<LocalizedAttributesRule>>,
+    prefix_search: Setting<PrefixSearch>,
+    facet_search: Setting<bool>,
 }
 
 impl<'a, 't, 'i> Settings<'a, 't, 'i> {
@@ -212,6 +228,8 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             embedder_settings: Setting::NotSet,
             search_cutoff: Setting::NotSet,
             localized_attributes_rules: Setting::NotSet,
+            prefix_search: Setting::NotSet,
+            facet_search: Setting::NotSet,
             indexer_config,
         }
     }
@@ -416,6 +434,22 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
 
     pub fn reset_localized_attributes_rules(&mut self) {
         self.localized_attributes_rules = Setting::Reset;
+    }
+
+    pub fn set_prefix_search(&mut self, value: PrefixSearch) {
+        self.prefix_search = Setting::Set(value);
+    }
+
+    pub fn reset_prefix_search(&mut self) {
+        self.prefix_search = Setting::Reset;
+    }
+
+    pub fn set_facet_search(&mut self, value: bool) {
+        self.facet_search = Setting::Set(value);
+    }
+
+    pub fn reset_facet_search(&mut self) {
+        self.facet_search = Setting::Reset;
     }
 
     #[tracing::instrument(
@@ -944,10 +978,46 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                     false
                 } else {
                     self.index.put_proximity_precision(self.wtxn, new)?;
-                    true
+                    old.is_some() || new != ProximityPrecision::default()
                 }
             }
             Setting::Reset => self.index.delete_proximity_precision(self.wtxn)?,
+            Setting::NotSet => false,
+        };
+
+        Ok(changed)
+    }
+
+    fn update_prefix_search(&mut self) -> Result<bool> {
+        let changed = match self.prefix_search {
+            Setting::Set(new) => {
+                let old = self.index.prefix_search(self.wtxn)?;
+                if old == Some(new) {
+                    false
+                } else {
+                    self.index.put_prefix_search(self.wtxn, new)?;
+                    old.is_some() || new != PrefixSearch::default()
+                }
+            }
+            Setting::Reset => self.index.delete_prefix_search(self.wtxn)?,
+            Setting::NotSet => false,
+        };
+
+        Ok(changed)
+    }
+
+    fn update_facet_search(&mut self) -> Result<bool> {
+        let changed = match self.facet_search {
+            Setting::Set(new) => {
+                let old = self.index.facet_search(self.wtxn)?;
+                if old == new {
+                    false
+                } else {
+                    self.index.put_facet_search(self.wtxn, new)?;
+                    true
+                }
+            }
+            Setting::Reset => self.index.delete_facet_search(self.wtxn)?,
             Setting::NotSet => false,
         };
 
@@ -1203,6 +1273,8 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         self.update_searchable()?;
         self.update_exact_attributes()?;
         self.update_proximity_precision()?;
+        self.update_prefix_search()?;
+        self.update_facet_search()?;
         self.update_localized_attributes_rules()?;
 
         let embedding_config_updates = self.update_embedding_configs()?;
@@ -1282,6 +1354,7 @@ impl InnerIndexSettingsDiff {
                 || old_settings.allowed_separators != new_settings.allowed_separators
                 || old_settings.dictionary != new_settings.dictionary
                 || old_settings.proximity_precision != new_settings.proximity_precision
+                || old_settings.prefix_search != new_settings.prefix_search
                 || old_settings.localized_searchable_fields_ids
                     != new_settings.localized_searchable_fields_ids
         };
@@ -1372,7 +1445,7 @@ impl InnerIndexSettingsDiff {
         }
     }
 
-    pub fn reindex_facets(&self) -> bool {
+    pub fn facet_fids_changed(&self) -> bool {
         let existing_fields = &self.new.existing_fields;
         if existing_fields.iter().any(|field| field.contains('.')) {
             return true;
@@ -1392,7 +1465,15 @@ impl InnerIndexSettingsDiff {
         }
 
         (existing_fields - old_faceted_fields) != (existing_fields - new_faceted_fields)
-            || self.old.localized_faceted_fields_ids != self.new.localized_faceted_fields_ids
+    }
+
+    pub fn global_facet_settings_changed(&self) -> bool {
+        self.old.localized_faceted_fields_ids != self.new.localized_faceted_fields_ids
+            || self.old.facet_search != self.new.facet_search
+    }
+
+    pub fn reindex_facets(&self) -> bool {
+        self.facet_fids_changed() || self.global_facet_settings_changed()
     }
 
     pub fn reindex_vectors(&self) -> bool {
@@ -1432,6 +1513,8 @@ pub(crate) struct InnerIndexSettings {
     pub non_faceted_fields_ids: Vec<FieldId>,
     pub localized_searchable_fields_ids: LocalizedFieldIds,
     pub localized_faceted_fields_ids: LocalizedFieldIds,
+    pub prefix_search: PrefixSearch,
+    pub facet_search: bool,
 }
 
 impl InnerIndexSettings {
@@ -1457,6 +1540,8 @@ impl InnerIndexSettings {
             Some(embedding_configs) => embedding_configs,
             None => embedders(index.embedding_configs(rtxn)?)?,
         };
+        let prefix_search = index.prefix_search(rtxn)?.unwrap_or_default();
+        let facet_search = index.facet_search(rtxn)?;
         let existing_fields: HashSet<_> = index
             .field_distribution(rtxn)?
             .into_iter()
@@ -1514,6 +1599,8 @@ impl InnerIndexSettings {
             non_faceted_fields_ids: vectors_fids.clone(),
             localized_searchable_fields_ids,
             localized_faceted_fields_ids,
+            prefix_search,
+            facet_search,
         })
     }
 
@@ -2721,6 +2808,8 @@ mod tests {
                     embedder_settings,
                     search_cutoff,
                     localized_attributes_rules,
+                    prefix_search,
+                    facet_search,
                 } = settings;
                 assert!(matches!(searchable_fields, Setting::NotSet));
                 assert!(matches!(displayed_fields, Setting::NotSet));
@@ -2746,6 +2835,8 @@ mod tests {
                 assert!(matches!(embedder_settings, Setting::NotSet));
                 assert!(matches!(search_cutoff, Setting::NotSet));
                 assert!(matches!(localized_attributes_rules, Setting::NotSet));
+                assert!(matches!(prefix_search, Setting::NotSet));
+                assert!(matches!(facet_search, Setting::NotSet));
             })
             .unwrap();
     }

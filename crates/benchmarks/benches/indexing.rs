@@ -8,6 +8,7 @@ use bumpalo::Bump;
 use criterion::{criterion_group, criterion_main, Criterion};
 use milli::documents::PrimaryKey;
 use milli::heed::{EnvOpenOptions, RwTxn};
+use milli::progress::Progress;
 use milli::update::new::indexer;
 use milli::update::{IndexDocumentsMethod, IndexerConfig, Settings};
 use milli::vector::EmbeddingConfigs;
@@ -16,6 +17,7 @@ use rand::seq::SliceRandom;
 use rand_chacha::rand_core::SeedableRng;
 use roaring::RoaringBitmap;
 
+#[cfg(not(windows))]
 #[global_allocator]
 static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
@@ -150,13 +152,14 @@ fn indexing_songs_default(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -164,7 +167,7 @@ fn indexing_songs_default(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -216,13 +219,14 @@ fn reindexing_songs_default(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -230,7 +234,7 @@ fn reindexing_songs_default(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -260,13 +264,14 @@ fn reindexing_songs_default(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -274,7 +279,7 @@ fn reindexing_songs_default(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -328,13 +333,14 @@ fn deleting_songs_in_batches_default(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -342,7 +348,7 @@ fn deleting_songs_in_batches_default(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -404,13 +410,14 @@ fn indexing_songs_in_three_batches_default(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -418,7 +425,7 @@ fn indexing_songs_in_three_batches_default(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -448,13 +455,14 @@ fn indexing_songs_in_three_batches_default(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -462,7 +470,7 @@ fn indexing_songs_in_three_batches_default(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -488,13 +496,14 @@ fn indexing_songs_in_three_batches_default(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -502,7 +511,7 @@ fn indexing_songs_in_three_batches_default(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -555,13 +564,14 @@ fn indexing_songs_without_faceted_numbers(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -569,7 +579,7 @@ fn indexing_songs_without_faceted_numbers(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -621,13 +631,14 @@ fn indexing_songs_without_faceted_fields(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -635,7 +646,7 @@ fn indexing_songs_without_faceted_fields(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -687,13 +698,14 @@ fn indexing_wiki(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -701,7 +713,7 @@ fn indexing_wiki(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -752,13 +764,14 @@ fn reindexing_wiki(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -766,7 +779,7 @@ fn reindexing_wiki(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -796,13 +809,14 @@ fn reindexing_wiki(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -810,7 +824,7 @@ fn reindexing_wiki(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -863,13 +877,14 @@ fn deleting_wiki_in_batches_default(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -877,7 +892,7 @@ fn deleting_wiki_in_batches_default(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -939,13 +954,14 @@ fn indexing_wiki_in_three_batches(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -953,7 +969,7 @@ fn indexing_wiki_in_three_batches(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -984,13 +1000,14 @@ fn indexing_wiki_in_three_batches(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -998,7 +1015,7 @@ fn indexing_wiki_in_three_batches(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -1025,13 +1042,14 @@ fn indexing_wiki_in_three_batches(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -1039,7 +1057,7 @@ fn indexing_wiki_in_three_batches(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -1091,13 +1109,14 @@ fn indexing_movies_default(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -1105,7 +1124,7 @@ fn indexing_movies_default(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -1156,13 +1175,14 @@ fn reindexing_movies_default(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -1170,7 +1190,7 @@ fn reindexing_movies_default(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -1200,13 +1220,14 @@ fn reindexing_movies_default(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -1214,7 +1235,7 @@ fn reindexing_movies_default(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -1267,13 +1288,14 @@ fn deleting_movies_in_batches_default(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -1281,7 +1303,7 @@ fn deleting_movies_in_batches_default(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -1321,6 +1343,7 @@ fn delete_documents_from_ids(index: Index, document_ids_to_delete: Vec<RoaringBi
         indexer::index(
             &mut wtxn,
             &index,
+            &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
             config.grenad_parameters(),
             &db_fields_ids_map,
             new_fields_ids_map,
@@ -1328,7 +1351,7 @@ fn delete_documents_from_ids(index: Index, document_ids_to_delete: Vec<RoaringBi
             &document_changes,
             EmbeddingConfigs::default(),
             &|| false,
-            &|_| (),
+            &Progress::default(),
         )
         .unwrap();
 
@@ -1378,13 +1401,14 @@ fn indexing_movies_in_three_batches(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -1392,7 +1416,7 @@ fn indexing_movies_in_three_batches(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -1422,13 +1446,14 @@ fn indexing_movies_in_three_batches(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -1436,7 +1461,7 @@ fn indexing_movies_in_three_batches(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -1462,13 +1487,14 @@ fn indexing_movies_in_three_batches(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -1476,7 +1502,7 @@ fn indexing_movies_in_three_batches(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -1551,13 +1577,14 @@ fn indexing_nested_movies_default(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -1565,7 +1592,7 @@ fn indexing_nested_movies_default(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -1641,13 +1668,14 @@ fn deleting_nested_movies_in_batches_default(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -1655,7 +1683,7 @@ fn deleting_nested_movies_in_batches_default(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -1723,13 +1751,14 @@ fn indexing_nested_movies_without_faceted_fields(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -1737,7 +1766,7 @@ fn indexing_nested_movies_without_faceted_fields(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -1789,13 +1818,14 @@ fn indexing_geo(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -1803,7 +1833,7 @@ fn indexing_geo(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -1854,13 +1884,14 @@ fn reindexing_geo(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -1868,7 +1899,7 @@ fn reindexing_geo(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -1898,13 +1929,14 @@ fn reindexing_geo(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -1912,7 +1944,7 @@ fn reindexing_geo(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -1965,13 +1997,14 @@ fn deleting_geo_in_batches_default(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -1979,7 +2012,7 @@ fn deleting_geo_in_batches_default(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 

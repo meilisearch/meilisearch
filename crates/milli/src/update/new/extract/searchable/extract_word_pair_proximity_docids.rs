@@ -70,6 +70,15 @@ impl SearchableExtractor for WordPairProximityDocidsExtractor {
                 )?;
             }
             DocumentChange::Update(inner) => {
+                if !inner.has_changed_for_fields(
+                    document_tokenizer.attribute_to_extract,
+                    rtxn,
+                    index,
+                    context.db_fields_ids_map,
+                )? {
+                    return Ok(());
+                }
+
                 let document = inner.current(rtxn, index, context.db_fields_ids_map)?;
                 process_document_tokens(
                     document,

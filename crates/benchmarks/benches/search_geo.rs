@@ -5,6 +5,7 @@ use criterion::{criterion_group, criterion_main};
 use milli::update::Settings;
 use utils::Conf;
 
+#[cfg(not(windows))]
 #[global_allocator]
 static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 

@@ -70,6 +70,8 @@ pub mod main_key {
     pub const EMBEDDING_CONFIGS: &str = "embedding_configs";
     pub const SEARCH_CUTOFF: &str = "search_cutoff";
     pub const LOCALIZED_ATTRIBUTES_RULES: &str = "localized_attributes_rules";
+    pub const FACET_SEARCH: &str = "facet_search";
+    pub const PREFIX_SEARCH: &str = "prefix_search";
 }
 
 pub mod db_name {
@@ -1233,6 +1235,10 @@ impl Index {
         )
     }
 
+    pub(crate) fn delete_words_prefixes_fst(&self, wtxn: &mut RwTxn<'_>) -> heed::Result<bool> {
+        self.main.remap_key_type::<Str>().delete(wtxn, main_key::WORDS_PREFIXES_FST_KEY)
+    }
+
     /// Returns the FST which is the words prefixes dictionary of the engine.
     pub fn words_prefixes_fst<'t>(&self, rtxn: &'t RoTxn<'t>) -> Result<fst::Set<Cow<'t, [u8]>>> {
         match self.main.remap_types::<Str, Bytes>().get(rtxn, main_key::WORDS_PREFIXES_FST_KEY)? {
@@ -1562,6 +1568,41 @@ impl Index {
         self.main.remap_key_type::<Str>().delete(txn, main_key::PROXIMITY_PRECISION)
     }
 
+    pub fn prefix_search(&self, txn: &RoTxn<'_>) -> heed::Result<Option<PrefixSearch>> {
+        self.main.remap_types::<Str, SerdeBincode<PrefixSearch>>().get(txn, main_key::PREFIX_SEARCH)
+    }
+
+    pub(crate) fn put_prefix_search(
+        &self,
+        txn: &mut RwTxn<'_>,
+        val: PrefixSearch,
+    ) -> heed::Result<()> {
+        self.main.remap_types::<Str, SerdeBincode<PrefixSearch>>().put(
+            txn,
+            main_key::PREFIX_SEARCH,
+            &val,
+        )
+    }
+
+    pub(crate) fn delete_prefix_search(&self, txn: &mut RwTxn<'_>) -> heed::Result<bool> {
+        self.main.remap_key_type::<Str>().delete(txn, main_key::PREFIX_SEARCH)
+    }
+
+    pub fn facet_search(&self, txn: &RoTxn<'_>) -> heed::Result<bool> {
+        self.main
+            .remap_types::<Str, SerdeBincode<bool>>()
+            .get(txn, main_key::FACET_SEARCH)
+            .map(|v| v.unwrap_or(true))
+    }
+
+    pub(crate) fn put_facet_search(&self, txn: &mut RwTxn<'_>, val: bool) -> heed::Result<()> {
+        self.main.remap_types::<Str, SerdeBincode<bool>>().put(txn, main_key::FACET_SEARCH, &val)
+    }
+
+    pub(crate) fn delete_facet_search(&self, txn: &mut RwTxn<'_>) -> heed::Result<bool> {
+        self.main.remap_key_type::<Str>().delete(txn, main_key::FACET_SEARCH)
+    }
+
     pub fn localized_attributes_rules(
         &self,
         rtxn: &RoTxn<'_>,
@@ -1647,12 +1688,9 @@ impl Index {
         Ok(res)
     }
 
-    pub fn prefix_settings(&self, _rtxn: &RoTxn<'_>) -> Result<PrefixSettings> {
-        Ok(PrefixSettings {
-            compute_prefixes: true,
-            max_prefix_length: 4,
-            prefix_count_threshold: 100,
-        })
+    pub fn prefix_settings(&self, rtxn: &RoTxn<'_>) -> Result<PrefixSettings> {
+        let compute_prefixes = self.prefix_search(rtxn)?.unwrap_or_default();
+        Ok(PrefixSettings { compute_prefixes, max_prefix_length: 4, prefix_count_threshold: 100 })
     }
 }
 
@@ -1665,9 +1703,17 @@ pub struct IndexEmbeddingConfig {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct PrefixSettings {
-    pub prefix_count_threshold: u64,
+    pub prefix_count_threshold: usize,
     pub max_prefix_length: usize,
-    pub compute_prefixes: bool,
+    pub compute_prefixes: PrefixSearch,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum PrefixSearch {
+    #[default]
+    IndexingTime,
+    Disabled,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -1688,6 +1734,7 @@ pub(crate) mod tests {
 
     use crate::error::{Error, InternalError};
     use crate::index::{DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS};
+    use crate::progress::Progress;
     use crate::update::new::indexer;
     use crate::update::settings::InnerIndexSettings;
     use crate::update::{
@@ -1764,7 +1811,7 @@ pub(crate) mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )?;
 
             if let Some(error) = operation_stats.into_iter().find_map(|stat| stat.error) {
@@ -1775,6 +1822,7 @@ pub(crate) mod tests {
                 indexer::index(
                     wtxn,
                     &self.inner,
+                    &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     indexer_config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -1782,7 +1830,7 @@ pub(crate) mod tests {
                     &document_changes,
                     embedders,
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
             })
             .unwrap()?;
@@ -1854,7 +1902,7 @@ pub(crate) mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )?;
 
             if let Some(error) = operation_stats.into_iter().find_map(|stat| stat.error) {
@@ -1865,6 +1913,7 @@ pub(crate) mod tests {
                 indexer::index(
                     wtxn,
                     &self.inner,
+                    &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     indexer_config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -1872,7 +1921,7 @@ pub(crate) mod tests {
                     &document_changes,
                     embedders,
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
             })
             .unwrap()?;
@@ -1934,7 +1983,7 @@ pub(crate) mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )
             .unwrap();
 
@@ -1945,6 +1994,7 @@ pub(crate) mod tests {
                 indexer::index(
                     &mut wtxn,
                     &index.inner,
+                    &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     indexer_config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -1952,7 +2002,7 @@ pub(crate) mod tests {
                     &document_changes,
                     embedders,
                     &|| should_abort.load(Relaxed),
-                    &|_| (),
+                    &Progress::default(),
                 )
             })
             .unwrap()

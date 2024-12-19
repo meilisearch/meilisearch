@@ -27,18 +27,27 @@ impl CboRoaringBitmapCodec {
         }
     }
 
-    pub fn serialize_into(roaring: &RoaringBitmap, vec: &mut Vec<u8>) {
+    pub fn serialize_into_vec(roaring: &RoaringBitmap, vec: &mut Vec<u8>) {
+        Self::serialize_into_writer(roaring, vec).unwrap()
+    }
+
+    pub fn serialize_into_writer<W: io::Write>(
+        roaring: &RoaringBitmap,
+        mut writer: W,
+    ) -> io::Result<()> {
         if roaring.len() <= THRESHOLD as u64 {
             // If the number of items (u32s) to encode is less than or equal to the threshold
             // it means that it would weigh the same or less than the RoaringBitmap
             // header, so we directly encode them using ByteOrder instead.
             for integer in roaring {
-                vec.write_u32::<NativeEndian>(integer).unwrap();
+                writer.write_u32::<NativeEndian>(integer)?;
             }
         } else {
             // Otherwise, we use the classic RoaringBitmapCodec that writes a header.
-            roaring.serialize_into(vec).unwrap();
+            roaring.serialize_into(writer)?;
         }
+
+        Ok(())
     }
 
     pub fn deserialize_from(mut bytes: &[u8]) -> io::Result<RoaringBitmap> {
@@ -143,7 +152,7 @@ impl CboRoaringBitmapCodec {
             return Ok(None);
         }
 
-        Self::serialize_into(&previous, buffer);
+        Self::serialize_into_vec(&previous, buffer);
         Ok(Some(&buffer[..]))
     }
 }
@@ -169,7 +178,7 @@ impl heed::BytesEncode<'_> for CboRoaringBitmapCodec {
 
     fn bytes_encode(item: &Self::EItem) -> Result<Cow<'_, [u8]>, BoxedError> {
         let mut vec = Vec::with_capacity(Self::serialized_size(item));
-        Self::serialize_into(item, &mut vec);
+        Self::serialize_into_vec(item, &mut vec);
         Ok(Cow::Owned(vec))
     }
 }

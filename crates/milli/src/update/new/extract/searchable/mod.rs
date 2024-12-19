@@ -14,9 +14,9 @@ use tokenize_document::{tokenizer_builder, DocumentTokenizer};
 use super::cache::BalancedCaches;
 use super::DocidsExtractor;
 use crate::update::new::indexer::document_changes::{
-    extract, DocumentChangeContext, DocumentChanges, Extractor, IndexingContext, Progress,
+    extract, DocumentChangeContext, DocumentChanges, Extractor, IndexingContext,
 };
-use crate::update::new::steps::Step;
+use crate::update::new::steps::IndexingStep;
 use crate::update::new::thread_local::{FullySend, ThreadLocal};
 use crate::update::new::DocumentChange;
 use crate::update::GrenadParameters;
@@ -56,16 +56,15 @@ impl<'a, 'extractor, EX: SearchableExtractor + Sync> Extractor<'extractor>
 }
 
 pub trait SearchableExtractor: Sized + Sync {
-    fn run_extraction<'pl, 'fid, 'indexer, 'index, 'extractor, DC: DocumentChanges<'pl>, MSP, SP>(
+    fn run_extraction<'pl, 'fid, 'indexer, 'index, 'extractor, DC: DocumentChanges<'pl>, MSP>(
         grenad_parameters: GrenadParameters,
         document_changes: &DC,
-        indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP, SP>,
+        indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP>,
         extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
-        step: Step,
+        step: IndexingStep,
     ) -> Result<Vec<BalancedCaches<'extractor>>>
     where
         MSP: Fn() -> bool + Sync,
-        SP: Fn(Progress) + Sync,
     {
         let rtxn = indexing_context.index.read_txn()?;
         let stop_words = indexing_context.index.stop_words(&rtxn)?;
@@ -134,16 +133,15 @@ pub trait SearchableExtractor: Sized + Sync {
 }
 
 impl<T: SearchableExtractor> DocidsExtractor for T {
-    fn run_extraction<'pl, 'fid, 'indexer, 'index, 'extractor, DC: DocumentChanges<'pl>, MSP, SP>(
+    fn run_extraction<'pl, 'fid, 'indexer, 'index, 'extractor, DC: DocumentChanges<'pl>, MSP>(
         grenad_parameters: GrenadParameters,
         document_changes: &DC,
-        indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP, SP>,
+        indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP>,
         extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
-        step: Step,
+        step: IndexingStep,
     ) -> Result<Vec<BalancedCaches<'extractor>>>
     where
         MSP: Fn() -> bool + Sync,
-        SP: Fn(Progress) + Sync,
     {
         Self::run_extraction(
             grenad_parameters,

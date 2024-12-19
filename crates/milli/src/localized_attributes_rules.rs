@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use charabia::Language;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 use crate::fields_ids_map::FieldsIdsMap;
 use crate::FieldId;
@@ -14,9 +15,10 @@ use crate::FieldId;
 /// The pattern `attribute_name*` matches any attribute name that starts with `attribute_name`.
 /// The pattern `*attribute_name` matches any attribute name that ends with `attribute_name`.
 /// The pattern `*attribute_name*` matches any attribute name that contains `attribute_name`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct LocalizedAttributesRule {
     pub attribute_patterns: Vec<String>,
+    #[schema(value_type = Vec<String>)]
     pub locales: Vec<Language>,
 }
 

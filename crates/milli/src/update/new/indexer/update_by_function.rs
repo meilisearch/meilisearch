@@ -1,8 +1,9 @@
-use raw_collections::RawMap;
+use bumparaw_collections::RawMap;
 use rayon::iter::IndexedParallelIterator;
 use rayon::slice::ParallelSlice as _;
 use rhai::{Dynamic, Engine, OptimizationLevel, Scope, AST};
 use roaring::RoaringBitmap;
+use rustc_hash::FxBuildHasher;
 
 use super::document_changes::DocumentChangeContext;
 use super::DocumentChanges;
@@ -160,8 +161,12 @@ impl<'index> DocumentChanges<'index> for UpdateByFunctionChanges<'index> {
                         if document_id != new_document_id {
                             Err(Error::UserError(UserError::DocumentEditionCannotModifyPrimaryKey))
                         } else {
-                            let raw_new_doc = RawMap::from_raw_value(raw_new_doc, doc_alloc)
-                                .map_err(InternalError::SerdeJson)?;
+                            let raw_new_doc = RawMap::from_raw_value_and_hasher(
+                                raw_new_doc,
+                                FxBuildHasher,
+                                doc_alloc,
+                            )
+                            .map_err(InternalError::SerdeJson)?;
 
                             Ok(Some(DocumentChange::Update(Update::create(
                                 docid,

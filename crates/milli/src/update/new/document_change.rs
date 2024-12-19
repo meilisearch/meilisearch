@@ -1,7 +1,10 @@
 use bumpalo::Bump;
 use heed::RoTxn;
 
-use super::document::{DocumentFromDb, DocumentFromVersions, MergedDocument, Versions};
+use super::document::{
+    Document as _, DocumentFromDb, DocumentFromVersions, MergedDocument, Versions,
+};
+use super::extract::perm_json_p;
 use super::vector_document::{
     MergedVectorDocument, VectorDocumentFromDb, VectorDocumentFromVersions,
 };
@@ -162,6 +165,80 @@ impl<'doc> Update<'doc> {
                 DocumentFromVersions::new(&self.new),
             )
         }
+    }
+
+    /// Returns whether the updated version of the document is different from the current version for the passed subset of fields.
+    ///
+    /// `true` if at least one top-level-field that is a exactly a member of field or a parent of a member of field changed.
+    /// Otherwise `false`.
+    pub fn has_changed_for_fields<'t, Mapper: FieldIdMapper>(
+        &self,
+        fields: Option<&[&str]>,
+        rtxn: &'t RoTxn,
+        index: &'t Index,
+        mapper: &'t Mapper,
+    ) -> Result<bool> {
+        let mut changed = false;
+        let mut cached_current = None;
+        let mut updated_selected_field_count = 0;
+
+        for entry in self.updated().iter_top_level_fields() {
+            let (key, updated_value) = entry?;
+
+            if perm_json_p::select_field(key, fields, &[]) == perm_json_p::Selection::Skip {
+                continue;
+            }
+
+            updated_selected_field_count += 1;
+            let current = match cached_current {
+                Some(current) => current,
+                None => self.current(rtxn, index, mapper)?,
+            };
+            let current_value = current.top_level_field(key)?;
+            let Some(current_value) = current_value else {
+                changed = true;
+                break;
+            };
+
+            if current_value.get() != updated_value.get() {
+                changed = true;
+                break;
+            }
+            cached_current = Some(current);
+        }
+
+        if !self.has_deletion {
+            // no field deletion, so fields that don't appear in `updated` cannot have changed
+            return Ok(changed);
+        }
+
+        if changed {
+            return Ok(true);
+        }
+
+        // we saw all updated fields, and set `changed` if any field wasn't in `current`.
+        // so if there are as many fields in `current` as in `updated`, then nothing changed.
+        // If there is any more fields in `current`, then they are missing in `updated`.
+        let has_deleted_fields = {
+            let current = match cached_current {
+                Some(current) => current,
+                None => self.current(rtxn, index, mapper)?,
+            };
+
+            let mut current_selected_field_count = 0;
+            for entry in current.iter_top_level_fields() {
+                let (key, _) = entry?;
+
+                if perm_json_p::select_field(key, fields, &[]) == perm_json_p::Selection::Skip {
+                    continue;
+                }
+                current_selected_field_count += 1;
+            }
+
+            current_selected_field_count != updated_selected_field_count
+        };
+
+        Ok(has_deleted_fields)
     }
 
     pub fn updated_vectors(

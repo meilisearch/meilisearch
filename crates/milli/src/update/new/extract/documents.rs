@@ -12,13 +12,14 @@ use crate::update::new::thread_local::FullySend;
 use crate::update::new::DocumentChange;
 use crate::vector::EmbeddingConfigs;
 use crate::Result;
-pub struct DocumentsExtractor<'a> {
-    document_sender: &'a DocumentsSender<'a>,
+
+pub struct DocumentsExtractor<'a, 'b> {
+    document_sender: DocumentsSender<'a, 'b>,
     embedders: &'a EmbeddingConfigs,
 }
 
-impl<'a> DocumentsExtractor<'a> {
-    pub fn new(document_sender: &'a DocumentsSender<'a>, embedders: &'a EmbeddingConfigs) -> Self {
+impl<'a, 'b> DocumentsExtractor<'a, 'b> {
+    pub fn new(document_sender: DocumentsSender<'a, 'b>, embedders: &'a EmbeddingConfigs) -> Self {
         Self { document_sender, embedders }
     }
 }
@@ -29,7 +30,7 @@ pub struct DocumentExtractorData {
     pub field_distribution_delta: HashMap<String, i64>,
 }
 
-impl<'a, 'extractor> Extractor<'extractor> for DocumentsExtractor<'a> {
+impl<'a, 'b, 'extractor> Extractor<'extractor> for DocumentsExtractor<'a, 'b> {
     type Data = FullySend<RefCell<DocumentExtractorData>>;
 
     fn init_data(&self, _extractor_alloc: &'extractor Bump) -> Result<Self::Data> {

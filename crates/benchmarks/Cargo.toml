@@ -24,7 +24,7 @@ tempfile = "3.14.0"
 criterion = { version = "0.5.1", features = ["html_reports"] }
 rand = "0.8.5"
 rand_chacha = "0.3.1"
-roaring = "0.10.6"
+roaring = "0.10.7"
 
 [build-dependencies]
 anyhow = "1.0.86"
