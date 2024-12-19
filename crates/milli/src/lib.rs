@@ -29,6 +29,7 @@ pub mod vector;
 #[cfg(test)]
 #[macro_use]
 pub mod snapshot_tests;
+pub mod constants;
 mod fieldids_weights_map;
 
 use std::collections::{BTreeMap, HashMap};
