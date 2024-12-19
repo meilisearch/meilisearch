@@ -74,7 +74,7 @@ pub struct DocumentParam {
 
 #[derive(OpenApi)]
 #[openapi(
-    paths(get_documents, replace_documents, update_documents, clear_all_documents, delete_documents_batch),
+    paths(get_document, get_documents, delete_document, replace_documents, update_documents, clear_all_documents, delete_documents_batch, delete_documents_by_filter, edit_documents_by_function, documents_by_query_post),
     tags(
         (
             name = "Documents",
@@ -107,12 +107,14 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     );
 }
 
-#[derive(Debug, Deserr)]
+#[derive(Debug, Deserr, IntoParams)]
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 pub struct GetDocument {
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentFields>)]
+    #[param(value_type = Option<Vec<String>>)]
     fields: OptionStarOrList<String>,
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentRetrieveVectors>)]
+    #[param(value_type = Option<bool>)]
     retrieve_vectors: Param<bool>,
 }
 
@@ -188,6 +190,56 @@ impl<Method: AggregateMethod> Aggregate for DocumentsFetchAggregator<Method> {
     }
 }
 
+
+/// Get one document
+///
+/// Get one document from its primary key.
+#[utoipa::path(
+    get,
+    path = "/{indexUid}/documents/{documentId}",
+    tags = ["Indexes", "Documents"],
+    security(("Bearer" = ["documents.get", "documents.*", "*"])),
+    params(
+        ("indexUid" = String, Path, example = "movies", description = "Index Unique Identifier", nullable = false),
+        ("documentId" = String, Path, example = "85087", description = "The document identifier", nullable = false),
+        GetDocument,
+   ),
+    responses(
+        (status = 200, description = "The documents are returned", body = serde_json::Value, content_type = "application/json", example = json!(
+            {
+                "id": 25684,
+                "title": "American Ninja 5",
+                "poster": "https://image.tmdb.org/t/p/w1280/iuAQVI4mvjI83wnirpD8GVNRVuY.jpg",
+                "overview": "When a scientists daughter is kidnapped, American Ninja, attempts to find her, but this time he teams up with a youngster he has trained in the ways of the ninja.",
+                "release_date": 725846400
+            }
+        )),
+        (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "Index `movies` not found.",
+                "code": "index_not_found",
+                "type": "invalid_request",
+                "link": "https://docs.meilisearch.com/errors#index_not_found"
+            }
+        )),
+        (status = 404, description = "Document not found", body = ResponseError, content_type = "application/json", example = json!(
+            {
+              "message": "Document `a` not found.",
+              "code": "document_not_found",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#document_not_found"
+            }
+        )),
+        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+    )
+)]
 pub async fn get_document(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_GET }>, Data<IndexScheduler>>,
     document_param: web::Path<DocumentParam>,
@@ -251,6 +303,39 @@ impl Aggregate for DocumentsDeletionAggregator {
     }
 }
 
+
+/// Delete a document
+///
+/// Delete a single document by id.
+#[utoipa::path(
+    delete,
+    path = "/{indexUid}/documents/{documentsId}",
+    tags = ["Indexes", "Documents"],
+    security(("Bearer" = ["documents.delete", "documents.*", "*"])),
+    params(
+        ("indexUid" = String, Path, example = "movies", description = "Index Unique Identifier", nullable = false),
+        ("documentsId" = String, Path, example = "movies", description = "Document Identifier", nullable = false),
+    ),
+    responses(
+        (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+            {
+                "taskUid": 147,
+                "indexUid": null,
+                "status": "enqueued",
+                "type": "documentAdditionOrUpdate",
+                "enqueuedAt": "2024-08-08T17:05:55.791772Z"
+            }
+        )),
+        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+    )
+)]
 pub async fn delete_document(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_DELETE }>, Data<IndexScheduler>>,
     path: web::Path<DocumentParam>,
@@ -321,6 +406,58 @@ pub struct BrowseQuery {
     filter: Option<Value>,
 }
 
+/// Get documents with POST
+///
+/// Get a set of documents.
+#[utoipa::path(
+    post,
+    path = "/{indexUid}/documents/fetch",
+    tags = ["Indexes", "Documents"],
+    security(("Bearer" = ["documents.delete", "documents.*", "*"])),
+    params(
+        ("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false),
+        BrowseQuery,
+    ),
+    responses(
+        (status = 200, description = "Task successfully enqueued", body = PaginationView<serde_json::Value>, content_type = "application/json", example = json!(
+            {
+                "results":[
+                    {
+                        "title":"The Travels of Ibn Battuta",
+                        "genres":[
+                            "Travel",
+                            "Adventure"
+                        ],
+                        "language":"English",
+                        "rating":4.5
+                    },
+                    {
+                        "title":"Pride and Prejudice",
+                        "genres":[
+                            "Classics",
+                            "Fiction",
+                            "Romance",
+                            "Literature"
+                        ],
+                        "language":"English",
+                        "rating":4
+                    },
+                ],
+                "offset":0,
+                "limit":2,
+                "total":5
+            }
+        )),
+        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+    )
+)]
 pub async fn documents_by_query_post(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_GET }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
@@ -356,12 +493,10 @@ pub async fn documents_by_query_post(
     security(("Bearer" = ["documents.get", "documents.*", "*"])),
     params(
         ("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false),
-        // Here we can use the post version of the browse query since it contains the exact same parameter
         BrowseQuery
     ),
     responses(
-        //                                                         body = PaginationView<Document>
-        (status = 200, description = "The documents are returned", body = serde_json::Value, content_type = "application/json", example = json!(
+        (status = 200, description = "The documents are returned", body = PaginationView<serde_json::Value>, content_type = "application/json", example = json!(
             {
                 "results": [
                     {
@@ -922,8 +1057,8 @@ async fn copy_body_to_file(
     security(("Bearer" = ["documents.delete", "documents.*", "*"])),
     params(
         ("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false),
+        // TODO: how to task an array of strings in parameter
     ),
-    // TODO: how to return an array of strings
     responses(
         (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
@@ -983,13 +1118,45 @@ pub async fn delete_documents_batch(
     Ok(HttpResponse::Accepted().json(task))
 }
 
-#[derive(Debug, Deserr)]
+#[derive(Debug, Deserr, IntoParams)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct DocumentDeletionByFilter {
     #[deserr(error = DeserrJsonError<InvalidDocumentFilter>, missing_field_error = DeserrJsonError::missing_document_filter)]
     filter: Value,
 }
 
+/// Delete documents by filter
+///
+/// Delete a set of documents based on a filter.
+#[utoipa::path(
+    post,
+    path = "/{indexUid}/documents/delete",
+    tags = ["Indexes", "Documents"],
+    security(("Bearer" = ["documents.delete", "documents.*", "*"])),
+    params(
+        ("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false),
+        DocumentDeletionByFilter,
+    ),
+    responses(
+        (status = 202, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+            {
+                "taskUid": 147,
+                "indexUid": null,
+                "status": "enqueued",
+                "type": "documentDeletion",
+                "enqueuedAt": "2024-08-08T17:05:55.791772Z"
+            }
+        )),
+        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+    )
+)]
 pub async fn delete_documents_by_filter(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_DELETE }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
@@ -1030,7 +1197,7 @@ pub async fn delete_documents_by_filter(
     Ok(HttpResponse::Accepted().json(task))
 }
 
-#[derive(Debug, Deserr)]
+#[derive(Debug, Deserr, IntoParams)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct DocumentEditionByFunction {
     #[deserr(default, error = DeserrJsonError<InvalidDocumentFilter>)]
@@ -1069,6 +1236,38 @@ impl Aggregate for EditDocumentsByFunctionAggregator {
     }
 }
 
+/// Edit documents by function.
+///
+/// Use a [RHAI function](https://rhai.rs/book/engine/hello-world.html) to edit one or more documents directly in Meilisearch.
+#[utoipa::path(
+    post,
+    path = "/{indexUid}/documents/edit",
+    tags = ["Indexes", "Documents"],
+    security(("Bearer" = ["documents.*", "*"])),
+    params(
+        ("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false),
+        DocumentEditionByFunction,        
+    ),
+    responses(
+        (status = 202, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+            {
+                "taskUid": 147,
+                "indexUid": null,
+                "status": "enqueued",
+                "type": "documentDeletion",
+                "enqueuedAt": "2024-08-08T17:05:55.791772Z"
+            }
+        )),
+        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+    )
+)]
 pub async fn edit_documents_by_function(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_ALL }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
