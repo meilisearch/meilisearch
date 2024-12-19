@@ -67,7 +67,7 @@ pub struct TasksFilterQuery {
 
     /// Permits to filter tasks by their batch uid. By default, when the `batchUids` query parameter is not set, all task uids are returned. It's possible to specify several batch uids by separating them with the `,` character.
     #[deserr(default, error = DeserrQueryParamError<InvalidBatchUids>)]
-    #[param(required = false, value_type = Option<BatchId>, example = 12421)]
+    #[param(required = false, value_type = Option<u32>, example = 12421)]
     pub batch_uids: OptionStarOrList<BatchId>,
 
     /// Permits to filter tasks by their uid. By default, when the uids query parameter is not set, all task uids are returned. It's possible to specify several uids by separating them with the `,` character.

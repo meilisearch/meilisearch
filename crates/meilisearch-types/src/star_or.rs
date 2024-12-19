@@ -6,6 +6,7 @@ use std::str::FromStr;
 use deserr::{DeserializeError, Deserr, MergeWithError, ValueKind};
 use serde::de::Visitor;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use utoipa::{IntoParams, PartialSchema, ToSchema};
 
 use crate::deserr::query_params::FromQueryParameter;
 
@@ -229,7 +230,7 @@ pub enum OptionStarOrList<T> {
     List(Vec<T>),
 }
 
-impl<T> OptionStarOrList<T> {
+impl<T: PartialSchema> OptionStarOrList<T> {
     pub fn is_some(&self) -> bool {
         match self {
             Self::None => false,
