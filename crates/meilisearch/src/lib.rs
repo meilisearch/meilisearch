@@ -7,6 +7,8 @@ pub mod extractors;
 pub mod metrics;
 pub mod middleware;
 pub mod option;
+#[cfg(test)]
+mod option_test;
 pub mod routes;
 pub mod search;
 pub mod search_queue;
