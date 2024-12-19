@@ -274,7 +274,7 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
                     last_match_last_token_position_plus_one
                 } else {
                     // we have matched the end of possible tokens, there's nothing to advance
-                    tokens.len() - 1
+                    tokens.len()
                 }
             };
 

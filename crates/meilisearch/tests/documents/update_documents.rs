@@ -172,7 +172,7 @@ async fn error_update_documents_bad_document_id() {
     assert_eq!(
         response["error"]["message"],
         json!(
-            r#"Document identifier `"foo & bar"` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_), and can not be more than 512 bytes."#
+            r#"Document identifier `"foo & bar"` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_), and can not be more than 511 bytes."#
         )
     );
     assert_eq!(response["error"]["code"], json!("invalid_document_id"));

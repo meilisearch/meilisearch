@@ -17,6 +17,32 @@ use crate::extractors::authentication::GuardedData;
 use crate::routes::{get_task_id, is_dry_run, SummarizedTaskView};
 use crate::Opt;
 
+/// This macro generates the routes for the settings.
+///
+/// It takes a list of settings and generates a module for each setting.
+/// Each module contains the `get`, `update` and `delete` routes for the setting.
+///
+/// It also generates a `configure` function that configures the routes for the settings.
+macro_rules! make_setting_routes {
+    ($({route: $route:literal, update_verb: $update_verb:ident, value_type: $type:ty, err_type: $err_ty:ty, attr: $attr:ident, camelcase_attr: $camelcase_attr:literal, analytics: $analytics:ident},)*) => {
+        $(
+            make_setting_route!($route, $update_verb, $type, $err_ty, $attr, $camelcase_attr, $analytics);
+        )*
+
+        pub fn configure(cfg: &mut web::ServiceConfig) {
+            use crate::extractors::sequential_extractor::SeqHandler;
+            cfg.service(
+                web::resource("")
+                .route(web::patch().to(SeqHandler(update_all)))
+                .route(web::get().to(SeqHandler(get_all)))
+                .route(web::delete().to(SeqHandler(delete_all))))
+                $(.service($attr::resources()))*;
+        }
+
+        pub const ALL_SETTINGS_NAMES: &[&str] = &[$(stringify!($attr)),*];
+    };
+}
+
 #[macro_export]
 macro_rules! make_setting_route {
     ($route:literal, $update_verb:ident, $type:ty, $err_ty:ty, $attr:ident, $camelcase_attr:literal, $analytics:ident) => {
@@ -153,255 +179,227 @@ macro_rules! make_setting_route {
     };
 }
 
-make_setting_route!(
-    "/filterable-attributes",
-    put,
-    std::collections::BTreeSet<String>,
-    meilisearch_types::deserr::DeserrJsonError<
-        meilisearch_types::error::deserr_codes::InvalidSettingsFilterableAttributes,
-    >,
-    filterable_attributes,
-    "filterableAttributes",
-    FilterableAttributesAnalytics
-);
-
-make_setting_route!(
-    "/sortable-attributes",
-    put,
-    std::collections::BTreeSet<String>,
-    meilisearch_types::deserr::DeserrJsonError<
-        meilisearch_types::error::deserr_codes::InvalidSettingsSortableAttributes,
-    >,
-    sortable_attributes,
-    "sortableAttributes",
-    SortableAttributesAnalytics
-);
-
-make_setting_route!(
-    "/displayed-attributes",
-    put,
-    Vec<String>,
-    meilisearch_types::deserr::DeserrJsonError<
-        meilisearch_types::error::deserr_codes::InvalidSettingsDisplayedAttributes,
-    >,
-    displayed_attributes,
-    "displayedAttributes",
-    DisplayedAttributesAnalytics
-);
-
-make_setting_route!(
-    "/typo-tolerance",
-    patch,
-    meilisearch_types::settings::TypoSettings,
-    meilisearch_types::deserr::DeserrJsonError<
-        meilisearch_types::error::deserr_codes::InvalidSettingsTypoTolerance,
-    >,
-    typo_tolerance,
-    "typoTolerance",
-    TypoToleranceAnalytics
-);
-
-make_setting_route!(
-    "/searchable-attributes",
-    put,
-    Vec<String>,
-    meilisearch_types::deserr::DeserrJsonError<
-        meilisearch_types::error::deserr_codes::InvalidSettingsSearchableAttributes,
-    >,
-    searchable_attributes,
-    "searchableAttributes",
-    SearchableAttributesAnalytics
-);
-
-make_setting_route!(
-    "/stop-words",
-    put,
-    std::collections::BTreeSet<String>,
-    meilisearch_types::deserr::DeserrJsonError<
-        meilisearch_types::error::deserr_codes::InvalidSettingsStopWords,
-    >,
-    stop_words,
-    "stopWords",
-    StopWordsAnalytics
-);
-
-make_setting_route!(
-    "/non-separator-tokens",
-    put,
-    std::collections::BTreeSet<String>,
-    meilisearch_types::deserr::DeserrJsonError<
-        meilisearch_types::error::deserr_codes::InvalidSettingsNonSeparatorTokens,
-    >,
-    non_separator_tokens,
-    "nonSeparatorTokens",
-    NonSeparatorTokensAnalytics
-);
-
-make_setting_route!(
-    "/separator-tokens",
-    put,
-    std::collections::BTreeSet<String>,
-    meilisearch_types::deserr::DeserrJsonError<
-        meilisearch_types::error::deserr_codes::InvalidSettingsSeparatorTokens,
-    >,
-    separator_tokens,
-    "separatorTokens",
-    SeparatorTokensAnalytics
-);
-
-make_setting_route!(
-    "/dictionary",
-    put,
-    std::collections::BTreeSet<String>,
-    meilisearch_types::deserr::DeserrJsonError<
-        meilisearch_types::error::deserr_codes::InvalidSettingsDictionary,
-    >,
-    dictionary,
-    "dictionary",
-    DictionaryAnalytics
-);
-
-make_setting_route!(
-    "/synonyms",
-    put,
-    std::collections::BTreeMap<String, Vec<String>>,
-    meilisearch_types::deserr::DeserrJsonError<
-        meilisearch_types::error::deserr_codes::InvalidSettingsSynonyms,
-    >,
-    synonyms,
-    "synonyms",
-    SynonymsAnalytics
-);
-
-make_setting_route!(
-    "/distinct-attribute",
-    put,
-    String,
-    meilisearch_types::deserr::DeserrJsonError<
-        meilisearch_types::error::deserr_codes::InvalidSettingsDistinctAttribute,
-    >,
-    distinct_attribute,
-    "distinctAttribute",
-    DistinctAttributeAnalytics
-);
-
-make_setting_route!(
-    "/proximity-precision",
-    put,
-    meilisearch_types::settings::ProximityPrecisionView,
-    meilisearch_types::deserr::DeserrJsonError<
-        meilisearch_types::error::deserr_codes::InvalidSettingsProximityPrecision,
-    >,
-    proximity_precision,
-    "proximityPrecision",
-    ProximityPrecisionAnalytics
-);
-
-make_setting_route!(
-    "/localized-attributes",
-    put,
-    Vec<meilisearch_types::locales::LocalizedAttributesRuleView>,
-    meilisearch_types::deserr::DeserrJsonError<
-        meilisearch_types::error::deserr_codes::InvalidSettingsLocalizedAttributes,
-    >,
-    localized_attributes,
-    "localizedAttributes",
-    LocalesAnalytics
-);
-
-make_setting_route!(
-    "/ranking-rules",
-    put,
-    Vec<meilisearch_types::settings::RankingRuleView>,
-    meilisearch_types::deserr::DeserrJsonError<
-        meilisearch_types::error::deserr_codes::InvalidSettingsRankingRules,
-    >,
-    ranking_rules,
-    "rankingRules",
-    RankingRulesAnalytics
-);
-
-make_setting_route!(
-    "/faceting",
-    patch,
-    meilisearch_types::settings::FacetingSettings,
-    meilisearch_types::deserr::DeserrJsonError<
-        meilisearch_types::error::deserr_codes::InvalidSettingsFaceting,
-    >,
-    faceting,
-    "faceting",
-    FacetingAnalytics
-);
-
-make_setting_route!(
-    "/pagination",
-    patch,
-    meilisearch_types::settings::PaginationSettings,
-    meilisearch_types::deserr::DeserrJsonError<
-        meilisearch_types::error::deserr_codes::InvalidSettingsPagination,
-    >,
-    pagination,
-    "pagination",
-    PaginationAnalytics
-);
-
-make_setting_route!(
-    "/embedders",
-    patch,
-    std::collections::BTreeMap<String, Setting<meilisearch_types::milli::vector::settings::EmbeddingSettings>>,
-    meilisearch_types::deserr::DeserrJsonError<
-        meilisearch_types::error::deserr_codes::InvalidSettingsEmbedders,
-    >,
-    embedders,
-    "embedders",
-    EmbeddersAnalytics
-);
-
-make_setting_route!(
-    "/search-cutoff-ms",
-    put,
-    u64,
-    meilisearch_types::deserr::DeserrJsonError<
-        meilisearch_types::error::deserr_codes::InvalidSettingsSearchCutoffMs,
-    >,
-    search_cutoff_ms,
-    "searchCutoffMs",
-    SearchCutoffMsAnalytics
-);
-
-macro_rules! generate_configure {
-    ($($mod:ident),*) => {
-        pub fn configure(cfg: &mut web::ServiceConfig) {
-            use crate::extractors::sequential_extractor::SeqHandler;
-            cfg.service(
-                web::resource("")
-                .route(web::patch().to(SeqHandler(update_all)))
-                .route(web::get().to(SeqHandler(get_all)))
-                .route(web::delete().to(SeqHandler(delete_all))))
-                $(.service($mod::resources()))*;
-        }
-    };
-}
-
-generate_configure!(
-    filterable_attributes,
-    sortable_attributes,
-    displayed_attributes,
-    localized_attributes,
-    searchable_attributes,
-    distinct_attribute,
-    proximity_precision,
-    stop_words,
-    separator_tokens,
-    non_separator_tokens,
-    dictionary,
-    synonyms,
-    ranking_rules,
-    typo_tolerance,
-    pagination,
-    faceting,
-    embedders,
-    search_cutoff_ms
+make_setting_routes!(
+    {
+        route: "/filterable-attributes",
+        update_verb: put,
+        value_type: std::collections::BTreeSet<String>,
+        err_type: meilisearch_types::deserr::DeserrJsonError<
+            meilisearch_types::error::deserr_codes::InvalidSettingsFilterableAttributes,
+        >,
+        attr: filterable_attributes,
+        camelcase_attr: "filterableAttributes",
+        analytics: FilterableAttributesAnalytics
+    },
+    {
+        route: "/sortable-attributes",
+        update_verb: put,
+        value_type: std::collections::BTreeSet<String>,
+        err_type: meilisearch_types::deserr::DeserrJsonError<
+            meilisearch_types::error::deserr_codes::InvalidSettingsSortableAttributes,
+        >,
+        attr: sortable_attributes,
+        camelcase_attr: "sortableAttributes",
+        analytics: SortableAttributesAnalytics
+    },
+    {
+        route: "/displayed-attributes",
+        update_verb: put,
+        value_type: Vec<String>,
+        err_type: meilisearch_types::deserr::DeserrJsonError<
+            meilisearch_types::error::deserr_codes::InvalidSettingsDisplayedAttributes,
+        >,
+        attr: displayed_attributes,
+        camelcase_attr: "displayedAttributes",
+        analytics: DisplayedAttributesAnalytics
+    },
+    {
+        route: "/typo-tolerance",
+        update_verb: patch,
+        value_type: meilisearch_types::settings::TypoSettings,
+        err_type: meilisearch_types::deserr::DeserrJsonError<
+            meilisearch_types::error::deserr_codes::InvalidSettingsTypoTolerance,
+        >,
+        attr: typo_tolerance,
+        camelcase_attr: "typoTolerance",
+        analytics: TypoToleranceAnalytics
+    },
+    {
+        route: "/searchable-attributes",
+        update_verb: put,
+        value_type: Vec<String>,
+        err_type: meilisearch_types::deserr::DeserrJsonError<
+            meilisearch_types::error::deserr_codes::InvalidSettingsSearchableAttributes,
+        >,
+        attr: searchable_attributes,
+        camelcase_attr: "searchableAttributes",
+        analytics: SearchableAttributesAnalytics
+    },
+    {
+        route: "/stop-words",
+        update_verb: put,
+        value_type: std::collections::BTreeSet<String>,
+        err_type: meilisearch_types::deserr::DeserrJsonError<
+            meilisearch_types::error::deserr_codes::InvalidSettingsStopWords,
+        >,
+        attr: stop_words,
+        camelcase_attr: "stopWords",
+        analytics: StopWordsAnalytics
+    },
+    {
+        route: "/non-separator-tokens",
+        update_verb: put,
+        value_type: std::collections::BTreeSet<String>,
+        err_type: meilisearch_types::deserr::DeserrJsonError<
+            meilisearch_types::error::deserr_codes::InvalidSettingsNonSeparatorTokens,
+        >,
+        attr: non_separator_tokens,
+        camelcase_attr: "nonSeparatorTokens",
+        analytics: NonSeparatorTokensAnalytics
+    },
+    {
+        route: "/separator-tokens",
+        update_verb: put,
+        value_type: std::collections::BTreeSet<String>,
+        err_type: meilisearch_types::deserr::DeserrJsonError<
+            meilisearch_types::error::deserr_codes::InvalidSettingsSeparatorTokens,
+        >,
+        attr: separator_tokens,
+        camelcase_attr: "separatorTokens",
+        analytics: SeparatorTokensAnalytics
+    },
+    {
+        route: "/dictionary",
+        update_verb: put,
+        value_type: std::collections::BTreeSet<String>,
+        err_type: meilisearch_types::deserr::DeserrJsonError<
+            meilisearch_types::error::deserr_codes::InvalidSettingsDictionary,
+        >,
+        attr: dictionary,
+        camelcase_attr: "dictionary",
+        analytics: DictionaryAnalytics
+    },
+    {
+        route: "/synonyms",
+        update_verb: put,
+        value_type: std::collections::BTreeMap<String, Vec<String>>,
+        err_type: meilisearch_types::deserr::DeserrJsonError<
+            meilisearch_types::error::deserr_codes::InvalidSettingsSynonyms,
+        >,
+        attr: synonyms,
+        camelcase_attr: "synonyms",
+        analytics: SynonymsAnalytics
+    },
+    {
+        route: "/distinct-attribute",
+        update_verb: put,
+        value_type: String,
+        err_type: meilisearch_types::deserr::DeserrJsonError<
+            meilisearch_types::error::deserr_codes::InvalidSettingsDistinctAttribute,
+        >,
+        attr: distinct_attribute,
+        camelcase_attr: "distinctAttribute",
+        analytics: DistinctAttributeAnalytics
+    },
+    {
+        route: "/proximity-precision",
+        update_verb: put,
+        value_type: meilisearch_types::settings::ProximityPrecisionView,
+        err_type: meilisearch_types::deserr::DeserrJsonError<
+            meilisearch_types::error::deserr_codes::InvalidSettingsProximityPrecision,
+        >,
+        attr: proximity_precision,
+        camelcase_attr: "proximityPrecision",
+        analytics: ProximityPrecisionAnalytics
+    },
+    {
+        route: "/localized-attributes",
+        update_verb: put,
+        value_type: Vec<meilisearch_types::locales::LocalizedAttributesRuleView>,
+        err_type: meilisearch_types::deserr::DeserrJsonError<
+            meilisearch_types::error::deserr_codes::InvalidSettingsLocalizedAttributes,
+        >,
+        attr: localized_attributes,
+        camelcase_attr: "localizedAttributes",
+        analytics: LocalesAnalytics
+    },
+    {
+        route: "/ranking-rules",
+        update_verb: put,
+        value_type: Vec<meilisearch_types::settings::RankingRuleView>,
+        err_type: meilisearch_types::deserr::DeserrJsonError<
+            meilisearch_types::error::deserr_codes::InvalidSettingsRankingRules,
+        >,
+        attr: ranking_rules,
+        camelcase_attr: "rankingRules",
+        analytics: RankingRulesAnalytics
+    },
+    {
+        route: "/faceting",
+        update_verb: patch,
+        value_type: meilisearch_types::settings::FacetingSettings,
+        err_type: meilisearch_types::deserr::DeserrJsonError<
+            meilisearch_types::error::deserr_codes::InvalidSettingsFaceting,
+        >,
+        attr: faceting,
+        camelcase_attr: "faceting",
+        analytics: FacetingAnalytics
+    },
+    {
+        route: "/pagination",
+        update_verb: patch,
+        value_type: meilisearch_types::settings::PaginationSettings,
+        err_type: meilisearch_types::deserr::DeserrJsonError<
+            meilisearch_types::error::deserr_codes::InvalidSettingsPagination,
+        >,
+        attr: pagination,
+        camelcase_attr: "pagination",
+        analytics: PaginationAnalytics
+    },
+    {
+        route: "/embedders",
+        update_verb: patch,
+        value_type: std::collections::BTreeMap<String, Setting<meilisearch_types::milli::vector::settings::EmbeddingSettings>>,
+        err_type: meilisearch_types::deserr::DeserrJsonError<
+            meilisearch_types::error::deserr_codes::InvalidSettingsEmbedders,
+        >,
+        attr: embedders,
+        camelcase_attr: "embedders",
+        analytics: EmbeddersAnalytics
+    },
+    {
+        route: "/search-cutoff-ms",
+        update_verb: put,
+        value_type: u64,
+        err_type: meilisearch_types::deserr::DeserrJsonError<
+            meilisearch_types::error::deserr_codes::InvalidSettingsSearchCutoffMs,
+        >,
+        attr: search_cutoff_ms,
+        camelcase_attr: "searchCutoffMs",
+        analytics: SearchCutoffMsAnalytics
+    },
+    {
+        route: "/facet-search",
+        update_verb: put,
+        value_type: bool,
+        err_type: meilisearch_types::deserr::DeserrJsonError<
+            meilisearch_types::error::deserr_codes::InvalidSettingsFacetSearch,
+        >,
+        attr: facet_search,
+        camelcase_attr: "facetSearch",
+        analytics: FacetSearchAnalytics
+    },
+    {
+        route: "/prefix-search",
+        update_verb: put,
+        value_type: meilisearch_types::settings::PrefixSearchSettings,
+        err_type: meilisearch_types::deserr::DeserrJsonError<
+            meilisearch_types::error::deserr_codes::InvalidSettingsPrefixSearch,
+        >,
+        attr: prefix_search,
+        camelcase_attr: "prefixSearch",
+        analytics: PrefixSearchAnalytics
+    },
 );
 
 pub async fn update_all(
@@ -456,6 +454,8 @@ pub async fn update_all(
             non_separator_tokens: NonSeparatorTokensAnalytics::new(
                 new_settings.non_separator_tokens.as_ref().set(),
             ),
+            facet_search: FacetSearchAnalytics::new(new_settings.facet_search.as_ref().set()),
+            prefix_search: PrefixSearchAnalytics::new(new_settings.prefix_search.as_ref().set()),
         },
         &req,
     );

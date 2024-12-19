@@ -475,7 +475,7 @@ impl<F> Embeddings<F> {
         Ok(())
     }
 
-    /// Append a flat vector of embeddings a the end of the embeddings.
+    /// Append a flat vector of embeddings at the end of the embeddings.
     ///
     /// If `embeddings.len() % self.dimension != 0`, then the append operation fails.
     pub fn append(&mut self, mut embeddings: Vec<F>) -> Result<(), Vec<F>> {

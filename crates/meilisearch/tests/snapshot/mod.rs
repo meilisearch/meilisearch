@@ -129,11 +129,11 @@ async fn perform_on_demand_snapshot() {
 
     index.load_test_set().await;
 
-    server.index("doggo").create(Some("bone")).await;
-    index.wait_task(2).await;
+    let (task, _) = server.index("doggo").create(Some("bone")).await;
+    index.wait_task(task.uid()).await.succeeded();
 
-    server.index("doggo").create(Some("bone")).await;
-    index.wait_task(2).await;
+    let (task, _) = server.index("doggo").create(Some("bone")).await;
+    index.wait_task(task.uid()).await.failed();
 
     let (task, code) = server.create_snapshot().await;
     snapshot!(code, @"202 Accepted");

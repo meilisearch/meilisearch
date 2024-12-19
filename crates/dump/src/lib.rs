@@ -292,6 +292,8 @@ pub(crate) mod test {
             embedders: Setting::NotSet,
             search_cutoff_ms: Setting::NotSet,
             localized_attributes: Setting::NotSet,
+            facet_search: Setting::NotSet,
+            prefix_search: Setting::NotSet,
             _kind: std::marker::PhantomData,
         };
         settings.check()

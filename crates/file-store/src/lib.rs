@@ -136,6 +136,14 @@ pub struct File {
 }
 
 impl File {
+    pub fn from_parts(path: PathBuf, file: Option<NamedTempFile>) -> Self {
+        Self { path, file }
+    }
+
+    pub fn into_parts(self) -> (PathBuf, Option<NamedTempFile>) {
+        (self.path, self.file)
+    }
+
     pub fn dry_file() -> Result<Self> {
         Ok(Self { path: PathBuf::new(), file: None })
     }

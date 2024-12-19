@@ -38,6 +38,16 @@ pub struct RenderPromptError {
     pub fault: FaultSource,
 }
 impl RenderPromptError {
+    pub(crate) fn missing_context_with_external_docid(
+        external_docid: String,
+        inner: liquid::Error,
+    ) -> RenderPromptError {
+        Self {
+            kind: RenderPromptErrorKind::MissingContextWithExternalDocid(external_docid, inner),
+            fault: FaultSource::User,
+        }
+    }
+
     pub(crate) fn missing_context(inner: liquid::Error) -> RenderPromptError {
         Self { kind: RenderPromptErrorKind::MissingContext(inner), fault: FaultSource::User }
     }
@@ -47,6 +57,8 @@ impl RenderPromptError {
 pub enum RenderPromptErrorKind {
     #[error("missing field in document: {0}")]
     MissingContext(liquid::Error),
+    #[error("missing field in document `{0}`: {1}")]
+    MissingContextWithExternalDocid(String, liquid::Error),
 }
 
 impl From<RenderPromptError> for crate::Error {

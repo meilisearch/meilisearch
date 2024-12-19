@@ -1,8 +1,9 @@
 use deserr::Deserr;
 use milli::OrderBy;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Serialize, Deserialize, Deserr)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Serialize, Deserialize, Deserr, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[deserr(rename_all = camelCase)]
 pub enum FacetValuesSort {
