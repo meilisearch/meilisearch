@@ -82,7 +82,7 @@ macro_rules! make_setting_route {
                 let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
                 let new_settings = Settings { $attr: Setting::Reset.into(), ..Default::default() };
-
+x
                 let allow_index_creation =
                     index_scheduler.filters().allow_index_creation(&index_uid);
 
