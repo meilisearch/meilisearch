@@ -1,4 +1,5 @@
 use actix_web::test;
+use actix_web::web::resource;
 use meili_snap::{json_string, snapshot};
 use meilisearch::Opt;
 use time::format_description::well_known::Rfc3339;
@@ -980,7 +981,7 @@ async fn add_documents_no_index_creation() {
     snapshot!(code, @"202 Accepted");
     assert_eq!(response["taskUid"], 0);
 
-    index.wait_task(0).await;
+    index.wait_task(response.uid()).await;
 
     let (response, code) = index.get_task(0).await;
     snapshot!(code, @"200 OK");
@@ -1059,9 +1060,9 @@ async fn document_addition_with_primary_key() {
     }
     "###);
 
-    index.wait_task(0).await;
+    index.wait_task(response.uid()).await;
 
-    let (response, code) = index.get_task(0).await;
+    let (response, code) = index.get_task(response.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
@@ -1169,7 +1170,7 @@ async fn replace_document() {
     }
     "###);
 
-    index.wait_task(0).await;
+    index.wait_task(response.uid()).await;
 
     let documents = json!([
         {
@@ -1178,12 +1179,12 @@ async fn replace_document() {
         }
     ]);
 
-    let (_response, code) = index.add_documents(documents, None).await;
+    let (task, code) = index.add_documents(documents, None).await;
     snapshot!(code,@"202 Accepted");
 
-    index.wait_task(1).await;
+    index.wait_task(task.uid()).await;
 
-    let (response, code) = index.get_task(1).await;
+    let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
@@ -1270,8 +1271,8 @@ async fn error_add_documents_bad_document_id() {
             "content": "foobar"
         }
     ]);
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
     let (response, code) = index.get_task(1).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
@@ -1312,8 +1313,8 @@ async fn error_add_documents_missing_document_id() {
             "content": "foobar"
         }
     ]);
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
     let (response, code) = index.get_task(1).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
@@ -1624,8 +1625,8 @@ async fn add_documents_with_geo_field() {
         },
     ]);
 
-    index.add_documents(documents, None).await;
-    let response = index.wait_task(1).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    let response = index.wait_task(task.uid()).await;
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
@@ -1663,8 +1664,8 @@ async fn add_documents_invalid_geo_field() {
         }
     ]);
 
-    index.add_documents(documents, None).await;
-    index.wait_task(2).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
     let (response, code) = index.get_task(2).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
@@ -1701,8 +1702,8 @@ async fn add_documents_invalid_geo_field() {
         }
     ]);
 
-    index.add_documents(documents, None).await;
-    index.wait_task(3).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
     let (response, code) = index.get_task(3).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
@@ -1739,8 +1740,8 @@ async fn add_documents_invalid_geo_field() {
         }
     ]);
 
-    index.add_documents(documents, None).await;
-    index.wait_task(4).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
     let (response, code) = index.get_task(4).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
@@ -1777,9 +1778,9 @@ async fn add_documents_invalid_geo_field() {
         }
     ]);
 
-    index.add_documents(documents, None).await;
-    index.wait_task(5).await;
-    let (response, code) = index.get_task(5).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
+    let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
@@ -1815,9 +1816,9 @@ async fn add_documents_invalid_geo_field() {
         }
     ]);
 
-    index.add_documents(documents, None).await;
-    index.wait_task(6).await;
-    let (response, code) = index.get_task(6).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
+    let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
@@ -1853,9 +1854,9 @@ async fn add_documents_invalid_geo_field() {
         }
     ]);
 
-    index.add_documents(documents, None).await;
-    index.wait_task(7).await;
-    let (response, code) = index.get_task(7).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
+    let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
@@ -1891,9 +1892,9 @@ async fn add_documents_invalid_geo_field() {
         }
     ]);
 
-    index.add_documents(documents, None).await;
-    index.wait_task(8).await;
-    let (response, code) = index.get_task(8).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
+    let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
@@ -1929,9 +1930,9 @@ async fn add_documents_invalid_geo_field() {
         }
     ]);
 
-    index.add_documents(documents, None).await;
-    index.wait_task(9).await;
-    let (response, code) = index.get_task(9).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
+    let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
@@ -1967,9 +1968,9 @@ async fn add_documents_invalid_geo_field() {
         }
     ]);
 
-    index.add_documents(documents, None).await;
-    index.wait_task(10).await;
-    let (response, code) = index.get_task(10).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
+    let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
@@ -2005,9 +2006,9 @@ async fn add_documents_invalid_geo_field() {
         }
     ]);
 
-    index.add_documents(documents, None).await;
-    index.wait_task(11).await;
-    let (response, code) = index.get_task(11).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
+    let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
@@ -2043,9 +2044,9 @@ async fn add_documents_invalid_geo_field() {
         }
     ]);
 
-    index.add_documents(documents, None).await;
-    index.wait_task(12).await;
-    let (response, code) = index.get_task(12).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
+    let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
@@ -2081,9 +2082,9 @@ async fn add_documents_invalid_geo_field() {
         }
     ]);
 
-    index.add_documents(documents, None).await;
-    index.wait_task(13).await;
-    let (response, code) = index.get_task(13).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
+    let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
@@ -2331,8 +2332,8 @@ async fn error_primary_key_inference() {
         }
     ]);
 
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
     let (response, code) = index.get_task(0).await;
     assert_eq!(code, 200);
 
@@ -2372,9 +2373,9 @@ async fn error_primary_key_inference() {
         }
     ]);
 
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
-    let (response, code) = index.get_task(1).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
+    let (response, code) = index.get_task(task.uid()).await;
     assert_eq!(code, 200);
 
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
@@ -2411,9 +2412,9 @@ async fn error_primary_key_inference() {
         }
     ]);
 
-    index.add_documents(documents, None).await;
-    index.wait_task(2).await;
-    let (response, code) = index.get_task(2).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
+    let (response, code) = index.get_task(task.uid()).await;
     assert_eq!(code, 200);
 
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
@@ -2450,14 +2451,14 @@ async fn add_documents_with_primary_key_twice() {
         }
     ]);
 
-    index.add_documents(documents.clone(), Some("title")).await;
-    index.wait_task(0).await;
-    let (response, _code) = index.get_task(0).await;
+    let (task,_status_code) = index.add_documents(documents.clone(), Some("title")).await;
+    index.wait_task(task.uid()).await;
+    let (response, _code) = index.get_task(task.uid()).await;
     assert_eq!(response["status"], "succeeded");
 
-    index.add_documents(documents, Some("title")).await;
-    index.wait_task(1).await;
-    let (response, _code) = index.get_task(1).await;
+    let (task,_status_code) = index.add_documents(documents, Some("title")).await;
+    index.wait_task(task.uid()).await;
+    let (response, _code) = index.get_task(task.uid()).await;
     assert_eq!(response["status"], "succeeded");
 }
 

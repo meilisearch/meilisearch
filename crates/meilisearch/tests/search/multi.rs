@@ -89,8 +89,8 @@ async fn simple_search_single_index() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
 
     let (response, code) = server
         .multi_search(json!({"queries": [
@@ -161,8 +161,8 @@ async fn federation_single_search_single_index() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
 
     let (response, code) = server
         .multi_search(json!({"federation": {}, "queries": [
@@ -208,8 +208,8 @@ async fn federation_multiple_search_single_index() {
     let index = server.index("test");
 
     let documents = SCORE_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
 
     let (response, code) = server
         .multi_search(json!({"federation": {}, "queries": [
@@ -283,8 +283,8 @@ async fn federation_two_search_single_index() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
 
     let (response, code) = server
         .multi_search(json!({"federation": {}, "queries": [
@@ -351,8 +351,8 @@ async fn simple_search_missing_index_uid() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
 
     let (response, code) = server
         .multi_search(json!({"queries": [
@@ -376,8 +376,8 @@ async fn federation_simple_search_missing_index_uid() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
 
     let (response, code) = server
         .multi_search(json!({"federation": {}, "queries": [
@@ -401,8 +401,8 @@ async fn simple_search_illegal_index_uid() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
 
     let (response, code) = server
         .multi_search(json!({"queries": [
@@ -426,8 +426,8 @@ async fn federation_search_illegal_index_uid() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
 
     let (response, code) = server
         .multi_search(json!({"federation": {}, "queries": [
@@ -451,13 +451,13 @@ async fn simple_search_two_indexes() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
 
     let index = server.index("nested");
     let documents = NESTED_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
+    let (add_task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(add_task.uid()).await;
 
     let (response, code) = server
         .multi_search(json!({"queries": [
@@ -558,13 +558,13 @@ async fn federation_two_search_two_indexes() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
 
     let index = server.index("nested");
     let documents = NESTED_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
 
     let (response, code) = server
         .multi_search(json!({"federation": {}, "queries": [
@@ -666,18 +666,18 @@ async fn federation_multiple_search_multiple_indexes() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
 
     let index = server.index("nested");
     let documents = NESTED_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
 
     let index = server.index("score");
     let documents = SCORE_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(2).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
 
     let (response, code) = server
         .multi_search(json!({"federation": {}, "queries": [
@@ -924,8 +924,8 @@ async fn search_one_index_doesnt_exist() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
 
     let (response, code) = server
         .multi_search(json!({"queries": [
@@ -950,8 +950,8 @@ async fn federation_one_index_doesnt_exist() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
 
     let (response, code) = server
         .multi_search(json!({"federation": {}, "queries": [
@@ -1021,13 +1021,13 @@ async fn search_one_query_error() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
 
     let index = server.index("nested");
     let documents = NESTED_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
 
     let (response, code) = server
         .multi_search(json!({"queries": [
@@ -1053,13 +1053,13 @@ async fn federation_one_query_error() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
 
     let index = server.index("nested");
     let documents = NESTED_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
 
     let (response, code) = server
         .multi_search(json!({"federation": {}, "queries": [
@@ -1085,13 +1085,13 @@ async fn federation_one_query_sort_error() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
 
     let index = server.index("nested");
     let documents = NESTED_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
 
     let (response, code) = server
         .multi_search(json!({"federation": {}, "queries": [
@@ -1117,13 +1117,13 @@ async fn search_multiple_query_errors() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
 
     let index = server.index("nested");
     let documents = NESTED_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
 
     let (response, code) = server
         .multi_search(json!({"queries": [
@@ -1149,13 +1149,13 @@ async fn federation_multiple_query_errors() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
 
     let index = server.index("nested");
     let documents = NESTED_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
 
     let (response, code) = server
         .multi_search(json!({"queries": [
@@ -1181,13 +1181,13 @@ async fn federation_multiple_query_sort_errors() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
 
     let index = server.index("nested");
     let documents = NESTED_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
 
     let (response, code) = server
         .multi_search(json!({"queries": [
@@ -1213,13 +1213,13 @@ async fn federation_multiple_query_errors_interleaved() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
 
     let index = server.index("nested");
     let documents = NESTED_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
 
     let (response, code) = server
         .multi_search(json!({"queries": [
@@ -1246,13 +1246,13 @@ async fn federation_multiple_query_sort_errors_interleaved() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
 
     let index = server.index("nested");
     let documents = NESTED_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
 
     let (response, code) = server
         .multi_search(json!({"queries": [
@@ -3020,18 +3020,18 @@ async fn federation_limit_offset() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
 
     let index = server.index("nested");
     let documents = NESTED_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
 
     let index = server.index("score");
     let documents = SCORE_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(2).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
     {
         let (response, code) = server
             .multi_search(json!({"federation": {}, "queries": [
@@ -3338,18 +3338,18 @@ async fn federation_formatting() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
 
     let index = server.index("nested");
     let documents = NESTED_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
 
     let index = server.index("score");
     let documents = SCORE_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(2).await;
+    let (task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await;
     {
         let (response, code) = server
             .multi_search(json!({"federation": {}, "queries": [
