@@ -5,11 +5,11 @@ use crate::json;
 async fn stats() {
     let server = Server::new().await;
     let index = server.index("test");
-    let (_, code) = index.create(Some("id")).await;
+    let (task, code) = index.create(Some("id")).await;
 
     assert_eq!(code, 202);
 
-    index.wait_task(0).await;
+    index.wait_task(task.uid()).await;
 
     let (response, code) = index.stats().await;
 
@@ -33,7 +33,7 @@ async fn stats() {
     assert_eq!(code, 202);
     assert_eq!(response["taskUid"], 1);
 
-    index.wait_task(1).await;
+    index.wait_task(response.uid()).await;
 
     let (response, code) = index.stats().await;
 
