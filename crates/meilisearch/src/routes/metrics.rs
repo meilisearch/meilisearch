@@ -1,16 +1,17 @@
-use actix_web::http::header;
-use actix_web::web::{self, Data};
-use actix_web::HttpResponse;
-use index_scheduler::IndexScheduler;
-use meilisearch_auth::AuthController;
-use meilisearch_types::error::ResponseError;
-use meilisearch_types::keys::actions;
-use prometheus::{Encoder, TextEncoder};
-
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
 use crate::routes::create_all_stats;
 use crate::search_queue::SearchQueue;
+use actix_web::http::header;
+use actix_web::web::{self, Data};
+use actix_web::HttpResponse;
+use index_scheduler::{IndexScheduler, Query};
+use meilisearch_auth::AuthController;
+use meilisearch_types::error::ResponseError;
+use meilisearch_types::keys::actions;
+use meilisearch_types::tasks::Status;
+use prometheus::{Encoder, TextEncoder};
+use time::OffsetDateTime;
 
 pub fn configure(config: &mut web::ServiceConfig) {
     config.service(web::resource("").route(web::get().to(get_metrics)));
@@ -60,6 +61,22 @@ pub async fn get_metrics(
         crate::metrics::MEILISEARCH_LAST_UPDATE.set(last_update.unix_timestamp());
     }
     crate::metrics::MEILISEARCH_IS_INDEXING.set(index_scheduler.is_task_processing()? as i64);
+
+    let task_queue_latency_seconds = index_scheduler
+        .get_tasks_from_authorized_indexes(
+            Query {
+                limit: Some(1),
+                reverse: Some(true),
+                statuses: Some(vec![Status::Enqueued, Status::Processing]),
+                ..Query::default()
+            },
+            auth_filters,
+        )?
+        .0
+        .first()
+        .map(|task| (OffsetDateTime::now_utc() - task.enqueued_at).as_seconds_f64())
+        .unwrap_or(0.0);
+    crate::metrics::MEILISEARCH_TASK_QUEUE_LATENCY_SECONDS.set(task_queue_latency_seconds);
 
     let encoder = TextEncoder::new();
     let mut buffer = vec![];

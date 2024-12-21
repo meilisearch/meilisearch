@@ -1,7 +1,7 @@
 use lazy_static::lazy_static;
 use prometheus::{
-    opts, register_histogram_vec, register_int_counter_vec, register_int_gauge,
-    register_int_gauge_vec, HistogramVec, IntCounterVec, IntGauge, IntGaugeVec,
+    opts, register_gauge, register_histogram_vec, register_int_counter_vec, register_int_gauge,
+    register_int_gauge_vec, Gauge, HistogramVec, IntCounterVec, IntGauge, IntGaugeVec,
 };
 
 lazy_static! {
@@ -63,4 +63,9 @@ lazy_static! {
             "Meilisearch Searches Being Processed"
         ))
         .expect("Can't create a metric");
+    pub static ref MEILISEARCH_TASK_QUEUE_LATENCY_SECONDS: Gauge = register_gauge!(
+        "meilisearch_task_queue_latency_seconds",
+        "Meilisearch Task Queue Latency in Seconds",
+    )
+    .expect("Can't create a metric");
 }
