@@ -1,3 +1,4 @@
+use actix_web::web::resource;
 use meili_snap::{json_string, snapshot};
 
 use crate::common::Server;
@@ -8,14 +9,14 @@ async fn set_and_reset() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    let (_response, _code) = index
+    let (task, _code) = index
         .update_settings(json!({
             "nonSeparatorTokens": ["#", "&"],
             "separatorTokens": ["&sep", "<br/>"],
             "dictionary": ["J.R.R.", "J. R. R."],
         }))
         .await;
-    index.wait_task(0).await;
+    index.wait_task(task.uid()).await;
 
     let (response, _) = index.settings().await;
     snapshot!(json_string!(response["nonSeparatorTokens"]), @r###"
@@ -37,7 +38,7 @@ async fn set_and_reset() {
     ]
     "###);
 
-    index
+    let (task,_status_code) = index
         .update_settings(json!({
             "nonSeparatorTokens": null,
             "separatorTokens": null,
@@ -45,7 +46,7 @@ async fn set_and_reset() {
         }))
         .await;
 
-    index.wait_task(1).await;
+    index.wait_task(task.uid()).await;
 
     let (response, _) = index.settings().await;
     snapshot!(json_string!(response["nonSeparatorTokens"]), @"[]");
@@ -73,17 +74,17 @@ async fn set_and_search() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (add_task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(add_task.uid()).await;
 
-    let (_response, _code) = index
+    let (update_task, _code) = index
         .update_settings(json!({
             "nonSeparatorTokens": ["#", "&"],
             "separatorTokens": ["<br/>", "&sep"],
             "dictionary": ["#", "A#", "B#", "C#", "D#", "E#", "F#", "G#"],
         }))
         .await;
-    index.wait_task(1).await;
+    index.wait_task(update_task.uid()).await;
 
     index
         .search(json!({"q": "&", "attributesToHighlight": ["content"]}), |response, code| {
@@ -227,10 +228,10 @@ async fn advanced_synergies() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (add_task,_status_code) = index.add_documents(documents, None).await;
+    index.wait_task(add_task.uid()).await;
 
-    let (_response, _code) = index
+    let (update_task, _code) = index
         .update_settings(json!({
             "dictionary": ["J.R.R.", "J. R. R."],
             "synonyms": {
@@ -243,7 +244,7 @@ async fn advanced_synergies() {
             }
         }))
         .await;
-    index.wait_task(1).await;
+    index.wait_task(update_task.uid()).await;
 
     index
         .search(json!({"q": "J.R.R.", "attributesToHighlight": ["content"]}), |response, code| {
@@ -353,7 +354,7 @@ async fn advanced_synergies() {
             "dictionary": ["J.R.R.", "J. R. R.", "J.K.", "J. K."],
         }))
         .await;
-    index.wait_task(2).await;
+    index.wait_task(_response.uid()).await;
 
     index
         .search(json!({"q": "jk", "attributesToHighlight": ["content"]}), |response, code| {
