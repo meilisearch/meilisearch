@@ -10,6 +10,7 @@ use roaring::{MultiOps, RoaringBitmap};
 use serde_json::Value;
 
 use super::facet_range_search;
+use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::error::{Error, UserError};
 use crate::heed_codec::facet::{
     FacetGroupKey, FacetGroupKeyCodec, FacetGroupValue, FacetGroupValueCodec, OrderedF64Codec,
@@ -501,7 +502,7 @@ impl<'a> Filter<'a> {
                 }
             }
             FilterCondition::GeoLowerThan { point, radius } => {
-                if filterable_fields.contains("_geo") {
+                if filterable_fields.contains(RESERVED_GEO_FIELD_NAME) {
                     let base_point: [f64; 2] =
                         [point[0].parse_finite_float()?, point[1].parse_finite_float()?];
                     if !(-90.0..=90.0).contains(&base_point[0]) {
@@ -530,13 +531,13 @@ impl<'a> Filter<'a> {
                     Ok(result)
                 } else {
                     Err(point[0].as_external_error(FilterError::AttributeNotFilterable {
-                        attribute: "_geo",
+                        attribute: RESERVED_GEO_FIELD_NAME,
                         filterable_fields: filterable_fields.clone(),
                     }))?
                 }
             }
             FilterCondition::GeoBoundingBox { top_right_point, bottom_left_point } => {
-                if filterable_fields.contains("_geo") {
+                if filterable_fields.contains(RESERVED_GEO_FIELD_NAME) {
                     let top_right: [f64; 2] = [
                         top_right_point[0].parse_finite_float()?,
                         top_right_point[1].parse_finite_float()?,
@@ -663,7 +664,7 @@ impl<'a> Filter<'a> {
                 } else {
                     Err(top_right_point[0].as_external_error(
                         FilterError::AttributeNotFilterable {
-                            attribute: "_geo",
+                            attribute: RESERVED_GEO_FIELD_NAME,
                             filterable_fields: filterable_fields.clone(),
                         },
                     ))?
@@ -689,6 +690,7 @@ mod tests {
     use maplit::hashset;
     use roaring::RoaringBitmap;
 
+    use crate::constants::RESERVED_GEO_FIELD_NAME;
     use crate::index::tests::TempIndex;
     use crate::Filter;
 
@@ -899,7 +901,7 @@ mod tests {
 
         index
             .update_settings(|settings| {
-                settings.set_filterable_fields(hashset! { S("_geo") });
+                settings.set_filterable_fields(hashset! { S(RESERVED_GEO_FIELD_NAME) });
             })
             .unwrap();
 
@@ -911,7 +913,7 @@ mod tests {
                 "address": "Viale Vittorio Veneto, 30, 20124, Milan, Italy",
                 "type": "pizza",
                 "rating": 9,
-                "_geo": {
+                RESERVED_GEO_FIELD_NAME: {
                   "lat": 45.4777599,
                   "lng": 9.1967508
                 }
@@ -922,7 +924,7 @@ mod tests {
                 "address": "Via Dogana, 1, 20123 Milan, Italy",
                 "type": "ice cream",
                 "rating": 10,
-                "_geo": {
+                RESERVED_GEO_FIELD_NAME: {
                   "lat": 45.4632046,
                   "lng": 9.1719421
                 }
@@ -945,8 +947,8 @@ mod tests {
 
         index
             .update_settings(|settings| {
-                settings.set_searchable_fields(vec![S("_geo"), S("price")]); // to keep the fields order
-                settings.set_filterable_fields(hashset! { S("_geo"), S("price") });
+                settings.set_searchable_fields(vec![S(RESERVED_GEO_FIELD_NAME), S("price")]); // to keep the fields order
+                settings.set_filterable_fields(hashset! { S(RESERVED_GEO_FIELD_NAME), S("price") });
             })
             .unwrap();
 
@@ -995,8 +997,8 @@ mod tests {
 
         index
             .update_settings(|settings| {
-                settings.set_searchable_fields(vec![S("_geo"), S("price")]); // to keep the fields order
-                settings.set_filterable_fields(hashset! { S("_geo"), S("price") });
+                settings.set_searchable_fields(vec![S(RESERVED_GEO_FIELD_NAME), S("price")]); // to keep the fields order
+                settings.set_filterable_fields(hashset! { S(RESERVED_GEO_FIELD_NAME), S("price") });
             })
             .unwrap();
 
