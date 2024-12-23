@@ -34,8 +34,7 @@ macro_rules! make_setting_routes {
 
         #[derive(OpenApi)]
         #[openapi(
-            nest($((path = "/", api = $attr::$attr),)*),
-            // paths(/* update_all, get_all, delete_all,*/ $( $attr::get, $attr::update, $attr::delete,)*),
+            paths(update_all, get_all, delete_all, $( $attr::get, $attr::update, $attr::delete,)*),
             tags(
                 (
                     name = "Settings",
@@ -82,16 +81,10 @@ macro_rules! make_setting_route {
             #[allow(unused_imports)]
             use super::*;
 
-            #[derive(OpenApi)]
-            #[openapi(
-                paths(get, update, delete,),
-            )]
-            pub struct $attr;
-
             #[doc = $camelcase_attr]
             #[utoipa::path(
                 delete,
-                path = "/",
+                path = concat!("{indexUid}/settings", $route),
                 tags = ["Indexes", "Settings"],
                 security(("Bearer" = ["settings.update", "settings.*", "*"])),
                 request_body = $type,
@@ -152,7 +145,7 @@ macro_rules! make_setting_route {
             #[doc = $camelcase_attr]
             #[utoipa::path(
                 $update_verb,
-                path = "/",
+                path = concat!("{indexUid}/settings", $route),
                 tags = ["Indexes", "Settings"],
                 security(("Bearer" = ["settings.update", "settings.*", "*"])),
                 request_body = $type,
@@ -235,19 +228,13 @@ macro_rules! make_setting_route {
             #[doc = $camelcase_attr]
             #[utoipa::path(
                 get,
-                path = "/",
+                path = concat!("{indexUid}/settings", $route),
                 tags = ["Indexes", "Settings"],
                 security(("Bearer" = ["settings.get", "settings.*", "*"])),
                 request_body = $type,
                 responses(
-                    (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
-                        {
-                            "taskUid": 147,
-                            "indexUid": "movies",
-                            "status": "enqueued",
-                            "type": "settingsUpdate",
-                            "enqueuedAt": "2024-08-08T17:05:55.791772Z"
-                        }
+                    (status = 200, description = concat!($camelcase_attr, " is returned"), body = SummarizedTaskView, content_type = "application/json", example = json!(
+                        <$type>::default()
                     )),
                     (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
                         {
@@ -510,6 +497,38 @@ make_setting_routes!(
     },
 );
 
+#[utoipa::path(
+    patch,
+    path = "{indexUid}/settings",
+    tags = ["Indexes", "Settings"],
+    security(("Bearer" = ["settings.update", "settings.*", "*"])),
+    request_body = Settings<Unchecked>,
+    responses(
+        (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+            {
+                "taskUid": 147,
+                "indexUid": "movies",
+                "status": "enqueued",
+                "type": "settingsUpdate",
+                "enqueuedAt": "2024-08-08T17:05:55.791772Z"
+            }
+        )),
+        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+    )
+)]
+/// Update settings
+///
+/// Update the settings of an index.
+/// Passing null to an index setting will reset it to its default value.
+/// Updates in the settings route are partial. This means that any parameters not provided in the body will be left unchanged.
+/// If the provided index does not exist, it will be created.
 pub async fn update_all(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SETTINGS_UPDATE }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
@@ -587,6 +606,28 @@ pub async fn update_all(
     Ok(HttpResponse::Accepted().json(task))
 }
 
+#[utoipa::path(
+    get,
+    path = "{indexUid}/settings",
+    tags = ["Indexes", "Settings"],
+    security(("Bearer" = ["settings.update", "settings.*", "*"])),
+    responses(
+        (status = 200, description = "Settings are returned", body = Settings<Unchecked>, content_type = "application/json", example = json!(
+            Settings::<Unchecked>::default()
+        )),
+        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+    )
+)]
+/// All settings
+///
+/// This route allows you to retrieve, configure, or reset all of an index's settings at once.
 pub async fn get_all(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SETTINGS_GET }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
@@ -600,6 +641,34 @@ pub async fn get_all(
     Ok(HttpResponse::Ok().json(new_settings))
 }
 
+#[utoipa::path(
+    delete,
+    path = "{indexUid}/settings",
+    tags = ["Indexes", "Settings"],
+    security(("Bearer" = ["settings.update", "settings.*", "*"])),
+    responses(
+        (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+            {
+                "taskUid": 147,
+                "indexUid": "movies",
+                "status": "enqueued",
+                "type": "settingsUpdate",
+                "enqueuedAt": "2024-08-08T17:05:55.791772Z"
+            }
+        )),
+        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+    )
+)]
+/// Reset settings
+///
+/// Reset all the settings of an index to their default value.
 pub async fn delete_all(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SETTINGS_UPDATE }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
