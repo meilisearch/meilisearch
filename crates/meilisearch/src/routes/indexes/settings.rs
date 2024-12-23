@@ -6,9 +6,12 @@ use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::update::Setting;
-use meilisearch_types::settings::{settings, SecretPolicy, Settings, Unchecked};
+use meilisearch_types::settings::{
+    settings, SecretPolicy, SettingEmbeddingSettings, Settings, Unchecked,
+};
 use meilisearch_types::tasks::KindWithContent;
 use tracing::debug;
+use utoipa::OpenApi;
 
 use super::settings_analytics::*;
 use crate::analytics::Analytics;
@@ -28,6 +31,20 @@ macro_rules! make_setting_routes {
         $(
             make_setting_route!($route, $update_verb, $type, $err_ty, $attr, $camelcase_attr, $analytics);
         )*
+
+        #[derive(OpenApi)]
+        #[openapi(
+            nest($((path = "/", api = $attr::$attr),)*),
+            // paths(/* update_all, get_all, delete_all,*/ $( $attr::get, $attr::update, $attr::delete,)*),
+            tags(
+                (
+                    name = "Settings",
+                    description = "Use the /settings route to customize search settings for a given index. You can either modify all index settings at once using the update settings endpoint, or use a child route to configure a single setting.",
+                    external_docs(url = "https://www.meilisearch.com/docs/reference/api/settings"),
+                ),
+            ),
+        )]
+        pub struct SettingsApi;
 
         pub fn configure(cfg: &mut web::ServiceConfig) {
             use crate::extractors::sequential_extractor::SeqHandler;
@@ -62,7 +79,42 @@ macro_rules! make_setting_route {
             use $crate::extractors::sequential_extractor::SeqHandler;
             use $crate::Opt;
             use $crate::routes::{is_dry_run, get_task_id, SummarizedTaskView};
+            #[allow(unused_imports)]
+            use super::*;
 
+            #[derive(OpenApi)]
+            #[openapi(
+                paths(get, update, delete,),
+            )]
+            pub struct $attr;
+
+            #[doc = $camelcase_attr]
+            #[utoipa::path(
+                delete,
+                path = "/",
+                tags = ["Indexes", "Settings"],
+                security(("Bearer" = ["settings.update", "settings.*", "*"])),
+                request_body = $type,
+                responses(
+                    (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+                        {
+                            "taskUid": 147,
+                            "indexUid": "movies",
+                            "status": "enqueued",
+                            "type": "settingsUpdate",
+                            "enqueuedAt": "2024-08-08T17:05:55.791772Z"
+                        }
+                    )),
+                    (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+                        {
+                            "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                            "code": "missing_authorization_header",
+                            "type": "auth",
+                            "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+                        }
+                    )),
+                )
+            )]
             pub async fn delete(
                 index_scheduler: GuardedData<
                     ActionPolicy<{ actions::SETTINGS_UPDATE }>,
@@ -96,6 +148,34 @@ macro_rules! make_setting_route {
                 Ok(HttpResponse::Accepted().json(task))
             }
 
+
+            #[doc = $camelcase_attr]
+            #[utoipa::path(
+                $update_verb,
+                path = "/",
+                tags = ["Indexes", "Settings"],
+                security(("Bearer" = ["settings.update", "settings.*", "*"])),
+                request_body = $type,
+                responses(
+                    (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+                        {
+                            "taskUid": 147,
+                            "indexUid": "movies",
+                            "status": "enqueued",
+                            "type": "settingsUpdate",
+                            "enqueuedAt": "2024-08-08T17:05:55.791772Z"
+                        }
+                    )),
+                    (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+                        {
+                            "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                            "code": "missing_authorization_header",
+                            "type": "auth",
+                            "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+                        }
+                    )),
+                )
+            )]
             pub async fn update(
                 index_scheduler: GuardedData<
                     ActionPolicy<{ actions::SETTINGS_UPDATE }>,
@@ -151,6 +231,34 @@ macro_rules! make_setting_route {
                 Ok(HttpResponse::Accepted().json(task))
             }
 
+
+            #[doc = $camelcase_attr]
+            #[utoipa::path(
+                get,
+                path = "/",
+                tags = ["Indexes", "Settings"],
+                security(("Bearer" = ["settings.get", "settings.*", "*"])),
+                request_body = $type,
+                responses(
+                    (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+                        {
+                            "taskUid": 147,
+                            "indexUid": "movies",
+                            "status": "enqueued",
+                            "type": "settingsUpdate",
+                            "enqueuedAt": "2024-08-08T17:05:55.791772Z"
+                        }
+                    )),
+                    (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+                        {
+                            "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                            "code": "missing_authorization_header",
+                            "type": "auth",
+                            "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+                        }
+                    )),
+                )
+            )]
             pub async fn get(
                 index_scheduler: GuardedData<
                     ActionPolicy<{ actions::SETTINGS_GET }>,
@@ -359,7 +467,7 @@ make_setting_routes!(
     {
         route: "/embedders",
         update_verb: patch,
-        value_type: std::collections::BTreeMap<String, Setting<meilisearch_types::milli::vector::settings::EmbeddingSettings>>,
+        value_type: std::collections::BTreeMap<String, SettingEmbeddingSettings>,
         err_type: meilisearch_types::deserr::DeserrJsonError<
             meilisearch_types::error::deserr_codes::InvalidSettingsEmbedders,
         >,

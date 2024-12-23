@@ -8,10 +8,9 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use meilisearch_types::facet_values_sort::FacetValuesSort;
 use meilisearch_types::locales::{Locale, LocalizedAttributesRuleView};
 use meilisearch_types::milli::update::Setting;
-use meilisearch_types::milli::vector::settings::EmbeddingSettings;
 use meilisearch_types::settings::{
     FacetingSettings, PaginationSettings, PrefixSearchSettings, ProximityPrecisionView,
-    RankingRuleView, TypoSettings,
+    RankingRuleView, SettingEmbeddingSettings, TypoSettings,
 };
 use serde::Serialize;
 
@@ -497,13 +496,13 @@ pub struct EmbeddersAnalytics {
 }
 
 impl EmbeddersAnalytics {
-    pub fn new(setting: Option<&BTreeMap<String, Setting<EmbeddingSettings>>>) -> Self {
+    pub fn new(setting: Option<&BTreeMap<String, SettingEmbeddingSettings>>) -> Self {
         let mut sources = std::collections::HashSet::new();
 
         if let Some(s) = &setting {
             for source in s
                 .values()
-                .filter_map(|config| config.clone().set())
+                .filter_map(|config| config.inner.clone().set())
                 .filter_map(|config| config.source.set())
             {
                 use meilisearch_types::milli::vector::settings::EmbedderSource;
@@ -522,18 +521,18 @@ impl EmbeddersAnalytics {
             sources: Some(sources),
             document_template_used: setting.as_ref().map(|map| {
                 map.values()
-                    .filter_map(|config| config.clone().set())
+                    .filter_map(|config| config.inner.clone().set())
                     .any(|config| config.document_template.set().is_some())
             }),
             document_template_max_bytes: setting.as_ref().and_then(|map| {
                 map.values()
-                    .filter_map(|config| config.clone().set())
+                    .filter_map(|config| config.inner.clone().set())
                     .filter_map(|config| config.document_template_max_bytes.set())
                     .max()
             }),
             binary_quantization_used: setting.as_ref().map(|map| {
                 map.values()
-                    .filter_map(|config| config.clone().set())
+                    .filter_map(|config| config.inner.clone().set())
                     .any(|config| config.binary_quantized.set().is_some())
             }),
         }
