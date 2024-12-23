@@ -9,6 +9,7 @@ use heed::{RoTxn, RwTxn, Unspecified};
 use ordered_float::OrderedFloat;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 use self::error::{EmbedError, NewEmbedderError};
 use crate::prompt::{Prompt, PromptData};
@@ -710,18 +711,20 @@ impl Embedder {
 ///
 /// The intended use is to make the similarity score more comparable to the regular ranking score.
 /// This allows to correct effects where results are too "packed" around a certain value.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize, Serialize, ToSchema)]
 #[serde(from = "DistributionShiftSerializable")]
 #[serde(into = "DistributionShiftSerializable")]
 pub struct DistributionShift {
     /// Value where the results are "packed".
     ///
     /// Similarity scores are translated so that they are packed around 0.5 instead
+    #[schema(value_type = f32)]
     pub current_mean: OrderedFloat<f32>,
 
     /// standard deviation of a similarity score.
     ///
     /// Set below 0.4 to make the results less packed around the mean, and above 0.4 to make them more packed.
+    #[schema(value_type = f32)]
     pub current_sigma: OrderedFloat<f32>,
 }
 

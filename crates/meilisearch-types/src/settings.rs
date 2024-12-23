@@ -144,6 +144,25 @@ impl MergeWithError<milli::CriterionError> for DeserrJsonError<InvalidSettingsRa
     }
 }
 
+#[derive(Debug, Default, Serialize, Deserialize, PartialEq, Eq, Clone, ToSchema)]
+pub struct SettingEmbeddingSettings {
+    #[serde(flatten)]
+    #[schema(inline, value_type = Option<crate::milli::vector::settings::EmbeddingSettings>)]
+    pub inner: Setting<crate::milli::vector::settings::EmbeddingSettings>,
+}
+
+impl<E: DeserializeError> Deserr<E> for SettingEmbeddingSettings {
+    fn deserialize_from_value<V: deserr::IntoValue>(
+        value: deserr::Value<V>,
+        location: ValuePointerRef,
+    ) -> Result<Self, E> {
+        Setting::<crate::milli::vector::settings::EmbeddingSettings>::deserialize_from_value(
+            value, location,
+        )
+        .map(|inner| Self { inner })
+    }
+}
+
 /// Holds all the settings for an index. `T` can either be `Checked` if they represents settings
 /// whose validity is guaranteed, or `Unchecked` if they need to be validated. In the later case, a
 /// call to `check` will return a `Settings<Checked>` from a `Settings<Unchecked>`.
@@ -237,7 +256,7 @@ pub struct Settings<T> {
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsEmbedders>)]
     #[schema(value_type = String)] // TODO: TAMO
-    pub embedders: Setting<BTreeMap<String, Setting<milli::vector::settings::EmbeddingSettings>>>,
+    pub embedders: Setting<BTreeMap<String, SettingEmbeddingSettings>>,
     /// Maximum duration of a search query.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsSearchCutoffMs>)]
@@ -254,7 +273,6 @@ pub struct Settings<T> {
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsPrefixSearch>)]
     #[schema(value_type = Option<PrefixSearchSettings>, example = json!("Hemlo"))]
-    // TODO: TAMO
     pub prefix_search: Setting<PrefixSearchSettings>,
 
     #[serde(skip)]
@@ -269,7 +287,7 @@ impl<T> Settings<T> {
         };
 
         for mut embedder in embedders.values_mut() {
-            let Setting::Set(embedder) = &mut embedder else {
+            let SettingEmbeddingSettings { inner: Setting::Set(embedder) } = &mut embedder else {
                 continue;
             };
 
@@ -434,8 +452,9 @@ impl Settings<Unchecked> {
         let Setting::Set(mut configs) = self.embedders else { return Ok(self) };
         for (name, config) in configs.iter_mut() {
             let config_to_check = std::mem::take(config);
-            let checked_config = milli::update::validate_embedding_settings(config_to_check, name)?;
-            *config = checked_config
+            let checked_config =
+                milli::update::validate_embedding_settings(config_to_check.inner, name)?;
+            *config = SettingEmbeddingSettings { inner: checked_config };
         }
         self.embedders = Setting::Set(configs);
         Ok(self)
@@ -713,7 +732,9 @@ pub fn apply_settings_to_builder(
     }
 
     match embedders {
-        Setting::Set(value) => builder.set_embedder_settings(value.clone()),
+        Setting::Set(value) => builder.set_embedder_settings(
+            value.iter().map(|(k, v)| (k.clone(), v.inner.clone())).collect(),
+        ),
         Setting::Reset => builder.reset_embedder_settings(),
         Setting::NotSet => (),
     }
@@ -827,7 +848,9 @@ pub fn settings(
     let embedders: BTreeMap<_, _> = index
         .embedding_configs(rtxn)?
         .into_iter()
-        .map(|IndexEmbeddingConfig { name, config, .. }| (name, Setting::Set(config.into())))
+        .map(|IndexEmbeddingConfig { name, config, .. }| {
+            (name, SettingEmbeddingSettings { inner: Setting::Set(config.into()) })
+        })
         .collect();
     let embedders = if embedders.is_empty() { Setting::NotSet } else { Setting::Set(embedders) };
 
@@ -886,7 +909,7 @@ pub fn settings(
     Ok(settings)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserr)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserr, ToSchema)]
 #[deserr(try_from(&String) = FromStr::from_str -> CriterionError)]
 pub enum RankingRuleView {
     /// Sorted by decreasing number of matched query terms.
@@ -982,7 +1005,7 @@ impl From<RankingRuleView> for Criterion {
     }
 }
 
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Deserr, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Deserr, Serialize, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 #[deserr(error = DeserrJsonError<InvalidSettingsProximityPrecision>, rename_all = camelCase, deny_unknown_fields)]
 pub enum ProximityPrecisionView {
