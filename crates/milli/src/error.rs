@@ -10,12 +10,14 @@ use rhai::EvalAltResult;
 use serde_json::Value;
 use thiserror::Error;
 
+use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::documents::{self, DocumentsBatchCursorError};
 use crate::thread_pool_no_abort::PanicCatched;
 use crate::{CriterionError, DocumentId, FieldId, Object, SortError};
 
 pub fn is_reserved_keyword(keyword: &str) -> bool {
-    ["_geo", "_geoDistance", "_geoPoint", "_geoRadius", "_geoBoundingBox"].contains(&keyword)
+    [RESERVED_GEO_FIELD_NAME, "_geoDistance", "_geoPoint", "_geoRadius", "_geoBoundingBox"]
+        .contains(&keyword)
 }
 
 #[derive(Error, Debug)]

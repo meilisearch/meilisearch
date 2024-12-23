@@ -10,11 +10,10 @@ use serde_json::value::RawValue;
 
 use super::document::{Document, DocumentFromDb, DocumentFromVersions, Versions};
 use super::indexer::de::DeserrRawValue;
+use crate::constants::RESERVED_VECTORS_FIELD_NAME;
 use crate::documents::FieldIdMapper;
 use crate::index::IndexEmbeddingConfig;
-use crate::vector::parsed_vectors::{
-    RawVectors, RawVectorsError, VectorOrArrayOfVectors, RESERVED_VECTORS_FIELD_NAME,
-};
+use crate::vector::parsed_vectors::{RawVectors, RawVectorsError, VectorOrArrayOfVectors};
 use crate::vector::{ArroyWrapper, Embedding, EmbeddingConfigs};
 use crate::{DocumentId, Index, InternalError, Result, UserError};
 

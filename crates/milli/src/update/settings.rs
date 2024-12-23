@@ -14,6 +14,7 @@ use time::OffsetDateTime;
 use super::del_add::DelAddOperation;
 use super::index_documents::{IndexDocumentsConfig, Transform};
 use super::IndexerConfig;
+use crate::constants::{RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME};
 use crate::criterion::Criterion;
 use crate::error::UserError;
 use crate::index::{
@@ -25,7 +26,6 @@ use crate::prompt::default_max_bytes;
 use crate::proximity::ProximityPrecision;
 use crate::update::index_documents::IndexDocumentsMethod;
 use crate::update::{IndexDocuments, UpdateIndexingStep};
-use crate::vector::parsed_vectors::RESERVED_VECTORS_FIELD_NAME;
 use crate::vector::settings::{
     check_set, check_unset, EmbedderAction, EmbedderSource, EmbeddingSettings, ReindexAction,
     WriteBackToDocuments,
@@ -1535,7 +1535,7 @@ impl InnerIndexSettings {
             .filter_map(|(field, count)| (count != 0).then_some(field))
             .collect();
         // index.fields_ids_map($a)? ==>> fields_ids_map
-        let geo_fields_ids = match fields_ids_map.id("_geo") {
+        let geo_fields_ids = match fields_ids_map.id(RESERVED_GEO_FIELD_NAME) {
             Some(gfid) => {
                 let is_sortable = index.sortable_fields_ids(rtxn)?.contains(&gfid);
                 let is_filterable = index.filterable_fields_ids(rtxn)?.contains(&gfid);

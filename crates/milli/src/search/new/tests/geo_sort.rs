@@ -6,6 +6,7 @@ use big_s::S;
 use heed::RoTxn;
 use maplit::hashset;
 
+use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::index::tests::TempIndex;
 use crate::score_details::ScoreDetails;
 use crate::search::new::tests::collect_field_values;
@@ -17,7 +18,7 @@ fn create_index() -> TempIndex {
     index
         .update_settings(|s| {
             s.set_primary_key("id".to_owned());
-            s.set_sortable_fields(hashset! { S("_geo") });
+            s.set_sortable_fields(hashset! { S(RESERVED_GEO_FIELD_NAME) });
             s.set_criteria(vec![Criterion::Words, Criterion::Sort]);
         })
         .unwrap();
@@ -68,12 +69,12 @@ fn test_geo_sort() {
 
     index
         .add_documents(documents!([
-            { "id": 2, "_geo": { "lat": 2, "lng": -1 } },
-            { "id": 3, "_geo": { "lat": -2, "lng": -2 } },
-            { "id": 5, "_geo": { "lat": 6, "lng": -5 } },
-            { "id": 4, "_geo": { "lat": 3, "lng": 5 } },
-            { "id": 0, "_geo": { "lat": 0, "lng": 0 } },
-            { "id": 1, "_geo": { "lat": 1, "lng": 1 } },
+            { "id": 2, RESERVED_GEO_FIELD_NAME: { "lat": 2, "lng": -1 } },
+            { "id": 3, RESERVED_GEO_FIELD_NAME: { "lat": -2, "lng": -2 } },
+            { "id": 5, RESERVED_GEO_FIELD_NAME: { "lat": 6, "lng": -5 } },
+            { "id": 4, RESERVED_GEO_FIELD_NAME: { "lat": 3, "lng": 5 } },
+            { "id": 0, RESERVED_GEO_FIELD_NAME: { "lat": 0, "lng": 0 } },
+            { "id": 1, RESERVED_GEO_FIELD_NAME: { "lat": 1, "lng": 1 } },
             { "id": 6 }, { "id": 8 }, { "id": 7 }, { "id": 10 }, { "id": 9 },
         ]))
         .unwrap();
@@ -100,12 +101,12 @@ fn test_geo_sort_around_the_edge_of_the_flat_earth() {
 
     index
         .add_documents(documents!([
-            { "id": 0, "_geo": { "lat": 0, "lng": 0 } },
-            { "id": 1, "_geo": { "lat": 88, "lng": 0 } },
-            { "id": 2, "_geo": { "lat": -89, "lng": 0 } },
+            { "id": 0, RESERVED_GEO_FIELD_NAME: { "lat": 0, "lng": 0 } },
+            { "id": 1, RESERVED_GEO_FIELD_NAME: { "lat": 88, "lng": 0 } },
+            { "id": 2, RESERVED_GEO_FIELD_NAME: { "lat": -89, "lng": 0 } },
 
-            { "id": 3, "_geo": { "lat": 0, "lng": 178 } },
-            { "id": 4, "_geo": { "lat": 0, "lng": -179 } },
+            { "id": 3, RESERVED_GEO_FIELD_NAME: { "lat": 0, "lng": 178 } },
+            { "id": 4, RESERVED_GEO_FIELD_NAME: { "lat": 0, "lng": -179 } },
         ]))
         .unwrap();
 
@@ -177,11 +178,11 @@ fn geo_sort_mixed_with_words() {
 
     index
         .add_documents(documents!([
-            { "id": 0, "doggo": "jean", "_geo": { "lat": 0, "lng": 0 } },
-            { "id": 1, "doggo": "intel", "_geo": { "lat": 88, "lng": 0 } },
-            { "id": 2, "doggo": "jean bob", "_geo": { "lat": -89, "lng": 0 } },
-            { "id": 3, "doggo": "jean michel", "_geo": { "lat": 0, "lng": 178 } },
-            { "id": 4, "doggo": "bob marley", "_geo": { "lat": 0, "lng": -179 } },
+            { "id": 0, "doggo": "jean", RESERVED_GEO_FIELD_NAME: { "lat": 0, "lng": 0 } },
+            { "id": 1, "doggo": "intel", RESERVED_GEO_FIELD_NAME: { "lat": 88, "lng": 0 } },
+            { "id": 2, "doggo": "jean bob", RESERVED_GEO_FIELD_NAME: { "lat": -89, "lng": 0 } },
+            { "id": 3, "doggo": "jean michel", RESERVED_GEO_FIELD_NAME: { "lat": 0, "lng": 178 } },
+            { "id": 4, "doggo": "bob marley", RESERVED_GEO_FIELD_NAME: { "lat": 0, "lng": -179 } },
         ]))
         .unwrap();
 

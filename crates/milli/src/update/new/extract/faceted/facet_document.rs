@@ -1,5 +1,6 @@
 use serde_json::Value;
 
+use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::update::new::document::Document;
 use crate::update::new::extract::geo::extract_geo_coordinates;
 use crate::update::new::extract::perm_json_p;
@@ -69,7 +70,7 @@ pub fn extract_document_facets<'doc>(
         }
     }
 
-    if attributes_to_extract.contains(&"_geo") {
+    if attributes_to_extract.contains(&RESERVED_GEO_FIELD_NAME) {
         if let Some(geo_value) = document.geo_field()? {
             if let Some([lat, lng]) = extract_geo_coordinates(external_document_id, geo_value)? {
                 let (lat_fid, lng_fid) = field_id_map
