@@ -18,7 +18,7 @@ const DEFAULT_CROP_MARKER: &str = "…";
 const DEFAULT_HIGHLIGHT_PREFIX: &str = "<em>";
 const DEFAULT_HIGHLIGHT_SUFFIX: &str = "</em>";
 
-/// Structure used to build a Matcher allowing to customize formating tags.
+/// Structure used to build a Matcher allowing to customize formatting tags.
 pub struct MatcherBuilder<'m> {
     matching_words: MatchingWords,
     tokenizer: Tokenizer<'m>,
