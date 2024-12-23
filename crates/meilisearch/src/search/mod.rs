@@ -537,10 +537,11 @@ impl SearchQueryWithIndex {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Deserr)]
+#[derive(Debug, Clone, PartialEq, Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct SimilarQuery {
     #[deserr(error = DeserrJsonError<InvalidSimilarId>)]
+    #[schema(value_type = String)]
     pub id: ExternalDocumentId,
     #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSimilarOffset>)]
     pub offset: usize,
@@ -559,6 +560,7 @@ pub struct SimilarQuery {
     #[deserr(default, error = DeserrJsonError<InvalidSimilarShowRankingScoreDetails>, default)]
     pub show_ranking_score_details: bool,
     #[deserr(default, error = DeserrJsonError<InvalidSimilarRankingScoreThreshold>, default)]
+    #[schema(value_type = f64)]
     pub ranking_score_threshold: Option<RankingScoreThresholdSimilar>,
 }
 
@@ -722,7 +724,7 @@ impl fmt::Debug for SearchResult {
     }
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Debug, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SimilarResult {
     pub hits: Vec<SearchHit>,
