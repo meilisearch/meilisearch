@@ -42,6 +42,7 @@ mod similar_analytics;
     nest(
         (path = "/", api = documents::DocumentsApi),
         (path = "/", api = facet_search::FacetSearchApi),
+        (path = "/", api = similar::SimilarApi),
     ),
     paths(list_indexes, create_index, get_index, update_index, delete_index, get_index_stats),
     tags(
