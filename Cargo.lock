@@ -490,6 +490,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
+name = "bbqueue"
+version = "0.5.1"
+source = "git+https://github.com/meilisearch/bbqueue#cbb87cc707b5af415ef203bdaf2443e06ba0d6d4"
+
+[[package]]
 name = "benchmarks"
 version = "1.12.0"
 dependencies = [
@@ -699,6 +704,20 @@ checksum = "79296716171880943b8470b5f8d03aa55eb2e645a4874bdbb28adb49162e012c"
 dependencies = [
  "allocator-api2",
  "serde",
+]
+
+[[package]]
+name = "bumparaw-collections"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4ce682bdc86c2e25ef5cd95881d9d6a1902214eddf74cf9ffea88fe1464377e8"
+dependencies = [
+ "allocator-api2",
+ "bitpacking",
+ "bumpalo",
+ "hashbrown 0.15.1",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -969,8 +988,9 @@ dependencies = [
 
 [[package]]
 name = "charabia"
-version = "0.9.1"
-source = "git+https://github.com/meilisearch/charabia?branch=mutualize-char-normalizer#f8d8308cdb8db80819be7eeed5652cc4a995cc71"
+version = "0.9.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf8921fe4d53ab8f9e8f9b72ce6f91726cfc40fffab1243d27db406b5e2e9cc2"
 dependencies = [
  "aho-corasick",
  "csv",
@@ -1243,19 +1263,6 @@ checksum = "6b50826342786a51a89e2da3a28f1c32b06e387201bc2d19791f622c673706b1"
 dependencies = [
  "cast",
  "itertools 0.10.5",
-]
-
-[[package]]
-name = "crossbeam"
-version = "0.8.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1137cd7e7fc0fb5d3c5a8678be38ec56e819125d8d7907411fe24ccb943faca8"
-dependencies = [
- "crossbeam-channel",
- "crossbeam-deque",
- "crossbeam-epoch",
- "crossbeam-queue",
- "crossbeam-utils",
 ]
 
 [[package]]
@@ -1918,6 +1925,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "flume"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "da0e4dd2a88388a1f4ccc7c9ce104604dab68d9f408dc34cd45823d5a9069095"
+dependencies = [
+ "spin",
+]
+
+[[package]]
 name = "fnv"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2263,8 +2279,9 @@ checksum = "d2fabcfbdc87f4758337ca535fb41a6d701b65693ce38287d856d1674551ec9b"
 
 [[package]]
 name = "grenad"
-version = "0.4.7"
-source = "git+https://github.com/meilisearch/grenad?branch=various-improvements#58ac87d852413571102f44c5e55ca13509a3f1a0"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0e2ac9baf835ee2a7f0622a5617792ced6f65af25994078c343d429431ef2bbc"
 dependencies = [
  "bytemuck",
  "byteorder",
@@ -2614,7 +2631,9 @@ dependencies = [
  "big_s",
  "bincode",
  "bumpalo",
- "crossbeam",
+ "bumparaw-collections",
+ "convert_case 0.6.0",
+ "crossbeam-channel",
  "csv",
  "derive_builder 0.20.0",
  "dump",
@@ -2628,7 +2647,6 @@ dependencies = [
  "meilisearch-types",
  "memmap2",
  "page_size",
- "raw-collections",
  "rayon",
  "roaring",
  "serde",
@@ -2644,12 +2662,12 @@ dependencies = [
 
 [[package]]
 name = "indexmap"
-version = "2.2.6"
+version = "2.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "168fb715dda47215e360912c096649d23d58bf392ac62f73919e831745e40f26"
+checksum = "62f822373a4fe84d4bb149bf54e584a7f4abec90e072ed49cda0edea5b95471f"
 dependencies = [
  "equivalent",
- "hashbrown 0.14.3",
+ "hashbrown 0.15.1",
  "serde",
 ]
 
@@ -2708,7 +2726,8 @@ checksum = "28b29a3cd74f0f4598934efe3aeba42bae0eb4680554128851ebbecb02af14e6"
 [[package]]
 name = "irg-kvariants"
 version = "0.1.1"
-source = "git+https://github.com/meilisearch/charabia?branch=mutualize-char-normalizer#f8d8308cdb8db80819be7eeed5652cc4a995cc71"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ef2af7c331f2536964a32b78a7d2e0963d78b42f4a76323b16cc7d94b1ddce26"
 dependencies = [
  "csv",
  "once_cell",
@@ -3545,6 +3564,7 @@ dependencies = [
  "actix-web",
  "anyhow",
  "bumpalo",
+ "bumparaw-collections",
  "convert_case 0.6.0",
  "csv",
  "deserr",
@@ -3557,8 +3577,8 @@ dependencies = [
  "meili-snap",
  "memmap2",
  "milli",
- "raw-collections",
  "roaring",
+ "rustc-hash 2.1.0",
  "serde",
  "serde-cs",
  "serde_json",
@@ -3579,9 +3599,12 @@ dependencies = [
  "clap",
  "dump",
  "file-store",
+ "indexmap",
  "meilisearch-auth",
  "meilisearch-types",
  "serde",
+ "serde_json",
+ "tempfile",
  "time",
  "uuid",
 ]
@@ -3608,11 +3631,13 @@ version = "1.12.0"
 dependencies = [
  "allocator-api2",
  "arroy 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "bbqueue",
  "big_s",
  "bimap",
  "bincode",
  "bstr",
  "bumpalo",
+ "bumparaw-collections",
  "bytemuck",
  "byteorder",
  "candle-core",
@@ -3627,6 +3652,7 @@ dependencies = [
  "enum-iterator",
  "filter-parser",
  "flatten-serde-json",
+ "flume",
  "fst",
  "fxhash",
  "geoutils",
@@ -3650,13 +3676,12 @@ dependencies = [
  "once_cell",
  "ordered-float",
  "rand",
- "raw-collections",
  "rayon",
  "rayon-par-bridge",
  "rhai",
  "roaring",
  "rstar",
- "rustc-hash 2.0.0",
+ "rustc-hash 2.1.0",
  "serde",
  "serde_json",
  "slice-group-by",
@@ -3912,7 +3937,8 @@ dependencies = [
 [[package]]
 name = "obkv"
 version = "0.3.0"
-source = "git+https://github.com/kerollmops/obkv?branch=unsized-kvreader#ce535874008ecac554f02e0c670e6caf62134d6b"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ae4512a8f418ac322335255a72361b9ac927e106f4d7fe6ab4d8ac59cb01f7a9"
 
 [[package]]
 name = "once_cell"
@@ -4404,7 +4430,7 @@ dependencies = [
  "bytes",
  "rand",
  "ring",
- "rustc-hash 2.0.0",
+ "rustc-hash 2.1.0",
  "rustls",
  "slab",
  "thiserror",
@@ -4478,19 +4504,6 @@ checksum = "32cb0b9bc82b0a0876c2dd994a7e7a2683d3e7390ca40e6886785ef0c7e3ee31"
 dependencies = [
  "num-traits",
  "rand",
-]
-
-[[package]]
-name = "raw-collections"
-version = "0.1.0"
-source = "git+https://github.com/meilisearch/raw-collections.git#15e5d7bdebc0c149b2a28b2454f307c717d07f8a"
-dependencies = [
- "allocator-api2",
- "bitpacking",
- "bumpalo",
- "hashbrown 0.15.1",
- "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -4739,8 +4752,9 @@ dependencies = [
 
 [[package]]
 name = "roaring"
-version = "0.10.6"
-source = "git+https://github.com/RoaringBitmap/roaring-rs?branch=clone-iter-slice#8ff028e484fb6192a0acf5a669eaf18c30cada6e"
+version = "0.10.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f81dc953b2244ddd5e7860cb0bb2a790494b898ef321d4aff8e260efab60cc88"
 dependencies = [
  "bytemuck",
  "byteorder",
@@ -4789,9 +4803,9 @@ checksum = "08d43f7aa6b08d49f382cde6a7982047c3426db949b1424bc4b7ec9ae12c6ce2"
 
 [[package]]
 name = "rustc-hash"
-version = "2.0.0"
+version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "583034fd73374156e66797ed8e5b0d5690409c9226b22d87cb7f19821c05d152"
+checksum = "c7fb8039b3032c191086b10f11f319a6e99e1e82889c5cc6046f515c9db1d497"
 
 [[package]]
 name = "rustc_version"
@@ -4960,9 +4974,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.132"
+version = "1.0.133"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d726bfaff4b320266d395898905d0eba0345aae23b54aee3a737e260fd46db03"
+checksum = "c7fceb2473b9166b2294ef05efcb65a3db80803f0b03ef86a5fc88a2b85ee377"
 dependencies = [
  "indexmap",
  "itoa",
@@ -5182,6 +5196,9 @@ name = "spin"
 version = "0.9.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6980e8d7511241f8acf4aebddbb1ff938df5eebe98691418c4468d0b72a96a67"
+dependencies = [
+ "lock_api",
+]
 
 [[package]]
 name = "spm_precompiled"
@@ -6015,9 +6032,9 @@ dependencies = [
 
 [[package]]
 name = "wana_kana"
-version = "3.0.0"
+version = "4.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "477976a5c56fb7b014795df5a2ce08d2de8bcd4d5980844c5bd3978a7fd1c30b"
+checksum = "a74666202acfcb4f9b995be2e3e9f7f530deb65e05a1407b8d0b30c9c451238a"
 dependencies = [
  "fnv",
  "itertools 0.10.5",

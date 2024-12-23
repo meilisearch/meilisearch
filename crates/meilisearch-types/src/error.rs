@@ -279,6 +279,7 @@ InvalidSearchPage                     , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchQ                        , InvalidRequest       , BAD_REQUEST ;
 InvalidFacetSearchQuery               , InvalidRequest       , BAD_REQUEST ;
 InvalidFacetSearchName                , InvalidRequest       , BAD_REQUEST ;
+FacetSearchDisabled                   , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchVector                   , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchShowMatchesPosition      , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchShowRankingScore         , InvalidRequest       , BAD_REQUEST ;
@@ -290,6 +291,8 @@ InvalidSearchDistinct                 , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsDisplayedAttributes    , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsDistinctAttribute      , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsProximityPrecision     , InvalidRequest       , BAD_REQUEST ;
+InvalidSettingsFacetSearch            , InvalidRequest       , BAD_REQUEST ;
+InvalidSettingsPrefixSearch           , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsFaceting               , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsFilterableAttributes   , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsPagination             , InvalidRequest       , BAD_REQUEST ;
@@ -547,7 +550,7 @@ impl fmt::Display for deserr_codes::InvalidSimilarId {
             "the value of `id` is invalid. \
             A document identifier can be of type integer or string, \
             only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_), \
-            and can not be more than 512 bytes."
+            and can not be more than 511 bytes."
         )
     }
 }

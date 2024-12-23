@@ -223,7 +223,7 @@ async fn list_batches_status_and_type_filtered() {
 }
 
 #[actix_rt::test]
-async fn get_batch_filter_error() {
+async fn list_batch_filter_error() {
     let server = Server::new().await;
 
     let (response, code) = server.batches_filter("lol=pied").await;
@@ -283,6 +283,7 @@ async fn test_summarized_document_addition_or_update() {
         @r#"
     {
       "uid": 0,
+      "progress": null,
       "details": {
         "receivedDocuments": 1,
         "indexedDocuments": 1
@@ -313,6 +314,7 @@ async fn test_summarized_document_addition_or_update() {
         @r#"
     {
       "uid": 1,
+      "progress": null,
       "details": {
         "receivedDocuments": 1,
         "indexedDocuments": 1
@@ -348,6 +350,7 @@ async fn test_summarized_delete_documents_by_batch() {
         @r#"
     {
       "uid": 0,
+      "progress": null,
       "details": {
         "providedIds": 3,
         "deletedDocuments": 0
@@ -379,6 +382,7 @@ async fn test_summarized_delete_documents_by_batch() {
         @r#"
     {
       "uid": 2,
+      "progress": null,
       "details": {
         "providedIds": 1,
         "deletedDocuments": 0
@@ -415,6 +419,7 @@ async fn test_summarized_delete_documents_by_filter() {
         @r#"
     {
       "uid": 0,
+      "progress": null,
       "details": {
         "providedIds": 0,
         "deletedDocuments": 0,
@@ -447,6 +452,7 @@ async fn test_summarized_delete_documents_by_filter() {
         @r#"
     {
       "uid": 2,
+      "progress": null,
       "details": {
         "providedIds": 0,
         "deletedDocuments": 0,
@@ -479,6 +485,7 @@ async fn test_summarized_delete_documents_by_filter() {
         @r#"
     {
       "uid": 4,
+      "progress": null,
       "details": {
         "providedIds": 0,
         "deletedDocuments": 0,
@@ -515,6 +522,7 @@ async fn test_summarized_delete_document_by_id() {
         @r#"
     {
       "uid": 0,
+      "progress": null,
       "details": {
         "providedIds": 1,
         "deletedDocuments": 0
@@ -546,6 +554,7 @@ async fn test_summarized_delete_document_by_id() {
         @r#"
     {
       "uid": 2,
+      "progress": null,
       "details": {
         "providedIds": 1,
         "deletedDocuments": 0
@@ -593,6 +602,7 @@ async fn test_summarized_settings_update() {
         @r#"
     {
       "uid": 0,
+      "progress": null,
       "details": {
         "displayedAttributes": [
           "doggos",
@@ -637,6 +647,7 @@ async fn test_summarized_index_creation() {
         @r#"
     {
       "uid": 0,
+      "progress": null,
       "details": {},
       "stats": {
         "totalNbTasks": 1,
@@ -664,6 +675,7 @@ async fn test_summarized_index_creation() {
         @r#"
     {
       "uid": 1,
+      "progress": null,
       "details": {
         "primaryKey": "doggos"
       },
@@ -808,6 +820,7 @@ async fn test_summarized_index_update() {
         @r#"
     {
       "uid": 0,
+      "progress": null,
       "details": {},
       "stats": {
         "totalNbTasks": 1,
@@ -835,6 +848,7 @@ async fn test_summarized_index_update() {
         @r#"
     {
       "uid": 1,
+      "progress": null,
       "details": {
         "primaryKey": "bones"
       },
@@ -867,6 +881,7 @@ async fn test_summarized_index_update() {
         @r#"
     {
       "uid": 3,
+      "progress": null,
       "details": {},
       "stats": {
         "totalNbTasks": 1,
@@ -894,6 +909,7 @@ async fn test_summarized_index_update() {
         @r#"
     {
       "uid": 4,
+      "progress": null,
       "details": {
         "primaryKey": "bones"
       },
@@ -931,6 +947,7 @@ async fn test_summarized_index_swap() {
         @r#"
     {
       "uid": 0,
+      "progress": null,
       "details": {
         "swaps": [
           {
@@ -971,6 +988,7 @@ async fn test_summarized_index_swap() {
         @r#"
     {
       "uid": 3,
+      "progress": null,
       "details": {
         "swaps": [
           {
@@ -1013,6 +1031,7 @@ async fn test_summarized_batch_cancelation() {
         @r#"
     {
       "uid": 1,
+      "progress": null,
       "details": {
         "matchedTasks": 1,
         "canceledTasks": 0,
@@ -1050,6 +1069,7 @@ async fn test_summarized_batch_deletion() {
         @r#"
     {
       "uid": 1,
+      "progress": null,
       "details": {
         "matchedTasks": 1,
         "deletedTasks": 1,
@@ -1083,6 +1103,7 @@ async fn test_summarized_dump_creation() {
         @r#"
     {
       "uid": 0,
+      "progress": null,
       "details": {
         "dumpUid": "[dumpUid]"
       },

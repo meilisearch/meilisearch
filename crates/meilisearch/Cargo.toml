@@ -57,7 +57,7 @@ meilisearch-types = { path = "../meilisearch-types" }
 mimalloc = { version = "0.1.43", default-features = false }
 mime = "0.3.17"
 num_cpus = "1.16.0"
-obkv = { git = "https://github.com/kerollmops/obkv", branch = "unsized-kvreader" }
+obkv = "0.3.0"
 once_cell = "1.19.0"
 ordered-float = "4.2.1"
 parking_lot = "0.12.3"
@@ -103,7 +103,7 @@ tracing-subscriber = { version = "0.3.18", features = ["json"] }
 tracing-trace = { version = "0.1.0", path = "../tracing-trace" }
 tracing-actix-web = "0.7.11"
 build-info = { version = "1.7.0", path = "../build-info" }
-roaring = "0.10.2"
+roaring = "0.10.7"
 mopa-maintained = "0.2.3"
 
 [dev-dependencies]
@@ -157,5 +157,5 @@ german = ["meilisearch-types/german"]
 turkish = ["meilisearch-types/turkish"]
 
 [package.metadata.mini-dashboard]
-assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.2.15/build.zip"
-sha1 = "d057600b4a839a2e0c0be7a372cd1b2683f3ca7e"
+assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.2.16/build.zip"
+sha1 = "68f83438a114aabbe76bc9fe480071e741996662"

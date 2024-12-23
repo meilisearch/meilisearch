@@ -95,7 +95,7 @@ async fn error_update_existing_primary_key() {
     let response = index.wait_task(2).await;
 
     let expected_response = json!({
-        "message": "Index already has a primary key: `id`.",
+        "message": "Index `test`: Index already has a primary key: `id`.",
         "code": "index_primary_key_already_exists",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#index_primary_key_already_exists"

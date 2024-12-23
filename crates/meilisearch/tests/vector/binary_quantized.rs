@@ -318,7 +318,7 @@ async fn try_to_disable_binary_quantization() {
         }
       },
       "error": {
-        "message": "`.embedders.manual.binaryQuantized`: Cannot disable the binary quantization.\n - Note: Binary quantization is a lossy operation that cannot be reverted.\n - Hint: Add a new embedder that is non-quantized and regenerate the vectors.",
+        "message": "Index `doggo`: `.embedders.manual.binaryQuantized`: Cannot disable the binary quantization.\n - Note: Binary quantization is a lossy operation that cannot be reverted.\n - Hint: Add a new embedder that is non-quantized and regenerate the vectors.",
         "code": "invalid_settings_embedders",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_settings_embedders"

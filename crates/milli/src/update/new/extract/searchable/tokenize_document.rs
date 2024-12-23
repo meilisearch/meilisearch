@@ -176,9 +176,10 @@ pub fn tokenizer_builder<'a>(
 #[cfg(test)]
 mod test {
     use bumpalo::Bump;
+    use bumparaw_collections::RawMap;
     use charabia::TokenizerBuilder;
     use meili_snap::snapshot;
-    use raw_collections::RawMap;
+    use rustc_hash::FxBuildHasher;
     use serde_json::json;
     use serde_json::value::RawValue;
 
@@ -234,7 +235,7 @@ mod test {
 
         let bump = Bump::new();
         let document: &RawValue = serde_json::from_str(&document).unwrap();
-        let document = RawMap::from_raw_value(document, &bump).unwrap();
+        let document = RawMap::from_raw_value_and_hasher(document, FxBuildHasher, &bump).unwrap();
 
         let document = Versions::single(document);
         let document = DocumentFromVersions::new(&document);

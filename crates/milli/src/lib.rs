@@ -1,6 +1,7 @@
 #![cfg_attr(all(test, fuzzing), feature(no_coverage))]
 #![allow(clippy::type_complexity)]
 
+#[cfg(not(windows))]
 #[cfg(test)]
 #[global_allocator]
 pub static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
@@ -30,6 +31,7 @@ pub mod vector;
 #[macro_use]
 pub mod snapshot_tests;
 mod fieldids_weights_map;
+pub mod progress;
 
 use std::collections::{BTreeMap, HashMap};
 use std::convert::{TryFrom, TryInto};

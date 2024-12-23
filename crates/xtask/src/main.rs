@@ -16,6 +16,7 @@ struct ListFeaturesDeriveArgs {
 #[command(author, version, about, long_about)]
 #[command(name = "cargo xtask")]
 #[command(bin_name = "cargo xtask")]
+#[allow(clippy::large_enum_variant)] // please, that's enough...
 enum Command {
     ListFeatures(ListFeaturesDeriveArgs),
     Bench(BenchDeriveArgs),

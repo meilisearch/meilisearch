@@ -29,6 +29,7 @@ pub use self::transform::{Transform, TransformOutput};
 use super::new::StdResult;
 use crate::documents::{obkv_to_object, DocumentsBatchReader};
 use crate::error::{Error, InternalError};
+use crate::index::{PrefixSearch, PrefixSettings};
 use crate::thread_pool_no_abort::ThreadPoolNoAbortBuilder;
 pub use crate::update::index_documents::helpers::CursorClonableMmap;
 use crate::update::{
@@ -82,8 +83,6 @@ pub struct IndexDocuments<'t, 'i, 'a, FP, FA> {
 
 #[derive(Default, Debug, Clone)]
 pub struct IndexDocumentsConfig {
-    pub words_prefix_threshold: Option<u32>,
-    pub max_prefix_length: Option<usize>,
     pub words_positions_level_group_size: Option<NonZeroU32>,
     pub words_positions_min_level_size: Option<NonZeroU32>,
     pub update_method: IndexDocumentsMethod,
@@ -565,14 +564,32 @@ where
             self.index.words_prefixes_fst(self.wtxn)?.map_data(|cow| cow.into_owned())?;
 
         // Run the words prefixes update operation.
-        let mut builder = WordsPrefixesFst::new(self.wtxn, self.index);
-        if let Some(value) = self.config.words_prefix_threshold {
-            builder.threshold(value);
+        let PrefixSettings { prefix_count_threshold, max_prefix_length, compute_prefixes } =
+            self.index.prefix_settings(self.wtxn)?;
+
+        // If the prefix search is enabled at indexing time, we compute the prefixes.
+        if compute_prefixes == PrefixSearch::IndexingTime {
+            let mut builder = WordsPrefixesFst::new(self.wtxn, self.index);
+            builder.threshold(prefix_count_threshold);
+            builder.max_prefix_length(max_prefix_length);
+            builder.execute()?;
+        } else {
+            // If the prefix search is disabled at indexing time, we delete the previous words prefixes fst.
+            // And all the associated docids databases.
+            self.index.delete_words_prefixes_fst(self.wtxn)?;
+            self.index.word_prefix_docids.clear(self.wtxn)?;
+            self.index.exact_word_prefix_docids.clear(self.wtxn)?;
+            self.index.word_prefix_position_docids.clear(self.wtxn)?;
+            self.index.word_prefix_fid_docids.clear(self.wtxn)?;
+
+            databases_seen += 3;
+            (self.progress)(UpdateIndexingStep::MergeDataIntoFinalDatabase {
+                databases_seen,
+                total_databases: TOTAL_POSTING_DATABASE_COUNT,
+            });
+
+            return Ok(());
         }
-        if let Some(value) = self.config.max_prefix_length {
-            builder.max_prefix_length(value);
-        }
-        builder.execute()?;
 
         if (self.should_abort)() {
             return Err(Error::InternalError(InternalError::AbortedIndexation));
@@ -749,6 +766,7 @@ mod tests {
     use crate::documents::mmap_from_objects;
     use crate::index::tests::TempIndex;
     use crate::index::IndexEmbeddingConfig;
+    use crate::progress::Progress;
     use crate::search::TermsMatchingStrategy;
     use crate::update::new::indexer;
     use crate::update::Setting;
@@ -1947,7 +1965,7 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )
             .unwrap();
 
@@ -2131,13 +2149,14 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )
             .unwrap();
 
         indexer::index(
             &mut wtxn,
             &index.inner,
+            &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
             indexer_config.grenad_parameters(),
             &db_fields_ids_map,
             new_fields_ids_map,
@@ -2145,7 +2164,7 @@ mod tests {
             &document_changes,
             embedders,
             &|| false,
-            &|_| (),
+            &Progress::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();
@@ -2192,13 +2211,14 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )
             .unwrap();
 
         indexer::index(
             &mut wtxn,
             &index.inner,
+            &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
             indexer_config.grenad_parameters(),
             &db_fields_ids_map,
             new_fields_ids_map,
@@ -2206,7 +2226,7 @@ mod tests {
             &document_changes,
             embedders,
             &|| false,
-            &|_| (),
+            &Progress::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();
@@ -2244,13 +2264,14 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )
             .unwrap();
 
         indexer::index(
             &mut wtxn,
             &index.inner,
+            &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
             indexer_config.grenad_parameters(),
             &db_fields_ids_map,
             new_fields_ids_map,
@@ -2258,7 +2279,7 @@ mod tests {
             &document_changes,
             embedders,
             &|| false,
-            &|_| (),
+            &Progress::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();
@@ -2295,13 +2316,14 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )
             .unwrap();
 
         indexer::index(
             &mut wtxn,
             &index.inner,
+            &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
             indexer_config.grenad_parameters(),
             &db_fields_ids_map,
             new_fields_ids_map,
@@ -2309,7 +2331,7 @@ mod tests {
             &document_changes,
             embedders,
             &|| false,
-            &|_| (),
+            &Progress::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();
@@ -2348,13 +2370,14 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )
             .unwrap();
 
         indexer::index(
             &mut wtxn,
             &index.inner,
+            &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
             indexer_config.grenad_parameters(),
             &db_fields_ids_map,
             new_fields_ids_map,
@@ -2362,7 +2385,7 @@ mod tests {
             &document_changes,
             embedders,
             &|| false,
-            &|_| (),
+            &Progress::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();
@@ -2406,13 +2429,14 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )
             .unwrap();
 
         indexer::index(
             &mut wtxn,
             &index.inner,
+            &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
             indexer_config.grenad_parameters(),
             &db_fields_ids_map,
             new_fields_ids_map,
@@ -2420,7 +2444,7 @@ mod tests {
             &document_changes,
             embedders,
             &|| false,
-            &|_| (),
+            &Progress::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();
@@ -2457,13 +2481,14 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )
             .unwrap();
 
         indexer::index(
             &mut wtxn,
             &index.inner,
+            &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
             indexer_config.grenad_parameters(),
             &db_fields_ids_map,
             new_fields_ids_map,
@@ -2471,7 +2496,7 @@ mod tests {
             &document_changes,
             embedders,
             &|| false,
-            &|_| (),
+            &Progress::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();
@@ -2508,13 +2533,14 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )
             .unwrap();
 
         indexer::index(
             &mut wtxn,
             &index.inner,
+            &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
             indexer_config.grenad_parameters(),
             &db_fields_ids_map,
             new_fields_ids_map,
@@ -2522,7 +2548,7 @@ mod tests {
             &document_changes,
             embedders,
             &|| false,
-            &|_| (),
+            &Progress::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();
@@ -2701,13 +2727,14 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )
             .unwrap();
 
         indexer::index(
             &mut wtxn,
             &index.inner,
+            &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
             indexer_config.grenad_parameters(),
             &db_fields_ids_map,
             new_fields_ids_map,
@@ -2715,7 +2742,7 @@ mod tests {
             &document_changes,
             embedders,
             &|| false,
-            &|_| (),
+            &Progress::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();
@@ -2759,13 +2786,14 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )
             .unwrap();
 
         indexer::index(
             &mut wtxn,
             &index.inner,
+            &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
             indexer_config.grenad_parameters(),
             &db_fields_ids_map,
             new_fields_ids_map,
@@ -2773,7 +2801,7 @@ mod tests {
             &document_changes,
             embedders,
             &|| false,
-            &|_| (),
+            &Progress::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();
@@ -2814,13 +2842,14 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )
             .unwrap();
 
         indexer::index(
             &mut wtxn,
             &index.inner,
+            &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
             indexer_config.grenad_parameters(),
             &db_fields_ids_map,
             new_fields_ids_map,
@@ -2828,7 +2857,7 @@ mod tests {
             &document_changes,
             embedders,
             &|| false,
-            &|_| (),
+            &Progress::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();

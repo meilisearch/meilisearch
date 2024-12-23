@@ -1,9 +1,11 @@
 use std::cmp::Ordering;
+use std::sync::atomic::AtomicBool;
 use std::sync::{OnceLock, RwLock};
 use std::thread::{self, Builder};
 
 use big_s::S;
-use document_changes::{extract, DocumentChanges, IndexingContext, Progress};
+use bumparaw_collections::RawMap;
+use document_changes::{extract, DocumentChanges, IndexingContext};
 pub use document_deletion::DocumentDeletion;
 pub use document_operation::{DocumentOperation, PayloadStats};
 use hashbrown::HashMap;
@@ -12,7 +14,7 @@ use heed::{RoTxn, RwTxn};
 use itertools::{merge_join_by, EitherOrBoth};
 pub use partial_dump::PartialDump;
 use rand::SeedableRng as _;
-use raw_collections::RawMap;
+use rustc_hash::FxBuildHasher;
 use time::OffsetDateTime;
 pub use update_by_function::UpdateByFunction;
 
@@ -20,7 +22,7 @@ use super::channel::*;
 use super::extract::*;
 use super::facet_search_builder::FacetSearchBuilder;
 use super::merger::FacetFieldIdsDelta;
-use super::steps::Step;
+use super::steps::IndexingStep;
 use super::thread_local::ThreadLocal;
 use super::word_fst_builder::{PrefixData, PrefixDelta, WordFstBuilder};
 use super::words_prefix_docids::{
@@ -31,6 +33,7 @@ use crate::documents::{PrimaryKey, DEFAULT_PRIMARY_KEY};
 use crate::facet::FacetType;
 use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
 use crate::index::main_key::{WORDS_FST_KEY, WORDS_PREFIXES_FST_KEY};
+use crate::progress::Progress;
 use crate::proximity::ProximityPrecision;
 use crate::update::del_add::DelAdd;
 use crate::update::new::extract::EmbeddingExtractor;
@@ -41,7 +44,7 @@ use crate::update::settings::InnerIndexSettings;
 use crate::update::{FacetsUpdateBulk, GrenadParameters};
 use crate::vector::{ArroyWrapper, EmbeddingConfigs, Embeddings};
 use crate::{
-    FieldsIdsMap, GlobalFieldsIdsMap, Index, InternalError, Result, ThreadPoolNoAbort,
+    Error, FieldsIdsMap, GlobalFieldsIdsMap, Index, InternalError, Result, ThreadPoolNoAbort,
     ThreadPoolNoAbortBuilder, UserError,
 };
 
@@ -58,9 +61,10 @@ mod update_by_function;
 ///
 /// TODO return stats
 #[allow(clippy::too_many_arguments)] // clippy: 😝
-pub fn index<'pl, 'indexer, 'index, DC, MSP, SP>(
+pub fn index<'pl, 'indexer, 'index, DC, MSP>(
     wtxn: &mut RwTxn,
     index: &'index Index,
+    pool: &ThreadPoolNoAbort,
     grenad_parameters: GrenadParameters,
     db_fields_ids_map: &'indexer FieldsIdsMap,
     new_fields_ids_map: FieldsIdsMap,
@@ -68,14 +72,44 @@ pub fn index<'pl, 'indexer, 'index, DC, MSP, SP>(
     document_changes: &DC,
     embedders: EmbeddingConfigs,
     must_stop_processing: &'indexer MSP,
-    send_progress: &'indexer SP,
+    progress: &'indexer Progress,
 ) -> Result<()>
 where
     DC: DocumentChanges<'pl>,
     MSP: Fn() -> bool + Sync,
-    SP: Fn(Progress) + Sync,
 {
-    let (extractor_sender, writer_receiver) = extractor_writer_channel(10_000);
+    let mut bbbuffers = Vec::new();
+    let finished_extraction = AtomicBool::new(false);
+
+    // We reduce the actual memory used to 5%. The reason we do this here and not in Meilisearch
+    // is because we still use the old indexer for the settings and it is highly impacted by the
+    // max memory. So we keep the changes here and will remove these changes once we use the new
+    // indexer to also index settings. Related to #5125 and #5141.
+    let grenad_parameters = GrenadParameters {
+        max_memory: grenad_parameters.max_memory.map(|mm| mm * 5 / 100),
+        ..grenad_parameters
+    };
+
+    // We compute and remove the allocated BBQueues buffers capacity from the indexing memory.
+    let minimum_capacity = 50 * 1024 * 1024 * pool.current_num_threads(); // 50 MiB
+    let (grenad_parameters, total_bbbuffer_capacity) = grenad_parameters.max_memory.map_or(
+        (grenad_parameters, 2 * minimum_capacity), // 100 MiB by thread by default
+        |max_memory| {
+            // 2% of the indexing memory
+            let total_bbbuffer_capacity = (max_memory / 100 / 2).max(minimum_capacity);
+            let new_grenad_parameters = GrenadParameters {
+                max_memory: Some(
+                    max_memory.saturating_sub(total_bbbuffer_capacity).max(100 * 1024 * 1024),
+                ),
+                ..grenad_parameters
+            };
+            (new_grenad_parameters, total_bbbuffer_capacity)
+        },
+    );
+
+    let (extractor_sender, mut writer_receiver) = pool
+        .install(|| extractor_writer_bbqueue(&mut bbbuffers, total_bbbuffer_capacity, 1000))
+        .unwrap();
 
     let metadata_builder = MetadataBuilder::from_index(index, wtxn)?;
     let new_fields_ids_map = FieldIdMapWithMetadata::new(new_fields_ids_map, metadata_builder);
@@ -91,244 +125,274 @@ where
         doc_allocs: &doc_allocs,
         fields_ids_map_store: &fields_ids_map_store,
         must_stop_processing,
-        send_progress,
+        progress,
     };
 
+    let mut index_embeddings = index.embedding_configs(wtxn)?;
     let mut field_distribution = index.field_distribution(wtxn)?;
     let mut document_ids = index.documents_ids(wtxn)?;
 
     thread::scope(|s| -> Result<()> {
         let indexer_span = tracing::Span::current();
         let embedders = &embedders;
+        let finished_extraction = &finished_extraction;
         // prevent moving the field_distribution and document_ids in the inner closure...
         let field_distribution = &mut field_distribution;
         let document_ids = &mut document_ids;
         let extractor_handle = Builder::new().name(S("indexer-extractors")).spawn_scoped(s, move || {
-            let span = tracing::trace_span!(target: "indexing::documents", parent: &indexer_span, "extract");
-            let _entered = span.enter();
-
-            let rtxn = index.read_txn()?;
-
-            // document but we need to create a function that collects and compresses documents.
-            let document_sender = extractor_sender.documents();
-            let document_extractor = DocumentsExtractor::new(&document_sender, embedders);
-            let datastore = ThreadLocal::with_capacity(rayon::current_num_threads());
-
-            extract(document_changes,
-                &document_extractor,
-                indexing_context,
-                &mut extractor_allocs,
-                &datastore,
-                Step::ExtractingDocuments,
-            )?;
-
-            for document_extractor_data in datastore {
-                let document_extractor_data = document_extractor_data.0.into_inner();
-                for (field, delta) in document_extractor_data.field_distribution_delta {
-                    let current = field_distribution.entry(field).or_default();
-                    // adding the delta should never cause a negative result, as we are removing fields that previously existed.
-                    *current = current.saturating_add_signed(delta);
-                }
-                document_extractor_data.docids_delta.apply_to(document_ids);
-            }
-
-            field_distribution.retain(|_, v| *v != 0);
-
-            let facet_field_ids_delta;
-
-            {
-                let span = tracing::trace_span!(target: "indexing::documents::extract", "faceted");
+            pool.install(move || {
+                let span = tracing::trace_span!(target: "indexing::documents", parent: &indexer_span, "extract");
                 let _entered = span.enter();
 
-                facet_field_ids_delta = merge_and_send_facet_docids(
-                    FacetedDocidsExtractor::run_extraction(
-                        grenad_parameters,
+                let rtxn = index.read_txn()?;
+
+                // document but we need to create a function that collects and compresses documents.
+                let document_sender = extractor_sender.documents();
+                let document_extractor = DocumentsExtractor::new(document_sender, embedders);
+                let datastore = ThreadLocal::with_capacity(rayon::current_num_threads());
+                {
+                    let span = tracing::trace_span!(target: "indexing::documents::extract", parent: &indexer_span, "documents");
+                    let _entered = span.enter();
+                    extract(
                         document_changes,
+                        &document_extractor,
                         indexing_context,
                         &mut extractor_allocs,
-                        &extractor_sender.field_id_docid_facet_sender(),
-                        Step::ExtractingFacets
-                    )?,
-                    FacetDatabases::new(index),
-                    index,
-                    extractor_sender.facet_docids(),
-                )?;
-            }
-
-            {
-                let span = tracing::trace_span!(target: "indexing::documents::extract", "word_docids");
-                let _entered = span.enter();
-
-
-                let WordDocidsCaches {
-                    word_docids,
-                    word_fid_docids,
-                    exact_word_docids,
-                    word_position_docids,
-                    fid_word_count_docids,
-                } = WordDocidsExtractors::run_extraction(
-                    grenad_parameters,
-                    document_changes,
-                    indexing_context,
-                    &mut extractor_allocs,
-                    Step::ExtractingWords
-                )?;
-
-                // TODO Word Docids Merger
-                {
-                    let span = tracing::trace_span!(target: "indexing::documents::merge", "word_docids");
-                    let _entered = span.enter();
-                    merge_and_send_docids(
-                        word_docids,
-                        index.word_docids.remap_types(),
-                        index,
-                        extractor_sender.docids::<WordDocids>(),
-                        &indexing_context.must_stop_processing,
+                        &datastore,
+                        IndexingStep::ExtractingDocuments,
                     )?;
                 }
-
-                // Word Fid Docids Merging
                 {
-                    let span = tracing::trace_span!(target: "indexing::documents::merge", "word_fid_docids");
+                    let span = tracing::trace_span!(target: "indexing::documents::merge", parent: &indexer_span, "documents");
                     let _entered = span.enter();
-                    merge_and_send_docids(
-                        word_fid_docids,
-                        index.word_fid_docids.remap_types(),
-                        index,
-                        extractor_sender.docids::<WordFidDocids>(),
-                        &indexing_context.must_stop_processing,
-                    )?;
+                    for document_extractor_data in datastore {
+                        let document_extractor_data = document_extractor_data.0.into_inner();
+                        for (field, delta) in document_extractor_data.field_distribution_delta {
+                            let current = field_distribution.entry(field).or_default();
+                            // adding the delta should never cause a negative result, as we are removing fields that previously existed.
+                            *current = current.saturating_add_signed(delta);
+                        }
+                        document_extractor_data.docids_delta.apply_to(document_ids);
+                    }
+
+                    field_distribution.retain(|_, v| *v != 0);
                 }
 
-                // Exact Word Docids Merging
+                let facet_field_ids_delta;
+
                 {
-                    let span = tracing::trace_span!(target: "indexing::documents::merge", "exact_word_docids");
-                    let _entered = span.enter();
-                    merge_and_send_docids(
-                        exact_word_docids,
-                        index.exact_word_docids.remap_types(),
-                        index,
-                        extractor_sender.docids::<ExactWordDocids>(),
-                        &indexing_context.must_stop_processing,
-                    )?;
-                }
+                    let caches = {
+                        let span = tracing::trace_span!(target: "indexing::documents::extract", parent: &indexer_span, "faceted");
+                        let _entered = span.enter();
 
-                // Word Position Docids Merging
-                {
-                    let span = tracing::trace_span!(target: "indexing::documents::merge", "word_position_docids");
-                    let _entered = span.enter();
-                    merge_and_send_docids(
-                        word_position_docids,
-                        index.word_position_docids.remap_types(),
-                        index,
-                        extractor_sender.docids::<WordPositionDocids>(),
-                        &indexing_context.must_stop_processing,
-                    )?;
-                }
+                        FacetedDocidsExtractor::run_extraction(
+                                grenad_parameters,
+                                document_changes,
+                                indexing_context,
+                                &mut extractor_allocs,
+                                &extractor_sender.field_id_docid_facet_sender(),
+                                IndexingStep::ExtractingFacets
+                            )?
+                    };
 
-                // Fid Word Count Docids Merging
-                {
-                    let span = tracing::trace_span!(target: "indexing::documents::merge", "fid_word_count_docids");
-                    let _entered = span.enter();
-                    merge_and_send_docids(
-                        fid_word_count_docids,
-                        index.field_id_word_count_docids.remap_types(),
-                        index,
-                        extractor_sender.docids::<FidWordCountDocids>(),
-                        &indexing_context.must_stop_processing,
-                    )?;
-                }
-            }
+                    {
+                        let span = tracing::trace_span!(target: "indexing::documents::merge", parent: &indexer_span, "faceted");
+                        let _entered = span.enter();
 
-            // run the proximity extraction only if the precision is by word
-            // this works only if the settings didn't change during this transaction.
-            let proximity_precision = index.proximity_precision(&rtxn)?.unwrap_or_default();
-            if proximity_precision == ProximityPrecision::ByWord {
-                let span = tracing::trace_span!(target: "indexing::documents::extract", "word_pair_proximity_docids");
-                let _entered = span.enter();
-
-
-                let caches = <WordPairProximityDocidsExtractor as DocidsExtractor>::run_extraction(
-                    grenad_parameters,
-                    document_changes,
-                    indexing_context,
-                    &mut extractor_allocs,
-                    Step::ExtractingWordProximity,
-                )?;
-
-                merge_and_send_docids(
-                    caches,
-                    index.word_pair_proximity_docids.remap_types(),
-                    index,
-                    extractor_sender.docids::<WordPairProximityDocids>(),
-                    &indexing_context.must_stop_processing,
-                )?;
-            }
-
-            'vectors: {
-                let span = tracing::trace_span!(target: "indexing::documents::extract", "vectors");
-                let _entered = span.enter();
-
-                let mut index_embeddings = index.embedding_configs(&rtxn)?;
-                if index_embeddings.is_empty() {
-                    break 'vectors;
-                }
-
-                let embedding_sender = extractor_sender.embeddings();
-                let extractor = EmbeddingExtractor::new(embedders, &embedding_sender, field_distribution, request_threads());
-                let mut datastore = ThreadLocal::with_capacity(rayon::current_num_threads());
-                extract(document_changes, &extractor, indexing_context, &mut extractor_allocs, &datastore, Step::ExtractingEmbeddings)?;
-
-                for config in &mut index_embeddings {
-                    'data: for data in datastore.iter_mut() {
-                        let data = &mut data.get_mut().0;
-                        let Some(deladd) = data.remove(&config.name) else { continue 'data; };
-                        deladd.apply_to(&mut config.user_provided);
+                        facet_field_ids_delta = merge_and_send_facet_docids(
+                            caches,
+                            FacetDatabases::new(index),
+                            index,
+                            extractor_sender.facet_docids(),
+                        )?;
                     }
                 }
 
-                embedding_sender.finish(index_embeddings).unwrap();
-            }
+                {
+                    let WordDocidsCaches {
+                        word_docids,
+                        word_fid_docids,
+                        exact_word_docids,
+                        word_position_docids,
+                        fid_word_count_docids,
+                    } = {
+                        let span = tracing::trace_span!(target: "indexing::documents::extract", "word_docids");
+                        let _entered = span.enter();
 
-            'geo: {
-                let span = tracing::trace_span!(target: "indexing::documents::extract", "geo");
-                let _entered = span.enter();
+                        WordDocidsExtractors::run_extraction(
+                            grenad_parameters,
+                            document_changes,
+                            indexing_context,
+                            &mut extractor_allocs,
+                            IndexingStep::ExtractingWords
+                        )?
+                    };
 
-                let Some(extractor) = GeoExtractor::new(&rtxn, index, grenad_parameters)? else {
-                    break 'geo;
-                };
-                let datastore = ThreadLocal::with_capacity(rayon::current_num_threads());
-                extract(
-                    document_changes,
-                    &extractor,
-                    indexing_context,
-                    &mut extractor_allocs,
-                    &datastore,
-                    Step::WritingGeoPoints
-                )?;
+                    {
+                        let span = tracing::trace_span!(target: "indexing::documents::merge", "word_docids");
+                        let _entered = span.enter();
+                        merge_and_send_docids(
+                            word_docids,
+                            index.word_docids.remap_types(),
+                            index,
+                            extractor_sender.docids::<WordDocids>(),
+                            &indexing_context.must_stop_processing,
+                        )?;
+                    }
 
-                merge_and_send_rtree(
-                    datastore,
-                    &rtxn,
-                    index,
-                    extractor_sender.geo(),
-                    &indexing_context.must_stop_processing,
-                )?;
-            }
+                    {
+                        let span = tracing::trace_span!(target: "indexing::documents::merge", "word_fid_docids");
+                        let _entered = span.enter();
+                        merge_and_send_docids(
+                            word_fid_docids,
+                            index.word_fid_docids.remap_types(),
+                            index,
+                            extractor_sender.docids::<WordFidDocids>(),
+                            &indexing_context.must_stop_processing,
+                        )?;
+                    }
 
-            {
-                let span = tracing::trace_span!(target: "indexing::documents::extract", "FINISH");
-                let _entered = span.enter();
-                (indexing_context.send_progress)(Progress::from_step(Step::WritingToDatabase));
-            }
+                    {
+                        let span = tracing::trace_span!(target: "indexing::documents::merge", "exact_word_docids");
+                        let _entered = span.enter();
+                        merge_and_send_docids(
+                            exact_word_docids,
+                            index.exact_word_docids.remap_types(),
+                            index,
+                            extractor_sender.docids::<ExactWordDocids>(),
+                            &indexing_context.must_stop_processing,
+                        )?;
+                    }
 
-            Result::Ok(facet_field_ids_delta)
+                    {
+                        let span = tracing::trace_span!(target: "indexing::documents::merge", "word_position_docids");
+                        let _entered = span.enter();
+                        merge_and_send_docids(
+                            word_position_docids,
+                            index.word_position_docids.remap_types(),
+                            index,
+                            extractor_sender.docids::<WordPositionDocids>(),
+                            &indexing_context.must_stop_processing,
+                        )?;
+                    }
+
+                    {
+                        let span = tracing::trace_span!(target: "indexing::documents::merge", "fid_word_count_docids");
+                        let _entered = span.enter();
+                        merge_and_send_docids(
+                            fid_word_count_docids,
+                            index.field_id_word_count_docids.remap_types(),
+                            index,
+                            extractor_sender.docids::<FidWordCountDocids>(),
+                            &indexing_context.must_stop_processing,
+                        )?;
+                    }
+                }
+
+                // run the proximity extraction only if the precision is by word
+                // this works only if the settings didn't change during this transaction.
+                let proximity_precision = index.proximity_precision(&rtxn)?.unwrap_or_default();
+                if proximity_precision == ProximityPrecision::ByWord {
+                    let caches = {
+                        let span = tracing::trace_span!(target: "indexing::documents::extract", "word_pair_proximity_docids");
+                        let _entered = span.enter();
+
+                        <WordPairProximityDocidsExtractor as DocidsExtractor>::run_extraction(
+                            grenad_parameters,
+                            document_changes,
+                            indexing_context,
+                            &mut extractor_allocs,
+                            IndexingStep::ExtractingWordProximity,
+                        )?
+                    };
+
+                    {
+                        let span = tracing::trace_span!(target: "indexing::documents::merge", "word_pair_proximity_docids");
+                        let _entered = span.enter();
+
+                        merge_and_send_docids(
+                            caches,
+                            index.word_pair_proximity_docids.remap_types(),
+                            index,
+                            extractor_sender.docids::<WordPairProximityDocids>(),
+                            &indexing_context.must_stop_processing,
+                        )?;
+                    }
+                }
+
+                'vectors: {
+                    if index_embeddings.is_empty() {
+                        break 'vectors;
+                    }
+
+                    let embedding_sender = extractor_sender.embeddings();
+                    let extractor = EmbeddingExtractor::new(embedders, embedding_sender, field_distribution, request_threads());
+                    let mut datastore = ThreadLocal::with_capacity(rayon::current_num_threads());
+                    {
+                        let span = tracing::trace_span!(target: "indexing::documents::extract", "vectors");
+                        let _entered = span.enter();
+
+                        extract(
+                            document_changes,
+                            &extractor,
+                            indexing_context,
+                            &mut extractor_allocs,
+                            &datastore,
+                            IndexingStep::ExtractingEmbeddings,
+                        )?;
+                    }
+                    {
+                        let span = tracing::trace_span!(target: "indexing::documents::merge", "vectors");
+                        let _entered = span.enter();
+
+                        for config in &mut index_embeddings {
+                            'data: for data in datastore.iter_mut() {
+                                let data = &mut data.get_mut().0;
+                                let Some(deladd) = data.remove(&config.name) else { continue 'data; };
+                                deladd.apply_to(&mut config.user_provided);
+                            }
+                        }
+                    }
+                }
+
+                'geo: {
+                    let Some(extractor) = GeoExtractor::new(&rtxn, index, grenad_parameters)? else {
+                        break 'geo;
+                    };
+                    let datastore = ThreadLocal::with_capacity(rayon::current_num_threads());
+
+                    {
+                        let span = tracing::trace_span!(target: "indexing::documents::extract", "geo");
+                        let _entered = span.enter();
+
+                        extract(
+                            document_changes,
+                            &extractor,
+                            indexing_context,
+                            &mut extractor_allocs,
+                            &datastore,
+                            IndexingStep::WritingGeoPoints
+                        )?;
+                    }
+
+                    merge_and_send_rtree(
+                        datastore,
+                        &rtxn,
+                        index,
+                        extractor_sender.geo(),
+                        &indexing_context.must_stop_processing,
+                    )?;
+                }
+                indexing_context.progress.update_progress(IndexingStep::WritingToDatabase);
+                finished_extraction.store(true, std::sync::atomic::Ordering::Relaxed);
+
+                Result::Ok((facet_field_ids_delta, index_embeddings))
+            }).unwrap()
         })?;
 
         let global_fields_ids_map = GlobalFieldsIdsMap::new(&new_fields_ids_map);
 
         let vector_arroy = index.vector_arroy;
-        let mut rng = rand::rngs::StdRng::seed_from_u64(42);
         let indexer_span = tracing::Span::current();
         let arroy_writers: Result<HashMap<_, _>> = embedders
             .inner_as_ref()
@@ -351,94 +415,116 @@ where
             })
             .collect();
 
+        // Used by by the ArroySetVector to copy the embedding into an
+        // aligned memory area, required by arroy to accept a new vector.
+        let mut aligned_embedding = Vec::new();
         let mut arroy_writers = arroy_writers?;
-        for operation in writer_receiver {
-            match operation {
-                WriterOperation::DbOperation(db_operation) => {
-                    let database = db_operation.database(index);
-                    match db_operation.entry() {
-                        EntryOperation::Delete(e) => {
-                            if !database.delete(wtxn, e.entry())? {
-                                unreachable!("We tried to delete an unknown key")
-                            }
-                        }
-                        EntryOperation::Write(e) => database.put(wtxn, e.key(), e.value())?,
-                    }
+
+        {
+            let span = tracing::trace_span!(target: "indexing::write_db", "all");
+            let _entered = span.enter();
+
+            let span = tracing::trace_span!(target: "indexing::write_db", "post_merge");
+            let mut _entered_post_merge = None;
+
+            while let Some(action) = writer_receiver.recv_action() {
+                if _entered_post_merge.is_none()
+                    && finished_extraction.load(std::sync::atomic::Ordering::Relaxed)
+                {
+                    _entered_post_merge = Some(span.enter());
                 }
-                WriterOperation::ArroyOperation(arroy_operation) => match arroy_operation {
-                    ArroyOperation::DeleteVectors { docid } => {
-                        for (_embedder_index, (_embedder_name, _embedder, writer, dimensions)) in
-                            &mut arroy_writers
-                        {
-                            let dimensions = *dimensions;
-                            writer.del_items(wtxn, dimensions, docid)?;
+
+                match action {
+                    ReceiverAction::WakeUp => (),
+                    ReceiverAction::LargeEntry(LargeEntry { database, key, value }) => {
+                        let database_name = database.database_name();
+                        let database = database.database(index);
+                        if let Err(error) = database.put(wtxn, &key, &value) {
+                            return Err(Error::InternalError(InternalError::StorePut {
+                                database_name,
+                                key: bstr::BString::from(&key[..]),
+                                value_length: value.len(),
+                                error,
+                            }));
                         }
                     }
-                    ArroyOperation::SetVectors {
-                        docid,
-                        embedder_id,
-                        embeddings: raw_embeddings,
-                    } => {
+                    ReceiverAction::LargeVectors(large_vectors) => {
+                        let LargeVectors { docid, embedder_id, .. } = large_vectors;
                         let (_, _, writer, dimensions) =
                             arroy_writers.get(&embedder_id).expect("requested a missing embedder");
-                        // TODO: switch to Embeddings
                         let mut embeddings = Embeddings::new(*dimensions);
-                        for embedding in raw_embeddings {
-                            embeddings.append(embedding).unwrap();
+                        for embedding in large_vectors.read_embeddings(*dimensions) {
+                            embeddings.push(embedding.to_vec()).unwrap();
                         }
-
                         writer.del_items(wtxn, *dimensions, docid)?;
                         writer.add_items(wtxn, docid, &embeddings)?;
                     }
-                    ArroyOperation::SetVector { docid, embedder_id, embedding } => {
-                        let (_, _, writer, dimensions) =
-                            arroy_writers.get(&embedder_id).expect("requested a missing embedder");
-                        writer.del_items(wtxn, *dimensions, docid)?;
-                        writer.add_item(wtxn, docid, &embedding)?;
-                    }
-                    ArroyOperation::Finish { configs } => {
-                        let span = tracing::trace_span!(target: "indexing::vectors", parent: &indexer_span, "build");
-                        let _entered = span.enter();
+                }
 
-                        (indexing_context.send_progress)(Progress::from_step(
-                            Step::WritingEmbeddingsToDatabase,
-                        ));
-
-                        for (_embedder_index, (_embedder_name, _embedder, writer, dimensions)) in
-                            &mut arroy_writers
-                        {
-                            let dimensions = *dimensions;
-                            writer.build_and_quantize(
-                                wtxn,
-                                &mut rng,
-                                dimensions,
-                                false,
-                                &indexing_context.must_stop_processing,
-                            )?;
-                        }
-
-                        index.put_embedding_configs(wtxn, configs)?;
-                    }
-                },
+                // Every time the is a message in the channel we search
+                // for new entries in the BBQueue buffers.
+                write_from_bbqueue(
+                    &mut writer_receiver,
+                    index,
+                    wtxn,
+                    &arroy_writers,
+                    &mut aligned_embedding,
+                )?;
             }
+
+            // Once the extractor/writer channel is closed
+            // we must process the remaining BBQueue messages.
+            write_from_bbqueue(
+                &mut writer_receiver,
+                index,
+                wtxn,
+                &arroy_writers,
+                &mut aligned_embedding,
+            )?;
         }
 
-        (indexing_context.send_progress)(Progress::from_step(Step::WaitingForExtractors));
+        indexing_context.progress.update_progress(IndexingStep::WaitingForExtractors);
 
-        let facet_field_ids_delta = extractor_handle.join().unwrap()?;
+        let (facet_field_ids_delta, index_embeddings) = extractor_handle.join().unwrap()?;
 
-        (indexing_context.send_progress)(Progress::from_step(Step::PostProcessingFacets));
+        'vectors: {
+            let span =
+                tracing::trace_span!(target: "indexing::vectors", parent: &indexer_span, "build");
+            let _entered = span.enter();
 
-        compute_facet_search_database(index, wtxn, global_fields_ids_map)?;
+            if index_embeddings.is_empty() {
+                break 'vectors;
+            }
+
+            indexing_context.progress.update_progress(IndexingStep::WritingEmbeddingsToDatabase);
+            let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+            for (_index, (_embedder_name, _embedder, writer, dimensions)) in &mut arroy_writers {
+                let dimensions = *dimensions;
+                writer.build_and_quantize(
+                    wtxn,
+                    &mut rng,
+                    dimensions,
+                    false,
+                    &indexing_context.must_stop_processing,
+                )?;
+            }
+
+            index.put_embedding_configs(wtxn, index_embeddings)?;
+        }
+
+        indexing_context.progress.update_progress(IndexingStep::PostProcessingFacets);
+        if index.facet_search(wtxn)? {
+            compute_facet_search_database(index, wtxn, global_fields_ids_map)?;
+        }
+
         compute_facet_level_database(index, wtxn, facet_field_ids_delta)?;
 
-        (indexing_context.send_progress)(Progress::from_step(Step::PostProcessingWords));
-
+        indexing_context.progress.update_progress(IndexingStep::PostProcessingWords);
         if let Some(prefix_delta) = compute_word_fst(index, wtxn)? {
             compute_prefix_database(index, wtxn, prefix_delta, grenad_parameters)?;
         }
 
-        (indexing_context.send_progress)(Progress::from_step(Step::Finalizing));
+        indexing_context.progress.update_progress(IndexingStep::Finalizing);
 
         Ok(()) as Result<_>
     })?;
@@ -460,6 +546,72 @@ where
     index.put_field_distribution(wtxn, &field_distribution)?;
     index.put_documents_ids(wtxn, &document_ids)?;
     index.set_updated_at(wtxn, &OffsetDateTime::now_utc())?;
+
+    Ok(())
+}
+
+/// A function dedicated to manage all the available BBQueue frames.
+///
+/// It reads all the available frames, do the corresponding database operations
+/// and stops when no frame are available.
+fn write_from_bbqueue(
+    writer_receiver: &mut WriterBbqueueReceiver<'_>,
+    index: &Index,
+    wtxn: &mut RwTxn<'_>,
+    arroy_writers: &HashMap<u8, (&str, &crate::vector::Embedder, ArroyWrapper, usize)>,
+    aligned_embedding: &mut Vec<f32>,
+) -> crate::Result<()> {
+    while let Some(frame_with_header) = writer_receiver.recv_frame() {
+        match frame_with_header.header() {
+            EntryHeader::DbOperation(operation) => {
+                let database_name = operation.database.database_name();
+                let database = operation.database.database(index);
+                let frame = frame_with_header.frame();
+                match operation.key_value(frame) {
+                    (key, Some(value)) => {
+                        if let Err(error) = database.put(wtxn, key, value) {
+                            return Err(Error::InternalError(InternalError::StorePut {
+                                database_name,
+                                key: key.into(),
+                                value_length: value.len(),
+                                error,
+                            }));
+                        }
+                    }
+                    (key, None) => match database.delete(wtxn, key) {
+                        Ok(false) => {
+                            unreachable!("We tried to delete an unknown key: {key:?}")
+                        }
+                        Ok(_) => (),
+                        Err(error) => {
+                            return Err(Error::InternalError(InternalError::StoreDeletion {
+                                database_name,
+                                key: key.into(),
+                                error,
+                            }));
+                        }
+                    },
+                }
+            }
+            EntryHeader::ArroyDeleteVector(ArroyDeleteVector { docid }) => {
+                for (_index, (_name, _embedder, writer, dimensions)) in arroy_writers {
+                    let dimensions = *dimensions;
+                    writer.del_items(wtxn, dimensions, docid)?;
+                }
+            }
+            EntryHeader::ArroySetVectors(asvs) => {
+                let ArroySetVectors { docid, embedder_id, .. } = asvs;
+                let frame = frame_with_header.frame();
+                let (_, _, writer, dimensions) =
+                    arroy_writers.get(&embedder_id).expect("requested a missing embedder");
+                let mut embeddings = Embeddings::new(*dimensions);
+                let all_embeddings = asvs.read_all_embeddings_into_vec(frame, aligned_embedding);
+                embeddings.append(all_embeddings.to_vec()).unwrap();
+                writer.del_items(wtxn, *dimensions, docid)?;
+                writer.add_items(wtxn, docid, &embeddings)?;
+            }
+        }
+    }
 
     Ok(())
 }
@@ -618,7 +770,7 @@ pub fn retrieve_or_guess_primary_key<'a>(
     index: &Index,
     new_fields_ids_map: &mut FieldsIdsMap,
     primary_key_from_op: Option<&'a str>,
-    first_document: Option<RawMap<'a>>,
+    first_document: Option<RawMap<'a, FxBuildHasher>>,
 ) -> Result<StdResult<(PrimaryKey<'a>, bool), UserError>> {
     // make sure that we have a declared primary key, either fetching it from the index or attempting to guess it.
 

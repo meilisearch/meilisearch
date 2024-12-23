@@ -604,7 +604,7 @@ async fn delete_document_by_filter() {
         "originalFilter": "\"doggo = bernese\""
       },
       "error": {
-        "message": "Attribute `doggo` is not filterable. This index does not have configured filterable attributes.\n1:6 doggo = bernese",
+        "message": "Index `EMPTY_INDEX`: Attribute `doggo` is not filterable. This index does not have configured filterable attributes.\n1:6 doggo = bernese",
         "code": "invalid_document_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
@@ -636,7 +636,7 @@ async fn delete_document_by_filter() {
         "originalFilter": "\"catto = jorts\""
       },
       "error": {
-        "message": "Attribute `catto` is not filterable. Available filterable attributes are: `id`, `title`.\n1:6 catto = jorts",
+        "message": "Index `SHARED_DOCUMENTS`: Attribute `catto` is not filterable. Available filterable attributes are: `id`, `title`.\n1:6 catto = jorts",
         "code": "invalid_document_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_filter"

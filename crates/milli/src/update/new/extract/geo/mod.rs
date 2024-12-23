@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 use std::fs::File;
-use std::io::{self, BufReader, BufWriter, ErrorKind, Read, Write as _};
+use std::io::{self, BufReader, BufWriter, ErrorKind, Read, Seek as _, Write as _};
 use std::{iter, mem, result};
 
 use bumpalo::Bump;
@@ -97,30 +97,34 @@ pub struct FrozenGeoExtractorData<'extractor> {
 impl<'extractor> FrozenGeoExtractorData<'extractor> {
     pub fn iter_and_clear_removed(
         &mut self,
-    ) -> impl IntoIterator<Item = io::Result<ExtractedGeoPoint>> + '_ {
-        mem::take(&mut self.removed)
+    ) -> io::Result<impl IntoIterator<Item = io::Result<ExtractedGeoPoint>> + '_> {
+        Ok(mem::take(&mut self.removed)
             .iter()
             .copied()
             .map(Ok)
-            .chain(iterator_over_spilled_geopoints(&mut self.spilled_removed))
+            .chain(iterator_over_spilled_geopoints(&mut self.spilled_removed)?))
     }
 
     pub fn iter_and_clear_inserted(
         &mut self,
-    ) -> impl IntoIterator<Item = io::Result<ExtractedGeoPoint>> + '_ {
-        mem::take(&mut self.inserted)
+    ) -> io::Result<impl IntoIterator<Item = io::Result<ExtractedGeoPoint>> + '_> {
+        Ok(mem::take(&mut self.inserted)
             .iter()
             .copied()
             .map(Ok)
-            .chain(iterator_over_spilled_geopoints(&mut self.spilled_inserted))
+            .chain(iterator_over_spilled_geopoints(&mut self.spilled_inserted)?))
     }
 }
 
 fn iterator_over_spilled_geopoints(
     spilled: &mut Option<BufReader<File>>,
-) -> impl IntoIterator<Item = io::Result<ExtractedGeoPoint>> + '_ {
+) -> io::Result<impl IntoIterator<Item = io::Result<ExtractedGeoPoint>> + '_> {
     let mut spilled = spilled.take();
-    iter::from_fn(move || match &mut spilled {
+    if let Some(spilled) = &mut spilled {
+        spilled.rewind()?;
+    }
+
+    Ok(iter::from_fn(move || match &mut spilled {
         Some(file) => {
             let geopoint_bytes = &mut [0u8; mem::size_of::<ExtractedGeoPoint>()];
             match file.read_exact(geopoint_bytes) {
@@ -130,7 +134,7 @@ fn iterator_over_spilled_geopoints(
             }
         }
         None => None,
-    })
+    }))
 }
 
 impl<'extractor> Extractor<'extractor> for GeoExtractor {
@@ -157,7 +161,9 @@ impl<'extractor> Extractor<'extractor> for GeoExtractor {
         let mut data_ref = context.data.borrow_mut_or_yield();
 
         for change in changes {
-            if max_memory.map_or(false, |mm| context.extractor_alloc.allocated_bytes() >= mm) {
+            if data_ref.spilled_removed.is_none()
+                && max_memory.map_or(false, |mm| context.extractor_alloc.allocated_bytes() >= mm)
+            {
                 // We must spill as we allocated too much memory
                 data_ref.spilled_removed = tempfile::tempfile().map(BufWriter::new).map(Some)?;
                 data_ref.spilled_inserted = tempfile::tempfile().map(BufWriter::new).map(Some)?;
