@@ -3471,6 +3471,7 @@ dependencies = [
  "clap",
  "crossbeam-channel",
  "deserr",
+ "doc-comment",
  "dump",
  "either",
  "file-store",
