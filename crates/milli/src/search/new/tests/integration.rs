@@ -11,6 +11,7 @@ use crate::update::{IndexDocumentsMethod, IndexerConfig, Settings};
 use crate::vector::EmbeddingConfigs;
 use crate::{db_snap, Criterion, Index};
 pub const CONTENT: &str = include_str!("../../../../tests/assets/test_set.ndjson");
+use crate::constants::RESERVED_GEO_FIELD_NAME;
 
 pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     let path = tempfile::tempdir().unwrap();
@@ -27,7 +28,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     builder.set_filterable_fields(hashset! {
         S("tag"),
         S("asc_desc_rank"),
-        S("_geo"),
+        S(RESERVED_GEO_FIELD_NAME),
         S("opt1"),
         S("opt1.opt2"),
         S("tag_in")

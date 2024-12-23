@@ -10,8 +10,6 @@ use crate::index::IndexEmbeddingConfig;
 use crate::update::del_add::{DelAdd, KvReaderDelAdd};
 use crate::{DocumentId, FieldId, InternalError, UserError};
 
-pub const RESERVED_VECTORS_FIELD_NAME: &str = "_vectors";
-
 #[derive(serde::Serialize, Debug)]
 #[serde(untagged)]
 pub enum RawVectors<'doc> {
