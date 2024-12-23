@@ -34,6 +34,7 @@ use serde::Serialize;
 use serde_json::{json, Value};
 #[cfg(test)]
 mod mod_test;
+use utoipa::ToSchema;
 
 use crate::error::MeilisearchHttpError;
 
@@ -52,7 +53,7 @@ pub const DEFAULT_HIGHLIGHT_PRE_TAG: fn() -> String = || "<em>".to_string();
 pub const DEFAULT_HIGHLIGHT_POST_TAG: fn() -> String = || "</em>".to_string();
 pub const DEFAULT_SEMANTIC_RATIO: fn() -> SemanticRatio = || SemanticRatio(0.5);
 
-#[derive(Clone, Default, PartialEq, Deserr)]
+#[derive(Clone, Default, PartialEq, Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct SearchQuery {
     #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
@@ -62,8 +63,10 @@ pub struct SearchQuery {
     #[deserr(default, error = DeserrJsonError<InvalidHybridQuery>)]
     pub hybrid: Option<HybridQuery>,
     #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSearchOffset>)]
+    #[schema(default = DEFAULT_SEARCH_OFFSET)]
     pub offset: usize,
     #[deserr(default = DEFAULT_SEARCH_LIMIT(), error = DeserrJsonError<InvalidSearchLimit>)]
+    #[schema(default = DEFAULT_SEARCH_LIMIT)]
     pub limit: usize,
     #[deserr(default, error = DeserrJsonError<InvalidSearchPage>)]
     pub page: Option<usize>,
@@ -75,15 +78,16 @@ pub struct SearchQuery {
     pub retrieve_vectors: bool,
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToCrop>)]
     pub attributes_to_crop: Option<Vec<String>>,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchCropLength>, default = DEFAULT_CROP_LENGTH())]
+    #[deserr(error = DeserrJsonError<InvalidSearchCropLength>, default = DEFAULT_CROP_LENGTH())]
+    #[schema(default = DEFAULT_CROP_LENGTH)]
     pub crop_length: usize,
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToHighlight>)]
     pub attributes_to_highlight: Option<HashSet<String>>,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchShowMatchesPosition>, default)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchShowMatchesPosition>)]
     pub show_matches_position: bool,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScore>, default)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScore>)]
     pub show_ranking_score: bool,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScoreDetails>, default)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScoreDetails>)]
     pub show_ranking_score_details: bool,
     #[deserr(default, error = DeserrJsonError<InvalidSearchFilter>)]
     pub filter: Option<Value>,
@@ -93,26 +97,28 @@ pub struct SearchQuery {
     pub distinct: Option<String>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchFacets>)]
     pub facets: Option<Vec<String>>,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchHighlightPreTag>, default = DEFAULT_HIGHLIGHT_PRE_TAG())]
+    #[deserr(error = DeserrJsonError<InvalidSearchHighlightPreTag>, default = DEFAULT_HIGHLIGHT_PRE_TAG())]
+    #[schema(default = DEFAULT_HIGHLIGHT_PRE_TAG)]
     pub highlight_pre_tag: String,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchHighlightPostTag>, default = DEFAULT_HIGHLIGHT_POST_TAG())]
+    #[deserr(error = DeserrJsonError<InvalidSearchHighlightPostTag>, default = DEFAULT_HIGHLIGHT_POST_TAG())]
+    #[schema(default = DEFAULT_HIGHLIGHT_POST_TAG)]
     pub highlight_post_tag: String,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchCropMarker>, default = DEFAULT_CROP_MARKER())]
+    #[deserr(error = DeserrJsonError<InvalidSearchCropMarker>, default = DEFAULT_CROP_MARKER())]
+    #[schema(default = DEFAULT_CROP_MARKER)]
     pub crop_marker: String,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchMatchingStrategy>, default)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchMatchingStrategy>)]
     pub matching_strategy: MatchingStrategy,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToSearchOn>, default)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToSearchOn>)]
     pub attributes_to_search_on: Option<Vec<String>>,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchRankingScoreThreshold>, default)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchRankingScoreThreshold>)]
     pub ranking_score_threshold: Option<RankingScoreThreshold>,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchLocales>, default)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchLocales>)]
     pub locales: Option<Vec<Locale>>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Deserr)]
+#[derive(Debug, Clone, Copy, PartialEq, Deserr, ToSchema)]
 #[deserr(try_from(f64) = TryFrom::try_from -> InvalidSearchRankingScoreThreshold)]
 pub struct RankingScoreThreshold(f64);
-
 impl std::convert::TryFrom<f64> for RankingScoreThreshold {
     type Error = InvalidSearchRankingScoreThreshold;
 
@@ -266,10 +272,11 @@ impl fmt::Debug for SearchQuery {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Deserr)]
+#[derive(Debug, Clone, Default, PartialEq, Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError<InvalidHybridQuery>, rename_all = camelCase, deny_unknown_fields)]
 pub struct HybridQuery {
     #[deserr(default, error = DeserrJsonError<InvalidSearchSemanticRatio>, default)]
+    #[schema(value_type = f32, default)]
     pub semantic_ratio: SemanticRatio,
     #[deserr(error = DeserrJsonError<InvalidEmbedder>)]
     pub embedder: String,
@@ -587,7 +594,7 @@ impl TryFrom<Value> for ExternalDocumentId {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Deserr)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Deserr, ToSchema)]
 #[deserr(rename_all = camelCase)]
 pub enum MatchingStrategy {
     /// Remove query words from last to first
@@ -634,11 +641,13 @@ impl From<FacetValuesSort> for OrderBy {
     }
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, PartialEq, ToSchema)]
 pub struct SearchHit {
     #[serde(flatten)]
+    #[schema(additional_properties, inline, value_type = HashMap<String, Value>)]
     pub document: Document,
     #[serde(rename = "_formatted", skip_serializing_if = "Document::is_empty")]
+    #[schema(additional_properties, value_type = HashMap<String, Value>)]
     pub formatted: Document,
     #[serde(rename = "_matchesPosition", skip_serializing_if = "Option::is_none")]
     pub matches_position: Option<MatchesPosition>,
@@ -648,8 +657,9 @@ pub struct SearchHit {
     pub ranking_score_details: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
-#[derive(Serialize, Clone, PartialEq)]
+#[derive(Serialize, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
 pub struct SearchResult {
     pub hits: Vec<SearchHit>,
     pub query: String,
@@ -657,6 +667,7 @@ pub struct SearchResult {
     #[serde(flatten)]
     pub hits_info: HitsInfo,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = HashMap<String, Value>)]
     pub facet_distribution: Option<BTreeMap<String, IndexMap<String, u64>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub facet_stats: Option<BTreeMap<String, FacetStats>>,
@@ -729,7 +740,7 @@ pub struct SearchResultWithIndex {
     pub result: SearchResult,
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Debug, Clone, PartialEq, Eq, ToSchema)]
 #[serde(untagged)]
 pub enum HitsInfo {
     #[serde(rename_all = "camelCase")]
@@ -738,7 +749,7 @@ pub enum HitsInfo {
     OffsetLimit { limit: usize, offset: usize, estimated_total_hits: usize },
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Debug, Clone, PartialEq, ToSchema)]
 pub struct FacetStats {
     pub min: f64,
     pub max: f64,

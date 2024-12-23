@@ -16,7 +16,7 @@ use time::OffsetDateTime;
 use utoipa::{IntoParams, OpenApi, ToSchema};
 use uuid::Uuid;
 
-use super::PAGINATION_DEFAULT_LIMIT;
+use super::{PAGINATION_DEFAULT_LIMIT, PAGINATION_DEFAULT_LIMIT_FN};
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
@@ -116,11 +116,11 @@ pub async fn create_api_key(
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 #[into_params(rename_all = "camelCase", parameter_in = Query)]
 pub struct ListApiKeys {
-    #[into_params(value_type = usize, default = 0)]
     #[deserr(default, error = DeserrQueryParamError<InvalidApiKeyOffset>)]
+    #[param(value_type = usize, default = 0)]
     pub offset: Param<usize>,
-    #[into_params(value_type = usize, default = PAGINATION_DEFAULT_LIMIT)]
     #[deserr(default = Param(PAGINATION_DEFAULT_LIMIT), error = DeserrQueryParamError<InvalidApiKeyLimit>)]
+    #[param(value_type = usize, default = PAGINATION_DEFAULT_LIMIT_FN)]
     pub limit: Param<usize>,
 }
 

@@ -13,6 +13,7 @@ use matching_words::{MatchType, PartialMatch};
 use r#match::{Match, MatchPosition};
 use serde::Serialize;
 use simple_token_kind::SimpleTokenKind;
+use utoipa::ToSchema;
 
 const DEFAULT_CROP_MARKER: &str = "…";
 const DEFAULT_HIGHLIGHT_PREFIX: &str = "<em>";
@@ -100,7 +101,7 @@ impl FormatOptions {
     }
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Debug, Clone, PartialEq, Eq, ToSchema)]
 pub struct MatchBounds {
     pub start: usize,
     pub length: usize,

@@ -35,6 +35,7 @@ use self::open_api_utils::OpenApiAuth;
 use self::tasks::AllTasks;
 
 const PAGINATION_DEFAULT_LIMIT: usize = 20;
+const PAGINATION_DEFAULT_LIMIT_FN: fn() -> usize = || 20;
 
 mod api_key;
 pub mod batches;
@@ -55,6 +56,8 @@ pub mod tasks;
     nest(
         (path = "/tasks", api = tasks::TaskApi),
         (path = "/indexes", api = indexes::IndexesApi),
+        // We must stop the search path here because the rest must be configured by each route individually
+        (path = "/indexes", api = indexes::search::SearchApi),
         (path = "/snapshots", api = snapshot::SnapshotApi),
         (path = "/dumps", api = dump::DumpApi),
         (path = "/keys", api = api_key::ApiKeyApi),
