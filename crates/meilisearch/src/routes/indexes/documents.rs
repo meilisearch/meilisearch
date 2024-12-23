@@ -205,7 +205,7 @@ impl<Method: AggregateMethod> Aggregate for DocumentsFetchAggregator<Method> {
         GetDocument,
    ),
     responses(
-        (status = 200, description = "The documents are returned", body = serde_json::Value, content_type = "application/json", example = json!(
+        (status = 200, description = "The document is returned", body = serde_json::Value, content_type = "application/json", example = json!(
             {
                 "id": 25684,
                 "title": "American Ninja 5",
