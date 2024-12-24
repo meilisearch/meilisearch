@@ -94,7 +94,7 @@ async fn basic_test_log_stream_route() {
       "enqueuedAt": "[date]"
     }
     "###);
-    server.wait_task(ret.uid()).await;
+    server.wait_task(ret.uid()).await.succeeded();
 
     let req = actix_web::test::TestRequest::delete().uri("/logs/stream");
     let req = req.to_request();
