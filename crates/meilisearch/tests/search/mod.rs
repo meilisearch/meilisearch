@@ -623,7 +623,7 @@ async fn placeholder_search_is_hard_limited() {
 
     let documents: Vec<_> = (0..1200).map(|i| json!({ "id": i, "text": "I am unique!" })).collect();
     let (task,_status_code) = index.add_documents(documents.into(), None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     index
         .search(
@@ -651,7 +651,7 @@ async fn placeholder_search_is_hard_limited() {
         .await;
 
     let (task,_status_code) = index.update_settings(json!({ "pagination": { "maxTotalHits": 10_000 } })).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     index
         .search(
@@ -686,7 +686,7 @@ async fn search_is_hard_limited() {
 
     let documents: Vec<_> = (0..1200).map(|i| json!({ "id": i, "text": "I am unique!" })).collect();
     let (task,_status_code) = index.add_documents(documents.into(), None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     index
         .search(
@@ -716,7 +716,7 @@ async fn search_is_hard_limited() {
         .await;
 
     let (task,_status_code) = index.update_settings(json!({ "pagination": { "maxTotalHits": 10_000 } })).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     index
         .search(
@@ -755,7 +755,7 @@ async fn faceting_max_values_per_facet() {
 
     let documents: Vec<_> = (0..10_000).map(|id| json!({ "id": id, "number": id * 10 })).collect();
     let (task,_status_code) = index.add_documents(json!(documents), None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     index
         .search(
@@ -771,7 +771,7 @@ async fn faceting_max_values_per_facet() {
         .await;
 
     let (task,_status_code) = index.update_settings(json!({ "faceting": { "maxValuesPerFacet": 10_000 } })).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     index
         .search(
@@ -795,7 +795,7 @@ async fn test_score_details() {
     let documents = DOCUMENTS.clone();
 
     let res = index.add_documents(json!(documents), None).await;
-    index.wait_task(res.0.uid()).await;
+    index.wait_task(res.0.uid()).await.succeeded();
 
     index
         .search(
@@ -868,7 +868,7 @@ async fn test_score() {
     let documents = SCORE_DOCUMENTS.clone();
 
     let res = index.add_documents(json!(documents), None).await;
-    index.wait_task(res.0.uid()).await;
+    index.wait_task(res.0.uid()).await.succeeded();
 
     index
         .search(
@@ -921,7 +921,7 @@ async fn test_score_threshold() {
     let documents = SCORE_DOCUMENTS.clone();
 
     let res = index.add_documents(json!(documents), None).await;
-    index.wait_task(res.0.uid()).await;
+    index.wait_task(res.0.uid()).await.succeeded();
 
     index
         .search(
@@ -1077,7 +1077,7 @@ async fn test_degraded_score_details() {
     index.add_documents(json!(documents), None).await;
     // We can't really use anything else than 0ms here; otherwise, the test will get flaky.
     let (res, _code) = index.update_settings(json!({ "searchCutoffMs": 0 })).await;
-    index.wait_task(res.uid()).await;
+    index.wait_task(res.uid()).await.succeeded();
 
     index
         .search(
@@ -1163,7 +1163,7 @@ async fn experimental_feature_vector_store() {
     let documents = DOCUMENTS.clone();
 
     let (task,_status_code) = index.add_documents(json!(documents), None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = index
         .search_post(json!({
@@ -1370,7 +1370,7 @@ async fn camelcased_words() {
         { "id": 4, "title": "testab" },
     ]);
     let (task,_status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     index
         .search(json!({"q": "deLonghi"}), |response, code| {
@@ -1593,7 +1593,7 @@ async fn simple_search_with_strange_synonyms() {
 
     let documents = DOCUMENTS.clone();
     let (task,_status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     index
         .search(json!({"q": "How to train"}), |response, code| {
@@ -1680,11 +1680,11 @@ async fn change_attributes_settings() {
 
     let documents = NESTED_DOCUMENTS.clone();
     let (task,_status_code) = index.add_documents(json!(documents), None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (task,_status_code) =
         index.update_settings(json!({ "searchableAttributes": ["father", "mother", "doggos"], "filterableAttributes": ["doggos"] })).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     // search
     index

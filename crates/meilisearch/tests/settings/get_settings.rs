@@ -250,7 +250,7 @@ async fn secrets_are_hidden_in_settings() {
 
     let index = server.index("test");
     let (response, _code) = index.create(None).await;
-    index.wait_task(response.uid()).await;
+    index.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index
         .update_settings(json!({
@@ -379,14 +379,14 @@ async fn test_partial_update() {
     let server = Server::new().await;
     let index = server.index("test");
     let (task, _code) = index.update_settings(json!({"displayedAttributes": ["foo"]})).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
     assert_eq!(response["displayedAttributes"], json!(["foo"]));
     assert_eq!(response["searchableAttributes"], json!(["*"]));
 
     let (task, _) = index.update_settings(json!({"searchableAttributes": ["bar"]})).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
@@ -422,12 +422,12 @@ async fn reset_all_settings() {
     let (response, code) = index.add_documents(documents, None).await;
     assert_eq!(code, 202);
     assert_eq!(response["taskUid"], 0);
-    index.wait_task(response.uid()).await;
+    index.wait_task(response.uid()).await.succeeded();
 
     let (update_task,_status_code) = index
         .update_settings(json!({"displayedAttributes": ["name", "age"], "searchableAttributes": ["name"], "stopWords": ["the"], "filterableAttributes": ["age"], "synonyms": {"puppy": ["dog", "doggo", "potat"] }}))
         .await;
-    index.wait_task(update_task.uid()).await;
+    index.wait_task(update_task.uid()).await.succeeded();
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
     assert_eq!(response["displayedAttributes"], json!(["name", "age"]));
@@ -437,7 +437,7 @@ async fn reset_all_settings() {
     assert_eq!(response["filterableAttributes"], json!(["age"]));
 
     let (delete_task,_status_code) = index.delete_settings().await;
-    index.wait_task(delete_task.uid()).await;
+    index.wait_task(delete_task.uid()).await.succeeded();
 
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
@@ -507,7 +507,7 @@ async fn set_and_reset_distinct_attribute_with_dedicated_route() {
     let index = server.index("test");
 
     let (task, _code) = index.update_distinct_attribute(json!("test")).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, _) = index.get_distinct_attribute().await;
 
@@ -515,7 +515,7 @@ async fn set_and_reset_distinct_attribute_with_dedicated_route() {
 
     let (task,_status_code) = index.update_distinct_attribute(json!(null)).await;
 
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, _) = index.get_distinct_attribute().await;
 

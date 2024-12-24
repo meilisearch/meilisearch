@@ -862,7 +862,7 @@ async fn filter_reserved_geo_point_string() {
     let index = server.unique_index();
 
     let (task, _code) = index.update_settings(json!({"filterableAttributes": ["title"]})).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let expected_response = json!({
        "message": "`_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:18 _geoPoint = Glass",
@@ -884,7 +884,7 @@ async fn sort_geo_reserved_attribute() {
     let index = server.unique_index();
 
     let (task, _code) = index.update_settings(json!({"sortableAttributes": ["id"]})).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let expected_response = json!({
         "message": "`_geo` is a reserved keyword and thus can't be used as a sort expression. Use the _geoPoint(latitude, longitude) built-in rule to sort on _geo field coordinates.",
@@ -911,7 +911,7 @@ async fn sort_reserved_attribute() {
     let index = server.unique_index();
 
     let (task, _code) = index.update_settings(json!({"sortableAttributes": ["id"]})).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let expected_response = json!({
         "message": "`_geoDistance` is a reserved keyword and thus can't be used as a sort expression.",
@@ -1095,7 +1095,7 @@ async fn distinct_at_search_time() {
     assert_eq!(code, 400);
 
     let (task, _) = index.update_settings_filterable_attributes(json!(["color", "machin"])).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let expected_response = json!({
         "message": format!("Index `{}`: Attribute `doggo.truc` is not filterable and thus, cannot be used as distinct attribute. Available filterable attributes are: `color, machin`.", index.uid),
@@ -1109,7 +1109,7 @@ async fn distinct_at_search_time() {
     assert_eq!(code, 400);
 
     let (task, _) = index.update_settings_displayed_attributes(json!(["color"])).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let expected_response = json!({
         "message": format!("Index `{}`: Attribute `doggo.truc` is not filterable and thus, cannot be used as distinct attribute. Available filterable attributes are: `color, <..hidden-attributes>`.", index.uid),

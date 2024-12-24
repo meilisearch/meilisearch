@@ -1096,7 +1096,7 @@ async fn facet_search_with_localized_attributes() {
     }
     "###);
     let (task,_status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, _) = index
         .facet_search(json!({"facetName": "name_zh", "facetQuery": "进击", "locales": ["cmn"]}))
@@ -1165,7 +1165,7 @@ async fn swedish_search() {
             ]
         }))
         .await;
-    index.wait_task(_response.uid()).await;
+    index.wait_task(_response.uid()).await.succeeded();
 
     // infer swedish
     index
@@ -1286,7 +1286,7 @@ async fn german_search() {
             ]
         }))
         .await;
-    index.wait_task(_response.uid()).await;
+    index.wait_task(_response.uid()).await.succeeded();
 
     // infer swedish
     index

@@ -618,7 +618,7 @@ async fn clear_documents() {
     let index = generate_default_user_provided_documents(&server).await;
 
     let (value, _code) = index.clear_all_documents().await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     // Make sure the documents DB has been cleared
     let (documents, _code) = index

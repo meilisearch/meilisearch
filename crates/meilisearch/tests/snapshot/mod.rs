@@ -56,7 +56,7 @@ async fn perform_snapshot() {
     let (task, code) = server.index("test1").create(Some("prim")).await;
     meili_snap::snapshot!(code, @"202 Accepted");
 
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     // wait for the _next task_ to process, aka the snapshot that should be enqueued at some point
 

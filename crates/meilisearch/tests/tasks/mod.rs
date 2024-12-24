@@ -607,7 +607,7 @@ async fn test_summarized_index_creation() {
     let server = Server::new().await;
     let index = server.index("test");
     let (task,_status_code) = index.create(None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.get_task(task.uid()).await;
     assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
@@ -631,7 +631,7 @@ async fn test_summarized_index_creation() {
     "###);
 
     let (task,_status_code) = index.create(Some("doggos")).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.get_task(task.uid()).await;
     assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
@@ -775,7 +775,7 @@ async fn test_summarized_index_update() {
     let index = server.index("test");
     // If the index doesn't exist yet, we should get errors with or without the primary key.
     let (task,_status_code) = index.update(None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.get_task(task.uid()).await;
     assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
@@ -804,7 +804,7 @@ async fn test_summarized_index_update() {
     "###);
 
     let (task,_status_code) = index.update(Some("bones")).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.get_task(task.uid()).await;
     assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
@@ -836,7 +836,7 @@ async fn test_summarized_index_update() {
     index.create(None).await;
 
     let (task,_status_code) = index.update(None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.get_task(task.uid()).await;
     assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
@@ -860,7 +860,7 @@ async fn test_summarized_index_update() {
     "###);
 
     let (task,_status_code) = index.update(Some("bones")).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.get_task(task.uid()).await;
     assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
@@ -892,7 +892,7 @@ async fn test_summarized_index_swap() {
             { "indexes": ["doggos", "cattos"] }
         ]))
         .await;
-    server.wait_task(task.uid()).await;
+    server.wait_task(task.uid()).await.succeeded();
     let (task, _) = server.get_task(task.uid()).await;
     assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
@@ -934,7 +934,7 @@ async fn test_summarized_index_swap() {
             { "indexes": ["doggos", "cattos"] }
         ]))
         .await;
-    server.wait_task(task.uid()).await;
+    server.wait_task(task.uid()).await.succeeded();
     let (task, _) = server.get_task(task.uid()).await;
     assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
@@ -971,9 +971,9 @@ async fn test_summarized_task_cancelation() {
     let index = server.index("doggos");
     // to avoid being flaky we're only going to cancel an already finished task :(
     let (task,_status_code) = index.create(None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
     let (task,_status_code) = server.cancel_tasks("uids=0").await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.get_task(task.uid()).await;
     assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
@@ -1005,9 +1005,9 @@ async fn test_summarized_task_deletion() {
     let index = server.index("doggos");
     // to avoid being flaky we're only going to delete an already finished task :(
     let (task,_status_code) = index.create(None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
     let (task,_status_code) = server.delete_tasks("uids=0").await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.get_task(task.uid()).await;
     assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },

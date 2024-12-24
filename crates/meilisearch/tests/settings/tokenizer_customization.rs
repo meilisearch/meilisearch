@@ -244,7 +244,7 @@ async fn advanced_synergies() {
             }
         }))
         .await;
-    index.wait_task(update_task.uid()).await;
+    index.wait_task(update_task.uid()).await.succeeded();
 
     index
         .search(json!({"q": "J.R.R.", "attributesToHighlight": ["content"]}), |response, code| {
@@ -354,7 +354,7 @@ async fn advanced_synergies() {
             "dictionary": ["J.R.R.", "J. R. R.", "J.K.", "J. K."],
         }))
         .await;
-    index.wait_task(_response.uid()).await;
+    index.wait_task(_response.uid()).await.succeeded();
 
     index
         .search(json!({"q": "jk", "attributesToHighlight": ["content"]}), |response, code| {
