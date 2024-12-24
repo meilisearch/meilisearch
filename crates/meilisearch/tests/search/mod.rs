@@ -248,7 +248,7 @@ async fn test_kanji_language_detection() {
         { "id": 2, "title": "הַשּׁוּעָל הַמָּהִיר (״הַחוּם״) לֹא יָכוֹל לִקְפֹּץ 9.94 מֶטְרִים, נָכוֹן? ברר, 1.5°C- בַּחוּץ!" }
     ]);
     let (task,_status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     index
         .search(json!({"q": "東京"}), |response, code| {
@@ -271,10 +271,10 @@ async fn test_thai_language() {
         { "id": 2, "title": "สบู่สมุนไพรฝางแดงผสมว่านหางจรเข้ 100 กรัม จำนวน 6 ก้อน" }
     ]);
     let (task,_status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (task,_status_code) = index.update_settings(json!({"rankingRules": ["exactness"]})).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     index
         .search(json!({"q": "สบู"}), |response, code| {
@@ -608,7 +608,7 @@ async fn displayed_attributes() {
 
     let documents = DOCUMENTS.clone();
     let (task,_status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) =
         index.search_post(json!({ "attributesToRetrieve": ["title", "id"] })).await;

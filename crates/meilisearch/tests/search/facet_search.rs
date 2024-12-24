@@ -281,7 +281,7 @@ async fn facet_search_dont_support_words() {
     let documents = DOCUMENTS.clone();
     index.update_settings_filterable_attributes(json!(["genres"])).await;
     let (task,_status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) =
         index.facet_search(json!({"facetName": "genres", "facetQuery": "words"})).await;
@@ -299,7 +299,7 @@ async fn simple_facet_search_with_sort_by_count() {
     index.update_settings_faceting(json!({ "sortFacetValuesBy": { "*": "count" } })).await;
     index.update_settings_filterable_attributes(json!(["genres"])).await;
     let (task,_status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) =
         index.facet_search(json!({"facetName": "genres", "facetQuery": "a"})).await;

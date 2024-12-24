@@ -16,7 +16,7 @@ async fn set_and_reset() {
             "dictionary": ["J.R.R.", "J. R. R."],
         }))
         .await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, _) = index.settings().await;
     snapshot!(json_string!(response["nonSeparatorTokens"]), @r###"
@@ -46,7 +46,7 @@ async fn set_and_reset() {
         }))
         .await;
 
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, _) = index.settings().await;
     snapshot!(json_string!(response["nonSeparatorTokens"]), @"[]");
@@ -75,7 +75,7 @@ async fn set_and_search() {
     let index = server.index("test");
 
     let (add_task,_status_code) = index.add_documents(documents, None).await;
-    index.wait_task(add_task.uid()).await;
+    index.wait_task(add_task.uid()).await.succeeded();
 
     let (update_task, _code) = index
         .update_settings(json!({
@@ -84,7 +84,7 @@ async fn set_and_search() {
             "dictionary": ["#", "A#", "B#", "C#", "D#", "E#", "F#", "G#"],
         }))
         .await;
-    index.wait_task(update_task.uid()).await;
+    index.wait_task(update_task.uid()).await.succeeded();
 
     index
         .search(json!({"q": "&", "attributesToHighlight": ["content"]}), |response, code| {
@@ -229,7 +229,7 @@ async fn advanced_synergies() {
     let index = server.index("test");
 
     let (add_task,_status_code) = index.add_documents(documents, None).await;
-    index.wait_task(add_task.uid()).await;
+    index.wait_task(add_task.uid()).await.succeeded();
 
     let (update_task, _code) = index
         .update_settings(json!({

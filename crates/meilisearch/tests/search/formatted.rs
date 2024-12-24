@@ -596,7 +596,7 @@ async fn test_cjk_highlight() {
         { "id": 1, "title": "大卫到了扫罗那里" },
     ]);
     let (response, _) = index.add_documents(documents, None).await;
-    index.wait_task(response.uid()).await;
+    index.wait_task(response.uid()).await.succeeded();
 
     index
         .search(json!({"q": "で", "attributesToHighlight": ["title"]}), |response, code| {

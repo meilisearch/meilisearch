@@ -573,7 +573,7 @@ async fn retrieve_vectors() {
         .update_settings(json!({ "displayedAttributes": ["id", "title", "desc", "_vectors"]} ))
         .await;
     assert_eq!(202, code, "{:?}", response);
-    index.wait_task(response.uid()).await;
+    index.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index
         .search_post(
@@ -623,7 +623,7 @@ async fn retrieve_vectors() {
     let (response, code) =
         index.update_settings(json!({ "displayedAttributes": ["id", "title", "desc"]} )).await;
     assert_eq!(202, code, "{:?}", response);
-    index.wait_task(response.uid()).await;
+    index.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index
         .search_post(

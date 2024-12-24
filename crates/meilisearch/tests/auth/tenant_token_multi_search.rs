@@ -427,17 +427,17 @@ macro_rules! compute_forbidden_single_search {
         let (task,_status_code) = index
             .update_settings(json!({"filterableAttributes": ["color"]}))
             .await;
-        index.wait_task(task.uid()).await;
+        index.wait_task(task.uid()).await.succeeded();
         drop(index);
 
         let index = server.index("products");
         let documents = NESTED_DOCUMENTS.clone();
         let (task,_status_code) = index.add_documents(documents, None).await;
-        index.wait_task(task.uid()).await;
+        index.wait_task(task.uid()).await.succeeded();
         let (task,_status_code) = index
             .update_settings(json!({"filterableAttributes": ["doggos"]}))
             .await;
-        index.wait_task(task.uid()).await;
+        index.wait_task(task.uid()).await.succeeded();
         drop(index);
 
         assert_eq!($parent_keys.len(), $failed_query_indexes.len(), "keys != query_indexes");
@@ -499,21 +499,21 @@ macro_rules! compute_forbidden_multiple_search {
         let index = server.index("sales");
         let documents = DOCUMENTS.clone();
         let (task,_status_code) = index.add_documents(documents, None).await;
-        index.wait_task(task.uid()).await;
+        index.wait_task(task.uid()).await.succeeded();
         let (task,_status_code) = index
             .update_settings(json!({"filterableAttributes": ["color"]}))
             .await;
-        index.wait_task(task.uid()).await;
+        index.wait_task(task.uid()).await.succeeded();
         drop(index);
 
         let index = server.index("products");
         let documents = NESTED_DOCUMENTS.clone();
         let (task,_status_code) = index.add_documents(documents, None).await;
-        index.wait_task(task.uid()).await;
+        index.wait_task(task.uid()).await.succeeded();
         let (task,_status_code) = index
             .update_settings(json!({"filterableAttributes": ["doggos"]}))
             .await;
-        index.wait_task(task.uid()).await;
+        index.wait_task(task.uid()).await.succeeded();
         drop(index);
 
         assert_eq!($parent_keys.len(), $failed_query_indexes.len(), "keys != query_indexes");

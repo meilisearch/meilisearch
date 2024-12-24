@@ -528,7 +528,7 @@ async fn auto_infer_locales_at_search_with_attributes_to_search_on() {
     }
     "###);
     let (task,_status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     // auto infer any language
     index
@@ -602,7 +602,7 @@ async fn auto_infer_locales_at_search() {
     }
     "###);
     let (task,_status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     index
         .search(
@@ -701,7 +701,7 @@ async fn force_different_locales_with_pattern_nested() {
     }
     "###);
     let (task,_status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     // chinese
     index
@@ -779,7 +779,7 @@ async fn settings_change() {
     let index = server.index("test");
     let documents = NESTED_DOCUMENTS.clone();
     let (task,_status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
     let (response, _) = index
         .update_settings(json!({
             "searchableAttributes": ["document_en", "document_ja", "document_zh"],
@@ -798,7 +798,7 @@ async fn settings_change() {
       "enqueuedAt": "[date]"
     }
     "###);
-    index.wait_task(response.uid()).await;
+    index.wait_task(response.uid()).await.succeeded();
 
     // chinese
     index
@@ -861,7 +861,7 @@ async fn settings_change() {
       "enqueuedAt": "[date]"
     }
     "###);
-    index.wait_task(response.uid()).await;
+    index.wait_task(response.uid()).await.succeeded();
 
     // chinese
     index
@@ -916,7 +916,7 @@ async fn invalid_locales() {
         )
         .await;
     let (task,_status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = index.search_post(json!({"q": "Atta", "locales": ["invalid"]})).await;
     snapshot!(code, @"400 Bad Request");
@@ -1034,7 +1034,7 @@ async fn simple_facet_search() {
     }
     "###);
     let (task,_status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, _) = index
         .facet_search(json!({"facetName": "name_zh", "facetQuery": "進撃", "locales": ["cmn"]}))

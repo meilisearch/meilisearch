@@ -708,7 +708,7 @@ async fn filter_invalid_attribute_array() {
     let index = server.unique_index();
 
     let (task, _code) = index.update_settings(json!({"filterableAttributes": ["title"]})).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let expected_response = json!({
         "message": format!("Index `{}`: Attribute `many` is not filterable. Available filterable attributes are: `title`.\n1:5 many = Glass", index.uid),
@@ -730,7 +730,7 @@ async fn filter_invalid_attribute_string() {
     let index = server.unique_index();
 
     let (task, _code) = index.update_settings(json!({"filterableAttributes": ["title"]})).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let expected_response = json!({
         "message": format!("Index `{}`: Attribute `many` is not filterable. Available filterable attributes are: `title`.\n1:5 many = Glass", index.uid),
@@ -752,7 +752,7 @@ async fn filter_reserved_geo_attribute_array() {
     let index = server.unique_index();
 
     let (task, _code) = index.update_settings(json!({"filterableAttributes": ["title"]})).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let expected_response = json!({
         "message": "`_geo` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:13 _geo = Glass",
@@ -774,7 +774,7 @@ async fn filter_reserved_geo_attribute_string() {
     let index = server.unique_index();
 
     let (task, _code) = index.update_settings(json!({"filterableAttributes": ["title"]})).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let expected_response = json!({
         "message": "`_geo` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:13 _geo = Glass",
@@ -796,7 +796,7 @@ async fn filter_reserved_attribute_array() {
     let index = server.unique_index();
 
     let (task, _code) = index.update_settings(json!({"filterableAttributes": ["title"]})).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let expected_response = json!({
         "message": "`_geoDistance` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:21 _geoDistance = Glass",
@@ -818,7 +818,7 @@ async fn filter_reserved_attribute_string() {
     let index = server.unique_index();
 
     let (task, _code) = index.update_settings(json!({"filterableAttributes": ["title"]})).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let expected_response = json!({
        "message": "`_geoDistance` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:21 _geoDistance = Glass",
@@ -840,7 +840,7 @@ async fn filter_reserved_geo_point_array() {
     let index = server.unique_index();
 
     let (task, _code) = index.update_settings(json!({"filterableAttributes": ["title"]})).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let expected_response = json!({
         "message": "`_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:18 _geoPoint = Glass",

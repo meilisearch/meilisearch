@@ -304,7 +304,7 @@ async fn test_summarized_document_addition_or_update() {
     "###);
 
     let (task,_status_code) = index.add_documents(json!({ "id": 42, "content": "doggos & fluff" }), Some("id")).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.get_task(1).await;
     assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
@@ -334,7 +334,7 @@ async fn test_summarized_delete_documents_by_batch() {
     let server = Server::new().await;
     let index = server.index("test");
     let (task,_status_code) = index.delete_batch(vec![1, 2, 3]).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.get_task(0).await;
     assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
@@ -366,7 +366,7 @@ async fn test_summarized_delete_documents_by_batch() {
 
     index.create(None).await;
     let (del_task,_status_code) = index.delete_batch(vec![42]).await;
-    index.wait_task(del_task.uid()).await;
+    index.wait_task(del_task.uid()).await.succeeded();
     let (task, _) = index.get_task(del_task.uid()).await;
     assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
@@ -398,7 +398,7 @@ async fn test_summarized_delete_documents_by_filter() {
     let index = server.index("test");
 
     let (task,_status_code) = index.delete_document_by_filter(json!({ "filter": "doggo = bernese" })).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.get_task(task.uid()).await;
     assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
@@ -430,7 +430,7 @@ async fn test_summarized_delete_documents_by_filter() {
 
     index.create(None).await;
     let (task,_status_code) = index.delete_document_by_filter(json!({ "filter": "doggo = bernese" })).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.get_task(task.uid()).await;
     assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
@@ -462,7 +462,7 @@ async fn test_summarized_delete_documents_by_filter() {
 
     index.update_settings(json!({ "filterableAttributes": ["doggo"] })).await;
     let (task,_status_code) = index.delete_document_by_filter(json!({ "filter": "doggo = bernese" })).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.get_task(task.uid()).await;
     assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
@@ -493,7 +493,7 @@ async fn test_summarized_delete_document_by_id() {
     let server = Server::new().await;
     let index = server.index("test");
     let (task,_status_code) = index.delete_document(1).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.get_task(task.uid()).await;
     assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
@@ -525,7 +525,7 @@ async fn test_summarized_delete_document_by_id() {
 
     index.create(None).await;
     let (task,_status_code) = index.delete_document(42).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.get_task(task.uid()).await;
     assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
@@ -568,7 +568,7 @@ async fn test_summarized_settings_update() {
     "###);
 
     let (task,_status_code) = index.update_settings(json!({ "displayedAttributes": ["doggos", "name"], "filterableAttributes": ["age", "nb_paw_pads"], "sortableAttributes": ["iq"] })).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.get_task(task.uid()).await;
     assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },

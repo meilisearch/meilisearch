@@ -193,7 +193,7 @@ async fn get_settings() {
     let server = Server::new().await;
     let index = server.index("test");
     let (response, _code) = index.create(None).await;
-    index.wait_task(response.uid()).await;
+    index.wait_task(response.uid()).await.succeeded();
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
     let settings = response.as_object().unwrap();

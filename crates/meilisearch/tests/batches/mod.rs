@@ -12,7 +12,7 @@ async fn error_get_unexisting_batch_status() {
     let server = Server::new().await;
     let index = server.index("test");
     let (task,_coder) =  index.create(None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
     let (response, code) = index.get_batch(1).await;
 
     let expected_response = json!({
@@ -31,7 +31,7 @@ async fn get_batch_status() {
     let server = Server::new().await;
     let index = server.index("test");
     let (task, _status_code) = index.create(None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
     let (_response, code) = index.get_batch(0).await;
     assert_eq!(code, 200);
 }
@@ -41,7 +41,7 @@ async fn list_batches() {
     let server = Server::new().await;
     let index = server.index("test");
     let (task,_status_code) = index.create(None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
     index
         .add_documents(serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(), None)
         .await;
@@ -98,7 +98,7 @@ async fn list_batches_with_star_filters() {
     let server = Server::new().await;
     let index = server.index("test");
     let (batch, _code) = index.create(None).await;
-    index.wait_task(batch.uid()).await;
+    index.wait_task(batch.uid()).await.succeeded();
     index
         .add_documents(serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(), None)
         .await;
@@ -143,7 +143,7 @@ async fn list_batches_status_filtered() {
     let server = Server::new().await;
     let index = server.index("test");
     let (task,_status_code) = index.create(None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
     let (task,_status_code) = index
         .add_documents(serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(), None)
         .await;
@@ -157,7 +157,7 @@ async fn list_batches_status_filtered() {
     // assert_eq!(code, 200, "{}", response);
     // assert_eq!(response["results"].as_array().unwrap().len(), 1);
 
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = index.filtered_batches(&[], &["succeeded"], &[]).await;
     assert_eq!(code, 200, "{}", response);
@@ -169,7 +169,7 @@ async fn list_batches_type_filtered() {
     let server = Server::new().await;
     let index = server.index("test");
     let (task,_status_code) = index.create(None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
     index
         .add_documents(serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(), None)
         .await;
@@ -189,7 +189,7 @@ async fn list_batches_invalid_canceled_by_filter() {
     let server = Server::new().await;
     let index = server.index("test");
     let (task,_status_code) = index.create(None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
     index
         .add_documents(serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(), None)
         .await;
@@ -204,7 +204,7 @@ async fn list_batches_status_and_type_filtered() {
     let server = Server::new().await;
     let index = server.index("test");
     let (task,_status_code) = index.create(None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
     index
         .add_documents(serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(), None)
         .await;
