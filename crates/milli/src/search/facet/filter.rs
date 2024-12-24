@@ -230,6 +230,15 @@ impl<'a> Filter<'a> {
     pub fn evaluate(&self, rtxn: &heed::RoTxn<'_>, index: &Index) -> Result<RoaringBitmap> {
         // to avoid doing this for each recursive call we're going to do it ONCE ahead of time
         let filterable_fields = index.filterable_fields(rtxn)?;
+        for fid in self.condition.fids(MAX_FILTER_DEPTH) {
+            let attribute = fid.value();
+            if !crate::is_faceted(attribute, &filterable_fields) {
+                return Err(fid.as_external_error(FilterError::AttributeNotFilterable {
+                    attribute,
+                    filterable_fields,
+                }))?;
+            }
+        }
         self.inner_evaluate(rtxn, index, &filterable_fields, None)
     }
 
@@ -812,6 +821,24 @@ mod tests {
         ));
 
         let filter = Filter::from_str("name = 12").unwrap().unwrap();
+        let error = filter.evaluate(&rtxn, &index).unwrap_err();
+        assert!(error.to_string().starts_with(
+            "Attribute `name` is not filterable. Available filterable attributes are: `title`."
+        ));
+
+        let filter = Filter::from_str("title = \"test\" AND name = 12").unwrap().unwrap();
+        let error = filter.evaluate(&rtxn, &index).unwrap_err();
+        assert!(error.to_string().starts_with(
+            "Attribute `name` is not filterable. Available filterable attributes are: `title`."
+        ));
+
+        let filter = Filter::from_str("title = \"test\" AND name IN [12]").unwrap().unwrap();
+        let error = filter.evaluate(&rtxn, &index).unwrap_err();
+        assert!(error.to_string().starts_with(
+            "Attribute `name` is not filterable. Available filterable attributes are: `title`."
+        ));
+
+        let filter = Filter::from_str("title = \"test\" AND name != 12").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
         assert!(error.to_string().starts_with(
             "Attribute `name` is not filterable. Available filterable attributes are: `title`."
