@@ -11,7 +11,7 @@ async fn create_and_get_index() {
 
     assert_eq!(code, 202);
 
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = index.get().await;
 
@@ -57,7 +57,7 @@ async fn list_multiple_indexes() {
     server.index("test").create(None).await;
     let (task,_status_code) = server.index("test1").create(Some("key")).await;
 
-    server.index("test").wait_task(task.uid()).await;
+    server.index("test").wait_task(task.uid()).await.succeeded();
 
     let (response, code) = server.list_indexes(None, None).await;
     assert_eq!(code, 200);

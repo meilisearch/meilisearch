@@ -47,7 +47,7 @@ async fn geo_sort_with_geo_strings() {
     index.update_settings_filterable_attributes(json!(["_geo"])).await;
     index.update_settings_sortable_attributes(json!(["_geo"])).await;
     let (task,_status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     index
         .search(
@@ -128,7 +128,7 @@ async fn bug_4640() {
     index.add_documents(documents, None).await;
     index.update_settings_filterable_attributes(json!(["_geo"])).await;
     let (ret, _code) = index.update_settings_sortable_attributes(json!(["_geo"])).await;
-    index.wait_task(ret.uid()).await;
+    index.wait_task(ret.uid()).await.succeeded();
 
     // Sort the document with the second one first
     index

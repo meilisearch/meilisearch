@@ -31,7 +31,7 @@ async fn stats() {
     let (task, code) = index.create(Some("id")).await;
 
     assert_eq!(code, 202);
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = server.stats().await;
 
@@ -57,7 +57,7 @@ async fn stats() {
     assert_eq!(code, 202, "{}", response);
     assert_eq!(response["taskUid"], 1);
 
-    index.wait_task(response.uid()).await;
+    index.wait_task(response.uid()).await.succeeded();
 
     let timestamp = OffsetDateTime::now_utc();
     let (response, code) = server.stats().await;

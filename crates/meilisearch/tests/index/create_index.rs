@@ -131,7 +131,7 @@ async fn create_index_with_invalid_primary_key() {
     let (response, code) = index.add_documents(documents, Some("title")).await;
     assert_eq!(code, 202);
 
-    index.wait_task(response.uid()).await;
+    index.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index.get().await;
     assert_eq!(code, 200);
@@ -142,7 +142,7 @@ async fn create_index_with_invalid_primary_key() {
     let (response, code) = index.add_documents(documents, Some("id")).await;
     assert_eq!(code, 202);
 
-    index.wait_task(response.uid()).await;
+    index.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index.get().await;
     assert_eq!(code, 200);

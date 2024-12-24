@@ -66,7 +66,7 @@ async fn search_no_searchable_attribute_set() {
         .await;
 
     let (task,_status_code) = index.update_settings_searchable_attributes(json!(["*"])).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     index
         .search(
@@ -79,7 +79,7 @@ async fn search_no_searchable_attribute_set() {
         .await;
 
     let (task,_status_code) = index.update_settings_searchable_attributes(json!(["*"])).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     index
         .search(
@@ -110,7 +110,7 @@ async fn search_on_all_attributes_restricted_set() {
     let server = Server::new().await;
     let index = index_with_documents(&server, &SIMPLE_SEARCH_DOCUMENTS).await;
     let (task,_status_code) = index.update_settings_searchable_attributes(json!(["title"])).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     index
         .search(json!({"q": "Captain Marvel", "attributesToSearchOn": ["*"]}), |response, code| {
@@ -193,7 +193,7 @@ async fn word_ranking_rule_order_exact_words() {
     let server = Server::new().await;
     let index = index_with_documents(&server, &SIMPLE_SEARCH_DOCUMENTS).await;
     let (task,_status_code) = index.update_settings_typo_tolerance(json!({"disableOnWords": ["Captain", "Marvel"]})).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     // simple search should return 2 documents (ids: 2 and 3).
     index
@@ -359,7 +359,7 @@ async fn search_on_exact_field() {
     let (response, code) =
         index.update_settings_typo_tolerance(json!({ "disableOnAttributes": ["exact"] })).await;
     assert_eq!(202, code, "{:?}", response);
-    index.wait_task(response.uid()).await;
+    index.wait_task(response.uid()).await.succeeded();
     // Searching on an exact attribute should only return the document matching without typo.
     index
         .search(json!({"q": "Marvel", "attributesToSearchOn": ["exact"]}), |response, code| {

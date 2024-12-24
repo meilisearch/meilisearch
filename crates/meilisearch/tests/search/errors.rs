@@ -640,7 +640,7 @@ async fn filter_invalid_syntax_object() {
     let index = server.unique_index();
 
     let (task, _code) = index.update_settings(json!({"filterableAttributes": ["title"]})).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     index
         .search(json!({"filter": "title & Glass"}), |response, code| {
@@ -663,7 +663,7 @@ async fn filter_invalid_syntax_array() {
     let index = server.unique_index();
 
     let (task, _code) = index.update_settings(json!({"filterableAttributes": ["title"]})).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     index
         .search(json!({"filter": ["title & Glass"]}), |response, code| {
@@ -686,7 +686,7 @@ async fn filter_invalid_syntax_string() {
     let index = server.unique_index();
 
     let (task, _code) = index.update_settings(json!({"filterableAttributes": ["title"]})).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let expected_response = json!({
         "message": "Found unexpected characters at the end of the filter: `XOR title = Glass`. You probably forgot an `OR` or an `AND` rule.\n15:32 title = Glass XOR title = Glass",

@@ -65,7 +65,7 @@ async fn formatted_contain_wildcard() {
 
     let documents = NESTED_DOCUMENTS.clone();
     let (response, _) = index.add_documents(documents, None).await;
-    index.wait_task(response.uid()).await;
+    index.wait_task(response.uid()).await.succeeded();
 
     index.search(json!({ "q": "pésti", "attributesToRetrieve": ["father", "mother"], "attributesToHighlight": ["father", "mother", "*"], "attributesToCrop": ["doggos"], "showMatchesPosition": true }),
         |response, code|
@@ -398,7 +398,7 @@ async fn displayedattr_2_smol() {
 
     let documents = NESTED_DOCUMENTS.clone();
     let (response, _) = index.add_documents(documents, None).await;
-    index.wait_task(response.uid()).await;
+    index.wait_task(response.uid()).await.succeeded();
 
     index
         .search(json!({ "attributesToRetrieve": ["father", "id"], "attributesToHighlight": ["mother"], "attributesToCrop": ["cattos"] }),

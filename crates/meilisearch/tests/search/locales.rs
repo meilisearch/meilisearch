@@ -99,7 +99,7 @@ async fn simple_search() {
         )
         .await;
     let (task,_status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     // english
     index
@@ -221,7 +221,7 @@ async fn force_locales() {
     }
     "###);
     let (task,_status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     // chinese detection
     index
@@ -299,7 +299,7 @@ async fn force_locales_with_pattern() {
     }
     "###);
     let (task,_status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     // chinese detection
     index
@@ -375,7 +375,7 @@ async fn force_locales_with_pattern_nested() {
     }
     "###);
     let (task,_status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     // chinese
     index
@@ -450,7 +450,7 @@ async fn force_different_locales_with_pattern() {
     }
     "###);
     let (task,_status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     // force chinese
     index

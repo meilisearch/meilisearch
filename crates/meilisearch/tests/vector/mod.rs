@@ -55,7 +55,7 @@ async fn add_remove_user_provided() {
         }))
         .await;
     snapshot!(code, @"202 Accepted");
-    server.wait_task(response.uid()).await;
+    server.wait_task(response.uid()).await.succeeded();
 
     let documents = json!([
       {"id": 0, "name": "kefir", "_vectors": { "manual": [0, 0, 0] }},

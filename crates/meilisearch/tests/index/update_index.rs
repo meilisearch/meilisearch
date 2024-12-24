@@ -61,7 +61,7 @@ async fn update_nothing() {
 
     assert_eq!(code, 202);
 
-    index.wait_task(task1.uid()).await;
+    index.wait_task(task1.uid()).await.succeeded();
 
     let (task2, code) = index.update(None).await;
 

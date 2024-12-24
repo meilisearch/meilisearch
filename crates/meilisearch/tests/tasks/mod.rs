@@ -14,7 +14,7 @@ async fn error_get_unexisting_task_status() {
     let server = Server::new().await;
     let index = server.index("test");
     let (task,_status_code) = index.create(None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
     let (response, code) = index.get_task(1).await;
 
     let expected_response = json!({
@@ -42,7 +42,7 @@ async fn get_task_status() {
             None,
         )
         .await;
-    index.wait_task(create_task.uid()).await;
+    index.wait_task(create_task.uid()).await.succeeded();
     let (_response, code) = index.get_task(add_task.uid()).await;
     assert_eq!(code, 200);
     // TODO check response format, as per #48
@@ -53,7 +53,7 @@ async fn list_tasks() {
     let server = Server::new().await;
     let index = server.index("test");
     let (task,_status_code) = index.create(None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
     index
         .add_documents(serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(), None)
         .await;
@@ -105,7 +105,7 @@ async fn list_tasks_with_star_filters() {
     let server = Server::new().await;
     let index = server.index("test");
     let (task, _code) = index.create(None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
     index
         .add_documents(serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(), None)
         .await;
@@ -150,7 +150,7 @@ async fn list_tasks_status_filtered() {
     let server = Server::new().await;
     let index = server.index("test");
     let (task,_status_code) = index.create(None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
     index
         .add_documents(serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(), None)
         .await;
@@ -164,7 +164,7 @@ async fn list_tasks_status_filtered() {
     // assert_eq!(code, 200, "{}", response);
     // assert_eq!(response["results"].as_array().unwrap().len(), 1);
 
-    index.wait_task(response.uid()).await;
+    index.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index.filtered_tasks(&[], &["succeeded"], &[]).await;
     assert_eq!(code, 200, "{}", response);
@@ -176,7 +176,7 @@ async fn list_tasks_type_filtered() {
     let server = Server::new().await;
     let index = server.index("test");
     let (task,_status_code) = index.create(None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
     index
         .add_documents(serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(), None)
         .await;
@@ -196,7 +196,7 @@ async fn list_tasks_invalid_canceled_by_filter() {
     let server = Server::new().await;
     let index = server.index("test");
     let (task,_status_code) = index.create(None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
     index
         .add_documents(serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(), None)
         .await;
@@ -211,7 +211,7 @@ async fn list_tasks_status_and_type_filtered() {
     let server = Server::new().await;
     let index = server.index("test");
     let (task,_status_code) = index.create(None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
     index
         .add_documents(serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(), None)
         .await;
@@ -279,7 +279,7 @@ async fn test_summarized_document_addition_or_update() {
     let server = Server::new().await;
     let index = server.index("test");
     let (task,_status_code) = index.add_documents(json!({ "id": 42, "content": "doggos & fluff" }), None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.get_task(0).await;
     assert_json_snapshot!(task,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },

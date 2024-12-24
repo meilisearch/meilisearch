@@ -139,7 +139,7 @@ async fn phrase_search_with_stop_word() {
 
     let documents = DOCUMENTS.clone();
     let (task,_status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     index
         .search(json!({"q": "how \"to\" train \"the" }), |response, code| {
@@ -219,10 +219,10 @@ async fn negative_special_cases_search() {
 
     let documents = DOCUMENTS.clone();
     let (task,_status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (task,_status_code) = index.update_settings(json!({"synonyms": { "escape": ["gläss"] }})).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     // There is a synonym for escape -> glass but we don't want "escape", only the derivates: glass
     index
