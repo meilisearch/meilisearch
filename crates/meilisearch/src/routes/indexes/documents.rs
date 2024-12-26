@@ -107,14 +107,18 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     );
 }
 
-#[derive(Debug, Deserr, IntoParams)]
+#[derive(Debug, Deserr, IntoParams, ToSchema)]
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
+#[into_params(rename_all = "camelCase", parameter_in = Query)]
+#[schema(rename_all = "camelCase")]
 pub struct GetDocument {
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentFields>)]
     #[param(value_type = Option<Vec<String>>)]
+    #[schema(value_type = Option<Vec<String>>)]
     fields: OptionStarOrList<String>,
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentRetrieveVectors>)]
     #[param(value_type = Option<bool>)]
+    #[schema(value_type = Option<bool>)]
     retrieve_vectors: Param<bool>,
 }
 
@@ -195,8 +199,8 @@ impl<Method: AggregateMethod> Aggregate for DocumentsFetchAggregator<Method> {
 /// Get one document from its primary key.
 #[utoipa::path(
     get,
-    path = "/{indexUid}/documents/{documentId}",
-    tags = ["Indexes", "Documents"],
+    path = "{indexUid}/documents/{documentId}",
+    tag = "Documents",
     security(("Bearer" = ["documents.get", "documents.*", "*"])),
     params(
         ("indexUid" = String, Path, example = "movies", description = "Index Unique Identifier", nullable = false),
@@ -307,12 +311,12 @@ impl Aggregate for DocumentsDeletionAggregator {
 /// Delete a single document by id.
 #[utoipa::path(
     delete,
-    path = "/{indexUid}/documents/{documentsId}",
-    tags = ["Indexes", "Documents"],
+    path = "{indexUid}/documents/{documentId}",
+    tag = "Documents",
     security(("Bearer" = ["documents.delete", "documents.*", "*"])),
     params(
         ("indexUid" = String, Path, example = "movies", description = "Index Unique Identifier", nullable = false),
-        ("documentsId" = String, Path, example = "movies", description = "Document Identifier", nullable = false),
+        ("documentId" = String, Path, example = "853", description = "Document Identifier", nullable = false),
     ),
     responses(
         (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
@@ -386,6 +390,7 @@ pub struct BrowseQueryGet {
 #[derive(Debug, Deserr, IntoParams, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 #[schema(rename_all = "camelCase")]
+#[into_params(rename_all = "camelCase", parameter_in = Query)]
 pub struct BrowseQuery {
     #[schema(default, example = 150)]
     #[deserr(default, error = DeserrJsonError<InvalidDocumentOffset>)]
@@ -409,13 +414,11 @@ pub struct BrowseQuery {
 /// Get a set of documents.
 #[utoipa::path(
     post,
-    path = "/{indexUid}/documents/fetch",
-    tags = ["Indexes", "Documents"],
+    path = "{indexUid}/documents/fetch",
+    tag = "Documents",
     security(("Bearer" = ["documents.delete", "documents.*", "*"])),
-    params(
-        ("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false),
-        BrowseQuery,
-    ),
+    params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
+    request_body = BrowseQuery,
     responses(
         (status = 200, description = "Task successfully enqueued", body = PaginationView<serde_json::Value>, content_type = "application/json", example = json!(
             {
@@ -486,8 +489,8 @@ pub async fn documents_by_query_post(
 /// Get documents by batches.
 #[utoipa::path(
     get,
-    path = "/{indexUid}/documents",
-    tags = ["Indexes", "Documents"],
+    path = "{indexUid}/documents",
+    tag = "Documents",
     security(("Bearer" = ["documents.get", "documents.*", "*"])),
     params(
         ("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false),
@@ -607,7 +610,7 @@ fn documents_by_query(
 
 #[derive(Deserialize, Debug, Deserr, IntoParams)]
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
-#[into_params(rename_all = "camelCase")]
+#[into_params(parameter_in = Query, rename_all = "camelCase")]
 pub struct UpdateDocumentsQuery {
     /// The primary key of the documents. primaryKey is optional. If you want to set the primary key of your index through this route,
     /// it only has to be done the first time you add documents to the index. After which it will be ignored if given.
@@ -683,14 +686,15 @@ impl<Method: AggregateMethod> Aggregate for DocumentsAggregator<Method> {
 /// > This object accepts keys corresponding to the different embedders defined your index settings.
 #[utoipa::path(
     post,
-    path = "/{indexUid}/documents",
-    tags = ["Indexes", "Documents"],
+    path = "{indexUid}/documents",
+    tag = "Documents",
     security(("Bearer" = ["documents.add", "documents.*", "*"])),
     params(
         ("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false),
         // Here we can use the post version of the browse query since it contains the exact same parameter
         UpdateDocumentsQuery,
     ),
+    request_body = serde_json::Value,
     responses(
         (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
@@ -783,14 +787,15 @@ pub async fn replace_documents(
 /// > This object accepts keys corresponding to the different embedders defined your index settings.
 #[utoipa::path(
     put,
-    path = "/{indexUid}/documents",
-    tags = ["Indexes", "Documents"],
+    path = "{indexUid}/documents",
+    tag = "Documents",
     security(("Bearer" = ["documents.add", "documents.*", "*"])),
     params(
         ("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false),
         // Here we can use the post version of the browse query since it contains the exact same parameter
         UpdateDocumentsQuery,
     ),
+    request_body = serde_json::Value,
     responses(
         (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
@@ -1045,18 +1050,18 @@ async fn copy_body_to_file(
     Ok(read_file)
 }
 
-/// Delete documents
+/// Delete documents by batch
 ///
-/// Delete a selection of documents based on array of document id's.
+/// Delete a set of documents based on an array of document ids.
 #[utoipa::path(
-    delete,
-    path = "/{indexUid}/documents",
-    tags = ["Indexes", "Documents"],
+    post,
+    path = "{indexUid}/delete-batch",
+    tag = "Documents",
     security(("Bearer" = ["documents.delete", "documents.*", "*"])),
     params(
         ("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false),
-        // TODO: how to task an array of strings in parameter
     ),
+    request_body = Vec<Value>,
     responses(
         (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
@@ -1116,8 +1121,9 @@ pub async fn delete_documents_batch(
     Ok(HttpResponse::Accepted().json(task))
 }
 
-#[derive(Debug, Deserr, IntoParams)]
+#[derive(Debug, Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
+#[schema(rename_all = "camelCase")]
 pub struct DocumentDeletionByFilter {
     #[deserr(error = DeserrJsonError<InvalidDocumentFilter>, missing_field_error = DeserrJsonError::missing_document_filter)]
     filter: Value,
@@ -1128,15 +1134,13 @@ pub struct DocumentDeletionByFilter {
 /// Delete a set of documents based on a filter.
 #[utoipa::path(
     post,
-    path = "/{indexUid}/documents/delete",
-    tags = ["Indexes", "Documents"],
+    path = "{indexUid}/documents/delete",
+    tag = "Documents",
     security(("Bearer" = ["documents.delete", "documents.*", "*"])),
-    params(
-        ("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false),
-        DocumentDeletionByFilter,
-    ),
+    params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
+    request_body = DocumentDeletionByFilter,
     responses(
-        (status = 202, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = ACCEPTED, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 147,
                 "indexUid": null,
@@ -1242,8 +1246,8 @@ impl Aggregate for EditDocumentsByFunctionAggregator {
 /// Use a [RHAI function](https://rhai.rs/book/engine/hello-world.html) to edit one or more documents directly in Meilisearch.
 #[utoipa::path(
     post,
-    path = "/{indexUid}/documents/edit",
-    tags = ["Indexes", "Documents"],
+    path = "{indexUid}/documents/edit",
+    tag = "Documents",
     security(("Bearer" = ["documents.*", "*"])),
     params(
         ("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false),
@@ -1343,13 +1347,10 @@ pub async fn edit_documents_by_function(
 /// Delete all documents in the specified index.
 #[utoipa::path(
     delete,
-    path = "/{indexUid}/documents",
-    tags = ["Indexes", "Documents"],
+    path = "{indexUid}/documents",
+    tag = "Documents",
     security(("Bearer" = ["documents.delete", "documents.*", "*"])),
-    params(
-        ("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false),
-        UpdateDocumentsQuery,
-    ),
+    params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
     responses(
         (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
