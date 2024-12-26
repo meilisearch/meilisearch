@@ -23,7 +23,6 @@ use crate::search::{
 };
 use crate::search_queue::SearchQueue;
 
-
 #[derive(OpenApi)]
 #[openapi(
     paths(multi_search_with_post),
