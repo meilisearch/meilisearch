@@ -190,7 +190,6 @@ impl<Method: AggregateMethod> Aggregate for DocumentsFetchAggregator<Method> {
     }
 }
 
-
 /// Get one document
 ///
 /// Get one document from its primary key.
@@ -302,7 +301,6 @@ impl Aggregate for DocumentsDeletionAggregator {
         serde_json::to_value(*self).unwrap_or_default()
     }
 }
-
 
 /// Delete a document
 ///
@@ -1197,13 +1195,16 @@ pub async fn delete_documents_by_filter(
     Ok(HttpResponse::Accepted().json(task))
 }
 
-#[derive(Debug, Deserr, IntoParams)]
+#[derive(Debug, Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct DocumentEditionByFunction {
+    /// A string containing a RHAI function.
     #[deserr(default, error = DeserrJsonError<InvalidDocumentFilter>)]
     pub filter: Option<Value>,
+    /// A string containing a filter expression.
     #[deserr(default, error = DeserrJsonError<InvalidDocumentEditionContext>)]
     pub context: Option<Value>,
+    /// An object with data Meilisearch should make available for the editing function.
     #[deserr(error = DeserrJsonError<InvalidDocumentEditionFunctionFilter>, missing_field_error = DeserrJsonError::missing_document_edition_function)]
     pub function: String,
 }
@@ -1246,8 +1247,8 @@ impl Aggregate for EditDocumentsByFunctionAggregator {
     security(("Bearer" = ["documents.*", "*"])),
     params(
         ("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false),
-        DocumentEditionByFunction,        
     ),
+    request_body = DocumentEditionByFunction,
     responses(
         (status = 202, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
