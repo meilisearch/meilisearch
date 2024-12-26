@@ -8,11 +8,26 @@ use meilisearch_types::error::ResponseError;
 use meilisearch_types::keys::actions;
 use serde::Serialize;
 use tracing::debug;
+use utoipa::{OpenApi, ToSchema};
 
 use crate::analytics::{Aggregate, Analytics};
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
+
+#[derive(OpenApi)]
+#[openapi(
+    paths(get_features),
+    tags((
+        name = "Experimental features",
+        description = "The `/experimental-features` route allows you to activate or deactivate some of Meilisearch's experimental features.
+
+This route is **synchronous**. This means that no task object will be returned, and any activated or deactivated features will be made available or unavailable immediately.",
+        external_docs(url = "https://www.meilisearch.com/docs/reference/api/experimental_features"),
+        
+    )),
+)]
+pub struct ExperimentalFeaturesApi;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
@@ -22,6 +37,32 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     );
 }
 
+/// Get all experimental features
+///
+/// Get a list of all experimental features that can be activated via the /experimental-features route and whether or not they are currently activated.
+#[utoipa::path(
+    post,
+    path = "/",
+    tag = "Experimental features",
+    security(("Bearer" = ["experimental_features.get", "experimental_features.*", "*"])),
+    responses(
+        (status = OK, description = "Experimental features are returned", body = RuntimeTogglableFeatures, content_type = "application/json", example = json!(
+            {
+                "metrics": false,
+                "logsRoute": true,
+                "vectorSearch": false,
+            }
+        )),
+        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+    )
+)]
 async fn get_features(
     index_scheduler: GuardedData<
         ActionPolicy<{ actions::EXPERIMENTAL_FEATURES_GET }>,
@@ -35,8 +76,9 @@ async fn get_features(
     HttpResponse::Ok().json(features)
 }
 
-#[derive(Debug, Deserr)]
+#[derive(Debug, Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
+#[schema(rename_all = "camelCase")]
 pub struct RuntimeTogglableFeatures {
     #[deserr(default)]
     pub vector_store: Option<bool>,
@@ -79,6 +121,32 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
     }
 }
 
+/// Configure experimental features
+///
+/// Activate or deactivate experimental features.
+#[utoipa::path(
+    patch,
+    path = "/",
+    tag = "Experimental features",
+    security(("Bearer" = ["experimental_features.update", "experimental_features.*", "*"])),
+    responses(
+        (status = OK, description = "Experimental features are returned", body = RuntimeTogglableFeatures, content_type = "application/json", example = json!(
+            {
+                "metrics": false,
+                "logsRoute": true,
+                "vectorSearch": false,
+            }
+        )),
+        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+    )
+)]
 async fn patch_features(
     index_scheduler: GuardedData<
         ActionPolicy<{ actions::EXPERIMENTAL_FEATURES_UPDATE }>,
