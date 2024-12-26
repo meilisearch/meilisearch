@@ -255,7 +255,7 @@ pub struct Settings<T> {
     /// Embedder required for performing meaning-based search queries.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsEmbedders>)]
-    #[schema(value_type = String)] // TODO: TAMO
+    #[schema(value_type = Option<BTreeMap<String, SettingEmbeddingSettings>>)]
     pub embedders: Setting<BTreeMap<String, SettingEmbeddingSettings>>,
     /// Maximum duration of a search query.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
