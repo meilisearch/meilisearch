@@ -69,6 +69,7 @@ impl TaskView {
 
 #[derive(Default, Debug, PartialEq, Eq, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
 pub struct DetailsView {
     /// Number of documents received for documentAdditionOrUpdate task.
     #[serde(skip_serializing_if = "Option::is_none")]

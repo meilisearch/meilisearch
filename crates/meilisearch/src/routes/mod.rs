@@ -2,6 +2,9 @@ use std::collections::BTreeMap;
 
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
+use crate::milli::progress::ProgressStepView;
+use crate::milli::progress::ProgressView;
+use crate::routes::batches::AllBatches;
 use crate::routes::features::RuntimeTogglableFeatures;
 use crate::routes::indexes::documents::DocumentEditionByFunction;
 use crate::routes::multi_search::SearchResults;
@@ -16,6 +19,8 @@ use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use index_scheduler::IndexScheduler;
 use meilisearch_auth::AuthController;
+use meilisearch_types::batch_view::BatchView;
+use meilisearch_types::batches::BatchStats;
 use meilisearch_types::error::{Code, ErrorType, ResponseError};
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::keys::CreateApiKey;
@@ -63,6 +68,7 @@ pub mod tasks;
 #[openapi(
     nest(
         (path = "/tasks", api = tasks::TaskApi),
+        (path = "/batches", api = batches::BatchesApi),
         (path = "/indexes", api = indexes::IndexesApi),
         // We must stop the search path here because the rest must be configured by each route individually
         (path = "/indexes", api = indexes::search::SearchApi),
@@ -80,29 +86,29 @@ pub mod tasks;
         (name = "Stats", description = "Stats gives extended information and metrics about indexes and the Meilisearch database."),
     ),
     modifiers(&OpenApiAuth),
-    components(schemas(RuntimeTogglableFeatures, SwapIndexesPayload, DocumentEditionByFunction, MergeFacets, FederationOptions, SearchQueryWithIndex, Federation, FederatedSearch, FederatedSearchResult, SearchResults, SearchResultWithIndex, SimilarQuery, SimilarResult, PaginationView<serde_json::Value>, BrowseQuery, UpdateIndexRequest, IndexUid, IndexCreateRequest, KeyView, Action, CreateApiKey, UpdateStderrLogs, LogMode, GetLogs, IndexStats, Stats, HealthStatus, HealthResponse, VersionResponse, Code, ErrorType, AllTasks, TaskView, Status, DetailsView, ResponseError, Settings<Unchecked>, Settings<Checked>, TypoSettings, MinWordSizeTyposSetting, FacetingSettings, PaginationSettings, SummarizedTaskView, Kind))
+    components(schemas(AllBatches, BatchStats, ProgressStepView, ProgressView, BatchView, RuntimeTogglableFeatures, SwapIndexesPayload, DocumentEditionByFunction, MergeFacets, FederationOptions, SearchQueryWithIndex, Federation, FederatedSearch, FederatedSearchResult, SearchResults, SearchResultWithIndex, SimilarQuery, SimilarResult, PaginationView<serde_json::Value>, BrowseQuery, UpdateIndexRequest, IndexUid, IndexCreateRequest, KeyView, Action, CreateApiKey, UpdateStderrLogs, LogMode, GetLogs, IndexStats, Stats, HealthStatus, HealthResponse, VersionResponse, Code, ErrorType, AllTasks, TaskView, Status, DetailsView, ResponseError, Settings<Unchecked>, Settings<Checked>, TypoSettings, MinWordSizeTyposSetting, FacetingSettings, PaginationSettings, SummarizedTaskView, Kind))
 )]
 pub struct MeilisearchApi;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     let openapi = MeilisearchApi::openapi();
 
-    cfg.service(web::scope("/tasks").configure(tasks::configure)) // done
-        .service(web::scope("/batches").configure(batches::configure)) // TODO
-        .service(Scalar::with_url("/scalar", openapi.clone())) // done
-        .service(RapiDoc::with_openapi("/api-docs/openapi.json", openapi.clone()).path("/rapidoc")) // done
-        .service(Redoc::with_url("/redoc", openapi)) // done
-        .service(web::resource("/health").route(web::get().to(get_health))) // done
-        .service(web::scope("/logs").configure(logs::configure)) // done
-        .service(web::scope("/keys").configure(api_key::configure)) // done
-        .service(web::scope("/dumps").configure(dump::configure)) // done
-        .service(web::scope("/snapshots").configure(snapshot::configure)) // done
-        .service(web::resource("/stats").route(web::get().to(get_stats))) // done
-        .service(web::resource("/version").route(web::get().to(get_version))) // done
-        .service(web::scope("/indexes").configure(indexes::configure)) // done
-        .service(web::scope("/multi-search").configure(multi_search::configure)) // done
-        .service(web::scope("/swap-indexes").configure(swap_indexes::configure)) // done
-        .service(web::scope("/metrics").configure(metrics::configure)) // done
+    cfg.service(web::scope("/tasks").configure(tasks::configure))
+        .service(web::scope("/batches").configure(batches::configure))
+        .service(Scalar::with_url("/scalar", openapi.clone()))
+        .service(RapiDoc::with_openapi("/api-docs/openapi.json", openapi.clone()).path("/rapidoc"))
+        .service(Redoc::with_url("/redoc", openapi))
+        .service(web::resource("/health").route(web::get().to(get_health)))
+        .service(web::scope("/logs").configure(logs::configure))
+        .service(web::scope("/keys").configure(api_key::configure))
+        .service(web::scope("/dumps").configure(dump::configure))
+        .service(web::scope("/snapshots").configure(snapshot::configure))
+        .service(web::resource("/stats").route(web::get().to(get_stats)))
+        .service(web::resource("/version").route(web::get().to(get_version)))
+        .service(web::scope("/indexes").configure(indexes::configure))
+        .service(web::scope("/multi-search").configure(multi_search::configure))
+        .service(web::scope("/swap-indexes").configure(swap_indexes::configure))
+        .service(web::scope("/metrics").configure(metrics::configure))
         .service(web::scope("/experimental-features").configure(features::configure));
 }
 

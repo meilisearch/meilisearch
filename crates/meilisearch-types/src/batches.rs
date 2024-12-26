@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use milli::progress::ProgressView;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
+use utoipa::ToSchema;
 
 use crate::task_view::DetailsView;
 use crate::tasks::{Kind, Status};
@@ -25,8 +26,9 @@ pub struct Batch {
     pub finished_at: Option<OffsetDateTime>,
 }
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
 pub struct BatchStats {
     pub total_nb_tasks: BatchId,
     pub status: BTreeMap<Status, u32>,
