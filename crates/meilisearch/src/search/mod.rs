@@ -39,7 +39,10 @@ use utoipa::ToSchema;
 use crate::error::MeilisearchHttpError;
 
 mod federated;
-pub use federated::{perform_federated_search, FederatedSearch, Federation, FederationOptions};
+pub use federated::{
+    perform_federated_search, FederatedSearch, FederatedSearchResult, Federation,
+    FederationOptions, MergeFacets,
+};
 
 mod ranking_rules;
 
@@ -388,8 +391,9 @@ impl SearchQuery {
 // This struct contains the fields of `SearchQuery` inline.
 // This is because neither deserr nor serde support `flatten` when using `deny_unknown_fields.
 // The `From<SearchQueryWithIndex>` implementation ensures both structs remain up to date.
-#[derive(Debug, Clone, PartialEq, Deserr)]
+#[derive(Debug, Clone, PartialEq, Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
+#[schema(rename_all = "camelCase")]
 pub struct SearchQueryWithIndex {
     #[deserr(error = DeserrJsonError<InvalidIndexUid>, missing_field_error = DeserrJsonError::missing_index_uid)]
     pub index_uid: IndexUid,
@@ -734,8 +738,9 @@ pub struct SimilarResult {
     pub hits_info: HitsInfo,
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Debug, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
 pub struct SearchResultWithIndex {
     pub index_uid: String,
     #[serde(flatten)]
@@ -746,8 +751,10 @@ pub struct SearchResultWithIndex {
 #[serde(untagged)]
 pub enum HitsInfo {
     #[serde(rename_all = "camelCase")]
+    #[schema(rename_all = "camelCase")]
     Pagination { hits_per_page: usize, page: usize, total_pages: usize, total_hits: usize },
     #[serde(rename_all = "camelCase")]
+    #[schema(rename_all = "camelCase")]
     OffsetLimit { limit: usize, offset: usize, estimated_total_hits: usize },
 }
 
@@ -1034,8 +1041,9 @@ pub fn perform_search(
     Ok(result)
 }
 
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default, Serialize, ToSchema)]
 pub struct ComputedFacets {
+    #[schema(value_type = Option<BTreeMap<String, BTreeMap<String, u64>>>)]
     pub distribution: BTreeMap<String, IndexMap<String, u64>>,
     pub stats: BTreeMap<String, FacetStats>,
 }
