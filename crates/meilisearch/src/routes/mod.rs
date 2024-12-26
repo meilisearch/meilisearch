@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
+use crate::routes::features::RuntimeTogglableFeatures;
 use crate::routes::indexes::documents::DocumentEditionByFunction;
 use crate::routes::multi_search::SearchResults;
 use crate::routes::swap_indexes::SwapIndexesPayload;
@@ -72,13 +73,14 @@ pub mod tasks;
         (path = "/logs", api = logs::LogsApi),
         (path = "/multi-search", api = multi_search::MultiSearchApi),
         (path = "/swap-indexes", api = swap_indexes::SwapIndexesApi),
+        (path = "/experimental-features", api = features::ExperimentalFeaturesApi),
     ),
     paths(get_health, get_version, get_stats),
     tags(
         (name = "Stats", description = "Stats gives extended information and metrics about indexes and the Meilisearch database."),
     ),
     modifiers(&OpenApiAuth),
-    components(schemas(SwapIndexesPayload, DocumentEditionByFunction, MergeFacets, FederationOptions, SearchQueryWithIndex, Federation, FederatedSearch, FederatedSearchResult, SearchResults, SearchResultWithIndex, SimilarQuery, SimilarResult, PaginationView<serde_json::Value>, BrowseQuery, UpdateIndexRequest, IndexUid, IndexCreateRequest, KeyView, Action, CreateApiKey, UpdateStderrLogs, LogMode, GetLogs, IndexStats, Stats, HealthStatus, HealthResponse, VersionResponse, Code, ErrorType, AllTasks, TaskView, Status, DetailsView, ResponseError, Settings<Unchecked>, Settings<Checked>, TypoSettings, MinWordSizeTyposSetting, FacetingSettings, PaginationSettings, SummarizedTaskView, Kind))
+    components(schemas(RuntimeTogglableFeatures, SwapIndexesPayload, DocumentEditionByFunction, MergeFacets, FederationOptions, SearchQueryWithIndex, Federation, FederatedSearch, FederatedSearchResult, SearchResults, SearchResultWithIndex, SimilarQuery, SimilarResult, PaginationView<serde_json::Value>, BrowseQuery, UpdateIndexRequest, IndexUid, IndexCreateRequest, KeyView, Action, CreateApiKey, UpdateStderrLogs, LogMode, GetLogs, IndexStats, Stats, HealthStatus, HealthResponse, VersionResponse, Code, ErrorType, AllTasks, TaskView, Status, DetailsView, ResponseError, Settings<Unchecked>, Settings<Checked>, TypoSettings, MinWordSizeTyposSetting, FacetingSettings, PaginationSettings, SummarizedTaskView, Kind))
 )]
 pub struct MeilisearchApi;
 
@@ -99,7 +101,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(web::resource("/version").route(web::get().to(get_version))) // done
         .service(web::scope("/indexes").configure(indexes::configure)) // done
         .service(web::scope("/multi-search").configure(multi_search::configure)) // done
-        .service(web::scope("/swap-indexes").configure(swap_indexes::configure)) // TODO
+        .service(web::scope("/swap-indexes").configure(swap_indexes::configure)) // done
         .service(web::scope("/metrics").configure(metrics::configure)) // done
         .service(web::scope("/experimental-features").configure(features::configure));
 }
