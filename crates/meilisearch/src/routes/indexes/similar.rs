@@ -51,8 +51,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 /// Retrieve documents similar to a specific search result.
 #[utoipa::path(
     get,
-    path = "/{indexUid}/similar",
-    tags = ["Indexes", "Similar documents"],
+    path = "{indexUid}/similar",
+    tag = "Similar documents",
     security(("Bearer" = ["search", "*"])),
     params(
         ("indexUid" = String, Path, example = "movies", description = "Index Unique Identifier", nullable = false),
@@ -135,12 +135,10 @@ pub async fn similar_get(
 /// Retrieve documents similar to a specific search result.
 #[utoipa::path(
     post,
-    path = "/{indexUid}/similar",
-    tags = ["Indexes", "Similar documents"],
+    path = "{indexUid}/similar",
+    tag = "Similar documents",
     security(("Bearer" = ["search", "*"])),
-    params(
-        ("indexUid" = String, Path, example = "movies", description = "Index Unique Identifier", nullable = false),
-    ),
+    params(("indexUid" = String, Path, example = "movies", description = "Index Unique Identifier", nullable = false)),
     request_body = SimilarQuery,
     responses(
         (status = 200, description = "The documents are returned", body = SimilarResult, content_type = "application/json", example = json!(

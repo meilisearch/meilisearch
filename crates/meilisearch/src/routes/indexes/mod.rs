@@ -110,7 +110,7 @@ impl IndexView {
 
 #[derive(Deserr, Debug, Clone, Copy, IntoParams)]
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
-#[into_params(rename_all = "camelCase")]
+#[into_params(rename_all = "camelCase", parameter_in = Query)]
 pub struct ListIndexes {
     /// The number of indexes to skip before starting to retrieve anything
     #[param(value_type = Option<usize>, default, example = 100)]
@@ -515,7 +515,7 @@ impl From<index_scheduler::IndexStats> for IndexStats {
 #[utoipa::path(
     get,
     path = "/{indexUid}/stats",
-    tags = ["Indexes", "Stats"],
+    tag = "Stats",
     security(("Bearer" = ["stats.get", "stats.*", "*"])),
     params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
     responses(
