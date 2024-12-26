@@ -177,12 +177,10 @@ impl Aggregate for FacetSearchAggregator {
 /// Search for a facet value within a given facet.
 #[utoipa::path(
     post,
-    path = "/{indexUid}/facet-search",
-    tags = ["Indexes", "Facet Search"],
+    path = "{indexUid}/facet-search",
+    tag = "Facet Search",
     security(("Bearer" = ["search", "*"])),
-    params(
-        ("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false),
-    ),
+    params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
     request_body = FacetSearchQuery,
     responses(
         (status = 200, description = "The documents are returned", body = SearchResult, content_type = "application/json", example = json!(

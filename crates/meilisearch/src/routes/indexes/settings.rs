@@ -85,8 +85,9 @@ macro_rules! make_setting_route {
             #[utoipa::path(
                 delete,
                 path = concat!("{indexUid}/settings", $route),
-                tags = ["Indexes", "Settings"],
+                tag = "Settings",
                 security(("Bearer" = ["settings.update", "settings.*", "*"])),
+                params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
                 request_body = $type,
                 responses(
                     (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
@@ -146,8 +147,9 @@ macro_rules! make_setting_route {
             #[utoipa::path(
                 $update_verb,
                 path = concat!("{indexUid}/settings", $route),
-                tags = ["Indexes", "Settings"],
+                tag = "Settings",
                 security(("Bearer" = ["settings.update", "settings.*", "*"])),
+                params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
                 request_body = $type,
                 responses(
                     (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
@@ -229,8 +231,9 @@ macro_rules! make_setting_route {
             #[utoipa::path(
                 get,
                 path = concat!("{indexUid}/settings", $route),
-                tags = ["Indexes", "Settings"],
+                tag = "Settings",
                 security(("Bearer" = ["settings.get", "settings.*", "*"])),
+                params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
                 request_body = $type,
                 responses(
                     (status = 200, description = concat!($camelcase_attr, " is returned"), body = SummarizedTaskView, content_type = "application/json", example = json!(
@@ -500,8 +503,9 @@ make_setting_routes!(
 #[utoipa::path(
     patch,
     path = "{indexUid}/settings",
-    tags = ["Indexes", "Settings"],
+    tag = "Settings",
     security(("Bearer" = ["settings.update", "settings.*", "*"])),
+    params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
     request_body = Settings<Unchecked>,
     responses(
         (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
@@ -609,8 +613,9 @@ pub async fn update_all(
 #[utoipa::path(
     get,
     path = "{indexUid}/settings",
-    tags = ["Indexes", "Settings"],
+    tag = "Settings",
     security(("Bearer" = ["settings.update", "settings.*", "*"])),
+    params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
     responses(
         (status = 200, description = "Settings are returned", body = Settings<Unchecked>, content_type = "application/json", example = json!(
             Settings::<Unchecked>::default()
@@ -644,8 +649,9 @@ pub async fn get_all(
 #[utoipa::path(
     delete,
     path = "{indexUid}/settings",
-    tags = ["Indexes", "Settings"],
+    tag = "Settings",
     security(("Bearer" = ["settings.update", "settings.*", "*"])),
+    params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
     responses(
         (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {

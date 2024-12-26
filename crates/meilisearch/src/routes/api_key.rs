@@ -208,7 +208,7 @@ pub async fn list_api_keys(
 /// Get an API key from its `uid` or its `key` field.
 #[utoipa::path(
     get,
-    path = "/{key}",
+    path = "/{uidOrKey}",
     tag = "Keys",
     security(("Bearer" = ["keys.get", "keys.*", "*"])),
     params(("uidOrKey" = String, Path, format = Password, example = "7b198a7f-52a0-4188-8762-9ad93cd608b2", description = "The `uid` or `key` field of an existing API key", nullable = false)),
@@ -275,7 +275,7 @@ pub async fn get_api_key(
 /// If there is an issue with the `key` or `uid` of a key, then you must recreate one from scratch.
 #[utoipa::path(
     patch,
-    path = "/{key}",
+    path = "/{uidOrKey}",
     tag = "Keys",
     security(("Bearer" = ["keys.update", "keys.*", "*"])),
     params(("uidOrKey" = String, Path, format = Password, example = "7b198a7f-52a0-4188-8762-9ad93cd608b2", description = "The `uid` or `key` field of an existing API key", nullable = false)),
@@ -345,7 +345,7 @@ pub async fn patch_api_key(
 /// If there is an issue with the `key` or `uid` of a key, then you must recreate one from scratch.
 #[utoipa::path(
     delete,
-    path = "/{key}",
+    path = "/{uidOrKey}",
     tag = "Keys",
     security(("Bearer" = ["keys.delete", "keys.*", "*"])),
     params(("uidOrKey" = String, Path, format = Password, example = "7b198a7f-52a0-4188-8762-9ad93cd608b2", description = "The `uid` or `key` field of an existing API key", nullable = false)),
