@@ -17,7 +17,7 @@ use crate::extractors::sequential_extractor::SeqHandler;
 
 #[derive(OpenApi)]
 #[openapi(
-    paths(get_features),
+    paths(get_features, patch_features),
     tags((
         name = "Experimental features",
         description = "The `/experimental-features` route allows you to activate or deactivate some of Meilisearch's experimental features.
