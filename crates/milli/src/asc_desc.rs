@@ -176,7 +176,7 @@ impl From<AscDescError> for SortError {
             AscDescError::ReservedKeyword { name } if name.starts_with("_geoPoint") => {
                 SortError::BadGeoPointUsage { name }
             }
-            AscDescError::ReservedKeyword { name } if &name == RESERVED_GEO_FIELD_NAME => {
+            AscDescError::ReservedKeyword { name } if name == RESERVED_GEO_FIELD_NAME => {
                 SortError::ReservedNameForSettings { name }
             }
             AscDescError::ReservedKeyword { name } if name.starts_with("_geoRadius") => {

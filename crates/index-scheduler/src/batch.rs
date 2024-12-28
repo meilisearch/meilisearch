@@ -34,7 +34,9 @@ use meilisearch_types::milli::documents::{obkv_to_object, DocumentsBatchReader, 
 use meilisearch_types::milli::heed::CompactionOption;
 use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::update::new::indexer::{self, UpdateByFunction};
-use meilisearch_types::milli::update::{DocumentAdditionResult, IndexDocumentsMethod, Settings as MilliSettings};
+use meilisearch_types::milli::update::{
+    DocumentAdditionResult, IndexDocumentsMethod, Settings as MilliSettings,
+};
 use meilisearch_types::milli::vector::parsed_vectors::{ExplicitVectors, VectorOrArrayOfVectors};
 use meilisearch_types::milli::{self, Filter, ThreadPoolNoAbortBuilder};
 use meilisearch_types::settings::{apply_settings_to_builder, Settings, Unchecked};

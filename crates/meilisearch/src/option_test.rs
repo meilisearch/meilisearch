@@ -1,5 +1,6 @@
-use crate::option::Opt;
 use clap::Parser;
+
+use crate::option::Opt;
 
 #[test]
 fn test_valid_opt() {
