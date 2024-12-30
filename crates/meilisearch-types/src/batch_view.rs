@@ -1,13 +1,15 @@
 use milli::progress::ProgressView;
 use serde::Serialize;
 use time::{Duration, OffsetDateTime};
+use utoipa::ToSchema;
 
 use crate::batches::{Batch, BatchId, BatchStats};
 use crate::task_view::DetailsView;
 use crate::tasks::serialize_duration;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
 pub struct BatchView {
     pub uid: BatchId,
     pub progress: Option<ProgressView>,

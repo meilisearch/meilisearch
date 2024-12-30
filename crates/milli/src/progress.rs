@@ -4,6 +4,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, RwLock};
 
 use serde::Serialize;
+use utoipa::ToSchema;
 
 pub trait Step: 'static + Send + Sync {
     fn name(&self) -> Cow<'static, str>;
@@ -136,15 +137,17 @@ macro_rules! make_atomic_progress {
 make_atomic_progress!(Document alias AtomicDocumentStep => "document" );
 make_atomic_progress!(Payload alias AtomicPayloadStep => "payload" );
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
 pub struct ProgressView {
     pub steps: Vec<ProgressStepView>,
     pub percentage: f32,
 }
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
 pub struct ProgressStepView {
     pub current_step: Cow<'static, str>,
     pub finished: u32,

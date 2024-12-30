@@ -35,7 +35,7 @@ async fn retrieve_binary_quantize_status_in_the_settings() {
 
     let (settings, code) = index.settings().await;
     snapshot!(code, @"200 OK");
-    snapshot!(settings["embedders"]["manual"], @r###"{"source":"userProvided","dimensions":3}"###);
+    snapshot!(settings["embedders"]["manual"], @r#"{"source":"userProvided","dimensions":3}"#);
 
     let (response, code) = index
         .update_settings(json!({
@@ -53,7 +53,7 @@ async fn retrieve_binary_quantize_status_in_the_settings() {
 
     let (settings, code) = index.settings().await;
     snapshot!(code, @"200 OK");
-    snapshot!(settings["embedders"]["manual"], @r###"{"source":"userProvided","dimensions":3,"binaryQuantized":false}"###);
+    snapshot!(settings["embedders"]["manual"], @r#"{"source":"userProvided","dimensions":3,"binaryQuantized":false}"#);
 
     let (response, code) = index
         .update_settings(json!({
@@ -71,7 +71,7 @@ async fn retrieve_binary_quantize_status_in_the_settings() {
 
     let (settings, code) = index.settings().await;
     snapshot!(code, @"200 OK");
-    snapshot!(settings["embedders"]["manual"], @r###"{"source":"userProvided","dimensions":3,"binaryQuantized":true}"###);
+    snapshot!(settings["embedders"]["manual"], @r#"{"source":"userProvided","dimensions":3,"binaryQuantized":true}"#);
 }
 
 #[actix_rt::test]
@@ -300,7 +300,7 @@ async fn try_to_disable_binary_quantization() {
         .await;
     snapshot!(code, @"202 Accepted");
     let ret = server.wait_task(response.uid()).await;
-    snapshot!(ret, @r###"
+    snapshot!(ret, @r#"
     {
       "uid": "[uid]",
       "batchUid": "[batch_uid]",
@@ -328,7 +328,7 @@ async fn try_to_disable_binary_quantization() {
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "###);
+    "#);
 }
 
 #[actix_rt::test]
