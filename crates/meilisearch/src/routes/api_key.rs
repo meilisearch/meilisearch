@@ -16,7 +16,7 @@ use time::OffsetDateTime;
 use utoipa::{IntoParams, OpenApi, ToSchema};
 use uuid::Uuid;
 
-use super::{PAGINATION_DEFAULT_LIMIT, PAGINATION_DEFAULT_LIMIT_FN};
+use super::{PaginationView, PAGINATION_DEFAULT_LIMIT, PAGINATION_DEFAULT_LIMIT_FN};
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
@@ -134,7 +134,6 @@ impl ListApiKeys {
 /// Get API Keys
 ///
 /// List all API Keys
-/// TODO: Tamo fix the return type
 #[utoipa::path(
     get,
     path = "/",
@@ -142,7 +141,7 @@ impl ListApiKeys {
     security(("Bearer" = ["keys.get", "keys.*", "*"])),
     params(ListApiKeys),
     responses(
-        (status = 202, description = "List of keys", body = serde_json::Value, content_type = "application/json", example = json!(
+        (status = 202, description = "List of keys", body = PaginationView<KeyView>, content_type = "application/json", example = json!(
             {
                 "results": [
                     {
@@ -268,11 +267,10 @@ pub async fn get_api_key(
 }
 
 
-/// Update an API Key
+/// Update a Key
 ///
-/// Update an API key from its `uid` or its `key` field.
-/// Only the `name` and `description` of the api key can be updated.
-/// If there is an issue with the `key` or `uid` of a key, then you must recreate one from scratch.
+/// Update the name and description of an API key.
+/// Updates to keys are partial. This means you should provide only the fields you intend to update, as any fields not present in the payload will remain unchanged.
 #[utoipa::path(
     patch,
     path = "/{uidOrKey}",
@@ -338,11 +336,9 @@ pub async fn patch_api_key(
 
 
 
-/// Update an API Key
+/// Delete a key
 ///
-/// Update an API key from its `uid` or its `key` field.
-/// Only the `name` and `description` of the api key can be updated.
-/// If there is an issue with the `key` or `uid` of a key, then you must recreate one from scratch.
+/// Delete the specified API key.
 #[utoipa::path(
     delete,
     path = "/{uidOrKey}",

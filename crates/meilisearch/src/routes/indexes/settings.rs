@@ -234,9 +234,8 @@ macro_rules! make_setting_route {
                 tag = "Settings",
                 security(("Bearer" = ["settings.get", "settings.*", "*"])),
                 params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
-                request_body = $type,
                 responses(
-                    (status = 200, description = concat!($camelcase_attr, " is returned"), body = SummarizedTaskView, content_type = "application/json", example = json!(
+                    (status = 200, description = concat!($camelcase_attr, " is returned"), body = $type, content_type = "application/json", example = json!(
                         <$type>::default()
                     )),
                     (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(

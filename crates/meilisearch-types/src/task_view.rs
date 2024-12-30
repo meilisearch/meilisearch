@@ -16,7 +16,7 @@ pub struct TaskView {
     #[schema(value_type = u32, example = 4312)]
     pub uid: TaskId,
     /// The unique identifier of the index where this task is operated.
-    #[schema(example = json!("movies"))]
+    #[schema(value_type = Option<u32>, example = json!("movies"))]
     pub batch_uid: Option<BatchId>,
     #[serde(default)]
     pub index_uid: Option<String>,

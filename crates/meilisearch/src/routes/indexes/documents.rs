@@ -372,25 +372,30 @@ pub async fn delete_document(
     Ok(HttpResponse::Accepted().json(task))
 }
 
-#[derive(Debug, Deserr)]
+#[derive(Debug, Deserr, IntoParams)]
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
+#[into_params(rename_all = "camelCase", parameter_in = Query)]
 pub struct BrowseQueryGet {
+    #[param(default, value_type = Option<usize>)]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentOffset>)]
     offset: Param<usize>,
+    #[param(default, value_type = Option<usize>)]
     #[deserr(default = Param(PAGINATION_DEFAULT_LIMIT), error = DeserrQueryParamError<InvalidDocumentLimit>)]
     limit: Param<usize>,
+    #[param(default, value_type = Option<Vec<String>>)]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentFields>)]
     fields: OptionStarOrList<String>,
+    #[param(default, value_type = Option<bool>)]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentRetrieveVectors>)]
     retrieve_vectors: Param<bool>,
+    #[param(default, value_type = Option<String>, example = "popularity > 1000")]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentFilter>)]
     filter: Option<String>,
 }
 
-#[derive(Debug, Deserr, IntoParams, ToSchema)]
+#[derive(Debug, Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 #[schema(rename_all = "camelCase")]
-#[into_params(rename_all = "camelCase", parameter_in = Query)]
 pub struct BrowseQuery {
     #[schema(default, example = 150)]
     #[deserr(default, error = DeserrJsonError<InvalidDocumentOffset>)]
@@ -404,7 +409,7 @@ pub struct BrowseQuery {
     #[schema(default, example = true)]
     #[deserr(default, error = DeserrJsonError<InvalidDocumentRetrieveVectors>)]
     retrieve_vectors: bool,
-    #[schema(default, example = "popularity > 1000")]
+    #[schema(default, value_type = Option<Value>, example = "popularity > 1000")]
     #[deserr(default, error = DeserrJsonError<InvalidDocumentFilter>)]
     filter: Option<Value>,
 }
@@ -494,7 +499,7 @@ pub async fn documents_by_query_post(
     security(("Bearer" = ["documents.get", "documents.*", "*"])),
     params(
         ("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false),
-        BrowseQuery
+        BrowseQueryGet
     ),
     responses(
         (status = 200, description = "The documents are returned", body = PaginationView<serde_json::Value>, content_type = "application/json", example = json!(
