@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 
-use hashbrown::HashSet;
+use hashbrown::{HashMap, HashSet};
 use heed::types::Bytes;
 use heed::{Database, RoTxn};
 use memmap2::Mmap;
@@ -155,35 +155,97 @@ impl<'a> FacetDatabases<'a> {
     }
 }
 
+#[derive(Debug)]
+pub enum FacetFieldIdDelta {
+    Bulk,
+    Incremental(Vec<FacetFieldIdChange>),
+}
+
+impl FacetFieldIdDelta {
+    fn push(&mut self, facet_value: &[u8], operation: FacetFieldIdOperation, db_size: usize) {
+        *self = match std::mem::replace(self, FacetFieldIdDelta::Bulk) {
+            FacetFieldIdDelta::Bulk => FacetFieldIdDelta::Bulk,
+            FacetFieldIdDelta::Incremental(mut v) => {
+                if v.len() >= (db_size / 500) {
+                    FacetFieldIdDelta::Bulk
+                } else {
+                    v.push(FacetFieldIdChange { facet_value: facet_value.into(), operation });
+                    FacetFieldIdDelta::Incremental(v)
+                }
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct FacetFieldIdChange {
+    facet_value: Box<[u8]>,
+    operation: FacetFieldIdOperation,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum FacetFieldIdOperation {
+    /// The docids have been modified for an existing facet value
+    ///
+    /// The modification must be propagated to upper levels, without changing the structure of the tree
+    InPlace,
+    /// A new value has been inserted
+    ///
+    /// The modification must be propagated to upper levels, splitting nodes and adding new levels as necessary.
+    Insert,
+    /// An existing value has been deleted
+    ///
+    /// The modification must be propagated to upper levels, merging nodes and removing levels as necessary.
+    Remove,
+}
+
 #[derive(Debug, Default)]
 pub struct FacetFieldIdsDelta {
     /// The field ids that have been modified
-    modified_facet_string_ids: HashSet<FieldId>,
-    modified_facet_number_ids: HashSet<FieldId>,
+    modified_facet_string_ids: HashMap<FieldId, FacetFieldIdDelta, rustc_hash::FxBuildHasher>,
+    modified_facet_number_ids: HashMap<FieldId, FacetFieldIdDelta, rustc_hash::FxBuildHasher>,
+    db_size: usize,
 }
 
 impl FacetFieldIdsDelta {
-    fn register_facet_string_id(&mut self, field_id: FieldId) {
-        self.modified_facet_string_ids.insert(field_id);
+    fn register_facet_string_id(
+        &mut self,
+        field_id: FieldId,
+        facet_value: &[u8],
+        operation: FacetFieldIdOperation,
+    ) {
+        self.modified_facet_string_ids
+            .entry(field_id)
+            .or_insert(FacetFieldIdDelta::Incremental(Default::default()))
+            .push(facet_value, operation, self.db_size);
     }
 
-    fn register_facet_number_id(&mut self, field_id: FieldId) {
-        self.modified_facet_number_ids.insert(field_id);
+    fn register_facet_number_id(
+        &mut self,
+        field_id: FieldId,
+        facet_value: &[u8],
+        operation: FacetFieldIdOperation,
+    ) {
+        self.modified_facet_number_ids
+            .entry(field_id)
+            .or_insert(FacetFieldIdDelta::Incremental(Default::default()))
+            .push(facet_value, operation, self.db_size);
     }
 
-    fn register_from_key(&mut self, key: &[u8]) {
-        let (facet_kind, field_id) = self.extract_key_data(key);
+    fn register_from_key(&mut self, key: &[u8], operation: FacetFieldIdOperation) {
+        let (facet_kind, field_id, facet_value) = self.extract_key_data(key);
         match facet_kind {
-            FacetKind::Number => self.register_facet_number_id(field_id),
-            FacetKind::String => self.register_facet_string_id(field_id),
+            FacetKind::Number => self.register_facet_number_id(field_id, facet_value, operation),
+            FacetKind::String => self.register_facet_string_id(field_id, facet_value, operation),
             _ => (),
         }
     }
 
-    fn extract_key_data(&self, key: &[u8]) -> (FacetKind, FieldId) {
+    fn extract_key_data(&self, key: &[u8]) -> (FacetKind, FieldId, &[u8]) {
         let facet_kind = FacetKind::from(key[0]);
         let field_id = FieldId::from_be_bytes([key[1], key[2]]);
-        (facet_kind, field_id)
+        let facet_value = &key[2..];
+        (facet_kind, field_id, facet_value)
     }
 
     pub fn modified_facet_string_ids(&self) -> Option<Vec<FieldId>> {
