@@ -291,7 +291,10 @@ impl IndexScheduler {
 
         debug_assert!(old_task != *task);
         debug_assert_eq!(old_task.uid, task.uid);
-        debug_assert!(old_task.batch_uid.is_none() && task.batch_uid.is_some());
+        debug_assert!(
+            old_task.batch_uid.is_none() && task.batch_uid.is_some(),
+            "\n==> old: {old_task:?}\n==> new: {task:?}"
+        );
 
         if old_task.status != task.status {
             self.update_status(wtxn, old_task.status, |bitmap| {
