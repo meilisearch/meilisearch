@@ -836,10 +836,8 @@ impl<'a, 'i> Transform<'a, 'i> {
             })
             .collect();
 
-        let old_vectors_fid = settings_diff
-            .old
-            .fields_ids_map
-            .id(crate::vector::parsed_vectors::RESERVED_VECTORS_FIELD_NAME);
+        let old_vectors_fid =
+            settings_diff.old.fields_ids_map.id(crate::constants::RESERVED_VECTORS_FIELD_NAME);
 
         // We initialize the sorter with the user indexing settings.
         let mut flattened_sorter =

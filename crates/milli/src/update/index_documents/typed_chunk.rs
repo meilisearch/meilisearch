@@ -137,8 +137,7 @@ pub(crate) fn write_typed_chunk_into_index(
             let _entered = span.enter();
 
             let fields_ids_map = index.fields_ids_map(wtxn)?;
-            let vectors_fid =
-                fields_ids_map.id(crate::vector::parsed_vectors::RESERVED_VECTORS_FIELD_NAME);
+            let vectors_fid = fields_ids_map.id(crate::constants::RESERVED_VECTORS_FIELD_NAME);
 
             let mut builder = MergerBuilder::new(KeepLatestObkv);
             for typed_chunk in typed_chunks {

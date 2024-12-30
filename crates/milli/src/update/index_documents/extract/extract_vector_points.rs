@@ -13,13 +13,14 @@ use roaring::RoaringBitmap;
 use serde_json::Value;
 
 use super::helpers::{create_writer, writer_into_reader, GrenadParameters};
+use crate::constants::RESERVED_VECTORS_FIELD_NAME;
 use crate::error::FaultSource;
 use crate::index::IndexEmbeddingConfig;
 use crate::prompt::{FieldsIdsMapWithMetadata, Prompt};
 use crate::update::del_add::{DelAdd, KvReaderDelAdd, KvWriterDelAdd};
 use crate::update::settings::InnerIndexSettingsDiff;
 use crate::vector::error::{EmbedErrorKind, PossibleEmbeddingMistakes, UnusedVectorsDistribution};
-use crate::vector::parsed_vectors::{ParsedVectorsDiff, VectorState, RESERVED_VECTORS_FIELD_NAME};
+use crate::vector::parsed_vectors::{ParsedVectorsDiff, VectorState};
 use crate::vector::settings::ReindexAction;
 use crate::vector::{Embedder, Embedding};
 use crate::{try_split_array_at, DocumentId, FieldId, Result, ThreadPoolNoAbort};

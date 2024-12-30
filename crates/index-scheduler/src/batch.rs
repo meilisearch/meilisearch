@@ -29,6 +29,7 @@ use bumpalo::Bump;
 use dump::IndexMetadata;
 use meilisearch_types::batches::BatchId;
 use meilisearch_types::heed::{RoTxn, RwTxn};
+use meilisearch_types::milli::constants::RESERVED_VECTORS_FIELD_NAME;
 use meilisearch_types::milli::documents::{obkv_to_object, DocumentsBatchReader, PrimaryKey};
 use meilisearch_types::milli::heed::CompactionOption;
 use meilisearch_types::milli::progress::Progress;
@@ -36,9 +37,7 @@ use meilisearch_types::milli::update::new::indexer::{self, UpdateByFunction};
 use meilisearch_types::milli::update::{
     DocumentAdditionResult, IndexDocumentsMethod, Settings as MilliSettings,
 };
-use meilisearch_types::milli::vector::parsed_vectors::{
-    ExplicitVectors, VectorOrArrayOfVectors, RESERVED_VECTORS_FIELD_NAME,
-};
+use meilisearch_types::milli::vector::parsed_vectors::{ExplicitVectors, VectorOrArrayOfVectors};
 use meilisearch_types::milli::{self, Filter, ThreadPoolNoAbortBuilder};
 use meilisearch_types::settings::{apply_settings_to_builder, Settings, Unchecked};
 use meilisearch_types::tasks::{Details, IndexSwap, Kind, KindWithContent, Status, Task};

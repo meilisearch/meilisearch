@@ -1209,8 +1209,7 @@ impl<'a> HitMaker<'a> {
             .displayed_fields_ids(rtxn)?
             .map(|fields| fields.into_iter().collect::<BTreeSet<_>>());
 
-        let vectors_fid =
-            fields_ids_map.id(milli::vector::parsed_vectors::RESERVED_VECTORS_FIELD_NAME);
+        let vectors_fid = fields_ids_map.id(milli::constants::RESERVED_VECTORS_FIELD_NAME);
 
         let vectors_is_hidden = match (&displayed_ids, vectors_fid) {
             // displayed_ids is a wildcard, so `_vectors` can be displayed regardless of its fid
@@ -1219,8 +1218,7 @@ impl<'a> HitMaker<'a> {
             (Some(_), None) => {
                 // unwrap as otherwise we'd go to the first one
                 let displayed_names = index.displayed_fields(rtxn)?.unwrap();
-                !displayed_names
-                    .contains(&milli::vector::parsed_vectors::RESERVED_VECTORS_FIELD_NAME)
+                !displayed_names.contains(&milli::constants::RESERVED_VECTORS_FIELD_NAME)
             }
             // displayed_ids is a finit list, so hide if `_vectors` is not part of it
             (Some(map), Some(vectors_fid)) => map.contains(&vectors_fid),

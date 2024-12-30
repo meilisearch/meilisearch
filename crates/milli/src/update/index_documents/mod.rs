@@ -763,6 +763,7 @@ mod tests {
     use maplit::hashset;
 
     use super::*;
+    use crate::constants::RESERVED_GEO_FIELD_NAME;
     use crate::documents::mmap_from_objects;
     use crate::index::tests::TempIndex;
     use crate::index::IndexEmbeddingConfig;
@@ -944,12 +945,12 @@ mod tests {
         index.index_documents_config.update_method = IndexDocumentsMethod::ReplaceDocuments;
 
         index.add_documents(documents!([
-          { "id": 2,    "title": "Pride and Prejudice",                    "author": "Jane Austin",              "genre": "romance",    "price": 3.5, "_geo": { "lat": 12, "lng": 42 } },
+          { "id": 2,    "title": "Pride and Prejudice",                    "author": "Jane Austin",              "genre": "romance",    "price": 3.5, RESERVED_GEO_FIELD_NAME: { "lat": 12, "lng": 42 } },
           { "id": 456,  "title": "Le Petit Prince",                        "author": "Antoine de Saint-Exupéry", "genre": "adventure" , "price": 10.0 },
           { "id": 1,    "title": "Alice In Wonderland",                    "author": "Lewis Carroll",            "genre": "fantasy",    "price": 25.99 },
           { "id": 1344, "title": "The Hobbit",                             "author": "J. R. R. Tolkien",         "genre": "fantasy" },
           { "id": 4,    "title": "Harry Potter and the Half-Blood Prince", "author": "J. K. Rowling",            "genre": "fantasy" },
-          { "id": 42,   "title": "The Hitchhiker's Guide to the Galaxy",   "author": "Douglas Adams", "_geo": { "lat": 35, "lng": 23 } }
+          { "id": 42,   "title": "The Hitchhiker's Guide to the Galaxy",   "author": "Douglas Adams", RESERVED_GEO_FIELD_NAME: { "lat": 35, "lng": 23 } }
         ])).unwrap();
 
         db_snap!(index, word_docids, "initial");
@@ -989,18 +990,18 @@ mod tests {
         // We send 6 documents and mix the ones that have _geo and those that don't have it.
         index
             .add_documents(documents!([
-              { "id": 2, "price": 3.5, "_geo": { "lat": 12, "lng": 42 } },
+              { "id": 2, "price": 3.5, RESERVED_GEO_FIELD_NAME: { "lat": 12, "lng": 42 } },
               { "id": 456 },
               { "id": 1 },
               { "id": 1344 },
               { "id": 4 },
-              { "id": 42, "_geo": { "lat": 35, "lng": 23 } }
+              { "id": 42, RESERVED_GEO_FIELD_NAME: { "lat": 35, "lng": 23 } }
             ]))
             .unwrap();
 
         index
             .update_settings(|settings| {
-                settings.set_filterable_fields(hashset!(S("_geo")));
+                settings.set_filterable_fields(hashset!(S(RESERVED_GEO_FIELD_NAME)));
             })
             .unwrap();
     }
@@ -1012,13 +1013,13 @@ mod tests {
 
         index
             .update_settings(|settings| {
-                settings.set_filterable_fields(hashset!(S("_geo")));
+                settings.set_filterable_fields(hashset!(S(RESERVED_GEO_FIELD_NAME)));
             })
             .unwrap();
 
         let error = index
             .add_documents(documents!([
-              { "id": 0, "_geo": { "lng": 42 } }
+              { "id": 0, RESERVED_GEO_FIELD_NAME: { "lng": 42 } }
             ]))
             .unwrap_err();
         assert_eq!(
@@ -1028,7 +1029,7 @@ mod tests {
 
         let error = index
             .add_documents(documents!([
-              { "id": 0, "_geo": { "lat": 42 } }
+              { "id": 0, RESERVED_GEO_FIELD_NAME: { "lat": 42 } }
             ]))
             .unwrap_err();
         assert_eq!(
@@ -1038,7 +1039,7 @@ mod tests {
 
         let error = index
             .add_documents(documents!([
-              { "id": 0, "_geo": { "lat": "lol", "lng": 42 } }
+              { "id": 0, RESERVED_GEO_FIELD_NAME: { "lat": "lol", "lng": 42 } }
             ]))
             .unwrap_err();
         assert_eq!(
@@ -1048,7 +1049,7 @@ mod tests {
 
         let error = index
             .add_documents(documents!([
-              { "id": 0, "_geo": { "lat": [12, 13], "lng": 42 } }
+              { "id": 0, RESERVED_GEO_FIELD_NAME: { "lat": [12, 13], "lng": 42 } }
             ]))
             .unwrap_err();
         assert_eq!(
@@ -1058,7 +1059,7 @@ mod tests {
 
         let error = index
             .add_documents(documents!([
-              { "id": 0, "_geo": { "lat": 12, "lng": "hello" } }
+              { "id": 0, RESERVED_GEO_FIELD_NAME: { "lat": 12, "lng": "hello" } }
             ]))
             .unwrap_err();
         assert_eq!(
@@ -1076,7 +1077,7 @@ mod tests {
                 { "objectId": 123, "title": "Pride and Prejudice", "comment": "A great book" },
                 { "objectId": 456, "title": "Le Petit Prince",     "comment": "A french book" },
                 { "objectId": 1,   "title": "Alice In Wonderland", "comment": "A weird book" },
-                { "objectId": 30,  "title": "Hamlet", "_geo": { "lat": 12, "lng": 89 } }
+                { "objectId": 30,  "title": "Hamlet", RESERVED_GEO_FIELD_NAME: { "lat": 12, "lng": 89 } }
             ]))
             .unwrap();
 
@@ -1091,7 +1092,7 @@ mod tests {
 
         index
             .add_documents(documents!([
-                { "objectId": 30,  "title": "Hamlet", "_geo": { "lat": 12, "lng": 89 } }
+                { "objectId": 30,  "title": "Hamlet", RESERVED_GEO_FIELD_NAME: { "lat": 12, "lng": 89 } }
             ]))
             .unwrap();
 
@@ -1102,7 +1103,7 @@ mod tests {
 
         index
             .add_documents(documents!([
-                { "objectId": 30,  "title": "Hamlet", "_geo": { "lat": 12, "lng": 89 } }
+                { "objectId": 30,  "title": "Hamlet", RESERVED_GEO_FIELD_NAME: { "lat": 12, "lng": 89 } }
             ]))
             .unwrap();
     }
@@ -3146,34 +3147,34 @@ mod tests {
         index
             .update_settings_using_wtxn(&mut wtxn, |settings| {
                 settings.set_primary_key(S("id"));
-                settings.set_filterable_fields(hashset!(S("_geo")));
-                settings.set_sortable_fields(hashset!(S("_geo")));
+                settings.set_filterable_fields(hashset!(S(RESERVED_GEO_FIELD_NAME)));
+                settings.set_sortable_fields(hashset!(S(RESERVED_GEO_FIELD_NAME)));
             })
             .unwrap();
         wtxn.commit().unwrap();
 
         let mut wtxn = index.write_txn().unwrap();
         index.add_documents_using_wtxn(&mut wtxn, documents!([
-            { "id": "1",  "city": "Lille",             "_geo": { "lat": 50.6299, "lng": 3.0569 } },
-            { "id": "2",  "city": "Mons-en-Barœul",    "_geo": { "lat": 50.6415, "lng": 3.1106 } },
-            { "id": "3",  "city": "Hellemmes",         "_geo": { "lat": 50.6312, "lng": 3.1106 } },
-            { "id": "4",  "city": "Villeneuve-d'Ascq", "_geo": { "lat": 50.6224, "lng": 3.1476 } },
-            { "id": "5",  "city": "Hem",               "_geo": { "lat": 50.6552, "lng": 3.1897 } },
-            { "id": "6",  "city": "Roubaix",           "_geo": { "lat": 50.6924, "lng": 3.1763 } },
-            { "id": "7",  "city": "Tourcoing",         "_geo": { "lat": 50.7263, "lng": 3.1541 } },
-            { "id": "8",  "city": "Mouscron",          "_geo": { "lat": 50.7453, "lng": 3.2206 } },
-            { "id": "9",  "city": "Tournai",           "_geo": { "lat": 50.6053, "lng": 3.3758 } },
-            { "id": "10", "city": "Ghent",             "_geo": { "lat": 51.0537, "lng": 3.6957 } },
-            { "id": "11", "city": "Brussels",          "_geo": { "lat": 50.8466, "lng": 4.3370 } },
-            { "id": "12", "city": "Charleroi",         "_geo": { "lat": 50.4095, "lng": 4.4347 } },
-            { "id": "13", "city": "Mons",              "_geo": { "lat": 50.4502, "lng": 3.9623 } },
-            { "id": "14", "city": "Valenciennes",      "_geo": { "lat": 50.3518, "lng": 3.5326 } },
-            { "id": "15", "city": "Arras",             "_geo": { "lat": 50.2844, "lng": 2.7637 } },
-            { "id": "16", "city": "Cambrai",           "_geo": { "lat": 50.1793, "lng": 3.2189 } },
-            { "id": "17", "city": "Bapaume",           "_geo": { "lat": 50.1112, "lng": 2.8547 } },
-            { "id": "18", "city": "Amiens",            "_geo": { "lat": 49.9314, "lng": 2.2710 } },
-            { "id": "19", "city": "Compiègne",         "_geo": { "lat": 49.4449, "lng": 2.7913 } },
-            { "id": "20", "city": "Paris",             "_geo": { "lat": 48.9021, "lng": 2.3708 } }
+            { "id": "1",  "city": "Lille",             RESERVED_GEO_FIELD_NAME: { "lat": 50.6299, "lng": 3.0569 } },
+            { "id": "2",  "city": "Mons-en-Barœul",    RESERVED_GEO_FIELD_NAME: { "lat": 50.6415, "lng": 3.1106 } },
+            { "id": "3",  "city": "Hellemmes",         RESERVED_GEO_FIELD_NAME: { "lat": 50.6312, "lng": 3.1106 } },
+            { "id": "4",  "city": "Villeneuve-d'Ascq", RESERVED_GEO_FIELD_NAME: { "lat": 50.6224, "lng": 3.1476 } },
+            { "id": "5",  "city": "Hem",               RESERVED_GEO_FIELD_NAME: { "lat": 50.6552, "lng": 3.1897 } },
+            { "id": "6",  "city": "Roubaix",           RESERVED_GEO_FIELD_NAME: { "lat": 50.6924, "lng": 3.1763 } },
+            { "id": "7",  "city": "Tourcoing",         RESERVED_GEO_FIELD_NAME: { "lat": 50.7263, "lng": 3.1541 } },
+            { "id": "8",  "city": "Mouscron",          RESERVED_GEO_FIELD_NAME: { "lat": 50.7453, "lng": 3.2206 } },
+            { "id": "9",  "city": "Tournai",           RESERVED_GEO_FIELD_NAME: { "lat": 50.6053, "lng": 3.3758 } },
+            { "id": "10", "city": "Ghent",             RESERVED_GEO_FIELD_NAME: { "lat": 51.0537, "lng": 3.6957 } },
+            { "id": "11", "city": "Brussels",          RESERVED_GEO_FIELD_NAME: { "lat": 50.8466, "lng": 4.3370 } },
+            { "id": "12", "city": "Charleroi",         RESERVED_GEO_FIELD_NAME: { "lat": 50.4095, "lng": 4.4347 } },
+            { "id": "13", "city": "Mons",              RESERVED_GEO_FIELD_NAME: { "lat": 50.4502, "lng": 3.9623 } },
+            { "id": "14", "city": "Valenciennes",      RESERVED_GEO_FIELD_NAME: { "lat": 50.3518, "lng": 3.5326 } },
+            { "id": "15", "city": "Arras",             RESERVED_GEO_FIELD_NAME: { "lat": 50.2844, "lng": 2.7637 } },
+            { "id": "16", "city": "Cambrai",           RESERVED_GEO_FIELD_NAME: { "lat": 50.1793, "lng": 3.2189 } },
+            { "id": "17", "city": "Bapaume",           RESERVED_GEO_FIELD_NAME: { "lat": 50.1112, "lng": 2.8547 } },
+            { "id": "18", "city": "Amiens",            RESERVED_GEO_FIELD_NAME: { "lat": 49.9314, "lng": 2.2710 } },
+            { "id": "19", "city": "Compiègne",         RESERVED_GEO_FIELD_NAME: { "lat": 49.4449, "lng": 2.7913 } },
+            { "id": "20", "city": "Paris",             RESERVED_GEO_FIELD_NAME: { "lat": 48.9021, "lng": 2.3708 } }
         ])).unwrap();
         wtxn.commit().unwrap();
 
