@@ -144,11 +144,18 @@ impl MergeWithError<milli::CriterionError> for DeserrJsonError<InvalidSettingsRa
     }
 }
 
-#[derive(Debug, Default, Serialize, Deserialize, PartialEq, Eq, Clone, ToSchema)]
+#[derive(Default, Serialize, Deserialize, PartialEq, Eq, Clone, ToSchema)]
+#[repr(transparent)]
+#[serde(transparent)]
 pub struct SettingEmbeddingSettings {
-    #[serde(flatten)]
     #[schema(inline, value_type = Option<crate::milli::vector::settings::EmbeddingSettings>)]
     pub inner: Setting<crate::milli::vector::settings::EmbeddingSettings>,
+}
+
+impl fmt::Debug for SettingEmbeddingSettings {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.inner.fmt(f)
+    }
 }
 
 impl<E: DeserializeError> Deserr<E> for SettingEmbeddingSettings {
