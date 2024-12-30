@@ -1220,9 +1220,12 @@ async fn replace_document() {
 #[actix_rt::test]
 async fn add_no_documents() {
     let server = Server::new().await;
-    let index = server.index("test");
-    let (_response, code) = index.add_documents(json!([]), None).await;
+    let index = server.index("kefir");
+    let (task, code) = index.add_documents(json!([]), None).await;
     snapshot!(code, @"202 Accepted");
+    let task = server.wait_task(task.uid()).await;
+    let task = task.succeeded();
+    snapshot!(task, @"");
 }
 
 #[actix_rt::test]
