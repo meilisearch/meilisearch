@@ -71,7 +71,6 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
- "zstd",
 ]
 
 [[package]]
@@ -93,7 +92,6 @@ dependencies = [
  "bytestring",
  "cfg-if",
  "http 0.2.11",
- "regex",
  "regex-lite",
  "serde",
  "tracing",
@@ -199,7 +197,6 @@ dependencies = [
  "mime",
  "once_cell",
  "pin-project-lite",
- "regex",
  "regex-lite",
  "serde",
  "serde_json",
@@ -3471,7 +3468,6 @@ dependencies = [
  "clap",
  "crossbeam-channel",
  "deserr",
- "doc-comment",
  "dump",
  "either",
  "file-store",
@@ -3537,8 +3533,6 @@ dependencies = [
  "url",
  "urlencoding",
  "utoipa",
- "utoipa-rapidoc",
- "utoipa-redoc",
  "utoipa-scalar",
  "uuid",
  "wiremock",
@@ -5986,30 +5980,6 @@ dependencies = [
  "regex",
  "syn 2.0.87",
  "uuid",
-]
-
-[[package]]
-name = "utoipa-rapidoc"
-version = "5.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f5e784e313457e79d65c378bdfc2f74275f0db91a72252be7d34360ec2afbe1"
-dependencies = [
- "actix-web",
- "serde",
- "serde_json",
- "utoipa",
-]
-
-[[package]]
-name = "utoipa-redoc"
-version = "5.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9218304bba9a0ea5e92085b0a427ccce5fd56eaaf6436d245b7578e6a95787e1"
-dependencies = [
- "actix-web",
- "serde",
- "serde_json",
- "utoipa",
 ]
 
 [[package]]
