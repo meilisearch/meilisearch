@@ -36,8 +36,6 @@ use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use tracing::debug;
 use utoipa::{OpenApi, ToSchema};
-use utoipa_rapidoc::RapiDoc;
-use utoipa_redoc::{Redoc, Servable};
 use utoipa_scalar::{Scalar, Servable as ScalarServable};
 
 use self::api_key::KeyView;
@@ -93,13 +91,8 @@ pub mod tasks;
 pub struct MeilisearchApi;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
-    let openapi = MeilisearchApi::openapi();
-
     cfg.service(web::scope("/tasks").configure(tasks::configure))
         .service(web::scope("/batches").configure(batches::configure))
-        .service(Scalar::with_url("/scalar", openapi.clone()))
-        .service(RapiDoc::with_openapi("/api-docs/openapi.json", openapi.clone()).path("/rapidoc"))
-        .service(Redoc::with_url("/redoc", openapi))
         .service(web::resource("/health").route(web::get().to(get_health)))
         .service(web::scope("/logs").configure(logs::configure))
         .service(web::scope("/keys").configure(api_key::configure))
@@ -112,6 +105,12 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(web::scope("/swap-indexes").configure(swap_indexes::configure))
         .service(web::scope("/metrics").configure(metrics::configure))
         .service(web::scope("/experimental-features").configure(features::configure));
+
+    let now = std::time::Instant::now();
+    let openapi = MeilisearchApi::openapi();
+    println!("Took {:?} to generate the openapi file", now.elapsed());
+    // #[cfg(feature = "webp")]
+    cfg.service(Scalar::with_url("/scalar", openapi.clone()));
 }
 
 pub fn get_task_id(req: &HttpRequest, opt: &Opt) -> Result<Option<TaskId>, ResponseError> {

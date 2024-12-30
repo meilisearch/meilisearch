@@ -107,9 +107,6 @@ roaring = "0.10.7"
 mopa-maintained = "0.2.3"
 utoipa = { version = "5.2.0", features = ["actix_extras", "macros", "non_strict_integers", "preserve_order", "uuid", "time", "openapi_extensions"] }
 utoipa-scalar = { version = "0.2.0", features = ["actix-web"] }
-utoipa-rapidoc = { version = "5.0.0", features = ["actix-web"] }
-utoipa-redoc = { version = "5.0.0", features = ["actix-web"] }
-doc-comment = "0.3.3"
 
 [dev-dependencies]
 actix-rt = "2.10.0"
