@@ -18,7 +18,9 @@ use time::OffsetDateTime;
 use tracing::debug;
 use utoipa::{IntoParams, OpenApi, ToSchema};
 
-use super::{get_task_id, Pagination, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT};
+use super::{
+    get_task_id, Pagination, PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT,
+};
 use crate::analytics::{Aggregate, Analytics};
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
@@ -138,7 +140,7 @@ impl ListIndexes {
     security(("Bearer" = ["indexes.get", "indexes.*", "*"])),
     params(ListIndexes),
     responses(
-        (status = 200, description = "Indexes are returned", body = serde_json::Value, content_type = "application/json", example = json!(
+        (status = 200, description = "Indexes are returned", body = PaginationView<IndexView>, content_type = "application/json", example = json!(
             {
                 "results": [
                     {
