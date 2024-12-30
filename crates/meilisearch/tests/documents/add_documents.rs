@@ -1225,7 +1225,25 @@ async fn add_no_documents() {
     snapshot!(code, @"202 Accepted");
     let task = server.wait_task(task.uid()).await;
     let task = task.succeeded();
-    snapshot!(task, @"");
+    snapshot!(task, @r#"
+    {
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "kefir",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 0,
+        "indexedDocuments": 0
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "#);
 }
 
 #[actix_rt::test]
