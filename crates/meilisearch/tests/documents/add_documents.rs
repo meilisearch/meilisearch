@@ -1220,9 +1220,89 @@ async fn replace_document() {
 #[actix_rt::test]
 async fn add_no_documents() {
     let server = Server::new().await;
-    let index = server.index("test");
-    let (_response, code) = index.add_documents(json!([]), None).await;
+    let index = server.index("kefir");
+    let (task, code) = index.add_documents(json!([]), None).await;
     snapshot!(code, @"202 Accepted");
+    let task = server.wait_task(task.uid()).await;
+    let task = task.succeeded();
+    snapshot!(task, @r#"
+    {
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "kefir",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 0,
+        "indexedDocuments": 0
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "#);
+
+    let (task, _code) = index.add_documents(json!([]), Some("kefkef")).await;
+    let task = server.wait_task(task.uid()).await;
+    let task = task.succeeded();
+    snapshot!(task, @r#"
+    {
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "kefir",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 0,
+        "indexedDocuments": 0
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "#);
+
+    let (task, _code) = index.add_documents(json!([{ "kefkef": 1 }]), None).await;
+    let task = server.wait_task(task.uid()).await;
+    let task = task.succeeded();
+    snapshot!(task, @r#"
+    {
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "kefir",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "#);
+    let (documents, _status) = index.get_all_documents(GetAllDocumentsOptions::default()).await;
+    snapshot!(documents, @r#"
+    {
+      "results": [
+        {
+          "kefkef": 1
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 1
+    }
+    "#);
 }
 
 #[actix_rt::test]

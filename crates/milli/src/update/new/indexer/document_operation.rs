@@ -252,6 +252,24 @@ fn extract_addition_payload_changes<'r, 'pl: 'r>(
         previous_offset = iter.byte_offset();
     }
 
+    if payload.is_empty() {
+        let result = retrieve_or_guess_primary_key(
+            rtxn,
+            index,
+            new_fields_ids_map,
+            primary_key_from_op,
+            None,
+        );
+        match result {
+            Ok(Ok((pk, _))) => {
+                primary_key.get_or_insert(pk);
+            }
+            Ok(Err(UserError::NoPrimaryKeyCandidateFound)) => (),
+            Ok(Err(user_error)) => return Err(Error::UserError(user_error)),
+            Err(error) => return Err(error),
+        };
+    }
+
     Ok(new_docids_version_offsets)
 }
 
