@@ -106,7 +106,6 @@ pub async fn list_indexes(
     let filters = index_scheduler.filters();
     let (total, indexes) =
         index_scheduler.get_paginated_indexes_stats(filters, *paginate.offset, *paginate.limit)?;
-    dbg!("hore");
     let indexes = indexes
         .into_iter()
         .map(|(name, stats)| IndexView {
