@@ -104,7 +104,6 @@ pub async fn list_indexes(
 ) -> Result<HttpResponse, ResponseError> {
     debug!(parameters = ?paginate, "List indexes");
     let filters = index_scheduler.filters();
-    dbg!("here");
     let (total, indexes) =
         index_scheduler.get_paginated_indexes_stats(filters, *paginate.offset, *paginate.limit)?;
     dbg!("hore");
