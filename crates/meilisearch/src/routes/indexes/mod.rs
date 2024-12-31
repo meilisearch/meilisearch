@@ -5,7 +5,7 @@ use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::actix_web::{AwebJson, AwebQueryParameter};
 use deserr::{DeserializeError, Deserr, ValuePointerRef};
-use index_scheduler::{Error, IndexScheduler};
+use index_scheduler::IndexScheduler;
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::{immutable_field_error, DeserrJsonError, DeserrQueryParamError};
 use meilisearch_types::error::deserr_codes::*;
@@ -104,19 +104,18 @@ pub async fn list_indexes(
 ) -> Result<HttpResponse, ResponseError> {
     debug!(parameters = ?paginate, "List indexes");
     let filters = index_scheduler.filters();
-    let indexes: Vec<Option<IndexView>> =
-        index_scheduler.try_for_each_index(|uid, index| -> Result<Option<IndexView>, _> {
-            if !filters.is_index_authorized(uid) {
-                return Ok(None);
-            }
-            Ok(Some(
-                IndexView::new(uid.to_string(), index)
-                    .map_err(|e| Error::from_milli(e, Some(uid.to_string())))?,
-            ))
-        })?;
-    // Won't cause to open all indexes because IndexView doesn't keep the `Index` opened.
-    let indexes: Vec<IndexView> = indexes.into_iter().flatten().collect();
-    let ret = paginate.as_pagination().auto_paginate_sized(indexes.into_iter());
+    let (total, indexes) =
+        index_scheduler.get_paginated_indexes_stats(filters, *paginate.offset, *paginate.limit)?;
+    let indexes = indexes
+        .into_iter()
+        .map(|(name, stats)| IndexView {
+            uid: name,
+            created_at: stats.created_at,
+            updated_at: stats.updated_at,
+            primary_key: stats.primary_key,
+        })
+        .collect::<Vec<_>>();
+    let ret = paginate.as_pagination().format_with(total, indexes);
 
     debug!(returns = ?ret, "List indexes");
     Ok(HttpResponse::Ok().json(ret))
