@@ -426,7 +426,7 @@ pub async fn shared_index_with_test_set() -> &'static Index<'static, Shared> {
                 )
                 .await;
             assert_eq!(code, 202);
-            index.wait_task(response.uid()).await;
+            index.wait_task(response.uid()).await.succeeded();
             index
         })
         .await
