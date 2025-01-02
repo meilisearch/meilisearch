@@ -265,7 +265,8 @@ impl FacetFieldIdsDelta {
     fn extract_key_data<'key>(&self, key: &'key [u8]) -> (FacetKind, FieldId, &'key [u8]) {
         let facet_kind = FacetKind::from(key[0]);
         let field_id = FieldId::from_be_bytes([key[1], key[2]]);
-        let facet_value = &key[2..];
+        // level is also stored in the key at [3] (always 0)
+        let facet_value = &key[4..];
         (facet_kind, field_id, facet_value)
     }
 
