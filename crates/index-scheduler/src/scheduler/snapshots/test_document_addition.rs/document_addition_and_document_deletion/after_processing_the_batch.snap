@@ -1,0 +1,69 @@
+---
+source: crates/index-scheduler/src/scheduler/test_document_addition.rs
+snapshot_kind: text
+---
+### Autobatching Enabled = true
+### Processing batch None:
+[]
+----------------------------------------------------------------------
+### All Tasks:
+0 {uid: 0, batch_uid: 0, status: succeeded, details: { received_documents: 3, indexed_documents: Some(3) }, kind: DocumentAdditionOrUpdate { index_uid: "doggos", primary_key: Some("id"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000000, documents_count: 3, allow_index_creation: true }}
+1 {uid: 1, batch_uid: 0, status: succeeded, details: { received_document_ids: 2, deleted_documents: Some(2) }, kind: DocumentDeletion { index_uid: "doggos", documents_ids: ["1", "2"] }}
+----------------------------------------------------------------------
+### Status:
+enqueued []
+succeeded [0,1,]
+----------------------------------------------------------------------
+### Kind:
+"documentAdditionOrUpdate" [0,]
+"documentDeletion" [1,]
+----------------------------------------------------------------------
+### Index Tasks:
+doggos [0,1,]
+----------------------------------------------------------------------
+### Index Mapper:
+doggos: { number_of_documents: 1, field_distribution: {"doggo": 1, "id": 1} }
+
+----------------------------------------------------------------------
+### Canceled By:
+
+----------------------------------------------------------------------
+### Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+----------------------------------------------------------------------
+### Started At:
+[timestamp] [0,1,]
+----------------------------------------------------------------------
+### Finished At:
+[timestamp] [0,1,]
+----------------------------------------------------------------------
+### All Batches:
+0 {uid: 0, details: {"receivedDocuments":3,"indexedDocuments":3,"providedIds":2,"deletedDocuments":2}, stats: {"totalNbTasks":2,"status":{"succeeded":2},"types":{"documentAdditionOrUpdate":1,"documentDeletion":1},"indexUids":{"doggos":2}}, }
+----------------------------------------------------------------------
+### Batch to tasks mapping:
+0 [0,1,]
+----------------------------------------------------------------------
+### Batches Status:
+succeeded [0,]
+----------------------------------------------------------------------
+### Batches Kind:
+"documentAdditionOrUpdate" [0,]
+"documentDeletion" [0,]
+----------------------------------------------------------------------
+### Batches Index Tasks:
+doggos [0,]
+----------------------------------------------------------------------
+### Batches Enqueued At:
+[timestamp] [0,]
+[timestamp] [0,]
+----------------------------------------------------------------------
+### Batches Started At:
+[timestamp] [0,]
+----------------------------------------------------------------------
+### Batches Finished At:
+[timestamp] [0,]
+----------------------------------------------------------------------
+### File Store:
+
+----------------------------------------------------------------------

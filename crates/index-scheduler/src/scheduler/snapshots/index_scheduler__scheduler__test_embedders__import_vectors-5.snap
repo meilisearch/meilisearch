@@ -1,0 +1,16 @@
+---
+source: crates/index-scheduler/src/scheduler/test_embedders.rs
+expression: fakerest_config.embedder_options
+snapshot_kind: text
+---
+{
+  "Rest": {
+    "api_key": "My super secret",
+    "distribution": null,
+    "dimensions": 384,
+    "url": "http://localhost:7777",
+    "request": "{{text}}",
+    "response": "{{embedding}}",
+    "headers": {}
+  }
+}

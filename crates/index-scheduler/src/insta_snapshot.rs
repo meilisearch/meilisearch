@@ -5,11 +5,11 @@ use meilisearch_types::batches::Batch;
 use meilisearch_types::heed::types::{SerdeBincode, SerdeJson, Str};
 use meilisearch_types::heed::{Database, RoTxn};
 use meilisearch_types::milli::{CboRoaringBitmapCodec, RoaringBitmapCodec, BEU32};
-use meilisearch_types::tasks::{Details, Kind, Task};
+use meilisearch_types::tasks::{Details, Kind, Status, Task};
 use roaring::RoaringBitmap;
 
 use crate::index_mapper::IndexMapper;
-use crate::{IndexScheduler, Status, BEI128};
+use crate::{IndexScheduler, BEI128};
 
 pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
     // Since we'll snapshot the index right afterward, we don't need to ensure it's internally consistent for every run.
@@ -18,21 +18,14 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
     scheduler.assert_internally_consistent();
 
     let IndexScheduler {
-        autobatching_enabled,
         cleanup_enabled: _,
-        must_stop_processing: _,
         processing_tasks,
         env,
         queue,
+        scheduler,
 
         index_mapper,
         features: _,
-        max_number_of_batched_tasks: _,
-        wake_up: _,
-        dumps_path: _,
-        snapshots_path: _,
-        auth_path: _,
-        version_file_path: _,
         webhook_url: _,
         webhook_authorization_header: _,
         test_breakpoint_sdr: _,
@@ -46,7 +39,7 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
     let mut snap = String::new();
 
     let processing = processing_tasks.read().unwrap().clone();
-    snap.push_str(&format!("### Autobatching Enabled = {autobatching_enabled}\n"));
+    snap.push_str(&format!("### Autobatching Enabled = {}\n", scheduler.autobatching_enabled));
     snap.push_str(&format!(
         "### Processing batch {:?}:\n",
         processing.batch.as_ref().map(|batch| batch.uid)

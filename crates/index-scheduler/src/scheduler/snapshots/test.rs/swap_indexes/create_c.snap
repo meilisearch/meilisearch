@@ -1,0 +1,91 @@
+---
+source: crates/index-scheduler/src/scheduler/test.rs
+snapshot_kind: text
+---
+### Autobatching Enabled = true
+### Processing batch None:
+[]
+----------------------------------------------------------------------
+### All Tasks:
+0 {uid: 0, batch_uid: 0, status: succeeded, details: { primary_key: Some("id") }, kind: IndexCreation { index_uid: "a", primary_key: Some("id") }}
+1 {uid: 1, batch_uid: 1, status: succeeded, details: { primary_key: Some("id") }, kind: IndexCreation { index_uid: "b", primary_key: Some("id") }}
+2 {uid: 2, batch_uid: 2, status: succeeded, details: { primary_key: Some("id") }, kind: IndexCreation { index_uid: "c", primary_key: Some("id") }}
+3 {uid: 3, status: enqueued, details: { primary_key: Some("id") }, kind: IndexCreation { index_uid: "d", primary_key: Some("id") }}
+----------------------------------------------------------------------
+### Status:
+enqueued [3,]
+succeeded [0,1,2,]
+----------------------------------------------------------------------
+### Kind:
+"indexCreation" [0,1,2,3,]
+----------------------------------------------------------------------
+### Index Tasks:
+a [0,]
+b [1,]
+c [2,]
+d [3,]
+----------------------------------------------------------------------
+### Index Mapper:
+a: { number_of_documents: 0, field_distribution: {} }
+b: { number_of_documents: 0, field_distribution: {} }
+c: { number_of_documents: 0, field_distribution: {} }
+
+----------------------------------------------------------------------
+### Canceled By:
+
+----------------------------------------------------------------------
+### Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+----------------------------------------------------------------------
+### Started At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+----------------------------------------------------------------------
+### Finished At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+----------------------------------------------------------------------
+### All Batches:
+0 {uid: 0, details: {"primaryKey":"id"}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"a":1}}, }
+1 {uid: 1, details: {"primaryKey":"id"}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"b":1}}, }
+2 {uid: 2, details: {"primaryKey":"id"}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"c":1}}, }
+----------------------------------------------------------------------
+### Batch to tasks mapping:
+0 [0,]
+1 [1,]
+2 [2,]
+----------------------------------------------------------------------
+### Batches Status:
+succeeded [0,1,2,]
+----------------------------------------------------------------------
+### Batches Kind:
+"indexCreation" [0,1,2,]
+----------------------------------------------------------------------
+### Batches Index Tasks:
+a [0,]
+b [1,]
+c [2,]
+----------------------------------------------------------------------
+### Batches Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+----------------------------------------------------------------------
+### Batches Started At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+----------------------------------------------------------------------
+### Batches Finished At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+----------------------------------------------------------------------
+### File Store:
+
+----------------------------------------------------------------------

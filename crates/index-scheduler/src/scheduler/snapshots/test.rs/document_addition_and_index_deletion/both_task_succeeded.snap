@@ -1,0 +1,79 @@
+---
+source: crates/index-scheduler/src/scheduler/test.rs
+snapshot_kind: text
+---
+### Autobatching Enabled = true
+### Processing batch None:
+[]
+----------------------------------------------------------------------
+### All Tasks:
+0 {uid: 0, batch_uid: 0, status: succeeded, details: { primary_key: None }, kind: IndexCreation { index_uid: "doggos", primary_key: None }}
+1 {uid: 1, batch_uid: 1, status: succeeded, details: { received_documents: 1, indexed_documents: Some(0) }, kind: DocumentAdditionOrUpdate { index_uid: "doggos", primary_key: Some("id"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000000, documents_count: 1, allow_index_creation: true }}
+2 {uid: 2, batch_uid: 1, status: succeeded, details: { deleted_documents: Some(0) }, kind: IndexDeletion { index_uid: "doggos" }}
+----------------------------------------------------------------------
+### Status:
+enqueued []
+succeeded [0,1,2,]
+----------------------------------------------------------------------
+### Kind:
+"documentAdditionOrUpdate" [1,]
+"indexCreation" [0,]
+"indexDeletion" [2,]
+----------------------------------------------------------------------
+### Index Tasks:
+doggos [0,1,2,]
+----------------------------------------------------------------------
+### Index Mapper:
+
+----------------------------------------------------------------------
+### Canceled By:
+
+----------------------------------------------------------------------
+### Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+----------------------------------------------------------------------
+### Started At:
+[timestamp] [0,]
+[timestamp] [1,2,]
+----------------------------------------------------------------------
+### Finished At:
+[timestamp] [0,]
+[timestamp] [1,2,]
+----------------------------------------------------------------------
+### All Batches:
+0 {uid: 0, details: {}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"doggos":1}}, }
+1 {uid: 1, details: {"receivedDocuments":1,"indexedDocuments":0,"deletedDocuments":0}, stats: {"totalNbTasks":2,"status":{"succeeded":2},"types":{"documentAdditionOrUpdate":1,"indexDeletion":1},"indexUids":{"doggos":2}}, }
+----------------------------------------------------------------------
+### Batch to tasks mapping:
+0 [0,]
+1 [1,2,]
+----------------------------------------------------------------------
+### Batches Status:
+succeeded [0,1,]
+----------------------------------------------------------------------
+### Batches Kind:
+"documentAdditionOrUpdate" [1,]
+"indexCreation" [0,]
+"indexDeletion" [1,]
+----------------------------------------------------------------------
+### Batches Index Tasks:
+doggos [0,1,]
+----------------------------------------------------------------------
+### Batches Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [1,]
+----------------------------------------------------------------------
+### Batches Started At:
+[timestamp] [0,]
+[timestamp] [1,]
+----------------------------------------------------------------------
+### Batches Finished At:
+[timestamp] [0,]
+[timestamp] [1,]
+----------------------------------------------------------------------
+### File Store:
+
+----------------------------------------------------------------------

@@ -1,0 +1,117 @@
+---
+source: crates/index-scheduler/src/scheduler/test.rs
+snapshot_kind: text
+---
+### Autobatching Enabled = true
+### Processing batch None:
+[]
+----------------------------------------------------------------------
+### All Tasks:
+0 {uid: 0, batch_uid: 0, status: succeeded, details: { primary_key: None }, kind: IndexCreation { index_uid: "doggos", primary_key: None }}
+1 {uid: 1, batch_uid: 1, status: succeeded, details: { primary_key: None }, kind: IndexCreation { index_uid: "cattos", primary_key: None }}
+2 {uid: 2, batch_uid: 2, status: succeeded, details: { primary_key: None }, kind: IndexCreation { index_uid: "girafos", primary_key: None }}
+3 {uid: 3, batch_uid: 3, status: succeeded, details: { deleted_documents: Some(0) }, kind: DocumentClear { index_uid: "doggos" }}
+4 {uid: 4, batch_uid: 4, status: succeeded, details: { deleted_documents: Some(0) }, kind: DocumentClear { index_uid: "cattos" }}
+5 {uid: 5, batch_uid: 5, status: succeeded, details: { deleted_documents: Some(0) }, kind: DocumentClear { index_uid: "girafos" }}
+----------------------------------------------------------------------
+### Status:
+enqueued []
+succeeded [0,1,2,3,4,5,]
+----------------------------------------------------------------------
+### Kind:
+"documentDeletion" [3,4,5,]
+"indexCreation" [0,1,2,]
+----------------------------------------------------------------------
+### Index Tasks:
+cattos [1,4,]
+doggos [0,3,]
+girafos [2,5,]
+----------------------------------------------------------------------
+### Index Mapper:
+cattos: { number_of_documents: 0, field_distribution: {} }
+doggos: { number_of_documents: 0, field_distribution: {} }
+girafos: { number_of_documents: 0, field_distribution: {} }
+
+----------------------------------------------------------------------
+### Canceled By:
+
+----------------------------------------------------------------------
+### Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+[timestamp] [4,]
+[timestamp] [5,]
+----------------------------------------------------------------------
+### Started At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+[timestamp] [4,]
+[timestamp] [5,]
+----------------------------------------------------------------------
+### Finished At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+[timestamp] [4,]
+[timestamp] [5,]
+----------------------------------------------------------------------
+### All Batches:
+0 {uid: 0, details: {}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"doggos":1}}, }
+1 {uid: 1, details: {}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"cattos":1}}, }
+2 {uid: 2, details: {}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"girafos":1}}, }
+3 {uid: 3, details: {"deletedDocuments":0}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"documentDeletion":1},"indexUids":{"doggos":1}}, }
+4 {uid: 4, details: {"deletedDocuments":0}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"documentDeletion":1},"indexUids":{"cattos":1}}, }
+5 {uid: 5, details: {"deletedDocuments":0}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"documentDeletion":1},"indexUids":{"girafos":1}}, }
+----------------------------------------------------------------------
+### Batch to tasks mapping:
+0 [0,]
+1 [1,]
+2 [2,]
+3 [3,]
+4 [4,]
+5 [5,]
+----------------------------------------------------------------------
+### Batches Status:
+succeeded [0,1,2,3,4,5,]
+----------------------------------------------------------------------
+### Batches Kind:
+"documentDeletion" [3,4,5,]
+"indexCreation" [0,1,2,]
+----------------------------------------------------------------------
+### Batches Index Tasks:
+cattos [1,4,]
+doggos [0,3,]
+girafos [2,5,]
+----------------------------------------------------------------------
+### Batches Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+[timestamp] [4,]
+[timestamp] [5,]
+----------------------------------------------------------------------
+### Batches Started At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+[timestamp] [4,]
+[timestamp] [5,]
+----------------------------------------------------------------------
+### Batches Finished At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+[timestamp] [4,]
+[timestamp] [5,]
+----------------------------------------------------------------------
+### File Store:
+
+----------------------------------------------------------------------

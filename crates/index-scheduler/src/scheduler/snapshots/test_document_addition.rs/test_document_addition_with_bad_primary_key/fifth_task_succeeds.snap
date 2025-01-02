@@ -1,0 +1,96 @@
+---
+source: crates/index-scheduler/src/scheduler/test_document_addition.rs
+snapshot_kind: text
+---
+### Autobatching Enabled = true
+### Processing batch None:
+[]
+----------------------------------------------------------------------
+### All Tasks:
+0 {uid: 0, batch_uid: 0, status: failed, error: ResponseError { code: 200, message: "Document doesn't have a `bork` attribute: `{\"id\":0,\"doggo\":\"jean bob\"}`.", error_code: "missing_document_id", error_type: "invalid_request", error_link: "https://docs.meilisearch.com/errors#missing_document_id" }, details: { received_documents: 1, indexed_documents: Some(0) }, kind: DocumentAdditionOrUpdate { index_uid: "doggos", primary_key: Some("bork"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000000, documents_count: 1, allow_index_creation: true }}
+1 {uid: 1, batch_uid: 0, status: failed, error: ResponseError { code: 200, message: "Document doesn't have a `bork` attribute: `{\"id\":1,\"doggo\":\"jean bob\"}`.", error_code: "missing_document_id", error_type: "invalid_request", error_link: "https://docs.meilisearch.com/errors#missing_document_id" }, details: { received_documents: 1, indexed_documents: Some(0) }, kind: DocumentAdditionOrUpdate { index_uid: "doggos", primary_key: Some("bork"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000001, documents_count: 1, allow_index_creation: true }}
+2 {uid: 2, batch_uid: 1, status: succeeded, details: { received_documents: 1, indexed_documents: Some(1) }, kind: DocumentAdditionOrUpdate { index_uid: "doggos", primary_key: Some("id"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000002, documents_count: 1, allow_index_creation: true }}
+3 {uid: 3, batch_uid: 2, status: failed, error: ResponseError { code: 200, message: "Index already has a primary key: `id`.", error_code: "index_primary_key_already_exists", error_type: "invalid_request", error_link: "https://docs.meilisearch.com/errors#index_primary_key_already_exists" }, details: { received_documents: 1, indexed_documents: Some(0) }, kind: DocumentAdditionOrUpdate { index_uid: "doggos", primary_key: Some("bork"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000003, documents_count: 1, allow_index_creation: true }}
+4 {uid: 4, batch_uid: 3, status: succeeded, details: { received_documents: 1, indexed_documents: Some(1) }, kind: DocumentAdditionOrUpdate { index_uid: "doggos", primary_key: Some("id"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000004, documents_count: 1, allow_index_creation: true }}
+----------------------------------------------------------------------
+### Status:
+enqueued []
+succeeded [2,4,]
+failed [0,1,3,]
+----------------------------------------------------------------------
+### Kind:
+"documentAdditionOrUpdate" [0,1,2,3,4,]
+----------------------------------------------------------------------
+### Index Tasks:
+doggos [0,1,2,3,4,]
+----------------------------------------------------------------------
+### Index Mapper:
+doggos: { number_of_documents: 2, field_distribution: {"doggo": 2, "id": 2} }
+
+----------------------------------------------------------------------
+### Canceled By:
+
+----------------------------------------------------------------------
+### Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+[timestamp] [4,]
+----------------------------------------------------------------------
+### Started At:
+[timestamp] [0,1,]
+[timestamp] [2,]
+[timestamp] [3,]
+[timestamp] [4,]
+----------------------------------------------------------------------
+### Finished At:
+[timestamp] [0,1,]
+[timestamp] [2,]
+[timestamp] [3,]
+[timestamp] [4,]
+----------------------------------------------------------------------
+### All Batches:
+0 {uid: 0, details: {"receivedDocuments":2,"indexedDocuments":0}, stats: {"totalNbTasks":2,"status":{"failed":2},"types":{"documentAdditionOrUpdate":2},"indexUids":{"doggos":2}}, }
+1 {uid: 1, details: {"receivedDocuments":1,"indexedDocuments":1}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"documentAdditionOrUpdate":1},"indexUids":{"doggos":1}}, }
+2 {uid: 2, details: {"receivedDocuments":1,"indexedDocuments":0}, stats: {"totalNbTasks":1,"status":{"failed":1},"types":{"documentAdditionOrUpdate":1},"indexUids":{"doggos":1}}, }
+3 {uid: 3, details: {"receivedDocuments":1,"indexedDocuments":1}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"documentAdditionOrUpdate":1},"indexUids":{"doggos":1}}, }
+----------------------------------------------------------------------
+### Batch to tasks mapping:
+0 [0,1,]
+1 [2,]
+2 [3,]
+3 [4,]
+----------------------------------------------------------------------
+### Batches Status:
+succeeded [1,3,]
+failed [0,2,]
+----------------------------------------------------------------------
+### Batches Kind:
+"documentAdditionOrUpdate" [0,1,2,3,]
+----------------------------------------------------------------------
+### Batches Index Tasks:
+doggos [0,1,2,3,]
+----------------------------------------------------------------------
+### Batches Enqueued At:
+[timestamp] [0,]
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+----------------------------------------------------------------------
+### Batches Started At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+----------------------------------------------------------------------
+### Batches Finished At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+----------------------------------------------------------------------
+### File Store:
+
+----------------------------------------------------------------------

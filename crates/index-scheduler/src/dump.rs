@@ -199,7 +199,7 @@ impl<'a> Dump<'a> {
         }
 
         self.wtxn.commit()?;
-        self.index_scheduler.wake_up.signal();
+        self.index_scheduler.scheduler.wake_up.signal();
 
         Ok(())
     }

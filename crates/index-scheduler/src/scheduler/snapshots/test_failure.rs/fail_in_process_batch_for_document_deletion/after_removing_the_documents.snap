@@ -1,0 +1,95 @@
+---
+source: crates/index-scheduler/src/scheduler/test_failure.rs
+snapshot_kind: text
+---
+### Autobatching Enabled = true
+### Processing batch None:
+[]
+----------------------------------------------------------------------
+### All Tasks:
+0 {uid: 0, batch_uid: 0, status: succeeded, details: { settings: Settings { displayed_attributes: WildcardSetting(NotSet), searchable_attributes: WildcardSetting(NotSet), filterable_attributes: Set({"catto"}), sortable_attributes: NotSet, ranking_rules: NotSet, stop_words: NotSet, non_separator_tokens: NotSet, separator_tokens: NotSet, dictionary: NotSet, synonyms: NotSet, distinct_attribute: NotSet, proximity_precision: NotSet, typo_tolerance: NotSet, faceting: NotSet, pagination: NotSet, embedders: NotSet, search_cutoff_ms: NotSet, localized_attributes: NotSet, facet_search: NotSet, prefix_search: NotSet, _kind: PhantomData<meilisearch_types::settings::Unchecked> } }, kind: SettingsUpdate { index_uid: "doggos", new_settings: Settings { displayed_attributes: WildcardSetting(NotSet), searchable_attributes: WildcardSetting(NotSet), filterable_attributes: Set({"catto"}), sortable_attributes: NotSet, ranking_rules: NotSet, stop_words: NotSet, non_separator_tokens: NotSet, separator_tokens: NotSet, dictionary: NotSet, synonyms: NotSet, distinct_attribute: NotSet, proximity_precision: NotSet, typo_tolerance: NotSet, faceting: NotSet, pagination: NotSet, embedders: NotSet, search_cutoff_ms: NotSet, localized_attributes: NotSet, facet_search: NotSet, prefix_search: NotSet, _kind: PhantomData<meilisearch_types::settings::Unchecked> }, is_deletion: false, allow_index_creation: true }}
+1 {uid: 1, batch_uid: 1, status: succeeded, details: { received_documents: 3, indexed_documents: Some(3) }, kind: DocumentAdditionOrUpdate { index_uid: "doggos", primary_key: Some("id"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000000, documents_count: 3, allow_index_creation: true }}
+2 {uid: 2, batch_uid: 2, status: succeeded, details: { received_document_ids: 1, deleted_documents: Some(1) }, kind: DocumentDeletion { index_uid: "doggos", documents_ids: ["1"] }}
+3 {uid: 3, batch_uid: 2, status: failed, error: ResponseError { code: 200, message: "Index `doggos`: Invalid type for filter subexpression: expected: String, Array, found: true.", error_code: "invalid_document_filter", error_type: "invalid_request", error_link: "https://docs.meilisearch.com/errors#invalid_document_filter" }, details: { original_filter: true, deleted_documents: Some(0) }, kind: DocumentDeletionByFilter { index_uid: "doggos", filter_expr: Bool(true) }}
+4 {uid: 4, batch_uid: 2, status: failed, error: ResponseError { code: 200, message: "Index `doggos`: Attribute `id` is not filterable. Available filterable attributes are: `catto`.\n1:3 id = 2", error_code: "invalid_document_filter", error_type: "invalid_request", error_link: "https://docs.meilisearch.com/errors#invalid_document_filter" }, details: { original_filter: "id = 2", deleted_documents: Some(0) }, kind: DocumentDeletionByFilter { index_uid: "doggos", filter_expr: String("id = 2") }}
+5 {uid: 5, batch_uid: 2, status: succeeded, details: { original_filter: "catto EXISTS", deleted_documents: Some(1) }, kind: DocumentDeletionByFilter { index_uid: "doggos", filter_expr: String("catto EXISTS") }}
+----------------------------------------------------------------------
+### Status:
+enqueued []
+succeeded [0,1,2,5,]
+failed [3,4,]
+----------------------------------------------------------------------
+### Kind:
+"documentAdditionOrUpdate" [1,]
+"documentDeletion" [2,3,4,5,]
+"settingsUpdate" [0,]
+----------------------------------------------------------------------
+### Index Tasks:
+doggos [0,1,2,3,4,5,]
+----------------------------------------------------------------------
+### Index Mapper:
+doggos: { number_of_documents: 1, field_distribution: {"doggo": 1, "id": 1} }
+
+----------------------------------------------------------------------
+### Canceled By:
+
+----------------------------------------------------------------------
+### Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+[timestamp] [4,]
+[timestamp] [5,]
+----------------------------------------------------------------------
+### Started At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,3,4,5,]
+----------------------------------------------------------------------
+### Finished At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,3,4,5,]
+----------------------------------------------------------------------
+### All Batches:
+0 {uid: 0, details: {"filterableAttributes":["catto"]}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"settingsUpdate":1},"indexUids":{"doggos":1}}, }
+1 {uid: 1, details: {"receivedDocuments":3,"indexedDocuments":3}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"documentAdditionOrUpdate":1},"indexUids":{"doggos":1}}, }
+2 {uid: 2, details: {"providedIds":1,"deletedDocuments":2,"originalFilter":"true&\"id = 2\"&\"catto EXISTS\""}, stats: {"totalNbTasks":4,"status":{"succeeded":2,"failed":2},"types":{"documentDeletion":4},"indexUids":{"doggos":4}}, }
+----------------------------------------------------------------------
+### Batch to tasks mapping:
+0 [0,]
+1 [1,]
+2 [2,3,4,5,]
+----------------------------------------------------------------------
+### Batches Status:
+succeeded [0,1,2,]
+failed [2,]
+----------------------------------------------------------------------
+### Batches Kind:
+"documentAdditionOrUpdate" [1,]
+"documentDeletion" [2,]
+"settingsUpdate" [0,]
+----------------------------------------------------------------------
+### Batches Index Tasks:
+doggos [0,1,2,]
+----------------------------------------------------------------------
+### Batches Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [2,]
+----------------------------------------------------------------------
+### Batches Started At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+----------------------------------------------------------------------
+### Batches Finished At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+----------------------------------------------------------------------
+### File Store:
+
+----------------------------------------------------------------------

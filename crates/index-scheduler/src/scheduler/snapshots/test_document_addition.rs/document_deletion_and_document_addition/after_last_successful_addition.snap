@@ -1,0 +1,77 @@
+---
+source: crates/index-scheduler/src/scheduler/test_document_addition.rs
+snapshot_kind: text
+---
+### Autobatching Enabled = true
+### Processing batch None:
+[]
+----------------------------------------------------------------------
+### All Tasks:
+0 {uid: 0, batch_uid: 0, status: failed, error: ResponseError { code: 200, message: "Index `doggos` not found.", error_code: "index_not_found", error_type: "invalid_request", error_link: "https://docs.meilisearch.com/errors#index_not_found" }, details: { received_document_ids: 2, deleted_documents: Some(0) }, kind: DocumentDeletion { index_uid: "doggos", documents_ids: ["1", "2"] }}
+1 {uid: 1, batch_uid: 1, status: succeeded, details: { received_documents: 3, indexed_documents: Some(3) }, kind: DocumentAdditionOrUpdate { index_uid: "doggos", primary_key: Some("id"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000000, documents_count: 3, allow_index_creation: true }}
+----------------------------------------------------------------------
+### Status:
+enqueued []
+succeeded [1,]
+failed [0,]
+----------------------------------------------------------------------
+### Kind:
+"documentAdditionOrUpdate" [1,]
+"documentDeletion" [0,]
+----------------------------------------------------------------------
+### Index Tasks:
+doggos [0,1,]
+----------------------------------------------------------------------
+### Index Mapper:
+doggos: { number_of_documents: 3, field_distribution: {"catto": 1, "doggo": 2, "id": 3} }
+
+----------------------------------------------------------------------
+### Canceled By:
+
+----------------------------------------------------------------------
+### Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+----------------------------------------------------------------------
+### Started At:
+[timestamp] [0,]
+[timestamp] [1,]
+----------------------------------------------------------------------
+### Finished At:
+[timestamp] [0,]
+[timestamp] [1,]
+----------------------------------------------------------------------
+### All Batches:
+0 {uid: 0, details: {"providedIds":2,"deletedDocuments":0}, stats: {"totalNbTasks":1,"status":{"failed":1},"types":{"documentDeletion":1},"indexUids":{"doggos":1}}, }
+1 {uid: 1, details: {"receivedDocuments":3,"indexedDocuments":3}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"documentAdditionOrUpdate":1},"indexUids":{"doggos":1}}, }
+----------------------------------------------------------------------
+### Batch to tasks mapping:
+0 [0,]
+1 [1,]
+----------------------------------------------------------------------
+### Batches Status:
+succeeded [1,]
+failed [0,]
+----------------------------------------------------------------------
+### Batches Kind:
+"documentAdditionOrUpdate" [1,]
+"documentDeletion" [0,]
+----------------------------------------------------------------------
+### Batches Index Tasks:
+doggos [0,1,]
+----------------------------------------------------------------------
+### Batches Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+----------------------------------------------------------------------
+### Batches Started At:
+[timestamp] [0,]
+[timestamp] [1,]
+----------------------------------------------------------------------
+### Batches Finished At:
+[timestamp] [0,]
+[timestamp] [1,]
+----------------------------------------------------------------------
+### File Store:
+
+----------------------------------------------------------------------
