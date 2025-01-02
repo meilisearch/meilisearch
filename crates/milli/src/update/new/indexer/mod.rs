@@ -745,14 +745,12 @@ fn compute_facet_level_database(
         let _entered = span.enter();
         match delta {
             super::merger::FacetFieldIdDelta::Bulk => {
-                /// TODO: remove info before shipping (or downgrade to debug)
-                tracing::info!(%fid, "bulk string facet processing");
+                tracing::debug!(%fid, "bulk string facet processing");
                 FacetsUpdateBulk::new_not_updating_level_0(index, vec![fid], FacetType::String)
                     .execute(wtxn)?
             }
             super::merger::FacetFieldIdDelta::Incremental(delta_data) => {
-                /// TODO: remove info before shipping (or downgrade to debug)
-                tracing::info!(%fid, len=%delta_data.len(), "incremental string facet processing");
+                tracing::debug!(%fid, len=%delta_data.len(), "incremental string facet processing");
                 FacetsUpdateIncremental::new(
                     index,
                     FacetType::String,
@@ -772,14 +770,12 @@ fn compute_facet_level_database(
         let _entered = span.enter();
         match delta {
             super::merger::FacetFieldIdDelta::Bulk => {
-                /// TODO: remove info before shipping (or downgrade to debug)
-                tracing::info!(%fid, "bulk number facet processing");
+                tracing::debug!(%fid, "bulk number facet processing");
                 FacetsUpdateBulk::new_not_updating_level_0(index, vec![fid], FacetType::Number)
                     .execute(wtxn)?
             }
             super::merger::FacetFieldIdDelta::Incremental(delta_data) => {
-                /// TODO: remove info before shipping (or downgrade to debug)
-                tracing::info!(%fid, len=%delta_data.len(), "incremental number facet processing");
+                tracing::debug!(%fid, len=%delta_data.len(), "incremental number facet processing");
                 /// TODO: check is_valid lmdb key
                 FacetsUpdateIncremental::new(
                     index,
@@ -793,8 +789,7 @@ fn compute_facet_level_database(
                 .execute(wtxn)?
             }
         }
-        /// TODO: remove me before shipping!
-        crate::update::facet::sanity_checks(
+        debug_assert!(crate::update::facet::sanity_checks(
             index,
             wtxn,
             fid,
@@ -803,7 +798,7 @@ fn compute_facet_level_database(
             FACET_MIN_LEVEL_SIZE as usize,
             FACET_MAX_GROUP_SIZE as usize,
         )
-        .expect("sanity check failed");
+        .is_ok());
     }
 
     Ok(())
