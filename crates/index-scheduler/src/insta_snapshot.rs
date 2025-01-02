@@ -5,11 +5,11 @@ use meilisearch_types::batches::Batch;
 use meilisearch_types::heed::types::{SerdeBincode, SerdeJson, Str};
 use meilisearch_types::heed::{Database, RoTxn};
 use meilisearch_types::milli::{CboRoaringBitmapCodec, RoaringBitmapCodec, BEU32};
-use meilisearch_types::tasks::{Details, Task};
+use meilisearch_types::tasks::{Details, Kind, Task};
 use roaring::RoaringBitmap;
 
 use crate::index_mapper::IndexMapper;
-use crate::{IndexScheduler, Kind, Status, BEI128};
+use crate::{IndexScheduler, Status, BEI128};
 
 pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
     // Since we'll snapshot the index right afterward, we don't need to ensure it's internally consistent for every run.

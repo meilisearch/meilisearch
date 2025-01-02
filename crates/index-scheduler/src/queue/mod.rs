@@ -7,9 +7,10 @@ mod tasks_test;
 #[cfg(test)]
 mod test;
 
-use std::time::Duration;
+use std::{collections::BTreeMap, time::Duration};
 
 use crate::{
+    processing::ProcessingTasks,
     utils::{check_index_swap_validity, filter_out_references_to_newer_tasks, ProcessingBatch},
     Error, Result,
 };
@@ -336,5 +337,44 @@ impl Queue {
         )?;
 
         Ok(())
+    }
+
+    pub fn get_stats(
+        &self,
+        rtxn: &RoTxn,
+        processing: &ProcessingTasks,
+    ) -> Result<BTreeMap<String, BTreeMap<String, u64>>> {
+        let mut res = BTreeMap::new();
+        let processing_tasks = processing.processing.len();
+
+        res.insert(
+            "statuses".to_string(),
+            enum_iterator::all::<Status>()
+                .map(|s| {
+                    let tasks = self.tasks.get_status(rtxn, s)?.len();
+                    match s {
+                        Status::Enqueued => Ok((s.to_string(), tasks - processing_tasks)),
+                        Status::Processing => Ok((s.to_string(), processing_tasks)),
+                        s => Ok((s.to_string(), tasks)),
+                    }
+                })
+                .collect::<Result<BTreeMap<String, u64>>>()?,
+        );
+        res.insert(
+            "types".to_string(),
+            enum_iterator::all::<Kind>()
+                .map(|s| Ok((s.to_string(), self.tasks.get_kind(rtxn, s)?.len())))
+                .collect::<Result<BTreeMap<String, u64>>>()?,
+        );
+        res.insert(
+            "indexes".to_string(),
+            self.tasks
+                .index_tasks
+                .iter(rtxn)?
+                .map(|res| Ok(res.map(|(name, bitmap)| (name.to_string(), bitmap.len()))?))
+                .collect::<Result<BTreeMap<String, u64>>>()?,
+        );
+
+        Ok(res)
     }
 }
