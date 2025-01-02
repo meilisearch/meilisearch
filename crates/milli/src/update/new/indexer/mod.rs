@@ -793,6 +793,17 @@ fn compute_facet_level_database(
                 .execute(wtxn)?
             }
         }
+        /// TODO: remove me before shipping!
+        crate::update::facet::sanity_checks(
+            index,
+            wtxn,
+            fid,
+            FacetType::Number,
+            FACET_GROUP_SIZE as usize,
+            FACET_MIN_LEVEL_SIZE as usize,
+            FACET_MAX_GROUP_SIZE as usize,
+        )
+        .expect("sanity check failed");
     }
 
     Ok(())
