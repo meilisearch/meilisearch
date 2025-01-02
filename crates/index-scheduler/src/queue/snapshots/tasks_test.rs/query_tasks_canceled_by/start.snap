@@ -1,0 +1,87 @@
+---
+source: crates/index-scheduler/src/queue/tasks_test.rs
+snapshot_kind: text
+---
+### Autobatching Enabled = true
+### Processing batch None:
+[]
+----------------------------------------------------------------------
+### All Tasks:
+0 {uid: 0, batch_uid: 0, status: succeeded, details: { primary_key: Some("mouse") }, kind: IndexCreation { index_uid: "catto", primary_key: Some("mouse") }}
+1 {uid: 1, batch_uid: 1, status: canceled, canceled_by: 3, details: { primary_key: Some("sheep") }, kind: IndexCreation { index_uid: "doggo", primary_key: Some("sheep") }}
+2 {uid: 2, batch_uid: 1, status: canceled, canceled_by: 3, details: { swaps: [IndexSwap { indexes: ("catto", "doggo") }] }, kind: IndexSwap { swaps: [IndexSwap { indexes: ("catto", "doggo") }] }}
+3 {uid: 3, batch_uid: 1, status: succeeded, details: { matched_tasks: 3, canceled_tasks: Some(2), original_filter: "test_query" }, kind: TaskCancelation { query: "test_query", tasks: RoaringBitmap<[0, 1, 2]> }}
+----------------------------------------------------------------------
+### Status:
+enqueued []
+succeeded [0,3,]
+canceled [1,2,]
+----------------------------------------------------------------------
+### Kind:
+"indexCreation" [0,1,]
+"indexSwap" [2,]
+"taskCancelation" [3,]
+----------------------------------------------------------------------
+### Index Tasks:
+catto [0,2,]
+doggo [1,2,]
+----------------------------------------------------------------------
+### Index Mapper:
+catto: { number_of_documents: 0, field_distribution: {} }
+
+----------------------------------------------------------------------
+### Canceled By:
+3 [1,2,]
+
+----------------------------------------------------------------------
+### Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+----------------------------------------------------------------------
+### Started At:
+[timestamp] [0,]
+[timestamp] [1,2,3,]
+----------------------------------------------------------------------
+### Finished At:
+[timestamp] [0,]
+[timestamp] [1,2,3,]
+----------------------------------------------------------------------
+### All Batches:
+0 {uid: 0, details: {"primaryKey":"mouse"}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"catto":1}}, }
+1 {uid: 1, details: {"primaryKey":"sheep","matchedTasks":3,"canceledTasks":2,"originalFilter":"test_query","swaps":[{"indexes":["catto","doggo"]}]}, stats: {"totalNbTasks":3,"status":{"succeeded":1,"canceled":2},"types":{"indexCreation":1,"indexSwap":1,"taskCancelation":1},"indexUids":{"doggo":1}}, }
+----------------------------------------------------------------------
+### Batch to tasks mapping:
+0 [0,]
+1 [1,2,3,]
+----------------------------------------------------------------------
+### Batches Status:
+succeeded [0,1,]
+canceled [1,]
+----------------------------------------------------------------------
+### Batches Kind:
+"indexCreation" [0,1,]
+"indexSwap" [1,]
+"taskCancelation" [1,]
+----------------------------------------------------------------------
+### Batches Index Tasks:
+catto [0,1,]
+doggo [1,]
+----------------------------------------------------------------------
+### Batches Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [1,]
+----------------------------------------------------------------------
+### Batches Started At:
+[timestamp] [0,]
+[timestamp] [1,]
+----------------------------------------------------------------------
+### Batches Finished At:
+[timestamp] [0,]
+[timestamp] [1,]
+----------------------------------------------------------------------
+### File Store:
+
+----------------------------------------------------------------------

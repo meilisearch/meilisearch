@@ -260,11 +260,8 @@ async fn cancel_tasks(
 
     let query = params.into_query();
 
-    let (tasks, _) = index_scheduler.get_task_ids_from_authorized_indexes(
-        &index_scheduler.read_txn()?,
-        &query,
-        index_scheduler.filters(),
-    )?;
+    let (tasks, _) =
+        index_scheduler.get_task_ids_from_authorized_indexes(&query, index_scheduler.filters())?;
     let task_cancelation =
         KindWithContent::TaskCancelation { query: format!("?{}", req.query_string()), tasks };
 
@@ -312,11 +309,8 @@ async fn delete_tasks(
 
     let query = params.into_query();
 
-    let (tasks, _) = index_scheduler.get_task_ids_from_authorized_indexes(
-        &index_scheduler.read_txn()?,
-        &query,
-        index_scheduler.filters(),
-    )?;
+    let (tasks, _) =
+        index_scheduler.get_task_ids_from_authorized_indexes(&query, index_scheduler.filters())?;
     let task_deletion =
         KindWithContent::TaskDeletion { query: format!("?{}", req.query_string()), tasks };
 
@@ -349,7 +343,7 @@ async fn get_tasks(
     let query = params.into_query();
 
     let filters = index_scheduler.filters();
-    let (tasks, total) = index_scheduler.get_tasks_from_authorized_indexes(query, filters)?;
+    let (tasks, total) = index_scheduler.get_tasks_from_authorized_indexes(&query, filters)?;
     let mut results: Vec<_> = tasks.iter().map(TaskView::from_task).collect();
 
     // If we were able to fetch the number +1 tasks we asked
@@ -377,7 +371,7 @@ async fn get_task(
 
     let query = index_scheduler::Query { uids: Some(vec![task_uid]), ..Query::default() };
     let filters = index_scheduler.filters();
-    let (tasks, _) = index_scheduler.get_tasks_from_authorized_indexes(query, filters)?;
+    let (tasks, _) = index_scheduler.get_tasks_from_authorized_indexes(&query, filters)?;
 
     if let Some(task) = tasks.first() {
         let task_view = TaskView::from_task(task);

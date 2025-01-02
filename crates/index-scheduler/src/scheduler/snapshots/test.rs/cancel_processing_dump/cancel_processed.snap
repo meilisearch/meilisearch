@@ -1,0 +1,69 @@
+---
+source: crates/index-scheduler/src/scheduler/test.rs
+snapshot_kind: text
+---
+### Autobatching Enabled = true
+### Processing batch None:
+[]
+----------------------------------------------------------------------
+### All Tasks:
+0 {uid: 0, batch_uid: 0, status: canceled, canceled_by: 1, details: { dump_uid: None }, kind: DumpCreation { keys: [], instance_uid: None }}
+1 {uid: 1, batch_uid: 0, status: succeeded, details: { matched_tasks: 1, canceled_tasks: Some(1), original_filter: "cancel dump" }, kind: TaskCancelation { query: "cancel dump", tasks: RoaringBitmap<[0]> }}
+----------------------------------------------------------------------
+### Status:
+enqueued []
+succeeded [1,]
+canceled [0,]
+----------------------------------------------------------------------
+### Kind:
+"taskCancelation" [1,]
+"dumpCreation" [0,]
+----------------------------------------------------------------------
+### Index Tasks:
+----------------------------------------------------------------------
+### Index Mapper:
+
+----------------------------------------------------------------------
+### Canceled By:
+1 [0,]
+
+----------------------------------------------------------------------
+### Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+----------------------------------------------------------------------
+### Started At:
+[timestamp] [0,1,]
+----------------------------------------------------------------------
+### Finished At:
+[timestamp] [0,1,]
+----------------------------------------------------------------------
+### All Batches:
+0 {uid: 0, details: {"matchedTasks":1,"canceledTasks":1,"originalFilter":"cancel dump"}, stats: {"totalNbTasks":2,"status":{"succeeded":1,"canceled":1},"types":{"taskCancelation":1,"dumpCreation":1},"indexUids":{}}, }
+----------------------------------------------------------------------
+### Batch to tasks mapping:
+0 [0,1,]
+----------------------------------------------------------------------
+### Batches Status:
+succeeded [0,]
+canceled [0,]
+----------------------------------------------------------------------
+### Batches Kind:
+"taskCancelation" [0,]
+"dumpCreation" [0,]
+----------------------------------------------------------------------
+### Batches Index Tasks:
+----------------------------------------------------------------------
+### Batches Enqueued At:
+[timestamp] [0,]
+[timestamp] [0,]
+----------------------------------------------------------------------
+### Batches Started At:
+[timestamp] [0,]
+----------------------------------------------------------------------
+### Batches Finished At:
+[timestamp] [0,]
+----------------------------------------------------------------------
+### File Store:
+
+----------------------------------------------------------------------
