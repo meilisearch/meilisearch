@@ -64,7 +64,7 @@ pub async fn get_metrics(
 
     let task_queue_latency_seconds = index_scheduler
         .get_tasks_from_authorized_indexes(
-            Query {
+            &Query {
                 limit: Some(1),
                 reverse: Some(true),
                 statuses: Some(vec![Status::Enqueued, Status::Processing]),

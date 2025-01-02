@@ -8,7 +8,7 @@ use roaring::RoaringBitmap;
 
 use crate::utils::ProcessingBatch;
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct ProcessingTasks {
     pub batch: Option<Arc<ProcessingBatch>>,
     /// The list of tasks ids that are currently running.
@@ -20,7 +20,7 @@ pub struct ProcessingTasks {
 impl ProcessingTasks {
     /// Creates an empty `ProcessingAt` struct.
     pub fn new() -> ProcessingTasks {
-        ProcessingTasks { batch: None, processing: Arc::new(RoaringBitmap::new()), progress: None }
+        ProcessingTasks::default()
     }
 
     pub fn get_progress_view(&self) -> Option<ProgressView> {

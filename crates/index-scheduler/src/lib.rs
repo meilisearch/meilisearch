@@ -27,6 +27,7 @@ mod index_mapper;
 mod insta_snapshot;
 mod lru;
 mod processing;
+mod queue;
 mod utils;
 pub mod uuid_codec;
 
@@ -35,7 +36,6 @@ pub type TaskId = u32;
 
 use std::collections::{BTreeMap, HashMap};
 use std::io::{self, BufReader, Read};
-use std::ops::{Bound, RangeBounds};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering::{self, Relaxed};
@@ -46,124 +46,36 @@ use std::time::Duration;
 use dump::{KindDump, TaskDump, UpdateFile};
 pub use error::Error;
 pub use features::RoFeatures;
-use file_store::FileStore;
 use flate2::bufread::GzEncoder;
 use flate2::Compression;
-use meilisearch_types::batches::{Batch, BatchId};
+use meilisearch_types::batches::Batch;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::features::{InstanceTogglableFeatures, RuntimeTogglableFeatures};
 use meilisearch_types::heed::byteorder::BE;
-use meilisearch_types::heed::types::{SerdeBincode, SerdeJson, Str, I128};
-use meilisearch_types::heed::{self, Database, Env, PutFlags, RoTxn, RwTxn};
+use meilisearch_types::heed::types::I128;
+use meilisearch_types::heed::{self, Env, RoTxn, RwTxn};
 use meilisearch_types::milli::documents::DocumentsBatchBuilder;
 use meilisearch_types::milli::index::IndexEmbeddingConfig;
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::vector::{Embedder, EmbedderOptions, EmbeddingConfigs};
-use meilisearch_types::milli::{self, CboRoaringBitmapCodec, Index, RoaringBitmapCodec, BEU32};
+use meilisearch_types::milli::{self, Index};
 use meilisearch_types::task_view::TaskView;
 use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
 use processing::ProcessingTasks;
+pub use queue::Query;
+use queue::Queue;
 use rayon::current_num_threads;
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 use roaring::RoaringBitmap;
 use synchronoise::SignalEvent;
-use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
-use utils::{filter_out_references_to_newer_tasks, keep_ids_within_datetimes, map_bound};
 use uuid::Uuid;
 
 use crate::index_mapper::IndexMapper;
 use crate::processing::{AtomicTaskStep, BatchProgress};
-use crate::utils::{check_index_swap_validity, clamp_to_page_size};
+use crate::utils::clamp_to_page_size;
 
 pub(crate) type BEI128 = I128<BE>;
-
-/// Defines a subset of tasks to be retrieved from the [`IndexScheduler`].
-///
-/// An empty/default query (where each field is set to `None`) matches all tasks.
-/// Each non-null field restricts the set of tasks further.
-#[derive(Default, Debug, Clone, PartialEq, Eq)]
-pub struct Query {
-    /// The maximum number of tasks to be matched
-    pub limit: Option<u32>,
-    /// The minimum [task id](`meilisearch_types::tasks::Task::uid`) to be matched
-    pub from: Option<u32>,
-    /// The order used to return the tasks. By default the newest tasks are returned first and the boolean is `false`.
-    pub reverse: Option<bool>,
-    /// The [task ids](`meilisearch_types::tasks::Task::uid`) to be matched
-    pub uids: Option<Vec<TaskId>>,
-    /// The [batch ids](`meilisearch_types::batches::Batch::uid`) to be matched
-    pub batch_uids: Option<Vec<BatchId>>,
-    /// The allowed [statuses](`meilisearch_types::tasks::Task::status`) of the matched tasls
-    pub statuses: Option<Vec<Status>>,
-    /// The allowed [kinds](meilisearch_types::tasks::Kind) of the matched tasks.
-    ///
-    /// The kind of a task is given by:
-    /// ```
-    /// # use meilisearch_types::tasks::{Task, Kind};
-    /// # fn doc_func(task: Task) -> Kind {
-    /// task.kind.as_kind()
-    /// # }
-    /// ```
-    pub types: Option<Vec<Kind>>,
-    /// The allowed [index ids](meilisearch_types::tasks::Task::index_uid) of the matched tasks
-    pub index_uids: Option<Vec<String>>,
-    /// The [task ids](`meilisearch_types::tasks::Task::uid`) of the [`TaskCancelation`](meilisearch_types::tasks::Task::Kind::TaskCancelation) tasks
-    /// that canceled the matched tasks.
-    pub canceled_by: Option<Vec<TaskId>>,
-    /// Exclusive upper bound of the matched tasks' [`enqueued_at`](meilisearch_types::tasks::Task::enqueued_at) field.
-    pub before_enqueued_at: Option<OffsetDateTime>,
-    /// Exclusive lower bound of the matched tasks' [`enqueued_at`](meilisearch_types::tasks::Task::enqueued_at) field.
-    pub after_enqueued_at: Option<OffsetDateTime>,
-    /// Exclusive upper bound of the matched tasks' [`started_at`](meilisearch_types::tasks::Task::started_at) field.
-    pub before_started_at: Option<OffsetDateTime>,
-    /// Exclusive lower bound of the matched tasks' [`started_at`](meilisearch_types::tasks::Task::started_at) field.
-    pub after_started_at: Option<OffsetDateTime>,
-    /// Exclusive upper bound of the matched tasks' [`finished_at`](meilisearch_types::tasks::Task::finished_at) field.
-    pub before_finished_at: Option<OffsetDateTime>,
-    /// Exclusive lower bound of the matched tasks' [`finished_at`](meilisearch_types::tasks::Task::finished_at) field.
-    pub after_finished_at: Option<OffsetDateTime>,
-}
-
-impl Query {
-    /// Return `true` if every field of the query is set to `None`, such that the query
-    /// matches all tasks.
-    pub fn is_empty(&self) -> bool {
-        matches!(
-            self,
-            Query {
-                limit: None,
-                from: None,
-                reverse: None,
-                uids: None,
-                batch_uids: None,
-                statuses: None,
-                types: None,
-                index_uids: None,
-                canceled_by: None,
-                before_enqueued_at: None,
-                after_enqueued_at: None,
-                before_started_at: None,
-                after_started_at: None,
-                before_finished_at: None,
-                after_finished_at: None,
-            }
-        )
-    }
-
-    /// Add an [index id](meilisearch_types::tasks::Task::index_uid) to the list of permitted indexes.
-    pub fn with_index(self, index_uid: String) -> Self {
-        let mut index_vec = self.index_uids.unwrap_or_default();
-        index_vec.push(index_uid);
-        Self { index_uids: Some(index_vec), ..self }
-    }
-
-    // Removes the `from` and `limit` restrictions from the query.
-    // Useful to get the total number of tasks matching a filter.
-    pub fn without_limits(self) -> Self {
-        Query { limit: None, from: None, ..self }
-    }
-}
 
 #[derive(Default, Clone, Debug)]
 struct MustStopProcessing(Arc<AtomicBool>);
@@ -180,27 +92,6 @@ impl MustStopProcessing {
     fn reset(&self) {
         self.0.store(false, Relaxed);
     }
-}
-
-/// Database const names for the `IndexScheduler`.
-mod db_name {
-    pub const ALL_TASKS: &str = "all-tasks";
-    pub const ALL_BATCHES: &str = "all-batches";
-    pub const BATCH_TO_TASKS_MAPPING: &str = "batch-to-tasks-mapping";
-    pub const STATUS: &str = "status";
-    pub const KIND: &str = "kind";
-    pub const INDEX_TASKS: &str = "index-tasks";
-    pub const CANCELED_BY: &str = "canceled_by";
-    pub const ENQUEUED_AT: &str = "enqueued-at";
-    pub const STARTED_AT: &str = "started-at";
-    pub const FINISHED_AT: &str = "finished-at";
-
-    pub const BATCH_STATUS: &str = "batch-status";
-    pub const BATCH_KIND: &str = "batch-kind";
-    pub const BATCH_INDEX_TASKS: &str = "batch-index-tasks";
-    pub const BATCH_ENQUEUED_AT: &str = "batch-enqueued-at";
-    pub const BATCH_STARTED_AT: &str = "batch-started-at";
-    pub const BATCH_FINISHED_AT: &str = "batch-finished-at";
 }
 
 #[cfg(test)]
@@ -250,7 +141,7 @@ pub struct IndexSchedulerOptions {
     /// The number of indexes that can be concurrently opened in memory.
     pub index_count: usize,
     /// Configuration used during indexing for each meilisearch index.
-    pub indexer_config: IndexerConfig,
+    pub indexer_config: Arc<IndexerConfig>,
     /// Set to `true` iff the index scheduler is allowed to automatically
     /// batch tasks together, to process multiple tasks at once.
     pub autobatching_enabled: bool,
@@ -279,46 +170,8 @@ pub struct IndexScheduler {
     /// The list of tasks currently processing
     pub(crate) processing_tasks: Arc<RwLock<ProcessingTasks>>,
 
-    /// The list of files referenced by the tasks
-    pub(crate) file_store: FileStore,
-
-    /// The main database, it contains all the tasks accessible by their Id.
-    pub(crate) all_tasks: Database<BEU32, SerdeJson<Task>>,
-
-    /// Contains all the batches accessible by their Id.
-    pub(crate) all_batches: Database<BEU32, SerdeJson<Batch>>,
-
-    /// Matches a batch id with the associated task ids.
-    pub(crate) batch_to_tasks_mapping: Database<BEU32, CboRoaringBitmapCodec>,
-
-    /// All the tasks ids grouped by their status.
-    // TODO we should not be able to serialize a `Status::Processing` in this database.
-    pub(crate) status: Database<SerdeBincode<Status>, RoaringBitmapCodec>,
-    /// All the tasks ids grouped by their kind.
-    pub(crate) kind: Database<SerdeBincode<Kind>, RoaringBitmapCodec>,
-    /// Store the tasks associated to an index.
-    pub(crate) index_tasks: Database<Str, RoaringBitmapCodec>,
-    /// Store the tasks that were canceled by a task uid
-    pub(crate) canceled_by: Database<BEU32, RoaringBitmapCodec>,
-    /// Store the task ids of tasks which were enqueued at a specific date
-    pub(crate) enqueued_at: Database<BEI128, CboRoaringBitmapCodec>,
-    /// Store the task ids of finished tasks which started being processed at a specific date
-    pub(crate) started_at: Database<BEI128, CboRoaringBitmapCodec>,
-    /// Store the task ids of tasks which finished at a specific date
-    pub(crate) finished_at: Database<BEI128, CboRoaringBitmapCodec>,
-
-    /// All the batches containing a task matching the selected status.
-    pub(crate) batch_status: Database<SerdeBincode<Status>, RoaringBitmapCodec>,
-    /// All the batches ids grouped by the kind of their task.
-    pub(crate) batch_kind: Database<SerdeBincode<Kind>, RoaringBitmapCodec>,
-    /// Store the batches associated to an index.
-    pub(crate) batch_index_tasks: Database<Str, RoaringBitmapCodec>,
-    /// Store the batches containing tasks which were enqueued at a specific date
-    pub(crate) batch_enqueued_at: Database<BEI128, CboRoaringBitmapCodec>,
-    /// Store the batches containing finished tasks started at a specific date
-    pub(crate) batch_started_at: Database<BEI128, CboRoaringBitmapCodec>,
-    /// Store the batches containing tasks finished at a specific date
-    pub(crate) batch_finished_at: Database<BEI128, CboRoaringBitmapCodec>,
+    /// The queue containing both the tasks and the batches.
+    pub queue: queue::Queue,
 
     /// In charge of creating, opening, storing and returning indexes.
     pub(crate) index_mapper: IndexMapper,
@@ -334,10 +187,6 @@ pub struct IndexScheduler {
 
     /// Whether we should automatically cleanup the task queue or not.
     pub(crate) cleanup_enabled: bool,
-
-    /// The max number of tasks allowed before the scheduler starts to delete
-    /// the finished tasks automatically.
-    pub(crate) max_number_of_tasks: usize,
 
     /// The maximum number of tasks that will be batched together.
     pub(crate) max_number_of_batched_tasks: usize,
@@ -386,33 +235,12 @@ impl IndexScheduler {
             env: self.env.clone(),
             must_stop_processing: self.must_stop_processing.clone(),
             processing_tasks: self.processing_tasks.clone(),
-            file_store: self.file_store.clone(),
-            all_tasks: self.all_tasks,
-            all_batches: self.all_batches,
-            batch_to_tasks_mapping: self.batch_to_tasks_mapping,
-
-            // Tasks reverse index
-            status: self.status,
-            kind: self.kind,
-            index_tasks: self.index_tasks,
-            canceled_by: self.canceled_by,
-            enqueued_at: self.enqueued_at,
-            started_at: self.started_at,
-            finished_at: self.finished_at,
-
-            // Batches reverse index
-            batch_status: self.batch_status,
-            batch_kind: self.batch_kind,
-            batch_index_tasks: self.batch_index_tasks,
-            batch_enqueued_at: self.batch_enqueued_at,
-            batch_started_at: self.batch_started_at,
-            batch_finished_at: self.batch_finished_at,
+            queue: self.queue.private_clone(),
 
             index_mapper: self.index_mapper.clone(),
             wake_up: self.wake_up.clone(),
             autobatching_enabled: self.autobatching_enabled,
             cleanup_enabled: self.cleanup_enabled,
-            max_number_of_tasks: self.max_number_of_tasks,
             max_number_of_batched_tasks: self.max_number_of_batched_tasks,
             snapshots_path: self.snapshots_path.clone(),
             dumps_path: self.dumps_path.clone(),
@@ -430,9 +258,7 @@ impl IndexScheduler {
             features: self.features.clone(),
         }
     }
-}
 
-impl IndexScheduler {
     /// Create an index scheduler and start its run loop.
     pub fn new(
         options: IndexSchedulerOptions,
@@ -469,75 +295,28 @@ impl IndexScheduler {
             heed::EnvOpenOptions::new()
                 .max_dbs(19)
                 .map_size(budget.task_db_size)
-                .open(options.tasks_path)
+                .open(&options.tasks_path)
         }?;
 
         let features = features::FeatureData::new(&env, options.instance_features)?;
 
-        let file_store = FileStore::new(&options.update_file_path)?;
-
         let mut wtxn = env.write_txn()?;
-        let all_tasks = env.create_database(&mut wtxn, Some(db_name::ALL_TASKS))?;
-        let all_batches = env.create_database(&mut wtxn, Some(db_name::ALL_BATCHES))?;
-        let batch_to_tasks_mapping =
-            env.create_database(&mut wtxn, Some(db_name::BATCH_TO_TASKS_MAPPING))?;
-
-        let status = env.create_database(&mut wtxn, Some(db_name::STATUS))?;
-        let kind = env.create_database(&mut wtxn, Some(db_name::KIND))?;
-        let index_tasks = env.create_database(&mut wtxn, Some(db_name::INDEX_TASKS))?;
-        let canceled_by = env.create_database(&mut wtxn, Some(db_name::CANCELED_BY))?;
-        let enqueued_at = env.create_database(&mut wtxn, Some(db_name::ENQUEUED_AT))?;
-        let started_at = env.create_database(&mut wtxn, Some(db_name::STARTED_AT))?;
-        let finished_at = env.create_database(&mut wtxn, Some(db_name::FINISHED_AT))?;
-
-        let batch_status = env.create_database(&mut wtxn, Some(db_name::BATCH_STATUS))?;
-        let batch_kind = env.create_database(&mut wtxn, Some(db_name::BATCH_KIND))?;
-        let batch_index_tasks = env.create_database(&mut wtxn, Some(db_name::BATCH_INDEX_TASKS))?;
-        let batch_enqueued_at = env.create_database(&mut wtxn, Some(db_name::BATCH_ENQUEUED_AT))?;
-        let batch_started_at = env.create_database(&mut wtxn, Some(db_name::BATCH_STARTED_AT))?;
-        let batch_finished_at = env.create_database(&mut wtxn, Some(db_name::BATCH_FINISHED_AT))?;
+        let queue = Queue::new(&env, &mut wtxn, &options)?;
+        let index_mapper = IndexMapper::new(&env, &mut wtxn, &options, budget)?;
         wtxn.commit()?;
 
         // allow unreachable_code to get rids of the warning in the case of a test build.
         let this = Self {
             must_stop_processing: MustStopProcessing::default(),
             processing_tasks: Arc::new(RwLock::new(ProcessingTasks::new())),
-            file_store,
-            all_tasks,
-            all_batches,
-            batch_to_tasks_mapping,
-            // Task reverse indexes
-            status,
-            kind,
-            index_tasks,
-            canceled_by,
-            enqueued_at,
-            started_at,
-            finished_at,
+            queue,
 
-            // Batch reverse indexes
-            batch_status,
-            batch_kind,
-            batch_index_tasks,
-            batch_enqueued_at,
-            batch_started_at,
-            batch_finished_at,
-
-            index_mapper: IndexMapper::new(
-                &env,
-                options.indexes_path,
-                budget.map_size,
-                options.index_growth_amount,
-                budget.index_count,
-                options.enable_mdb_writemap,
-                options.indexer_config,
-            )?,
+            index_mapper,
             env,
             // we want to start the loop right away in case meilisearch was ctrl+Ced while processing things
             wake_up: Arc::new(SignalEvent::auto(true)),
             autobatching_enabled: options.autobatching_enabled,
             cleanup_enabled: options.cleanup_enabled,
-            max_number_of_tasks: options.max_number_of_tasks,
             max_number_of_batched_tasks: options.max_number_of_batched_tasks,
             dumps_path: options.dumps_path,
             snapshots_path: options.snapshots_path,
@@ -563,7 +342,7 @@ impl IndexScheduler {
     /// Return `Ok(())` if the index scheduler is able to access one of its database.
     pub fn health(&self) -> Result<()> {
         let rtxn = self.env.read_txn()?;
-        self.all_tasks.first(&rtxn)?;
+        self.queue.batch_to_tasks_mapping.first(&rtxn)?;
         Ok(())
     }
 
@@ -707,11 +486,13 @@ impl IndexScheduler {
         let rtxn = self.env.read_txn()?;
         self.index_mapper.index(&rtxn, name)
     }
+
     /// Return the boolean referring if index exists.
     pub fn index_exists(&self, name: &str) -> Result<bool> {
         let rtxn = self.env.read_txn()?;
         self.index_mapper.index_exists(&rtxn, name)
     }
+
     /// Return the name of all indexes without opening them.
     pub fn index_names(&self) -> Result<Vec<String>> {
         let rtxn = self.env.read_txn()?;
@@ -736,391 +517,6 @@ impl IndexScheduler {
         self.index_mapper.try_for_each_index(&rtxn, f)
     }
 
-    /// Return the task ids matched by the given query from the index scheduler's point of view.
-    pub(crate) fn get_task_ids(&self, rtxn: &RoTxn, query: &Query) -> Result<RoaringBitmap> {
-        let ProcessingTasks { batch: processing_batch, processing: processing_tasks, progress: _ } =
-            self.processing_tasks.read().unwrap().clone();
-        let Query {
-            limit,
-            from,
-            reverse,
-            uids,
-            batch_uids,
-            statuses,
-            types,
-            index_uids,
-            canceled_by,
-            before_enqueued_at,
-            after_enqueued_at,
-            before_started_at,
-            after_started_at,
-            before_finished_at,
-            after_finished_at,
-        } = query;
-
-        let mut tasks = self.all_task_ids(rtxn)?;
-
-        if let Some(from) = from {
-            let range = if reverse.unwrap_or_default() {
-                u32::MIN..*from
-            } else {
-                from.saturating_add(1)..u32::MAX
-            };
-            tasks.remove_range(range);
-        }
-
-        if let Some(batch_uids) = batch_uids {
-            let mut batch_tasks = RoaringBitmap::new();
-            for batch_uid in batch_uids {
-                if processing_batch.as_ref().map_or(false, |batch| batch.uid == *batch_uid) {
-                    batch_tasks |= &*processing_tasks;
-                } else {
-                    batch_tasks |= self.tasks_in_batch(rtxn, *batch_uid)?;
-                }
-            }
-            tasks &= batch_tasks;
-        }
-
-        if let Some(status) = statuses {
-            let mut status_tasks = RoaringBitmap::new();
-            for status in status {
-                match status {
-                    // special case for Processing tasks
-                    Status::Processing => {
-                        status_tasks |= &*processing_tasks;
-                    }
-                    status => status_tasks |= &self.get_status(rtxn, *status)?,
-                };
-            }
-            if !status.contains(&Status::Processing) {
-                tasks -= &*processing_tasks;
-            }
-            tasks &= status_tasks;
-        }
-
-        if let Some(uids) = uids {
-            let uids = RoaringBitmap::from_iter(uids);
-            tasks &= &uids;
-        }
-
-        if let Some(canceled_by) = canceled_by {
-            let mut all_canceled_tasks = RoaringBitmap::new();
-            for cancel_task_uid in canceled_by {
-                if let Some(canceled_by_uid) = self.canceled_by.get(rtxn, cancel_task_uid)? {
-                    all_canceled_tasks |= canceled_by_uid;
-                }
-            }
-
-            // if the canceled_by has been specified but no task
-            // matches then we prefer matching zero than all tasks.
-            if all_canceled_tasks.is_empty() {
-                return Ok(RoaringBitmap::new());
-            } else {
-                tasks &= all_canceled_tasks;
-            }
-        }
-
-        if let Some(kind) = types {
-            let mut kind_tasks = RoaringBitmap::new();
-            for kind in kind {
-                kind_tasks |= self.get_kind(rtxn, *kind)?;
-            }
-            tasks &= &kind_tasks;
-        }
-
-        if let Some(index) = index_uids {
-            let mut index_tasks = RoaringBitmap::new();
-            for index in index {
-                index_tasks |= self.index_tasks(rtxn, index)?;
-            }
-            tasks &= &index_tasks;
-        }
-
-        // For the started_at filter, we need to treat the part of the tasks that are processing from the part of the
-        // tasks that are not processing. The non-processing ones are filtered normally while the processing ones
-        // are entirely removed unless the in-memory startedAt variable falls within the date filter.
-        // Once we have filtered the two subsets, we put them back together and assign it back to `tasks`.
-        tasks = {
-            let (mut filtered_non_processing_tasks, mut filtered_processing_tasks) =
-                (&tasks - &*processing_tasks, &tasks & &*processing_tasks);
-
-            // special case for Processing tasks
-            // A closure that clears the filtered_processing_tasks if their started_at date falls outside the given bounds
-            let clear_filtered_processing_tasks =
-                |start: Bound<OffsetDateTime>, end: Bound<OffsetDateTime>| {
-                    let start = map_bound(start, |b| b.unix_timestamp_nanos());
-                    let end = map_bound(end, |b| b.unix_timestamp_nanos());
-                    let is_within_dates = RangeBounds::contains(
-                        &(start, end),
-                        &processing_batch
-                            .map_or_else(OffsetDateTime::now_utc, |batch| batch.started_at)
-                            .unix_timestamp_nanos(),
-                    );
-                    if !is_within_dates {
-                        filtered_processing_tasks.clear();
-                    }
-                };
-            match (after_started_at, before_started_at) {
-                (None, None) => (),
-                (None, Some(before)) => {
-                    clear_filtered_processing_tasks(Bound::Unbounded, Bound::Excluded(*before))
-                }
-                (Some(after), None) => {
-                    clear_filtered_processing_tasks(Bound::Excluded(*after), Bound::Unbounded)
-                }
-                (Some(after), Some(before)) => clear_filtered_processing_tasks(
-                    Bound::Excluded(*after),
-                    Bound::Excluded(*before),
-                ),
-            };
-
-            keep_ids_within_datetimes(
-                rtxn,
-                &mut filtered_non_processing_tasks,
-                self.started_at,
-                *after_started_at,
-                *before_started_at,
-            )?;
-            filtered_non_processing_tasks | filtered_processing_tasks
-        };
-
-        keep_ids_within_datetimes(
-            rtxn,
-            &mut tasks,
-            self.enqueued_at,
-            *after_enqueued_at,
-            *before_enqueued_at,
-        )?;
-
-        keep_ids_within_datetimes(
-            rtxn,
-            &mut tasks,
-            self.finished_at,
-            *after_finished_at,
-            *before_finished_at,
-        )?;
-
-        if let Some(limit) = limit {
-            tasks = if query.reverse.unwrap_or_default() {
-                tasks.into_iter().take(*limit as usize).collect()
-            } else {
-                tasks.into_iter().rev().take(*limit as usize).collect()
-            };
-        }
-
-        Ok(tasks)
-    }
-
-    /// Return the batch ids matched by the given query from the index scheduler's point of view.
-    pub(crate) fn get_batch_ids(
-        &self,
-        rtxn: &RoTxn,
-        processing: &ProcessingTasks,
-        query: &Query,
-    ) -> Result<RoaringBitmap> {
-        let Query {
-            limit,
-            from,
-            reverse,
-            uids,
-            batch_uids,
-            statuses,
-            types,
-            index_uids,
-            canceled_by,
-            before_enqueued_at,
-            after_enqueued_at,
-            before_started_at,
-            after_started_at,
-            before_finished_at,
-            after_finished_at,
-        } = query;
-
-        let mut batches = self.all_batch_ids(rtxn)?;
-        if let Some(batch_id) = processing.batch.as_ref().map(|batch| batch.uid) {
-            batches.insert(batch_id);
-        }
-
-        if let Some(from) = from {
-            let range = if reverse.unwrap_or_default() {
-                u32::MIN..*from
-            } else {
-                from.saturating_add(1)..u32::MAX
-            };
-            batches.remove_range(range);
-        }
-
-        if let Some(batch_uids) = &batch_uids {
-            let batches_uids = RoaringBitmap::from_iter(batch_uids);
-            batches &= batches_uids;
-        }
-
-        if let Some(status) = &statuses {
-            let mut status_batches = RoaringBitmap::new();
-            for status in status {
-                match status {
-                    // special case for Processing batches
-                    Status::Processing => {
-                        if let Some(batch_id) = processing.batch.as_ref().map(|batch| batch.uid) {
-                            status_batches.insert(batch_id);
-                        }
-                    }
-                    // Enqueued tasks are not stored in batches
-                    Status::Enqueued => (),
-                    status => status_batches |= &self.get_batch_status(rtxn, *status)?,
-                };
-            }
-            if !status.contains(&Status::Processing) {
-                if let Some(ref batch) = processing.batch {
-                    batches.remove(batch.uid);
-                }
-            }
-            batches &= status_batches;
-        }
-
-        if let Some(task_uids) = &uids {
-            let mut batches_by_task_uids = RoaringBitmap::new();
-            for task_uid in task_uids {
-                if let Some(task) = self.get_task(rtxn, *task_uid)? {
-                    if let Some(batch_uid) = task.batch_uid {
-                        batches_by_task_uids.insert(batch_uid);
-                    }
-                }
-            }
-            batches &= batches_by_task_uids;
-        }
-
-        // There is no database for this query, we must retrieve the task queried by the client and ensure it's valid
-        if let Some(canceled_by) = &canceled_by {
-            let mut all_canceled_batches = RoaringBitmap::new();
-            for cancel_uid in canceled_by {
-                if let Some(task) = self.get_task(rtxn, *cancel_uid)? {
-                    if task.kind.as_kind() == Kind::TaskCancelation
-                        && task.status == Status::Succeeded
-                    {
-                        if let Some(batch_uid) = task.batch_uid {
-                            all_canceled_batches.insert(batch_uid);
-                        }
-                    }
-                }
-            }
-
-            // if the canceled_by has been specified but no batch
-            // matches then we prefer matching zero than all batches.
-            if all_canceled_batches.is_empty() {
-                return Ok(RoaringBitmap::new());
-            } else {
-                batches &= all_canceled_batches;
-            }
-        }
-
-        if let Some(kind) = &types {
-            let mut kind_batches = RoaringBitmap::new();
-            for kind in kind {
-                kind_batches |= self.get_batch_kind(rtxn, *kind)?;
-                if let Some(uid) = processing
-                    .batch
-                    .as_ref()
-                    .and_then(|batch| batch.kinds.contains(kind).then_some(batch.uid))
-                {
-                    kind_batches.insert(uid);
-                }
-            }
-            batches &= &kind_batches;
-        }
-
-        if let Some(index) = &index_uids {
-            let mut index_batches = RoaringBitmap::new();
-            for index in index {
-                index_batches |= self.index_batches(rtxn, index)?;
-                if let Some(uid) = processing
-                    .batch
-                    .as_ref()
-                    .and_then(|batch| batch.indexes.contains(index).then_some(batch.uid))
-                {
-                    index_batches.insert(uid);
-                }
-            }
-            batches &= &index_batches;
-        }
-
-        // For the started_at filter, we need to treat the part of the batches that are processing from the part of the
-        // batches that are not processing. The non-processing ones are filtered normally while the processing ones
-        // are entirely removed unless the in-memory startedAt variable falls within the date filter.
-        // Once we have filtered the two subsets, we put them back together and assign it back to `batches`.
-        batches = {
-            let (mut filtered_non_processing_batches, mut filtered_processing_batches) =
-                (&batches - &*processing.processing, &batches & &*processing.processing);
-
-            // special case for Processing batches
-            // A closure that clears the filtered_processing_batches if their started_at date falls outside the given bounds
-            let mut clear_filtered_processing_batches =
-                |start: Bound<OffsetDateTime>, end: Bound<OffsetDateTime>| {
-                    let start = map_bound(start, |b| b.unix_timestamp_nanos());
-                    let end = map_bound(end, |b| b.unix_timestamp_nanos());
-                    let is_within_dates = RangeBounds::contains(
-                        &(start, end),
-                        &processing
-                            .batch
-                            .as_ref()
-                            .map_or_else(OffsetDateTime::now_utc, |batch| batch.started_at)
-                            .unix_timestamp_nanos(),
-                    );
-                    if !is_within_dates {
-                        filtered_processing_batches.clear();
-                    }
-                };
-            match (after_started_at, before_started_at) {
-                (None, None) => (),
-                (None, Some(before)) => {
-                    clear_filtered_processing_batches(Bound::Unbounded, Bound::Excluded(*before))
-                }
-                (Some(after), None) => {
-                    clear_filtered_processing_batches(Bound::Excluded(*after), Bound::Unbounded)
-                }
-                (Some(after), Some(before)) => clear_filtered_processing_batches(
-                    Bound::Excluded(*after),
-                    Bound::Excluded(*before),
-                ),
-            };
-
-            keep_ids_within_datetimes(
-                rtxn,
-                &mut filtered_non_processing_batches,
-                self.batch_started_at,
-                *after_started_at,
-                *before_started_at,
-            )?;
-            filtered_non_processing_batches | filtered_processing_batches
-        };
-
-        keep_ids_within_datetimes(
-            rtxn,
-            &mut batches,
-            self.batch_enqueued_at,
-            *after_enqueued_at,
-            *before_enqueued_at,
-        )?;
-
-        keep_ids_within_datetimes(
-            rtxn,
-            &mut batches,
-            self.batch_finished_at,
-            *after_finished_at,
-            *before_finished_at,
-        )?;
-
-        if let Some(limit) = limit {
-            batches = if query.reverse.unwrap_or_default() {
-                batches.into_iter().take(*limit as usize).collect()
-            } else {
-                batches.into_iter().rev().take(*limit as usize).collect()
-            };
-        }
-
-        Ok(batches)
-    }
-
     /// The returned structure contains:
     /// 1. The name of the property being observed can be `statuses`, `types`, or `indexes`.
     /// 2. The name of the specific data related to the property can be `enqueued` for the `statuses`, `settingsUpdate` for the `types`, or the name of the index for the `indexes`, for example.
@@ -1136,7 +532,7 @@ impl IndexScheduler {
             "statuses".to_string(),
             enum_iterator::all::<Status>()
                 .map(|s| {
-                    let tasks = self.get_status(&rtxn, s)?.len();
+                    let tasks = self.queue.tasks.get_status(&rtxn, s)?.len();
                     match s {
                         Status::Enqueued => Ok((s.to_string(), tasks - processing_tasks)),
                         Status::Processing => Ok((s.to_string(), processing_tasks)),
@@ -1148,12 +544,14 @@ impl IndexScheduler {
         res.insert(
             "types".to_string(),
             enum_iterator::all::<Kind>()
-                .map(|s| Ok((s.to_string(), self.get_kind(&rtxn, s)?.len())))
+                .map(|s| Ok((s.to_string(), self.queue.tasks.get_kind(&rtxn, s)?.len())))
                 .collect::<Result<BTreeMap<String, u64>>>()?,
         );
         res.insert(
             "indexes".to_string(),
-            self.index_tasks
+            self.queue
+                .tasks
+                .index_tasks
                 .iter(&rtxn)?
                 .map(|res| Ok(res.map(|(name, bitmap)| (name.to_string(), bitmap.len()))?))
                 .collect::<Result<BTreeMap<String, u64>>>()?,
@@ -1172,129 +570,9 @@ impl IndexScheduler {
     pub fn is_index_processing(&self, index: &str) -> Result<bool> {
         let rtxn = self.env.read_txn()?;
         let processing_tasks = self.processing_tasks.read().unwrap().processing.clone();
-        let index_tasks = self.index_tasks(&rtxn, index)?;
+        let index_tasks = self.queue.tasks.index_tasks(&rtxn, index)?;
         let nbr_index_processing_tasks = processing_tasks.intersection_len(&index_tasks);
         Ok(nbr_index_processing_tasks > 0)
-    }
-
-    /// Return the task ids matching the query along with the total number of tasks
-    /// by ignoring the from and limit parameters from the user's point of view.
-    ///
-    /// There are two differences between an internal query and a query executed by
-    /// the user.
-    ///
-    /// 1. IndexSwap tasks are not publicly associated with any index, but they are associated
-    /// with many indexes internally.
-    /// 2. The user may not have the rights to access the tasks (internally) associated with all indexes.
-    pub fn get_task_ids_from_authorized_indexes(
-        &self,
-        rtxn: &RoTxn,
-        query: &Query,
-        filters: &meilisearch_auth::AuthFilter,
-    ) -> Result<(RoaringBitmap, u64)> {
-        // compute all tasks matching the filter by ignoring the limits, to find the number of tasks matching
-        // the filter.
-        // As this causes us to compute the filter twice it is slightly inefficient, but doing it this way spares
-        // us from modifying the underlying implementation, and the performance remains sufficient.
-        // Should this change, we would modify `get_task_ids` to directly return the number of matching tasks.
-        let total_tasks = self.get_task_ids(rtxn, &query.clone().without_limits())?;
-        let mut tasks = self.get_task_ids(rtxn, query)?;
-
-        // If the query contains a list of index uid or there is a finite list of authorized indexes,
-        // then we must exclude all the kinds that aren't associated to one and only one index.
-        if query.index_uids.is_some() || !filters.all_indexes_authorized() {
-            for kind in enum_iterator::all::<Kind>().filter(|kind| !kind.related_to_one_index()) {
-                tasks -= self.get_kind(rtxn, kind)?;
-            }
-        }
-
-        // Any task that is internally associated with a non-authorized index
-        // must be discarded.
-        if !filters.all_indexes_authorized() {
-            let all_indexes_iter = self.index_tasks.iter(rtxn)?;
-            for result in all_indexes_iter {
-                let (index, index_tasks) = result?;
-                if !filters.is_index_authorized(index) {
-                    tasks -= index_tasks;
-                }
-            }
-        }
-
-        Ok((tasks, total_tasks.len()))
-    }
-
-    /// Return the batch ids matching the query along with the total number of batches
-    /// by ignoring the from and limit parameters from the user's point of view.
-    ///
-    /// There are two differences between an internal query and a query executed by
-    /// the user.
-    ///
-    /// 1. IndexSwap tasks are not publicly associated with any index, but they are associated
-    /// with many indexes internally.
-    /// 2. The user may not have the rights to access the tasks (internally) associated with all indexes.
-    fn get_batch_ids_from_authorized_indexes(
-        &self,
-        rtxn: &RoTxn,
-        processing: &ProcessingTasks,
-        query: &Query,
-        filters: &meilisearch_auth::AuthFilter,
-    ) -> Result<(RoaringBitmap, u64)> {
-        // compute all batches matching the filter by ignoring the limits, to find the number of batches matching
-        // the filter.
-        // As this causes us to compute the filter twice it is slightly inefficient, but doing it this way spares
-        // us from modifying the underlying implementation, and the performance remains sufficient.
-        // Should this change, we would modify `get_batch_ids` to directly return the number of matching batches.
-        let total_batches =
-            self.get_batch_ids(rtxn, processing, &query.clone().without_limits())?;
-        let mut batches = self.get_batch_ids(rtxn, processing, query)?;
-
-        // If the query contains a list of index uid or there is a finite list of authorized indexes,
-        // then we must exclude all the batches that only contains tasks associated to multiple indexes.
-        // This works because we don't autobatch tasks associated to multiple indexes with tasks associated
-        // to a single index. e.g: IndexSwap cannot be batched with IndexCreation.
-        if query.index_uids.is_some() || !filters.all_indexes_authorized() {
-            for kind in enum_iterator::all::<Kind>().filter(|kind| !kind.related_to_one_index()) {
-                batches -= self.get_kind(rtxn, kind)?;
-                if let Some(batch) = processing.batch.as_ref() {
-                    if batch.kinds.contains(&kind) {
-                        batches.remove(batch.uid);
-                    }
-                }
-            }
-        }
-
-        // Any batch that is internally associated with at least one authorized index
-        // must be returned.
-        if !filters.all_indexes_authorized() {
-            let mut valid_indexes = RoaringBitmap::new();
-            let mut forbidden_indexes = RoaringBitmap::new();
-
-            let all_indexes_iter = self.batch_index_tasks.iter(rtxn)?;
-            for result in all_indexes_iter {
-                let (index, index_tasks) = result?;
-                if filters.is_index_authorized(index) {
-                    valid_indexes |= index_tasks;
-                } else {
-                    forbidden_indexes |= index_tasks;
-                }
-            }
-            if let Some(batch) = processing.batch.as_ref() {
-                for index in &batch.indexes {
-                    if filters.is_index_authorized(index) {
-                        valid_indexes.insert(batch.uid);
-                    } else {
-                        forbidden_indexes.insert(batch.uid);
-                    }
-                }
-            }
-
-            // If a batch had ONE valid task then it should be returned
-            let invalid_batches = forbidden_indexes - valid_indexes;
-
-            batches -= invalid_batches;
-        }
-
-        Ok((batches, total_batches.len()))
     }
 
     /// Return the tasks matching the query from the user's point of view along
@@ -1308,49 +586,31 @@ impl IndexScheduler {
     /// 2. The user may not have the rights to access the tasks (internally) associated with all indexes.
     pub fn get_tasks_from_authorized_indexes(
         &self,
-        query: Query,
+        query: &Query,
         filters: &meilisearch_auth::AuthFilter,
     ) -> Result<(Vec<Task>, u64)> {
-        let rtxn = self.env.read_txn()?;
+        let rtxn = self.read_txn()?;
+        let processing = self.processing_tasks.read().unwrap();
+        self.queue.get_tasks_from_authorized_indexes(&rtxn, query, filters, &processing)
+    }
 
-        let (tasks, total) = self.get_task_ids_from_authorized_indexes(&rtxn, &query, filters)?;
-        let tasks = if query.reverse.unwrap_or_default() {
-            Box::new(tasks.into_iter()) as Box<dyn Iterator<Item = u32>>
-        } else {
-            Box::new(tasks.into_iter().rev()) as Box<dyn Iterator<Item = u32>>
-        };
-        let tasks =
-            self.get_existing_tasks(&rtxn, tasks.take(query.limit.unwrap_or(u32::MAX) as usize))?;
-
-        let ProcessingTasks { batch, processing, progress } =
-            self.processing_tasks.read().map_err(|_| Error::CorruptedTaskQueue)?.clone();
-
-        // ignored for now, might be added to batch details later
-        let _ = progress;
-
-        let ret = tasks.into_iter();
-        if processing.is_empty() || batch.is_none() {
-            Ok((ret.collect(), total))
-        } else {
-            // Safe because we ensured there was a batch in the previous branch
-            let batch = batch.unwrap();
-            Ok((
-                ret.map(|task| {
-                    if processing.contains(task.uid) {
-                        Task {
-                            status: Status::Processing,
-                            batch_uid: Some(batch.uid),
-                            started_at: Some(batch.started_at),
-                            ..task
-                        }
-                    } else {
-                        task
-                    }
-                })
-                .collect(),
-                total,
-            ))
-        }
+    /// Return the task ids matching the query along with the total number of tasks
+    /// by ignoring the from and limit parameters from the user's point of view.
+    ///
+    /// There are two differences between an internal query and a query executed by
+    /// the user.
+    ///
+    /// 1. IndexSwap tasks are not publicly associated with any index, but they are associated
+    /// with many indexes internally.
+    /// 2. The user may not have the rights to access the tasks (internally) associated with all indexes.
+    pub fn get_task_ids_from_authorized_indexes(
+        &self,
+        query: &Query,
+        filters: &meilisearch_auth::AuthFilter,
+    ) -> Result<(RoaringBitmap, u64)> {
+        let rtxn = self.read_txn()?;
+        let processing = self.processing_tasks.read().unwrap();
+        self.queue.get_task_ids_from_authorized_indexes(&rtxn, query, filters, &processing)
     }
 
     /// Return the batches matching the query from the user's point of view along
@@ -1364,27 +624,31 @@ impl IndexScheduler {
     /// 2. The user may not have the rights to access the tasks (internally) associated with all indexes.
     pub fn get_batches_from_authorized_indexes(
         &self,
-        query: Query,
+        query: &Query,
         filters: &meilisearch_auth::AuthFilter,
     ) -> Result<(Vec<Batch>, u64)> {
-        let rtxn = self.env.read_txn()?;
-        let processing = self.processing_tasks.read().unwrap().clone();
+        let rtxn = self.read_txn()?;
+        let processing = self.processing_tasks.read().unwrap();
+        self.queue.get_batches_from_authorized_indexes(&rtxn, query, filters, &processing)
+    }
 
-        let (batches, total) =
-            self.get_batch_ids_from_authorized_indexes(&rtxn, &processing, &query, filters)?;
-        let batches = if query.reverse.unwrap_or_default() {
-            Box::new(batches.into_iter()) as Box<dyn Iterator<Item = u32>>
-        } else {
-            Box::new(batches.into_iter().rev()) as Box<dyn Iterator<Item = u32>>
-        };
-
-        let batches = self.get_existing_batches(
-            &rtxn,
-            &processing,
-            batches.take(query.limit.unwrap_or(u32::MAX) as usize),
-        )?;
-
-        Ok((batches, total))
+    /// Return the batch ids matching the query along with the total number of batches
+    /// by ignoring the from and limit parameters from the user's point of view.
+    ///
+    /// There are two differences between an internal query and a query executed by
+    /// the user.
+    ///
+    /// 1. IndexSwap tasks are not publicly associated with any index, but they are associated
+    /// with many indexes internally.
+    /// 2. The user may not have the rights to access the tasks (internally) associated with all indexes.
+    pub fn get_batch_ids_from_authorized_indexes(
+        &self,
+        query: &Query,
+        filters: &meilisearch_auth::AuthFilter,
+    ) -> Result<(RoaringBitmap, u64)> {
+        let rtxn = self.read_txn()?;
+        let processing = self.processing_tasks.read().unwrap();
+        self.queue.get_batch_ids_from_authorized_indexes(&rtxn, query, filters, &processing)
     }
 
     /// Register a new task in the scheduler.
@@ -1396,8 +660,6 @@ impl IndexScheduler {
         task_id: Option<TaskId>,
         dry_run: bool,
     ) -> Result<Task> {
-        let mut wtxn = self.env.write_txn()?;
-
         // if the task doesn't delete anything and 50% of the task queue is full, we must refuse to enqueue the incomming task
         if !matches!(&kind, KindWithContent::TaskDeletion { tasks, .. } if !tasks.is_empty())
             && (self.env.non_free_pages_size()? * 100) / self.env.info().map_size as u64 > 40
@@ -1405,64 +667,9 @@ impl IndexScheduler {
             return Err(Error::NoSpaceLeftInTaskQueue);
         }
 
-        let next_task_id = self.next_task_id(&wtxn)?;
+        let mut wtxn = self.env.write_txn()?;
 
-        if let Some(uid) = task_id {
-            if uid < next_task_id {
-                return Err(Error::BadTaskId { received: uid, expected: next_task_id });
-            }
-        }
-
-        let mut task = Task {
-            uid: task_id.unwrap_or(next_task_id),
-            // The batch is defined once we starts processing the task
-            batch_uid: None,
-            enqueued_at: OffsetDateTime::now_utc(),
-            started_at: None,
-            finished_at: None,
-            error: None,
-            canceled_by: None,
-            details: kind.default_details(),
-            status: Status::Enqueued,
-            kind: kind.clone(),
-        };
-        // For deletion and cancelation tasks, we want to make extra sure that they
-        // don't attempt to delete/cancel tasks that are newer than themselves.
-        filter_out_references_to_newer_tasks(&mut task);
-        // If the register task is an index swap task, verify that it is well-formed
-        // (that it does not contain duplicate indexes).
-        check_index_swap_validity(&task)?;
-
-        // At this point the task is going to be registered and no further checks will be done
-        if dry_run {
-            return Ok(task);
-        }
-
-        // Get rid of the mutability.
-        let task = task;
-
-        self.all_tasks.put_with_flags(&mut wtxn, PutFlags::APPEND, &task.uid, &task)?;
-
-        for index in task.indexes() {
-            self.update_index(&mut wtxn, index, |bitmap| {
-                bitmap.insert(task.uid);
-            })?;
-        }
-
-        self.update_status(&mut wtxn, Status::Enqueued, |bitmap| {
-            bitmap.insert(task.uid);
-        })?;
-
-        self.update_kind(&mut wtxn, task.kind.as_kind(), |bitmap| {
-            bitmap.insert(task.uid);
-        })?;
-
-        utils::insert_task_datetime(&mut wtxn, self.enqueued_at, task.enqueued_at, task.uid)?;
-
-        if let Err(e) = wtxn.commit() {
-            self.delete_persisted_task_data(&task)?;
-            return Err(e.into());
-        }
+        let task = self.queue.register(&mut wtxn, &kind, task_id, dry_run)?;
 
         // If the registered task is a task cancelation
         // we inform the processing tasks to stop (if necessary).
@@ -1474,9 +681,13 @@ impl IndexScheduler {
             }
         }
 
+        if let Err(e) = wtxn.commit() {
+            self.queue.delete_persisted_task_data(&task)?;
+            return Err(e.into());
+        }
+
         // notify the scheduler loop to execute a new tick
         self.wake_up.signal();
-
         Ok(task)
     }
 
@@ -1495,36 +706,6 @@ impl IndexScheduler {
         let wtxn = self.env.write_txn()?;
         let index = self.index_mapper.create_index(wtxn, name, date)?;
         Ok(index)
-    }
-
-    /// Create a file and register it in the index scheduler.
-    ///
-    /// The returned file and uuid can be used to associate
-    /// some data to a task. The file will be kept until
-    /// the task has been fully processed.
-    pub fn create_update_file(&self, dry_run: bool) -> Result<(Uuid, file_store::File)> {
-        if dry_run {
-            Ok((Uuid::nil(), file_store::File::dry_file()?))
-        } else {
-            Ok(self.file_store.new_update()?)
-        }
-    }
-
-    #[cfg(test)]
-    pub fn create_update_file_with_uuid(&self, uuid: u128) -> Result<(Uuid, file_store::File)> {
-        Ok(self.file_store.new_update_with_uuid(uuid)?)
-    }
-
-    /// The size on disk taken by all the updates files contained in the `IndexScheduler`, in bytes.
-    pub fn compute_update_file_size(&self) -> Result<u64> {
-        Ok(self.file_store.compute_total_size()?)
-    }
-
-    /// Delete a file from the index scheduler.
-    ///
-    /// Counterpart to the [`create_update_file`](IndexScheduler::create_update_file) method.
-    pub fn delete_update_file(&self, uuid: Uuid) -> Result<()> {
-        Ok(self.file_store.delete(uuid)?)
     }
 
     /// Perform one iteration of the run loop.
@@ -1548,7 +729,9 @@ impl IndexScheduler {
         }
 
         if self.cleanup_enabled {
-            self.cleanup_task_queue()?;
+            let mut wtxn = self.env.write_txn()?;
+            self.queue.cleanup_task_queue(&mut wtxn)?;
+            wtxn.commit()?;
         }
 
         let rtxn = self.env.read_txn().map_err(Error::HeedTransaction)?;
@@ -1635,11 +818,13 @@ impl IndexScheduler {
                         None => success += 1,
                     }
 
-                    self.update_task(&mut wtxn, &task)
+                    self.queue
+                        .tasks
+                        .update_task(&mut wtxn, &task)
                         .map_err(|e| Error::TaskDatabaseUpdate(Box::new(e)))?;
                 }
                 if let Some(canceled_by) = canceled_by {
-                    self.canceled_by.put(&mut wtxn, &canceled_by, &canceled)?;
+                    self.queue.tasks.canceled_by.put(&mut wtxn, &canceled_by, &canceled)?;
                 }
                 tracing::info!("A batch of tasks was successfully completed with {success} successful tasks and {failure} failed tasks.");
             }
@@ -1691,6 +876,8 @@ impl IndexScheduler {
                 for id in ids.iter() {
                     task_progress.fetch_add(1, Ordering::Relaxed);
                     let mut task = self
+                        .queue
+                        .tasks
                         .get_task(&wtxn, id)
                         .map_err(|e| Error::TaskDatabaseUpdate(Box::new(e)))?
                         .ok_or(Error::CorruptedTaskQueue)?;
@@ -1704,7 +891,9 @@ impl IndexScheduler {
 
                     tracing::error!("Batch failed {}", error);
 
-                    self.update_task(&mut wtxn, &task)
+                    self.queue
+                        .tasks
+                        .update_task(&mut wtxn, &task)
                         .map_err(|e| Error::TaskDatabaseUpdate(Box::new(e)))?;
                 }
             }
@@ -1712,7 +901,7 @@ impl IndexScheduler {
 
         // We must re-add the canceled task so they're part of the same batch.
         ids |= canceled;
-        self.write_batch(&mut wtxn, processing_batch, &ids)?;
+        self.queue.write_batch(&mut wtxn, processing_batch, &ids)?;
 
         #[cfg(test)]
         self.maybe_fail(tests::FailureLocation::CommittingWtxn)?;
@@ -1732,10 +921,12 @@ impl IndexScheduler {
             let rtxn = self.read_txn()?;
             while let Some(id) = ids.select(idx.fetch_add(1, Ordering::Relaxed)) {
                 let task = self
+                    .queue
+                    .tasks
                     .get_task(&rtxn, id)
                     .map_err(|e| Error::TaskDatabaseUpdate(Box::new(e)))?
                     .ok_or(Error::CorruptedTaskQueue)?;
-                if let Err(e) = self.delete_persisted_task_data(&task) {
+                if let Err(e) = self.queue.delete_persisted_task_data(&task) {
                     tracing::error!(
                         "Failure to delete the content files associated with task {}. Error: {e}",
                         task.uid
@@ -1773,6 +964,8 @@ impl IndexScheduler {
                             Some(task_id) => {
                                 let task = self
                                     .index_scheduler
+                                    .queue
+                                    .tasks
                                     .get_task(self.rtxn, task_id)
                                     .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?
                                     .ok_or_else(|| {
@@ -1834,59 +1027,6 @@ impl IndexScheduler {
         Ok(())
     }
 
-    /// Register a task to cleanup the task queue if needed
-    fn cleanup_task_queue(&self) -> Result<()> {
-        let rtxn = self.env.read_txn().map_err(Error::HeedTransaction)?;
-
-        let nb_tasks = self.all_task_ids(&rtxn)?.len();
-        // if we have less than 1M tasks everything is fine
-        if nb_tasks < self.max_number_of_tasks as u64 {
-            return Ok(());
-        }
-
-        let finished = self.status.get(&rtxn, &Status::Succeeded)?.unwrap_or_default()
-            | self.status.get(&rtxn, &Status::Failed)?.unwrap_or_default()
-            | self.status.get(&rtxn, &Status::Canceled)?.unwrap_or_default();
-
-        let to_delete = RoaringBitmap::from_iter(finished.into_iter().rev().take(100_000));
-
-        // /!\ the len must be at least 2 or else we might enter an infinite loop where we only delete
-        //     the deletion tasks we enqueued ourselves.
-        if to_delete.len() < 2 {
-            tracing::warn!("The task queue is almost full, but no task can be deleted yet.");
-            // the only thing we can do is hope that the user tasks are going to finish
-            return Ok(());
-        }
-
-        tracing::info!(
-            "The task queue is almost full. Deleting the oldest {} finished tasks.",
-            to_delete.len()
-        );
-
-        // it's safe to unwrap here because we checked the len above
-        let newest_task_id = to_delete.iter().last().unwrap();
-        let last_task_to_delete =
-            self.get_task(&rtxn, newest_task_id)?.ok_or(Error::CorruptedTaskQueue)?;
-        drop(rtxn);
-
-        // increase time by one nanosecond so that the enqueuedAt of the last task to delete is also lower than that date.
-        let delete_before = last_task_to_delete.enqueued_at + Duration::from_nanos(1);
-
-        self.register(
-            KindWithContent::TaskDeletion {
-                query: format!(
-                    "?beforeEnqueuedAt={}&statuses=succeeded,failed,canceled",
-                    delete_before.format(&Rfc3339).map_err(|_| Error::CorruptedTaskQueue)?,
-                ),
-                tasks: to_delete,
-            },
-            None,
-            false,
-        )?;
-
-        Ok(())
-    }
-
     pub fn index_stats(&self, index_uid: &str) -> Result<IndexStats> {
         let is_indexing = self.is_index_processing(index_uid)?;
         let rtxn = self.read_txn()?;
@@ -1903,13 +1043,6 @@ impl IndexScheduler {
         let wtxn = self.env.write_txn().map_err(Error::HeedTransaction)?;
         self.features.put_runtime_features(wtxn, features)?;
         Ok(())
-    }
-
-    pub(crate) fn delete_persisted_task_data(&self, task: &Task) -> Result<()> {
-        match task.content_uuid() {
-            Some(content_file) => self.delete_update_file(content_file),
-            None => Ok(()),
-        }
     }
 
     // TODO: consider using a type alias or a struct embedder/template
@@ -2019,7 +1152,7 @@ impl<'a> Dump<'a> {
     ) -> Result<Task> {
         let content_uuid = match content_file {
             Some(content_file) if task.status == Status::Enqueued => {
-                let (uuid, mut file) = self.index_scheduler.create_update_file(false)?;
+                let (uuid, mut file) = self.index_scheduler.queue.create_update_file(false)?;
                 let mut builder = DocumentsBatchBuilder::new(&mut file);
                 for doc in content_file {
                     builder.append_json_object(&doc?)?;
@@ -2113,7 +1246,7 @@ impl<'a> Dump<'a> {
             },
         };
 
-        self.index_scheduler.all_tasks.put(&mut self.wtxn, &task.uid, &task)?;
+        self.index_scheduler.queue.tasks.all_tasks.put(&mut self.wtxn, &task.uid, &task)?;
 
         for index in task.indexes() {
             match self.indexes.get_mut(index) {
@@ -2130,7 +1263,7 @@ impl<'a> Dump<'a> {
 
         utils::insert_task_datetime(
             &mut self.wtxn,
-            self.index_scheduler.enqueued_at,
+            self.index_scheduler.queue.tasks.enqueued_at,
             task.enqueued_at,
             task.uid,
         )?;
@@ -2140,7 +1273,7 @@ impl<'a> Dump<'a> {
             if let Some(started_at) = task.started_at {
                 utils::insert_task_datetime(
                     &mut self.wtxn,
-                    self.index_scheduler.started_at,
+                    self.index_scheduler.queue.tasks.started_at,
                     started_at,
                     task.uid,
                 )?;
@@ -2148,7 +1281,7 @@ impl<'a> Dump<'a> {
             if let Some(finished_at) = task.finished_at {
                 utils::insert_task_datetime(
                     &mut self.wtxn,
-                    self.index_scheduler.finished_at,
+                    self.index_scheduler.queue.tasks.finished_at,
                     finished_at,
                     task.uid,
                 )?;
@@ -2164,13 +1297,13 @@ impl<'a> Dump<'a> {
     /// Commit all the changes and exit the importing dump state
     pub fn finish(mut self) -> Result<()> {
         for (index, bitmap) in self.indexes {
-            self.index_scheduler.index_tasks.put(&mut self.wtxn, &index, &bitmap)?;
+            self.index_scheduler.queue.tasks.index_tasks.put(&mut self.wtxn, &index, &bitmap)?;
         }
         for (status, bitmap) in self.statuses {
-            self.index_scheduler.put_status(&mut self.wtxn, status, &bitmap)?;
+            self.index_scheduler.queue.tasks.put_status(&mut self.wtxn, status, &bitmap)?;
         }
         for (kind, bitmap) in self.kinds {
-            self.index_scheduler.put_kind(&mut self.wtxn, kind, &bitmap)?;
+            self.index_scheduler.queue.tasks.put_kind(&mut self.wtxn, kind, &bitmap)?;
         }
 
         self.wtxn.commit()?;
@@ -2222,10 +1355,7 @@ mod tests {
     use insta::assert_json_snapshot;
     use maplit::btreeset;
     use meili_snap::{json_string, snapshot};
-    use meilisearch_auth::AuthFilter;
     use meilisearch_types::document_formats::DocumentFormatError;
-    use meilisearch_types::error::ErrorCode;
-    use meilisearch_types::index_uid_pattern::IndexUidPattern;
     use meilisearch_types::milli::obkv_to_json;
     use meilisearch_types::milli::update::IndexDocumentsMethod::{
         ReplaceDocuments, UpdateDocuments,
@@ -2236,12 +1366,11 @@ mod tests {
     use meilisearch_types::tasks::IndexSwap;
     use meilisearch_types::VERSION_FILE_NAME;
     use tempfile::{NamedTempFile, TempDir};
-    use time::Duration;
     use uuid::Uuid;
     use Breakpoint::*;
 
     use super::*;
-    use crate::insta_snapshot::{snapshot_bitmap, snapshot_index_scheduler};
+    use crate::insta_snapshot::snapshot_index_scheduler;
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub enum FailureLocation {
@@ -2288,7 +1417,7 @@ mod tests {
                 enable_mdb_writemap: false,
                 index_growth_amount: 1000 * 1000 * 1000 * 1000, // 1 TB
                 index_count: 5,
-                indexer_config,
+                indexer_config: Arc::new(indexer_config),
                 autobatching_enabled: true,
                 cleanup_enabled: true,
                 max_number_of_tasks: 1_000_000,
@@ -2337,7 +1466,10 @@ mod tests {
     }
 
     /// Return a `KindWithContent::IndexCreation` task
-    fn index_creation_task(index: &'static str, primary_key: &'static str) -> KindWithContent {
+    pub(crate) fn index_creation_task(
+        index: &'static str,
+        primary_key: &'static str,
+    ) -> KindWithContent {
         KindWithContent::IndexCreation { index_uid: S(index), primary_key: Some(S(primary_key)) }
     }
     /// Create a `KindWithContent::DocumentImport` task that imports documents.
@@ -2348,7 +1480,7 @@ mod tests {
     /// - `content_file` is given as parameter
     /// - `documents_count` is given as parameter
     /// - `allow_index_creation` is set to `true`
-    fn replace_document_import_task(
+    pub(crate) fn replace_document_import_task(
         index: &'static str,
         primary_key: Option<&'static str>,
         content_file_uuid: u128,
@@ -2365,7 +1497,7 @@ mod tests {
     }
 
     /// Adapting to the new json reading interface
-    pub fn read_json(
+    pub(crate) fn read_json(
         bytes: &[u8],
         write: impl Write,
     ) -> std::result::Result<u64, DocumentFormatError> {
@@ -2381,7 +1513,7 @@ mod tests {
     /// The update file contains just one simple document whose id is given by `document_id`.
     ///
     /// The uuid of the file and its documents count is returned.
-    fn sample_documents(
+    pub(crate) fn sample_documents(
         index_scheduler: &IndexScheduler,
         file_uuid: u128,
         document_id: usize,
@@ -2393,7 +1525,8 @@ mod tests {
         }}"#
         );
 
-        let (_uuid, mut file) = index_scheduler.create_update_file_with_uuid(file_uuid).unwrap();
+        let (_uuid, mut file) =
+            index_scheduler.queue.create_update_file_with_uuid(file_uuid).unwrap();
         let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
         (file, documents_count)
     }
@@ -2460,7 +1593,7 @@ mod tests {
 
         /// Advance the scheduler until all the provided breakpoints are reached in order.
         #[track_caller]
-        fn advance_till(&mut self, breakpoints: impl IntoIterator<Item = Breakpoint>) {
+        pub(crate) fn advance_till(&mut self, breakpoints: impl IntoIterator<Item = Breakpoint>) {
             for breakpoint in breakpoints {
                 let b = self.advance();
                 assert_eq!(
@@ -2476,7 +1609,7 @@ mod tests {
 
         /// Wait for `n` successful batches.
         #[track_caller]
-        fn advance_n_successful_batches(&mut self, n: usize) {
+        pub(crate) fn advance_n_successful_batches(&mut self, n: usize) {
             for _ in 0..n {
                 self.advance_one_successful_batch();
             }
@@ -2484,7 +1617,7 @@ mod tests {
 
         /// Wait for `n` failed batches.
         #[track_caller]
-        fn advance_n_failed_batches(&mut self, n: usize) {
+        pub(crate) fn advance_n_failed_batches(&mut self, n: usize) {
             for _ in 0..n {
                 self.advance_one_failed_batch();
             }
@@ -2492,7 +1625,7 @@ mod tests {
 
         // Wait for one successful batch.
         #[track_caller]
-        fn advance_one_successful_batch(&mut self) {
+        pub(crate) fn advance_one_successful_batch(&mut self) {
             self.advance_till([Start, BatchCreated]);
             loop {
                 match self.advance() {
@@ -2515,7 +1648,7 @@ mod tests {
 
         // Wait for one failed batch.
         #[track_caller]
-        fn advance_one_failed_batch(&mut self) {
+        pub(crate) fn advance_one_failed_batch(&mut self) {
             self.advance_till([Start, BatchCreated]);
             loop {
                 match self.advance() {
@@ -2531,37 +1664,6 @@ mod tests {
             }
             self.advance_till([AfterProcessing]);
         }
-    }
-
-    #[test]
-    fn register() {
-        // In this test, the handle doesn't make any progress, we only check that the tasks are registered
-        let (index_scheduler, mut _handle) = IndexScheduler::test(true, vec![]);
-
-        let kinds = [
-            index_creation_task("catto", "mouse"),
-            replace_document_import_task("catto", None, 0, 12),
-            replace_document_import_task("catto", None, 1, 50),
-            replace_document_import_task("doggo", Some("bone"), 2, 5000),
-        ];
-        let (_, file) = index_scheduler.create_update_file_with_uuid(0).unwrap();
-        file.persist().unwrap();
-        let (_, file) = index_scheduler.create_update_file_with_uuid(1).unwrap();
-        file.persist().unwrap();
-        let (_, file) = index_scheduler.create_update_file_with_uuid(2).unwrap();
-        file.persist().unwrap();
-
-        for (idx, kind) in kinds.into_iter().enumerate() {
-            let k = kind.as_kind();
-            let task = index_scheduler.register(kind, None, false).unwrap();
-            index_scheduler.assert_internally_consistent();
-
-            assert_eq!(task.uid, idx as u32);
-            assert_eq!(task.status, Status::Enqueued);
-            assert_eq!(task.kind.as_kind(), k);
-        }
-
-        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "everything_is_successfully_registered");
     }
 
     #[test]
@@ -2820,7 +1922,7 @@ mod tests {
             "doggo": "bob"
         }"#;
 
-        let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0).unwrap();
+        let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(0).unwrap();
         let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
         file.persist().unwrap();
         index_scheduler
@@ -2865,7 +1967,7 @@ mod tests {
             .unwrap();
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
 
-        let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0).unwrap();
+        let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(0).unwrap();
         let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
         file.persist().unwrap();
         index_scheduler
@@ -2905,7 +2007,7 @@ mod tests {
             { "id": 3, "doggo": "bork" }
         ]"#;
 
-        let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0).unwrap();
+        let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(0).unwrap();
         let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
         file.persist().unwrap();
         index_scheduler
@@ -2971,7 +2073,7 @@ mod tests {
             { "id": 3, "doggo": "bork" }
         ]"#;
 
-        let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0).unwrap();
+        let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(0).unwrap();
         let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
         file.persist().unwrap();
         index_scheduler
@@ -3037,7 +2139,7 @@ mod tests {
             { "id": 3, "doggo": "bork" }
         ]"#;
 
-        let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0).unwrap();
+        let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(0).unwrap();
         let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
         file.persist().unwrap();
         index_scheduler
@@ -3288,7 +2390,7 @@ mod tests {
             "doggo": "bob"
         }"#;
 
-        let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0).unwrap();
+        let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(0).unwrap();
         let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
         file.persist().unwrap();
         index_scheduler
@@ -3462,7 +2564,7 @@ mod tests {
                 i, i
             );
 
-            let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
+            let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(i).unwrap();
             let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             file.persist().unwrap();
             index_scheduler
@@ -3513,7 +2615,7 @@ mod tests {
                 i, i
             );
 
-            let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
+            let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(i).unwrap();
             let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             file.persist().unwrap();
             index_scheduler
@@ -3566,7 +2668,7 @@ mod tests {
                 i, i
             );
 
-            let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
+            let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(i).unwrap();
             let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             file.persist().unwrap();
             index_scheduler
@@ -3646,7 +2748,7 @@ mod tests {
 
         {
             let rtxn = index_scheduler.read_txn().unwrap();
-            let task = index_scheduler.get_task(&rtxn, 0).unwrap().unwrap();
+            let task = index_scheduler.queue.tasks.get_task(&rtxn, 0).unwrap().unwrap();
             let task = meilisearch_types::task_view::TaskView::from_task(&task);
             insta::assert_json_snapshot!(task.details);
         }
@@ -3656,7 +2758,7 @@ mod tests {
 
         {
             let rtxn = index_scheduler.read_txn().unwrap();
-            let task = index_scheduler.get_task(&rtxn, 0).unwrap().unwrap();
+            let task = index_scheduler.queue.tasks.get_task(&rtxn, 0).unwrap().unwrap();
             let task = meilisearch_types::task_view::TaskView::from_task(&task);
             insta::assert_json_snapshot!(task.details);
         }
@@ -3685,7 +2787,7 @@ mod tests {
                 i, i
             );
 
-            let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
+            let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(i).unwrap();
             let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             file.persist().unwrap();
             index_scheduler
@@ -3740,7 +2842,7 @@ mod tests {
                 i, i
             );
 
-            let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
+            let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(i).unwrap();
             let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             file.persist().unwrap();
             index_scheduler
@@ -3796,893 +2898,6 @@ mod tests {
     }
 
     #[test]
-    fn query_tasks_from_and_limit() {
-        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
-
-        let kind = index_creation_task("doggo", "bone");
-        let _task = index_scheduler.register(kind, None, false).unwrap();
-        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
-        let kind = index_creation_task("whalo", "plankton");
-        let _task = index_scheduler.register(kind, None, false).unwrap();
-        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_second_task");
-        let kind = index_creation_task("catto", "his_own_vomit");
-        let _task = index_scheduler.register(kind, None, false).unwrap();
-        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_third_task");
-
-        handle.advance_n_successful_batches(3);
-        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "processed_all_tasks");
-
-        let rtxn = index_scheduler.env.read_txn().unwrap();
-        let query = Query { limit: Some(0), ..Default::default() };
-        let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
-            .unwrap();
-        snapshot!(snapshot_bitmap(&tasks), @"[]");
-
-        let query = Query { limit: Some(1), ..Default::default() };
-        let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
-            .unwrap();
-        snapshot!(snapshot_bitmap(&tasks), @"[2,]");
-
-        let query = Query { limit: Some(2), ..Default::default() };
-        let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
-            .unwrap();
-        snapshot!(snapshot_bitmap(&tasks), @"[1,2,]");
-
-        let query = Query { from: Some(1), ..Default::default() };
-        let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
-            .unwrap();
-        snapshot!(snapshot_bitmap(&tasks), @"[0,1,]");
-
-        let query = Query { from: Some(2), ..Default::default() };
-        let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
-            .unwrap();
-        snapshot!(snapshot_bitmap(&tasks), @"[0,1,2,]");
-
-        let query = Query { from: Some(1), limit: Some(1), ..Default::default() };
-        let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
-            .unwrap();
-        snapshot!(snapshot_bitmap(&tasks), @"[1,]");
-
-        let query = Query { from: Some(1), limit: Some(2), ..Default::default() };
-        let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
-            .unwrap();
-        snapshot!(snapshot_bitmap(&tasks), @"[0,1,]");
-    }
-
-    #[test]
-    fn query_tasks_simple() {
-        let start_time = OffsetDateTime::now_utc();
-
-        let (index_scheduler, mut handle) =
-            IndexScheduler::test(true, vec![(3, FailureLocation::InsideProcessBatch)]);
-
-        let kind = index_creation_task("catto", "mouse");
-        let _task = index_scheduler.register(kind, None, false).unwrap();
-        let kind = index_creation_task("doggo", "sheep");
-        let _task = index_scheduler.register(kind, None, false).unwrap();
-        let kind = index_creation_task("whalo", "fish");
-        let _task = index_scheduler.register(kind, None, false).unwrap();
-
-        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "start");
-
-        handle.advance_till([Start, BatchCreated]);
-
-        let rtxn = index_scheduler.env.read_txn().unwrap();
-
-        let query = Query { statuses: Some(vec![Status::Processing]), ..Default::default() };
-        let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
-            .unwrap();
-        snapshot!(snapshot_bitmap(&tasks), @"[0,]"); // only the processing tasks in the first tick
-
-        let query = Query { statuses: Some(vec![Status::Enqueued]), ..Default::default() };
-        let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
-            .unwrap();
-        snapshot!(snapshot_bitmap(&tasks), @"[1,2,]"); // only the enqueued tasks in the first tick
-
-        let query = Query {
-            statuses: Some(vec![Status::Enqueued, Status::Processing]),
-            ..Default::default()
-        };
-        let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
-            .unwrap();
-        snapshot!(snapshot_bitmap(&tasks), @"[0,1,2,]"); // both enqueued and processing tasks in the first tick
-
-        let query = Query {
-            statuses: Some(vec![Status::Enqueued, Status::Processing]),
-            after_started_at: Some(start_time),
-            ..Default::default()
-        };
-        let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
-            .unwrap();
-        // both enqueued and processing tasks in the first tick, but limited to those with a started_at
-        // that comes after the start of the test, which should excludes the enqueued tasks
-        snapshot!(snapshot_bitmap(&tasks), @"[0,]");
-
-        let query = Query {
-            statuses: Some(vec![Status::Enqueued, Status::Processing]),
-            before_started_at: Some(start_time),
-            ..Default::default()
-        };
-        let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
-            .unwrap();
-        // both enqueued and processing tasks in the first tick, but limited to those with a started_at
-        // that comes before the start of the test, which should excludes all of them
-        snapshot!(snapshot_bitmap(&tasks), @"[]");
-
-        let query = Query {
-            statuses: Some(vec![Status::Enqueued, Status::Processing]),
-            after_started_at: Some(start_time),
-            before_started_at: Some(start_time + Duration::minutes(1)),
-            ..Default::default()
-        };
-        let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
-            .unwrap();
-        // both enqueued and processing tasks in the first tick, but limited to those with a started_at
-        // that comes after the start of the test and before one minute after the start of the test,
-        // which should exclude the enqueued tasks and include the only processing task
-        snapshot!(snapshot_bitmap(&tasks), @"[0,]");
-
-        handle.advance_till([
-            InsideProcessBatch,
-            InsideProcessBatch,
-            ProcessBatchSucceeded,
-            AfterProcessing,
-            Start,
-            BatchCreated,
-        ]);
-
-        let rtxn = index_scheduler.env.read_txn().unwrap();
-
-        let second_start_time = OffsetDateTime::now_utc();
-
-        let query = Query {
-            statuses: Some(vec![Status::Succeeded, Status::Processing]),
-            after_started_at: Some(start_time),
-            before_started_at: Some(start_time + Duration::minutes(1)),
-            ..Default::default()
-        };
-        let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
-            .unwrap();
-        // both succeeded and processing tasks in the first tick, but limited to those with a started_at
-        // that comes after the start of the test and before one minute after the start of the test,
-        // which should include all tasks
-        snapshot!(snapshot_bitmap(&tasks), @"[0,1,]");
-
-        let query = Query {
-            statuses: Some(vec![Status::Succeeded, Status::Processing]),
-            before_started_at: Some(start_time),
-            ..Default::default()
-        };
-        let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
-            .unwrap();
-        // both succeeded and processing tasks in the first tick, but limited to those with a started_at
-        // that comes before the start of the test, which should exclude all tasks
-        snapshot!(snapshot_bitmap(&tasks), @"[]");
-
-        let query = Query {
-            statuses: Some(vec![Status::Enqueued, Status::Succeeded, Status::Processing]),
-            after_started_at: Some(second_start_time),
-            before_started_at: Some(second_start_time + Duration::minutes(1)),
-            ..Default::default()
-        };
-        let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
-            .unwrap();
-        // both succeeded and processing tasks in the first tick, but limited to those with a started_at
-        // that comes after the start of the second part of the test and before one minute after the
-        // second start of the test, which should exclude all tasks
-        snapshot!(snapshot_bitmap(&tasks), @"[]");
-
-        // now we make one more batch, the started_at field of the new tasks will be past `second_start_time`
-        handle.advance_till([
-            InsideProcessBatch,
-            InsideProcessBatch,
-            ProcessBatchSucceeded,
-            AfterProcessing,
-            Start,
-            BatchCreated,
-        ]);
-
-        let rtxn = index_scheduler.env.read_txn().unwrap();
-
-        let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
-            .unwrap();
-        // we run the same query to verify that, and indeed find that the last task is matched
-        snapshot!(snapshot_bitmap(&tasks), @"[2,]");
-
-        let query = Query {
-            statuses: Some(vec![Status::Enqueued, Status::Succeeded, Status::Processing]),
-            after_started_at: Some(second_start_time),
-            before_started_at: Some(second_start_time + Duration::minutes(1)),
-            ..Default::default()
-        };
-        let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
-            .unwrap();
-        // enqueued, succeeded, or processing tasks started after the second part of the test, should
-        // again only return the last task
-        snapshot!(snapshot_bitmap(&tasks), @"[2,]");
-
-        handle.advance_till([ProcessBatchFailed, AfterProcessing]);
-        let rtxn = index_scheduler.read_txn().unwrap();
-
-        // now the last task should have failed
-        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "end");
-        let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
-            .unwrap();
-        // so running the last query should return nothing
-        snapshot!(snapshot_bitmap(&tasks), @"[]");
-
-        let query = Query {
-            statuses: Some(vec![Status::Failed]),
-            after_started_at: Some(second_start_time),
-            before_started_at: Some(second_start_time + Duration::minutes(1)),
-            ..Default::default()
-        };
-        let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
-            .unwrap();
-        // but the same query on failed tasks should return the last task
-        snapshot!(snapshot_bitmap(&tasks), @"[2,]");
-
-        let query = Query {
-            statuses: Some(vec![Status::Failed]),
-            after_started_at: Some(second_start_time),
-            before_started_at: Some(second_start_time + Duration::minutes(1)),
-            ..Default::default()
-        };
-        let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
-            .unwrap();
-        // but the same query on failed tasks should return the last task
-        snapshot!(snapshot_bitmap(&tasks), @"[2,]");
-
-        let query = Query {
-            statuses: Some(vec![Status::Failed]),
-            uids: Some(vec![1]),
-            after_started_at: Some(second_start_time),
-            before_started_at: Some(second_start_time + Duration::minutes(1)),
-            ..Default::default()
-        };
-        let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
-            .unwrap();
-        // same query but with an invalid uid
-        snapshot!(snapshot_bitmap(&tasks), @"[]");
-
-        let query = Query {
-            statuses: Some(vec![Status::Failed]),
-            uids: Some(vec![2]),
-            after_started_at: Some(second_start_time),
-            before_started_at: Some(second_start_time + Duration::minutes(1)),
-            ..Default::default()
-        };
-        let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
-            .unwrap();
-        // same query but with a valid uid
-        snapshot!(snapshot_bitmap(&tasks), @"[2,]");
-    }
-
-    #[test]
-    fn query_tasks_special_rules() {
-        let (index_scheduler, mut handle) =
-            IndexScheduler::test(true, vec![(3, FailureLocation::InsideProcessBatch)]);
-
-        let kind = index_creation_task("catto", "mouse");
-        let _task = index_scheduler.register(kind, None, false).unwrap();
-        let kind = index_creation_task("doggo", "sheep");
-        let _task = index_scheduler.register(kind, None, false).unwrap();
-        let kind = KindWithContent::IndexSwap {
-            swaps: vec![IndexSwap { indexes: ("catto".to_owned(), "doggo".to_owned()) }],
-        };
-        let _task = index_scheduler.register(kind, None, false).unwrap();
-        let kind = KindWithContent::IndexSwap {
-            swaps: vec![IndexSwap { indexes: ("catto".to_owned(), "whalo".to_owned()) }],
-        };
-        let _task = index_scheduler.register(kind, None, false).unwrap();
-
-        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "start");
-
-        handle.advance_till([Start, BatchCreated]);
-
-        let rtxn = index_scheduler.env.read_txn().unwrap();
-
-        let query = Query { index_uids: Some(vec!["catto".to_owned()]), ..Default::default() };
-        let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
-            .unwrap();
-        // only the first task associated with catto is returned, the indexSwap tasks are excluded!
-        snapshot!(snapshot_bitmap(&tasks), @"[0,]");
-
-        let query = Query { index_uids: Some(vec!["catto".to_owned()]), ..Default::default() };
-        let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(
-                &rtxn,
-                &query,
-                &AuthFilter::with_allowed_indexes(
-                    vec![IndexUidPattern::new_unchecked("doggo")].into_iter().collect(),
-                ),
-            )
-            .unwrap();
-        // we have asked for only the tasks associated with catto, but are only authorized to retrieve the tasks
-        // associated with doggo -> empty result
-        snapshot!(snapshot_bitmap(&tasks), @"[]");
-
-        let query = Query::default();
-        let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(
-                &rtxn,
-                &query,
-                &AuthFilter::with_allowed_indexes(
-                    vec![IndexUidPattern::new_unchecked("doggo")].into_iter().collect(),
-                ),
-            )
-            .unwrap();
-        // we asked for all the tasks, but we are only authorized to retrieve the doggo tasks
-        // -> only the index creation of doggo should be returned
-        snapshot!(snapshot_bitmap(&tasks), @"[1,]");
-
-        let query = Query::default();
-        let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(
-                &rtxn,
-                &query,
-                &AuthFilter::with_allowed_indexes(
-                    vec![
-                        IndexUidPattern::new_unchecked("catto"),
-                        IndexUidPattern::new_unchecked("doggo"),
-                    ]
-                    .into_iter()
-                    .collect(),
-                ),
-            )
-            .unwrap();
-        // we asked for all the tasks, but we are only authorized to retrieve the doggo and catto tasks
-        // -> all tasks except the swap of catto with whalo are returned
-        snapshot!(snapshot_bitmap(&tasks), @"[0,1,]");
-
-        let query = Query::default();
-        let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
-            .unwrap();
-        // we asked for all the tasks with all index authorized -> all tasks returned
-        snapshot!(snapshot_bitmap(&tasks), @"[0,1,2,3,]");
-    }
-
-    #[test]
-    fn query_tasks_canceled_by() {
-        let (index_scheduler, mut handle) =
-            IndexScheduler::test(true, vec![(3, FailureLocation::InsideProcessBatch)]);
-
-        let kind = index_creation_task("catto", "mouse");
-        let _ = index_scheduler.register(kind, None, false).unwrap();
-        let kind = index_creation_task("doggo", "sheep");
-        let _ = index_scheduler.register(kind, None, false).unwrap();
-        let kind = KindWithContent::IndexSwap {
-            swaps: vec![IndexSwap { indexes: ("catto".to_owned(), "doggo".to_owned()) }],
-        };
-        let _task = index_scheduler.register(kind, None, false).unwrap();
-
-        handle.advance_n_successful_batches(1);
-        let kind = KindWithContent::TaskCancelation {
-            query: "test_query".to_string(),
-            tasks: [0, 1, 2, 3].into_iter().collect(),
-        };
-        let task_cancelation = index_scheduler.register(kind, None, false).unwrap();
-        handle.advance_n_successful_batches(1);
-
-        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "start");
-
-        let rtxn = index_scheduler.read_txn().unwrap();
-        let query = Query { canceled_by: Some(vec![task_cancelation.uid]), ..Query::default() };
-        let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default())
-            .unwrap();
-        // 0 is not returned because it was not canceled, 3 is not returned because it is the uid of the
-        // taskCancelation itself
-        snapshot!(snapshot_bitmap(&tasks), @"[1,2,]");
-
-        let query = Query { canceled_by: Some(vec![task_cancelation.uid]), ..Query::default() };
-        let (tasks, _) = index_scheduler
-            .get_task_ids_from_authorized_indexes(
-                &rtxn,
-                &query,
-                &AuthFilter::with_allowed_indexes(
-                    vec![IndexUidPattern::new_unchecked("doggo")].into_iter().collect(),
-                ),
-            )
-            .unwrap();
-        // Return only 1 because the user is not authorized to see task 2
-        snapshot!(snapshot_bitmap(&tasks), @"[1,]");
-    }
-
-    #[test]
-    fn query_batches_from_and_limit() {
-        let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
-
-        let kind = index_creation_task("doggo", "bone");
-        let _task = index_scheduler.register(kind, None, false).unwrap();
-        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
-        let kind = index_creation_task("whalo", "plankton");
-        let _task = index_scheduler.register(kind, None, false).unwrap();
-        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_second_task");
-        let kind = index_creation_task("catto", "his_own_vomit");
-        let _task = index_scheduler.register(kind, None, false).unwrap();
-        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_third_task");
-
-        handle.advance_n_successful_batches(3);
-        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "processed_all_tasks");
-
-        let proc = index_scheduler.processing_tasks.read().unwrap().clone();
-        let rtxn = index_scheduler.env.read_txn().unwrap();
-        let query = Query { limit: Some(0), ..Default::default() };
-        let (batches, _) = index_scheduler
-            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
-            .unwrap();
-        snapshot!(snapshot_bitmap(&batches), @"[]");
-
-        let query = Query { limit: Some(1), ..Default::default() };
-        let (batches, _) = index_scheduler
-            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
-            .unwrap();
-        snapshot!(snapshot_bitmap(&batches), @"[2,]");
-
-        let query = Query { limit: Some(2), ..Default::default() };
-        let (batches, _) = index_scheduler
-            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
-            .unwrap();
-        snapshot!(snapshot_bitmap(&batches), @"[1,2,]");
-
-        let query = Query { from: Some(1), ..Default::default() };
-        let (batches, _) = index_scheduler
-            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
-            .unwrap();
-        snapshot!(snapshot_bitmap(&batches), @"[0,1,]");
-
-        let query = Query { from: Some(2), ..Default::default() };
-        let (batches, _) = index_scheduler
-            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
-            .unwrap();
-        snapshot!(snapshot_bitmap(&batches), @"[0,1,2,]");
-
-        let query = Query { from: Some(1), limit: Some(1), ..Default::default() };
-        let (batches, _) = index_scheduler
-            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
-            .unwrap();
-        snapshot!(snapshot_bitmap(&batches), @"[1,]");
-
-        let query = Query { from: Some(1), limit: Some(2), ..Default::default() };
-        let (batches, _) = index_scheduler
-            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
-            .unwrap();
-        snapshot!(snapshot_bitmap(&batches), @"[0,1,]");
-    }
-
-    #[test]
-    fn query_batches_simple() {
-        let start_time = OffsetDateTime::now_utc();
-
-        let (index_scheduler, mut handle) =
-            IndexScheduler::test(true, vec![(3, FailureLocation::InsideProcessBatch)]);
-
-        let kind = index_creation_task("catto", "mouse");
-        let _task = index_scheduler.register(kind, None, false).unwrap();
-        let kind = index_creation_task("doggo", "sheep");
-        let _task = index_scheduler.register(kind, None, false).unwrap();
-        let kind = index_creation_task("whalo", "fish");
-        let _task = index_scheduler.register(kind, None, false).unwrap();
-
-        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "start");
-
-        handle.advance_till([Start, BatchCreated]);
-
-        let rtxn = index_scheduler.env.read_txn().unwrap();
-        let proc = index_scheduler.processing_tasks.read().unwrap().clone();
-
-        let query = Query { statuses: Some(vec![Status::Processing]), ..Default::default() };
-        let (mut batches, _) = index_scheduler
-            .get_batches_from_authorized_indexes(query.clone(), &AuthFilter::default())
-            .unwrap();
-        assert_eq!(batches.len(), 1);
-        batches[0].started_at = OffsetDateTime::UNIX_EPOCH;
-        // Insta cannot snapshot our batches because the batch stats contains an enum as key: https://github.com/mitsuhiko/insta/issues/689
-        let batch = serde_json::to_string_pretty(&batches[0]).unwrap();
-        snapshot!(batch, @r#"
-        {
-          "uid": 0,
-          "details": {
-            "primaryKey": "mouse"
-          },
-          "stats": {
-            "totalNbTasks": 1,
-            "status": {
-              "processing": 1
-            },
-            "types": {
-              "indexCreation": 1
-            },
-            "indexUids": {
-              "catto": 1
-            }
-          },
-          "startedAt": "1970-01-01T00:00:00Z",
-          "finishedAt": null
-        }
-        "#);
-
-        let query = Query { statuses: Some(vec![Status::Enqueued]), ..Default::default() };
-        let (batches, _) = index_scheduler
-            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
-            .unwrap();
-        snapshot!(snapshot_bitmap(&batches), @"[]"); // The batches don't contains any enqueued tasks
-
-        let query = Query {
-            statuses: Some(vec![Status::Enqueued, Status::Processing]),
-            ..Default::default()
-        };
-        let (batches, _) = index_scheduler
-            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
-            .unwrap();
-        snapshot!(snapshot_bitmap(&batches), @"[0,]"); // both enqueued and processing tasks in the first tick
-
-        let query = Query {
-            statuses: Some(vec![Status::Enqueued, Status::Processing]),
-            after_started_at: Some(start_time),
-            ..Default::default()
-        };
-        let (batches, _) = index_scheduler
-            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
-            .unwrap();
-        // both enqueued and processing tasks in the first tick, but limited to those with a started_at
-        // that comes after the start of the test, which should excludes the enqueued tasks
-        snapshot!(snapshot_bitmap(&batches), @"[0,]");
-
-        let query = Query {
-            statuses: Some(vec![Status::Enqueued, Status::Processing]),
-            before_started_at: Some(start_time),
-            ..Default::default()
-        };
-        let (batches, _) = index_scheduler
-            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
-            .unwrap();
-        // both enqueued and processing tasks in the first tick, but limited to those with a started_at
-        // that comes before the start of the test, which should excludes all of them
-        snapshot!(snapshot_bitmap(&batches), @"[]");
-
-        let query = Query {
-            statuses: Some(vec![Status::Enqueued, Status::Processing]),
-            after_started_at: Some(start_time),
-            before_started_at: Some(start_time + Duration::minutes(1)),
-            ..Default::default()
-        };
-        let (batches, _) = index_scheduler
-            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
-            .unwrap();
-        // both enqueued and processing tasks in the first tick, but limited to those with a started_at
-        // that comes after the start of the test and before one minute after the start of the test,
-        // which should exclude the enqueued tasks and include the only processing task
-        snapshot!(snapshot_bitmap(&batches), @"[0,]");
-
-        handle.advance_till([
-            InsideProcessBatch,
-            InsideProcessBatch,
-            ProcessBatchSucceeded,
-            AfterProcessing,
-            Start,
-            BatchCreated,
-        ]);
-        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after-advancing-a-bit");
-
-        let rtxn = index_scheduler.env.read_txn().unwrap();
-        let proc = index_scheduler.processing_tasks.read().unwrap().clone();
-
-        let second_start_time = OffsetDateTime::now_utc();
-
-        let query = Query {
-            statuses: Some(vec![Status::Succeeded, Status::Processing]),
-            after_started_at: Some(start_time),
-            before_started_at: Some(start_time + Duration::minutes(1)),
-            ..Default::default()
-        };
-        let (batches, _) = index_scheduler
-            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
-            .unwrap();
-        // both succeeded and processing tasks in the first tick, but limited to those with a started_at
-        // that comes after the start of the test and before one minute after the start of the test,
-        // which should include all tasks
-        snapshot!(snapshot_bitmap(&batches), @"[0,1,]");
-
-        let query = Query {
-            statuses: Some(vec![Status::Succeeded, Status::Processing]),
-            before_started_at: Some(start_time),
-            ..Default::default()
-        };
-        let (batches, _) = index_scheduler
-            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
-            .unwrap();
-        // both succeeded and processing tasks in the first tick, but limited to those with a started_at
-        // that comes before the start of the test, which should exclude all tasks
-        snapshot!(snapshot_bitmap(&batches), @"[]");
-
-        let query = Query {
-            statuses: Some(vec![Status::Enqueued, Status::Succeeded, Status::Processing]),
-            after_started_at: Some(second_start_time),
-            before_started_at: Some(second_start_time + Duration::minutes(1)),
-            ..Default::default()
-        };
-        let (batches, _) = index_scheduler
-            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
-            .unwrap();
-        // both succeeded and processing tasks in the first tick, but limited to those with a started_at
-        // that comes after the start of the second part of the test and before one minute after the
-        // second start of the test, which should exclude all tasks
-        snapshot!(snapshot_bitmap(&batches), @"[]");
-
-        // now we make one more batch, the started_at field of the new tasks will be past `second_start_time`
-        handle.advance_till([
-            InsideProcessBatch,
-            InsideProcessBatch,
-            ProcessBatchSucceeded,
-            AfterProcessing,
-            Start,
-            BatchCreated,
-        ]);
-
-        let rtxn = index_scheduler.env.read_txn().unwrap();
-        let proc = index_scheduler.processing_tasks.read().unwrap().clone();
-
-        let (batches, _) = index_scheduler
-            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
-            .unwrap();
-        // we run the same query to verify that, and indeed find that the last task is matched
-        snapshot!(snapshot_bitmap(&batches), @"[2,]");
-
-        let query = Query {
-            statuses: Some(vec![Status::Enqueued, Status::Succeeded, Status::Processing]),
-            after_started_at: Some(second_start_time),
-            before_started_at: Some(second_start_time + Duration::minutes(1)),
-            ..Default::default()
-        };
-        let (batches, _) = index_scheduler
-            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
-            .unwrap();
-        // enqueued, succeeded, or processing tasks started after the second part of the test, should
-        // again only return the last task
-        snapshot!(snapshot_bitmap(&batches), @"[2,]");
-
-        handle.advance_till([ProcessBatchFailed, AfterProcessing]);
-        let rtxn = index_scheduler.read_txn().unwrap();
-        let proc = index_scheduler.processing_tasks.read().unwrap().clone();
-
-        // now the last task should have failed
-        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "end");
-        let (batches, _) = index_scheduler
-            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
-            .unwrap();
-        // so running the last query should return nothing
-        snapshot!(snapshot_bitmap(&batches), @"[]");
-
-        let query = Query {
-            statuses: Some(vec![Status::Failed]),
-            after_started_at: Some(second_start_time),
-            before_started_at: Some(second_start_time + Duration::minutes(1)),
-            ..Default::default()
-        };
-        let (batches, _) = index_scheduler
-            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
-            .unwrap();
-        // but the same query on failed tasks should return the last task
-        snapshot!(snapshot_bitmap(&batches), @"[2,]");
-
-        let query = Query {
-            statuses: Some(vec![Status::Failed]),
-            after_started_at: Some(second_start_time),
-            before_started_at: Some(second_start_time + Duration::minutes(1)),
-            ..Default::default()
-        };
-        let (batches, _) = index_scheduler
-            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
-            .unwrap();
-        // but the same query on failed tasks should return the last task
-        snapshot!(snapshot_bitmap(&batches), @"[2,]");
-
-        let query = Query {
-            statuses: Some(vec![Status::Failed]),
-            uids: Some(vec![1]),
-            after_started_at: Some(second_start_time),
-            before_started_at: Some(second_start_time + Duration::minutes(1)),
-            ..Default::default()
-        };
-        let (batches, _) = index_scheduler
-            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
-            .unwrap();
-        // same query but with an invalid uid
-        snapshot!(snapshot_bitmap(&batches), @"[]");
-
-        let query = Query {
-            statuses: Some(vec![Status::Failed]),
-            uids: Some(vec![2]),
-            after_started_at: Some(second_start_time),
-            before_started_at: Some(second_start_time + Duration::minutes(1)),
-            ..Default::default()
-        };
-        let (batches, _) = index_scheduler
-            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
-            .unwrap();
-        // same query but with a valid uid
-        snapshot!(snapshot_bitmap(&batches), @"[2,]");
-    }
-
-    #[test]
-    fn query_batches_special_rules() {
-        let (index_scheduler, mut handle) =
-            IndexScheduler::test(true, vec![(3, FailureLocation::InsideProcessBatch)]);
-
-        let kind = index_creation_task("catto", "mouse");
-        let _task = index_scheduler.register(kind, None, false).unwrap();
-        let kind = index_creation_task("doggo", "sheep");
-        let _task = index_scheduler.register(kind, None, false).unwrap();
-        let kind = KindWithContent::IndexSwap {
-            swaps: vec![IndexSwap { indexes: ("catto".to_owned(), "doggo".to_owned()) }],
-        };
-        let _task = index_scheduler.register(kind, None, false).unwrap();
-        let kind = KindWithContent::IndexSwap {
-            swaps: vec![IndexSwap { indexes: ("catto".to_owned(), "whalo".to_owned()) }],
-        };
-        let _task = index_scheduler.register(kind, None, false).unwrap();
-
-        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "start");
-
-        handle.advance_till([Start, BatchCreated]);
-
-        let rtxn = index_scheduler.env.read_txn().unwrap();
-        let proc = index_scheduler.processing_tasks.read().unwrap().clone();
-
-        let query = Query { index_uids: Some(vec!["catto".to_owned()]), ..Default::default() };
-        let (batches, _) = index_scheduler
-            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
-            .unwrap();
-        // only the first task associated with catto is returned, the indexSwap tasks are excluded!
-        snapshot!(snapshot_bitmap(&batches), @"[0,]");
-
-        let query = Query { index_uids: Some(vec!["catto".to_owned()]), ..Default::default() };
-        let (batches, _) = index_scheduler
-            .get_batch_ids_from_authorized_indexes(
-                &rtxn,
-                &proc,
-                &query,
-                &AuthFilter::with_allowed_indexes(
-                    vec![IndexUidPattern::new_unchecked("doggo")].into_iter().collect(),
-                ),
-            )
-            .unwrap();
-        // we have asked for only the tasks associated with catto, but are only authorized to retrieve the tasks
-        // associated with doggo -> empty result
-        snapshot!(snapshot_bitmap(&batches), @"[]");
-
-        drop(rtxn);
-        // We're going to advance and process all the batches for the next query to actually hit the db
-        handle.advance_till([
-            InsideProcessBatch,
-            InsideProcessBatch,
-            ProcessBatchSucceeded,
-            AfterProcessing,
-        ]);
-        handle.advance_one_successful_batch();
-        handle.advance_n_failed_batches(2);
-        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after-processing-everything");
-        let rtxn = index_scheduler.env.read_txn().unwrap();
-
-        let query = Query::default();
-        let (batches, _) = index_scheduler
-            .get_batch_ids_from_authorized_indexes(
-                &rtxn,
-                &proc,
-                &query,
-                &AuthFilter::with_allowed_indexes(
-                    vec![IndexUidPattern::new_unchecked("doggo")].into_iter().collect(),
-                ),
-            )
-            .unwrap();
-        // we asked for all the tasks, but we are only authorized to retrieve the doggo tasks
-        // -> only the index creation of doggo should be returned
-        snapshot!(snapshot_bitmap(&batches), @"[1,]");
-
-        let query = Query::default();
-        let (batches, _) = index_scheduler
-            .get_batch_ids_from_authorized_indexes(
-                &rtxn,
-                &proc,
-                &query,
-                &AuthFilter::with_allowed_indexes(
-                    vec![
-                        IndexUidPattern::new_unchecked("catto"),
-                        IndexUidPattern::new_unchecked("doggo"),
-                    ]
-                    .into_iter()
-                    .collect(),
-                ),
-            )
-            .unwrap();
-        // we asked for all the tasks, but we are only authorized to retrieve the doggo and catto tasks
-        // -> all tasks except the swap of catto with whalo are returned
-        snapshot!(snapshot_bitmap(&batches), @"[0,1,]");
-
-        let query = Query::default();
-        let (batches, _) = index_scheduler
-            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
-            .unwrap();
-        // we asked for all the tasks with all index authorized -> all tasks returned
-        snapshot!(snapshot_bitmap(&batches), @"[0,1,2,3,]");
-    }
-
-    #[test]
-    fn query_batches_canceled_by() {
-        let (index_scheduler, mut handle) =
-            IndexScheduler::test(true, vec![(3, FailureLocation::InsideProcessBatch)]);
-
-        let kind = index_creation_task("catto", "mouse");
-        let _ = index_scheduler.register(kind, None, false).unwrap();
-        let kind = index_creation_task("doggo", "sheep");
-        let _ = index_scheduler.register(kind, None, false).unwrap();
-        let kind = KindWithContent::IndexSwap {
-            swaps: vec![IndexSwap { indexes: ("catto".to_owned(), "doggo".to_owned()) }],
-        };
-        let _task = index_scheduler.register(kind, None, false).unwrap();
-
-        handle.advance_n_successful_batches(1);
-        let kind = KindWithContent::TaskCancelation {
-            query: "test_query".to_string(),
-            tasks: [0, 1, 2, 3].into_iter().collect(),
-        };
-        let task_cancelation = index_scheduler.register(kind, None, false).unwrap();
-        handle.advance_n_successful_batches(1);
-
-        snapshot!(snapshot_index_scheduler(&index_scheduler), name: "start");
-
-        let rtxn = index_scheduler.read_txn().unwrap();
-        let proc = index_scheduler.processing_tasks.read().unwrap().clone();
-        let query = Query { canceled_by: Some(vec![task_cancelation.uid]), ..Query::default() };
-        let (batches, _) = index_scheduler
-            .get_batch_ids_from_authorized_indexes(&rtxn, &proc, &query, &AuthFilter::default())
-            .unwrap();
-        // The batch zero was the index creation task, the 1 is the task cancellation
-        snapshot!(snapshot_bitmap(&batches), @"[1,]");
-
-        let query = Query { canceled_by: Some(vec![task_cancelation.uid]), ..Query::default() };
-        let (batches, _) = index_scheduler
-            .get_batch_ids_from_authorized_indexes(
-                &rtxn,
-                &proc,
-                &query,
-                &AuthFilter::with_allowed_indexes(
-                    vec![IndexUidPattern::new_unchecked("doggo")].into_iter().collect(),
-                ),
-            )
-            .unwrap();
-        // Return only 1 because the user is not authorized to see task 2
-        snapshot!(snapshot_bitmap(&batches), @"[1,]");
-    }
-
-    #[test]
     fn fail_in_process_batch_for_index_creation() {
         let (index_scheduler, mut handle) =
             IndexScheduler::test(true, vec![(1, FailureLocation::InsideProcessBatch)]);
@@ -4710,7 +2925,7 @@ mod tests {
             "doggo": "bob"
         }"#;
 
-        let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0).unwrap();
+        let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(0).unwrap();
         let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
         file.persist().unwrap();
         index_scheduler
@@ -4752,7 +2967,7 @@ mod tests {
             "doggo": "bob"
         }"#;
 
-        let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0).unwrap();
+        let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(0).unwrap();
         let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
         file.persist().unwrap();
         index_scheduler
@@ -4812,7 +3027,7 @@ mod tests {
                 i, i
             );
 
-            let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
+            let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(i).unwrap();
             let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             file.persist().unwrap();
             index_scheduler
@@ -4864,7 +3079,7 @@ mod tests {
                 i, i
             );
 
-            let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
+            let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(i).unwrap();
             let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             file.persist().unwrap();
             index_scheduler
@@ -4926,7 +3141,7 @@ mod tests {
                 i, i
             );
 
-            let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
+            let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(i).unwrap();
             let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             file.persist().unwrap();
             index_scheduler
@@ -4993,7 +3208,7 @@ mod tests {
                 i, i
             );
 
-            let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
+            let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(i).unwrap();
             let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             file.persist().unwrap();
             index_scheduler
@@ -5065,7 +3280,7 @@ mod tests {
             );
             let allow_index_creation = i % 2 != 0;
 
-            let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
+            let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(i).unwrap();
             let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             file.persist().unwrap();
             index_scheduler
@@ -5122,7 +3337,7 @@ mod tests {
             );
             let allow_index_creation = i % 2 != 0;
 
-            let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(i).unwrap();
+            let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(i).unwrap();
             let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             file.persist().unwrap();
             index_scheduler
@@ -5176,7 +3391,7 @@ mod tests {
                 }}"#,
             );
             let (uuid, mut file) =
-                index_scheduler.create_update_file_with_uuid(id as u128).unwrap();
+                index_scheduler.queue.create_update_file_with_uuid(id as u128).unwrap();
             let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             assert_eq!(documents_count, 1);
             file.persist().unwrap();
@@ -5239,7 +3454,7 @@ mod tests {
                 }}"#,
             );
             let (uuid, mut file) =
-                index_scheduler.create_update_file_with_uuid(id as u128).unwrap();
+                index_scheduler.queue.create_update_file_with_uuid(id as u128).unwrap();
             let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             assert_eq!(documents_count, 1);
             file.persist().unwrap();
@@ -5299,7 +3514,7 @@ mod tests {
                 }}"#,
             );
             let (uuid, mut file) =
-                index_scheduler.create_update_file_with_uuid(id as u128).unwrap();
+                index_scheduler.queue.create_update_file_with_uuid(id as u128).unwrap();
             let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             assert_eq!(documents_count, 1);
             file.persist().unwrap();
@@ -5385,7 +3600,7 @@ mod tests {
                 }}"#,
             );
             let (uuid, mut file) =
-                index_scheduler.create_update_file_with_uuid(id as u128).unwrap();
+                index_scheduler.queue.create_update_file_with_uuid(id as u128).unwrap();
             let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             assert_eq!(documents_count, 1);
             file.persist().unwrap();
@@ -5472,7 +3687,7 @@ mod tests {
                 }}"#,
             );
             let (uuid, mut file) =
-                index_scheduler.create_update_file_with_uuid(id as u128).unwrap();
+                index_scheduler.queue.create_update_file_with_uuid(id as u128).unwrap();
             let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
             assert_eq!(documents_count, 1);
             file.persist().unwrap();
@@ -5552,222 +3767,6 @@ mod tests {
         assert_eq!(*index_scheduler.run_loop_iteration.read().unwrap(), 1);
         // No matter what happens in process_batch, the index_scheduler should be internally consistent
         snapshot!(snapshot_index_scheduler(&index_scheduler), name: "index_creation_failed");
-    }
-
-    #[test]
-    fn test_task_queue_is_full() {
-        let (index_scheduler, mut handle) =
-            IndexScheduler::test_with_custom_config(vec![], |config| {
-                // that's the minimum map size possible
-                config.task_db_size = 1048576;
-            });
-
-        index_scheduler
-            .register(
-                KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None },
-                None,
-                false,
-            )
-            .unwrap();
-        handle.advance_one_successful_batch();
-        // on average this task takes ~600 bytes
-        loop {
-            let result = index_scheduler.register(
-                KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None },
-                None,
-                false,
-            );
-            if result.is_err() {
-                break;
-            }
-            handle.advance_one_failed_batch();
-        }
-        index_scheduler.assert_internally_consistent();
-
-        // at this point the task DB shoud have reached its limit and we should not be able to register new tasks
-        let result = index_scheduler
-            .register(
-                KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None },
-                None,
-                false,
-            )
-            .unwrap_err();
-        snapshot!(result, @"Meilisearch cannot receive write operations because the limit of the task database has been reached. Please delete tasks to continue performing write operations.");
-        // we won't be able to test this error in an integration test thus as a best effort test I still ensure the error return the expected error code
-        snapshot!(format!("{:?}", result.error_code()), @"NoSpaceLeftOnDevice");
-
-        // Even the task deletion that doesn't delete anything shouldn't be accepted
-        let result = index_scheduler
-            .register(
-                KindWithContent::TaskDeletion { query: S("test"), tasks: RoaringBitmap::new() },
-                None,
-                false,
-            )
-            .unwrap_err();
-        snapshot!(result, @"Meilisearch cannot receive write operations because the limit of the task database has been reached. Please delete tasks to continue performing write operations.");
-        // we won't be able to test this error in an integration test thus as a best effort test I still ensure the error return the expected error code
-        snapshot!(format!("{:?}", result.error_code()), @"NoSpaceLeftOnDevice");
-
-        // But a task deletion that delete something should works
-        index_scheduler
-            .register(
-                KindWithContent::TaskDeletion { query: S("test"), tasks: (0..100).collect() },
-                None,
-                false,
-            )
-            .unwrap();
-        handle.advance_one_successful_batch();
-
-        // Now we should be able to enqueue a few tasks again
-        index_scheduler
-            .register(
-                KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None },
-                None,
-                false,
-            )
-            .unwrap();
-        handle.advance_one_failed_batch();
-    }
-
-    #[test]
-    fn test_auto_deletion_of_tasks() {
-        let (index_scheduler, mut handle) =
-            IndexScheduler::test_with_custom_config(vec![], |config| {
-                config.max_number_of_tasks = 2;
-            });
-
-        index_scheduler
-            .register(
-                KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None },
-                None,
-                false,
-            )
-            .unwrap();
-        handle.advance_one_successful_batch();
-
-        index_scheduler
-            .register(
-                KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None },
-                None,
-                false,
-            )
-            .unwrap();
-        handle.advance_one_failed_batch();
-
-        // at this point the max number of tasks is reached
-        // we can still enqueue multiple tasks
-        index_scheduler
-            .register(
-                KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None },
-                None,
-                false,
-            )
-            .unwrap();
-        index_scheduler
-            .register(
-                KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None },
-                None,
-                false,
-            )
-            .unwrap();
-
-        let rtxn = index_scheduler.env.read_txn().unwrap();
-        let tasks = index_scheduler.get_task_ids(&rtxn, &Query { ..Default::default() }).unwrap();
-        let tasks = index_scheduler.get_existing_tasks(&rtxn, tasks).unwrap();
-        snapshot!(json_string!(tasks, { "[].enqueuedAt" => "[date]", "[].startedAt" => "[date]", "[].finishedAt" => "[date]" }), name: "task_queue_is_full");
-        drop(rtxn);
-
-        // now we're above the max number of tasks
-        // and if we try to advance in the tick function a new task deletion should be enqueued
-        handle.advance_till([Start, BatchCreated]);
-        let rtxn = index_scheduler.env.read_txn().unwrap();
-        let tasks = index_scheduler.get_task_ids(&rtxn, &Query { ..Default::default() }).unwrap();
-        let tasks = index_scheduler.get_existing_tasks(&rtxn, tasks).unwrap();
-        snapshot!(json_string!(tasks, { "[].enqueuedAt" => "[date]", "[].startedAt" => "[date]", "[].finishedAt" => "[date]", ".**.original_filter" => "[filter]", ".**.query" => "[query]" }), name: "task_deletion_have_been_enqueued");
-        drop(rtxn);
-
-        handle.advance_till([InsideProcessBatch, ProcessBatchSucceeded, AfterProcessing]);
-        let rtxn = index_scheduler.env.read_txn().unwrap();
-        let tasks = index_scheduler.get_task_ids(&rtxn, &Query { ..Default::default() }).unwrap();
-        let tasks = index_scheduler.get_existing_tasks(&rtxn, tasks).unwrap();
-        snapshot!(json_string!(tasks, { "[].enqueuedAt" => "[date]", "[].startedAt" => "[date]", "[].finishedAt" => "[date]", ".**.original_filter" => "[filter]", ".**.query" => "[query]" }), name: "task_deletion_have_been_processed");
-        drop(rtxn);
-
-        handle.advance_one_failed_batch();
-        // a new task deletion has been enqueued
-        handle.advance_one_successful_batch();
-        let rtxn = index_scheduler.env.read_txn().unwrap();
-        let tasks = index_scheduler.get_task_ids(&rtxn, &Query { ..Default::default() }).unwrap();
-        let tasks = index_scheduler.get_existing_tasks(&rtxn, tasks).unwrap();
-        snapshot!(json_string!(tasks, { "[].enqueuedAt" => "[date]", "[].startedAt" => "[date]", "[].finishedAt" => "[date]", ".**.original_filter" => "[filter]", ".**.query" => "[query]" }), name: "after_the_second_task_deletion");
-        drop(rtxn);
-
-        handle.advance_one_failed_batch();
-        handle.advance_one_successful_batch();
-        let rtxn = index_scheduler.env.read_txn().unwrap();
-        let tasks = index_scheduler.get_task_ids(&rtxn, &Query { ..Default::default() }).unwrap();
-        let tasks = index_scheduler.get_existing_tasks(&rtxn, tasks).unwrap();
-        snapshot!(json_string!(tasks, { "[].enqueuedAt" => "[date]", "[].startedAt" => "[date]", "[].finishedAt" => "[date]", ".**.original_filter" => "[filter]", ".**.query" => "[query]" }), name: "everything_has_been_processed");
-        drop(rtxn);
-    }
-
-    #[test]
-    fn test_disable_auto_deletion_of_tasks() {
-        let (index_scheduler, mut handle) =
-            IndexScheduler::test_with_custom_config(vec![], |config| {
-                config.cleanup_enabled = false;
-                config.max_number_of_tasks = 2;
-            });
-
-        index_scheduler
-            .register(
-                KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None },
-                None,
-                false,
-            )
-            .unwrap();
-        handle.advance_one_successful_batch();
-
-        index_scheduler
-            .register(
-                KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None },
-                None,
-                false,
-            )
-            .unwrap();
-        handle.advance_one_failed_batch();
-
-        // at this point the max number of tasks is reached
-        // we can still enqueue multiple tasks
-        index_scheduler
-            .register(
-                KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None },
-                None,
-                false,
-            )
-            .unwrap();
-        index_scheduler
-            .register(
-                KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None },
-                None,
-                false,
-            )
-            .unwrap();
-
-        let rtxn = index_scheduler.env.read_txn().unwrap();
-        let tasks = index_scheduler.get_task_ids(&rtxn, &Query { ..Default::default() }).unwrap();
-        let tasks = index_scheduler.get_existing_tasks(&rtxn, tasks).unwrap();
-        snapshot!(json_string!(tasks, { "[].enqueuedAt" => "[date]", "[].startedAt" => "[date]", "[].finishedAt" => "[date]" }), name: "task_queue_is_full");
-        drop(rtxn);
-
-        // now we're above the max number of tasks
-        // and if we try to advance in the tick function no new task deletion should be enqueued
-        handle.advance_till([Start, BatchCreated]);
-        let rtxn = index_scheduler.env.read_txn().unwrap();
-        let tasks = index_scheduler.get_task_ids(&rtxn, &Query { ..Default::default() }).unwrap();
-        let tasks = index_scheduler.get_existing_tasks(&rtxn, tasks).unwrap();
-        snapshot!(json_string!(tasks, { "[].enqueuedAt" => "[date]", "[].startedAt" => "[date]", "[].finishedAt" => "[date]", ".**.original_filter" => "[filter]", ".**.query" => "[query]" }), name: "task_deletion_have_not_been_enqueued");
-        drop(rtxn);
     }
 
     #[test]
@@ -5947,126 +3946,6 @@ mod tests {
     }
 
     #[test]
-    fn basic_set_taskid() {
-        let (index_scheduler, _handle) = IndexScheduler::test(true, vec![]);
-
-        let kind = KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None };
-        let task = index_scheduler.register(kind, None, false).unwrap();
-        snapshot!(task.uid, @"0");
-
-        let kind = KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None };
-        let task = index_scheduler.register(kind, Some(12), false).unwrap();
-        snapshot!(task.uid, @"12");
-
-        let kind = KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None };
-        let error = index_scheduler.register(kind, Some(5), false).unwrap_err();
-        snapshot!(error, @"Received bad task id: 5 should be >= to 13.");
-    }
-
-    #[test]
-    fn dry_run() {
-        let (index_scheduler, _handle) = IndexScheduler::test(true, vec![]);
-
-        let kind = KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None };
-        let task = index_scheduler.register(kind, None, true).unwrap();
-        snapshot!(task.uid, @"0");
-        snapshot!(snapshot_index_scheduler(&index_scheduler), @r"
-        ### Autobatching Enabled = true
-        ### Processing batch None:
-        []
-        ----------------------------------------------------------------------
-        ### All Tasks:
-        ----------------------------------------------------------------------
-        ### Status:
-        ----------------------------------------------------------------------
-        ### Kind:
-        ----------------------------------------------------------------------
-        ### Index Tasks:
-        ----------------------------------------------------------------------
-        ### Index Mapper:
-
-        ----------------------------------------------------------------------
-        ### Canceled By:
-
-        ----------------------------------------------------------------------
-        ### Enqueued At:
-        ----------------------------------------------------------------------
-        ### Started At:
-        ----------------------------------------------------------------------
-        ### Finished At:
-        ----------------------------------------------------------------------
-        ### All Batches:
-        ----------------------------------------------------------------------
-        ### Batch to tasks mapping:
-        ----------------------------------------------------------------------
-        ### Batches Status:
-        ----------------------------------------------------------------------
-        ### Batches Kind:
-        ----------------------------------------------------------------------
-        ### Batches Index Tasks:
-        ----------------------------------------------------------------------
-        ### Batches Enqueued At:
-        ----------------------------------------------------------------------
-        ### Batches Started At:
-        ----------------------------------------------------------------------
-        ### Batches Finished At:
-        ----------------------------------------------------------------------
-        ### File Store:
-
-        ----------------------------------------------------------------------
-        ");
-
-        let kind = KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None };
-        let task = index_scheduler.register(kind, Some(12), true).unwrap();
-        snapshot!(task.uid, @"12");
-        snapshot!(snapshot_index_scheduler(&index_scheduler), @r"
-        ### Autobatching Enabled = true
-        ### Processing batch None:
-        []
-        ----------------------------------------------------------------------
-        ### All Tasks:
-        ----------------------------------------------------------------------
-        ### Status:
-        ----------------------------------------------------------------------
-        ### Kind:
-        ----------------------------------------------------------------------
-        ### Index Tasks:
-        ----------------------------------------------------------------------
-        ### Index Mapper:
-
-        ----------------------------------------------------------------------
-        ### Canceled By:
-
-        ----------------------------------------------------------------------
-        ### Enqueued At:
-        ----------------------------------------------------------------------
-        ### Started At:
-        ----------------------------------------------------------------------
-        ### Finished At:
-        ----------------------------------------------------------------------
-        ### All Batches:
-        ----------------------------------------------------------------------
-        ### Batch to tasks mapping:
-        ----------------------------------------------------------------------
-        ### Batches Status:
-        ----------------------------------------------------------------------
-        ### Batches Kind:
-        ----------------------------------------------------------------------
-        ### Batches Index Tasks:
-        ----------------------------------------------------------------------
-        ### Batches Enqueued At:
-        ----------------------------------------------------------------------
-        ### Batches Started At:
-        ----------------------------------------------------------------------
-        ### Batches Finished At:
-        ----------------------------------------------------------------------
-        ### File Store:
-
-        ----------------------------------------------------------------------
-        ");
-    }
-
-    #[test]
     fn import_vectors() {
         use meilisearch_types::settings::{Settings, Unchecked};
         use milli::update::Setting;
@@ -6114,7 +3993,7 @@ mod tests {
 
         {
             let rtxn = index_scheduler.read_txn().unwrap();
-            let task = index_scheduler.get_task(&rtxn, 0).unwrap().unwrap();
+            let task = index_scheduler.queue.tasks.get_task(&rtxn, 0).unwrap().unwrap();
             let task = meilisearch_types::task_view::TaskView::from_task(&task);
             insta::assert_json_snapshot!(task.details);
         }
@@ -6124,7 +4003,7 @@ mod tests {
 
         {
             let rtxn = index_scheduler.read_txn().unwrap();
-            let task = index_scheduler.get_task(&rtxn, 0).unwrap().unwrap();
+            let task = index_scheduler.queue.tasks.get_task(&rtxn, 0).unwrap().unwrap();
             let task = meilisearch_types::task_view::TaskView::from_task(&task);
             insta::assert_json_snapshot!(task.details);
         }
@@ -6183,7 +4062,7 @@ mod tests {
             }
         );
 
-        let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0u128).unwrap();
+        let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(0u128).unwrap();
         let documents_count = read_json(doc.to_string().as_bytes(), &mut file).unwrap();
         assert_eq!(documents_count, 1);
         file.persist().unwrap();
@@ -6257,7 +4136,7 @@ mod tests {
                     }
         );
 
-        let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(1u128).unwrap();
+        let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(1u128).unwrap();
         let documents_count = read_json(doc.to_string().as_bytes(), &mut file).unwrap();
         assert_eq!(documents_count, 1);
         file.persist().unwrap();
@@ -6377,7 +4256,7 @@ mod tests {
             ]
         );
 
-        let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0_u128).unwrap();
+        let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(0_u128).unwrap();
         let documents_count =
             read_json(serde_json::to_string_pretty(&content).unwrap().as_bytes(), &mut file)
                 .unwrap();
@@ -6508,7 +4387,7 @@ mod tests {
             ]
         );
 
-        let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(1_u128).unwrap();
+        let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(1_u128).unwrap();
         let documents_count =
             read_json(serde_json::to_string_pretty(&content).unwrap().as_bytes(), &mut file)
                 .unwrap();
@@ -6610,7 +4489,7 @@ mod tests {
             ]
         );
 
-        let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0_u128).unwrap();
+        let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(0_u128).unwrap();
         let documents_count =
             read_json(serde_json::to_string_pretty(&content).unwrap().as_bytes(), &mut file)
                 .unwrap();
@@ -6785,7 +4664,7 @@ mod tests {
             ]
         );
 
-        let (uuid, mut file) = index_scheduler.create_update_file_with_uuid(0_u128).unwrap();
+        let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(0_u128).unwrap();
         let documents_count =
             read_json(serde_json::to_string_pretty(&content).unwrap().as_bytes(), &mut file)
                 .unwrap();

@@ -36,7 +36,7 @@ async fn get_batch(
 
     let query = index_scheduler::Query { batch_uids: Some(vec![batch_uid]), ..Query::default() };
     let filters = index_scheduler.filters();
-    let (batches, _) = index_scheduler.get_batches_from_authorized_indexes(query, filters)?;
+    let (batches, _) = index_scheduler.get_batches_from_authorized_indexes(&query, filters)?;
 
     if let Some(batch) = batches.first() {
         let task_view = BatchView::from_batch(batch);
@@ -66,7 +66,7 @@ async fn get_batches(
     let query = params.into_query();
 
     let filters = index_scheduler.filters();
-    let (tasks, total) = index_scheduler.get_batches_from_authorized_indexes(query, filters)?;
+    let (tasks, total) = index_scheduler.get_batches_from_authorized_indexes(&query, filters)?;
     let mut results: Vec<_> = tasks.iter().map(BatchView::from_batch).collect();
 
     // If we were able to fetch the number +1 tasks we asked

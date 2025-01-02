@@ -307,7 +307,7 @@ fn open_or_create_database_unchecked(
             task_db_size: opt.max_task_db_size.as_u64() as usize,
             index_base_map_size: opt.max_index_size.as_u64() as usize,
             enable_mdb_writemap: opt.experimental_reduce_indexing_memory_usage,
-            indexer_config: (&opt.indexer_options).try_into()?,
+            indexer_config: Arc::new((&opt.indexer_options).try_into()?),
             autobatching_enabled: true,
             cleanup_enabled: !opt.experimental_replication_parameters,
             max_number_of_tasks: 1_000_000,

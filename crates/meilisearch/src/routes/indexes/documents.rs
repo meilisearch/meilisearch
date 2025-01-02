@@ -608,7 +608,7 @@ async fn document_addition(
         }
     };
 
-    let (uuid, mut update_file) = index_scheduler.create_update_file(dry_run)?;
+    let (uuid, mut update_file) = index_scheduler.queue.create_update_file(dry_run)?;
     let documents_count = match format {
         PayloadType::Ndjson => {
             let (path, file) = update_file.into_parts();
@@ -670,7 +670,7 @@ async fn document_addition(
         Err(e) => {
             // Here the file MAY have been persisted or not.
             // We don't know thus we ignore the file not found error.
-            match index_scheduler.delete_update_file(uuid) {
+            match index_scheduler.queue.delete_update_file(uuid) {
                 Ok(()) => (),
                 Err(index_scheduler::Error::FileStore(file_store::Error::IoError(e)))
                     if e.kind() == ErrorKind::NotFound => {}
@@ -701,7 +701,7 @@ async fn document_addition(
     {
         Ok(task) => task,
         Err(e) => {
-            index_scheduler.delete_update_file(uuid)?;
+            index_scheduler.queue.delete_update_file(uuid)?;
             return Err(e.into());
         }
     };

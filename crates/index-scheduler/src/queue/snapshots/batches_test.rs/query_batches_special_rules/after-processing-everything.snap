@@ -1,0 +1,100 @@
+---
+source: crates/index-scheduler/src/queue/batches_test.rs
+snapshot_kind: text
+---
+### Autobatching Enabled = true
+### Processing batch None:
+[]
+----------------------------------------------------------------------
+### All Tasks:
+0 {uid: 0, batch_uid: 0, status: succeeded, details: { primary_key: Some("mouse") }, kind: IndexCreation { index_uid: "catto", primary_key: Some("mouse") }}
+1 {uid: 1, batch_uid: 1, status: succeeded, details: { primary_key: Some("sheep") }, kind: IndexCreation { index_uid: "doggo", primary_key: Some("sheep") }}
+2 {uid: 2, batch_uid: 2, status: failed, error: ResponseError { code: 200, message: "Planned failure for tests.", error_code: "internal", error_type: "internal", error_link: "https://docs.meilisearch.com/errors#internal" }, details: { swaps: [IndexSwap { indexes: ("catto", "doggo") }] }, kind: IndexSwap { swaps: [IndexSwap { indexes: ("catto", "doggo") }] }}
+3 {uid: 3, batch_uid: 3, status: failed, error: ResponseError { code: 200, message: "Index `whalo` not found.", error_code: "index_not_found", error_type: "invalid_request", error_link: "https://docs.meilisearch.com/errors#index_not_found" }, details: { swaps: [IndexSwap { indexes: ("catto", "whalo") }] }, kind: IndexSwap { swaps: [IndexSwap { indexes: ("catto", "whalo") }] }}
+----------------------------------------------------------------------
+### Status:
+enqueued []
+succeeded [0,1,]
+failed [2,3,]
+----------------------------------------------------------------------
+### Kind:
+"indexCreation" [0,1,]
+"indexSwap" [2,3,]
+----------------------------------------------------------------------
+### Index Tasks:
+catto [0,2,3,]
+doggo [1,2,]
+whalo [3,]
+----------------------------------------------------------------------
+### Index Mapper:
+catto: { number_of_documents: 0, field_distribution: {} }
+doggo: { number_of_documents: 0, field_distribution: {} }
+
+----------------------------------------------------------------------
+### Canceled By:
+
+----------------------------------------------------------------------
+### Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+----------------------------------------------------------------------
+### Started At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+----------------------------------------------------------------------
+### Finished At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+----------------------------------------------------------------------
+### All Batches:
+0 {uid: 0, details: {"primaryKey":"mouse"}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"catto":1}}, }
+1 {uid: 1, details: {"primaryKey":"sheep"}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"doggo":1}}, }
+2 {uid: 2, details: {"swaps":[{"indexes":["catto","doggo"]}]}, stats: {"totalNbTasks":1,"status":{"failed":1},"types":{"indexSwap":1},"indexUids":{}}, }
+3 {uid: 3, details: {"swaps":[{"indexes":["catto","whalo"]}]}, stats: {"totalNbTasks":1,"status":{"failed":1},"types":{"indexSwap":1},"indexUids":{}}, }
+----------------------------------------------------------------------
+### Batch to tasks mapping:
+0 [0,]
+1 [1,]
+2 [2,]
+3 [3,]
+----------------------------------------------------------------------
+### Batches Status:
+succeeded [0,1,]
+failed [2,3,]
+----------------------------------------------------------------------
+### Batches Kind:
+"indexCreation" [0,1,]
+"indexSwap" [2,3,]
+----------------------------------------------------------------------
+### Batches Index Tasks:
+catto [0,2,3,]
+doggo [1,2,]
+whalo [3,]
+----------------------------------------------------------------------
+### Batches Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+----------------------------------------------------------------------
+### Batches Started At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+----------------------------------------------------------------------
+### Batches Finished At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+----------------------------------------------------------------------
+### File Store:
+
+----------------------------------------------------------------------

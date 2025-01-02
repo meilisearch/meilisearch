@@ -269,7 +269,7 @@ impl IndexScheduler {
         match batch {
             BatchKind::DocumentClear { ids } => Ok(Some(Batch::IndexOperation {
                 op: IndexOperation::DocumentClear {
-                    tasks: self.get_existing_tasks_for_processing_batch(
+                    tasks: self.queue.get_existing_tasks_for_processing_batch(
                         rtxn,
                         current_batch,
                         ids,
@@ -279,7 +279,8 @@ impl IndexScheduler {
                 must_create_index,
             })),
             BatchKind::DocumentEdition { id } => {
-                let mut task = self.get_task(rtxn, id)?.ok_or(Error::CorruptedTaskQueue)?;
+                let mut task =
+                    self.queue.tasks.get_task(rtxn, id)?.ok_or(Error::CorruptedTaskQueue)?;
                 current_batch.processing(Some(&mut task));
                 match &task.kind {
                     KindWithContent::DocumentEdition { index_uid, .. } => {
@@ -295,7 +296,7 @@ impl IndexScheduler {
                 }
             }
             BatchKind::DocumentOperation { method, operation_ids, .. } => {
-                let tasks = self.get_existing_tasks_for_processing_batch(
+                let tasks = self.queue.get_existing_tasks_for_processing_batch(
                     rtxn,
                     current_batch,
                     operation_ids,
@@ -338,7 +339,7 @@ impl IndexScheduler {
                 }))
             }
             BatchKind::DocumentDeletion { deletion_ids, includes_by_filter: _ } => {
-                let tasks = self.get_existing_tasks_for_processing_batch(
+                let tasks = self.queue.get_existing_tasks_for_processing_batch(
                     rtxn,
                     current_batch,
                     deletion_ids,
@@ -350,7 +351,7 @@ impl IndexScheduler {
                 }))
             }
             BatchKind::Settings { settings_ids, .. } => {
-                let tasks = self.get_existing_tasks_for_processing_batch(
+                let tasks = self.queue.get_existing_tasks_for_processing_batch(
                     rtxn,
                     current_batch,
                     settings_ids,
@@ -416,7 +417,8 @@ impl IndexScheduler {
                 }))
             }
             BatchKind::IndexCreation { id } => {
-                let mut task = self.get_task(rtxn, id)?.ok_or(Error::CorruptedTaskQueue)?;
+                let mut task =
+                    self.queue.tasks.get_task(rtxn, id)?.ok_or(Error::CorruptedTaskQueue)?;
                 current_batch.processing(Some(&mut task));
                 let (index_uid, primary_key) = match &task.kind {
                     KindWithContent::IndexCreation { index_uid, primary_key } => {
@@ -427,7 +429,8 @@ impl IndexScheduler {
                 Ok(Some(Batch::IndexCreation { index_uid, primary_key, task }))
             }
             BatchKind::IndexUpdate { id } => {
-                let mut task = self.get_task(rtxn, id)?.ok_or(Error::CorruptedTaskQueue)?;
+                let mut task =
+                    self.queue.tasks.get_task(rtxn, id)?.ok_or(Error::CorruptedTaskQueue)?;
                 current_batch.processing(Some(&mut task));
                 let primary_key = match &task.kind {
                     KindWithContent::IndexUpdate { primary_key, .. } => primary_key.clone(),
@@ -438,10 +441,15 @@ impl IndexScheduler {
             BatchKind::IndexDeletion { ids } => Ok(Some(Batch::IndexDeletion {
                 index_uid,
                 index_has_been_created: must_create_index,
-                tasks: self.get_existing_tasks_for_processing_batch(rtxn, current_batch, ids)?,
+                tasks: self.queue.get_existing_tasks_for_processing_batch(
+                    rtxn,
+                    current_batch,
+                    ids,
+                )?,
             })),
             BatchKind::IndexSwap { id } => {
-                let mut task = self.get_task(rtxn, id)?.ok_or(Error::CorruptedTaskQueue)?;
+                let mut task =
+                    self.queue.tasks.get_task(rtxn, id)?.ok_or(Error::CorruptedTaskQueue)?;
                 current_batch.processing(Some(&mut task));
                 Ok(Some(Batch::IndexSwap { task }))
             }
@@ -462,46 +470,49 @@ impl IndexScheduler {
         #[cfg(test)]
         self.maybe_fail(crate::tests::FailureLocation::InsideCreateBatch)?;
 
-        let batch_id = self.next_batch_id(rtxn)?;
+        let batch_id = self.queue.batches.next_batch_id(rtxn)?;
         let mut current_batch = ProcessingBatch::new(batch_id);
 
-        let enqueued = &self.get_status(rtxn, Status::Enqueued)?;
-        let to_cancel = self.get_kind(rtxn, Kind::TaskCancelation)? & enqueued;
+        let enqueued = &self.queue.tasks.get_status(rtxn, Status::Enqueued)?;
+        let to_cancel = self.queue.tasks.get_kind(rtxn, Kind::TaskCancelation)? & enqueued;
 
         // 1. we get the last task to cancel.
         if let Some(task_id) = to_cancel.max() {
-            let mut task = self.get_task(rtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
+            let mut task =
+                self.queue.tasks.get_task(rtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
             current_batch.processing(Some(&mut task));
             return Ok(Some((Batch::TaskCancelation { task }, current_batch)));
         }
 
         // 2. we get the next task to delete
-        let to_delete = self.get_kind(rtxn, Kind::TaskDeletion)? & enqueued;
+        let to_delete = self.queue.tasks.get_kind(rtxn, Kind::TaskDeletion)? & enqueued;
         if !to_delete.is_empty() {
-            let mut tasks = self.get_existing_tasks(rtxn, to_delete)?;
+            let mut tasks = self.queue.tasks.get_existing_tasks(rtxn, to_delete)?;
             current_batch.processing(&mut tasks);
             return Ok(Some((Batch::TaskDeletions(tasks), current_batch)));
         }
 
         // 3. we batch the snapshot.
-        let to_snapshot = self.get_kind(rtxn, Kind::SnapshotCreation)? & enqueued;
+        let to_snapshot = self.queue.tasks.get_kind(rtxn, Kind::SnapshotCreation)? & enqueued;
         if !to_snapshot.is_empty() {
-            let mut tasks = self.get_existing_tasks(rtxn, to_snapshot)?;
+            let mut tasks = self.queue.tasks.get_existing_tasks(rtxn, to_snapshot)?;
             current_batch.processing(&mut tasks);
             return Ok(Some((Batch::SnapshotCreation(tasks), current_batch)));
         }
 
         // 4. we batch the dumps.
-        let to_dump = self.get_kind(rtxn, Kind::DumpCreation)? & enqueued;
+        let to_dump = self.queue.tasks.get_kind(rtxn, Kind::DumpCreation)? & enqueued;
         if let Some(to_dump) = to_dump.min() {
-            let mut task = self.get_task(rtxn, to_dump)?.ok_or(Error::CorruptedTaskQueue)?;
+            let mut task =
+                self.queue.tasks.get_task(rtxn, to_dump)?.ok_or(Error::CorruptedTaskQueue)?;
             current_batch.processing(Some(&mut task));
             return Ok(Some((Batch::Dump(task), current_batch)));
         }
 
         // 5. We make a batch from the unprioritised tasks. Start by taking the next enqueued task.
         let task_id = if let Some(task_id) = enqueued.min() { task_id } else { return Ok(None) };
-        let mut task = self.get_task(rtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
+        let mut task =
+            self.queue.tasks.get_task(rtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
 
         // If the task is not associated with any index, verify that it is an index swap and
         // create the batch directly. Otherwise, get the index name associated with the task
@@ -523,7 +534,7 @@ impl IndexScheduler {
             primary_key = index.primary_key(&rtxn)?.map(|pk| pk.to_string());
         }
 
-        let index_tasks = self.index_tasks(rtxn, index_name)? & enqueued;
+        let index_tasks = self.queue.tasks.index_tasks(rtxn, index_name)? & enqueued;
 
         // If autobatching is disabled we only take one task at a time.
         // Otherwise, we take only a maximum of tasks to create batches.
@@ -534,7 +545,9 @@ impl IndexScheduler {
             .into_iter()
             .take(tasks_limit)
             .map(|task_id| {
-                self.get_task(rtxn, task_id)
+                self.queue
+                    .tasks
+                    .get_task(rtxn, task_id)
                     .and_then(|task| task.ok_or(Error::CorruptedTaskQueue))
                     .map(|task| (task.uid, task.kind))
             })
@@ -690,14 +703,18 @@ impl IndexScheduler {
 
                 // 2.4 Only copy the update files of the enqueued tasks
                 progress.update_progress(SnapshotCreationProgress::SnapshotTheUpdateFiles);
-                let enqueued = self.get_status(&rtxn, Status::Enqueued)?;
+                let enqueued = self.queue.tasks.get_status(&rtxn, Status::Enqueued)?;
                 let (atomic, update_file_progress) =
                     AtomicUpdateFileStep::new(enqueued.len() as u32);
                 progress.update_progress(update_file_progress);
                 for task_id in enqueued {
-                    let task = self.get_task(&rtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
+                    let task = self
+                        .queue
+                        .tasks
+                        .get_task(&rtxn, task_id)?
+                        .ok_or(Error::CorruptedTaskQueue)?;
                     if let Some(content_uuid) = task.content_uuid() {
-                        let src = self.file_store.get_update_path(content_uuid);
+                        let src = self.queue.file_store.get_update_path(content_uuid);
                         let dst = update_files_dir.join(content_uuid.to_string());
                         fs::copy(src, dst)?;
                     }
@@ -794,10 +811,10 @@ impl IndexScheduler {
                 let mut dump_tasks = dump.create_tasks_queue()?;
 
                 let (atomic, update_task_progress) =
-                    AtomicTaskStep::new(self.all_tasks.len(&rtxn)? as u32);
+                    AtomicTaskStep::new(self.queue.tasks.all_tasks.len(&rtxn)? as u32);
                 progress.update_progress(update_task_progress);
 
-                for ret in self.all_tasks.iter(&rtxn)? {
+                for ret in self.queue.tasks.all_tasks.iter(&rtxn)? {
                     if self.must_stop_processing.get() {
                         return Err(Error::AbortedTask);
                     }
@@ -826,7 +843,7 @@ impl IndexScheduler {
                             return Err(Error::AbortedTask);
                         }
                         if status == Status::Enqueued {
-                            let content_file = self.file_store.get_update(content_file)?;
+                            let content_file = self.queue.file_store.get_update(content_file)?;
 
                             let reader = DocumentsBatchReader::from_reader(content_file)
                                 .map_err(|e| Error::from_milli(e.into(), None))?;
@@ -1215,9 +1232,9 @@ impl IndexScheduler {
         }
 
         // 2. Get the task set for index = name that appeared before the index swap task
-        let mut index_lhs_task_ids = self.index_tasks(wtxn, lhs)?;
+        let mut index_lhs_task_ids = self.queue.tasks.index_tasks(wtxn, lhs)?;
         index_lhs_task_ids.remove_range(task_id..);
-        let mut index_rhs_task_ids = self.index_tasks(wtxn, rhs)?;
+        let mut index_rhs_task_ids = self.queue.tasks.index_tasks(wtxn, rhs)?;
         index_rhs_task_ids.remove_range(task_id..);
 
         // 3. before_name -> new_name in the task's KindWithContent
@@ -1227,20 +1244,21 @@ impl IndexScheduler {
         progress.update_progress(task_progress);
 
         for task_id in tasks_to_update {
-            let mut task = self.get_task(wtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
+            let mut task =
+                self.queue.tasks.get_task(wtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
             swap_index_uid_in_task(&mut task, (lhs, rhs));
-            self.all_tasks.put(wtxn, &task_id, &task)?;
+            self.queue.tasks.all_tasks.put(wtxn, &task_id, &task)?;
             atomic.fetch_add(1, Ordering::Relaxed);
         }
 
         // 4. remove the task from indexuid = before_name
         // 5. add the task to indexuid = after_name
         progress.update_progress(InnerSwappingTwoIndexes::UpdateTheIndexesMetadata);
-        self.update_index(wtxn, lhs, |lhs_tasks| {
+        self.queue.tasks.update_index(wtxn, lhs, |lhs_tasks| {
             *lhs_tasks -= &index_lhs_task_ids;
             *lhs_tasks |= &index_rhs_task_ids;
         })?;
-        self.update_index(wtxn, rhs, |rhs_tasks| {
+        self.queue.tasks.update_index(wtxn, rhs, |rhs_tasks| {
             *rhs_tasks -= &index_rhs_task_ids;
             *rhs_tasks |= &index_lhs_task_ids;
         })?;
@@ -1309,7 +1327,7 @@ impl IndexScheduler {
                 let mut content_files = Vec::new();
                 for operation in &operations {
                     if let DocumentOperation::Add(content_uuid) = operation {
-                        let content_file = self.file_store.get_update(*content_uuid)?;
+                        let content_file = self.queue.file_store.get_update(*content_uuid)?;
                         let mmap = unsafe { memmap2::Mmap::map(&content_file)? };
                         if !mmap.is_empty() {
                             content_files.push(mmap);
@@ -1772,10 +1790,10 @@ impl IndexScheduler {
         progress.update_progress(TaskDeletionProgress::DeletingTasksDateTime);
 
         // 1. Remove from this list the tasks that we are not allowed to delete
-        let enqueued_tasks = self.get_status(wtxn, Status::Enqueued)?;
+        let enqueued_tasks = self.queue.tasks.get_status(wtxn, Status::Enqueued)?;
         let processing_tasks = &self.processing_tasks.read().unwrap().processing.clone();
 
-        let all_task_ids = self.all_task_ids(wtxn)?;
+        let all_task_ids = self.queue.tasks.all_task_ids(wtxn)?;
         let mut to_delete_tasks = all_task_ids & matched_tasks;
         to_delete_tasks -= &**processing_tasks;
         to_delete_tasks -= &enqueued_tasks;
@@ -1792,7 +1810,8 @@ impl IndexScheduler {
         let (atomic_progress, task_progress) = AtomicTaskStep::new(to_delete_tasks.len() as u32);
         progress.update_progress(task_progress);
         for task_id in to_delete_tasks.iter() {
-            let task = self.get_task(wtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
+            let task =
+                self.queue.tasks.get_task(wtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
 
             affected_indexes.extend(task.indexes().into_iter().map(|x| x.to_owned()));
             affected_statuses.insert(task.status);
@@ -1801,12 +1820,27 @@ impl IndexScheduler {
             // we can only delete succeeded, failed, and canceled tasks.
             // In each of those cases, the persisted data is supposed to
             // have been deleted already.
-            utils::remove_task_datetime(wtxn, self.enqueued_at, task.enqueued_at, task.uid)?;
+            utils::remove_task_datetime(
+                wtxn,
+                self.queue.tasks.enqueued_at,
+                task.enqueued_at,
+                task.uid,
+            )?;
             if let Some(started_at) = task.started_at {
-                utils::remove_task_datetime(wtxn, self.started_at, started_at, task.uid)?;
+                utils::remove_task_datetime(
+                    wtxn,
+                    self.queue.tasks.started_at,
+                    started_at,
+                    task.uid,
+                )?;
             }
             if let Some(finished_at) = task.finished_at {
-                utils::remove_task_datetime(wtxn, self.finished_at, finished_at, task.uid)?;
+                utils::remove_task_datetime(
+                    wtxn,
+                    self.queue.tasks.finished_at,
+                    finished_at,
+                    task.uid,
+                )?;
             }
             if let Some(canceled_by) = task.canceled_by {
                 affected_canceled_by.insert(canceled_by);
@@ -1823,17 +1857,17 @@ impl IndexScheduler {
         );
         progress.update_progress(task_progress);
         for index in affected_indexes.iter() {
-            self.update_index(wtxn, index, |bitmap| *bitmap -= &to_delete_tasks)?;
+            self.queue.tasks.update_index(wtxn, index, |bitmap| *bitmap -= &to_delete_tasks)?;
             atomic_progress.fetch_add(1, Ordering::Relaxed);
         }
 
         for status in affected_statuses.iter() {
-            self.update_status(wtxn, *status, |bitmap| *bitmap -= &to_delete_tasks)?;
+            self.queue.tasks.update_status(wtxn, *status, |bitmap| *bitmap -= &to_delete_tasks)?;
             atomic_progress.fetch_add(1, Ordering::Relaxed);
         }
 
         for kind in affected_kinds.iter() {
-            self.update_kind(wtxn, *kind, |bitmap| *bitmap -= &to_delete_tasks)?;
+            self.queue.tasks.update_kind(wtxn, *kind, |bitmap| *bitmap -= &to_delete_tasks)?;
             atomic_progress.fetch_add(1, Ordering::Relaxed);
         }
 
@@ -1841,16 +1875,16 @@ impl IndexScheduler {
         let (atomic_progress, task_progress) = AtomicTaskStep::new(to_delete_tasks.len() as u32);
         progress.update_progress(task_progress);
         for task in to_delete_tasks.iter() {
-            self.all_tasks.delete(wtxn, &task)?;
+            self.queue.tasks.all_tasks.delete(wtxn, &task)?;
             atomic_progress.fetch_add(1, Ordering::Relaxed);
         }
         for canceled_by in affected_canceled_by {
-            if let Some(mut tasks) = self.canceled_by.get(wtxn, &canceled_by)? {
+            if let Some(mut tasks) = self.queue.tasks.canceled_by.get(wtxn, &canceled_by)? {
                 tasks -= &to_delete_tasks;
                 if tasks.is_empty() {
-                    self.canceled_by.delete(wtxn, &canceled_by)?;
+                    self.queue.tasks.canceled_by.delete(wtxn, &canceled_by)?;
                 } else {
-                    self.canceled_by.put(wtxn, &canceled_by, &tasks)?;
+                    self.queue.tasks.canceled_by.put(wtxn, &canceled_by, &tasks)?;
                 }
             }
         }
@@ -1858,41 +1892,41 @@ impl IndexScheduler {
         let (atomic_progress, batch_progress) = AtomicBatchStep::new(affected_batches.len() as u32);
         progress.update_progress(batch_progress);
         for (batch_id, to_delete_tasks) in affected_batches {
-            if let Some(mut tasks) = self.batch_to_tasks_mapping.get(wtxn, &batch_id)? {
+            if let Some(mut tasks) = self.queue.batch_to_tasks_mapping.get(wtxn, &batch_id)? {
                 tasks -= &to_delete_tasks;
                 // We must remove the batch entirely
                 if tasks.is_empty() {
-                    self.all_batches.delete(wtxn, &batch_id)?;
-                    self.batch_to_tasks_mapping.delete(wtxn, &batch_id)?;
+                    self.queue.batches.all_batches.delete(wtxn, &batch_id)?;
+                    self.queue.batch_to_tasks_mapping.delete(wtxn, &batch_id)?;
                 }
                 // Anyway, we must remove the batch from all its reverse indexes.
                 // The only way to do that is to check
 
                 for index in affected_indexes.iter() {
-                    let index_tasks = self.index_tasks(wtxn, index)?;
+                    let index_tasks = self.queue.tasks.index_tasks(wtxn, index)?;
                     let remaining_index_tasks = index_tasks & &tasks;
                     if remaining_index_tasks.is_empty() {
-                        self.update_batch_index(wtxn, index, |bitmap| {
+                        self.queue.batches.update_index(wtxn, index, |bitmap| {
                             bitmap.remove(batch_id);
                         })?;
                     }
                 }
 
                 for status in affected_statuses.iter() {
-                    let status_tasks = self.get_status(wtxn, *status)?;
+                    let status_tasks = self.queue.tasks.get_status(wtxn, *status)?;
                     let remaining_status_tasks = status_tasks & &tasks;
                     if remaining_status_tasks.is_empty() {
-                        self.update_batch_status(wtxn, *status, |bitmap| {
+                        self.queue.batches.update_status(wtxn, *status, |bitmap| {
                             bitmap.remove(batch_id);
                         })?;
                     }
                 }
 
                 for kind in affected_kinds.iter() {
-                    let kind_tasks = self.get_kind(wtxn, *kind)?;
+                    let kind_tasks = self.queue.tasks.get_kind(wtxn, *kind)?;
                     let remaining_kind_tasks = kind_tasks & &tasks;
                     if remaining_kind_tasks.is_empty() {
-                        self.update_batch_kind(wtxn, *kind, |bitmap| {
+                        self.queue.batches.update_kind(wtxn, *kind, |bitmap| {
                             bitmap.remove(batch_id);
                         })?;
                     }
@@ -1920,14 +1954,14 @@ impl IndexScheduler {
         // 1. Remove from this list the tasks that we are not allowed to cancel
         //    Notice that only the _enqueued_ ones are cancelable and we should
         //    have already aborted the indexation of the _processing_ ones
-        let cancelable_tasks = self.get_status(rtxn, Status::Enqueued)?;
+        let cancelable_tasks = self.queue.tasks.get_status(rtxn, Status::Enqueued)?;
         let tasks_to_cancel = cancelable_tasks & matched_tasks;
 
         let (task_progress, progress_obj) = AtomicTaskStep::new(tasks_to_cancel.len() as u32);
         progress.update_progress(progress_obj);
 
         // 2. We now have a list of tasks to cancel, cancel them
-        let mut tasks = self.get_existing_tasks(
+        let mut tasks = self.queue.tasks.get_existing_tasks(
             rtxn,
             tasks_to_cancel.iter().inspect(|_| {
                 task_progress.fetch_add(1, Ordering::Relaxed);
