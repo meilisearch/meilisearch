@@ -1,4 +1,4 @@
-use crate::Breakpoint::*;
+use crate::test_utils::Breakpoint::*;
 use meili_snap::snapshot;
 use meilisearch_auth::AuthFilter;
 use meilisearch_types::{
@@ -9,7 +9,7 @@ use time::{Duration, OffsetDateTime};
 
 use crate::{
     insta_snapshot::{snapshot_bitmap, snapshot_index_scheduler},
-    tests::{index_creation_task, FailureLocation},
+    test_utils::{index_creation_task, FailureLocation},
     IndexScheduler, Query,
 };
 

@@ -1,0 +1,95 @@
+---
+source: crates/index-scheduler/src/queue/test.rs
+snapshot_kind: text
+---
+[
+  {
+    "uid": 0,
+    "batchUid": 0,
+    "enqueuedAt": "[date]",
+    "startedAt": "[date]",
+    "finishedAt": "[date]",
+    "error": null,
+    "canceledBy": null,
+    "details": {
+      "IndexInfo": {
+        "primary_key": null
+      }
+    },
+    "status": "succeeded",
+    "kind": {
+      "indexCreation": {
+        "index_uid": "doggo",
+        "primary_key": null
+      }
+    }
+  },
+  {
+    "uid": 1,
+    "batchUid": 1,
+    "enqueuedAt": "[date]",
+    "startedAt": "[date]",
+    "finishedAt": "[date]",
+    "error": {
+      "message": "Index `doggo` already exists.",
+      "code": "index_already_exists",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#index_already_exists"
+    },
+    "canceledBy": null,
+    "details": {
+      "IndexInfo": {
+        "primary_key": null
+      }
+    },
+    "status": "failed",
+    "kind": {
+      "indexCreation": {
+        "index_uid": "doggo",
+        "primary_key": null
+      }
+    }
+  },
+  {
+    "uid": 2,
+    "batchUid": null,
+    "enqueuedAt": "[date]",
+    "startedAt": "[date]",
+    "finishedAt": "[date]",
+    "error": null,
+    "canceledBy": null,
+    "details": {
+      "IndexInfo": {
+        "primary_key": null
+      }
+    },
+    "status": "enqueued",
+    "kind": {
+      "indexCreation": {
+        "index_uid": "doggo",
+        "primary_key": null
+      }
+    }
+  },
+  {
+    "uid": 3,
+    "batchUid": null,
+    "enqueuedAt": "[date]",
+    "startedAt": "[date]",
+    "finishedAt": "[date]",
+    "error": null,
+    "canceledBy": null,
+    "details": {
+      "IndexInfo": {
+        "primary_key": null
+      }
+    },
+    "status": "enqueued",
+    "kind": {
+      "indexCreation": {
+        "index_uid": "doggo",
+        "primary_key": null
+      }
+    }
+  }
+]

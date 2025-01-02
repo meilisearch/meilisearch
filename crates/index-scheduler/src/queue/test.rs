@@ -1,4 +1,4 @@
-use crate::{Breakpoint::*, Query};
+use crate::{test_utils::Breakpoint::*, Query};
 use big_s::S;
 use meili_snap::{json_string, snapshot};
 use meilisearch_types::{
@@ -9,7 +9,7 @@ use roaring::RoaringBitmap;
 
 use crate::{
     insta_snapshot::snapshot_index_scheduler,
-    tests::{index_creation_task, replace_document_import_task},
+    test_utils::{index_creation_task, replace_document_import_task},
     IndexScheduler,
 };
 

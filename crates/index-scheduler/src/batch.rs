@@ -468,7 +468,7 @@ impl IndexScheduler {
         rtxn: &RoTxn,
     ) -> Result<Option<(Batch, ProcessingBatch)>> {
         #[cfg(test)]
-        self.maybe_fail(crate::tests::FailureLocation::InsideCreateBatch)?;
+        self.maybe_fail(crate::test_utils::FailureLocation::InsideCreateBatch)?;
 
         let batch_id = self.queue.batches.next_batch_id(rtxn)?;
         let mut current_batch = ProcessingBatch::new(batch_id);
@@ -587,9 +587,9 @@ impl IndexScheduler {
     ) -> Result<Vec<Task>> {
         #[cfg(test)]
         {
-            self.maybe_fail(crate::tests::FailureLocation::InsideProcessBatch)?;
-            self.maybe_fail(crate::tests::FailureLocation::PanicInsideProcessBatch)?;
-            self.breakpoint(crate::Breakpoint::InsideProcessBatch);
+            self.maybe_fail(crate::test_utils::FailureLocation::InsideProcessBatch)?;
+            self.maybe_fail(crate::test_utils::FailureLocation::PanicInsideProcessBatch)?;
+            self.breakpoint(crate::test_utils::Breakpoint::InsideProcessBatch);
         }
 
         match batch {
