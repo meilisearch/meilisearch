@@ -103,7 +103,6 @@ impl FacetsUpdateIncrementalInner {
             }
 
             // need to find a new parent
-
             let parent_key_prefix = FacetGroupKey {
                 field_id: self.field_id,
                 level: parent_level,
@@ -154,16 +153,26 @@ impl FacetsUpdateIncrementalInner {
                     }
                     // remove old left bound
                     unsafe { it.del_current()? };
+                    drop(it);
                     // pop all elements and order to visit the new left bound
-                    if let Some(first) = touched_children.last() {
-                        touched_parents.push(first);
-                    } else {
-                        touched_parents.push(child);
+                    touched_parents.push(child.clone());
+                    self.compute_parent_group(wtxn, child_level, child)?;
+                    for child in touched_children {
+                        let new_left_bound = touched_parents.last_mut().unwrap();
+                        new_left_bound.clear();
+                        new_left_bound.extend_from_slice(&child);
+                        self.compute_parent_group(wtxn, child_level, child)?;
                     }
                 }
                 Some(Err(err)) => return Err(err.into()),
                 // 2. max level reached, exit
-                None => {}
+                None => {
+                    drop(it);
+                    self.compute_parent_group(wtxn, child_level, child)?;
+                    for child in touched_children {
+                        self.compute_parent_group(wtxn, child_level, child)?;
+                    }
+                }
             }
         }
         self.find_touched_parents(
@@ -264,11 +273,27 @@ impl FacetsUpdateIncrementalInner {
                     left_bound: range_left_bound.as_slice(),
                 };
                 drop(child_it);
-                self.db.delete(wtxn, &update_key)?;
+                if let Bound::Included(_) = child_left_bound {
+                    self.db.delete(wtxn, &update_key)?;
+                }
+
                 break;
             };
 
+            drop(child_it);
             let current_left_bound = group_left_bound.to_owned();
+
+            let delete_old_bound = match child_left_bound {
+                Bound::Included(bound) => {
+                    if bound.left_bound != current_left_bound {
+                        Some(range_left_bound.clone())
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            };
+
             range_left_bound.clear();
             range_left_bound.extend_from_slice(right_bound);
             let child_left_key = FacetGroupKey {
@@ -277,7 +302,16 @@ impl FacetsUpdateIncrementalInner {
                 left_bound: range_left_bound.as_slice(),
             };
             child_left_bound = Bound::Excluded(child_left_key);
-            drop(child_it);
+
+            if let Some(old_bound) = delete_old_bound {
+                let update_key = FacetGroupKey {
+                    field_id: self.field_id,
+                    level: parent_level,
+                    left_bound: old_bound.as_slice(),
+                };
+                self.db.delete(wtxn, &update_key)?;
+            }
+
             let update_key = FacetGroupKey {
                 field_id: self.field_id,
                 level: parent_level,
