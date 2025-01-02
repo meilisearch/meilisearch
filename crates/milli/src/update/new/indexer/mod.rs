@@ -745,11 +745,13 @@ fn compute_facet_level_database(
         let _entered = span.enter();
         match delta {
             super::merger::FacetFieldIdDelta::Bulk => {
+                /// TODO: remove info before shipping (or downgrade to debug)
                 tracing::info!(%fid, "bulk string facet processing");
                 FacetsUpdateBulk::new_not_updating_level_0(index, vec![fid], FacetType::String)
                     .execute(wtxn)?
             }
             super::merger::FacetFieldIdDelta::Incremental(delta_data) => {
+                /// TODO: remove info before shipping (or downgrade to debug)
                 tracing::info!(%fid, len=%delta_data.len(), "incremental string facet processing");
                 FacetsUpdateIncremental::new(
                     index,
@@ -770,12 +772,15 @@ fn compute_facet_level_database(
         let _entered = span.enter();
         match delta {
             super::merger::FacetFieldIdDelta::Bulk => {
+                /// TODO: remove info before shipping (or downgrade to debug)
                 tracing::info!(%fid, "bulk number facet processing");
                 FacetsUpdateBulk::new_not_updating_level_0(index, vec![fid], FacetType::Number)
                     .execute(wtxn)?
             }
             super::merger::FacetFieldIdDelta::Incremental(delta_data) => {
+                /// TODO: remove info before shipping (or downgrade to debug)
                 tracing::info!(%fid, len=%delta_data.len(), "incremental number facet processing");
+                /// TODO: check is_valid lmdb key
                 FacetsUpdateIncremental::new(
                     index,
                     FacetType::Number,

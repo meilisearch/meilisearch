@@ -147,9 +147,14 @@ impl FacetsUpdateIncrementalInner {
                 .prefix_iter_mut(wtxn, &parent_level_left_bound)?;
             match it.next() {
                 // 1. left of the current left bound, or
-                Some(Ok((_first_key, _first_value))) => {
+                Some(Ok((first_key, _first_value))) => 'change_left_bound: {
+                    // make sure we don't spill on the neighboring fid (level also included defensively)
+                    if first_key.field_id != self.field_id || first_key.level != parent_level {
+                        break 'change_left_bound;
+                    }
+                    // remove old left bound
                     unsafe { it.del_current()? };
-                    // pop all elements
+                    // pop all elements and order to visit the new left bound
                     if let Some(first) = touched_children.last() {
                         touched_parents.push(first);
                     } else {
@@ -158,7 +163,7 @@ impl FacetsUpdateIncrementalInner {
                 }
                 Some(Err(err)) => return Err(err.into()),
                 // 2. max level reached, exit
-                None => return Ok(()),
+                None => {}
             }
         }
         self.find_touched_parents(
@@ -225,20 +230,30 @@ impl FacetsUpdateIncrementalInner {
 
         loop {
             let mut child_it = self.db.range(wtxn, &(child_left_bound, child_right_bound))?;
-            let res: Result<_> = child_it.by_ref().take(self.max_group_size as usize).try_fold(
-                (None, FacetGroupValue { size: 0, bitmap: Default::default() }),
-                |(bounds, mut group_value), child_res| {
-                    let (child_key, child_value) = child_res?;
-                    let bounds = match bounds {
-                        Some((left_bound, _)) => Some((left_bound, child_key.left_bound)),
-                        None => Some((child_key.left_bound, child_key.left_bound)),
-                    };
-                    // max_group_size <= u8::MAX
-                    group_value.size += 1;
-                    group_value.bitmap |= &child_value.bitmap;
-                    Ok((bounds, group_value))
-                },
-            );
+            let res: Result<_> = child_it
+                .by_ref()
+                .take(self.max_group_size as usize)
+                // stop if we go to the next level or field id
+                .take_while(|res| match res {
+                    Ok((child_key, _)) => {
+                        child_key.field_id == self.field_id && child_key.level == child_level
+                    }
+                    Err(_) => true,
+                })
+                .try_fold(
+                    (None, FacetGroupValue { size: 0, bitmap: Default::default() }),
+                    |(bounds, mut group_value), child_res| {
+                        let (child_key, child_value) = child_res?;
+                        let bounds = match bounds {
+                            Some((left_bound, _)) => Some((left_bound, child_key.left_bound)),
+                            None => Some((child_key.left_bound, child_key.left_bound)),
+                        };
+                        // max_group_size <= u8::MAX
+                        group_value.size += 1;
+                        group_value.bitmap |= &child_value.bitmap;
+                        Ok((bounds, group_value))
+                    },
+                );
 
             let (bounds, group_value) = res?;
 
