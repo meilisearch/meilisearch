@@ -1,17 +1,15 @@
-use std::{ffi::OsStr, fs, sync::atomic::Ordering};
+use std::ffi::OsStr;
+use std::fs;
+use std::sync::atomic::Ordering;
 
-use meilisearch_types::{
-    compression,
-    heed::CompactionOption,
-    milli::{self, progress::Progress},
-    tasks::{Status, Task},
-    VERSION_FILE_NAME,
-};
+use meilisearch_types::heed::CompactionOption;
+use meilisearch_types::milli::progress::Progress;
+use meilisearch_types::milli::{self};
+use meilisearch_types::tasks::{Status, Task};
+use meilisearch_types::{compression, VERSION_FILE_NAME};
 
-use crate::{
-    processing::{AtomicUpdateFileStep, SnapshotCreationProgress, VariableNameStep},
-    Error, IndexScheduler, Result,
-};
+use crate::processing::{AtomicUpdateFileStep, SnapshotCreationProgress, VariableNameStep};
+use crate::{Error, IndexScheduler, Result};
 
 impl IndexScheduler {
     pub(super) fn process_snapshot(

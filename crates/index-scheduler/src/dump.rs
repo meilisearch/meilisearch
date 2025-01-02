@@ -1,16 +1,13 @@
-use crate::{utils, Error, Result};
 use std::collections::HashMap;
 
 use dump::{KindDump, TaskDump, UpdateFile};
-use meilisearch_types::{
-    heed::RwTxn,
-    milli::documents::DocumentsBatchBuilder,
-    tasks::{Kind, KindWithContent, Status, Task},
-};
+use meilisearch_types::heed::RwTxn;
+use meilisearch_types::milli::documents::DocumentsBatchBuilder;
+use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
 use roaring::RoaringBitmap;
 use uuid::Uuid;
 
-use crate::IndexScheduler;
+use crate::{utils, Error, IndexScheduler, Result};
 
 pub struct Dump<'a> {
     index_scheduler: &'a IndexScheduler,

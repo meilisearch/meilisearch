@@ -1,17 +1,13 @@
-use crate::test_utils::Breakpoint::*;
 use meili_snap::snapshot;
 use meilisearch_auth::AuthFilter;
-use meilisearch_types::{
-    index_uid_pattern::IndexUidPattern,
-    tasks::{IndexSwap, KindWithContent, Status},
-};
+use meilisearch_types::index_uid_pattern::IndexUidPattern;
+use meilisearch_types::tasks::{IndexSwap, KindWithContent, Status};
 use time::{Duration, OffsetDateTime};
 
-use crate::{
-    insta_snapshot::{snapshot_bitmap, snapshot_index_scheduler},
-    test_utils::{index_creation_task, FailureLocation},
-    IndexScheduler, Query,
-};
+use crate::insta_snapshot::{snapshot_bitmap, snapshot_index_scheduler};
+use crate::test_utils::Breakpoint::*;
+use crate::test_utils::{index_creation_task, FailureLocation};
+use crate::{IndexScheduler, Query};
 
 #[test]
 fn query_batches_from_and_limit() {

@@ -1,23 +1,16 @@
 use std::ops::{Bound, RangeBounds};
 
-use meilisearch_types::{
-    heed::{
-        types::{DecodeIgnore, SerdeBincode, SerdeJson, Str},
-        Database, Env, RoTxn, RwTxn,
-    },
-    milli::{CboRoaringBitmapCodec, RoaringBitmapCodec, BEU32},
-    tasks::{Kind, Status, Task},
-};
+use meilisearch_types::heed::types::{DecodeIgnore, SerdeBincode, SerdeJson, Str};
+use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn};
+use meilisearch_types::milli::{CboRoaringBitmapCodec, RoaringBitmapCodec, BEU32};
+use meilisearch_types::tasks::{Kind, Status, Task};
 use roaring::{MultiOps, RoaringBitmap};
 use time::OffsetDateTime;
 
-use crate::{
-    processing::ProcessingTasks,
-    utils::{self, insert_task_datetime, keep_ids_within_datetimes, map_bound},
-    Error, Result, TaskId, BEI128,
-};
-
 use super::{Query, Queue};
+use crate::processing::ProcessingTasks;
+use crate::utils::{self, insert_task_datetime, keep_ids_within_datetimes, map_bound};
+use crate::{Error, Result, TaskId, BEI128};
 
 /// Database const names for the `IndexScheduler`.
 mod db_name {

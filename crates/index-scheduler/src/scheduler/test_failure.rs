@@ -1,18 +1,17 @@
 use std::time::Instant;
 
-use crate::test_utils::{read_json, Breakpoint::*};
 use big_s::S;
 use maplit::btreeset;
 use meili_snap::snapshot;
+use meilisearch_types::milli::obkv_to_json;
+use meilisearch_types::milli::update::IndexDocumentsMethod::*;
 use meilisearch_types::milli::update::Setting;
-use meilisearch_types::milli::{obkv_to_json, update::IndexDocumentsMethod::*};
 use meilisearch_types::tasks::KindWithContent;
 
-use crate::{
-    insta_snapshot::snapshot_index_scheduler,
-    test_utils::{index_creation_task, FailureLocation},
-    IndexScheduler,
-};
+use crate::insta_snapshot::snapshot_index_scheduler;
+use crate::test_utils::Breakpoint::*;
+use crate::test_utils::{index_creation_task, read_json, FailureLocation};
+use crate::IndexScheduler;
 
 #[test]
 fn fail_in_process_batch_for_index_creation() {

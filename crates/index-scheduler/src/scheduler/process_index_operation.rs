@@ -1,32 +1,21 @@
-use crate::{
-    processing::{
-        DocumentDeletionProgress, DocumentEditionProgress, DocumentOperationProgress,
-        SettingsProgress,
-    },
-    Error, Result,
-};
-use bumpalo::{collections::CollectIn, Bump};
-use meilisearch_types::{
-    heed::RwTxn,
-    milli::{
-        self,
-        documents::PrimaryKey,
-        progress::Progress,
-        update::{
-            new::indexer::{self, UpdateByFunction},
-            DocumentAdditionResult,
-        },
-        Filter, ThreadPoolNoAbortBuilder,
-    },
-    settings::apply_settings_to_builder,
-    tasks::{Details, KindWithContent, Status, Task},
-    Index,
-};
+use bumpalo::collections::CollectIn;
+use bumpalo::Bump;
+use meilisearch_types::heed::RwTxn;
+use meilisearch_types::milli::documents::PrimaryKey;
+use meilisearch_types::milli::progress::Progress;
+use meilisearch_types::milli::update::new::indexer::{self, UpdateByFunction};
+use meilisearch_types::milli::update::DocumentAdditionResult;
+use meilisearch_types::milli::{self, Filter, ThreadPoolNoAbortBuilder};
+use meilisearch_types::settings::apply_settings_to_builder;
+use meilisearch_types::tasks::{Details, KindWithContent, Status, Task};
+use meilisearch_types::Index;
 use roaring::RoaringBitmap;
 
-use crate::IndexScheduler;
-
 use super::create_batch::{DocumentOperation, IndexOperation};
+use crate::processing::{
+    DocumentDeletionProgress, DocumentEditionProgress, DocumentOperationProgress, SettingsProgress,
+};
+use crate::{Error, IndexScheduler, Result};
 
 impl IndexScheduler {
     /// Process the index operation on the given index.

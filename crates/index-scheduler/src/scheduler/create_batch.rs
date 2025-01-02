@@ -1,18 +1,15 @@
-use crate::{Error, Result};
 use std::fmt;
 
-use meilisearch_types::{
-    heed::RoTxn,
-    milli::update::IndexDocumentsMethod,
-    settings::{Settings, Unchecked},
-    tasks::{Kind, KindWithContent, Status, Task},
-};
+use meilisearch_types::heed::RoTxn;
+use meilisearch_types::milli::update::IndexDocumentsMethod;
+use meilisearch_types::settings::{Settings, Unchecked};
+use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
 use roaring::RoaringBitmap;
 use uuid::Uuid;
 
-use crate::{utils::ProcessingBatch, IndexScheduler};
-
 use super::autobatcher::{self, BatchKind};
+use crate::utils::ProcessingBatch;
+use crate::{Error, IndexScheduler, Result};
 
 /// Represents a combination of tasks that can all be processed at the same time.
 ///

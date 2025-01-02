@@ -1,23 +1,21 @@
-use std::{fs::File, io::BufWriter, sync::atomic::Ordering};
+use std::fs::File;
+use std::io::BufWriter;
+use std::sync::atomic::Ordering;
 
-use crate::{
-    processing::{AtomicDocumentStep, AtomicTaskStep, DumpCreationProgress, VariableNameStep},
-    Error, Result,
-};
 use dump::IndexMetadata;
-use meilisearch_types::{
-    milli::{
-        self,
-        constants::RESERVED_VECTORS_FIELD_NAME,
-        documents::{obkv_to_object, DocumentsBatchReader},
-        progress::Progress,
-        vector::parsed_vectors::{ExplicitVectors, VectorOrArrayOfVectors},
-    },
-    tasks::{Details, KindWithContent, Status, Task},
-};
-use time::{macros::format_description, OffsetDateTime};
+use meilisearch_types::milli::constants::RESERVED_VECTORS_FIELD_NAME;
+use meilisearch_types::milli::documents::{obkv_to_object, DocumentsBatchReader};
+use meilisearch_types::milli::progress::Progress;
+use meilisearch_types::milli::vector::parsed_vectors::{ExplicitVectors, VectorOrArrayOfVectors};
+use meilisearch_types::milli::{self};
+use meilisearch_types::tasks::{Details, KindWithContent, Status, Task};
+use time::macros::format_description;
+use time::OffsetDateTime;
 
-use crate::IndexScheduler;
+use crate::processing::{
+    AtomicDocumentStep, AtomicTaskStep, DumpCreationProgress, VariableNameStep,
+};
+use crate::{Error, IndexScheduler, Result};
 
 impl IndexScheduler {
     pub(super) fn process_dump_creation(

@@ -1,28 +1,22 @@
-use std::{
-    collections::{BTreeSet, HashMap, HashSet},
-    sync::atomic::Ordering,
-};
+use std::collections::{BTreeSet, HashMap, HashSet};
+use std::sync::atomic::Ordering;
 
-use meilisearch_types::{
-    batches::BatchId,
-    heed::{RoTxn, RwTxn},
-    milli::{self, progress::Progress},
-    tasks::{Details, IndexSwap, KindWithContent, Status, Task},
-};
+use meilisearch_types::batches::BatchId;
+use meilisearch_types::heed::{RoTxn, RwTxn};
+use meilisearch_types::milli::progress::Progress;
+use meilisearch_types::milli::{self};
+use meilisearch_types::tasks::{Details, IndexSwap, KindWithContent, Status, Task};
 use milli::update::Settings as MilliSettings;
 use roaring::RoaringBitmap;
 
-use crate::{
-    processing::{
-        AtomicBatchStep, AtomicTaskStep, CreateIndexProgress, DeleteIndexProgress,
-        InnerSwappingTwoIndexes, SwappingTheIndexes, TaskCancelationProgress, TaskDeletionProgress,
-        UpdateIndexProgress, VariableNameStep,
-    },
-    utils::{self, swap_index_uid_in_task, ProcessingBatch},
-    Error, IndexScheduler, Result, TaskId,
-};
-
 use super::create_batch::Batch;
+use crate::processing::{
+    AtomicBatchStep, AtomicTaskStep, CreateIndexProgress, DeleteIndexProgress,
+    InnerSwappingTwoIndexes, SwappingTheIndexes, TaskCancelationProgress, TaskDeletionProgress,
+    UpdateIndexProgress, VariableNameStep,
+};
+use crate::utils::{self, swap_index_uid_in_task, ProcessingBatch};
+use crate::{Error, IndexScheduler, Result, TaskId};
 
 impl IndexScheduler {
     /// Apply the operation associated with the given batch.

@@ -1,11 +1,13 @@
-use crate::insta_snapshot::snapshot_index_scheduler;
-use crate::test_utils::Breakpoint::*;
-use crate::{test_utils::read_json, IndexScheduler};
 use big_s::S;
 use meili_snap::snapshot;
 use meilisearch_types::milli::obkv_to_json;
 use meilisearch_types::milli::update::IndexDocumentsMethod::*;
 use meilisearch_types::tasks::KindWithContent;
+
+use crate::insta_snapshot::snapshot_index_scheduler;
+use crate::test_utils::read_json;
+use crate::test_utils::Breakpoint::*;
+use crate::IndexScheduler;
 
 #[test]
 fn document_addition() {

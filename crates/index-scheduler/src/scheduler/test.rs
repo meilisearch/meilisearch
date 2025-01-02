@@ -1,17 +1,19 @@
 use std::collections::BTreeMap;
 
-use crate::test_utils::{read_json, replace_document_import_task, sample_documents, Breakpoint::*};
 use big_s::S;
 use meili_snap::{json_string, snapshot};
-use meilisearch_types::{
-    milli::{self, index::IndexEmbeddingConfig, update::IndexDocumentsMethod::*},
-    tasks::{IndexSwap, KindWithContent},
-};
+use meilisearch_types::milli::index::IndexEmbeddingConfig;
+use meilisearch_types::milli::update::IndexDocumentsMethod::*;
+use meilisearch_types::milli::{self};
+use meilisearch_types::tasks::{IndexSwap, KindWithContent};
 use roaring::RoaringBitmap;
 
-use crate::{
-    insta_snapshot::snapshot_index_scheduler, test_utils::index_creation_task, IndexScheduler,
+use crate::insta_snapshot::snapshot_index_scheduler;
+use crate::test_utils::Breakpoint::*;
+use crate::test_utils::{
+    index_creation_task, read_json, replace_document_import_task, sample_documents,
 };
+use crate::IndexScheduler;
 
 #[test]
 fn insert_task_while_another_task_is_processing() {

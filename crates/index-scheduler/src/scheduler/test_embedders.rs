@@ -1,5 +1,3 @@
-use meilisearch_types::milli::vector::settings::EmbeddingSettings;
-use milli::update::IndexDocumentsMethod::*;
 use std::collections::BTreeMap;
 
 use big_s::S;
@@ -7,9 +5,11 @@ use insta::assert_json_snapshot;
 use meili_snap::{json_string, snapshot};
 use meilisearch_types::milli::index::IndexEmbeddingConfig;
 use meilisearch_types::milli::update::Setting;
+use meilisearch_types::milli::vector::settings::EmbeddingSettings;
 use meilisearch_types::milli::{self, obkv_to_json};
 use meilisearch_types::settings::{Settings, Unchecked};
 use meilisearch_types::tasks::KindWithContent;
+use milli::update::IndexDocumentsMethod::*;
 
 use crate::insta_snapshot::snapshot_index_scheduler;
 use crate::test_utils::read_json;

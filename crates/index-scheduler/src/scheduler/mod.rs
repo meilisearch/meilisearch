@@ -13,27 +13,20 @@ mod test_embedders;
 #[cfg(test)]
 mod test_failure;
 
-use crate::Result;
-use std::{
-    path::PathBuf,
-    sync::{
-        atomic::{AtomicBool, AtomicU32, Ordering},
-        Arc,
-    },
-};
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::Arc;
 
-use meilisearch_types::{error::ResponseError, milli, tasks::Status};
-use rayon::{
-    current_num_threads,
-    iter::{IntoParallelIterator, ParallelIterator},
-};
+use meilisearch_types::error::ResponseError;
+use meilisearch_types::milli;
+use meilisearch_types::tasks::Status;
+use rayon::current_num_threads;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use roaring::RoaringBitmap;
 use synchronoise::SignalEvent;
 
-use crate::{
-    processing::{AtomicTaskStep, BatchProgress},
-    Error, IndexScheduler, IndexSchedulerOptions, TickOutcome,
-};
+use crate::processing::{AtomicTaskStep, BatchProgress};
+use crate::{Error, IndexScheduler, IndexSchedulerOptions, Result, TickOutcome};
 
 #[derive(Default, Clone, Debug)]
 pub struct MustStopProcessing(Arc<AtomicBool>);

@@ -7,27 +7,26 @@ mod tasks_test;
 #[cfg(test)]
 mod test;
 
-use std::{collections::BTreeMap, time::Duration};
+use std::collections::BTreeMap;
+use std::time::Duration;
 
-use crate::{
-    processing::ProcessingTasks,
-    utils::{check_index_swap_validity, filter_out_references_to_newer_tasks, ProcessingBatch},
-    Error, Result,
-};
 use file_store::FileStore;
-use meilisearch_types::{
-    batches::BatchId,
-    heed::{Database, Env, RoTxn, RwTxn},
-    milli::{CboRoaringBitmapCodec, BEU32},
-    tasks::{Kind, KindWithContent, Status, Task},
-};
+use meilisearch_types::batches::BatchId;
+use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn};
+use meilisearch_types::milli::{CboRoaringBitmapCodec, BEU32};
+use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
 use roaring::RoaringBitmap;
-use time::{format_description::well_known::Rfc3339, OffsetDateTime};
+use time::format_description::well_known::Rfc3339;
+use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::{IndexSchedulerOptions, TaskId};
-
-use self::{batches::BatchQueue, tasks::TaskQueue};
+use self::batches::BatchQueue;
+use self::tasks::TaskQueue;
+use crate::processing::ProcessingTasks;
+use crate::utils::{
+    check_index_swap_validity, filter_out_references_to_newer_tasks, ProcessingBatch,
+};
+use crate::{Error, IndexSchedulerOptions, Result, TaskId};
 
 /// Database const names for the `IndexScheduler`.
 mod db_name {

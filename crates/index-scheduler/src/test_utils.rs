@@ -1,16 +1,13 @@
+use std::io::{BufWriter, Write};
+use std::sync::Arc;
+
 use file_store::File;
-use meilisearch_types::{
-    document_formats::DocumentFormatError, milli::update::IndexDocumentsMethod::ReplaceDocuments,
-};
-use std::{
-    io::{BufWriter, Write},
-    sync::Arc,
-};
+use meilisearch_types::document_formats::DocumentFormatError;
+use meilisearch_types::milli::update::IndexDocumentsMethod::ReplaceDocuments;
 use uuid::Uuid;
 
-use crate::{
-    insta_snapshot::snapshot_index_scheduler, Error, IndexScheduler, IndexSchedulerOptions,
-};
+use crate::insta_snapshot::snapshot_index_scheduler;
+use crate::{Error, IndexScheduler, IndexSchedulerOptions};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Breakpoint {
@@ -39,7 +36,9 @@ pub(crate) enum FailureLocation {
 
 use big_s::S;
 use crossbeam_channel::RecvTimeoutError;
-use meilisearch_types::{milli::update::IndexerConfig, tasks::KindWithContent, VERSION_FILE_NAME};
+use meilisearch_types::milli::update::IndexerConfig;
+use meilisearch_types::tasks::KindWithContent;
+use meilisearch_types::VERSION_FILE_NAME;
 use tempfile::{NamedTempFile, TempDir};
 use Breakpoint::*;
 

@@ -1,17 +1,13 @@
-use crate::{test_utils::Breakpoint::*, Query};
 use big_s::S;
 use meili_snap::{json_string, snapshot};
-use meilisearch_types::{
-    error::ErrorCode,
-    tasks::{KindWithContent, Status},
-};
+use meilisearch_types::error::ErrorCode;
+use meilisearch_types::tasks::{KindWithContent, Status};
 use roaring::RoaringBitmap;
 
-use crate::{
-    insta_snapshot::snapshot_index_scheduler,
-    test_utils::{index_creation_task, replace_document_import_task},
-    IndexScheduler,
-};
+use crate::insta_snapshot::snapshot_index_scheduler;
+use crate::test_utils::Breakpoint::*;
+use crate::test_utils::{index_creation_task, replace_document_import_task};
+use crate::{IndexScheduler, Query};
 
 #[test]
 fn register() {
