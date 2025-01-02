@@ -720,24 +720,6 @@ pub(crate) fn sanity_checks(
                 panic!("wrong parent left bound");
             }
 
-            if let Some(current_parent_facet_value) = current_parent_facet_value {
-                if current_parent_facet_value.field_id != parent_facet_value.field_id {
-                    panic!("wrong parent parent fid");
-                }
-                if current_parent_facet_value.level + 1 != parent_facet_value.level {
-                    panic!("wrong parent parent level");
-                }
-                if current_parent_facet_value.left_bound < parent_facet_value.left_bound {
-                    panic!("wrong parent parent level");
-                }
-            }
-
-            if let Some(current_parent_docids) = current_parent_docids {
-                if !current_parent_docids.bitmap.is_superset(&parent_docids.bitmap) {
-                    panic!("missing docids in parent parent");
-                }
-            }
-
             if !leaf_docids.bitmap.is_subset(&parent_docids.bitmap) {
                 panic!(
                     "missing docids from leaf in parent, current_level={}, parent={}, child={}, missing={missing:?}, child_len={}, child={:?}",
@@ -748,6 +730,30 @@ pub(crate) fn sanity_checks(
                     leaf_docids.bitmap.clone(),
                     missing=leaf_docids.bitmap - parent_docids.bitmap,
                 )
+            }
+
+            if let Some(current_parent_facet_value) = current_parent_facet_value {
+                if current_parent_facet_value.field_id != parent_facet_value.field_id {
+                    panic!("wrong parent parent fid");
+                }
+                if current_parent_facet_value.level + 1 != parent_facet_value.level {
+                    panic!("wrong parent parent level");
+                }
+                if current_parent_facet_value.left_bound < parent_facet_value.left_bound {
+                    panic!("wrong parent parent left bound");
+                }
+            }
+
+            if let Some(current_parent_docids) = current_parent_docids {
+                if !current_parent_docids.bitmap.is_subset(&parent_docids.bitmap) {
+                    panic!("missing docids from intermediate node in parent, parent_level={}, parent={}, intermediate={}, missing={missing:?}, intermediate={:?}",
+                    parent_facet_value.level,
+                    facet_to_string(parent_facet_value.left_bound, facet_type),
+                    facet_to_string(current_parent_facet_value.unwrap().left_bound, facet_type),
+                    current_parent_docids.bitmap.clone(),
+                    missing=current_parent_docids.bitmap - parent_docids.bitmap,
+                    );
+                }
             }
 
             current_parent_facet_value = Some(parent_facet_value);
@@ -829,6 +835,9 @@ pub(crate) fn sanity_checks(
 fn facet_to_string(facet_value: &[u8], facet_type: FacetType) -> String {
     match facet_type {
         FacetType::String => bstr::BStr::new(facet_value).to_string(),
-        FacetType::Number => OrderedF64Codec::bytes_decode(facet_value).unwrap().to_string(),
+        FacetType::Number => match OrderedF64Codec::bytes_decode(facet_value) {
+            Ok(value) => value.to_string(),
+            Err(e) => format!("error: {e} (bytes: {facet_value:?}"),
+        },
     }
 }
