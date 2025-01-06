@@ -101,6 +101,7 @@ use crate::{try_split_array_at, FieldId, Index, Result};
 
 pub mod bulk;
 pub mod incremental;
+pub mod new_incremental;
 
 /// A builder used to add new elements to the `facet_id_string_docids` or `facet_id_f64_docids` databases.
 ///
