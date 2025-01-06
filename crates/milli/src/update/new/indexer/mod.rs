@@ -36,6 +36,8 @@ use crate::index::main_key::{WORDS_FST_KEY, WORDS_PREFIXES_FST_KEY};
 use crate::progress::Progress;
 use crate::proximity::ProximityPrecision;
 use crate::update::del_add::DelAdd;
+use crate::update::facet::new_incremental::FacetsUpdateIncremental;
+use crate::update::facet::{FACET_GROUP_SIZE, FACET_MAX_GROUP_SIZE, FACET_MIN_LEVEL_SIZE};
 use crate::update::new::extract::EmbeddingExtractor;
 use crate::update::new::merger::merge_and_send_rtree;
 use crate::update::new::words_prefix_docids::compute_exact_word_prefix_docids;
@@ -203,6 +205,7 @@ where
                             caches,
                             FacetDatabases::new(index),
                             index,
+                            &rtxn,
                             extractor_sender.facet_docids(),
                         )?;
                     }
@@ -735,27 +738,66 @@ fn compute_facet_search_database(
 fn compute_facet_level_database(
     index: &Index,
     wtxn: &mut RwTxn,
-    facet_field_ids_delta: FacetFieldIdsDelta,
+    mut facet_field_ids_delta: FacetFieldIdsDelta,
 ) -> Result<()> {
-    if let Some(modified_facet_string_ids) = facet_field_ids_delta.modified_facet_string_ids() {
+    for (fid, delta) in facet_field_ids_delta.consume_facet_string_delta() {
         let span = tracing::trace_span!(target: "indexing::facet_field_ids", "string");
         let _entered = span.enter();
-        FacetsUpdateBulk::new_not_updating_level_0(
-            index,
-            modified_facet_string_ids,
-            FacetType::String,
-        )
-        .execute(wtxn)?;
+        match delta {
+            super::merger::FacetFieldIdDelta::Bulk => {
+                tracing::debug!(%fid, "bulk string facet processing");
+                FacetsUpdateBulk::new_not_updating_level_0(index, vec![fid], FacetType::String)
+                    .execute(wtxn)?
+            }
+            super::merger::FacetFieldIdDelta::Incremental(delta_data) => {
+                tracing::debug!(%fid, len=%delta_data.len(), "incremental string facet processing");
+                FacetsUpdateIncremental::new(
+                    index,
+                    FacetType::String,
+                    fid,
+                    delta_data,
+                    FACET_GROUP_SIZE,
+                    FACET_MIN_LEVEL_SIZE,
+                    FACET_MAX_GROUP_SIZE,
+                )
+                .execute(wtxn)?
+            }
+        }
     }
-    if let Some(modified_facet_number_ids) = facet_field_ids_delta.modified_facet_number_ids() {
+
+    for (fid, delta) in facet_field_ids_delta.consume_facet_number_delta() {
         let span = tracing::trace_span!(target: "indexing::facet_field_ids", "number");
         let _entered = span.enter();
-        FacetsUpdateBulk::new_not_updating_level_0(
+        match delta {
+            super::merger::FacetFieldIdDelta::Bulk => {
+                tracing::debug!(%fid, "bulk number facet processing");
+                FacetsUpdateBulk::new_not_updating_level_0(index, vec![fid], FacetType::Number)
+                    .execute(wtxn)?
+            }
+            super::merger::FacetFieldIdDelta::Incremental(delta_data) => {
+                tracing::debug!(%fid, len=%delta_data.len(), "incremental number facet processing");
+                FacetsUpdateIncremental::new(
+                    index,
+                    FacetType::Number,
+                    fid,
+                    delta_data,
+                    FACET_GROUP_SIZE,
+                    FACET_MIN_LEVEL_SIZE,
+                    FACET_MAX_GROUP_SIZE,
+                )
+                .execute(wtxn)?
+            }
+        }
+        debug_assert!(crate::update::facet::sanity_checks(
             index,
-            modified_facet_number_ids,
+            wtxn,
+            fid,
             FacetType::Number,
+            FACET_GROUP_SIZE as usize,
+            FACET_MIN_LEVEL_SIZE as usize,
+            FACET_MAX_GROUP_SIZE as usize,
         )
-        .execute(wtxn)?;
+        .is_ok());
     }
 
     Ok(())
