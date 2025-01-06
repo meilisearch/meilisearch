@@ -246,10 +246,32 @@ impl FacetsUpdateIncrementalInner {
         let mut child_left_bound = Bound::Included(child_left_key);
 
         loop {
+            // do a first pass on the range to find the number of children
+            let child_count = self
+                .db
+                .remap_data_type::<DecodeIgnore>()
+                .range(wtxn, &(child_left_bound, child_right_bound))?
+                .take(self.max_group_size as usize * 2)
+                .count();
             let mut child_it = self.db.range(wtxn, &(child_left_bound, child_right_bound))?;
+
+            // pick the right group_size depending on the number of children
+            let group_size = if child_count >= self.max_group_size as usize * 2 {
+                // more than twice the max_group_size => there will be space for at least 2 groups of max_group_size
+                self.max_group_size as usize
+            } else if child_count >= self.group_size as usize {
+                // size in [group_size, max_group_size * 2[
+                // divided by 2 it is between [group_size / 2, max_group_size[
+                // this ensures that the tree is balanced
+                child_count / 2
+            } else {
+                // take everything
+                child_count
+            };
+
             let res: Result<_> = child_it
                 .by_ref()
-                .take(self.max_group_size as usize)
+                .take(group_size)
                 // stop if we go to the next level or field id
                 .take_while(|res| match res {
                     Ok((child_key, _)) => {
