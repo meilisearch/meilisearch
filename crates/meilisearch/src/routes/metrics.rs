@@ -14,10 +14,8 @@ use utoipa::OpenApi;
 
 use time::OffsetDateTime;
 
-use crate::extractors::authentication::policies::ActionPolicy;
-use crate::extractors::authentication::{AuthenticationError, GuardedData};
-use crate::routes::create_all_stats;
-use crate::search_queue::SearchQueue;
+use index_scheduler::Query;
+use meilisearch_types::tasks::Status;
 
 #[derive(OpenApi)]
 #[openapi(paths(get_metrics))]
