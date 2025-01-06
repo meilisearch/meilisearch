@@ -144,7 +144,6 @@ macro_rules! make_setting_route {
             }
 
 
-            #[doc = $camelcase_attr]
             #[utoipa::path(
                 $update_verb,
                 path = concat!("{indexUid}/settings", $route),
@@ -230,7 +229,6 @@ macro_rules! make_setting_route {
             }
 
 
-            #[doc = $camelcase_attr]
             #[utoipa::path(
                 get,
                 path = concat!("{indexUid}/settings", $route),
