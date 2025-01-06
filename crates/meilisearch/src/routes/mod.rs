@@ -19,7 +19,6 @@ use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use tracing::debug;
 use utoipa::{OpenApi, ToSchema};
-use utoipa_scalar::{Scalar, Servable as ScalarServable};
 
 use self::api_key::KeyView;
 use self::indexes::documents::BrowseQuery;
@@ -102,11 +101,12 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(web::scope("/metrics").configure(metrics::configure))
         .service(web::scope("/experimental-features").configure(features::configure));
 
-    let now = std::time::Instant::now();
-    let openapi = MeilisearchApi::openapi();
-    println!("Took {:?} to generate the openapi file", now.elapsed());
-    // #[cfg(feature = "webp")]
-    cfg.service(Scalar::with_url("/scalar", openapi.clone()));
+    #[cfg(feature = "swagger")]
+    {
+        use utoipa_scalar::{Scalar, Servable as ScalarServable};
+        let openapi = MeilisearchApi::openapi();
+        cfg.service(Scalar::with_url("/scalar", openapi.clone()));
+    }
 }
 
 pub fn get_task_id(req: &HttpRequest, opt: &Opt) -> Result<Option<TaskId>, ResponseError> {
