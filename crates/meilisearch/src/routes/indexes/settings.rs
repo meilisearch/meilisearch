@@ -81,12 +81,13 @@ macro_rules! make_setting_route {
             #[allow(unused_imports)]
             use super::*;
 
-            #[doc = $camelcase_attr]
             #[utoipa::path(
                 delete,
                 path = concat!("{indexUid}/settings", $route),
                 tag = "Settings",
                 security(("Bearer" = ["settings.update", "settings.*", "*"])),
+                summary = concat!("Reset ", $camelcase_attr),
+                description = concat!("Reset an index's ", $camelcase_attr, " to its default value"),
                 params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
                 request_body = $type,
                 responses(
@@ -149,6 +150,8 @@ macro_rules! make_setting_route {
                 path = concat!("{indexUid}/settings", $route),
                 tag = "Settings",
                 security(("Bearer" = ["settings.update", "settings.*", "*"])),
+                summary = concat!("Update ", $camelcase_attr),
+                description = concat!("Update an index's user defined ", $camelcase_attr),
                 params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
                 request_body = $type,
                 responses(
@@ -232,6 +235,8 @@ macro_rules! make_setting_route {
                 get,
                 path = concat!("{indexUid}/settings", $route),
                 tag = "Settings",
+                summary = concat!("Get ", $camelcase_attr),
+                description = concat!("Get an user defined ", $camelcase_attr),
                 security(("Bearer" = ["settings.get", "settings.*", "*"])),
                 params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
                 responses(
