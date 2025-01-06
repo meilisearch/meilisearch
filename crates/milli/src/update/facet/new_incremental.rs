@@ -180,13 +180,16 @@ impl FacetsUpdateIncrementalInner {
                 }
             }
         }
-        self.find_touched_parents(
-            wtxn,
-            parent_level,
-            touched_parents
-                // no need to `rev` here because the parents were already visited in reverse order
-                .into_iter(),
-        )
+        if !touched_parents.is_empty() {
+            self.find_touched_parents(
+                wtxn,
+                parent_level,
+                touched_parents
+                    // no need to `rev` here because the parents were already visited in reverse order
+                    .into_iter(),
+            )?;
+        }
+        Ok(())
     }
 
     fn compute_parent_group(
