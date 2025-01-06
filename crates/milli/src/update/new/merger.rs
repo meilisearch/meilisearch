@@ -104,8 +104,8 @@ pub fn merge_and_send_facet_docids<'extractor>(
     rtxn: &RoTxn,
     docids_sender: FacetDocidsSender,
 ) -> Result<FacetFieldIdsDelta> {
-    let max_string_count = (index.facet_id_string_docids.len(rtxn)? / 500) as usize;
-    let max_number_count = (index.facet_id_f64_docids.len(rtxn)? / 500) as usize;
+    let max_string_count = (index.facet_id_string_docids.len(rtxn)? * 500) as usize;
+    let max_number_count = (index.facet_id_f64_docids.len(rtxn)? * 500) as usize;
     transpose_and_freeze_caches(&mut caches)?
         .into_par_iter()
         .map(|frozen| {
