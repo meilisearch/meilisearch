@@ -24,7 +24,6 @@ During a snapshot export, all indexes of the current instance are exported—tog
 During a snapshot import, all indexes contained in the indicated .snapshot file are imported along with their associated documents and settings.
 Snapshot imports are performed at launch using an option.",
         external_docs(url = "https://www.meilisearch.com/docs/reference/api/snapshots"),
-        
     )),
 )]
 pub struct SnapshotApi;

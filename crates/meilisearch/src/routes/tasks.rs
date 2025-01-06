@@ -33,7 +33,6 @@ use crate::{aggregate_methods, Opt};
         name = "Tasks",
         description = "The tasks route gives information about the progress of the [asynchronous operations](https://docs.meilisearch.com/learn/advanced/asynchronous_operations.html).",
         external_docs(url = "https://www.meilisearch.com/docs/reference/api/tasks"),
-        
     )),
 )]
 pub struct TaskApi;
@@ -495,7 +494,6 @@ pub struct AllTasks {
     /// Represents the value to send in from to fetch the next slice of the results. The first item for the next slice starts at this exact number. When the returned value is null, it means that all the data have been browsed in the given order.
     next: Option<u32>,
 }
-
 
 /// Get all tasks
 ///

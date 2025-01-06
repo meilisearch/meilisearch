@@ -31,7 +31,6 @@ use crate::routes::Pagination;
 You must have the master key or the default admin key to access the keys route. More information about the keys and their rights.
 Accessing any route under `/keys` without having set a master key will result in an error.",
         external_docs(url = "https://www.meilisearch.com/docs/reference/api/keys"),
-        
     )),
 )]
 pub struct ApiKeyApi;
@@ -49,7 +48,6 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .route(web::delete().to(SeqHandler(delete_api_key))),
     );
 }
-
 
 /// Create an API Key
 ///
@@ -130,7 +128,6 @@ impl ListApiKeys {
     }
 }
 
-
 /// Get API Keys
 ///
 /// List all API Keys
@@ -201,7 +198,6 @@ pub async fn list_api_keys(
     Ok(HttpResponse::Ok().json(page_view))
 }
 
-
 /// Get an API Key
 ///
 /// Get an API key from its `uid` or its `key` field.
@@ -265,7 +261,6 @@ pub async fn get_api_key(
 
     Ok(HttpResponse::Ok().json(res))
 }
-
 
 /// Update a Key
 ///
@@ -333,8 +328,6 @@ pub async fn patch_api_key(
 
     Ok(HttpResponse::Ok().json(res))
 }
-
-
 
 /// Delete a key
 ///

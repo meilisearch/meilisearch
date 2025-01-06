@@ -28,7 +28,6 @@ all indexes contained in the indicated `.dump` file are imported along with thei
 Any existing index with the same uid as an index in the dump file will be overwritten.
 Dump imports are [performed at launch](https://www.meilisearch.com/docs/learn/advanced/dumps#importing-a-dump) using an option.",
         external_docs(url = "https://www.meilisearch.com/docs/reference/api/dump"),
-        
     )),
 )]
 pub struct DumpApi;

@@ -26,7 +26,6 @@ use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::{LogRouteHandle, LogStderrHandle};
 
-
 #[derive(OpenApi)]
 #[openapi(
     paths(get_logs, cancel_logs, update_stderr_target),
@@ -35,7 +34,6 @@ use crate::{LogRouteHandle, LogStderrHandle};
         description = "Everything about retrieving or customizing logs.
 Currently [experimental](https://www.meilisearch.com/docs/learn/experimental/overview).",
         external_docs(url = "https://www.meilisearch.com/docs/learn/experimental/log_customization"),
-        
     )),
 )]
 pub struct LogsApi;
@@ -349,7 +347,6 @@ pub async fn get_logs(
         Err(MeilisearchHttpError::AlreadyUsedLogRoute.into())
     }
 }
-
 
 /// Stop retrieving logs
 ///

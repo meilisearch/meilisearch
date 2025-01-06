@@ -18,8 +18,8 @@ use crate::extractors::authentication::{AuthenticationError, GuardedData};
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::routes::indexes::search::search_kind;
 use crate::search::{
-    add_search_rules, perform_federated_search, perform_search, FederatedSearch, FederatedSearchResult, RetrieveVectors,
-    SearchQueryWithIndex, SearchResultWithIndex,
+    add_search_rules, perform_federated_search, perform_search, FederatedSearch,
+    FederatedSearchResult, RetrieveVectors, SearchQueryWithIndex, SearchResultWithIndex,
 };
 use crate::search_queue::SearchQueue;
 
@@ -30,7 +30,6 @@ use crate::search_queue::SearchQueue;
         name = "Multi-search",
         description = "The `/multi-search` route allows you to perform multiple search queries on one or more indexes by bundling them into a single HTTP request. Multi-search is also known as federated search.",
         external_docs(url = "https://www.meilisearch.com/docs/reference/api/multi_search"),
-        
     )),
 )]
 pub struct MultiSearchApi;

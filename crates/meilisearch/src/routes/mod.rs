@@ -1,22 +1,5 @@
 use std::collections::BTreeMap;
 
-use crate::extractors::authentication::policies::*;
-use crate::extractors::authentication::GuardedData;
-use crate::milli::progress::ProgressStepView;
-use crate::milli::progress::ProgressView;
-use crate::routes::batches::AllBatches;
-use crate::routes::features::RuntimeTogglableFeatures;
-use crate::routes::indexes::documents::DocumentDeletionByFilter;
-use crate::routes::indexes::documents::DocumentEditionByFunction;
-use crate::routes::indexes::IndexView;
-use crate::routes::multi_search::SearchResults;
-use crate::routes::swap_indexes::SwapIndexesPayload;
-use crate::search::{
-    FederatedSearch, FederatedSearchResult, Federation, FederationOptions, MergeFacets,
-    SearchQueryWithIndex, SearchResultWithIndex, SimilarQuery, SimilarResult,
-};
-use crate::search_queue::SearchQueue;
-use crate::Opt;
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use index_scheduler::IndexScheduler;
@@ -41,11 +24,24 @@ use utoipa_scalar::{Scalar, Servable as ScalarServable};
 use self::api_key::KeyView;
 use self::indexes::documents::BrowseQuery;
 use self::indexes::{IndexCreateRequest, IndexStats, UpdateIndexRequest};
-use self::logs::GetLogs;
-use self::logs::LogMode;
-use self::logs::UpdateStderrLogs;
+use self::logs::{GetLogs, LogMode, UpdateStderrLogs};
 use self::open_api_utils::OpenApiAuth;
 use self::tasks::AllTasks;
+use crate::extractors::authentication::policies::*;
+use crate::extractors::authentication::GuardedData;
+use crate::milli::progress::{ProgressStepView, ProgressView};
+use crate::routes::batches::AllBatches;
+use crate::routes::features::RuntimeTogglableFeatures;
+use crate::routes::indexes::documents::{DocumentDeletionByFilter, DocumentEditionByFunction};
+use crate::routes::indexes::IndexView;
+use crate::routes::multi_search::SearchResults;
+use crate::routes::swap_indexes::SwapIndexesPayload;
+use crate::search::{
+    FederatedSearch, FederatedSearchResult, Federation, FederationOptions, MergeFacets,
+    SearchQueryWithIndex, SearchResultWithIndex, SimilarQuery, SimilarResult,
+};
+use crate::search_queue::SearchQueue;
+use crate::Opt;
 
 const PAGINATION_DEFAULT_LIMIT: usize = 20;
 const PAGINATION_DEFAULT_LIMIT_FN: fn() -> usize = || 20;

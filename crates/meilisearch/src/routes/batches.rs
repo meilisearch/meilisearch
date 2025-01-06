@@ -22,7 +22,6 @@ use crate::extractors::sequential_extractor::SeqHandler;
         name = "Batches",
         description = "The /batches route gives information about the progress of batches of asynchronous operations.",
         external_docs(url = "https://www.meilisearch.com/docs/reference/api/batches"),
-        
     )),
 )]
 pub struct BatchesApi;

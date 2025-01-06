@@ -5,17 +5,14 @@ use crate::search_queue::SearchQueue;
 use actix_web::http::header;
 use actix_web::web::{self, Data};
 use actix_web::HttpResponse;
-use index_scheduler::IndexScheduler;
+use index_scheduler::{IndexScheduler, Query};
 use meilisearch_auth::AuthController;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::keys::actions;
-use prometheus::{Encoder, TextEncoder};
-use utoipa::OpenApi;
-
-use time::OffsetDateTime;
-
-use index_scheduler::Query;
 use meilisearch_types::tasks::Status;
+use prometheus::{Encoder, TextEncoder};
+use time::OffsetDateTime;
+use utoipa::OpenApi;
 
 #[derive(OpenApi)]
 #[openapi(paths(get_metrics))]

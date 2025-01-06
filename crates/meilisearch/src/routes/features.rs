@@ -24,7 +24,6 @@ use crate::extractors::sequential_extractor::SeqHandler;
 
 This route is **synchronous**. This means that no task object will be returned, and any activated or deactivated features will be made available or unavailable immediately.",
         external_docs(url = "https://www.meilisearch.com/docs/reference/api/experimental_features"),
-        
     )),
 )]
 pub struct ExperimentalFeaturesApi;
