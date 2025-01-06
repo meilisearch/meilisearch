@@ -16,6 +16,10 @@ pub fn valid_lmdb_key(key: impl AsRef<[u8]>) -> bool {
     key.as_ref().len() <= MAX_WORD_LENGTH * 2 && !key.as_ref().is_empty()
 }
 
+pub fn valid_facet_value(facet_value: impl AsRef<[u8]>) -> bool {
+    facet_value.as_ref().len() <= (MAX_WORD_LENGTH * 2) - 3 && !facet_value.as_ref().is_empty()
+}
+
 /// Divides one slice into two at an index, returns `None` if mid is out of bounds.
 pub fn try_split_at<T>(slice: &[T], mid: usize) -> Option<(&[T], &[T])> {
     if mid <= slice.len() {
