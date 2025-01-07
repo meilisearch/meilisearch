@@ -1,4 +1,6 @@
 mod autobatcher;
+#[cfg(test)]
+mod autobatcher_test;
 mod create_batch;
 mod process_batch;
 mod process_dump_creation;
