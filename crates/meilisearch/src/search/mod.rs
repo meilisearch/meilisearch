@@ -673,7 +673,7 @@ pub struct SearchResult {
     #[serde(flatten)]
     pub hits_info: HitsInfo,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schema(value_type = HashMap<String, Value>)]
+    #[schema(value_type = Option<BTreeMap<String, Value>>)]
     pub facet_distribution: Option<BTreeMap<String, IndexMap<String, u64>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub facet_stats: Option<BTreeMap<String, FacetStats>>,
@@ -1043,7 +1043,7 @@ pub fn perform_search(
 
 #[derive(Debug, Clone, Default, Serialize, ToSchema)]
 pub struct ComputedFacets {
-    #[schema(value_type = Option<BTreeMap<String, BTreeMap<String, u64>>>)]
+    #[schema(value_type = BTreeMap<String, BTreeMap<String, u64>>)]
     pub distribution: BTreeMap<String, IndexMap<String, u64>>,
     pub stats: BTreeMap<String, FacetStats>,
 }

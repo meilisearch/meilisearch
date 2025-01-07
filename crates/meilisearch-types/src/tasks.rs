@@ -471,10 +471,6 @@ pub enum Kind {
 }
 
 impl Kind {
-    pub fn all_variants() -> Vec<Self> {
-        enum_iterator::all::<Kind>().collect()
-    }
-
     pub fn related_to_one_index(&self) -> bool {
         match self {
             Kind::DocumentAdditionOrUpdate
