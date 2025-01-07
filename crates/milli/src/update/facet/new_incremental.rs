@@ -474,21 +474,4 @@ impl FacetsUpdateIncrementalInner {
 #[derive(Debug)]
 pub struct FacetFieldIdChange {
     pub facet_value: Box<[u8]>,
-    pub operation: FacetFieldIdOperation,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum FacetFieldIdOperation {
-    /// The docids have been modified for an existing facet value
-    ///
-    /// The modification must be propagated to upper levels, without changing the structure of the tree
-    InPlace,
-    /// A new value has been inserted
-    ///
-    /// The modification must be propagated to upper levels, splitting nodes and adding new levels as necessary.
-    Insert,
-    /// An existing value has been deleted
-    ///
-    /// The modification must be propagated to upper levels, merging nodes and removing levels as necessary.
-    Remove,
 }
