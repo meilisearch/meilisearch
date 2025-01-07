@@ -168,12 +168,9 @@ async fn list_batches_status_filtered() {
 async fn list_batches_type_filtered() {
     let server = Server::new().await;
     let index = server.index("test");
-    let (task, _status_code) = index.create(None).await;
+    let (task, _) = index.create(None).await;
     index.wait_task(task.uid()).await.succeeded();
-    index
-        .add_documents(serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(), None)
-        .await;
-
+    let (task, _) = index.delete().await;
     let (response, code) = index.filtered_batches(&["indexCreation"], &[], &[]).await;
     assert_eq!(code, 200, "{}", response);
     assert_eq!(response["results"].as_array().unwrap().len(), 1);
