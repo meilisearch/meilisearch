@@ -1,7 +1,3 @@
-use crate::extractors::authentication::policies::ActionPolicy;
-use crate::extractors::authentication::{AuthenticationError, GuardedData};
-use crate::routes::create_all_stats;
-use crate::search_queue::SearchQueue;
 use actix_web::http::header;
 use actix_web::web::{self, Data};
 use actix_web::HttpResponse;
@@ -12,6 +8,11 @@ use meilisearch_types::keys::actions;
 use meilisearch_types::tasks::Status;
 use prometheus::{Encoder, TextEncoder};
 use time::OffsetDateTime;
+
+use crate::extractors::authentication::policies::ActionPolicy;
+use crate::extractors::authentication::{AuthenticationError, GuardedData};
+use crate::routes::create_all_stats;
+use crate::search_queue::SearchQueue;
 
 pub fn configure(config: &mut web::ServiceConfig) {
     config.service(web::resource("").route(web::get().to(get_metrics)));
@@ -64,7 +65,7 @@ pub async fn get_metrics(
 
     let task_queue_latency_seconds = index_scheduler
         .get_tasks_from_authorized_indexes(
-            Query {
+            &Query {
                 limit: Some(1),
                 reverse: Some(true),
                 statuses: Some(vec![Status::Enqueued, Status::Processing]),

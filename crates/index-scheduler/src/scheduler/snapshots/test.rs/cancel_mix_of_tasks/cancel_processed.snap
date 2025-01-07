@@ -1,0 +1,88 @@
+---
+source: crates/index-scheduler/src/scheduler/test.rs
+snapshot_kind: text
+---
+### Autobatching Enabled = true
+### Processing batch None:
+[]
+----------------------------------------------------------------------
+### All Tasks:
+0 {uid: 0, batch_uid: 0, status: succeeded, details: { received_documents: 1, indexed_documents: Some(1) }, kind: DocumentAdditionOrUpdate { index_uid: "catto", primary_key: None, method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000000, documents_count: 1, allow_index_creation: true }}
+1 {uid: 1, batch_uid: 1, status: canceled, canceled_by: 3, details: { received_documents: 1, indexed_documents: Some(0) }, kind: DocumentAdditionOrUpdate { index_uid: "beavero", primary_key: None, method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000001, documents_count: 1, allow_index_creation: true }}
+2 {uid: 2, batch_uid: 1, status: canceled, canceled_by: 3, details: { received_documents: 1, indexed_documents: Some(0) }, kind: DocumentAdditionOrUpdate { index_uid: "wolfo", primary_key: None, method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000002, documents_count: 1, allow_index_creation: true }}
+3 {uid: 3, batch_uid: 1, status: succeeded, details: { matched_tasks: 3, canceled_tasks: Some(2), original_filter: "test_query" }, kind: TaskCancelation { query: "test_query", tasks: RoaringBitmap<[0, 1, 2]> }}
+----------------------------------------------------------------------
+### Status:
+enqueued []
+succeeded [0,3,]
+canceled [1,2,]
+----------------------------------------------------------------------
+### Kind:
+"documentAdditionOrUpdate" [0,1,2,]
+"taskCancelation" [3,]
+----------------------------------------------------------------------
+### Index Tasks:
+beavero [1,]
+catto [0,]
+wolfo [2,]
+----------------------------------------------------------------------
+### Index Mapper:
+beavero: { number_of_documents: 0, field_distribution: {} }
+catto: { number_of_documents: 1, field_distribution: {"id": 1} }
+
+----------------------------------------------------------------------
+### Canceled By:
+3 [1,2,]
+
+----------------------------------------------------------------------
+### Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+----------------------------------------------------------------------
+### Started At:
+[timestamp] [0,]
+[timestamp] [1,2,3,]
+----------------------------------------------------------------------
+### Finished At:
+[timestamp] [0,]
+[timestamp] [1,2,3,]
+----------------------------------------------------------------------
+### All Batches:
+0 {uid: 0, details: {"receivedDocuments":1,"indexedDocuments":1}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"documentAdditionOrUpdate":1},"indexUids":{"catto":1}}, }
+1 {uid: 1, details: {"receivedDocuments":2,"indexedDocuments":0,"matchedTasks":3,"canceledTasks":2,"originalFilter":"test_query"}, stats: {"totalNbTasks":3,"status":{"succeeded":1,"canceled":2},"types":{"documentAdditionOrUpdate":2,"taskCancelation":1},"indexUids":{"beavero":1,"wolfo":1}}, }
+----------------------------------------------------------------------
+### Batch to tasks mapping:
+0 [0,]
+1 [1,2,3,]
+----------------------------------------------------------------------
+### Batches Status:
+succeeded [0,1,]
+canceled [1,]
+----------------------------------------------------------------------
+### Batches Kind:
+"documentAdditionOrUpdate" [0,1,]
+"taskCancelation" [1,]
+----------------------------------------------------------------------
+### Batches Index Tasks:
+beavero [1,]
+catto [0,]
+wolfo [1,]
+----------------------------------------------------------------------
+### Batches Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [1,]
+----------------------------------------------------------------------
+### Batches Started At:
+[timestamp] [0,]
+[timestamp] [1,]
+----------------------------------------------------------------------
+### Batches Finished At:
+[timestamp] [0,]
+[timestamp] [1,]
+----------------------------------------------------------------------
+### File Store:
+
+----------------------------------------------------------------------

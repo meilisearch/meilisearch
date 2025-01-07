@@ -1,0 +1,63 @@
+---
+source: crates/index-scheduler/src/queue/test.rs
+snapshot_kind: text
+---
+### Autobatching Enabled = true
+### Processing batch None:
+[]
+----------------------------------------------------------------------
+### All Tasks:
+0 {uid: 0, status: enqueued, details: { primary_key: Some("mouse") }, kind: IndexCreation { index_uid: "catto", primary_key: Some("mouse") }}
+1 {uid: 1, status: enqueued, details: { received_documents: 12, indexed_documents: None }, kind: DocumentAdditionOrUpdate { index_uid: "catto", primary_key: None, method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000000, documents_count: 12, allow_index_creation: true }}
+2 {uid: 2, status: enqueued, details: { received_documents: 50, indexed_documents: None }, kind: DocumentAdditionOrUpdate { index_uid: "catto", primary_key: None, method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000001, documents_count: 50, allow_index_creation: true }}
+3 {uid: 3, status: enqueued, details: { received_documents: 5000, indexed_documents: None }, kind: DocumentAdditionOrUpdate { index_uid: "doggo", primary_key: Some("bone"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000002, documents_count: 5000, allow_index_creation: true }}
+----------------------------------------------------------------------
+### Status:
+enqueued [0,1,2,3,]
+----------------------------------------------------------------------
+### Kind:
+"documentAdditionOrUpdate" [1,2,3,]
+"indexCreation" [0,]
+----------------------------------------------------------------------
+### Index Tasks:
+catto [0,1,2,]
+doggo [3,]
+----------------------------------------------------------------------
+### Index Mapper:
+
+----------------------------------------------------------------------
+### Canceled By:
+
+----------------------------------------------------------------------
+### Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+----------------------------------------------------------------------
+### Started At:
+----------------------------------------------------------------------
+### Finished At:
+----------------------------------------------------------------------
+### All Batches:
+----------------------------------------------------------------------
+### Batch to tasks mapping:
+----------------------------------------------------------------------
+### Batches Status:
+----------------------------------------------------------------------
+### Batches Kind:
+----------------------------------------------------------------------
+### Batches Index Tasks:
+----------------------------------------------------------------------
+### Batches Enqueued At:
+----------------------------------------------------------------------
+### Batches Started At:
+----------------------------------------------------------------------
+### Batches Finished At:
+----------------------------------------------------------------------
+### File Store:
+00000000-0000-0000-0000-000000000000
+00000000-0000-0000-0000-000000000001
+00000000-0000-0000-0000-000000000002
+
+----------------------------------------------------------------------

@@ -1,0 +1,23 @@
+---
+source: crates/index-scheduler/src/scheduler/test_embedders.rs
+expression: task.details
+snapshot_kind: text
+---
+{
+  "embedders": {
+    "A_fakerest": {
+      "source": "rest",
+      "apiKey": "MyXXXX...",
+      "dimensions": 384,
+      "url": "http://localhost:7777",
+      "request": "{{text}}",
+      "response": "{{embedding}}"
+    },
+    "B_small_hf": {
+      "source": "huggingFace",
+      "model": "sentence-transformers/all-MiniLM-L6-v2",
+      "revision": "e4ce9877abf3edfe10b0d82785e83bdcb973e22e",
+      "documentTemplate": "{{doc.doggo}} the {{doc.breed}} best doggo"
+    }
+  }
+}

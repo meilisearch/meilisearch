@@ -1,0 +1,92 @@
+---
+source: crates/index-scheduler/src/queue/test.rs
+snapshot_kind: text
+---
+[
+  {
+    "uid": 2,
+    "batchUid": null,
+    "enqueuedAt": "[date]",
+    "startedAt": "[date]",
+    "finishedAt": "[date]",
+    "error": null,
+    "canceledBy": null,
+    "details": {
+      "IndexInfo": {
+        "primary_key": null
+      }
+    },
+    "status": "enqueued",
+    "kind": {
+      "indexCreation": {
+        "index_uid": "doggo",
+        "primary_key": null
+      }
+    }
+  },
+  {
+    "uid": 3,
+    "batchUid": null,
+    "enqueuedAt": "[date]",
+    "startedAt": "[date]",
+    "finishedAt": "[date]",
+    "error": null,
+    "canceledBy": null,
+    "details": {
+      "IndexInfo": {
+        "primary_key": null
+      }
+    },
+    "status": "enqueued",
+    "kind": {
+      "indexCreation": {
+        "index_uid": "doggo",
+        "primary_key": null
+      }
+    }
+  },
+  {
+    "uid": 4,
+    "batchUid": 2,
+    "enqueuedAt": "[date]",
+    "startedAt": "[date]",
+    "finishedAt": "[date]",
+    "error": null,
+    "canceledBy": null,
+    "details": {
+      "TaskDeletion": {
+        "matched_tasks": 2,
+        "deleted_tasks": 2,
+        "original_filter": "[filter]"
+      }
+    },
+    "status": "succeeded",
+    "kind": {
+      "taskDeletion": {
+        "query": "[query]",
+        "tasks": [
+          58,
+          48,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          16,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0
+        ]
+      }
+    }
+  }
+]

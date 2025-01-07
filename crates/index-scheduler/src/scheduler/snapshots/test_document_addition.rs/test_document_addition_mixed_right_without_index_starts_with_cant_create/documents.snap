@@ -1,0 +1,42 @@
+---
+source: crates/index-scheduler/src/scheduler/test_document_addition.rs
+snapshot_kind: text
+---
+[
+  {
+    "id": 1,
+    "doggo": "bob 1"
+  },
+  {
+    "id": 2,
+    "doggo": "bob 2"
+  },
+  {
+    "id": 3,
+    "doggo": "bob 3"
+  },
+  {
+    "id": 4,
+    "doggo": "bob 4"
+  },
+  {
+    "id": 5,
+    "doggo": "bob 5"
+  },
+  {
+    "id": 6,
+    "doggo": "bob 6"
+  },
+  {
+    "id": 7,
+    "doggo": "bob 7"
+  },
+  {
+    "id": 8,
+    "doggo": "bob 8"
+  },
+  {
+    "id": 9,
+    "doggo": "bob 9"
+  }
+]
