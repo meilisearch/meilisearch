@@ -259,7 +259,7 @@ pub struct Settings<T> {
     #[schema(value_type = Option<PaginationSettings>, example = json!({ "maxValuesPerFacet": 10, "sortFacetValuesBy": { "genre": FacetValuesSort::Count }}))]
     pub pagination: Setting<PaginationSettings>,
 
-    /// Embedder required for performing meaning-based search queries.
+    /// Embedder required for performing semantic search queries.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsEmbedders>)]
     #[schema(value_type = Option<BTreeMap<String, SettingEmbeddingSettings>>)]
