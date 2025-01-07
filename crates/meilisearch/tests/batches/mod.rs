@@ -986,7 +986,7 @@ async fn test_summarized_index_swap() {
         ]))
         .await;
     server.wait_task(task.uid()).await;
-    let (batch, _) = server.get_batch(task.uid().to_u32().unwrap()).await;
+    let (batch, _) = server.get_batch(1).await;
     assert_json_snapshot!(batch,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r#"
@@ -1029,8 +1029,7 @@ async fn test_summarized_batch_cancelation() {
     index.wait_task(task.uid()).await.succeeded();
     let (task, _status_code) = server.cancel_tasks("uids=0").await;
     index.wait_task(task.uid()).await.succeeded();
-    //TODO: create a get_batch function interface that accepts u64, and remove the following cast.
-    let (batch, _) = index.get_batch(task.uid().to_u32().unwrap()).await;
+    let (batch, _) = index.get_batch(1).await;
     assert_json_snapshot!(batch,
         { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
         @r#"
