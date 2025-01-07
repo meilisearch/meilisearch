@@ -147,6 +147,13 @@ impl MergeWithError<milli::CriterionError> for DeserrJsonError<InvalidSettingsRa
 #[derive(Default, Serialize, Deserialize, PartialEq, Eq, Clone, ToSchema)]
 #[repr(transparent)]
 #[serde(transparent)]
+/// "Technical" type that is required due to utoipa.
+///
+/// We did not find a way to implement [`utoipa::ToSchema`] for the [`Setting`] enum,
+/// but most types can use the `value_type` macro parameter to workaround that issue.
+///
+/// However that type is used in the settings route, including through the macro that auto-generate
+/// all the settings route, so we can't remap the `value_type`.
 pub struct SettingEmbeddingSettings {
     #[schema(inline, value_type = Option<crate::milli::vector::settings::EmbeddingSettings>)]
     pub inner: Setting<crate::milli::vector::settings::EmbeddingSettings>,
