@@ -19,7 +19,7 @@ use crate::update::new::FacetFieldIdsDelta;
 use crate::update::{FacetsUpdateBulk, GrenadParameters};
 use crate::{GlobalFieldsIdsMap, Index, Result};
 
-pub(super) fn postprocess<MSP>(
+pub(super) fn post_process<MSP>(
     indexing_context: IndexingContext<MSP>,
     wtxn: &mut RwTxn<'_>,
     global_fields_ids_map: GlobalFieldsIdsMap<'_>,

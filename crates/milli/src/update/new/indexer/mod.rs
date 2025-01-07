@@ -22,7 +22,6 @@ use crate::update::GrenadParameters;
 use crate::vector::{ArroyWrapper, EmbeddingConfigs};
 use crate::{FieldsIdsMap, GlobalFieldsIdsMap, Index, InternalError, Result, ThreadPoolNoAbort};
 
-mod compute;
 pub(crate) mod de;
 pub mod document_changes;
 mod document_deletion;
@@ -30,6 +29,7 @@ mod document_operation;
 mod extract;
 mod guess_primary_key;
 mod partial_dump;
+mod post_processing;
 mod update_by_function;
 mod write;
 
@@ -179,7 +179,12 @@ where
             &indexing_context.must_stop_processing,
         )?;
 
-        compute::postprocess(indexing_context, wtxn, global_fields_ids_map, facet_field_ids_delta)?;
+        post_processing::post_process(
+            indexing_context,
+            wtxn,
+            global_fields_ids_map,
+            facet_field_ids_delta,
+        )?;
 
         indexing_context.progress.update_progress(IndexingStep::Finalizing);
 
