@@ -65,7 +65,7 @@ async fn search_no_searchable_attribute_set() {
         )
         .await;
 
-    let (task,_status_code) = index.update_settings_searchable_attributes(json!(["*"])).await;
+    let (task, _status_code) = index.update_settings_searchable_attributes(json!(["*"])).await;
     index.wait_task(task.uid()).await.succeeded();
 
     index
@@ -78,7 +78,7 @@ async fn search_no_searchable_attribute_set() {
         )
         .await;
 
-    let (task,_status_code) = index.update_settings_searchable_attributes(json!(["*"])).await;
+    let (task, _status_code) = index.update_settings_searchable_attributes(json!(["*"])).await;
     index.wait_task(task.uid()).await.succeeded();
 
     index
@@ -109,7 +109,7 @@ async fn search_on_all_attributes() {
 async fn search_on_all_attributes_restricted_set() {
     let server = Server::new().await;
     let index = index_with_documents(&server, &SIMPLE_SEARCH_DOCUMENTS).await;
-    let (task,_status_code) = index.update_settings_searchable_attributes(json!(["title"])).await;
+    let (task, _status_code) = index.update_settings_searchable_attributes(json!(["title"])).await;
     index.wait_task(task.uid()).await.succeeded();
 
     index
@@ -192,7 +192,9 @@ async fn word_ranking_rule_order() {
 async fn word_ranking_rule_order_exact_words() {
     let server = Server::new().await;
     let index = index_with_documents(&server, &SIMPLE_SEARCH_DOCUMENTS).await;
-    let (task,_status_code) = index.update_settings_typo_tolerance(json!({"disableOnWords": ["Captain", "Marvel"]})).await;
+    let (task, _status_code) = index
+        .update_settings_typo_tolerance(json!({"disableOnWords": ["Captain", "Marvel"]}))
+        .await;
     index.wait_task(task.uid()).await.succeeded();
 
     // simple search should return 2 documents (ids: 2 and 3).

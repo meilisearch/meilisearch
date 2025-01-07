@@ -30,9 +30,10 @@ async fn delete_one_unexisting_document() {
 async fn delete_one_document() {
     let server = Server::new().await;
     let index = server.index("test");
-    let (task,_status_code) = index.add_documents(json!([{ "id": 0, "content": "foobar" }]), None).await;
+    let (task, _status_code) =
+        index.add_documents(json!([{ "id": 0, "content": "foobar" }]), None).await;
     index.wait_task(task.uid()).await.succeeded();
-    let (task,status_code) = server.index("test").delete_document(0).await;
+    let (task, status_code) = server.index("test").delete_document(0).await;
     assert_eq!(status_code, 202);
     index.wait_task(task.uid()).await.succeeded();
 
@@ -56,7 +57,7 @@ async fn clear_all_documents_unexisting_index() {
 async fn clear_all_documents() {
     let server = Server::new().await;
     let index = server.index("test");
-    let (task,_status_code) = index
+    let (task, _status_code) = index
         .add_documents(
             json!([{ "id": 1, "content": "foobar" }, { "id": 0, "content": "foobar" }]),
             None,
@@ -76,7 +77,7 @@ async fn clear_all_documents() {
 async fn clear_all_documents_empty_index() {
     let server = Server::new().await;
     let index = server.index("test");
-    let (task,_status_code) = index.create(None).await;
+    let (task, _status_code) = index.create(None).await;
     index.wait_task(task.uid()).await.succeeded();
     let (task, code) = index.clear_all_documents().await;
     assert_eq!(code, 202);
@@ -143,7 +144,7 @@ async fn delete_document_by_filter() {
     let server = Server::new().await;
     let index = server.index("doggo");
     index.update_settings_filterable_attributes(json!(["color"])).await;
-    let (task,_status_code) = index
+    let (task, _status_code) = index
         .add_documents(
             json!([
                 { "id": 0, "color": "red" },
@@ -303,7 +304,7 @@ async fn delete_document_by_complex_filter() {
     let server = Server::new().await;
     let index = server.index("doggo");
     index.update_settings_filterable_attributes(json!(["color"])).await;
-    let (task,_status_code) = index
+    let (task, _status_code) = index
         .add_documents(
             json!([
                 { "id": 0, "color": "red" },

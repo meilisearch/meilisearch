@@ -13,7 +13,7 @@ async fn set_and_reset_distinct_attribute() {
 
     assert_eq!(response["distinctAttribute"], "test");
 
-    let (task2,_status_code) = index.update_settings(json!({ "distinctAttribute": null })).await;
+    let (task2, _status_code) = index.update_settings(json!({ "distinctAttribute": null })).await;
 
     index.wait_task(task2.uid()).await.succeeded();
 
@@ -34,7 +34,7 @@ async fn set_and_reset_distinct_attribute_with_dedicated_route() {
 
     assert_eq!(response, "test");
 
-    let (update_task2,_status_code) = index.update_distinct_attribute(json!(null)).await;
+    let (update_task2, _status_code) = index.update_distinct_attribute(json!(null)).await;
 
     index.wait_task(update_task2.uid()).await.succeeded();
 

@@ -46,7 +46,7 @@ async fn geo_sort_with_geo_strings() {
     let documents = DOCUMENTS.clone();
     index.update_settings_filterable_attributes(json!(["_geo"])).await;
     index.update_settings_sortable_attributes(json!(["_geo"])).await;
-    let (task,_status_code) = index.add_documents(documents, None).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
     index.wait_task(task.uid()).await.succeeded();
 
     index

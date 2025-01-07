@@ -13,7 +13,7 @@ async fn update_primary_key() {
 
     assert_eq!(code, 202);
 
-    let (task,_status_code) = index.update(Some("primary")).await;
+    let (task, _status_code) = index.update(Some("primary")).await;
 
     let response = index.wait_task(task.uid()).await;
 
@@ -46,7 +46,7 @@ async fn create_and_update_with_different_encoding() {
     assert_eq!(code, 202);
 
     let index = server.index_with_encoder("test", Encoder::Brotli);
-    let (task,_status_code) = index.update(Some("primary")).await;
+    let (task, _status_code) = index.update(Some("primary")).await;
 
     let response = index.wait_task(task.uid()).await;
 

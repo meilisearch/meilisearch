@@ -151,7 +151,7 @@ async fn distinct_search_with_offset_no_ranking() {
 
     let documents = DOCUMENTS.clone();
     index.add_documents(documents, Some(DOCUMENT_PRIMARY_KEY)).await;
-    let (task,_status_code) = index.update_distinct_attribute(json!(DOCUMENT_DISTINCT_KEY)).await;
+    let (task, _status_code) = index.update_distinct_attribute(json!(DOCUMENT_DISTINCT_KEY)).await;
     index.wait_task(task.uid()).await.succeeded();
 
     fn get_hits(response: &Value) -> Vec<&str> {
@@ -210,7 +210,7 @@ async fn distinct_search_with_pagination_no_ranking() {
 
     let documents = DOCUMENTS.clone();
     index.add_documents(documents, Some(DOCUMENT_PRIMARY_KEY)).await;
-    let (task,_status_code) = index.update_distinct_attribute(json!(DOCUMENT_DISTINCT_KEY)).await;
+    let (task, _status_code) = index.update_distinct_attribute(json!(DOCUMENT_DISTINCT_KEY)).await;
     index.wait_task(task.uid()).await.succeeded();
 
     fn get_hits(response: &Value) -> Vec<&str> {

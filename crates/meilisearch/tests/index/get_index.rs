@@ -55,7 +55,7 @@ async fn no_index_return_empty_list() {
 async fn list_multiple_indexes() {
     let server = Server::new().await;
     server.index("test").create(None).await;
-    let (task,_status_code) = server.index("test1").create(Some("key")).await;
+    let (task, _status_code) = server.index("test1").create(Some("key")).await;
 
     server.index("test").wait_task(task.uid()).await.succeeded();
 

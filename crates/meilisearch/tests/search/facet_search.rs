@@ -41,7 +41,7 @@ async fn simple_facet_search() {
 
     let documents = DOCUMENTS.clone();
     index.update_settings_filterable_attributes(json!(["genres"])).await;
-    let (task,_status_code) = index.add_documents(documents, None).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
     index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) =
@@ -175,7 +175,7 @@ async fn advanced_facet_search() {
     let documents = DOCUMENTS.clone();
     index.update_settings_filterable_attributes(json!(["genres"])).await;
     index.update_settings_typo_tolerance(json!({ "enabled": false })).await;
-    let (task,_status_code) = index.add_documents(documents, None).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
     index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) =
@@ -199,7 +199,7 @@ async fn more_advanced_facet_search() {
     let documents = DOCUMENTS.clone();
     index.update_settings_filterable_attributes(json!(["genres"])).await;
     index.update_settings_typo_tolerance(json!({ "disableOnWords": ["adventre"] })).await;
-    let (task,_status_code) = index.add_documents(documents, None).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
     index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) =
@@ -223,7 +223,7 @@ async fn simple_facet_search_with_max_values() {
     let documents = DOCUMENTS.clone();
     index.update_settings_faceting(json!({ "maxValuesPerFacet": 1 })).await;
     index.update_settings_filterable_attributes(json!(["genres"])).await;
-    let (task,_status_code) = index.add_documents(documents, None).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
     index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) =
@@ -245,7 +245,7 @@ async fn simple_facet_search_by_count_with_max_values() {
         )
         .await;
     index.update_settings_filterable_attributes(json!(["genres"])).await;
-    let (task,_status_code) = index.add_documents(documents, None).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
     index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) =
@@ -261,7 +261,7 @@ async fn non_filterable_facet_search_error() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    let (task,_status_code) = index.add_documents(documents, None).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
     index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) =
@@ -280,7 +280,7 @@ async fn facet_search_dont_support_words() {
 
     let documents = DOCUMENTS.clone();
     index.update_settings_filterable_attributes(json!(["genres"])).await;
-    let (task,_status_code) = index.add_documents(documents, None).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
     index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) =
@@ -298,7 +298,7 @@ async fn simple_facet_search_with_sort_by_count() {
     let documents = DOCUMENTS.clone();
     index.update_settings_faceting(json!({ "sortFacetValuesBy": { "*": "count" } })).await;
     index.update_settings_filterable_attributes(json!(["genres"])).await;
-    let (task,_status_code) = index.add_documents(documents, None).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
     index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) =

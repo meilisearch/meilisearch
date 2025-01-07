@@ -436,7 +436,7 @@ async fn reset_all_settings() {
     assert_eq!(response["synonyms"], json!({"puppy": ["dog", "doggo", "potat"] }));
     assert_eq!(response["filterableAttributes"], json!(["age"]));
 
-    let (delete_task,_status_code) = index.delete_settings().await;
+    let (delete_task, _status_code) = index.delete_settings().await;
     index.wait_task(delete_task.uid()).await.succeeded();
 
     let (response, code) = index.settings().await;
@@ -462,7 +462,7 @@ async fn update_setting_unexisting_index() {
     assert_eq!(response["status"], "succeeded");
     let (_response, code) = index.get().await;
     assert_eq!(code, 200);
-    let (task,_status_code) = index.delete_settings().await;
+    let (task, _status_code) = index.delete_settings().await;
     let response = index.wait_task(task.uid()).await;
     assert_eq!(response["status"], "succeeded");
 }
@@ -513,7 +513,7 @@ async fn set_and_reset_distinct_attribute_with_dedicated_route() {
 
     assert_eq!(response, "test");
 
-    let (task,_status_code) = index.update_distinct_attribute(json!(null)).await;
+    let (task, _status_code) = index.update_distinct_attribute(json!(null)).await;
 
     index.wait_task(task.uid()).await.succeeded();
 

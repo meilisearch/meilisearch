@@ -38,7 +38,7 @@ async fn set_and_reset() {
     ]
     "###);
 
-    let (task,_status_code) = index
+    let (task, _status_code) = index
         .update_settings(json!({
             "nonSeparatorTokens": null,
             "separatorTokens": null,
@@ -74,7 +74,7 @@ async fn set_and_search() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    let (add_task,_status_code) = index.add_documents(documents, None).await;
+    let (add_task, _status_code) = index.add_documents(documents, None).await;
     index.wait_task(add_task.uid()).await.succeeded();
 
     let (update_task, _code) = index
@@ -228,7 +228,7 @@ async fn advanced_synergies() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    let (add_task,_status_code) = index.add_documents(documents, None).await;
+    let (add_task, _status_code) = index.add_documents(documents, None).await;
     index.wait_task(add_task.uid()).await.succeeded();
 
     let (update_task, _code) = index

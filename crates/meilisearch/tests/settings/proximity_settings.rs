@@ -29,7 +29,7 @@ async fn attribute_scale_search() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    let (task,_status_code) = index.add_documents(DOCUMENTS.clone(), None).await;
+    let (task, _status_code) = index.add_documents(DOCUMENTS.clone(), None).await;
     index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = index
@@ -102,7 +102,7 @@ async fn attribute_scale_phrase_search() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    let (task,_status_code) = index.add_documents(DOCUMENTS.clone(), None).await;
+    let (task, _status_code) = index.add_documents(DOCUMENTS.clone(), None).await;
     index.wait_task(task.uid()).await.succeeded();
 
     let (task, _code) = index
@@ -170,7 +170,7 @@ async fn word_scale_set_and_reset() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    let (task,_status_code) = index.add_documents(DOCUMENTS.clone(), None).await;
+    let (task, _status_code) = index.add_documents(DOCUMENTS.clone(), None).await;
     index.wait_task(task.uid()).await.succeeded();
 
     // Set and reset the setting ensuring the swap between the 2 settings is applied.
@@ -285,7 +285,7 @@ async fn attribute_scale_default_ranking_rules() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    let (task,_status_code) = index.add_documents(DOCUMENTS.clone(), None).await;
+    let (task, _status_code) = index.add_documents(DOCUMENTS.clone(), None).await;
     index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = index

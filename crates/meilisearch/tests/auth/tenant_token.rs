@@ -146,7 +146,7 @@ macro_rules! compute_forbidden_search {
         server.use_admin_key("MASTER_KEY").await;
         let index = server.index("sales");
         let documents = DOCUMENTS.clone();
-        let (task,_status_code) = index.add_documents(documents, None).await;
+        let (task, _status_code) = index.add_documents(documents, None).await;
         index.wait_task(task.uid()).await.succeeded();
         drop(index);
 

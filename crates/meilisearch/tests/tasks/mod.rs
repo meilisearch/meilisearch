@@ -13,7 +13,7 @@ use crate::json;
 async fn error_get_unexisting_task_status() {
     let server = Server::new().await;
     let index = server.index("test");
-    let (task,_status_code) = index.create(None).await;
+    let (task, _status_code) = index.create(None).await;
     index.wait_task(task.uid()).await.succeeded();
     let (response, code) = index.get_task(1).await;
 
@@ -32,8 +32,8 @@ async fn error_get_unexisting_task_status() {
 async fn get_task_status() {
     let server = Server::new().await;
     let index = server.index("test");
-    let (create_task,_status_code) = index.create(None).await;
-    let (add_task,_status_code) = index
+    let (create_task, _status_code) = index.create(None).await;
+    let (add_task, _status_code) = index
         .add_documents(
             json!([{
                 "id": 1,
@@ -52,7 +52,7 @@ async fn get_task_status() {
 async fn list_tasks() {
     let server = Server::new().await;
     let index = server.index("test");
-    let (task,_status_code) = index.create(None).await;
+    let (task, _status_code) = index.create(None).await;
     index.wait_task(task.uid()).await.succeeded();
     index
         .add_documents(serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(), None)
@@ -149,7 +149,7 @@ async fn list_tasks_with_star_filters() {
 async fn list_tasks_status_filtered() {
     let server = Server::new().await;
     let index = server.index("test");
-    let (task,_status_code) = index.create(None).await;
+    let (task, _status_code) = index.create(None).await;
     index.wait_task(task.uid()).await.succeeded();
     index
         .add_documents(serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(), None)
@@ -175,7 +175,7 @@ async fn list_tasks_status_filtered() {
 async fn list_tasks_type_filtered() {
     let server = Server::new().await;
     let index = server.index("test");
-    let (task,_status_code) = index.create(None).await;
+    let (task, _status_code) = index.create(None).await;
     index.wait_task(task.uid()).await.succeeded();
     index
         .add_documents(serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(), None)
@@ -195,7 +195,7 @@ async fn list_tasks_type_filtered() {
 async fn list_tasks_invalid_canceled_by_filter() {
     let server = Server::new().await;
     let index = server.index("test");
-    let (task,_status_code) = index.create(None).await;
+    let (task, _status_code) = index.create(None).await;
     index.wait_task(task.uid()).await.succeeded();
     index
         .add_documents(serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(), None)
@@ -210,7 +210,7 @@ async fn list_tasks_invalid_canceled_by_filter() {
 async fn list_tasks_status_and_type_filtered() {
     let server = Server::new().await;
     let index = server.index("test");
-    let (task,_status_code) = index.create(None).await;
+    let (task, _status_code) = index.create(None).await;
     index.wait_task(task.uid()).await.succeeded();
     index
         .add_documents(serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(), None)
@@ -278,7 +278,8 @@ async fn test_summarized_task_view() {
 async fn test_summarized_document_addition_or_update() {
     let server = Server::new().await;
     let index = server.index("test");
-    let (task,_status_code) = index.add_documents(json!({ "id": 42, "content": "doggos & fluff" }), None).await;
+    let (task, _status_code) =
+        index.add_documents(json!({ "id": 42, "content": "doggos & fluff" }), None).await;
     index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.get_task(0).await;
     assert_json_snapshot!(task,
@@ -303,7 +304,8 @@ async fn test_summarized_document_addition_or_update() {
     }
     "###);
 
-    let (task,_status_code) = index.add_documents(json!({ "id": 42, "content": "doggos & fluff" }), Some("id")).await;
+    let (task, _status_code) =
+        index.add_documents(json!({ "id": 42, "content": "doggos & fluff" }), Some("id")).await;
     index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.get_task(1).await;
     assert_json_snapshot!(task,
@@ -333,7 +335,7 @@ async fn test_summarized_document_addition_or_update() {
 async fn test_summarized_delete_documents_by_batch() {
     let server = Server::new().await;
     let index = server.index("test");
-    let (task,_status_code) = index.delete_batch(vec![1, 2, 3]).await;
+    let (task, _status_code) = index.delete_batch(vec![1, 2, 3]).await;
     index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.get_task(0).await;
     assert_json_snapshot!(task,
@@ -365,7 +367,7 @@ async fn test_summarized_delete_documents_by_batch() {
     "###);
 
     index.create(None).await;
-    let (del_task,_status_code) = index.delete_batch(vec![42]).await;
+    let (del_task, _status_code) = index.delete_batch(vec![42]).await;
     index.wait_task(del_task.uid()).await.succeeded();
     let (task, _) = index.get_task(del_task.uid()).await;
     assert_json_snapshot!(task,
@@ -397,7 +399,8 @@ async fn test_summarized_delete_documents_by_filter() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    let (task,_status_code) = index.delete_document_by_filter(json!({ "filter": "doggo = bernese" })).await;
+    let (task, _status_code) =
+        index.delete_document_by_filter(json!({ "filter": "doggo = bernese" })).await;
     index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.get_task(task.uid()).await;
     assert_json_snapshot!(task,
@@ -429,7 +432,8 @@ async fn test_summarized_delete_documents_by_filter() {
     "###);
 
     index.create(None).await;
-    let (task,_status_code) = index.delete_document_by_filter(json!({ "filter": "doggo = bernese" })).await;
+    let (task, _status_code) =
+        index.delete_document_by_filter(json!({ "filter": "doggo = bernese" })).await;
     index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.get_task(task.uid()).await;
     assert_json_snapshot!(task,
@@ -461,7 +465,8 @@ async fn test_summarized_delete_documents_by_filter() {
     "###);
 
     index.update_settings(json!({ "filterableAttributes": ["doggo"] })).await;
-    let (task,_status_code) = index.delete_document_by_filter(json!({ "filter": "doggo = bernese" })).await;
+    let (task, _status_code) =
+        index.delete_document_by_filter(json!({ "filter": "doggo = bernese" })).await;
     index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.get_task(task.uid()).await;
     assert_json_snapshot!(task,
@@ -492,7 +497,7 @@ async fn test_summarized_delete_documents_by_filter() {
 async fn test_summarized_delete_document_by_id() {
     let server = Server::new().await;
     let index = server.index("test");
-    let (task,_status_code) = index.delete_document(1).await;
+    let (task, _status_code) = index.delete_document(1).await;
     index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.get_task(task.uid()).await;
     assert_json_snapshot!(task,
@@ -524,7 +529,7 @@ async fn test_summarized_delete_document_by_id() {
     "###);
 
     index.create(None).await;
-    let (task,_status_code) = index.delete_document(42).await;
+    let (task, _status_code) = index.delete_document(42).await;
     index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.get_task(task.uid()).await;
     assert_json_snapshot!(task,
@@ -606,7 +611,7 @@ async fn test_summarized_settings_update() {
 async fn test_summarized_index_creation() {
     let server = Server::new().await;
     let index = server.index("test");
-    let (task,_status_code) = index.create(None).await;
+    let (task, _status_code) = index.create(None).await;
     index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.get_task(task.uid()).await;
     assert_json_snapshot!(task,
@@ -630,7 +635,7 @@ async fn test_summarized_index_creation() {
     }
     "###);
 
-    let (task,_status_code) = index.create(Some("doggos")).await;
+    let (task, _status_code) = index.create(Some("doggos")).await;
     index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.get_task(task.uid()).await;
     assert_json_snapshot!(task,
@@ -774,7 +779,7 @@ async fn test_summarized_index_update() {
     let server = Server::new().await;
     let index = server.index("test");
     // If the index doesn't exist yet, we should get errors with or without the primary key.
-    let (task,_status_code) = index.update(None).await;
+    let (task, _status_code) = index.update(None).await;
     index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.get_task(task.uid()).await;
     assert_json_snapshot!(task,
@@ -803,7 +808,7 @@ async fn test_summarized_index_update() {
     }
     "###);
 
-    let (task,_status_code) = index.update(Some("bones")).await;
+    let (task, _status_code) = index.update(Some("bones")).await;
     index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.get_task(task.uid()).await;
     assert_json_snapshot!(task,
@@ -835,7 +840,7 @@ async fn test_summarized_index_update() {
     // And run the same two tests once the index do exists.
     index.create(None).await;
 
-    let (task,_status_code) = index.update(None).await;
+    let (task, _status_code) = index.update(None).await;
     index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.get_task(task.uid()).await;
     assert_json_snapshot!(task,
@@ -859,7 +864,7 @@ async fn test_summarized_index_update() {
     }
     "###);
 
-    let (task,_status_code) = index.update(Some("bones")).await;
+    let (task, _status_code) = index.update(Some("bones")).await;
     index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.get_task(task.uid()).await;
     assert_json_snapshot!(task,
@@ -887,7 +892,7 @@ async fn test_summarized_index_update() {
 #[actix_web::test]
 async fn test_summarized_index_swap() {
     let server = Server::new().await;
-    let (task,_status_code) = server
+    let (task, _status_code) = server
         .index_swap(json!([
             { "indexes": ["doggos", "cattos"] }
         ]))
@@ -928,7 +933,7 @@ async fn test_summarized_index_swap() {
     "###);
 
     server.index("doggos").create(None).await;
-    let (task,_status_code) = server.index("cattos").create(None).await;
+    let (task, _status_code) = server.index("cattos").create(None).await;
     server
         .index_swap(json!([
             { "indexes": ["doggos", "cattos"] }
@@ -970,9 +975,9 @@ async fn test_summarized_task_cancelation() {
     let server = Server::new().await;
     let index = server.index("doggos");
     // to avoid being flaky we're only going to cancel an already finished task :(
-    let (task,_status_code) = index.create(None).await;
+    let (task, _status_code) = index.create(None).await;
     index.wait_task(task.uid()).await.succeeded();
-    let (task,_status_code) = server.cancel_tasks("uids=0").await;
+    let (task, _status_code) = server.cancel_tasks("uids=0").await;
     index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.get_task(task.uid()).await;
     assert_json_snapshot!(task,
@@ -1004,9 +1009,9 @@ async fn test_summarized_task_deletion() {
     let server = Server::new().await;
     let index = server.index("doggos");
     // to avoid being flaky we're only going to delete an already finished task :(
-    let (task,_status_code) = index.create(None).await;
+    let (task, _status_code) = index.create(None).await;
     index.wait_task(task.uid()).await.succeeded();
-    let (task,_status_code) = server.delete_tasks("uids=0").await;
+    let (task, _status_code) = server.delete_tasks("uids=0").await;
     index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.get_task(task.uid()).await;
     assert_json_snapshot!(task,
@@ -1036,7 +1041,7 @@ async fn test_summarized_task_deletion() {
 #[actix_web::test]
 async fn test_summarized_dump_creation() {
     let server = Server::new().await;
-    let (task,_status_code) = server.create_dump().await;
+    let (task, _status_code) = server.create_dump().await;
     server.wait_task(task.uid()).await;
     let (task, _) = server.get_task(task.uid()).await;
     assert_json_snapshot!(task,

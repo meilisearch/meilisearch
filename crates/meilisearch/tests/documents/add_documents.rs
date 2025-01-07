@@ -1274,7 +1274,7 @@ async fn error_add_documents_bad_document_id() {
             "content": "foobar"
         }
     ]);
-    let (task,_status_code) = index.add_documents(documents, None).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
     index.wait_task(task.uid()).await.succeeded();
     let (response, code) = index.get_task(1).await;
     snapshot!(code, @"200 OK");
@@ -1390,7 +1390,7 @@ async fn error_add_documents_missing_document_id() {
             "content": "foobar"
         }
     ]);
-    let (task,_status_code) = index.add_documents(documents, None).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
     index.wait_task(task.uid()).await.succeeded();
     let (response, code) = index.get_task(1).await;
     snapshot!(code, @"200 OK");
@@ -1702,7 +1702,7 @@ async fn add_documents_with_geo_field() {
         },
     ]);
 
-    let (task,_status_code) = index.add_documents(documents, None).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
     let response = index.wait_task(task.uid()).await;
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
@@ -1741,7 +1741,7 @@ async fn add_documents_invalid_geo_field() {
         }
     ]);
 
-    let (task,_status_code) = index.add_documents(documents, None).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
     index.wait_task(task.uid()).await.succeeded();
     let (response, code) = index.get_task(2).await;
     snapshot!(code, @"200 OK");
@@ -1779,7 +1779,7 @@ async fn add_documents_invalid_geo_field() {
         }
     ]);
 
-    let (task,_status_code) = index.add_documents(documents, None).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
     index.wait_task(task.uid()).await.succeeded();
     let (response, code) = index.get_task(3).await;
     snapshot!(code, @"200 OK");
@@ -1817,7 +1817,7 @@ async fn add_documents_invalid_geo_field() {
         }
     ]);
 
-    let (task,_status_code) = index.add_documents(documents, None).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
     index.wait_task(task.uid()).await.succeeded();
     let (response, code) = index.get_task(4).await;
     snapshot!(code, @"200 OK");
@@ -1855,7 +1855,7 @@ async fn add_documents_invalid_geo_field() {
         }
     ]);
 
-    let (task,_status_code) = index.add_documents(documents, None).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
     index.wait_task(task.uid()).await.succeeded();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
@@ -1893,7 +1893,7 @@ async fn add_documents_invalid_geo_field() {
         }
     ]);
 
-    let (task,_status_code) = index.add_documents(documents, None).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
     index.wait_task(task.uid()).await.succeeded();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
@@ -1931,7 +1931,7 @@ async fn add_documents_invalid_geo_field() {
         }
     ]);
 
-    let (task,_status_code) = index.add_documents(documents, None).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
     index.wait_task(task.uid()).await.succeeded();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
@@ -1969,7 +1969,7 @@ async fn add_documents_invalid_geo_field() {
         }
     ]);
 
-    let (task,_status_code) = index.add_documents(documents, None).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
     index.wait_task(task.uid()).await.succeeded();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
@@ -2007,7 +2007,7 @@ async fn add_documents_invalid_geo_field() {
         }
     ]);
 
-    let (task,_status_code) = index.add_documents(documents, None).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
     index.wait_task(task.uid()).await.succeeded();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
@@ -2045,7 +2045,7 @@ async fn add_documents_invalid_geo_field() {
         }
     ]);
 
-    let (task,_status_code) = index.add_documents(documents, None).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
     index.wait_task(task.uid()).await.succeeded();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
@@ -2083,7 +2083,7 @@ async fn add_documents_invalid_geo_field() {
         }
     ]);
 
-    let (task,_status_code) = index.add_documents(documents, None).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
     index.wait_task(task.uid()).await.succeeded();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
@@ -2121,7 +2121,7 @@ async fn add_documents_invalid_geo_field() {
         }
     ]);
 
-    let (task,_status_code) = index.add_documents(documents, None).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
     index.wait_task(task.uid()).await.succeeded();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
@@ -2159,7 +2159,7 @@ async fn add_documents_invalid_geo_field() {
         }
     ]);
 
-    let (task,_status_code) = index.add_documents(documents, None).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
     index.wait_task(task.uid()).await.succeeded();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
@@ -2409,7 +2409,7 @@ async fn error_primary_key_inference() {
         }
     ]);
 
-    let (task,_status_code) = index.add_documents(documents, None).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
     index.wait_task(task.uid()).await.succeeded();
     let (response, code) = index.get_task(0).await;
     assert_eq!(code, 200);
@@ -2450,7 +2450,7 @@ async fn error_primary_key_inference() {
         }
     ]);
 
-    let (task,_status_code) = index.add_documents(documents, None).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
     index.wait_task(task.uid()).await.succeeded();
     let (response, code) = index.get_task(task.uid()).await;
     assert_eq!(code, 200);
@@ -2489,7 +2489,7 @@ async fn error_primary_key_inference() {
         }
     ]);
 
-    let (task,_status_code) = index.add_documents(documents, None).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
     index.wait_task(task.uid()).await.succeeded();
     let (response, code) = index.get_task(task.uid()).await;
     assert_eq!(code, 200);
@@ -2528,12 +2528,12 @@ async fn add_documents_with_primary_key_twice() {
         }
     ]);
 
-    let (task,_status_code) = index.add_documents(documents.clone(), Some("title")).await;
+    let (task, _status_code) = index.add_documents(documents.clone(), Some("title")).await;
     index.wait_task(task.uid()).await.succeeded();
     let (response, _code) = index.get_task(task.uid()).await;
     assert_eq!(response["status"], "succeeded");
 
-    let (task,_status_code) = index.add_documents(documents, Some("title")).await;
+    let (task, _status_code) = index.add_documents(documents, Some("title")).await;
     index.wait_task(task.uid()).await.succeeded();
     let (response, _code) = index.get_task(task.uid()).await;
     assert_eq!(response["status"], "succeeded");

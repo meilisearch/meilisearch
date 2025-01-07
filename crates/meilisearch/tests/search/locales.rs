@@ -98,7 +98,7 @@ async fn simple_search() {
             json!({"searchableAttributes": ["name_en", "name_ja", "name_zh", "author_en", "author_ja", "author_zh", "description_en", "description_ja", "description_zh"]}),
         )
         .await;
-    let (task,_status_code) = index.add_documents(documents, None).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
     index.wait_task(task.uid()).await.succeeded();
 
     // english
@@ -220,7 +220,7 @@ async fn force_locales() {
       "enqueuedAt": "[date]"
     }
     "###);
-    let (task,_status_code) = index.add_documents(documents, None).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
     index.wait_task(task.uid()).await.succeeded();
 
     // chinese detection
@@ -298,7 +298,7 @@ async fn force_locales_with_pattern() {
       "enqueuedAt": "[date]"
     }
     "###);
-    let (task,_status_code) = index.add_documents(documents, None).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
     index.wait_task(task.uid()).await.succeeded();
 
     // chinese detection
@@ -374,7 +374,7 @@ async fn force_locales_with_pattern_nested() {
       "enqueuedAt": "[date]"
     }
     "###);
-    let (task,_status_code) = index.add_documents(documents, None).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
     index.wait_task(task.uid()).await.succeeded();
 
     // chinese
@@ -449,7 +449,7 @@ async fn force_different_locales_with_pattern() {
       "enqueuedAt": "[date]"
     }
     "###);
-    let (task,_status_code) = index.add_documents(documents, None).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
     index.wait_task(task.uid()).await.succeeded();
 
     // force chinese
@@ -527,7 +527,7 @@ async fn auto_infer_locales_at_search_with_attributes_to_search_on() {
       "enqueuedAt": "[date]"
     }
     "###);
-    let (task,_status_code) = index.add_documents(documents, None).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
     index.wait_task(task.uid()).await.succeeded();
 
     // auto infer any language
@@ -601,7 +601,7 @@ async fn auto_infer_locales_at_search() {
       "enqueuedAt": "[date]"
     }
     "###);
-    let (task,_status_code) = index.add_documents(documents, None).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
     index.wait_task(task.uid()).await.succeeded();
 
     index
@@ -700,7 +700,7 @@ async fn force_different_locales_with_pattern_nested() {
       "enqueuedAt": "[date]"
     }
     "###);
-    let (task,_status_code) = index.add_documents(documents, None).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
     index.wait_task(task.uid()).await.succeeded();
 
     // chinese
@@ -778,7 +778,7 @@ async fn settings_change() {
 
     let index = server.index("test");
     let documents = NESTED_DOCUMENTS.clone();
-    let (task,_status_code) = index.add_documents(documents, None).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
     index.wait_task(task.uid()).await.succeeded();
     let (response, _) = index
         .update_settings(json!({
@@ -915,7 +915,7 @@ async fn invalid_locales() {
             json!({"searchableAttributes": ["name_en", "name_ja", "name_zh", "author_en", "author_ja", "author_zh", "description_en", "description_ja", "description_zh"]}),
         )
         .await;
-    let (task,_status_code) = index.add_documents(documents, None).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
     index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = index.search_post(json!({"q": "Atta", "locales": ["invalid"]})).await;
@@ -1033,7 +1033,7 @@ async fn simple_facet_search() {
       "enqueuedAt": "[date]"
     }
     "###);
-    let (task,_status_code) = index.add_documents(documents, None).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
     index.wait_task(task.uid()).await.succeeded();
 
     let (response, _) = index
@@ -1095,7 +1095,7 @@ async fn facet_search_with_localized_attributes() {
       "enqueuedAt": "[date]"
     }
     "###);
-    let (task,_status_code) = index.add_documents(documents, None).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
     index.wait_task(task.uid()).await.succeeded();
 
     let (response, _) = index
