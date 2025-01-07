@@ -7,7 +7,7 @@ use meilisearch_types::milli::index::IndexEmbeddingConfig;
 use meilisearch_types::milli::update::Setting;
 use meilisearch_types::milli::vector::settings::EmbeddingSettings;
 use meilisearch_types::milli::{self, obkv_to_json};
-use meilisearch_types::settings::{Settings, Unchecked};
+use meilisearch_types::settings::{SettingEmbeddingSettings, Settings, Unchecked};
 use meilisearch_types::tasks::KindWithContent;
 use milli::update::IndexDocumentsMethod::*;
 
@@ -30,7 +30,10 @@ fn import_vectors() {
         response: Setting::Set(serde_json::json!("{{embedding}}")),
         ..Default::default()
     };
-    embedders.insert(S("A_fakerest"), Setting::Set(embedding_settings));
+    embedders.insert(
+        S("A_fakerest"),
+        SettingEmbeddingSettings { inner: Setting::Set(embedding_settings) },
+    );
 
     let embedding_settings = milli::vector::settings::EmbeddingSettings {
         source: Setting::Set(milli::vector::settings::EmbedderSource::HuggingFace),
@@ -39,7 +42,10 @@ fn import_vectors() {
         document_template: Setting::Set(S("{{doc.doggo}} the {{doc.breed}} best doggo")),
         ..Default::default()
     };
-    embedders.insert(S("B_small_hf"), Setting::Set(embedding_settings));
+    embedders.insert(
+        S("B_small_hf"),
+        SettingEmbeddingSettings { inner: Setting::Set(embedding_settings) },
+    );
 
     new_settings.embedders = Setting::Set(embedders);
 
@@ -356,13 +362,13 @@ fn import_vectors_first_and_embedder_later() {
 
     let setting = meilisearch_types::settings::Settings::<Unchecked> {
         embedders: Setting::Set(maplit::btreemap! {
-            S("my_doggo_embedder") => Setting::Set(EmbeddingSettings {
+            S("my_doggo_embedder") => SettingEmbeddingSettings { inner: Setting::Set(EmbeddingSettings {
                 source: Setting::Set(milli::vector::settings::EmbedderSource::HuggingFace),
                 model: Setting::Set(S("sentence-transformers/all-MiniLM-L6-v2")),
                 revision: Setting::Set(S("e4ce9877abf3edfe10b0d82785e83bdcb973e22e")),
                 document_template: Setting::Set(S("{{doc.doggo}}")),
                 ..Default::default()
-            })
+            }) }
         }),
         ..Default::default()
     };
@@ -511,11 +517,11 @@ fn delete_document_containing_vector() {
 
     let setting = meilisearch_types::settings::Settings::<Unchecked> {
         embedders: Setting::Set(maplit::btreemap! {
-            S("manual") => Setting::Set(EmbeddingSettings {
+            S("manual") => SettingEmbeddingSettings { inner: Setting::Set(EmbeddingSettings {
                 source: Setting::Set(milli::vector::settings::EmbedderSource::UserProvided),
                 dimensions: Setting::Set(3),
                 ..Default::default()
-            })
+            }) }
         }),
         ..Default::default()
     };
@@ -677,18 +683,18 @@ fn delete_embedder_with_user_provided_vectors() {
 
     let setting = meilisearch_types::settings::Settings::<Unchecked> {
         embedders: Setting::Set(maplit::btreemap! {
-            S("manual") => Setting::Set(EmbeddingSettings {
+            S("manual") => SettingEmbeddingSettings { inner: Setting::Set(EmbeddingSettings {
                 source: Setting::Set(milli::vector::settings::EmbedderSource::UserProvided),
                 dimensions: Setting::Set(3),
                 ..Default::default()
-            }),
-            S("my_doggo_embedder") => Setting::Set(EmbeddingSettings {
+            }) },
+            S("my_doggo_embedder") => SettingEmbeddingSettings { inner: Setting::Set(EmbeddingSettings {
                 source: Setting::Set(milli::vector::settings::EmbedderSource::HuggingFace),
                 model: Setting::Set(S("sentence-transformers/all-MiniLM-L6-v2")),
                 revision: Setting::Set(S("e4ce9877abf3edfe10b0d82785e83bdcb973e22e")),
                 document_template: Setting::Set(S("{{doc.doggo}}")),
                 ..Default::default()
-            }),
+            }) },
         }),
         ..Default::default()
     };
@@ -764,7 +770,7 @@ fn delete_embedder_with_user_provided_vectors() {
     {
         let setting = meilisearch_types::settings::Settings::<Unchecked> {
             embedders: Setting::Set(maplit::btreemap! {
-                S("manual") => Setting::Reset,
+                S("manual") => SettingEmbeddingSettings { inner: Setting::Reset },
             }),
             ..Default::default()
         };

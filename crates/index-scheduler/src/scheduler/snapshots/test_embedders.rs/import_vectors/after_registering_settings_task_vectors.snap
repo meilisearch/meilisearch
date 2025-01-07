@@ -1,13 +1,6 @@
 ---
-<<<<<<< HEAD:crates/index-scheduler/src/scheduler/snapshots/test_embedders.rs/import_vectors/after_registering_settings_task_vectors.snap
 source: crates/index-scheduler/src/scheduler/test_embedders.rs
 snapshot_kind: text
-||||||| parent of 2e258cec7 (fix some tests):crates/index-scheduler/src/snapshots/lib.rs/import_vectors/after_registering_settings_task_vectors.snap
-source: crates/index-scheduler/src/lib.rs
-=======
-source: crates/index-scheduler/src/lib.rs
-snapshot_kind: text
->>>>>>> 2e258cec7 (fix some tests):crates/index-scheduler/src/snapshots/lib.rs/import_vectors/after_registering_settings_task_vectors.snap
 ---
 ### Autobatching Enabled = true
 ### Processing batch None:

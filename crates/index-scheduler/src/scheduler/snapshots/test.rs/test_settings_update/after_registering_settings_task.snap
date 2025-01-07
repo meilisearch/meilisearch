@@ -1,13 +1,6 @@
 ---
-<<<<<<< HEAD:crates/index-scheduler/src/scheduler/snapshots/test.rs/test_settings_update/after_registering_settings_task.snap
 source: crates/index-scheduler/src/scheduler/test.rs
 snapshot_kind: text
-||||||| parent of 2e258cec7 (fix some tests):crates/index-scheduler/src/snapshots/lib.rs/test_settings_update/after_registering_settings_task.snap
-source: crates/index-scheduler/src/lib.rs
-=======
-source: crates/index-scheduler/src/lib.rs
-snapshot_kind: text
->>>>>>> 2e258cec7 (fix some tests):crates/index-scheduler/src/snapshots/lib.rs/test_settings_update/after_registering_settings_task.snap
 ---
 ### Autobatching Enabled = true
 ### Processing batch None:
