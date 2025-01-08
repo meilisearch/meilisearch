@@ -427,7 +427,8 @@ impl Segment {
         ) {
             // Replace the version number with the prototype name if any.
             let version = build_info::DescribeResult::from_build()
-                .and_then(|describe| describe.as_prototype()).unwrap_or(env!("CARGO_PKG_VERSION"));
+                .and_then(|describe| describe.as_prototype())
+                .unwrap_or(env!("CARGO_PKG_VERSION"));
 
             let _ = self
                 .batcher
