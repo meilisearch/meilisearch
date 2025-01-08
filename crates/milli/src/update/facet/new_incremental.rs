@@ -91,16 +91,13 @@ impl FacetsUpdateIncrementalInner {
                 FacetGroupKey { field_id: self.field_id, level: parent_level, left_bound: &[] };
 
             let mut last_parent: Option<Box<[u8]>> = None;
-            let mut child_it = changed_children.drain(..);
+            let mut child_it =
+                changed_children.drain(..).filter(|child| valid_facet_value(&child.facet_value));
             'current_level: while let Some(child) = child_it.next() {
-                if !valid_facet_value(&child.facet_value) {
-                    continue;
-                }
-
                 if let Some(last_parent) = &last_parent {
                     if &child.facet_value >= last_parent {
                         self.compute_parent_group(wtxn, child_level, child.facet_value)?;
-                        continue;
+                        continue 'current_level;
                     }
                 }
 
@@ -136,69 +133,55 @@ impl FacetsUpdateIncrementalInner {
                     }
                     Some(Err(err)) => return Err(err.into()),
                     None => {
-                        self.compute_parent_group(wtxn, child_level, child.facet_value)?;
+                        // no parent for that key
+                        let mut parent_it = self
+                            .db
+                            .remap_data_type::<DecodeIgnore>()
+                            .prefix_iter_mut(wtxn, &parent_level_left_bound)?;
+                        match parent_it.next() {
+                            // 1. left of the current left bound, or
+                            Some(Ok((first_key, _first_value))) => 'change_left_bound: {
+                                // make sure we don't spill on the neighboring fid (level also included defensively)
+                                if first_key.field_id != self.field_id
+                                    || first_key.level != parent_level
+                                {
+                                    break 'change_left_bound;
+                                }
+                                // remove old left bound
+                                unsafe { parent_it.del_current()? };
+                                drop(parent_it);
+                                changed_parents.push(FacetFieldIdChange {
+                                    facet_value: child.facet_value.clone(),
+                                });
+                                self.compute_parent_group(wtxn, child_level, child.facet_value)?;
+                                // pop all elements in order to visit the new left bound
+                                let new_left_bound =
+                                    &mut changed_parents.last_mut().unwrap().facet_value;
+                                for child in child_it.by_ref() {
+                                    new_left_bound.clone_from(&child.facet_value);
 
-                        // do we have children without parents?
-                        if let Some(child) = child_it.next() {
-                            // no parent for that key
-                            let mut parent_it = self
-                                .db
-                                .remap_data_type::<DecodeIgnore>()
-                                .prefix_iter_mut(wtxn, &parent_level_left_bound)?;
-                            match parent_it.next() {
-                                // 1. left of the current left bound, or
-                                Some(Ok((first_key, _first_value))) => 'change_left_bound: {
-                                    // make sure we don't spill on the neighboring fid (level also included defensively)
-                                    if first_key.field_id != self.field_id
-                                        || first_key.level != parent_level
-                                    {
-                                        break 'change_left_bound;
-                                    }
-                                    // remove old left bound
-                                    unsafe { parent_it.del_current()? };
-                                    drop(parent_it);
-                                    // pop all elements and order to visit the new left bound
-                                    changed_parents.push(FacetFieldIdChange {
-                                        facet_value: child.facet_value.clone(),
-                                    });
                                     self.compute_parent_group(
                                         wtxn,
                                         child_level,
                                         child.facet_value,
                                     )?;
-                                    for child in child_it.by_ref() {
-                                        let new_left_bound =
-                                            &mut changed_parents.last_mut().unwrap().facet_value;
-
-                                        new_left_bound.clone_from(&child.facet_value);
-
-                                        self.compute_parent_group(
-                                            wtxn,
-                                            child_level,
-                                            child.facet_value,
-                                        )?;
-                                    }
-
-                                    break 'current_level;
                                 }
-                                Some(Err(err)) => return Err(err.into()),
-                                // 2. max level reached, exit
-                                None => {
-                                    drop(parent_it);
+
+                                break 'current_level;
+                            }
+                            Some(Err(err)) => return Err(err.into()),
+                            // 2. max level reached, exit
+                            None => {
+                                drop(parent_it);
+                                self.compute_parent_group(wtxn, child_level, child.facet_value)?;
+                                for child in child_it.by_ref() {
                                     self.compute_parent_group(
                                         wtxn,
                                         child_level,
                                         child.facet_value,
                                     )?;
-                                    for child in child_it.by_ref() {
-                                        self.compute_parent_group(
-                                            wtxn,
-                                            child_level,
-                                            child.facet_value,
-                                        )?;
-                                    }
-                                    return Ok(());
                                 }
+                                return Ok(());
                             }
                         }
                     }
