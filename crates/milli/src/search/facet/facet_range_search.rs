@@ -132,12 +132,12 @@ impl<'t, 'b, 'bitmap> FacetRangeSearch<'t, 'b, 'bitmap> {
     ///
     /// 1. So long as the element's range is less than the left bound, we do nothing and keep iterating
     /// 2. If the element's range is fully contained by the bounds, then all of its docids are added to
-    /// the roaring bitmap.
+    ///    the roaring bitmap.
     /// 3. If the element's range merely intersects the bounds, then we call the algorithm recursively
-    /// on the children of the element from the level below.
+    ///    on the children of the element from the level below.
     /// 4. If the element's range is greater than the right bound, we do nothing and stop iterating.
-    /// Note that the right bound is found through either the `left_bound` of the *next* element,
-    /// or from the `rightmost_bound` argument
+    ///    Note that the right bound is found through either the `left_bound` of the *next* element,
+    ///    or from the `rightmost_bound` argument
     ///
     /// ## Arguments
     /// - `level`: the level being visited

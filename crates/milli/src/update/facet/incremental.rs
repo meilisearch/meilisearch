@@ -21,29 +21,30 @@ use crate::{CboRoaringBitmapCodec, Index, Result};
 /// Enum used as a return value for the facet incremental indexing.
 ///
 /// - `ModificationResult::InPlace` means that modifying the `facet_value` into the `level` did not have
-/// an effect on the number of keys in that level. Therefore, it did not increase the number of children
-/// of the parent node.
+///   an effect on the number of keys in that level. Therefore, it did not increase the number of children
+///   of the parent node.
 ///
 /// - `ModificationResult::Insert` means that modifying the `facet_value` into the `level` resulted
-/// in the addition of a new key in that level, and that therefore the number of children
-/// of the parent node should be incremented.
+///   in the addition of a new key in that level, and that therefore the number of children
+///   of the parent node should be incremented.
 ///
 /// - `ModificationResult::Remove` means that modifying the `facet_value` into the `level` resulted in a change in the
-/// number of keys in the level. For example, removing a document id from the facet value `3` could
-/// cause it to have no corresponding document in level 0 anymore, and therefore the key was deleted
-/// entirely. In that case, `ModificationResult::Remove` is returned. The parent of the deleted key must
-/// then adjust its group size. If its group size falls to 0, then it will need to be deleted as well.
+///   number of keys in the level. For example, removing a document id from the facet value `3` could
+///   cause it to have no corresponding document in level 0 anymore, and therefore the key was deleted
+///   entirely. In that case, `ModificationResult::Remove` is returned. The parent of the deleted key must
+///   then adjust its group size. If its group size falls to 0, then it will need to be deleted as well.
 ///
 /// - `ModificationResult::Reduce/Expand` means that modifying the `facet_value` into the `level` resulted in a change in the
-/// bounds of the keys of the level. For example, removing a document id from the facet value
-/// `3` might have caused the facet value `3` to have no corresponding document in level 0. Therefore,
-/// in level 1, the key with the left bound `3` had to be changed to the next facet value (e.g. 4).
-/// In that case `ModificationResult::Reduce` is returned. The parent of the reduced key may need to adjust
-/// its left bound as well.
+///   bounds of the keys of the level. For example, removing a document id from the facet value
+///   `3` might have caused the facet value `3` to have no corresponding document in level 0. Therefore,
+///   in level 1, the key with the left bound `3` had to be changed to the next facet value (e.g. 4).
+///   In that case `ModificationResult::Reduce` is returned. The parent of the reduced key may need to adjust
+///   its left bound as well.
 ///
 /// - `ModificationResult::Nothing` means that modifying the `facet_value` didn't have any impact into the `level`.
-/// This case is reachable when a document id is removed from a sub-level node but is still present in another one.
-/// For example, removing `2` from a document containing `2` and `3`, the document id will removed form the `level 0` but should remain in the group node [1..4] in `level 1`.
+///   This case is reachable when a document id is removed from a sub-level node but is still present in another one.
+///   For example, removing `2` from a document containing `2` and `3`, the document id will removed form the `level 0`
+///   but should remain in the group node [1..4] in `level 1`.
 enum ModificationResult {
     InPlace,
     Expand,

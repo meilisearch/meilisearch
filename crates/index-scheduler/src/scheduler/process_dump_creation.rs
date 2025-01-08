@@ -106,7 +106,7 @@ impl IndexScheduler {
         progress.update_progress(DumpCreationProgress::DumpTheIndexes);
         let nb_indexes = self.index_mapper.index_mapping.len(&rtxn)? as u32;
         let mut count = 0;
-        self.index_mapper.try_for_each_index(&rtxn, |uid, index| -> Result<()> {
+        let () = self.index_mapper.try_for_each_index(&rtxn, |uid, index| -> Result<()> {
             progress.update_progress(VariableNameStep::new(uid.to_string(), count, nb_indexes));
             count += 1;
 

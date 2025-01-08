@@ -1,7 +1,7 @@
 /*!
 This crate defines the index scheduler, which is responsible for:
 1. Keeping references to meilisearch's indexes and mapping them to their
-user-defined names.
+   user-defined names.
 2. Scheduling tasks given by the user and executing them, in batch if possible.
 
 When an `IndexScheduler` is created, a new thread containing a reference to the
@@ -513,7 +513,7 @@ impl IndexScheduler {
     /// the user.
     ///
     /// 1. IndexSwap tasks are not publicly associated with any index, but they are associated
-    /// with many indexes internally.
+    ///    with many indexes internally.
     /// 2. The user may not have the rights to access the tasks (internally) associated with all indexes.
     pub fn get_tasks_from_authorized_indexes(
         &self,
@@ -532,7 +532,7 @@ impl IndexScheduler {
     /// the user.
     ///
     /// 1. IndexSwap tasks are not publicly associated with any index, but they are associated
-    /// with many indexes internally.
+    ///    with many indexes internally.
     /// 2. The user may not have the rights to access the tasks (internally) associated with all indexes.
     pub fn get_task_ids_from_authorized_indexes(
         &self,
@@ -551,7 +551,7 @@ impl IndexScheduler {
     /// the user.
     ///
     /// 1. IndexSwap tasks are not publicly associated with any index, but they are associated
-    /// with many indexes internally.
+    ///    with many indexes internally.
     /// 2. The user may not have the rights to access the tasks (internally) associated with all indexes.
     pub fn get_batches_from_authorized_indexes(
         &self,
@@ -570,7 +570,7 @@ impl IndexScheduler {
     /// the user.
     ///
     /// 1. IndexSwap tasks are not publicly associated with any index, but they are associated
-    /// with many indexes internally.
+    ///    with many indexes internally.
     /// 2. The user may not have the rights to access the tasks (internally) associated with all indexes.
     pub fn get_batch_ids_from_authorized_indexes(
         &self,

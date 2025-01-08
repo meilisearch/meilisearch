@@ -4,15 +4,14 @@ This module tests the Proximity ranking rule:
 1. A proximity of >7 always has the same cost.
 
 2. Phrase terms can be in sprximity to other terms via their start and end words,
-but we need to make sure that the phrase exists in the document that meets this
-proximity condition. This is especially relevant with split words and synonyms.
+   but we need to make sure that the phrase exists in the document that meets this
+   proximity condition. This is especially relevant with split words and synonyms.
 
 3. An ngram has the same sprximity cost as its component words being consecutive.
-e.g. `sunflower` equivalent to `sun flower`.
+   e.g. `sunflower` equivalent to `sun flower`.
 
 4. The prefix databases can be used to find the sprximity between two words, but
-they store fewer sprximities than the regular word sprximity DB.
-
+   they store fewer sprximities than the regular word sprximity DB.
 */
 
 use std::collections::BTreeMap;

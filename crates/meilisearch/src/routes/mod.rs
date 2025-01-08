@@ -545,5 +545,5 @@ pub async fn get_health(
     index_scheduler.health().unwrap();
     auth_controller.health().unwrap();
 
-    Ok(HttpResponse::Ok().json(&HealthResponse::default()))
+    Ok(HttpResponse::Ok().json(HealthResponse::default()))
 }
