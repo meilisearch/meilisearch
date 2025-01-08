@@ -47,6 +47,7 @@ uuid = { version = "1.11.0", features = ["serde", "v4"] }
 arroy = "0.5.0"
 big_s = "1.0.2"
 crossbeam-channel = "0.5.14"
-insta = { version = "1.42.0", features = ["json", "redactions"] }
+# fixed version due to format breakages in v1.40
+insta = { version = "=1.39.0", features = ["json", "redactions"] }
 maplit = "1.0.2"
 meili-snap = { path = "../meili-snap" }

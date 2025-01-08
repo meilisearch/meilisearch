@@ -111,7 +111,8 @@ utoipa-scalar = { version = "0.2.1", optional = true, features = ["actix-web"] }
 [dev-dependencies]
 actix-rt = "2.10.0"
 brotli = "6.0.0"
-insta = "1.42.0"
+# fixed version due to format breakages in v1.40
+insta = "=1.39.0"
 manifest-dir-macros = "0.1.18"
 maplit = "1.0.2"
 meili-snap = { path = "../meili-snap" }

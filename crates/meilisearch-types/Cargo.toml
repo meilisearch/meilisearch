@@ -44,7 +44,8 @@ utoipa = { version = "5.3.1", features = ["macros"] }
 uuid = { version = "1.11.0", features = ["serde", "v4"] }
 
 [dev-dependencies]
-insta = "1.42.0"
+# fixed version due to format breakages in v1.40
+insta = "=1.39.0"
 meili-snap = { path = "../meili-snap" }
 
 [features]
