@@ -49,7 +49,7 @@ futures-util = "0.3.31"
 index-scheduler = { path = "../index-scheduler" }
 indexmap = { version = "2.7.0", features = ["serde"] }
 is-terminal = "0.4.13"
-itertools = "0.13.0"
+itertools = "0.14.0"
 jsonwebtoken = "9.3.0"
 lazy_static = "1.5.0"
 meilisearch-auth = { path = "../meilisearch-auth" }
@@ -75,17 +75,17 @@ reqwest = { version = "0.12.12", features = [
 rustls = { version = "0.23.20", features = ["ring"], default-features = false }
 rustls-pki-types = { version = "1.10.1", features = ["alloc"] }
 rustls-pemfile = "2.2.0"
-segment = { version = "0.2.4" }
+segment = { version = "0.2.5" }
 serde = { version = "1.0.217", features = ["derive"] }
 serde_json = { version = "1.0.135", features = ["preserve_order"] }
 sha2 = "0.10.8"
 siphasher = "1.0.1"
 slice-group-by = "0.3.1"
 static-files = { version = "0.2.4", optional = true }
-sysinfo = "0.30.13"
+sysinfo = "0.33.1"
 tar = "0.4.43"
 tempfile = "3.15.0"
-thiserror = "1.0.69"
+thiserror = "2.0.9"
 time = { version = "0.3.37", features = [
     "serde-well-known",
     "formatting",
@@ -123,7 +123,7 @@ yaup = "0.3.1"
 
 [build-dependencies]
 anyhow = { version = "1.0.95", optional = true }
-cargo_toml = { version = "0.20.5", optional = true }
+cargo_toml = { version = "0.21.0", optional = true }
 hex = { version = "0.4.3", optional = true }
 reqwest = { version = "0.12.12", features = [
     "blocking",

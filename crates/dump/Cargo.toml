@@ -22,7 +22,7 @@ serde = { version = "1.0.217", features = ["derive"] }
 serde_json = { version = "1.0.135", features = ["preserve_order"] }
 tar = "0.4.43"
 tempfile = "3.15.0"
-thiserror = "1.0.69"
+thiserror = "2.0.9"
 time = { version = "0.3.37", features = ["serde-well-known", "formatting", "parsing", "macros"] }
 tracing = "0.1.41"
 uuid = { version = "1.11.0", features = ["serde", "v4"] }
