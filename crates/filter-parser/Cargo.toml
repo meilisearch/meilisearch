@@ -17,4 +17,4 @@ nom_locate = "4.2.0"
 unescaper = "0.1.5"
 
 [dev-dependencies]
-insta = "1.39.0"
+insta = "1.42.0"

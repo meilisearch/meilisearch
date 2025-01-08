@@ -11,7 +11,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-tempfile = "3.10.1"
-thiserror = "1.0.61"
-tracing = "0.1.40"
-uuid = { version = "1.10.0", features = ["serde", "v4"] }
+tempfile = "3.15.0"
+thiserror = "1.0.69"
+tracing = "0.1.41"
+uuid = { version = "1.11.0", features = ["serde", "v4"] }
