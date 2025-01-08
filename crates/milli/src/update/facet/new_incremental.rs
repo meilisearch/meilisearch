@@ -91,8 +91,12 @@ impl FacetsUpdateIncrementalInner {
                 FacetGroupKey { field_id: self.field_id, level: parent_level, left_bound: &[] };
 
             let mut last_parent: Option<Box<[u8]>> = None;
-            let mut child_it =
-                changed_children.drain(..).filter(|child| valid_facet_value(&child.facet_value));
+            let mut child_it = changed_children
+                // drain all changed children
+                .drain(..)
+                // keep only children whose value is valid in the LMDB sense
+                .filter(|child| valid_facet_value(&child.facet_value));
+            // `while let` rather than `for` because we advance `child_it` inside of the loop
             'current_level: while let Some(child) = child_it.next() {
                 if let Some(last_parent) = &last_parent {
                     if &child.facet_value >= last_parent {
