@@ -1,5 +1,4 @@
 use actix_web::test;
-use actix_web::web::resource;
 use meili_snap::{json_string, snapshot};
 use meilisearch::Opt;
 use time::format_description::well_known::Rfc3339;

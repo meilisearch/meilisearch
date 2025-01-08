@@ -1,4 +1,3 @@
-use actix_web::web::resource;
 use meili_snap::{json_string, snapshot};
 use once_cell::sync::Lazy;
 
