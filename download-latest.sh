@@ -33,10 +33,12 @@ get_latest() {
         exit 1
     fi
 
-    if [ -z "$GITHUB_PAT" ]; then
-        curl -s "$latest_release" > "$temp_file" || return 1
-    else
+    if [ -n "$GITHUB_TOKEN" ]; then
+        curl -H "Authorization: Bearer $GITHUB_TOKEN" -s "$latest_release" > "$temp_file" || return 1
+    elif [ -n "$GITHUB_PAT" ]; then
         curl -H "Authorization: token $GITHUB_PAT" -s "$latest_release" > "$temp_file" || return 1
+    else
+        curl -s "$latest_release" > "$temp_file" || return 1
     fi
 
     latest="$(cat "$temp_file" | grep '"tag_name":' | cut -d ':' -f2 | tr -d '"' | tr -d ',' | tr -d ' ')"
