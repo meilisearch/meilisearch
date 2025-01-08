@@ -760,8 +760,8 @@ impl MaxMemory {
 /// Returns the total amount of bytes available or `None` if this system isn't supported.
 fn total_memory_bytes() -> Option<u64> {
     if sysinfo::IS_SUPPORTED_SYSTEM {
-        let memory_kind = RefreshKind::new().with_memory(MemoryRefreshKind::new().with_ram());
-        let mut system = System::new_with_specifics(memory_kind);
+        let mem_kind = RefreshKind::nothing().with_memory(MemoryRefreshKind::nothing().with_ram());
+        let mut system = System::new_with_specifics(mem_kind);
         system.refresh_memory();
         Some(system.total_memory())
     } else {
