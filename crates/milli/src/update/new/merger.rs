@@ -269,7 +269,8 @@ impl FacetFieldIdsDelta {
     pub fn consume_facet_string_delta(
         &mut self,
     ) -> impl Iterator<Item = (FieldId, FacetFieldIdDelta)> + '_ {
-        self.modified_facet_string_ids.drain()
+        None.into_iter()
+        //        self.modified_facet_string_ids.drain()
     }
 
     pub fn consume_facet_number_delta(
