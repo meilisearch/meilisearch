@@ -260,7 +260,7 @@ async fn distribution_shift() {
 
     snapshot!(code, @"202 Accepted");
     let response = server.wait_task(response.uid()).await;
-    snapshot!(response["details"], @r###"{"embedders":{"default":{"distribution":{"mean":0.998,"sigma":0.01}}}}"###);
+    snapshot!(response["details"], @r#"{"embedders":{"default":{"distribution":{"mean":0.998,"sigma":0.01}}}}"#);
 
     let (response, code) = index.search_post(search).await;
     snapshot!(code, @"200 OK");

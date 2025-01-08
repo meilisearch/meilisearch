@@ -5,6 +5,7 @@ use meili_snap::{json_string, snapshot};
 use meilisearch_types::milli::index::IndexEmbeddingConfig;
 use meilisearch_types::milli::update::IndexDocumentsMethod::*;
 use meilisearch_types::milli::{self};
+use meilisearch_types::settings::SettingEmbeddingSettings;
 use meilisearch_types::tasks::{IndexSwap, KindWithContent};
 use roaring::RoaringBitmap;
 
@@ -647,7 +648,8 @@ fn test_settings_update() {
         response: Setting::Set(serde_json::json!("{{embedding}}")),
         ..Default::default()
     };
-    embedders.insert(S("default"), Setting::Set(embedding_settings));
+    embedders
+        .insert(S("default"), SettingEmbeddingSettings { inner: Setting::Set(embedding_settings) });
     new_settings.embedders = Setting::Set(embedders);
 
     index_scheduler

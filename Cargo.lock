@@ -3532,6 +3532,8 @@ dependencies = [
  "tracing-trace",
  "url",
  "urlencoding",
+ "utoipa",
+ "utoipa-scalar",
  "uuid",
  "wiremock",
  "yaup",
@@ -3587,6 +3589,7 @@ dependencies = [
  "thiserror",
  "time",
  "tokio",
+ "utoipa",
  "uuid",
 ]
 
@@ -3698,6 +3701,7 @@ dependencies = [
  "uell",
  "ureq",
  "url",
+ "utoipa",
  "uuid",
 ]
 
@@ -5952,6 +5956,43 @@ name = "utf8parse"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "711b9620af191e0cdc7468a8d14e709c3dcdb115b36f838e601583af800a370a"
+
+[[package]]
+name = "utoipa"
+version = "5.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "514a48569e4e21c86d0b84b5612b5e73c0b2cf09db63260134ba426d4e8ea714"
+dependencies = [
+ "indexmap",
+ "serde",
+ "serde_json",
+ "utoipa-gen",
+]
+
+[[package]]
+name = "utoipa-gen"
+version = "5.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5629efe65599d0ccd5d493688cbf6e03aa7c1da07fe59ff97cf5977ed0637f66"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "regex",
+ "syn 2.0.87",
+ "uuid",
+]
+
+[[package]]
+name = "utoipa-scalar"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c1291aa7a2223c2f8399d1c6627ca0ba57ca0d7ecac762a2094a9dfd6376445a"
+dependencies = [
+ "actix-web",
+ "serde",
+ "serde_json",
+ "utoipa",
+]
 
 [[package]]
 name = "uuid"

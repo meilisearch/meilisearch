@@ -12,6 +12,7 @@ use meilisearch_types::milli;
 use meilisearch_types::serde_cs::vec::CS;
 use serde_json::Value;
 use tracing::debug;
+use utoipa::{IntoParams, OpenApi};
 
 use crate::analytics::Analytics;
 use crate::error::MeilisearchHttpError;
@@ -22,11 +23,27 @@ use crate::metrics::MEILISEARCH_DEGRADED_SEARCH_REQUESTS;
 use crate::routes::indexes::search_analytics::{SearchAggregator, SearchGET, SearchPOST};
 use crate::search::{
     add_search_rules, perform_search, HybridQuery, MatchingStrategy, RankingScoreThreshold,
-    RetrieveVectors, SearchKind, SearchQuery, SemanticRatio, DEFAULT_CROP_LENGTH,
+    RetrieveVectors, SearchKind, SearchQuery, SearchResult, SemanticRatio, DEFAULT_CROP_LENGTH,
     DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG,
     DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
 };
 use crate::search_queue::SearchQueue;
+
+#[derive(OpenApi)]
+#[openapi(
+    paths(search_with_url_query, search_with_post),
+    tags(
+        (
+            name = "Search",
+            description = "Meilisearch exposes two routes to perform searches:
+
+- A POST route: this is the preferred route when using API authentication, as it allows [preflight request](https://developer.mozilla.org/en-US/docs/Glossary/Preflight_request) caching and better performance.
+- A GET route: the usage of this route is discouraged, unless you have good reason to do otherwise (specific caching abilities for example)",
+            external_docs(url = "https://www.meilisearch.com/docs/reference/api/search"),
+        ),
+    ),
+)]
+pub struct SearchApi;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
@@ -36,30 +53,41 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     );
 }
 
-#[derive(Debug, deserr::Deserr)]
+#[derive(Debug, deserr::Deserr, IntoParams)]
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
+#[into_params(rename_all = "camelCase", parameter_in = Query)]
 pub struct SearchQueryGet {
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchQ>)]
     q: Option<String>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchVector>)]
+    #[param(value_type = Vec<f32>, explode = false)]
     vector: Option<CS<f32>>,
     #[deserr(default = Param(DEFAULT_SEARCH_OFFSET()), error = DeserrQueryParamError<InvalidSearchOffset>)]
+    #[param(value_type = usize, default = DEFAULT_SEARCH_OFFSET)]
     offset: Param<usize>,
     #[deserr(default = Param(DEFAULT_SEARCH_LIMIT()), error = DeserrQueryParamError<InvalidSearchLimit>)]
+    #[param(value_type = usize, default = DEFAULT_SEARCH_LIMIT)]
     limit: Param<usize>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchPage>)]
+    #[param(value_type = Option<usize>)]
     page: Option<Param<usize>>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchHitsPerPage>)]
+    #[param(value_type = Option<usize>)]
     hits_per_page: Option<Param<usize>>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchAttributesToRetrieve>)]
+    #[param(value_type = Vec<String>, explode = false)]
     attributes_to_retrieve: Option<CS<String>>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchRetrieveVectors>)]
+    #[param(value_type = bool, default)]
     retrieve_vectors: Param<bool>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchAttributesToCrop>)]
+    #[param(value_type = Vec<String>, explode = false)]
     attributes_to_crop: Option<CS<String>>,
     #[deserr(default = Param(DEFAULT_CROP_LENGTH()), error = DeserrQueryParamError<InvalidSearchCropLength>)]
+    #[param(value_type = usize, default = DEFAULT_CROP_LENGTH)]
     crop_length: Param<usize>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchAttributesToHighlight>)]
+    #[param(value_type = Vec<String>, explode = false)]
     attributes_to_highlight: Option<CS<String>>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchFilter>)]
     filter: Option<String>,
@@ -68,30 +96,41 @@ pub struct SearchQueryGet {
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchDistinct>)]
     distinct: Option<String>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchShowMatchesPosition>)]
+    #[param(value_type = bool)]
     show_matches_position: Param<bool>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchShowRankingScore>)]
+    #[param(value_type = bool)]
     show_ranking_score: Param<bool>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchShowRankingScoreDetails>)]
+    #[param(value_type = bool)]
     show_ranking_score_details: Param<bool>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchFacets>)]
+    #[param(value_type = Vec<String>, explode = false)]
     facets: Option<CS<String>>,
-    #[deserr( default = DEFAULT_HIGHLIGHT_PRE_TAG(), error = DeserrQueryParamError<InvalidSearchHighlightPreTag>)]
+    #[deserr(default = DEFAULT_HIGHLIGHT_PRE_TAG(), error = DeserrQueryParamError<InvalidSearchHighlightPreTag>)]
+    #[param(default = DEFAULT_HIGHLIGHT_PRE_TAG)]
     highlight_pre_tag: String,
-    #[deserr( default = DEFAULT_HIGHLIGHT_POST_TAG(), error = DeserrQueryParamError<InvalidSearchHighlightPostTag>)]
+    #[deserr(default = DEFAULT_HIGHLIGHT_POST_TAG(), error = DeserrQueryParamError<InvalidSearchHighlightPostTag>)]
+    #[param(default = DEFAULT_HIGHLIGHT_POST_TAG)]
     highlight_post_tag: String,
     #[deserr(default = DEFAULT_CROP_MARKER(), error = DeserrQueryParamError<InvalidSearchCropMarker>)]
+    #[param(default = DEFAULT_CROP_MARKER)]
     crop_marker: String,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchMatchingStrategy>)]
     matching_strategy: MatchingStrategy,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchAttributesToSearchOn>)]
+    #[param(value_type = Vec<String>, explode = false)]
     pub attributes_to_search_on: Option<CS<String>>,
     #[deserr(default, error = DeserrQueryParamError<InvalidEmbedder>)]
     pub hybrid_embedder: Option<String>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchSemanticRatio>)]
+    #[param(value_type = f32)]
     pub hybrid_semantic_ratio: Option<SemanticRatioGet>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchRankingScoreThreshold>)]
+    #[param(value_type = f32)]
     pub ranking_score_threshold: Option<RankingScoreThresholdGet>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchLocales>)]
+    #[param(value_type = Vec<Locale>, explode = false)]
     pub locales: Option<CS<Locale>>,
 }
 
@@ -220,6 +259,62 @@ pub fn fix_sort_query_parameters(sort_query: &str) -> Vec<String> {
     sort_parameters
 }
 
+/// Search an index with GET
+///
+/// Search for documents matching a specific query in the given index.
+#[utoipa::path(
+    get,
+    path = "/{indexUid}/search",
+    tags = ["Indexes", "Search"],
+    security(("Bearer" = ["search", "*"])),
+    params(
+        ("indexUid" = String, Path, example = "movies", description = "Index Unique Identifier", nullable = false),
+        SearchQueryGet
+    ),
+    responses(
+        (status = 200, description = "The documents are returned", body = SearchResult, content_type = "application/json", example = json!(
+            {
+              "hits": [
+                {
+                  "id": 2770,
+                  "title": "American Pie 2",
+                  "poster": "https://image.tmdb.org/t/p/w1280/q4LNgUnRfltxzp3gf1MAGiK5LhV.jpg",
+                  "overview": "The whole gang are back and as close as ever. They decide to get even closer by spending the summer together at a beach house. They decide to hold the biggest…",
+                  "release_date": 997405200
+                },
+                {
+                  "id": 190859,
+                  "title": "American Sniper",
+                  "poster": "https://image.tmdb.org/t/p/w1280/svPHnYE7N5NAGO49dBmRhq0vDQ3.jpg",
+                  "overview": "U.S. Navy SEAL Chris Kyle takes his sole mission—protect his comrades—to heart and becomes one of the most lethal snipers in American history. His pinpoint accuracy not only saves countless lives but also makes him a prime…",
+                  "release_date": 1418256000
+                }
+              ],
+              "offset": 0,
+              "limit": 2,
+              "estimatedTotalHits": 976,
+              "processingTimeMs": 35,
+              "query": "american "
+            }
+        )),
+        (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "Index `movies` not found.",
+                "code": "index_not_found",
+                "type": "invalid_request",
+                "link": "https://docs.meilisearch.com/errors#index_not_found"
+            }
+        )),
+        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+    )
+)]
 pub async fn search_with_url_query(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
     search_queue: web::Data<SearchQueue>,
@@ -271,6 +366,62 @@ pub async fn search_with_url_query(
     Ok(HttpResponse::Ok().json(search_result))
 }
 
+/// Search with POST
+///
+/// Search for documents matching a specific query in the given index.
+#[utoipa::path(
+    post,
+    path = "/{indexUid}/search",
+    tags = ["Indexes", "Search"],
+    security(("Bearer" = ["search", "*"])),
+    params(
+        ("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false),
+    ),
+    request_body = SearchQuery,
+    responses(
+        (status = 200, description = "The documents are returned", body = SearchResult, content_type = "application/json", example = json!(
+            {
+              "hits": [
+                {
+                  "id": 2770,
+                  "title": "American Pie 2",
+                  "poster": "https://image.tmdb.org/t/p/w1280/q4LNgUnRfltxzp3gf1MAGiK5LhV.jpg",
+                  "overview": "The whole gang are back and as close as ever. They decide to get even closer by spending the summer together at a beach house. They decide to hold the biggest…",
+                  "release_date": 997405200
+                },
+                {
+                  "id": 190859,
+                  "title": "American Sniper",
+                  "poster": "https://image.tmdb.org/t/p/w1280/svPHnYE7N5NAGO49dBmRhq0vDQ3.jpg",
+                  "overview": "U.S. Navy SEAL Chris Kyle takes his sole mission—protect his comrades—to heart and becomes one of the most lethal snipers in American history. His pinpoint accuracy not only saves countless lives but also makes him a prime…",
+                  "release_date": 1418256000
+                }
+              ],
+              "offset": 0,
+              "limit": 2,
+              "estimatedTotalHits": 976,
+              "processingTimeMs": 35,
+              "query": "american "
+            }
+        )),
+        (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "Index `movies` not found.",
+                "code": "index_not_found",
+                "type": "invalid_request",
+                "link": "https://docs.meilisearch.com/errors#index_not_found"
+            }
+        )),
+        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+    )
+)]
 pub async fn search_with_post(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
     search_queue: web::Data<SearchQueue>,
