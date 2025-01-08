@@ -346,35 +346,6 @@ pub(crate) mod test_helpers {
         for<'a> BoundCodec:
             BytesEncode<'a> + BytesDecode<'a, DItem = <BoundCodec as BytesEncode<'a>>::EItem>,
     {
-        #[cfg(all(test, fuzzing))]
-        pub fn open_from_tempdir(
-            tempdir: Rc<tempfile::TempDir>,
-            group_size: u8,
-            max_group_size: u8,
-            min_level_size: u8,
-        ) -> FacetIndex<BoundCodec> {
-            let group_size = std::cmp::min(16, std::cmp::max(group_size, 2)); // 2 <= x <= 16
-            let max_group_size = std::cmp::min(16, std::cmp::max(group_size * 2, max_group_size)); // 2*group_size <= x <= 16
-            let min_level_size = std::cmp::min(17, std::cmp::max(1, min_level_size)); // 1 <= x <= 17
-
-            let mut options = heed::EnvOpenOptions::new();
-            let options = options.map_size(4096 * 4 * 10 * 1000);
-            unsafe {
-                options.flag(heed::flags::Flags::MdbAlwaysFreePages);
-            }
-            let env = options.open(tempdir.path()).unwrap();
-            let content = env.open_database(None).unwrap().unwrap();
-
-            FacetIndex {
-                content,
-                group_size: Cell::new(group_size),
-                max_group_size: Cell::new(max_group_size),
-                min_level_size: Cell::new(min_level_size),
-                _tempdir: tempdir,
-                env,
-                _phantom: PhantomData,
-            }
-        }
         pub fn new(
             group_size: u8,
             max_group_size: u8,
@@ -400,26 +371,6 @@ pub(crate) mod test_helpers {
                 env,
                 _phantom: PhantomData,
             }
-        }
-
-        #[cfg(all(test, fuzzing))]
-        pub fn set_group_size(&self, group_size: u8) {
-            // 2 <= x <= 64
-            self.group_size.set(std::cmp::min(64, std::cmp::max(group_size, 2)));
-        }
-        #[cfg(all(test, fuzzing))]
-        pub fn set_max_group_size(&self, max_group_size: u8) {
-            // 2*group_size <= x <= 128
-            let max_group_size = std::cmp::max(4, std::cmp::min(128, max_group_size));
-            self.max_group_size.set(max_group_size);
-            if self.group_size.get() < max_group_size / 2 {
-                self.group_size.set(max_group_size / 2);
-            }
-        }
-        #[cfg(all(test, fuzzing))]
-        pub fn set_min_level_size(&self, min_level_size: u8) {
-            // 1 <= x <= inf
-            self.min_level_size.set(std::cmp::max(1, min_level_size));
         }
 
         pub fn insert<'a>(
