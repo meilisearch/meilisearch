@@ -66,7 +66,7 @@ impl FacetsUpdateIncremental {
              FacetFieldIdChange { facet_value: right, .. }| left.cmp(right),
         );
 
-        self.inner.find_touched_parents(
+        self.inner.find_changed_parents(
             wtxn,
             0,
             self.delta_data
@@ -81,21 +81,21 @@ impl FacetsUpdateIncremental {
 }
 
 impl FacetsUpdateIncrementalInner {
-    /// WARNING: `touched_children` must be sorted in **reverse** lexicographic order.
-    fn find_touched_parents(
+    /// WARNING: `changed_children` must be sorted in **reverse** lexicographic order.
+    fn find_changed_parents(
         &self,
         wtxn: &mut RwTxn,
         child_level: u8,
-        mut touched_children: impl Iterator<Item = Vec<u8>>,
+        mut changed_children: impl Iterator<Item = Vec<u8>>,
     ) -> Result<()> {
-        let mut touched_parents = vec![];
+        let mut changed_parents = vec![];
         let Some(parent_level) = child_level.checked_add(1) else { return Ok(()) };
         let parent_level_left_bound: FacetGroupKey<&[u8]> =
             FacetGroupKey { field_id: self.field_id, level: parent_level, left_bound: &[] };
 
         let mut last_parent: Option<Vec<u8>> = None;
 
-        for child in &mut touched_children {
+        for child in &mut changed_children {
             if !valid_facet_value(&child) {
                 continue;
             }
@@ -132,7 +132,7 @@ impl FacetsUpdateIncrementalInner {
                     last_parent = Some(parent_key.left_bound.to_owned());
 
                     // add to modified list for parent level
-                    touched_parents.push(parent_key.left_bound.to_owned());
+                    changed_parents.push(parent_key.left_bound.to_owned());
                     self.compute_parent_group(wtxn, child_level, child)?;
                 }
                 Some(Err(err)) => return Err(err.into()),
@@ -143,7 +143,7 @@ impl FacetsUpdateIncrementalInner {
             }
         }
         // do we have children without parents?
-        if let Some(child) = touched_children.next() {
+        if let Some(child) = changed_children.next() {
             // no parent for that key
             let mut it = self
                 .db
@@ -160,10 +160,10 @@ impl FacetsUpdateIncrementalInner {
                     unsafe { it.del_current()? };
                     drop(it);
                     // pop all elements and order to visit the new left bound
-                    touched_parents.push(child.clone());
+                    changed_parents.push(child.clone());
                     self.compute_parent_group(wtxn, child_level, child)?;
-                    for child in touched_children {
-                        let new_left_bound = touched_parents.last_mut().unwrap();
+                    for child in changed_children {
+                        let new_left_bound = changed_parents.last_mut().unwrap();
                         new_left_bound.clear();
                         new_left_bound.extend_from_slice(&child);
                         self.compute_parent_group(wtxn, child_level, child)?;
@@ -174,17 +174,17 @@ impl FacetsUpdateIncrementalInner {
                 None => {
                     drop(it);
                     self.compute_parent_group(wtxn, child_level, child)?;
-                    for child in touched_children {
+                    for child in changed_children {
                         self.compute_parent_group(wtxn, child_level, child)?;
                     }
                 }
             }
         }
-        if !touched_parents.is_empty() {
-            self.find_touched_parents(
+        if !changed_parents.is_empty() {
+            self.find_changed_parents(
                 wtxn,
                 parent_level,
-                touched_parents
+                changed_parents
                     // no need to `rev` here because the parents were already visited in reverse order
                     .into_iter(),
             )?;
