@@ -144,12 +144,26 @@ impl FacetsUpdateIncrementalInner {
                             .prefix_iter_mut(wtxn, &parent_level_left_bound)?;
                         match parent_it.next() {
                             // 1. left of the current left bound, or
-                            Some(Ok((first_key, _first_value))) => 'change_left_bound: {
+                            Some(Ok((first_key, _first_value))) => {
                                 // make sure we don't spill on the neighboring fid (level also included defensively)
                                 if first_key.field_id != self.field_id
                                     || first_key.level != parent_level
                                 {
-                                    break 'change_left_bound;
+                                    // max level reached, exit
+                                    drop(parent_it);
+                                    self.compute_parent_group(
+                                        wtxn,
+                                        child_level,
+                                        child.facet_value,
+                                    )?;
+                                    for child in child_it.by_ref() {
+                                        self.compute_parent_group(
+                                            wtxn,
+                                            child_level,
+                                            child.facet_value,
+                                        )?;
+                                    }
+                                    return Ok(());
                                 }
                                 // remove old left bound
                                 unsafe { parent_it.del_current()? };
@@ -170,8 +184,6 @@ impl FacetsUpdateIncrementalInner {
                                         child.facet_value,
                                     )?;
                                 }
-
-                                break 'current_level;
                             }
                             Some(Err(err)) => return Err(err.into()),
                             // 2. max level reached, exit
