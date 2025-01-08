@@ -163,8 +163,10 @@ impl Embedder {
 
         let token_ids = Tensor::stack(&token_ids, 0).map_err(EmbedError::tensor_shape)?;
         let token_type_ids = token_ids.zeros_like().map_err(EmbedError::tensor_shape)?;
-        let embeddings =
-            self.model.forward(&token_ids, &token_type_ids).map_err(EmbedError::model_forward)?;
+        let embeddings = self
+            .model
+            .forward(&token_ids, &token_type_ids, None)
+            .map_err(EmbedError::model_forward)?;
 
         // Apply some avg-pooling by taking the mean embedding value for all tokens (including padding)
         let (_n_sentence, n_tokens, _hidden_size) =
@@ -185,8 +187,10 @@ impl Embedder {
             Tensor::new(token_ids, &self.model.device).map_err(EmbedError::tensor_shape)?;
         let token_ids = Tensor::stack(&[token_ids], 0).map_err(EmbedError::tensor_shape)?;
         let token_type_ids = token_ids.zeros_like().map_err(EmbedError::tensor_shape)?;
-        let embeddings =
-            self.model.forward(&token_ids, &token_type_ids).map_err(EmbedError::model_forward)?;
+        let embeddings = self
+            .model
+            .forward(&token_ids, &token_type_ids, None)
+            .map_err(EmbedError::model_forward)?;
 
         // Apply some avg-pooling by taking the mean embedding value for all tokens (including padding)
         let (_n_sentence, n_tokens, _hidden_size) =
