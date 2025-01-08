@@ -536,6 +536,9 @@ where
     drop(fields_ids_map_store);
 
     let new_fields_ids_map = new_fields_ids_map.into_inner().unwrap();
+    for (fid, name, metadata) in new_fields_ids_map.iter() {
+        tracing::debug!("{fid}:{name},{metadata:?}");
+    }
     index.put_fields_ids_map(wtxn, new_fields_ids_map.as_fields_ids_map())?;
 
     if let Some(new_primary_key) = new_primary_key {
