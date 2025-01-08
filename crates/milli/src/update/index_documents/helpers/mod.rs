@@ -10,10 +10,10 @@ use fst::{IntoStreamer, Streamer};
 pub use grenad_helpers::*;
 pub use merge_functions::*;
 
-use crate::{MAX_LMDB_KEY_LENGTH, MAX_WORD_LENGTH};
+use crate::MAX_LMDB_KEY_LENGTH;
 
 pub fn valid_lmdb_key(key: impl AsRef<[u8]>) -> bool {
-    key.as_ref().len() <= MAX_WORD_LENGTH * 2 && !key.as_ref().is_empty()
+    key.as_ref().len() <= MAX_LMDB_KEY_LENGTH - 3 && !key.as_ref().is_empty()
 }
 
 pub fn valid_facet_value(facet_value: impl AsRef<[u8]>) -> bool {
