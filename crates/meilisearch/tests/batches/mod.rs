@@ -169,7 +169,8 @@ async fn list_batches_type_filtered() {
     let index = server.index("test");
     let (task, _) = index.create(None).await;
     index.wait_task(task.uid()).await.succeeded();
-    let (_task, _) = index.delete().await;
+    let (task, _) = index.delete().await;
+    index.wait_task(task.uid()).await.succeeded();
     let (response, code) = index.filtered_batches(&["indexCreation"], &[], &[]).await;
     assert_eq!(code, 200, "{}", response);
     assert_eq!(response["results"].as_array().unwrap().len(), 1);
