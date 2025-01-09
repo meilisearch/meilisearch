@@ -497,17 +497,26 @@ impl IndexScheduler {
             1
         };
 
-        let enqueued = index_tasks
-            .into_iter()
-            .take(tasks_limit)
-            .map(|task_id| {
-                self.queue
-                    .tasks
-                    .get_task(rtxn, task_id)
-                    .and_then(|task| task.ok_or(Error::CorruptedTaskQueue))
-                    .map(|task| (task.uid, task.kind))
-            })
-            .collect::<Result<Vec<_>>>()?;
+        let mut enqueued = Vec::new();
+        let mut total_size: u64 = 0;
+        for task_id in index_tasks.into_iter().take(tasks_limit) {
+            let task = self
+                .queue
+                .tasks
+                .get_task(rtxn, task_id)
+                .and_then(|task| task.ok_or(Error::CorruptedTaskQueue))?;
+
+            if let Some(uuid) = task.content_uuid() {
+                let content_size = self.queue.file_store.compute_size(uuid)?;
+                total_size = total_size.saturating_add(content_size);
+            }
+
+            if total_size > self.scheduler.batched_tasks_size_limit && !enqueued.is_empty() {
+                break;
+            }
+
+            enqueued.push((task.uid, task.kind));
+        }
 
         if let Some((batchkind, create_index)) =
             autobatcher::autobatch(enqueued, index_already_exists, primary_key.as_deref())

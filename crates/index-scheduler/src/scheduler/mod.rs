@@ -60,6 +60,9 @@ pub struct Scheduler {
     /// The maximum number of tasks that will be batched together.
     pub(crate) max_number_of_batched_tasks: usize,
 
+    /// The maximum size, in bytes, of tasks in a batch.
+    pub(crate) batched_tasks_size_limit: u64,
+
     /// The path used to create the dumps.
     pub(crate) dumps_path: PathBuf,
 
@@ -80,6 +83,7 @@ impl Scheduler {
             wake_up: self.wake_up.clone(),
             autobatching_enabled: self.autobatching_enabled,
             max_number_of_batched_tasks: self.max_number_of_batched_tasks,
+            batched_tasks_size_limit: self.batched_tasks_size_limit,
             dumps_path: self.dumps_path.clone(),
             snapshots_path: self.snapshots_path.clone(),
             auth_path: self.auth_path.clone(),
@@ -94,6 +98,7 @@ impl Scheduler {
             wake_up: Arc::new(SignalEvent::auto(true)),
             autobatching_enabled: options.autobatching_enabled,
             max_number_of_batched_tasks: options.max_number_of_batched_tasks,
+            batched_tasks_size_limit: options.batched_tasks_size_limit,
             dumps_path: options.dumps_path.clone(),
             snapshots_path: options.snapshots_path.clone(),
             auth_path: options.auth_path.clone(),
