@@ -134,7 +134,7 @@ and can not be more than 511 bytes.", .document_id.to_string()
     InvalidVectorsEmbedderConf { document_id: String, error: String },
     #[error("{0}")]
     InvalidFilter(String),
-    #[error("Invalid type for filter subexpression: expected: {}, found: {1}.", .0.join(", "))]
+    #[error("Invalid type for filter subexpression: expected: {}, found: {}.", .0.join(", "), .1)]
     InvalidFilterExpression(&'static [&'static str], Value),
     #[error("Attribute `{}` is not sortable. {}",
         .field,

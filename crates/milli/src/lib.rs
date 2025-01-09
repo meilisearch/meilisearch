@@ -1,4 +1,3 @@
-#![cfg_attr(all(test, fuzzing), feature(no_coverage))]
 #![allow(clippy::type_complexity)]
 
 #[cfg(not(windows))]

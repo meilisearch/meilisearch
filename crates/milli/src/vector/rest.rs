@@ -175,7 +175,7 @@ impl Embedder {
 
     pub fn embed_tokens(
         &self,
-        tokens: &[usize],
+        tokens: &[u32],
         deadline: Option<Instant>,
     ) -> Result<Embedding, EmbedError> {
         let mut embeddings = embed(&self.data, tokens, 1, Some(self.dimensions), deadline)?;

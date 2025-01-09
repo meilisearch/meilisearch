@@ -444,7 +444,7 @@ impl Queue {
     /// the user.
     ///
     /// 1. IndexSwap tasks are not publicly associated with any index, but they are associated
-    /// with many indexes internally.
+    ///    with many indexes internally.
     /// 2. The user may not have the rights to access the tasks (internally) associated with all indexes.
     pub(crate) fn get_batch_ids_from_authorized_indexes(
         &self,

@@ -426,13 +426,9 @@ impl Segment {
             &AuthFilter::default(),
         ) {
             // Replace the version number with the prototype name if any.
-            let version = if let Some(prototype) = build_info::DescribeResult::from_build()
+            let version = build_info::DescribeResult::from_build()
                 .and_then(|describe| describe.as_prototype())
-            {
-                prototype
-            } else {
-                env!("CARGO_PKG_VERSION")
-            };
+                .unwrap_or(env!("CARGO_PKG_VERSION"));
 
             let _ = self
                 .batcher

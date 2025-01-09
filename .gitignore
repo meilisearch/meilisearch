@@ -10,6 +10,7 @@
 /dumps
 /bench
 /_xtask_benchmark.ms
+/benchmarks
 
 # Snapshots
 ## ... large

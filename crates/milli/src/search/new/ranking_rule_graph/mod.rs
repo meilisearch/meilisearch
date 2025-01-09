@@ -58,7 +58,7 @@ pub struct ComputedCondition {
 /// 2. The cost of traversing this edge
 /// 3. The condition associated with it
 /// 4. The list of nodes that have to be skipped
-/// if this edge is traversed.
+///    if this edge is traversed.
 #[derive(Clone)]
 pub struct Edge<E> {
     pub source_node: Interned<QueryNode>,

@@ -188,13 +188,13 @@ impl tracing_actix_web::RootSpanBuilder for AwebTracingLogger {
 
                 if let Some(error) = response.response().error() {
                     // use the status code already constructed for the outgoing HTTP response
-                    span.record("error", &tracing::field::display(error.as_response_error()));
+                    span.record("error", tracing::field::display(error.as_response_error()));
                 }
             }
             Err(error) => {
                 let code: i32 = error.error_response().status().as_u16().into();
                 span.record("status_code", code);
-                span.record("error", &tracing::field::display(error.as_response_error()));
+                span.record("error", tracing::field::display(error.as_response_error()));
             }
         };
     }

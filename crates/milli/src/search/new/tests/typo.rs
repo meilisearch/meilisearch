@@ -11,7 +11,7 @@ This module tests the following properties:
 8. 2grams can have 1 typo if they are larger than `min_word_len_two_typos`
 9. 3grams are not typo tolerant (but they can be split into two words)
 10. The `typo` ranking rule assumes the role of the `words` ranking rule implicitly
-if `words` doesn't exist before it.
+    if `words` doesn't exist before it.
 11. The `typo` ranking rule places documents with the same number of typos in the same bucket
 12. Prefix tolerance costs nothing according to the typo ranking rule
 13. Split words cost 1 typo according to the typo ranking rule

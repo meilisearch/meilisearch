@@ -1,7 +1,3 @@
-use crate::extractors::authentication::policies::ActionPolicy;
-use crate::extractors::authentication::{AuthenticationError, GuardedData};
-use crate::routes::create_all_stats;
-use crate::search_queue::SearchQueue;
 use actix_web::http::header;
 use actix_web::web::{self, Data};
 use actix_web::HttpResponse;
@@ -13,6 +9,11 @@ use meilisearch_types::tasks::Status;
 use prometheus::{Encoder, TextEncoder};
 use time::OffsetDateTime;
 use utoipa::OpenApi;
+
+use crate::extractors::authentication::policies::ActionPolicy;
+use crate::extractors::authentication::{AuthenticationError, GuardedData};
+use crate::routes::create_all_stats;
+use crate::search_queue::SearchQueue;
 
 #[derive(OpenApi)]
 #[openapi(paths(get_metrics))]

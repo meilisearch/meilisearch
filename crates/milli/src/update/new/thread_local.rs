@@ -29,9 +29,9 @@ use std::cell::RefCell;
 /// - An example of a type that verifies (1) and (2) is [`std::rc::Rc`] (when `T` is `Send` and `Sync`).
 /// - An example of a type that doesn't verify (1) is thread-local data.
 /// - An example of a type that doesn't verify (2) is [`std::sync::MutexGuard`]: a lot of mutex implementations require that
-/// a lock is returned to the operating system on the same thread that initially locked the mutex, failing to uphold this
-/// invariant will cause Undefined Behavior
-/// (see last § in [the nomicon](https://doc.rust-lang.org/nomicon/send-and-sync.html)).
+///   a lock is returned to the operating system on the same thread that initially locked the mutex, failing to uphold this
+///   invariant will cause Undefined Behavior
+///   (see last § in [the nomicon](https://doc.rust-lang.org/nomicon/send-and-sync.html)).
 ///
 /// It is **always safe** to implement this trait on a type that is `Send`, but no placeholder impl is provided due to limitations in
 /// coherency. Use the [`FullySend`] wrapper in this situation.
@@ -86,7 +86,7 @@ impl<T: MostlySend> MostlySendWrapper<T> {
 /// # Safety
 ///
 /// 1. `T` is [`MostlySend`], so by its safety contract it can be accessed by any thread and all of its operations are available
-///   from any thread.
+///    from any thread.
 /// 2. (P1) of `MostlySendWrapper::new` forces the user to never access the value from multiple threads concurrently.
 unsafe impl<T: MostlySend> Send for MostlySendWrapper<T> {}
 
