@@ -107,6 +107,7 @@ impl IndexScheduler {
             cleanup_enabled: true,
             max_number_of_tasks: 1_000_000,
             max_number_of_batched_tasks: usize::MAX,
+            batched_tasks_size_limit: u64::MAX,
             instance_features: Default::default(),
         };
         configuration(&mut options);

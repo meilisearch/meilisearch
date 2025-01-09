@@ -115,6 +115,9 @@ pub struct IndexSchedulerOptions {
     /// If the autobatcher is allowed to automatically batch tasks
     /// it will only batch this defined number of tasks at once.
     pub max_number_of_batched_tasks: usize,
+    /// If the autobatcher is allowed to automatically batch tasks
+    /// it will only batch this defined maximum size (in bytes) of tasks at once.
+    pub batched_tasks_size_limit: u64,
     /// The experimental features enabled for this instance.
     pub instance_features: InstanceTogglableFeatures,
 }

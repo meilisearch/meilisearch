@@ -194,7 +194,7 @@ struct Infos {
     experimental_enable_logs_route: bool,
     experimental_reduce_indexing_memory_usage: bool,
     experimental_max_number_of_batched_tasks: usize,
-    experimental_limit_batched_tasks_total_size: usize,
+    experimental_limit_batched_tasks_total_size: u64,
     gpu_enabled: bool,
     db_path: bool,
     import_dump: bool,
