@@ -679,9 +679,7 @@ impl DelAddRoaringBitmap {
             let del = self.del.get_or_insert_with(RoaringBitmap::new);
             let mut iter = bbbul.iter_and_clear();
             while let Some(block) = iter.next_block() {
-                let iter = block.iter().copied();
-                let block = RoaringBitmap::from_sorted_iter(iter).unwrap();
-                *del |= block;
+                del.extend(block);
             }
         }
 
@@ -689,9 +687,7 @@ impl DelAddRoaringBitmap {
             let add = self.add.get_or_insert_with(RoaringBitmap::new);
             let mut iter = bbbul.iter_and_clear();
             while let Some(block) = iter.next_block() {
-                let iter = block.iter().copied();
-                let block = RoaringBitmap::from_sorted_iter(iter).unwrap();
-                *add |= block;
+                add.extend(block);
             }
         }
     }
