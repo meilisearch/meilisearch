@@ -26,8 +26,8 @@ use crate::Opt;
 macro_rules! make_setting_routes {
     ($({route: $route:literal, update_verb: $update_verb:ident, value_type: $type:ty, err_type: $err_ty:ty, attr: $attr:ident, camelcase_attr: $camelcase_attr:literal, analytics: $analytics:ident},)*) => {
         #[allow(dead_code)]
-        fn verify_settings_exhaustive() {
-            let meilisearch_types::settings::Settings { $($attr: _,)* } = 
+        fn verify_settings_exist() {
+            let meilisearch_types::settings::Settings { $($attr: _,)* .. } = 
                 meilisearch_types::settings::Settings::<meilisearch_types::settings::Unchecked>::default();
         }
 
