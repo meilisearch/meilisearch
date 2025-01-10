@@ -100,6 +100,7 @@ where
                 caches,
                 FacetDatabases::new(index),
                 index,
+                &rtxn,
                 extractor_sender.facet_docids(),
             )?;
         }

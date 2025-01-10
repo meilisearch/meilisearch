@@ -78,9 +78,7 @@ impl IndexScheduler {
                     if let DocumentOperation::Add(content_uuid) = operation {
                         let content_file = self.queue.file_store.get_update(*content_uuid)?;
                         let mmap = unsafe { memmap2::Mmap::map(&content_file)? };
-                        if !mmap.is_empty() {
-                            content_files.push(mmap);
-                        }
+                        content_files.push(mmap);
                     }
                 }
 
