@@ -29,8 +29,8 @@ async fn attribute_scale_search() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    index.add_documents(DOCUMENTS.clone(), None).await;
-    index.wait_task(0).await;
+    let (task, _status_code) = index.add_documents(DOCUMENTS.clone(), None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = index
         .update_settings(json!({
@@ -39,7 +39,7 @@ async fn attribute_scale_search() {
         }))
         .await;
     assert_eq!("202", code.as_str(), "{:?}", response);
-    index.wait_task(1).await;
+    index.wait_task(response.uid()).await.succeeded();
 
     // the expected order is [1, 3, 2] instead of [3, 1, 2]
     // because the attribute scale doesn't make the difference between 1 and 3.
@@ -102,16 +102,16 @@ async fn attribute_scale_phrase_search() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    index.add_documents(DOCUMENTS.clone(), None).await;
-    index.wait_task(0).await;
+    let (task, _status_code) = index.add_documents(DOCUMENTS.clone(), None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
-    let (_response, _code) = index
+    let (task, _code) = index
         .update_settings(json!({
             "proximityPrecision": "byAttribute",
             "rankingRules": ["words", "typo", "proximity"],
         }))
         .await;
-    index.wait_task(1).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     // the expected order is [1, 3] instead of [3, 1]
     // because the attribute scale doesn't make the difference between 1 and 3.
@@ -170,25 +170,25 @@ async fn word_scale_set_and_reset() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    index.add_documents(DOCUMENTS.clone(), None).await;
-    index.wait_task(0).await;
+    let (task, _status_code) = index.add_documents(DOCUMENTS.clone(), None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     // Set and reset the setting ensuring the swap between the 2 settings is applied.
-    let (_response, _code) = index
+    let (update_task1, _code) = index
         .update_settings(json!({
             "proximityPrecision": "byAttribute",
             "rankingRules": ["words", "typo", "proximity"],
         }))
         .await;
-    index.wait_task(1).await;
+    index.wait_task(update_task1.uid()).await.succeeded();
 
-    let (_response, _code) = index
+    let (update_task2, _code) = index
         .update_settings(json!({
             "proximityPrecision": "byWord",
             "rankingRules": ["words", "typo", "proximity"],
         }))
         .await;
-    index.wait_task(2).await;
+    index.wait_task(update_task2.uid()).await.succeeded();
 
     // [3, 1, 2]
     index
@@ -285,8 +285,8 @@ async fn attribute_scale_default_ranking_rules() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    index.add_documents(DOCUMENTS.clone(), None).await;
-    index.wait_task(0).await;
+    let (task, _status_code) = index.add_documents(DOCUMENTS.clone(), None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = index
         .update_settings(json!({
@@ -294,7 +294,7 @@ async fn attribute_scale_default_ranking_rules() {
         }))
         .await;
     assert_eq!("202", code.as_str(), "{:?}", response);
-    index.wait_task(1).await;
+    index.wait_task(response.uid()).await.succeeded();
 
     // the expected order is [3, 1, 2]
     index

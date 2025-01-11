@@ -15,7 +15,7 @@ async fn swap_indexes() {
     let (res, code) = b.add_documents(json!({ "id": 1, "index": "b"}), None).await;
     snapshot!(code, @"202 Accepted");
     snapshot!(res["taskUid"], @"1");
-    server.wait_task(1).await;
+    server.wait_task(res.uid()).await;
 
     let (tasks, code) = server.tasks().await;
     snapshot!(code, @"200 OK");
@@ -67,7 +67,7 @@ async fn swap_indexes() {
     let (res, code) = server.index_swap(json!([{ "indexes": ["a", "b"] }])).await;
     snapshot!(code, @"202 Accepted");
     snapshot!(res["taskUid"], @"2");
-    server.wait_task(2).await;
+    server.wait_task(res.uid()).await;
 
     let (tasks, code) = server.tasks().await;
     snapshot!(code, @"200 OK");
@@ -159,7 +159,7 @@ async fn swap_indexes() {
     let (res, code) = d.add_documents(json!({ "id": 1, "index": "d"}), None).await;
     snapshot!(code, @"202 Accepted");
     snapshot!(res["taskUid"], @"4");
-    server.wait_task(4).await;
+    server.wait_task(res.uid()).await;
 
     // ensure the index creation worked properly
     let (tasks, code) = server.tasks_filter("limit=2").await;
@@ -215,7 +215,7 @@ async fn swap_indexes() {
         server.index_swap(json!([{ "indexes": ["a", "b"] }, { "indexes": ["c", "d"] } ])).await;
     snapshot!(res["taskUid"], @"5");
     snapshot!(code, @"202 Accepted");
-    server.wait_task(5).await;
+    server.wait_task(res.uid()).await;
 
     // ensure the index creation worked properly
     let (tasks, code) = server.tasks().await;
