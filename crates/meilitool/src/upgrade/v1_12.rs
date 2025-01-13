@@ -23,7 +23,12 @@ use uuid::Uuid;
 use crate::try_opening_database;
 use crate::uuid_codec::UuidCodec;
 
-pub fn v1_11_to_v1_12(db_path: &Path) -> anyhow::Result<()> {
+pub fn v1_11_to_v1_12(
+    db_path: &Path,
+    _origin_major: &str,
+    _origin_minor: &str,
+    _origin_patch: &str,
+) -> anyhow::Result<()> {
     println!("Upgrading from v1.11.0 to v1.12.0");
 
     convert_update_files(db_path)?;
@@ -31,10 +36,19 @@ pub fn v1_11_to_v1_12(db_path: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn v1_12_to_v1_12_3(db_path: &Path) -> anyhow::Result<()> {
+pub fn v1_12_to_v1_12_3(
+    db_path: &Path,
+    origin_major: &str,
+    origin_minor: &str,
+    origin_patch: &str,
+) -> anyhow::Result<()> {
     println!("Upgrading from v1.12.{{0, 1, 2}} to v1.12.3");
 
-    rebuild_field_distribution(db_path)?;
+    if origin_minor == "12" {
+        rebuild_field_distribution(db_path)?;
+    } else {
+        println!("Not rebuilding field distribution as it wasn't corrupted coming from v{origin_major}.{origin_minor}.{origin_patch}");
+    }
 
     Ok(())
 }
