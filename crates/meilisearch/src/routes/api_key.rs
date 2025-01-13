@@ -54,7 +54,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 /// Create an API Key.
 #[utoipa::path(
     post,
-    path = "/",
+    path = "",
     tag = "Keys",
     security(("Bearer" = ["keys.create", "keys.*", "*"])),
     request_body = CreateApiKey,
@@ -133,7 +133,7 @@ impl ListApiKeys {
 /// List all API Keys
 #[utoipa::path(
     get,
-    path = "/",
+    path = "",
     tag = "Keys",
     security(("Bearer" = ["keys.get", "keys.*", "*"])),
     params(ListApiKeys),

@@ -41,7 +41,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 /// Get a list of all experimental features that can be activated via the /experimental-features route and whether or not they are currently activated.
 #[utoipa::path(
     post,
-    path = "/",
+    path = "",
     tag = "Experimental features",
     security(("Bearer" = ["experimental_features.get", "experimental_features.*", "*"])),
     responses(
@@ -126,7 +126,7 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
 /// Activate or deactivate experimental features.
 #[utoipa::path(
     patch,
-    path = "/",
+    path = "",
     tag = "Experimental features",
     security(("Bearer" = ["experimental_features.update", "experimental_features.*", "*"])),
     responses(

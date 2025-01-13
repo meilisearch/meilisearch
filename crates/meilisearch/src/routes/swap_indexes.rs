@@ -63,7 +63,7 @@ impl Aggregate for IndexSwappedAnalytics {
 /// Swapping indexA and indexB will also replace every mention of indexA by indexB and vice-versa in the task history. enqueued tasks are left unmodified.
 #[utoipa::path(
     post,
-    path = "/",
+    path = "",
     tag = "Indexes",
     security(("Bearer" = ["search", "*"])),
     request_body = Vec<SwapIndexesPayload>,

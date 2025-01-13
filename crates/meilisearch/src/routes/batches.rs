@@ -121,7 +121,7 @@ pub struct AllBatches {
 /// Batch results are paginated and can be filtered with query parameters.
 #[utoipa::path(
     get,
-    path = "/",
+    path = "",
     tag = "Batches",
     security(("Bearer" = ["tasks.get", "tasks.*", "*"])),
     params(TasksFilterQuery),
