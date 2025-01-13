@@ -46,7 +46,6 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     security(("Bearer" = ["experimental_features.get", "experimental_features.*", "*"])),
     responses(
         (status = OK, description = "Experimental features are returned", body = RuntimeTogglableFeatures, content_type = "application/json", example = json!(RuntimeTogglableFeatures {
-            vector_store: Some(true),
             metrics: Some(true),
             logs_route: Some(false),
             edit_documents_by_function: Some(false),
@@ -71,6 +70,7 @@ async fn get_features(
     let features = index_scheduler.features();
 
     let features = features.runtime_features();
+    let features: RuntimeTogglableFeatures = features.into();
     debug!(returns = ?features, "Get features");
     HttpResponse::Ok().json(features)
 }
@@ -81,8 +81,6 @@ async fn get_features(
 #[schema(rename_all = "camelCase")]
 pub struct RuntimeTogglableFeatures {
     #[deserr(default)]
-    pub vector_store: Option<bool>,
-    #[deserr(default)]
     pub metrics: Option<bool>,
     #[deserr(default)]
     pub logs_route: Option<bool>,
@@ -90,6 +88,25 @@ pub struct RuntimeTogglableFeatures {
     pub edit_documents_by_function: Option<bool>,
     #[deserr(default)]
     pub contains_filter: Option<bool>,
+}
+
+impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogglableFeatures {
+    fn from(value: meilisearch_types::features::RuntimeTogglableFeatures) -> Self {
+        let meilisearch_types::features::RuntimeTogglableFeatures {
+            vector_store: _,
+            metrics,
+            logs_route,
+            edit_documents_by_function,
+            contains_filter,
+        } = value;
+
+        Self {
+            metrics: Some(metrics),
+            logs_route: Some(logs_route),
+            edit_documents_by_function: Some(edit_documents_by_function),
+            contains_filter: Some(contains_filter),
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -161,7 +178,7 @@ async fn patch_features(
 
     let old_features = features.runtime_features();
     let new_features = meilisearch_types::features::RuntimeTogglableFeatures {
-        vector_store: new_features.0.vector_store.unwrap_or(old_features.vector_store),
+        vector_store: true,
         metrics: new_features.0.metrics.unwrap_or(old_features.metrics),
         logs_route: new_features.0.logs_route.unwrap_or(old_features.logs_route),
         edit_documents_by_function: new_features
