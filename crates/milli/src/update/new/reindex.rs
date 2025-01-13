@@ -1,7 +1,7 @@
 use heed::RwTxn;
 
 use super::document::{Document, DocumentFromDb};
-use crate::progress::{self, AtomicSubStep, NamedStep, Progress};
+use crate::progress::{self, AtomicSubStep, Progress};
 use crate::{FieldDistribution, Index, Result};
 
 pub fn field_distribution(index: &Index, wtxn: &mut RwTxn<'_>, progress: &Progress) -> Result<()> {
@@ -35,13 +35,4 @@ pub fn field_distribution(index: &Index, wtxn: &mut RwTxn<'_>, progress: &Progre
 
     index.put_field_distribution(wtxn, &distribution)?;
     Ok(())
-}
-
-#[derive(Default)]
-pub struct FieldDistributionIndexProgress;
-
-impl NamedStep for FieldDistributionIndexProgress {
-    fn name(&self) -> &'static str {
-        "documents"
-    }
 }

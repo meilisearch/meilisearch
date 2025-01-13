@@ -10,10 +10,10 @@ use anyhow::Context;
 use file_store::FileStore;
 use indexmap::IndexMap;
 use meilisearch_types::milli::documents::DocumentsBatchReader;
-use milli::heed::types::{SerdeJson, Str};
-use milli::heed::{Database, EnvOpenOptions, RoTxn, RwTxn};
-use milli::progress::Step;
-use milli::{FieldDistribution, Index};
+use meilisearch_types::milli::heed::types::{SerdeJson, Str};
+use meilisearch_types::milli::heed::{Database, EnvOpenOptions, RoTxn, RwTxn};
+use meilisearch_types::milli::progress::Step;
+use meilisearch_types::milli::{FieldDistribution, Index};
 use serde::Serialize;
 use serde_json::value::RawValue;
 use tempfile::NamedTempFile;
@@ -138,7 +138,7 @@ fn rebuild_field_distribution(db_path: &Path) -> anyhow::Result<()> {
         .map(|res| res.map(|(uid, uuid)| (uid.to_owned(), uuid)))
         .collect();
 
-    let progress = milli::progress::Progress::default();
+    let progress = meilisearch_types::milli::progress::Progress::default();
     let finished = AtomicBool::new(false);
 
     std::thread::scope(|scope| {
@@ -173,15 +173,19 @@ fn rebuild_field_distribution(db_path: &Path) -> anyhow::Result<()> {
 
             println!("\t- Rebuilding field distribution");
 
-            let index =
-                milli::Index::new(EnvOpenOptions::new(), &index_path).with_context(|| {
+            let index = meilisearch_types::milli::Index::new(EnvOpenOptions::new(), &index_path)
+                .with_context(|| {
                     format!("while opening index {uid} at '{}'", index_path.display())
                 })?;
 
             let mut index_txn = index.write_txn()?;
 
-            milli::update::new::reindex::field_distribution(&index, &mut index_txn, &progress)
-                .context("while rebuilding field distribution")?;
+            meilisearch_types::milli::update::new::reindex::field_distribution(
+                &index,
+                &mut index_txn,
+                &progress,
+            )
+            .context("while rebuilding field distribution")?;
 
             let stats = IndexStats::new(&index, &index_txn)
                 .with_context(|| format!("computing stats for index `{uid}`"))?;
@@ -281,7 +285,7 @@ impl IndexStats {
     /// # Parameters
     ///
     /// - rtxn: a RO transaction for the index, obtained from `Index::read_txn()`.
-    pub fn new(index: &Index, rtxn: &RoTxn) -> milli::Result<Self> {
+    pub fn new(index: &Index, rtxn: &RoTxn) -> meilisearch_types::milli::Result<Self> {
         Ok(IndexStats {
             number_of_documents: index.number_of_documents(rtxn)?,
             database_size: index.on_disk_size()?,
