@@ -69,7 +69,7 @@ use std::io::BufReader;
 use std::{io, iter, mem};
 
 use bumpalo::Bump;
-use bumparaw_collections::bbbul::{BitPacker, BitPacker4x};
+use bumparaw_collections::bbbul::{BitPacker, BitPacker8x};
 use bumparaw_collections::map::FrozenMap;
 use bumparaw_collections::{Bbbul, FrozenBbbul};
 use grenad::ReaderCursor;
@@ -189,13 +189,13 @@ impl<'extractor> BalancedCaches<'extractor> {
                         std::mem::transmute::<
                             &mut HashMap<
                                 &[u8],
-                                DelAddBbbul<BitPacker4x>, // from this
+                                DelAddBbbul<BitPacker8x>, // from this
                                 FxBuildHasher,
                                 &Bump,
                             >,
                             &mut HashMap<
                                 &[u8],
-                                FrozenDelAddBbbul<BitPacker4x>, // to that
+                                FrozenDelAddBbbul<BitPacker8x>, // to that
                                 FxBuildHasher,
                                 &Bump,
                             >,
@@ -227,13 +227,13 @@ impl<'extractor> BalancedCaches<'extractor> {
                         std::mem::transmute::<
                             &mut HashMap<
                                 &[u8],
-                                DelAddBbbul<BitPacker4x>, // from this
+                                DelAddBbbul<BitPacker8x>, // from this
                                 FxBuildHasher,
                                 &Bump,
                             >,
                             &mut HashMap<
                                 &[u8],
-                                FrozenDelAddBbbul<BitPacker4x>, // to that
+                                FrozenDelAddBbbul<BitPacker8x>, // to that
                                 FxBuildHasher,
                                 &Bump,
                             >,
@@ -253,7 +253,7 @@ struct NormalCaches<'extractor> {
     caches: Vec<
         HashMap<
             &'extractor [u8],
-            DelAddBbbul<'extractor, BitPacker4x>,
+            DelAddBbbul<'extractor, BitPacker8x>,
             FxBuildHasher,
             &'extractor Bump,
         >,
@@ -315,7 +315,7 @@ struct SpillingCaches<'extractor> {
     caches: Vec<
         HashMap<
             &'extractor [u8],
-            DelAddBbbul<'extractor, BitPacker4x>,
+            DelAddBbbul<'extractor, BitPacker8x>,
             FxBuildHasher,
             &'extractor Bump,
         >,
@@ -330,7 +330,7 @@ impl<'extractor> SpillingCaches<'extractor> {
         caches: Vec<
             HashMap<
                 &'extractor [u8],
-                DelAddBbbul<'extractor, BitPacker4x>,
+                DelAddBbbul<'extractor, BitPacker8x>,
                 FxBuildHasher,
                 &'extractor Bump,
             >,
@@ -451,7 +451,7 @@ pub struct FrozenCache<'a, 'extractor> {
         'a,
         'extractor,
         &'extractor [u8],
-        FrozenDelAddBbbul<'extractor, BitPacker4x>,
+        FrozenDelAddBbbul<'extractor, BitPacker8x>,
         FxBuildHasher,
     >,
     spilled: Vec<grenad::Reader<BufReader<File>>>,
