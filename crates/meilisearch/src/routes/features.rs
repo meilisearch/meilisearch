@@ -79,6 +79,7 @@ async fn get_features(
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct RuntimeTogglableFeatures {
     #[deserr(default)]
     pub metrics: Option<bool>,
