@@ -84,7 +84,6 @@ async fn clear_all_documents_empty_index() {
 
     let _update = index.wait_task(task.uid()).await;
     let (response, code) = index.get_all_documents(GetAllDocumentsOptions::default()).await;
-    index.wait_task(response.uid()).await.succeeded();
     assert_eq!(code, 200);
     assert!(response["results"].as_array().unwrap().is_empty());
 }

@@ -1274,8 +1274,8 @@ async fn error_add_documents_bad_document_id() {
         }
     ]);
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
-    let (response, code) = index.get_task(1).await;
+    index.wait_task(task.uid()).await.failed();
+    let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
@@ -1311,7 +1311,7 @@ async fn error_add_documents_bad_document_id() {
         }
     ]);
     let (value, _code) = index.add_documents(documents, None).await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.failed();
     let (response, code) = index.get_task(value.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
@@ -1348,7 +1348,7 @@ async fn error_add_documents_bad_document_id() {
         }
     ]);
     let (value, _code) = index.add_documents(documents, None).await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.failed();
     let (response, code) = index.get_task(value.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
@@ -1390,8 +1390,8 @@ async fn error_add_documents_missing_document_id() {
         }
     ]);
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
-    let (response, code) = index.get_task(1).await;
+    index.wait_task(task.uid()).await.failed();
+    let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
@@ -1439,7 +1439,7 @@ async fn error_document_field_limit_reached_in_one_document() {
     let (response, code) = index.update_documents(documents, Some("id")).await;
     snapshot!(code, @"202 Accepted");
 
-    let response = index.wait_task(response.uid()).await;
+    let response = index.wait_task(response.uid()).await.failed();
     snapshot!(code, @"202 Accepted");
     // Documents without a primary key are not accepted.
     snapshot!(response,
@@ -1741,8 +1741,8 @@ async fn add_documents_invalid_geo_field() {
     ]);
 
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
-    let (response, code) = index.get_task(2).await;
+    index.wait_task(task.uid()).await.failed();
+    let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
@@ -1779,8 +1779,8 @@ async fn add_documents_invalid_geo_field() {
     ]);
 
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
-    let (response, code) = index.get_task(3).await;
+    index.wait_task(task.uid()).await.failed();
+    let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
@@ -1817,8 +1817,8 @@ async fn add_documents_invalid_geo_field() {
     ]);
 
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
-    let (response, code) = index.get_task(4).await;
+    index.wait_task(task.uid()).await.failed();
+    let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
@@ -1855,7 +1855,7 @@ async fn add_documents_invalid_geo_field() {
     ]);
 
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    index.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
@@ -1893,7 +1893,7 @@ async fn add_documents_invalid_geo_field() {
     ]);
 
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    index.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
@@ -1931,7 +1931,7 @@ async fn add_documents_invalid_geo_field() {
     ]);
 
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    index.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
@@ -1969,7 +1969,7 @@ async fn add_documents_invalid_geo_field() {
     ]);
 
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    index.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
@@ -2007,7 +2007,7 @@ async fn add_documents_invalid_geo_field() {
     ]);
 
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    index.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
@@ -2045,7 +2045,7 @@ async fn add_documents_invalid_geo_field() {
     ]);
 
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    index.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
@@ -2083,7 +2083,7 @@ async fn add_documents_invalid_geo_field() {
     ]);
 
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    index.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
@@ -2121,7 +2121,7 @@ async fn add_documents_invalid_geo_field() {
     ]);
 
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    index.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
@@ -2159,7 +2159,7 @@ async fn add_documents_invalid_geo_field() {
     ]);
 
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    index.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
@@ -2200,7 +2200,7 @@ async fn add_documents_invalid_geo_field() {
 
     let (response, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let response = index.wait_task(response.uid()).await;
+    let response = index.wait_task(response.uid()).await.failed();
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
@@ -2237,7 +2237,7 @@ async fn add_documents_invalid_geo_field() {
 
     let (response, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let response = index.wait_task(response.uid()).await;
+    let response = index.wait_task(response.uid()).await.failed();
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
@@ -2274,7 +2274,7 @@ async fn add_documents_invalid_geo_field() {
 
     let (response, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let response = index.wait_task(response.uid()).await;
+    let response = index.wait_task(response.uid()).await.failed();
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
@@ -2318,7 +2318,7 @@ async fn add_invalid_geo_and_then_settings() {
     ]);
     let (ret, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let ret = index.wait_task(ret.uid()).await;
+    let ret = index.wait_task(ret.uid()).await.succeeded();
     snapshot!(ret, @r###"
     {
       "uid": "[uid]",
@@ -2341,7 +2341,7 @@ async fn add_invalid_geo_and_then_settings() {
 
     let (ret, code) = index.update_settings(json!({ "sortableAttributes": ["_geo"] })).await;
     snapshot!(code, @"202 Accepted");
-    let ret = index.wait_task(ret.uid()).await;
+    let ret = index.wait_task(ret.uid()).await.failed();
     snapshot!(ret, @r###"
     {
       "uid": "[uid]",
@@ -2409,8 +2409,8 @@ async fn error_primary_key_inference() {
     ]);
 
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
-    let (response, code) = index.get_task(0).await;
+    index.wait_task(task.uid()).await.failed();
+    let (response, code) = index.get_task(task.uid()).await;
     assert_eq!(code, 200);
 
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
@@ -2450,7 +2450,7 @@ async fn error_primary_key_inference() {
     ]);
 
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    index.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     assert_eq!(code, 200);
 
