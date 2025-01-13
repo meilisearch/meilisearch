@@ -1,5 +1,6 @@
 use std::sync::atomic::AtomicBool;
 
+use bstr::ByteSlice as _;
 use hashbrown::HashMap;
 use heed::RwTxn;
 use rand::SeedableRng as _;
@@ -152,7 +153,10 @@ pub fn write_from_bbqueue(
                     }
                     (key, None) => match database.delete(wtxn, key) {
                         Ok(false) => {
-                            unreachable!("We tried to delete an unknown key: {key:?}")
+                            unreachable!(
+                                "We tried to delete an unknown key from {database_name}: {:?}",
+                                key.as_bstr()
+                            )
                         }
                         Ok(_) => (),
                         Err(error) => {
