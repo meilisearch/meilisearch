@@ -4,6 +4,7 @@ use std::sync::{OnceLock, RwLock};
 use std::thread::{self, Builder};
 
 use big_s::S;
+use bstr::ByteSlice as _;
 use bumparaw_collections::RawMap;
 use document_changes::{extract, DocumentChanges, IndexingContext};
 pub use document_deletion::DocumentDeletion;
@@ -583,7 +584,10 @@ fn write_from_bbqueue(
                     }
                     (key, None) => match database.delete(wtxn, key) {
                         Ok(false) => {
-                            unreachable!("We tried to delete an unknown key: {key:?}")
+                            unreachable!(
+                                "We tried to delete an unknown key from {database_name}: {:?}",
+                                key.as_bstr()
+                            )
                         }
                         Ok(_) => (),
                         Err(error) => {
