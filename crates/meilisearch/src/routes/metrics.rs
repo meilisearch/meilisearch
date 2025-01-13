@@ -30,7 +30,7 @@ pub fn configure(config: &mut web::ServiceConfig) {
 /// which means it must be enabled.
 #[utoipa::path(
     get,
-    path = "/",
+    path = "",
     tag = "Stats",
     security(("Bearer" = ["metrics.get", "metrics.*", "*"])),
     responses(

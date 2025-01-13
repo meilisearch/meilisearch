@@ -135,7 +135,7 @@ impl ListIndexes {
 /// List all indexes.
 #[utoipa::path(
     get,
-    path = "/",
+    path = "",
     tag = "Indexes",
     security(("Bearer" = ["indexes.get", "indexes.*", "*"])),
     params(ListIndexes),
@@ -226,7 +226,7 @@ impl Aggregate for IndexCreatedAggregate {
 /// Create an index.
 #[utoipa::path(
     post,
-    path = "/",
+    path = "",
     tag = "Indexes",
     security(("Bearer" = ["indexes.create", "indexes.*", "*"])),
     request_body = IndexCreateRequest,

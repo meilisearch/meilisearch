@@ -40,18 +40,18 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 ///
 /// Get a list of all experimental features that can be activated via the /experimental-features route and whether or not they are currently activated.
 #[utoipa::path(
-    post,
-    path = "/",
+    get,
+    path = "",
     tag = "Experimental features",
     security(("Bearer" = ["experimental_features.get", "experimental_features.*", "*"])),
     responses(
-        (status = OK, description = "Experimental features are returned", body = RuntimeTogglableFeatures, content_type = "application/json", example = json!(
-            {
-                "metrics": false,
-                "logsRoute": true,
-                "vectorSearch": false,
-            }
-        )),
+        (status = OK, description = "Experimental features are returned", body = RuntimeTogglableFeatures, content_type = "application/json", example = json!(RuntimeTogglableFeatures {
+            vector_store: Some(true),
+            metrics: Some(true),
+            logs_route: Some(false),
+            edit_documents_by_function: Some(false),
+            contains_filter: Some(false),
+        })),
         (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
@@ -75,8 +75,9 @@ async fn get_features(
     HttpResponse::Ok().json(features)
 }
 
-#[derive(Debug, Deserr, ToSchema)]
+#[derive(Debug, Deserr, ToSchema, Serialize)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct RuntimeTogglableFeatures {
     #[deserr(default)]
@@ -125,17 +126,17 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
 /// Activate or deactivate experimental features.
 #[utoipa::path(
     patch,
-    path = "/",
+    path = "",
     tag = "Experimental features",
     security(("Bearer" = ["experimental_features.update", "experimental_features.*", "*"])),
     responses(
-        (status = OK, description = "Experimental features are returned", body = RuntimeTogglableFeatures, content_type = "application/json", example = json!(
-            {
-                "metrics": false,
-                "logsRoute": true,
-                "vectorSearch": false,
-            }
-        )),
+        (status = OK, description = "Experimental features are returned", body = RuntimeTogglableFeatures, content_type = "application/json", example = json!(RuntimeTogglableFeatures {
+            vector_store: Some(true),
+            metrics: Some(true),
+            logs_route: Some(false),
+            edit_documents_by_function: Some(false),
+            contains_filter: Some(false),
+         })),
         (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",

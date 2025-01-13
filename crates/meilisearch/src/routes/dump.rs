@@ -45,7 +45,7 @@ crate::empty_analytics!(DumpAnalytics, "Dump Created");
 /// If the dump directory does not exist yet, it will be created.
 #[utoipa::path(
     post,
-    path = "/",
+    path = "",
     tag = "Dumps",
     security(("Bearer" = ["dumps.create", "dumps.*", "*"])),
     responses(

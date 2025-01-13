@@ -86,6 +86,7 @@ macro_rules! make_setting_route {
                 path = concat!("{indexUid}/settings", $route),
                 tag = "Settings",
                 security(("Bearer" = ["settings.update", "settings.*", "*"])),
+                operation_id = concat!("delete", $camelcase_attr),
                 summary = concat!("Reset ", $camelcase_attr),
                 description = concat!("Reset an index's ", $camelcase_attr, " to its default value"),
                 params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
@@ -149,6 +150,7 @@ macro_rules! make_setting_route {
                 path = concat!("{indexUid}/settings", $route),
                 tag = "Settings",
                 security(("Bearer" = ["settings.update", "settings.*", "*"])),
+                operation_id = concat!(stringify!($update_verb), $camelcase_attr),
                 summary = concat!("Update ", $camelcase_attr),
                 description = concat!("Update an index's user defined ", $camelcase_attr),
                 params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
@@ -236,6 +238,7 @@ macro_rules! make_setting_route {
                 summary = concat!("Get ", $camelcase_attr),
                 description = concat!("Get an user defined ", $camelcase_attr),
                 security(("Bearer" = ["settings.get", "settings.*", "*"])),
+                operation_id = concat!("get", $camelcase_attr),
                 params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
                 responses(
                     (status = 200, description = concat!($camelcase_attr, " is returned"), body = $type, content_type = "application/json", example = json!(
