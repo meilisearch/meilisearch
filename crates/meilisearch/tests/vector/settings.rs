@@ -73,7 +73,7 @@ async fn update_embedder() {
         }))
         .await;
     snapshot!(code, @"202 Accepted");
-    server.wait_task(response.uid()).await;
+    server.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index
         .update_settings(json!({

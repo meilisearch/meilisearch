@@ -46,11 +46,11 @@ impl Value {
 
     // Panic if the json doesn't contain the `status` field set to "succeeded"
     #[track_caller]
-    pub fn succeeded(&self) -> &Self {
+    pub fn succeeded(&self) -> Self {
         if !self.is_success() {
             panic!("Called succeeded on {}", serde_json::to_string_pretty(&self.0).unwrap());
         }
-        self
+        self.clone()
     }
 
     /// Return `true` if the `status` field is set to `failed`.
@@ -65,11 +65,11 @@ impl Value {
 
     // Panic if the json doesn't contain the `status` field set to "succeeded"
     #[track_caller]
-    pub fn failed(&self) -> &Self {
+    pub fn failed(&self) -> Self {
         if !self.is_fail() {
             panic!("Called failed on {}", serde_json::to_string_pretty(&self.0).unwrap());
         }
-        self
+        self.clone()
     }
 }
 
@@ -426,7 +426,7 @@ pub async fn shared_index_with_test_set() -> &'static Index<'static, Shared> {
                 )
                 .await;
             assert_eq!(code, 202);
-            index.wait_task(response.uid()).await;
+            index.wait_task(response.uid()).await.succeeded();
             index
         })
         .await
