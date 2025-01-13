@@ -1,5 +1,5 @@
 ---
-source: milli/src/update/index_documents/mod.rs
+source: crates/milli/src/update/index_documents/mod.rs
 ---
 3   0  48.9021 1  [19, ]
 3   0  49.9314 1  [17, ]
@@ -15,6 +15,11 @@ source: milli/src/update/index_documents/mod.rs
 3   0  50.7453 1  [7, ]
 3   0  50.8466 1  [10, ]
 3   0  51.0537 1  [9, ]
+3   1  48.9021 2  [17, 19, ]
+3   1  50.1793 3  [13, 14, 15, ]
+3   1  50.4502 4  [0, 3, 8, 12, ]
+3   1  50.6312 2  [1, 2, ]
+3   1  50.7453 3  [7, 9, 10, ]
 4   0  2.271  1  [17, ]
 4   0  2.3708 1  [19, ]
 4   0  2.7637 1  [14, ]
@@ -28,4 +33,3 @@ source: milli/src/update/index_documents/mod.rs
 4   0  3.6957 1  [9, ]
 4   0  3.9623 1  [12, ]
 4   0  4.337  1  [10, ]
-
