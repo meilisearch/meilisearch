@@ -89,7 +89,8 @@ impl<'a, 'b, 'extractor> Extractor<'extractor> for DocumentsExtractor<'a, 'b> {
                             .or_default();
                         *entry -= 1;
                     }
-                    let content = update.updated();
+                    let content =
+                        update.merged(&context.rtxn, context.index, &context.db_fields_ids_map)?;
                     let geo_iter =
                         content.geo_field().transpose().map(|res| res.map(|rv| ("_geo", rv)));
                     for res in content.iter_top_level_fields().chain(geo_iter) {
