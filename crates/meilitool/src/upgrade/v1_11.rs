@@ -14,7 +14,12 @@ use meilisearch_types::milli::index::db_name;
 use crate::uuid_codec::UuidCodec;
 use crate::{try_opening_database, try_opening_poly_database};
 
-pub fn v1_10_to_v1_11(db_path: &Path) -> anyhow::Result<()> {
+pub fn v1_10_to_v1_11(
+    db_path: &Path,
+    _origin_major: &str,
+    _origin_minor: &str,
+    _origin_patch: &str,
+) -> anyhow::Result<()> {
     println!("Upgrading from v1.10.0 to v1.11.0");
 
     let index_scheduler_path = db_path.join("tasks");

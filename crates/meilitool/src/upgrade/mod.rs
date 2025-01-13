@@ -21,7 +21,12 @@ pub struct OfflineUpgrade {
 impl OfflineUpgrade {
     pub fn upgrade(self) -> anyhow::Result<()> {
         let upgrade_list = [
-            (v1_9_to_v1_10 as fn(&Path) -> Result<(), anyhow::Error>, "1", "10", "0"),
+            (
+                v1_9_to_v1_10 as fn(&Path, &str, &str, &str) -> Result<(), anyhow::Error>,
+                "1",
+                "10",
+                "0",
+            ),
             (v1_10_to_v1_11, "1", "11", "0"),
             (v1_11_to_v1_12, "1", "12", "0"),
             (v1_12_to_v1_12_3, "1", "12", "3"),
@@ -63,7 +68,7 @@ impl OfflineUpgrade {
         #[allow(clippy::needless_range_loop)]
         for index in start_at..=ends_at {
             let (func, major, minor, patch) = upgrade_list[index];
-            (func)(&self.db_path)?;
+            (func)(&self.db_path, current_major, current_minor, current_patch)?;
             println!("Done");
             // We're writing the version file just in case an issue arise _while_ upgrading.
             // We don't want the DB to fail in an unknown state.
