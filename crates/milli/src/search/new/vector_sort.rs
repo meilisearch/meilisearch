@@ -66,7 +66,7 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for VectorSort<Q> {
         "vector_sort".to_owned()
     }
 
-    #[tracing::instrument(level = "trace", skip_all, target = "search::vector_sort")]
+    #[tracing::instrument(level = "debug", skip_all, target = "search::vector_sort")]
     fn start_iteration(
         &mut self,
         ctx: &mut SearchContext<'ctx>,
