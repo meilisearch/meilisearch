@@ -249,9 +249,9 @@ async fn reset_embedder_documents() {
     snapshot!(json_string!(documents), @r###"
     {
       "message": "Cannot find embedder with name `default`.",
-      "code": "invalid_embedder",
+      "code": "invalid_search_embedder",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_embedder"
+      "link": "https://docs.meilisearch.com/errors#invalid_search_embedder"
     }
     "###);
 }

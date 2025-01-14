@@ -800,3 +800,86 @@ async fn similar_bad_retrieve_vectors() {
     }
     "###);
 }
+
+#[actix_rt::test]
+async fn similar_bad_embedder() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (response, code) = index
+        .update_settings(json!({
+        "embedders": {
+            "manual": {
+                "source": "userProvided",
+                "dimensions": 3,
+            }
+        },
+        "filterableAttributes": ["title"]}))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(response.uid()).await;
+
+    let documents = DOCUMENTS.clone();
+    let (value, code) = index.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+    index.wait_task(value.uid()).await;
+
+    let expected_response = json!({
+    "message": "Cannot find embedder with name `auto`.",
+    "code": "invalid_similar_embedder",
+    "type": "invalid_request",
+    "link": "https://docs.meilisearch.com/errors#invalid_similar_embedder"
+    });
+
+    index
+        .similar(json!({"id": 287947, "embedder": "auto"}), |response, code| {
+            assert_eq!(response, expected_response);
+            assert_eq!(code, 400);
+        })
+        .await;
+
+    let expected_response = json!({
+        "message": "Invalid value type at `.embedder`: expected a string, but found a positive integer: `42`",
+        "code": "invalid_similar_embedder",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_similar_embedder"
+    });
+
+    let (response, code) = index.similar_post(json!({"id": 287947, "embedder": 42})).await;
+
+    assert_eq!(response, expected_response);
+    assert_eq!(code, 400);
+
+    let expected_response = json!({
+        "message": "Invalid value type at `.embedder`: expected a string, but found null",
+        "code": "invalid_similar_embedder",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_similar_embedder"
+    });
+
+    let (response, code) = index.similar_post(json!({"id": 287947, "embedder": null})).await;
+
+    assert_eq!(response, expected_response);
+    assert_eq!(code, 400);
+
+    let expected_response = json!({
+       "message": "Missing field `embedder`",
+        "code": "bad_request",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#bad_request"
+    });
+
+    let (response, code) = index.similar_post(json!({"id": 287947})).await;
+    assert_eq!(response, expected_response);
+    assert_eq!(code, 400);
+
+    let expected_response = json!({
+       "message": "Missing parameter `embedder`",
+        "code": "bad_request",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#bad_request"
+    });
+    let (response, code) = index.similar_get("?id=287947").await;
+    assert_eq!(response, expected_response);
+    assert_eq!(code, 400);
+}
