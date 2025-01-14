@@ -1162,10 +1162,6 @@ struct AttributesFormat {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RetrieveVectors {
-    /// Do not touch the `_vectors` field
-    ///
-    /// this is the behavior when the vectorStore feature is disabled
-    Ignore,
     /// Remove the `_vectors` field
     ///
     /// this is the behavior when the vectorStore feature is enabled, and `retrieveVectors` is `false`
@@ -1177,15 +1173,11 @@ pub enum RetrieveVectors {
 }
 
 impl RetrieveVectors {
-    pub fn new(
-        retrieve_vector: bool,
-        features: index_scheduler::RoFeatures,
-    ) -> Result<Self, index_scheduler::Error> {
-        match (retrieve_vector, features.check_vector("Passing `retrieveVectors` as a parameter")) {
-            (true, Ok(())) => Ok(Self::Retrieve),
-            (true, Err(error)) => Err(error),
-            (false, Ok(())) => Ok(Self::Hide),
-            (false, Err(_)) => Ok(Self::Ignore),
+    pub fn new(retrieve_vector: bool) -> Self {
+        if retrieve_vector {
+            Self::Retrieve
+        } else {
+            Self::Hide
         }
     }
 }

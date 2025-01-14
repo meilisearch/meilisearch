@@ -94,7 +94,6 @@ pub struct RuntimeTogglableFeatures {
 impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogglableFeatures {
     fn from(value: meilisearch_types::features::RuntimeTogglableFeatures) -> Self {
         let meilisearch_types::features::RuntimeTogglableFeatures {
-            vector_store: _,
             metrics,
             logs_route,
             edit_documents_by_function,
@@ -112,7 +111,6 @@ impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogg
 
 #[derive(Serialize)]
 pub struct PatchExperimentalFeatureAnalytics {
-    vector_store: bool,
     metrics: bool,
     logs_route: bool,
     edit_documents_by_function: bool,
@@ -126,7 +124,6 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
 
     fn aggregate(self: Box<Self>, new: Box<Self>) -> Box<Self> {
         Box::new(Self {
-            vector_store: new.vector_store,
             metrics: new.metrics,
             logs_route: new.logs_route,
             edit_documents_by_function: new.edit_documents_by_function,
@@ -179,7 +176,6 @@ async fn patch_features(
 
     let old_features = features.runtime_features();
     let new_features = meilisearch_types::features::RuntimeTogglableFeatures {
-        vector_store: true,
         metrics: new_features.0.metrics.unwrap_or(old_features.metrics),
         logs_route: new_features.0.logs_route.unwrap_or(old_features.logs_route),
         edit_documents_by_function: new_features
@@ -193,7 +189,6 @@ async fn patch_features(
     // the it renames to camelCase, which we don't want for analytics.
     // **Do not** ignore fields with `..` or `_` here, because we want to add them in the future.
     let meilisearch_types::features::RuntimeTogglableFeatures {
-        vector_store,
         metrics,
         logs_route,
         edit_documents_by_function,
@@ -202,7 +197,6 @@ async fn patch_features(
 
     analytics.publish(
         PatchExperimentalFeatureAnalytics {
-            vector_store,
             metrics,
             logs_route,
             edit_documents_by_function,

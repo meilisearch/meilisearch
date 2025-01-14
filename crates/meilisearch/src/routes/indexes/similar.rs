@@ -216,11 +216,7 @@ async fn similar(
     index_uid: IndexUid,
     mut query: SimilarQuery,
 ) -> Result<SimilarResult, ResponseError> {
-    let features = index_scheduler.features();
-
-    features.check_vector("Using the similar API")?;
-
-    let retrieve_vectors = RetrieveVectors::new(query.retrieve_vectors, features)?;
+    let retrieve_vectors = RetrieveVectors::new(query.retrieve_vectors);
 
     // Tenant token search_rules.
     if let Some(search_rules) = index_scheduler.filters().get_index_search_rules(&index_uid) {

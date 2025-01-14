@@ -177,13 +177,12 @@ impl SegmentAnalytics {
 /// This structure represent the `infos` field we send in the analytics.
 /// It's quite close to the `Opt` structure except all sensitive informations
 /// have been simplified to a boolean.
-/// It's send as-is in amplitude thus you should never update a name of the
+/// It's sent as-is in amplitude thus you should never update a name of the
 /// struct without the approval of the PM.
 #[derive(Debug, Clone, Serialize)]
 struct Infos {
     env: String,
     experimental_contains_filter: bool,
-    experimental_vector_store: bool,
     experimental_enable_metrics: bool,
     experimental_edit_documents_by_function: bool,
     experimental_search_queue_size: usize,
@@ -269,7 +268,6 @@ impl Infos {
             indexer_options,
             config_file_path,
             no_analytics: _,
-            experimental_disable_vector_store,
         } = options;
 
         let schedule_snapshot = match schedule_snapshot {
@@ -281,7 +279,6 @@ impl Infos {
             indexer_options;
 
         let RuntimeTogglableFeatures {
-            vector_store: _,
             metrics,
             logs_route,
             edit_documents_by_function,
@@ -293,7 +290,6 @@ impl Infos {
         Self {
             env,
             experimental_contains_filter: experimental_contains_filter | contains_filter,
-            experimental_vector_store: !experimental_disable_vector_store,
             experimental_edit_documents_by_function: edit_documents_by_function,
             experimental_enable_metrics: experimental_enable_metrics | metrics,
             experimental_search_queue_size,
