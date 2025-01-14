@@ -121,7 +121,7 @@ pub struct SearchQueryGet {
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchAttributesToSearchOn>)]
     #[param(value_type = Vec<String>, explode = false)]
     pub attributes_to_search_on: Option<CS<String>>,
-    #[deserr(default, error = DeserrQueryParamError<InvalidEmbedder>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidSearchEmbedder>)]
     pub hybrid_embedder: Option<String>,
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchSemanticRatio>)]
     #[param(value_type = f32)]
@@ -185,7 +185,7 @@ impl TryFrom<SearchQueryGet> for SearchQuery {
             (None, Some(_)) => {
                 return Err(ResponseError::from_msg(
                     "`hybridEmbedder` is mandatory when `hybridSemanticRatio` is present".into(),
-                    meilisearch_types::error::Code::InvalidHybridQuery,
+                    meilisearch_types::error::Code::InvalidSearchHybridQuery,
                 ));
             }
             (Some(embedder), None) => {

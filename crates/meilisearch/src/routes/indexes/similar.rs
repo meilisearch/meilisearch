@@ -19,8 +19,8 @@ use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::routes::indexes::similar_analytics::{SimilarAggregator, SimilarGET, SimilarPOST};
 use crate::search::{
-    add_search_rules, perform_similar, RankingScoreThresholdSimilar, RetrieveVectors, SearchKind,
-    SimilarQuery, SimilarResult, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET,
+    add_search_rules, perform_similar, RankingScoreThresholdSimilar, RetrieveVectors, Route,
+    SearchKind, SimilarQuery, SimilarResult, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET,
 };
 
 #[derive(OpenApi)]
@@ -235,6 +235,7 @@ async fn similar(
         &index,
         &query.embedder,
         None,
+        Route::Similar,
     )?;
 
     tokio::task::spawn_blocking(move || {
@@ -281,7 +282,7 @@ pub struct SimilarQueryGet {
     #[deserr(default, error = DeserrQueryParamError<InvalidSimilarRankingScoreThreshold>, default)]
     #[param(value_type = Option<f32>)]
     pub ranking_score_threshold: Option<RankingScoreThresholdGet>,
-    #[deserr(error = DeserrQueryParamError<InvalidEmbedder>)]
+    #[deserr(error = DeserrQueryParamError<InvalidSimilarEmbedder>)]
     pub embedder: String,
 }
 
