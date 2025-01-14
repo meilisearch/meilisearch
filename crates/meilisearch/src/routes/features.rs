@@ -205,6 +205,7 @@ async fn patch_features(
         &req,
     );
     index_scheduler.put_runtime_features(new_features)?;
+    let new_features: RuntimeTogglableFeatures = new_features.into();
     debug!(returns = ?new_features, "Patch features");
     Ok(HttpResponse::Ok().json(new_features))
 }
