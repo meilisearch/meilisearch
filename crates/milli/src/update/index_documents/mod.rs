@@ -3309,6 +3309,44 @@ mod tests {
     }
 
     #[test]
+    fn incremental_update_without_changing_facet_distribution() {
+        let index = TempIndex::new();
+        index
+            .add_documents(documents!([
+                {"id": 0, "some_field": "aaa", "other_field": "aaa" },
+                {"id": 1, "some_field": "bbb", "other_field": "bbb" },
+            ]))
+            .unwrap();
+        {
+            let rtxn = index.read_txn().unwrap();
+            // count field distribution
+            let results = index.field_distribution(&rtxn).unwrap();
+            assert_eq!(Some(&2), results.get("id"));
+            assert_eq!(Some(&2), results.get("some_field"));
+            assert_eq!(Some(&2), results.get("other_field"));
+        }
+
+        let mut index = index;
+        index.index_documents_config.update_method = IndexDocumentsMethod::UpdateDocuments;
+
+        index
+            .add_documents(documents!([
+                {"id": 0, "other_field": "bbb" },
+                {"id": 1, "some_field": "ccc" },
+            ]))
+            .unwrap();
+
+        {
+            let rtxn = index.read_txn().unwrap();
+            // count field distribution
+            let results = index.field_distribution(&rtxn).unwrap();
+            assert_eq!(Some(&2), results.get("id"));
+            assert_eq!(Some(&2), results.get("some_field"));
+            assert_eq!(Some(&2), results.get("other_field"));
+        }
+    }
+
+    #[test]
     fn delete_words_exact_attributes() {
         let index = TempIndex::new();
 

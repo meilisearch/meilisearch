@@ -151,7 +151,12 @@ fn date_round_trip(
     Ok(())
 }
 
-pub fn v1_9_to_v1_10(db_path: &Path) -> anyhow::Result<()> {
+pub fn v1_9_to_v1_10(
+    db_path: &Path,
+    _origin_major: &str,
+    _origin_minor: &str,
+    _origin_patch: &str,
+) -> anyhow::Result<()> {
     println!("Upgrading from v1.9.0 to v1.10.0");
     // 2 changes here
 
