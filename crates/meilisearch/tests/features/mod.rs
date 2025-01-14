@@ -30,7 +30,6 @@ async fn experimental_features() {
     meili_snap::snapshot!(code, @"200 OK");
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "vectorStore": true,
       "metrics": true,
       "logsRoute": false,
       "editDocumentsByFunction": false,
@@ -56,7 +55,6 @@ async fn experimental_features() {
     meili_snap::snapshot!(code, @"200 OK");
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "vectorStore": true,
       "metrics": true,
       "logsRoute": false,
       "editDocumentsByFunction": false,
@@ -70,7 +68,6 @@ async fn experimental_features() {
     meili_snap::snapshot!(code, @"200 OK");
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "vectorStore": true,
       "metrics": true,
       "logsRoute": false,
       "editDocumentsByFunction": false,
