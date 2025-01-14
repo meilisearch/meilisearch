@@ -79,7 +79,6 @@ async fn get_features(
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
-#[serde(rename_all = "camelCase")]
 pub struct RuntimeTogglableFeatures {
     #[deserr(default)]
     pub metrics: Option<bool>,
@@ -146,7 +145,6 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
     security(("Bearer" = ["experimental_features.update", "experimental_features.*", "*"])),
     responses(
         (status = OK, description = "Experimental features are returned", body = RuntimeTogglableFeatures, content_type = "application/json", example = json!(RuntimeTogglableFeatures {
-            vector_store: Some(true),
             metrics: Some(true),
             logs_route: Some(false),
             edit_documents_by_function: Some(false),
