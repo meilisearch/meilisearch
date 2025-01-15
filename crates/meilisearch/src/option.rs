@@ -62,6 +62,8 @@ const MEILI_EXPERIMENTAL_MAX_NUMBER_OF_BATCHED_TASKS: &str =
     "MEILI_EXPERIMENTAL_MAX_NUMBER_OF_BATCHED_TASKS";
 const MEILI_EXPERIMENTAL_LIMIT_BATCHED_TASKS_TOTAL_SIZE: &str =
     "MEILI_EXPERIMENTAL_LIMIT_BATCHED_TASKS_SIZE";
+const MEILI_EXPERIMENTAL_ENABLE_DOCUMENT_COMPRESSION: &str =
+    "MEILI_EXPERIMENTAL_ENABLE_DOCUMENT_COMPRESSION";
 
 const DEFAULT_CONFIG_FILE_PATH: &str = "./config.toml";
 const DEFAULT_DB_PATH: &str = "./data.ms";
@@ -438,6 +440,11 @@ pub struct Opt {
     #[serde(default = "default_limit_batched_tasks_total_size")]
     pub experimental_limit_batched_tasks_total_size: u64,
 
+    /// Experimentally enable the document compression feature, see: <https://github.com/orgs/meilisearch/discussions/802>
+    #[clap(long, env = MEILI_EXPERIMENTAL_ENABLE_DOCUMENT_COMPRESSION)]
+    #[serde(default)]
+    pub experimental_enable_document_compression: bool,
+
     #[serde(flatten)]
     #[clap(flatten)]
     pub indexer_options: IndexerOpts,
@@ -540,6 +547,7 @@ impl Opt {
             experimental_reduce_indexing_memory_usage,
             experimental_max_number_of_batched_tasks,
             experimental_limit_batched_tasks_total_size,
+            experimental_enable_document_compression,
         } = self;
         export_to_env_if_not_present(MEILI_DB_PATH, db_path);
         export_to_env_if_not_present(MEILI_HTTP_ADDR, http_addr);
@@ -627,6 +635,10 @@ impl Opt {
         export_to_env_if_not_present(
             MEILI_EXPERIMENTAL_LIMIT_BATCHED_TASKS_TOTAL_SIZE,
             experimental_limit_batched_tasks_total_size.to_string(),
+        );
+        export_to_env_if_not_present(
+            MEILI_EXPERIMENTAL_ENABLE_DOCUMENT_COMPRESSION,
+            experimental_enable_document_compression.to_string(),
         );
         indexer_options.export_to_env();
     }
