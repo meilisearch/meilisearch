@@ -30,7 +30,7 @@ macro_rules! make_setting_routes {
             #[allow(dead_code)]
             const fn __verify_settings_exist() {
                 let _: fn() = || {
-                    let meilisearch_types::settings::Settings { $($attr: _,)* .. }: 
+                    let meilisearch_types::settings::Settings { $($attr: _,)* .. }:
                         meilisearch_types::settings::Settings<meilisearch_types::settings::Unchecked>;
                 };
             }
