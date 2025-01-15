@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use big_s::S;
 use meili_snap::{json_string, snapshot};
+use meilisearch_auth::AuthFilter;
 use meilisearch_types::milli::index::IndexEmbeddingConfig;
 use meilisearch_types::milli::update::IndexDocumentsMethod::*;
 use meilisearch_types::milli::{self};
@@ -875,4 +876,28 @@ fn cancel_processing_dump() {
 
     handle.advance_one_successful_batch();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "cancel_processed");
+}
+
+#[test]
+fn create_and_list_index() {
+    let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+
+    let index_creation =
+        KindWithContent::IndexCreation { index_uid: S("kefir"), primary_key: None };
+    let _ = index_scheduler.register(index_creation, None, false).unwrap();
+    handle.advance_till([Start, BatchCreated, InsideProcessBatch]);
+    // The index creation has not been started, the index should not exists
+
+    let err = index_scheduler.index("kefir").map(|_| ()).unwrap_err();
+    snapshot!(err, @"Index `kefir` not found.");
+    let empty = index_scheduler.get_paginated_indexes_stats(&AuthFilter::default(), 0, 20).unwrap();
+    snapshot!(format!("{empty:?}"), @"(0, [])");
+
+    // After advancing just once the index should've been created, the wtxn has been released and commited
+    // but the indexUpdate task has not been processed yet
+    handle.advance_till([InsideProcessBatch]);
+
+    index_scheduler.index("kefir").unwrap(); // Crash on corrupted task queue
+    let empty = index_scheduler.get_paginated_indexes_stats(&AuthFilter::default(), 0, 20).unwrap();
+    snapshot!(format!("{empty:?}"), @"");
 }
