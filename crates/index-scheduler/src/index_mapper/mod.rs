@@ -191,6 +191,11 @@ impl IndexMapper {
                         self.index_base_map_size,
                     )
                     .map_err(|e| Error::from_milli(e, Some(uuid.to_string())))?;
+                let index_rtxn = index.read_txn()?;
+                let stats = crate::index_mapper::IndexStats::new(&index, &index_rtxn)
+                    .map_err(|e| Error::from_milli(e, Some(name.to_string())))?;
+                self.store_stats_of(&mut wtxn, name, &stats)?;
+                drop(index_rtxn);
 
                 wtxn.commit()?;
 
