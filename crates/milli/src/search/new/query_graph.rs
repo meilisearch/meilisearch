@@ -21,9 +21,9 @@ use crate::Result;
 /// 1. `Start` : unique, represents the start of the query
 /// 2. `End` : unique, represents the end of a query
 /// 3. `Deleted` : represents a node that was deleted.
-/// All deleted nodes are unreachable from the start node.
+///    All deleted nodes are unreachable from the start node.
 /// 4. `Term` is a regular node representing a word or combination of words
-/// from the user query.
+///    from the user query.
 #[derive(Clone)]
 pub struct QueryNode {
     pub data: QueryNodeData,

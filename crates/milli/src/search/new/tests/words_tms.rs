@@ -2,11 +2,11 @@
 This module tests the following properties:
 
 1. The `last` term matching strategy starts removing terms from the query
-starting from the end if no more results match it.
+   starting from the end if no more results match it.
 2. Phrases are never deleted by the `last` term matching strategy
 3. Duplicate words don't affect the ranking of a document according to the `words` ranking rule
 4. The proximity of the first and last word of a phrase to its adjacent terms is taken into
-account by the proximity ranking rule.
+   account by the proximity ranking rule.
 5. Unclosed double quotes still make a phrase
 6. The `all` term matching strategy does not remove any term from the query
 7. The search is capable of returning no results if no documents match the query

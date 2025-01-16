@@ -194,6 +194,7 @@ struct Infos {
     experimental_enable_logs_route: bool,
     experimental_reduce_indexing_memory_usage: bool,
     experimental_max_number_of_batched_tasks: usize,
+    experimental_limit_batched_tasks_total_size: u64,
     gpu_enabled: bool,
     db_path: bool,
     import_dump: bool,
@@ -239,6 +240,7 @@ impl Infos {
             experimental_enable_logs_route,
             experimental_reduce_indexing_memory_usage,
             experimental_max_number_of_batched_tasks,
+            experimental_limit_batched_tasks_total_size,
             http_addr,
             master_key: _,
             env,
@@ -314,6 +316,7 @@ impl Infos {
             http_addr: http_addr != default_http_addr(),
             http_payload_size_limit,
             experimental_max_number_of_batched_tasks,
+            experimental_limit_batched_tasks_total_size,
             task_queue_webhook: task_webhook_url.is_some(),
             task_webhook_authorization_header: task_webhook_authorization_header.is_some(),
             log_level: log_level.to_string(),
@@ -426,13 +429,9 @@ impl Segment {
             &AuthFilter::default(),
         ) {
             // Replace the version number with the prototype name if any.
-            let version = if let Some(prototype) = build_info::DescribeResult::from_build()
+            let version = build_info::DescribeResult::from_build()
                 .and_then(|describe| describe.as_prototype())
-            {
-                prototype
-            } else {
-                env!("CARGO_PKG_VERSION")
-            };
+                .unwrap_or(env!("CARGO_PKG_VERSION"));
 
             let _ = self
                 .batcher

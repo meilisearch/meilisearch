@@ -13,6 +13,7 @@ use milli::proximity::ProximityPrecision;
 use milli::update::Setting;
 use milli::{Criterion, CriterionError, Index, DEFAULT_VALUES_PER_FACET};
 use serde::{Deserialize, Serialize, Serializer};
+use utoipa::ToSchema;
 
 use crate::deserr::DeserrJsonError;
 use crate::error::deserr_codes::*;
@@ -39,10 +40,10 @@ where
     .serialize(s)
 }
 
-#[derive(Clone, Default, Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Default, Debug, Serialize, PartialEq, Eq, ToSchema)]
 pub struct Checked;
 
-#[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
 pub struct Unchecked;
 
 impl<E> Deserr<E> for Unchecked
@@ -69,54 +70,63 @@ fn validate_min_word_size_for_typo_setting<E: DeserializeError>(
     Ok(s)
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Deserr)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Deserr, ToSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 #[deserr(deny_unknown_fields, rename_all = camelCase, validate = validate_min_word_size_for_typo_setting -> DeserrJsonError<InvalidSettingsTypoTolerance>)]
 pub struct MinWordSizeTyposSetting {
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
+    #[schema(value_type = Option<u8>, example = json!(5))]
     pub one_typo: Setting<u8>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
+    #[schema(value_type = Option<u8>, example = json!(9))]
     pub two_typos: Setting<u8>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Deserr)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Deserr, ToSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 #[deserr(deny_unknown_fields, rename_all = camelCase, where_predicate = __Deserr_E: deserr::MergeWithError<DeserrJsonError<InvalidSettingsTypoTolerance>>)]
 pub struct TypoSettings {
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
+    #[schema(value_type = Option<bool>, example = json!(true))]
     pub enabled: Setting<bool>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsTypoTolerance>)]
+    #[schema(value_type = Option<MinWordSizeTyposSetting>, example = json!({ "oneTypo": 5, "twoTypo": 9 }))]
     pub min_word_size_for_typos: Setting<MinWordSizeTyposSetting>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
+    #[schema(value_type = Option<BTreeSet<String>>, example = json!(["iPhone", "phone"]))]
     pub disable_on_words: Setting<BTreeSet<String>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
+    #[schema(value_type = Option<BTreeSet<String>>, example = json!(["uuid", "url"]))]
     pub disable_on_attributes: Setting<BTreeSet<String>>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Deserr)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Deserr, ToSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 #[deserr(rename_all = camelCase, deny_unknown_fields)]
 pub struct FacetingSettings {
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
+    #[schema(value_type = Option<usize>, example = json!(10))]
     pub max_values_per_facet: Setting<usize>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
+    #[schema(value_type = Option<BTreeMap<String, FacetValuesSort>>, example = json!({ "genre": FacetValuesSort::Count }))]
     pub sort_facet_values_by: Setting<BTreeMap<String, FacetValuesSort>>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Deserr)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Deserr, ToSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 #[deserr(rename_all = camelCase, deny_unknown_fields)]
 pub struct PaginationSettings {
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
+    #[schema(value_type = Option<usize>, example = json!(250))]
     pub max_total_hits: Setting<usize>,
 }
 
@@ -134,79 +144,149 @@ impl MergeWithError<milli::CriterionError> for DeserrJsonError<InvalidSettingsRa
     }
 }
 
+#[derive(Default, Serialize, Deserialize, PartialEq, Eq, Clone, ToSchema)]
+#[repr(transparent)]
+#[serde(transparent)]
+/// "Technical" type that is required due to utoipa.
+///
+/// We did not find a way to implement [`utoipa::ToSchema`] for the [`Setting`] enum,
+/// but most types can use the `value_type` macro parameter to workaround that issue.
+///
+/// However that type is used in the settings route, including through the macro that auto-generate
+/// all the settings route, so we can't remap the `value_type`.
+pub struct SettingEmbeddingSettings {
+    #[schema(inline, value_type = Option<crate::milli::vector::settings::EmbeddingSettings>)]
+    pub inner: Setting<crate::milli::vector::settings::EmbeddingSettings>,
+}
+
+impl fmt::Debug for SettingEmbeddingSettings {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.inner.fmt(f)
+    }
+}
+
+impl<E: DeserializeError> Deserr<E> for SettingEmbeddingSettings {
+    fn deserialize_from_value<V: deserr::IntoValue>(
+        value: deserr::Value<V>,
+        location: ValuePointerRef,
+    ) -> Result<Self, E> {
+        Setting::<crate::milli::vector::settings::EmbeddingSettings>::deserialize_from_value(
+            value, location,
+        )
+        .map(|inner| Self { inner })
+    }
+}
+
 /// Holds all the settings for an index. `T` can either be `Checked` if they represents settings
 /// whose validity is guaranteed, or `Unchecked` if they need to be validated. In the later case, a
 /// call to `check` will return a `Settings<Checked>` from a `Settings<Unchecked>`.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Deserr)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Deserr, ToSchema)]
 #[serde(
     deny_unknown_fields,
     rename_all = "camelCase",
     bound(serialize = "T: Serialize", deserialize = "T: Deserialize<'static>")
 )]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
+#[schema(rename_all = "camelCase")]
 pub struct Settings<T> {
+    /// Fields displayed in the returned documents.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsDisplayedAttributes>)]
+    #[schema(value_type = Option<Vec<String>>, example = json!(["id", "title", "description", "url"]))]
     pub displayed_attributes: WildcardSetting,
-
+    /// Fields in which to search for matching query words sorted by order of importance.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsSearchableAttributes>)]
+    #[schema(value_type = Option<Vec<String>>, example = json!(["title", "description"]))]
     pub searchable_attributes: WildcardSetting,
-
+    /// Attributes to use for faceting and filtering. See [Filtering and Faceted Search](https://www.meilisearch.com/docs/learn/filtering_and_sorting/search_with_facet_filters).
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsFilterableAttributes>)]
+    #[schema(value_type = Option<Vec<String>>, example = json!(["release_date", "genre"]))]
     pub filterable_attributes: Setting<BTreeSet<String>>,
+    /// Attributes to use when sorting search results.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsSortableAttributes>)]
+    #[schema(value_type = Option<Vec<String>>, example = json!(["release_date"]))]
     pub sortable_attributes: Setting<BTreeSet<String>>,
+    /// List of ranking rules sorted by order of importance. The order is customizable.
+    /// [A list of ordered built-in ranking rules](https://www.meilisearch.com/docs/learn/relevancy/relevancy).
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsRankingRules>)]
+    #[schema(value_type = Option<Vec<String>>, example = json!([RankingRuleView::Words, RankingRuleView::Typo, RankingRuleView::Proximity, RankingRuleView::Attribute, RankingRuleView::Exactness]))]
     pub ranking_rules: Setting<Vec<RankingRuleView>>,
+    /// List of words ignored when present in search queries.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsStopWords>)]
+    #[schema(value_type = Option<Vec<String>>, example = json!(["the", "a", "them", "their"]))]
     pub stop_words: Setting<BTreeSet<String>>,
+    /// List of characters not delimiting where one term begins and ends.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsNonSeparatorTokens>)]
+    #[schema(value_type = Option<Vec<String>>, example = json!([" ", "\n"]))]
     pub non_separator_tokens: Setting<BTreeSet<String>>,
+    /// List of characters delimiting where one term begins and ends.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsSeparatorTokens>)]
+    #[schema(value_type = Option<Vec<String>>, example = json!(["S"]))]
     pub separator_tokens: Setting<BTreeSet<String>>,
+    /// List of strings Meilisearch should parse as a single term.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsDictionary>)]
+    #[schema(value_type = Option<Vec<String>>, example = json!(["iPhone pro"]))]
     pub dictionary: Setting<BTreeSet<String>>,
+    /// List of associated words treated similarly. A word associated to an array of word as synonyms.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsSynonyms>)]
+    #[schema(value_type = Option<BTreeMap<String, Vec<String>>>, example = json!({ "he": ["she", "they", "them"], "phone": ["iPhone", "android"]}))]
     pub synonyms: Setting<BTreeMap<String, Vec<String>>>,
+    /// Search returns documents with distinct (different) values of the given field.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsDistinctAttribute>)]
+    #[schema(value_type = Option<String>, example = json!("sku"))]
     pub distinct_attribute: Setting<String>,
+    /// Precision level when calculating the proximity ranking rule.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsProximityPrecision>)]
+    #[schema(value_type = Option<String>, example = json!(ProximityPrecisionView::ByAttribute))]
     pub proximity_precision: Setting<ProximityPrecisionView>,
+    /// Customize typo tolerance feature.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsTypoTolerance>)]
+    #[schema(value_type = Option<TypoSettings>, example = json!({ "enabled": true, "disableOnAttributes": ["title"]}))]
     pub typo_tolerance: Setting<TypoSettings>,
+    /// Faceting settings.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsFaceting>)]
+    #[schema(value_type = Option<FacetingSettings>, example = json!({ "maxValuesPerFacet": 10, "sortFacetValuesBy": { "genre": FacetValuesSort::Count }}))]
     pub faceting: Setting<FacetingSettings>,
+    /// Pagination settings.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsPagination>)]
+    #[schema(value_type = Option<PaginationSettings>, example = json!({ "maxValuesPerFacet": 10, "sortFacetValuesBy": { "genre": FacetValuesSort::Count }}))]
     pub pagination: Setting<PaginationSettings>,
 
+    /// Embedder required for performing semantic search queries.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsEmbedders>)]
-    pub embedders: Setting<BTreeMap<String, Setting<milli::vector::settings::EmbeddingSettings>>>,
+    #[schema(value_type = Option<BTreeMap<String, SettingEmbeddingSettings>>)]
+    pub embedders: Setting<BTreeMap<String, SettingEmbeddingSettings>>,
+    /// Maximum duration of a search query.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsSearchCutoffMs>)]
+    #[schema(value_type = Option<u64>, example = json!(50))]
     pub search_cutoff_ms: Setting<u64>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsLocalizedAttributes>)]
+    #[schema(value_type = Option<Vec<LocalizedAttributesRuleView>>, example = json!(50))]
     pub localized_attributes: Setting<Vec<LocalizedAttributesRuleView>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsFacetSearch>)]
+    #[schema(value_type = Option<bool>, example = json!(true))]
     pub facet_search: Setting<bool>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsPrefixSearch>)]
+    #[schema(value_type = Option<PrefixSearchSettings>, example = json!("Hemlo"))]
     pub prefix_search: Setting<PrefixSearchSettings>,
 
     #[serde(skip)]
@@ -221,7 +301,7 @@ impl<T> Settings<T> {
         };
 
         for mut embedder in embedders.values_mut() {
-            let Setting::Set(embedder) = &mut embedder else {
+            let SettingEmbeddingSettings { inner: Setting::Set(embedder) } = &mut embedder else {
                 continue;
             };
 
@@ -386,8 +466,9 @@ impl Settings<Unchecked> {
         let Setting::Set(mut configs) = self.embedders else { return Ok(self) };
         for (name, config) in configs.iter_mut() {
             let config_to_check = std::mem::take(config);
-            let checked_config = milli::update::validate_embedding_settings(config_to_check, name)?;
-            *config = checked_config
+            let checked_config =
+                milli::update::validate_embedding_settings(config_to_check.inner, name)?;
+            *config = SettingEmbeddingSettings { inner: checked_config };
         }
         self.embedders = Setting::Set(configs);
         Ok(self)
@@ -665,7 +746,9 @@ pub fn apply_settings_to_builder(
     }
 
     match embedders {
-        Setting::Set(value) => builder.set_embedder_settings(value.clone()),
+        Setting::Set(value) => builder.set_embedder_settings(
+            value.iter().map(|(k, v)| (k.clone(), v.inner.clone())).collect(),
+        ),
         Setting::Reset => builder.reset_embedder_settings(),
         Setting::NotSet => (),
     }
@@ -779,7 +862,9 @@ pub fn settings(
     let embedders: BTreeMap<_, _> = index
         .embedding_configs(rtxn)?
         .into_iter()
-        .map(|IndexEmbeddingConfig { name, config, .. }| (name, Setting::Set(config.into())))
+        .map(|IndexEmbeddingConfig { name, config, .. }| {
+            (name, SettingEmbeddingSettings { inner: Setting::Set(config.into()) })
+        })
         .collect();
     let embedders = if embedders.is_empty() { Setting::NotSet } else { Setting::Set(embedders) };
 
@@ -838,7 +923,7 @@ pub fn settings(
     Ok(settings)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserr)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserr, ToSchema)]
 #[deserr(try_from(&String) = FromStr::from_str -> CriterionError)]
 pub enum RankingRuleView {
     /// Sorted by decreasing number of matched query terms.
@@ -934,7 +1019,7 @@ impl From<RankingRuleView> for Criterion {
     }
 }
 
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Deserr, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Deserr, Serialize, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 #[deserr(error = DeserrJsonError<InvalidSettingsProximityPrecision>, rename_all = camelCase, deny_unknown_fields)]
 pub enum ProximityPrecisionView {
@@ -1001,8 +1086,9 @@ impl std::ops::Deref for WildcardSetting {
     }
 }
 
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Deserr, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Deserr, Serialize, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
 #[deserr(error = DeserrJsonError<InvalidSettingsPrefixSearch>, rename_all = camelCase, deny_unknown_fields)]
 pub enum PrefixSearchSettings {
     #[default]

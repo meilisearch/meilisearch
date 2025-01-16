@@ -18,10 +18,10 @@ pub struct DistinctOutput {
 
 /// Return a [`DistinctOutput`] containing:
 /// - `remaining`: a set of docids built such that exactly one element from `candidates`
-/// is kept for each distinct value inside the given field. If the field does not exist, it
-/// is considered unique.
+///   is kept for each distinct value inside the given field. If the field does not exist, it
+///   is considered unique.
 /// - `excluded`: the set of document ids that contain a value for the given field that occurs
-/// in the given candidates.
+///   in the given candidates.
 pub fn apply_distinct_rule(
     ctx: &mut SearchContext<'_>,
     field_id: u16,

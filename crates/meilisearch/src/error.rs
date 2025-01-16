@@ -19,15 +19,15 @@ pub enum MeilisearchHttpError {
     #[error("The Content-Type `{0}` does not support the use of a csv delimiter. The csv delimiter can only be used with the Content-Type `text/csv`.")]
     CsvDelimiterWithWrongContentType(String),
     #[error(
-        "The Content-Type `{0}` is invalid. Accepted values for the Content-Type header are: {}",
-        .1.iter().map(|s| format!("`{}`", s)).collect::<Vec<_>>().join(", ")
+        "The Content-Type `{}` is invalid. Accepted values for the Content-Type header are: {}",
+        .0, .1.iter().map(|s| format!("`{}`", s)).collect::<Vec<_>>().join(", ")
     )]
     InvalidContentType(String, Vec<String>),
     #[error("Document `{0}` not found.")]
     DocumentNotFound(String),
     #[error("Sending an empty filter is forbidden.")]
     EmptyFilter,
-    #[error("Invalid syntax for the filter parameter: `expected {}, found: {1}`.", .0.join(", "))]
+    #[error("Invalid syntax for the filter parameter: `expected {}, found: {}`.", .0.join(", "), .1)]
     InvalidExpression(&'static [&'static str], Value),
     #[error("Using `federationOptions` is not allowed in a non-federated search.\n - Hint: remove `federationOptions` from query #{0} or add `federation` to the request.")]
     FederationOptionsInNonFederatedRequest(usize),

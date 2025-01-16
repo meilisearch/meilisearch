@@ -1,0 +1,93 @@
+---
+source: crates/index-scheduler/src/scheduler/test.rs
+snapshot_kind: text
+---
+### Autobatching Enabled = false
+### Processing batch None:
+[]
+----------------------------------------------------------------------
+### All Tasks:
+0 {uid: 0, batch_uid: 0, status: succeeded, details: { primary_key: None }, kind: IndexCreation { index_uid: "doggos", primary_key: None }}
+1 {uid: 1, batch_uid: 1, status: succeeded, details: { deleted_documents: Some(0) }, kind: DocumentClear { index_uid: "doggos" }}
+2 {uid: 2, batch_uid: 2, status: succeeded, details: { deleted_documents: Some(0) }, kind: DocumentClear { index_uid: "doggos" }}
+3 {uid: 3, batch_uid: 3, status: succeeded, details: { deleted_documents: Some(0) }, kind: DocumentClear { index_uid: "doggos" }}
+----------------------------------------------------------------------
+### Status:
+enqueued []
+succeeded [0,1,2,3,]
+----------------------------------------------------------------------
+### Kind:
+"documentDeletion" [1,2,3,]
+"indexCreation" [0,]
+----------------------------------------------------------------------
+### Index Tasks:
+doggos [0,1,2,3,]
+----------------------------------------------------------------------
+### Index Mapper:
+doggos: { number_of_documents: 0, field_distribution: {} }
+
+----------------------------------------------------------------------
+### Canceled By:
+
+----------------------------------------------------------------------
+### Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+----------------------------------------------------------------------
+### Started At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+----------------------------------------------------------------------
+### Finished At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+----------------------------------------------------------------------
+### All Batches:
+0 {uid: 0, details: {}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"doggos":1}}, }
+1 {uid: 1, details: {"deletedDocuments":0}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"documentDeletion":1},"indexUids":{"doggos":1}}, }
+2 {uid: 2, details: {"deletedDocuments":0}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"documentDeletion":1},"indexUids":{"doggos":1}}, }
+3 {uid: 3, details: {"deletedDocuments":0}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"documentDeletion":1},"indexUids":{"doggos":1}}, }
+----------------------------------------------------------------------
+### Batch to tasks mapping:
+0 [0,]
+1 [1,]
+2 [2,]
+3 [3,]
+----------------------------------------------------------------------
+### Batches Status:
+succeeded [0,1,2,3,]
+----------------------------------------------------------------------
+### Batches Kind:
+"documentDeletion" [1,2,3,]
+"indexCreation" [0,]
+----------------------------------------------------------------------
+### Batches Index Tasks:
+doggos [0,1,2,3,]
+----------------------------------------------------------------------
+### Batches Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+----------------------------------------------------------------------
+### Batches Started At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+----------------------------------------------------------------------
+### Batches Finished At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+----------------------------------------------------------------------
+### File Store:
+
+----------------------------------------------------------------------

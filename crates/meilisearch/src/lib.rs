@@ -188,13 +188,13 @@ impl tracing_actix_web::RootSpanBuilder for AwebTracingLogger {
 
                 if let Some(error) = response.response().error() {
                     // use the status code already constructed for the outgoing HTTP response
-                    span.record("error", &tracing::field::display(error.as_response_error()));
+                    span.record("error", tracing::field::display(error.as_response_error()));
                 }
             }
             Err(error) => {
                 let code: i32 = error.error_response().status().as_u16().into();
                 span.record("status_code", code);
-                span.record("error", &tracing::field::display(error.as_response_error()));
+                span.record("error", tracing::field::display(error.as_response_error()));
             }
         };
     }
@@ -307,11 +307,12 @@ fn open_or_create_database_unchecked(
             task_db_size: opt.max_task_db_size.as_u64() as usize,
             index_base_map_size: opt.max_index_size.as_u64() as usize,
             enable_mdb_writemap: opt.experimental_reduce_indexing_memory_usage,
-            indexer_config: (&opt.indexer_options).try_into()?,
+            indexer_config: Arc::new((&opt.indexer_options).try_into()?),
             autobatching_enabled: true,
             cleanup_enabled: !opt.experimental_replication_parameters,
             max_number_of_tasks: 1_000_000,
             max_number_of_batched_tasks: opt.experimental_max_number_of_batched_tasks,
+            batched_tasks_size_limit: opt.experimental_limit_batched_tasks_total_size,
             index_growth_amount: byte_unit::Byte::from_str("10GiB").unwrap().as_u64() as usize,
             index_count: DEFAULT_INDEX_COUNT,
             instance_features,

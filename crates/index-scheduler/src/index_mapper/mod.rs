@@ -16,7 +16,7 @@ use uuid::Uuid;
 use self::index_map::IndexMap;
 use self::IndexStatus::{Available, BeingDeleted, Closing, Missing};
 use crate::uuid_codec::UuidCodec;
-use crate::{Error, Result};
+use crate::{Error, IndexBudget, IndexSchedulerOptions, Result};
 
 mod index_map;
 
@@ -140,27 +140,19 @@ impl IndexStats {
 impl IndexMapper {
     pub fn new(
         env: &Env,
-        base_path: PathBuf,
-        index_base_map_size: usize,
-        index_growth_amount: usize,
-        index_count: usize,
-        enable_mdb_writemap: bool,
-        indexer_config: IndexerConfig,
+        wtxn: &mut RwTxn,
+        options: &IndexSchedulerOptions,
+        budget: IndexBudget,
     ) -> Result<Self> {
-        let mut wtxn = env.write_txn()?;
-        let index_mapping = env.create_database(&mut wtxn, Some(INDEX_MAPPING))?;
-        let index_stats = env.create_database(&mut wtxn, Some(INDEX_STATS))?;
-        wtxn.commit()?;
-
         Ok(Self {
-            index_map: Arc::new(RwLock::new(IndexMap::new(index_count))),
-            index_mapping,
-            index_stats,
-            base_path,
-            index_base_map_size,
-            index_growth_amount,
-            enable_mdb_writemap,
-            indexer_config: Arc::new(indexer_config),
+            index_map: Arc::new(RwLock::new(IndexMap::new(budget.index_count))),
+            index_mapping: env.create_database(wtxn, Some(INDEX_MAPPING))?,
+            index_stats: env.create_database(wtxn, Some(INDEX_STATS))?,
+            base_path: options.indexes_path.clone(),
+            index_base_map_size: budget.map_size,
+            index_growth_amount: options.index_growth_amount,
+            enable_mdb_writemap: options.enable_mdb_writemap,
+            indexer_config: options.indexer_config.clone(),
             currently_updating_index: Default::default(),
         })
     }
@@ -199,6 +191,11 @@ impl IndexMapper {
                         self.index_base_map_size,
                     )
                     .map_err(|e| Error::from_milli(e, Some(uuid.to_string())))?;
+                let index_rtxn = index.read_txn()?;
+                let stats = crate::index_mapper::IndexStats::new(&index, &index_rtxn)
+                    .map_err(|e| Error::from_milli(e, Some(name.to_string())))?;
+                self.store_stats_of(&mut wtxn, name, &stats)?;
+                drop(index_rtxn);
 
                 wtxn.commit()?;
 

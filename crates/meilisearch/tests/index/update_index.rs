@@ -13,9 +13,9 @@ async fn update_primary_key() {
 
     assert_eq!(code, 202);
 
-    index.update(Some("primary")).await;
+    let (task, _status_code) = index.update(Some("primary")).await;
 
-    let response = index.wait_task(1).await;
+    let response = index.wait_task(task.uid()).await;
 
     assert_eq!(response["status"], "succeeded");
 
@@ -46,9 +46,9 @@ async fn create_and_update_with_different_encoding() {
     assert_eq!(code, 202);
 
     let index = server.index_with_encoder("test", Encoder::Brotli);
-    index.update(Some("primary")).await;
+    let (task, _status_code) = index.update(Some("primary")).await;
 
-    let response = index.wait_task(1).await;
+    let response = index.wait_task(task.uid()).await;
 
     assert_eq!(response["status"], "succeeded");
 }
@@ -57,17 +57,17 @@ async fn create_and_update_with_different_encoding() {
 async fn update_nothing() {
     let server = Server::new().await;
     let index = server.index("test");
-    let (_, code) = index.create(None).await;
+    let (task1, code) = index.create(None).await;
 
     assert_eq!(code, 202);
 
-    index.wait_task(0).await;
+    index.wait_task(task1.uid()).await.succeeded();
 
-    let (_, code) = index.update(None).await;
+    let (task2, code) = index.update(None).await;
 
     assert_eq!(code, 202);
 
-    let response = index.wait_task(1).await;
+    let response = index.wait_task(task2.uid()).await;
 
     assert_eq!(response["status"], "succeeded");
 }
@@ -88,11 +88,11 @@ async fn error_update_existing_primary_key() {
     ]);
     index.add_documents(documents, None).await;
 
-    let (_, code) = index.update(Some("primary")).await;
+    let (task, code) = index.update(Some("primary")).await;
 
     assert_eq!(code, 202);
 
-    let response = index.wait_task(2).await;
+    let response = index.wait_task(task.uid()).await;
 
     let expected_response = json!({
         "message": "Index `test`: Index already has a primary key: `id`.",
@@ -107,11 +107,11 @@ async fn error_update_existing_primary_key() {
 #[actix_rt::test]
 async fn error_update_unexisting_index() {
     let server = Server::new().await;
-    let (_, code) = server.index("test").update(None).await;
+    let (task, code) = server.index("test").update(None).await;
 
     assert_eq!(code, 202);
 
-    let response = server.index("test").wait_task(0).await;
+    let response = server.index("test").wait_task(task.uid()).await;
 
     let expected_response = json!({
         "message": "Index `test` not found.",

@@ -323,7 +323,7 @@ mod tests {
     use uuid::Uuid;
 
     use super::super::IndexMapper;
-    use crate::tests::IndexSchedulerHandle;
+    use crate::test_utils::IndexSchedulerHandle;
     use crate::utils::clamp_to_page_size;
     use crate::IndexScheduler;
 
