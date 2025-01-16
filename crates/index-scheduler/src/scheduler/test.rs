@@ -907,8 +907,8 @@ fn create_and_list_index() {
           "kefir",
           {
             "number_of_documents": 0,
-            "database_size": 98304,
-            "used_database_size": 32768,
+            "database_size": "[bytes]",
+            "used_database_size": "[bytes]",
             "primary_key": null,
             "field_distribution": {},
             "created_at": "[date]",
