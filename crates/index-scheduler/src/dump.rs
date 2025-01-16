@@ -63,8 +63,6 @@ impl<'a> Dump<'a> {
             _ if task.status != Status::Enqueued => Some(Uuid::nil()),
             None if task.status == Status::Enqueued && task_has_no_docs => {
                 let (uuid, mut file) = self.index_scheduler.queue.create_update_file(false)?;
-                let builder = DocumentsBatchBuilder::new(&mut file);
-                builder.into_inner()?;
                 file.persist()?;
 
                 Some(uuid)
