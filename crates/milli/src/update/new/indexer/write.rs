@@ -155,7 +155,8 @@ pub fn write_from_bbqueue(
                         Ok(false) => {
                             tracing::error!(
                                 database_name,
-                                key = %key.as_bstr(),
+                                key_bytes = ?key,
+                                formatted_key = ?key.as_bstr(),
                                 "Attempt to delete an unknown key"
                             );
                         }
