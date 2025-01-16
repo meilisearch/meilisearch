@@ -29,7 +29,7 @@ use bumpalo::Bump;
 use dump::IndexMetadata;
 use meilisearch_types::batches::BatchId;
 use meilisearch_types::heed::{RoTxn, RwTxn};
-use meilisearch_types::milli::documents::{obkv_to_object, DocumentsBatchReader, PrimaryKey};
+use meilisearch_types::milli::documents::PrimaryKey;
 use meilisearch_types::milli::heed::CompactionOption;
 use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::update::new::indexer::{self, UpdateByFunction};
