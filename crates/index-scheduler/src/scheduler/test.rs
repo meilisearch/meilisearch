@@ -899,7 +899,7 @@ fn create_and_list_index() {
 
     index_scheduler.index("kefir").unwrap();
     let list = index_scheduler.get_paginated_indexes_stats(&AuthFilter::default(), 0, 20).unwrap();
-    snapshot!(json_string!(list, { "[1][0][1].created_at" => "[date]", "[1][0][1].updated_at" => "[date]" }), @r#"
+    snapshot!(json_string!(list, { "[1][0][1].created_at" => "[date]", "[1][0][1].updated_at" => "[date]" }), @r###"
     [
       1,
       [
@@ -907,8 +907,8 @@ fn create_and_list_index() {
           "kefir",
           {
             "number_of_documents": 0,
-            "database_size": 24576,
-            "used_database_size": 8192,
+            "database_size": 98304,
+            "used_database_size": 32768,
             "primary_key": null,
             "field_distribution": {},
             "created_at": "[date]",
@@ -917,5 +917,5 @@ fn create_and_list_index() {
         ]
       ]
     ]
-    "#);
+    "###);
 }

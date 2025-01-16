@@ -2,7 +2,7 @@ use crate::json;
 use meili_snap::{json_string, snapshot};
 use serde_json::Value;
 
-use crate::common::Server;
+use crate::common::{shared_does_not_exists_index, Server};
 
 #[actix_rt::test]
 async fn create_and_get_index() {
@@ -26,13 +26,12 @@ async fn create_and_get_index() {
 
 #[actix_rt::test]
 async fn error_get_unexisting_index() {
-    let server = Server::new_shared();
-    let index = server.unique_index();
+    let index = shared_does_not_exists_index().await;
 
     let (response, code) = index.get().await;
 
     let expected_response = json!({
-        "message": format!("Index `{}` not found.", index.uid),
+        "message": "Index `DOES_NOT_EXISTS` not found.",
         "code": "index_not_found",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#index_not_found"
@@ -57,10 +56,10 @@ async fn list_multiple_indexes() {
     let index1 = server.unique_index();
     let index2 = server.unique_index();
 
-    let (task1, _) = index1.create(None).await;
-    let (_task2, _) = index2.create(Some("key")).await;
+    let (_task1, _) = index1.create(None).await;
+    let (task2, _) = index2.create(Some("key")).await;
 
-    index1.wait_task(task1.uid()).await.succeeded();
+    index1.wait_task(task2.uid()).await.succeeded();
 
     let (response, code) = server.list_indexes(None, None).await;
     dbg!(response.clone());
