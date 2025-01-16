@@ -153,10 +153,11 @@ pub fn write_from_bbqueue(
                     }
                     (key, None) => match database.delete(wtxn, key) {
                         Ok(false) => {
-                            unreachable!(
-                                "We tried to delete an unknown key from {database_name}: {:?}",
-                                key.as_bstr()
-                            )
+                            tracing::error!(
+                                database_name,
+                                key = %key.as_bstr(),
+                                "Attempt to delete an unknown key"
+                            );
                         }
                         Ok(_) => (),
                         Err(error) => {
