@@ -5,14 +5,14 @@ use charabia::Language;
 use heed::RoTxn;
 
 use super::FieldsIdsMap;
-use crate::{FieldId, Index, LocalizedAttributesRule, Result};
+use crate::{FieldId, FilterableAttributesSettings, Index, LocalizedAttributesRule, Result};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Metadata {
     pub searchable: bool,
-    pub filterable: bool,
     pub sortable: bool,
     localized_attributes_rule_id: Option<NonZeroU16>,
+    filterable_attributes_rule_id: Option<NonZeroU16>,
 }
 
 #[derive(Debug, Clone)]
@@ -111,7 +111,7 @@ impl Metadata {
 #[derive(Debug, Clone)]
 pub struct MetadataBuilder {
     searchable_attributes: Vec<String>,
-    filterable_attributes: HashSet<String>,
+    filterable_attributes: Vec<FilterableAttributesSettings>,
     sortable_attributes: HashSet<String>,
     localized_attributes: Option<Vec<LocalizedAttributesRule>>,
 }
@@ -134,7 +134,7 @@ impl MetadataBuilder {
 
     pub fn new(
         searchable_attributes: Vec<String>,
-        filterable_attributes: HashSet<String>,
+        filterable_attributes: Vec<FilterableAttributesSettings>,
         sortable_attributes: HashSet<String>,
         localized_attributes: Option<Vec<LocalizedAttributesRule>>,
     ) -> Self {
@@ -152,8 +152,6 @@ impl MetadataBuilder {
             .iter()
             .any(|attribute| attribute == "*" || attribute == field);
 
-        let filterable = self.filterable_attributes.contains(field);
-
         let sortable = self.sortable_attributes.contains(field);
 
         let localized_attributes_rule_id = self
@@ -164,7 +162,24 @@ impl MetadataBuilder {
             // saturating_add(1): make `id` `NonZero`
             .map(|id| NonZeroU16::new(id.saturating_add(1).try_into().unwrap()).unwrap());
 
-        Metadata { searchable, filterable, sortable, localized_attributes_rule_id }
+        let filterable_attributes_rule_id = self
+            .filterable_attributes
+            .iter()
+            .position(|attribute| match attribute {
+                FilterableAttributesSettings::Field(field_name) => field_name == field,
+                FilterableAttributesSettings::Pattern(patterns) => {
+                    patterns.patterns.match_str(field)
+                }
+            })
+            // saturating_add(1): make `id` `NonZero`
+            .map(|id| NonZeroU16::new(id.saturating_add(1).try_into().unwrap()).unwrap());
+
+        Metadata {
+            searchable,
+            sortable,
+            localized_attributes_rule_id,
+            filterable_attributes_rule_id,
+        }
     }
 
     pub fn searchable_attributes(&self) -> &[String] {
@@ -175,7 +190,7 @@ impl MetadataBuilder {
         &self.sortable_attributes
     }
 
-    pub fn filterable_attributes(&self) -> &HashSet<String> {
+    pub fn filterable_attributes(&self) -> &[FilterableAttributesSettings] {
         &self.filterable_attributes
     }
 
