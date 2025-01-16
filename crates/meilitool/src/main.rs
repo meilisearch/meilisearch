@@ -9,7 +9,6 @@ use file_store::FileStore;
 use meilisearch_auth::AuthController;
 use meilisearch_types::heed::types::{SerdeJson, Str};
 use meilisearch_types::heed::{Database, Env, EnvOpenOptions, RoTxn, RwTxn, Unspecified};
-use meilisearch_types::milli::documents::{obkv_to_object, DocumentsBatchReader};
 use meilisearch_types::milli::{obkv_to_json, BEU32};
 use meilisearch_types::tasks::{Status, Task};
 use meilisearch_types::versioning::{get_version, parse_version};

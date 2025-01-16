@@ -55,7 +55,6 @@ use meilisearch_types::features::{InstanceTogglableFeatures, RuntimeTogglableFea
 use meilisearch_types::heed::byteorder::BE;
 use meilisearch_types::heed::types::{SerdeBincode, SerdeJson, Str, I128};
 use meilisearch_types::heed::{self, Database, Env, PutFlags, RoTxn, RwTxn};
-use meilisearch_types::milli::documents::DocumentsBatchBuilder;
 use meilisearch_types::milli::index::IndexEmbeddingConfig;
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::vector::{Embedder, EmbedderOptions, EmbeddingConfigs};
