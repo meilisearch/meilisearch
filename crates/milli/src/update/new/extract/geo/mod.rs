@@ -9,7 +9,6 @@ use heed::RoTxn;
 use serde_json::value::RawValue;
 use serde_json::Value;
 
-use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::error::GeoError;
 use crate::update::new::document::Document;
 use crate::update::new::indexer::document_changes::{DocumentChangeContext, Extractor};
@@ -29,9 +28,7 @@ impl GeoExtractor {
         index: &Index,
         grenad_parameters: GrenadParameters,
     ) -> Result<Option<Self>> {
-        let is_sortable = index.sortable_fields(rtxn)?.contains(RESERVED_GEO_FIELD_NAME);
-        let is_filterable = index.filterable_fields(rtxn)?.contains(RESERVED_GEO_FIELD_NAME);
-        if is_sortable || is_filterable {
+        if index.is_geo_activated(rtxn)? {
             Ok(Some(GeoExtractor { grenad_parameters }))
         } else {
             Ok(None)

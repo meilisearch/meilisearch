@@ -95,12 +95,7 @@ pub fn enrich_documents_batch<R: Read + Seek>(
     // If the settings specifies that a _geo field must be used therefore we must check the
     // validity of it in all the documents of this batch and this is when we return `Some`.
     let geo_field_id = match documents_batch_index.id(RESERVED_GEO_FIELD_NAME) {
-        Some(geo_field_id)
-            if index.sortable_fields(rtxn)?.contains(RESERVED_GEO_FIELD_NAME)
-                || index.filterable_fields(rtxn)?.contains(RESERVED_GEO_FIELD_NAME) =>
-        {
-            Some(geo_field_id)
-        }
+        Some(geo_field_id) if index.is_geo_activated(rtxn)? => Some(geo_field_id),
         _otherwise => None,
     };
 
