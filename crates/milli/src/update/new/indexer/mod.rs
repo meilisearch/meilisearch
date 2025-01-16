@@ -110,7 +110,7 @@ where
         },
     );
 
-    let (extractor_sender, mut writer_receiver) = pool
+    let (extractor_sender, writer_receiver) = pool
         .install(|| extractor_writer_bbqueue(&mut bbbuffers, total_bbbuffer_capacity, 1000))
         .unwrap();
 
@@ -425,6 +425,7 @@ where
         let mut arroy_writers = arroy_writers?;
 
         {
+            let mut writer_receiver = writer_receiver;
             let span = tracing::trace_span!(target: "indexing::write_db", "all");
             let _entered = span.enter();
 
@@ -584,10 +585,12 @@ fn write_from_bbqueue(
                     }
                     (key, None) => match database.delete(wtxn, key) {
                         Ok(false) => {
-                            unreachable!(
-                                "We tried to delete an unknown key from {database_name}: {:?}",
-                                key.as_bstr()
-                            )
+                            tracing::error!(
+                                database_name,
+                                key_bytes = ?key,
+                                formatted_key = ?key.as_bstr(),
+                                "Attempt to delete an unknown key"
+                            );
                         }
                         Ok(_) => (),
                         Err(error) => {
