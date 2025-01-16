@@ -184,6 +184,7 @@ impl IndexScheduler {
 
         progress.update_progress(BatchProgress::WritingTasksToDisk);
         processing_batch.finished();
+        let mut stop_scheduler_forever = false;
         let mut wtxn = self.env.write_txn().map_err(Error::HeedTransaction)?;
         let mut canceled = RoaringBitmap::new();
 
@@ -222,7 +223,7 @@ impl IndexScheduler {
                     self.queue
                         .tasks
                         .update_task(&mut wtxn, &task)
-                        .map_err(|e| Error::TaskDatabaseUpdate(Box::new(e)))?;
+                        .map_err(|e| Error::TaskDatabaseUpgrade(Box::new(e)))?;
                 }
                 if let Some(canceled_by) = canceled_by {
                     self.queue.tasks.canceled_by.put(&mut wtxn, &canceled_by, &canceled)?;
@@ -273,6 +274,12 @@ impl IndexScheduler {
                 let (task_progress, task_progress_obj) = AtomicTaskStep::new(ids.len() as u32);
                 progress.update_progress(task_progress_obj);
 
+                if matches!(err, Error::TaskDatabaseUpgrade(_)) {
+                    tracing::error!(
+                        "Upgrade task failed, tasks won't be processed until the following issue is fixed: {err}"
+                    );
+                    stop_scheduler_forever = true;
+                }
                 let error: ResponseError = err.into();
                 for id in ids.iter() {
                     task_progress.fetch_add(1, Ordering::Relaxed);
@@ -280,7 +287,7 @@ impl IndexScheduler {
                         .queue
                         .tasks
                         .get_task(&wtxn, id)
-                        .map_err(|e| Error::TaskDatabaseUpdate(Box::new(e)))?
+                        .map_err(|e| Error::TaskDatabaseUpgrade(Box::new(e)))?
                         .ok_or(Error::CorruptedTaskQueue)?;
                     task.status = Status::Failed;
                     task.error = Some(error.clone());
@@ -297,7 +304,7 @@ impl IndexScheduler {
                     self.queue
                         .tasks
                         .update_task(&mut wtxn, &task)
-                        .map_err(|e| Error::TaskDatabaseUpdate(Box::new(e)))?;
+                        .map_err(|e| Error::TaskDatabaseUpgrade(Box::new(e)))?;
                 }
             }
         }
@@ -327,7 +334,7 @@ impl IndexScheduler {
                     .queue
                     .tasks
                     .get_task(&rtxn, id)
-                    .map_err(|e| Error::TaskDatabaseUpdate(Box::new(e)))?
+                    .map_err(|e| Error::TaskDatabaseUpgrade(Box::new(e)))?
                     .ok_or(Error::CorruptedTaskQueue)?;
                 if let Err(e) = self.queue.delete_persisted_task_data(&task) {
                     tracing::error!(
@@ -345,6 +352,10 @@ impl IndexScheduler {
         #[cfg(test)]
         self.breakpoint(crate::test_utils::Breakpoint::AfterProcessing);
 
-        Ok(TickOutcome::TickAgain(processed_tasks))
+        if stop_scheduler_forever {
+            Ok(TickOutcome::StopProcessingForever)
+        } else {
+            Ok(TickOutcome::TickAgain(processed_tasks))
+        }
     }
 }

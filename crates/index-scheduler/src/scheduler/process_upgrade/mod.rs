@@ -1,23 +1,13 @@
 use meilisearch_types::{
     milli,
     milli::progress::{Progress, VariableNameStep},
-    tasks::{KindWithContent, Status, Task},
 };
 
 use crate::{processing::UpgradeDatabaseProgress, Error, IndexScheduler, Result};
 
 impl IndexScheduler {
-    pub(super) fn process_upgrade(
-        &self,
-        progress: Progress,
-        mut tasks: Vec<Task>,
-    ) -> Result<Vec<Task>> {
+    pub(super) fn process_upgrade(&self, progress: Progress) -> Result<()> {
         progress.update_progress(UpgradeDatabaseProgress::EnsuringCorrectnessOfTheSwap);
-
-        // Since we should not have multiple upgrade tasks, we're only going to process the latest one:
-        let KindWithContent::UpgradeDatabase { from } = tasks.last().unwrap().kind else {
-            unreachable!()
-        };
 
         enum UpgradeIndex {}
         let indexes = self.index_names()?;
@@ -29,14 +19,10 @@ impl IndexScheduler {
                 indexes.len() as u32,
             ));
             let index = self.index(uid)?;
-            milli::update::upgrade::upgrade(&index, from, progress.clone())
+            milli::update::upgrade::upgrade(&index, progress.clone())
                 .map_err(|e| Error::from_milli(e, Some(uid.to_string())))?;
         }
 
-        for task in tasks.iter_mut() {
-            task.status = Status::Succeeded;
-        }
-
-        Ok(tasks)
+        Ok(())
     }
 }

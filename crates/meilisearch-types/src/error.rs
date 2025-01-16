@@ -456,9 +456,6 @@ impl ErrorCode for milli::Error {
                     | UserError::DocumentEditionCompilationError(_) => {
                         Code::EditDocumentsByFunctionError
                     }
-                    UserError::TooOldForUpgrade(_, _, _)
-                    | UserError::CannotDowngrade(_, _, _)
-                    | UserError::CannotUpgradeToUnknownVersion(_, _, _) => Code::CouldNotUpgrade,
                 }
             }
         }

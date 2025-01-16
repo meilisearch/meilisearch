@@ -1,4 +1,5 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::Ordering;
 
 use meilisearch_types::batches::BatchId;
@@ -314,7 +315,24 @@ impl IndexScheduler {
                 task.status = Status::Succeeded;
                 Ok(vec![task])
             }
-            Batch::UpgradeDatabase { tasks } => self.process_upgrade(progress, tasks),
+            Batch::UpgradeDatabase { mut tasks } => {
+                let ret = catch_unwind(AssertUnwindSafe(|| self.process_upgrade(progress)));
+                match ret {
+                    Ok(Ok(())) => (),
+                    Ok(Err(e)) => return Err(Error::TaskDatabaseUpgrade(Box::new(e))),
+                    Err(_e) => {
+                        return Err(Error::TaskDatabaseUpgrade(Box::new(
+                            Error::ProcessBatchPanicked,
+                        )));
+                    }
+                }
+
+                for task in tasks.iter_mut() {
+                    task.status = Status::Succeeded;
+                }
+
+                Ok(tasks)
+            }
         }
     }
 

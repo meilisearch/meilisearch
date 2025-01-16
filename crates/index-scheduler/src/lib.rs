@@ -369,6 +369,7 @@ impl IndexScheduler {
                     match ret {
                         Ok(Ok(TickOutcome::TickAgain(_))) => (),
                         Ok(Ok(TickOutcome::WaitForSignal)) => run.scheduler.wake_up.wait(),
+                        Ok(Ok(TickOutcome::StopProcessingForever)) => break,
                         Ok(Err(e)) => {
                             tracing::error!("{e}");
                             // Wait one second when an irrecoverable error occurs.
@@ -816,6 +817,8 @@ pub enum TickOutcome {
     TickAgain(u64),
     /// The scheduler should wait for an external signal before attempting another `tick`.
     WaitForSignal,
+    /// The scheduler exits the run-loop and will never process tasks again
+    StopProcessingForever,
 }
 
 /// How many indexes we can afford to have open simultaneously.
