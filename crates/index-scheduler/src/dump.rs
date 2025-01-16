@@ -1,7 +1,9 @@
 use std::collections::HashMap;
+use std::io;
 
 use dump::{KindDump, TaskDump, UpdateFile};
 use meilisearch_types::heed::RwTxn;
+use meilisearch_types::milli;
 use meilisearch_types::milli::documents::DocumentsBatchBuilder;
 use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
 use roaring::RoaringBitmap;
@@ -43,12 +45,15 @@ impl<'a> Dump<'a> {
 
         let content_uuid = match content_file {
             Some(content_file) if task.status == Status::Enqueued => {
-                let (uuid, mut file) = self.index_scheduler.queue.create_update_file(false)?;
-                let mut builder = DocumentsBatchBuilder::new(&mut file);
+                let (uuid, file) = self.index_scheduler.queue.create_update_file(false)?;
+                let mut writer = io::BufWriter::new(file);
                 for doc in content_file {
-                    builder.append_json_object(&doc?)?;
+                    let doc = doc?;
+                    serde_json::to_writer(&mut writer, &doc).map_err(|e| {
+                        Error::from_milli(milli::InternalError::SerdeJson(e).into(), None)
+                    })?;
                 }
-                builder.into_inner()?;
+                let file = writer.into_inner().map_err(|e| e.into_error())?;
                 file.persist()?;
 
                 Some(uuid)
