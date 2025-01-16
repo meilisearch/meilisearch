@@ -20,7 +20,7 @@ pub fn upgrade_task_queue(tasks_path: &Path, from: (u32, u32, u32)) -> anyhow::R
         [(v1_12_to_current as fn(&Path) -> anyhow::Result<()>, "Upgrading from v1.12 to v1.13")];
 
     let start = match from {
-        (1, 12, _) => 0,
+        (1, 12, patch) if patch < current_patch => 0,
         (major, minor, patch) => {
             if major > current_major
                 || (major == current_major && minor > current_minor)

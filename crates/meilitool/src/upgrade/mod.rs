@@ -14,8 +14,8 @@ use crate::upgrade::v1_11::v1_10_to_v1_11;
 
 pub struct OfflineUpgrade {
     pub db_path: PathBuf,
-    pub current_version: (String, String, String),
-    pub target_version: (String, String, String),
+    pub current_version: (u32, u32, u32),
+    pub target_version: (u32, u32, u32),
 }
 
 impl OfflineUpgrade {
@@ -50,7 +50,7 @@ impl OfflineUpgrade {
 
         let upgrade_list = [
             (
-                v1_9_to_v1_10 as fn(&Path, &str, &str, &str) -> Result<(), anyhow::Error>,
+                v1_9_to_v1_10 as fn(&Path, u32, u32, u32) -> Result<(), anyhow::Error>,
                 "1",
                 "10",
                 "0",
@@ -62,18 +62,14 @@ impl OfflineUpgrade {
 
         let no_upgrade: usize = upgrade_list.len();
 
-        let (current_major, current_minor, current_patch) = &self.current_version;
+        let (current_major, current_minor, current_patch) = self.current_version;
 
-        let start_at = match (
-            current_major.as_str(),
-            current_minor.as_str(),
-            current_patch.as_str(),
-        ) {
-            ("1", "9", _) => 0,
-            ("1", "10", _) => 1,
-            ("1", "11", _) => 2,
-            ("1", "12", "0" | "1" | "2") => 3,
-            ("1", "12", "3" | "4" | "5") => no_upgrade,
+        let start_at = match (current_major, current_minor, current_patch) {
+            (1, 9, _) => 0,
+            (1, 10, _) => 1,
+            (1, 11, _) => 2,
+            (1, 12, 0 | 1 | 2) => 3,
+            (1, 12, 3 | 4 | 5) => no_upgrade,
             _ => {
                 bail!("Unsupported current version {current_major}.{current_minor}.{current_patch}. Can only upgrade from versions in range [{}-{}]",
                       FIRST_SUPPORTED_UPGRADE_FROM_VERSION,
@@ -81,16 +77,13 @@ impl OfflineUpgrade {
             }
         };
 
-        let (target_major, target_minor, target_patch) = &self.target_version;
+        let (target_major, target_minor, target_patch) = self.target_version;
 
-        let ends_at = match (target_major.as_str(), target_minor.as_str(), target_patch.as_str()) {
-            ("1", "10", _) => 0,
-            ("1", "11", _) => 1,
-            ("1", "12", "0" | "1" | "2") => 2,
-            ("1", "12", "3" | "4" | "5") => 3,
-            (major, _, _) if major.starts_with('v') => {
-                bail!("Target version must not starts with a `v`. Instead of writing `v1.9.0` write `1.9.0` for example.")
-            }
+        let ends_at = match (target_major, target_minor, target_patch) {
+            (1, 10, _) => 0,
+            (1, 11, _) => 1,
+            (1, 12, x) if x == 0 || x == 1 || x == 2 => 2,
+            (1, 12, 3 | 4 | 5) => 3,
             _ => {
                 bail!("Unsupported target version {target_major}.{target_minor}.{target_patch}. Can only upgrade to versions in range [{}-{}]",
                       FIRST_SUPPORTED_UPGRADE_TO_VERSION,

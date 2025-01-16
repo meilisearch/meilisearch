@@ -24,7 +24,7 @@ pub fn create_version_file(
     fs::write(version_path, format!("{}.{}.{}", major, minor, patch))
 }
 
-pub fn get_version(db_path: &Path) -> Result<(String, String, String), VersionFileError> {
+pub fn get_version(db_path: &Path) -> Result<(u32, u32, u32), VersionFileError> {
     let version_path = db_path.join(VERSION_FILE_NAME);
 
     match fs::read_to_string(version_path) {
@@ -36,11 +36,28 @@ pub fn get_version(db_path: &Path) -> Result<(String, String, String), VersionFi
     }
 }
 
-pub fn parse_version(version: &str) -> Result<(String, String, String), VersionFileError> {
+pub fn parse_version(version: &str) -> Result<(u32, u32, u32), VersionFileError> {
     let version_components = version.trim().split('.').collect::<Vec<_>>();
     let (major, minor, patch) = match &version_components[..] {
-        [major, minor, patch] => (major.to_string(), minor.to_string(), patch.to_string()),
-        _ => return Err(VersionFileError::MalformedVersionFile),
+        [major, minor, patch] => (
+            major.parse().map_err(|e| VersionFileError::MalformedVersionFile {
+                context: format!("Could not parse the major: {e}"),
+            })?,
+            minor.parse().map_err(|e| VersionFileError::MalformedVersionFile {
+                context: format!("Could not parse the minor: {e}"),
+            })?,
+            patch.parse().map_err(|e| VersionFileError::MalformedVersionFile {
+                context: format!("Could not parse the patch: {e}"),
+            })?,
+        ),
+        _ => {
+            return Err(VersionFileError::MalformedVersionFile {
+                context: format!(
+                    "The version contains {} parts instead of 3 (major, minor and patch)",
+                    version_components.len()
+                ),
+            })
+        }
     };
     Ok((major, minor, patch))
 }
@@ -53,14 +70,14 @@ pub enum VersionFileError {
         env!("CARGO_PKG_VERSION").to_string()
     )]
     MissingVersionFile,
-    #[error("Version file is corrupted and thus Meilisearch is unable to determine the version of the database.")]
-    MalformedVersionFile,
+    #[error("Version file is corrupted and thus Meilisearch is unable to determine the version of the database. {context}")]
+    MalformedVersionFile { context: String },
     #[error(
         "Your database version ({major}.{minor}.{patch}) is incompatible with your current engine version ({}).\n\
         To migrate data between Meilisearch versions, please follow our guide on https://www.meilisearch.com/docs/learn/update_and_migration/updating.",
         env!("CARGO_PKG_VERSION").to_string()
     )]
-    VersionMismatch { major: String, minor: String, patch: String },
+    VersionMismatch { major: u32, minor: u32, patch: u32 },
 
     #[error(transparent)]
     IoError(#[from] std::io::Error),

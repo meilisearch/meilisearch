@@ -25,9 +25,9 @@ use crate::uuid_codec::UuidCodec;
 
 pub fn v1_11_to_v1_12(
     db_path: &Path,
-    _origin_major: &str,
-    _origin_minor: &str,
-    _origin_patch: &str,
+    _origin_major: u32,
+    _origin_minor: u32,
+    _origin_patch: u32,
 ) -> anyhow::Result<()> {
     println!("Upgrading from v1.11.0 to v1.12.0");
 
@@ -38,13 +38,13 @@ pub fn v1_11_to_v1_12(
 
 pub fn v1_12_to_v1_12_3(
     db_path: &Path,
-    origin_major: &str,
-    origin_minor: &str,
-    origin_patch: &str,
+    origin_major: u32,
+    origin_minor: u32,
+    origin_patch: u32,
 ) -> anyhow::Result<()> {
     println!("Upgrading from v1.12.{{0, 1, 2}} to v1.12.3");
 
-    if origin_minor == "12" {
+    if origin_minor == 12 {
         rebuild_field_distribution(db_path)?;
     } else {
         println!("Not rebuilding field distribution as it wasn't corrupted coming from v{origin_major}.{origin_minor}.{origin_patch}");

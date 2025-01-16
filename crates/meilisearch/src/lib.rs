@@ -35,12 +35,13 @@ use extractors::payload::PayloadConfig;
 use index_scheduler::upgrade::upgrade_task_queue;
 use index_scheduler::{IndexScheduler, IndexSchedulerOptions};
 use meilisearch_auth::AuthController;
+use meilisearch_types::milli::constants::VERSION_MAJOR;
 use meilisearch_types::milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
 use meilisearch_types::milli::update::{IndexDocumentsConfig, IndexDocumentsMethod};
 use meilisearch_types::settings::apply_settings_to_builder;
 use meilisearch_types::tasks::KindWithContent;
 use meilisearch_types::versioning::{
-    create_current_version_file, get_version, VersionFileError, VERSION_MAJOR, VERSION_MINOR,
+    create_current_version_file, get_version, VersionFileError, VERSION_MINOR, VERSION_PATCH,
 };
 use meilisearch_types::{compression, milli, VERSION_FILE_NAME};
 pub use option::Opt;
@@ -345,14 +346,13 @@ fn check_version_and_update_task_queue(
 ) -> anyhow::Result<()> {
     let (major, minor, patch) = get_version(db_path)?;
 
-    if major != VERSION_MAJOR || minor != VERSION_MINOR {
+    let version_major: u32 = VERSION_MAJOR.parse().unwrap();
+    let version_minor: u32 = VERSION_MINOR.parse().unwrap();
+    let version_patch: u32 = VERSION_PATCH.parse().unwrap();
+
+    if major != version_major || minor != version_minor || patch > version_patch {
         if experimental_dumpless_upgrade {
-            let version = (
-                major.parse().map_err(|_| VersionFileError::MalformedVersionFile)?,
-                minor.parse().map_err(|_| VersionFileError::MalformedVersionFile)?,
-                patch.parse().map_err(|_| VersionFileError::MalformedVersionFile)?,
-            );
-            return upgrade_task_queue(&db_path.join("tasks"), version);
+            return upgrade_task_queue(&db_path.join("tasks"), (major, minor, patch));
         } else {
             return Err(VersionFileError::VersionMismatch { major, minor, patch }.into());
         }
