@@ -254,18 +254,15 @@ fn export_a_dump(
                 if status == Status::Enqueued {
                     let content_file = file_store.get_update(content_file_uuid)?;
 
-                    let reader =
-                        DocumentsBatchReader::from_reader(content_file).with_context(|| {
+                    for document in
+                        serde_json::de::Deserializer::from_reader(content_file).into_iter()
+                    {
+                        let document = document.with_context(|| {
                             format!("While reading content file {:?}", content_file_uuid)
                         })?;
-
-                    let (mut cursor, documents_batch_index) = reader.into_cursor_and_fields_index();
-                    while let Some(doc) = cursor.next_document().with_context(|| {
-                        format!("While iterating on content file {:?}", content_file_uuid)
-                    })? {
-                        dump_content_file
-                            .push_document(&obkv_to_object(doc, &documents_batch_index)?)?;
+                        dump_content_file.push_document(&document)?;
                     }
+
                     dump_content_file.flush()?;
                     count += 1;
                 }
