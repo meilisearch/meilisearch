@@ -39,6 +39,8 @@ impl<'a> Dump<'a> {
         task: TaskDump,
         content_file: Option<Box<UpdateFile>>,
     ) -> Result<Task> {
+        let task_has_no_docs = matches!(task.kind, KindDump::DocumentImport { documents_count, .. } if documents_count == 0);
+
         let content_uuid = match content_file {
             Some(content_file) if task.status == Status::Enqueued => {
                 let (uuid, mut file) = self.index_scheduler.queue.create_update_file(false)?;
@@ -54,6 +56,14 @@ impl<'a> Dump<'a> {
             // If the task isn't `Enqueued` then just generate a recognisable `Uuid`
             // in case we try to open it later.
             _ if task.status != Status::Enqueued => Some(Uuid::nil()),
+            None if task.status == Status::Enqueued && task_has_no_docs => {
+                let (uuid, mut file) = self.index_scheduler.queue.create_update_file(false)?;
+                let builder = DocumentsBatchBuilder::new(&mut file);
+                builder.into_inner()?;
+                file.persist()?;
+
+                Some(uuid)
+            }
             _ => None,
         };
 
