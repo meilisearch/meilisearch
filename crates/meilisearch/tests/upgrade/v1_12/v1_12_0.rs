@@ -206,6 +206,42 @@ async fn check_the_index_scheduler(server: &Server) {
     let (batches, _) = server.batches_filter("afterFinishedAt=2025-01-16T16:47:41Z").await;
     snapshot!(json_string!(batches, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]" }), name: "batches_filter_afterFinishedAt_equal_2025-01-16T16:47:41");
 
+    let (stats, _) = server.stats().await;
+    snapshot!(stats, @r#"
+    {
+      "databaseSize": 425984,
+      "lastUpdate": "2025-01-16T17:18:43.296777845Z",
+      "indexes": {
+        "kefir": {
+          "numberOfDocuments": 1,
+          "isIndexing": false,
+          "fieldDistribution": {
+            "age": 1,
+            "description": 1,
+            "id": 1,
+            "name": 1,
+            "surname": 1
+          }
+        }
+      }
+    }
+    "#);
+    let index = server.index("kefir");
+    let (stats, _) = index.stats().await;
+    snapshot!(stats, @r#"
+    {
+      "numberOfDocuments": 1,
+      "isIndexing": false,
+      "fieldDistribution": {
+        "age": 1,
+        "description": 1,
+        "id": 1,
+        "name": 1,
+        "surname": 1
+      }
+    }
+    "#);
+
     // Delete all the tasks of a specific batch
     let (task, _) = server.delete_tasks("batchUids=10").await;
     server.wait_task(task.uid()).await.succeeded();
@@ -218,15 +254,6 @@ async fn check_the_index_scheduler(server: &Server) {
     let index = server.index("kefirausaurus");
     let (task, _) = index.create(Some("kefid")).await;
     server.wait_task(task.uid()).await.succeeded();
-
-    let (stats, _) = index.stats().await;
-    snapshot!(stats, @r#"
-    {
-      "numberOfDocuments": 0,
-      "isIndexing": false,
-      "fieldDistribution": {}
-    }
-    "#);
 }
 
 /// Ensuring the index roughly works with filter and sort.
