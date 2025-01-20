@@ -17,7 +17,7 @@ tasks individually, but should be much faster since we are only performing
 one indexing operation.
 */
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::ffi::OsStr;
 use std::fmt;
 use std::fs::{self, File};
@@ -27,6 +27,7 @@ use std::sync::atomic::Ordering;
 use bumpalo::collections::CollectIn;
 use bumpalo::Bump;
 use dump::IndexMetadata;
+use meilisearch_types::batch_view::BatchView;
 use meilisearch_types::batches::BatchId;
 use meilisearch_types::heed::{RoTxn, RwTxn};
 use meilisearch_types::milli::documents::{obkv_to_object, DocumentsBatchReader, PrimaryKey};
@@ -790,7 +791,8 @@ impl IndexScheduler {
 
                 let rtxn = self.env.read_txn()?;
 
-                // 2. dump the tasks
+                // 2. dump the queue
+                // 2.1. dump the tasks
                 progress.update_progress(DumpCreationProgress::DumpTheTasks);
                 let mut dump_tasks = dump.create_tasks_queue()?;
 
@@ -821,7 +823,7 @@ impl IndexScheduler {
                     }
                     let mut dump_content_file = dump_tasks.push_task(&t.into())?;
 
-                    // 2.1. Dump the `content_file` associated with the task if there is one and the task is not finished yet.
+                    // 2.1.1. Dump the `content_file` associated with the task if there is one and the task is not finished yet.
                     if let Some(content_file) = content_file {
                         if self.must_stop_processing.get() {
                             return Err(Error::AbortedTask);
@@ -850,6 +852,39 @@ impl IndexScheduler {
                     atomic.fetch_add(1, Ordering::Relaxed);
                 }
                 dump_tasks.flush()?;
+
+                // 2.2. dump the batches
+                let mut dump_batches = dump.create_batches_queue()?;
+                let (atomic, update_batch_progress) =
+                    AtomicBatchStep::new(self.all_batches.len(&rtxn)? as u32);
+                progress.update_progress(update_batch_progress);
+
+                for ret in self.all_batches.iter(&rtxn)? {
+                    if self.must_stop_processing.get() {
+                        return Err(Error::AbortedTask);
+                    }
+
+                    let (_, mut batch) = ret?;
+
+                    // In the case we're dumping ourselves we want to be marked as finished
+                    // to not loop over ourselves indefinitely.
+                    if task.batch_uid == Some(batch.uid) {
+                        let finished_at = OffsetDateTime::now_utc();
+
+                        // We're going to fake the date because we don't know if everything is going to go well.
+                        // But we need to dump the task as finished and successful.
+                        // If something fail everything will be set appropriately in the end.
+                        batch.progress = None;
+                        let mut statuses = BTreeMap::new();
+                        statuses.insert(Status::Succeeded, 1);
+                        batch.stats.status = statuses;
+                        batch.started_at = started_at;
+                        batch.finished_at = Some(finished_at);
+                    }
+                    dump_batches.push_batch(&BatchView::from_batch(&batch))?;
+                    atomic.fetch_add(1, Ordering::Relaxed);
+                }
+                dump_batches.flush()?;
 
                 // 3. Dump the indexes
                 progress.update_progress(DumpCreationProgress::DumpTheIndexes);

@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use flate2::write::GzEncoder;
 use flate2::Compression;
+use meilisearch_types::batch_view::BatchView;
 use meilisearch_types::features::RuntimeTogglableFeatures;
 use meilisearch_types::keys::Key;
 use meilisearch_types::settings::{Checked, Settings};
@@ -52,6 +53,10 @@ impl DumpWriter {
 
     pub fn create_tasks_queue(&self) -> Result<TaskWriter> {
         TaskWriter::new(self.dir.path().join("tasks"))
+    }
+
+    pub fn create_batches_queue(&self) -> Result<BatchWriter> {
+        BatchWriter::new(self.dir.path().join("batches"))
     }
 
     pub fn create_experimental_features(&self, features: RuntimeTogglableFeatures) -> Result<()> {
@@ -152,6 +157,31 @@ impl UpdateFile {
         if let Some(mut writer) = self.writer {
             writer.flush()?;
         }
+        Ok(())
+    }
+}
+
+pub struct BatchWriter {
+    queue: BufWriter<File>,
+}
+
+impl BatchWriter {
+    pub(crate) fn new(path: PathBuf) -> Result<Self> {
+        std::fs::create_dir(&path)?;
+        let queue = File::create(path.join("queue.jsonl"))?;
+        Ok(BatchWriter { queue: BufWriter::new(queue) })
+    }
+
+    /// Pushes batches in the dump.
+    /// The batches doesn't contains any private information thus we don't need a special type like with the tasks.
+    pub fn push_batch(&mut self, batch: &BatchView) -> Result<()> {
+        self.queue.write_all(&serde_json::to_vec(batch)?)?;
+        self.queue.write_all(b"\n")?;
+        Ok(())
+    }
+
+    pub fn flush(mut self) -> Result<()> {
+        self.queue.flush()?;
         Ok(())
     }
 }
