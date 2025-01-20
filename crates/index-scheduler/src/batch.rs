@@ -29,7 +29,7 @@ use bumpalo::Bump;
 use dump::IndexMetadata;
 use meilisearch_types::batches::BatchId;
 use meilisearch_types::heed::{RoTxn, RwTxn};
-use meilisearch_types::milli::documents::{obkv_to_object, DocumentsBatchReader, PrimaryKey};
+use meilisearch_types::milli::documents::PrimaryKey;
 use meilisearch_types::milli::heed::CompactionOption;
 use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::update::new::indexer::{self, UpdateByFunction};
@@ -819,6 +819,13 @@ impl IndexScheduler {
                         t.started_at = Some(started_at);
                         t.finished_at = Some(finished_at);
                     }
+
+                    // Patch the task to remove the batch uid, because as of v1.12.5 batches are not persisted.
+                    // This prevent from referencing *future* batches not actually associated with the task.
+                    //
+                    // See <https://github.com/meilisearch/meilisearch/issues/5247> for details.
+                    t.batch_uid = None;
+
                     let mut dump_content_file = dump_tasks.push_task(&t.into())?;
 
                     // 2.1. Dump the `content_file` associated with the task if there is one and the task is not finished yet.
@@ -829,21 +836,18 @@ impl IndexScheduler {
                         if status == Status::Enqueued {
                             let content_file = self.file_store.get_update(content_file)?;
 
-                            let reader = DocumentsBatchReader::from_reader(content_file)
-                                .map_err(|e| Error::from_milli(e.into(), None))?;
-
-                            let (mut cursor, documents_batch_index) =
-                                reader.into_cursor_and_fields_index();
-
-                            while let Some(doc) = cursor
-                                .next_document()
-                                .map_err(|e| Error::from_milli(e.into(), None))?
+                            for document in
+                                serde_json::de::Deserializer::from_reader(content_file).into_iter()
                             {
-                                dump_content_file.push_document(
-                                    &obkv_to_object(doc, &documents_batch_index)
-                                        .map_err(|e| Error::from_milli(e, None))?,
-                                )?;
+                                let document = document.map_err(|e| {
+                                    Error::from_milli(
+                                        milli::InternalError::SerdeJson(e).into(),
+                                        None,
+                                    )
+                                })?;
+                                dump_content_file.push_document(&document)?;
                             }
+
                             dump_content_file.flush()?;
                         }
                     }

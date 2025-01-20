@@ -55,7 +55,6 @@ use meilisearch_types::features::{InstanceTogglableFeatures, RuntimeTogglableFea
 use meilisearch_types::heed::byteorder::BE;
 use meilisearch_types::heed::types::{SerdeBincode, SerdeJson, Str, I128};
 use meilisearch_types::heed::{self, Database, Env, PutFlags, RoTxn, RwTxn};
-use meilisearch_types::milli::documents::DocumentsBatchBuilder;
 use meilisearch_types::milli::index::IndexEmbeddingConfig;
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::vector::{Embedder, EmbedderOptions, EmbeddingConfigs};
@@ -2017,14 +2016,19 @@ impl<'a> Dump<'a> {
         task: TaskDump,
         content_file: Option<Box<UpdateFile>>,
     ) -> Result<Task> {
+        let task_has_no_docs = matches!(task.kind, KindDump::DocumentImport { documents_count, .. } if documents_count == 0);
+
         let content_uuid = match content_file {
             Some(content_file) if task.status == Status::Enqueued => {
-                let (uuid, mut file) = self.index_scheduler.create_update_file(false)?;
-                let mut builder = DocumentsBatchBuilder::new(&mut file);
+                let (uuid, file) = self.index_scheduler.create_update_file(false)?;
+                let mut writer = io::BufWriter::new(file);
                 for doc in content_file {
-                    builder.append_json_object(&doc?)?;
+                    let doc = doc?;
+                    serde_json::to_writer(&mut writer, &doc).map_err(|e| {
+                        Error::from_milli(milli::InternalError::SerdeJson(e).into(), None)
+                    })?;
                 }
-                builder.into_inner()?;
+                let file = writer.into_inner().map_err(|e| e.into_error())?;
                 file.persist()?;
 
                 Some(uuid)
@@ -2032,6 +2036,12 @@ impl<'a> Dump<'a> {
             // If the task isn't `Enqueued` then just generate a recognisable `Uuid`
             // in case we try to open it later.
             _ if task.status != Status::Enqueued => Some(Uuid::nil()),
+            None if task.status == Status::Enqueued && task_has_no_docs => {
+                let (uuid, file) = self.index_scheduler.create_update_file(false)?;
+                file.persist()?;
+
+                Some(uuid)
+            }
             _ => None,
         };
 
