@@ -146,6 +146,7 @@ pub struct IndexingContext<
 {
     pub index: &'index Index,
     pub db_fields_ids_map: &'indexer FieldsIdsMap,
+    pub allow_creating_compression_dictionary: bool,
     pub db_document_decompression_dictionary: Option<&'indexer DecoderDictionary<'static>>,
     pub new_fields_ids_map: &'fid RwLock<FieldIdMapWithMetadata>,
     pub doc_allocs: &'indexer ThreadLocal<FullySend<Cell<Bump>>>,
@@ -210,6 +211,7 @@ pub fn extract<
     IndexingContext {
         index,
         db_fields_ids_map,
+        allow_creating_compression_dictionary,
         db_document_decompression_dictionary,
         new_fields_ids_map,
         doc_allocs,

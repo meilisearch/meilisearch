@@ -60,6 +60,7 @@ where
     let number_of_documents = index.number_of_documents(wtxn)? as usize;
     match index.document_compression_raw_dictionary(wtxn)? {
         Some(dict) => Ok(Some(EncoderDictionary::copy(dict, COMPRESSION_LEVEL))),
+        None if !indexing_context.allow_creating_compression_dictionary => Ok(None),
         None if number_of_documents >= COMPRESS_LIMIT => Ok(None),
         None if number_of_documents + document_changes.len() < SAMPLE_SIZE => Ok(None),
         None => {

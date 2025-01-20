@@ -108,6 +108,7 @@ where
     let indexing_context = IndexingContext {
         index,
         db_fields_ids_map,
+        allow_creating_compression_dictionary,
         db_document_decompression_dictionary: db_document_decompression_dictionary.as_ref(),
         new_fields_ids_map: &new_fields_ids_map,
         doc_allocs: &doc_allocs,
