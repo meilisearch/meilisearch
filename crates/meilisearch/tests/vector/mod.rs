@@ -1,4 +1,5 @@
 mod binary_quantized;
+mod ollama;
 mod openai;
 mod rest;
 mod settings;
