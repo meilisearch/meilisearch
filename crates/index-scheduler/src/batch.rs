@@ -819,6 +819,13 @@ impl IndexScheduler {
                         t.started_at = Some(started_at);
                         t.finished_at = Some(finished_at);
                     }
+
+                    // Patch the task to remove the batch uid, because as of v1.12.5 batches are not persisted.
+                    // This prevent from referencing *future* batches not actually associated with the task.
+                    //
+                    // See <https://github.com/meilisearch/meilisearch/issues/5247> for details.
+                    t.batch_uid = None;
+
                     let mut dump_content_file = dump_tasks.push_task(&t.into())?;
 
                     // 2.1. Dump the `content_file` associated with the task if there is one and the task is not finished yet.
