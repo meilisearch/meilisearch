@@ -72,8 +72,8 @@ impl OfflineUpgrade {
             ("1", "9", _) => 0,
             ("1", "10", _) => 1,
             ("1", "11", _) => 2,
-            ("1", "12", x) if x == "0" || x == "1" || x == "2" => 3,
-            ("1", "12", x) if x == "3" || x == "4" || x == "5" => no_upgrade,
+            ("1", "12", "0" | "1" | "2") => 3,
+            ("1", "12", "3" | "4" | "5") => no_upgrade,
             _ => {
                 bail!("Unsupported current version {current_major}.{current_minor}.{current_patch}. Can only upgrade from versions in range [{}-{}]",
                       FIRST_SUPPORTED_UPGRADE_FROM_VERSION,
@@ -86,8 +86,8 @@ impl OfflineUpgrade {
         let ends_at = match (target_major.as_str(), target_minor.as_str(), target_patch.as_str()) {
             ("1", "10", _) => 0,
             ("1", "11", _) => 1,
-            ("1", "12", x) if x == "0" || x == "1" || x == "2" => 2,
-            ("1", "12", x) if x == "3" || x == "4" || x == "5" => 3,
+            ("1", "12", "0" | "1" | "2") => 2,
+            ("1", "12", "3" | "4" | "5") => 3,
             (major, _, _) if major.starts_with('v') => {
                 bail!("Target version must not starts with a `v`. Instead of writing `v1.9.0` write `1.9.0` for example.")
             }
