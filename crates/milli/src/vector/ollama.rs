@@ -46,11 +46,6 @@ impl EmbedderOptions {
         // **warning**: do not swap these two `if`s, as the second one is always true when the first one is.
         let (request, response) = if url.ends_with("/api/embeddings") {
             (
-                serde_json::json!({"model": model, "input": [super::rest::REQUEST_PLACEHOLDER, super::rest::REPEAT_PLACEHOLDER]}),
-                serde_json::json!({"embeddings": [super::rest::RESPONSE_PLACEHOLDER, super::rest::REPEAT_PLACEHOLDER]}),
-            )
-        } else if url.ends_with("/api/embed") {
-            (
                 serde_json::json!({
                     "model": model,
                     "prompt": super::rest::REQUEST_PLACEHOLDER,
@@ -58,6 +53,11 @@ impl EmbedderOptions {
                 serde_json::json!({
                     "embedding": super::rest::RESPONSE_PLACEHOLDER,
                 }),
+            )
+        } else if url.ends_with("/api/embed") {
+            (
+                serde_json::json!({"model": model, "input": [super::rest::REQUEST_PLACEHOLDER, super::rest::REPEAT_PLACEHOLDER]}),
+                serde_json::json!({"embeddings": [super::rest::RESPONSE_PLACEHOLDER, super::rest::REPEAT_PLACEHOLDER]}),
             )
         } else {
             return Err(NewEmbedderError::ollama_unsupported_url(url));
