@@ -19,10 +19,7 @@ pub fn field_distribution(index: &Index, wtxn: &mut RwTxn<'_>, progress: &Progre
     let mut doc_alloc = bumpalo::Bump::new();
 
     let db_document_decompression_dictionary =
-        match index.document_compression_raw_dictionary(wtxn)? {
-            Some(raw) => Some(DecoderDictionary::copy(raw)),
-            None => None,
-        };
+        index.document_compression_raw_dictionary(wtxn)?.map(|raw| DecoderDictionary::copy(raw));
 
     for docid in docids {
         update_document_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);

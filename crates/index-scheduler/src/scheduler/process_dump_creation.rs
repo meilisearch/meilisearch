@@ -128,6 +128,7 @@ impl IndexScheduler {
             let embedding_configs = index
                 .embedding_configs(&rtxn)
                 .map_err(|e| Error::from_milli(e, Some(uid.to_string())))?;
+            let decompression_dictionary = index.document_decompression_dictionary(&rtxn)?;
 
             let nb_documents = index
                 .number_of_documents(&rtxn)
@@ -135,8 +136,9 @@ impl IndexScheduler {
                 as u32;
             let (atomic, update_document_progress) = AtomicDocumentStep::new(nb_documents);
             progress.update_progress(update_document_progress);
+            let doc_alloc = bumpalo::Bump::new();
             let documents = index
-                .all_documents(&rtxn)
+                .all_compressed_documents(&rtxn)
                 .map_err(|e| Error::from_milli(e, Some(uid.to_string())))?;
             // 3.1. Dump the documents
             for ret in documents {
@@ -145,6 +147,10 @@ impl IndexScheduler {
                 }
 
                 let (id, doc) = ret.map_err(|e| Error::from_milli(e, Some(uid.to_string())))?;
+                let doc = match decompression_dictionary.as_ref() {
+                    Some(dict) => doc.decompress_into_bump(&doc_alloc, dict)?,
+                    None => doc.as_non_compressed(),
+                };
 
                 let mut document = milli::obkv_to_json(&all_fields, &fields_ids_map, doc)
                     .map_err(|e| Error::from_milli(e, Some(uid.to_string())))?;
