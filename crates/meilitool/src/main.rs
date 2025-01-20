@@ -245,6 +245,7 @@ fn export_a_dump(
             let (_, t) = ret?;
             let status = t.status;
             let content_file = t.content_uuid();
+
             let mut dump_content_file = dump_tasks.push_task(&t.into())?;
 
             // 3.1. Dump the `content_file` associated with the task if there is one and the task is not finished yet.

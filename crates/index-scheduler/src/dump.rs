@@ -4,7 +4,6 @@ use std::io;
 use dump::{KindDump, TaskDump, UpdateFile};
 use meilisearch_types::heed::RwTxn;
 use meilisearch_types::milli;
-use meilisearch_types::milli::documents::DocumentsBatchBuilder;
 use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
 use roaring::RoaringBitmap;
 use uuid::Uuid;
@@ -62,7 +61,7 @@ impl<'a> Dump<'a> {
             // in case we try to open it later.
             _ if task.status != Status::Enqueued => Some(Uuid::nil()),
             None if task.status == Status::Enqueued && task_has_no_docs => {
-                let (uuid, mut file) = self.index_scheduler.queue.create_update_file(false)?;
+                let (uuid, file) = self.index_scheduler.queue.create_update_file(false)?;
                 file.persist()?;
 
                 Some(uuid)
