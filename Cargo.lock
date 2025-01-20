@@ -3776,6 +3776,7 @@ dependencies = [
  "candle-transformers",
  "charabia",
  "concat-arrays",
+ "convert_case 0.6.0",
  "crossbeam-channel",
  "csv",
  "deserr",

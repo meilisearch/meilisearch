@@ -89,19 +89,24 @@ impl<Name: NamedStep> Step for AtomicSubStep<Name> {
     }
 }
 
+#[doc(hidden)]
+pub use convert_case as _private_convert_case;
+#[doc(hidden)]
+pub use enum_iterator as _private_enum_iterator;
+
 #[macro_export]
 macro_rules! make_enum_progress {
     ($visibility:vis enum $name:ident { $($variant:ident,)+ }) => {
         #[repr(u8)]
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Sequence)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, $crate::progress::_private_enum_iterator::Sequence)]
         #[allow(clippy::enum_variant_names)]
         $visibility enum $name {
             $($variant),+
         }
 
-        impl Step for $name {
-            fn name(&self) -> Cow<'static, str> {
-                use convert_case::Casing;
+        impl $crate::progress::Step for $name {
+            fn name(&self) -> std::borrow::Cow<'static, str> {
+                use $crate::progress::_private_convert_case::Casing;
 
                 match self {
                     $(
@@ -115,6 +120,7 @@ macro_rules! make_enum_progress {
             }
 
             fn total(&self) -> u32 {
+                use $crate::progress::_private_enum_iterator::Sequence;
                 Self::CARDINALITY as u32
             }
         }
