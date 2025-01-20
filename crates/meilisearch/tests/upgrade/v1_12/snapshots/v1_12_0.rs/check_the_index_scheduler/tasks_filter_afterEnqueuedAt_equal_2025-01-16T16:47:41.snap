@@ -1,0 +1,390 @@
+---
+source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
+snapshot_kind: text
+---
+{
+  "results": [
+    {
+      "uid": 21,
+      "batchUid": 20,
+      "indexUid": null,
+      "status": "succeeded",
+      "type": "upgradeDatabase",
+      "canceledBy": null,
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    },
+    {
+      "uid": 20,
+      "batchUid": 19,
+      "indexUid": "mieli",
+      "status": "succeeded",
+      "type": "indexDeletion",
+      "canceledBy": null,
+      "details": {
+        "deletedDocuments": 19546
+      },
+      "error": null,
+      "duration": "PT0.006903297S",
+      "enqueuedAt": "2025-01-20T11:50:52.862223877Z",
+      "startedAt": "2025-01-20T11:50:52.874106134Z",
+      "finishedAt": "2025-01-20T11:50:52.881009431Z"
+    },
+    {
+      "uid": 19,
+      "batchUid": 18,
+      "indexUid": null,
+      "status": "succeeded",
+      "type": "taskCancelation",
+      "canceledBy": null,
+      "details": {
+        "matchedTasks": 1,
+        "canceledTasks": 1,
+        "originalFilter": "?statuses=processing%2Cenqueued"
+      },
+      "error": null,
+      "duration": "PT0.000481257S",
+      "enqueuedAt": "2025-01-20T11:48:04.618121963Z",
+      "startedAt": "2025-01-20T11:48:04.92820416Z",
+      "finishedAt": "2025-01-20T11:48:04.928685417Z"
+    },
+    {
+      "uid": 18,
+      "batchUid": 18,
+      "indexUid": "mieli",
+      "status": "canceled",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": 19,
+      "details": {
+        "receivedDocuments": 19547,
+        "indexedDocuments": 0
+      },
+      "error": null,
+      "duration": "PT0.000481257S",
+      "enqueuedAt": "2025-01-20T11:48:04.596815611Z",
+      "startedAt": "2025-01-20T11:48:04.92820416Z",
+      "finishedAt": "2025-01-20T11:48:04.928685417Z"
+    },
+    {
+      "uid": 17,
+      "batchUid": 17,
+      "indexUid": null,
+      "status": "succeeded",
+      "type": "taskCancelation",
+      "canceledBy": null,
+      "details": {
+        "matchedTasks": 0,
+        "canceledTasks": 0,
+        "originalFilter": "?statuses=processing%2Cenqueued"
+      },
+      "error": null,
+      "duration": "PT0.000407005S",
+      "enqueuedAt": "2025-01-20T11:47:53.498618093Z",
+      "startedAt": "2025-01-20T11:47:53.509403957Z",
+      "finishedAt": "2025-01-20T11:47:53.509810962Z"
+    },
+    {
+      "uid": 16,
+      "batchUid": 16,
+      "indexUid": null,
+      "status": "succeeded",
+      "type": "taskCancelation",
+      "canceledBy": null,
+      "details": {
+        "matchedTasks": 0,
+        "canceledTasks": 0,
+        "originalFilter": "?statuses=processing%2Cenqueued"
+      },
+      "error": null,
+      "duration": "PT0.000403716S",
+      "enqueuedAt": "2025-01-20T11:47:48.426597451Z",
+      "startedAt": "2025-01-20T11:47:48.430653005Z",
+      "finishedAt": "2025-01-20T11:47:48.431056721Z"
+    },
+    {
+      "uid": 15,
+      "batchUid": 15,
+      "indexUid": null,
+      "status": "succeeded",
+      "type": "taskCancelation",
+      "canceledBy": null,
+      "details": {
+        "matchedTasks": 0,
+        "canceledTasks": 0,
+        "originalFilter": "?statuses=processing"
+      },
+      "error": null,
+      "duration": "PT0.000417016S",
+      "enqueuedAt": "2025-01-20T11:47:42.414346511Z",
+      "startedAt": "2025-01-20T11:47:42.429678617Z",
+      "finishedAt": "2025-01-20T11:47:42.430095633Z"
+    },
+    {
+      "uid": 14,
+      "batchUid": 14,
+      "indexUid": "mieli",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 19547,
+        "indexedDocuments": 19546
+      },
+      "error": null,
+      "duration": "PT12.086284842S",
+      "enqueuedAt": "2025-01-20T11:47:03.079292487Z",
+      "startedAt": "2025-01-20T11:47:03.092181576Z",
+      "finishedAt": "2025-01-20T11:47:15.178466418Z"
+    },
+    {
+      "uid": 13,
+      "batchUid": 13,
+      "indexUid": "kefir",
+      "status": "succeeded",
+      "type": "settingsUpdate",
+      "canceledBy": null,
+      "details": {
+        "localizedAttributes": [
+          {
+            "attributePatterns": [
+              "description"
+            ],
+            "locales": [
+              "fr"
+            ]
+          }
+        ]
+      },
+      "error": null,
+      "duration": "PT0.011506614S",
+      "enqueuedAt": "2025-01-16T17:18:43.280901282Z",
+      "startedAt": "2025-01-16T17:18:43.29334923Z",
+      "finishedAt": "2025-01-16T17:18:43.304855844Z"
+    },
+    {
+      "uid": 12,
+      "batchUid": 12,
+      "indexUid": "kefir",
+      "status": "succeeded",
+      "type": "settingsUpdate",
+      "canceledBy": null,
+      "details": {
+        "faceting": {
+          "sortFacetValuesBy": {
+            "*": "alpha",
+            "age": "count"
+          }
+        }
+      },
+      "error": null,
+      "duration": "PT0.007640163S",
+      "enqueuedAt": "2025-01-16T17:02:52.527382964Z",
+      "startedAt": "2025-01-16T17:02:52.539749853Z",
+      "finishedAt": "2025-01-16T17:02:52.547390016Z"
+    },
+    {
+      "uid": 11,
+      "batchUid": 11,
+      "indexUid": "kefir",
+      "status": "succeeded",
+      "type": "settingsUpdate",
+      "canceledBy": null,
+      "details": {
+        "searchCutoffMs": 8000
+      },
+      "error": null,
+      "duration": "PT0.007307840S",
+      "enqueuedAt": "2025-01-16T17:01:14.100316617Z",
+      "startedAt": "2025-01-16T17:01:14.112756687Z",
+      "finishedAt": "2025-01-16T17:01:14.120064527Z"
+    },
+    {
+      "uid": 10,
+      "batchUid": 10,
+      "indexUid": "kefir",
+      "status": "succeeded",
+      "type": "settingsUpdate",
+      "canceledBy": null,
+      "details": {
+        "faceting": {
+          "maxValuesPerFacet": 99
+        },
+        "pagination": {
+          "maxTotalHits": 15
+        }
+      },
+      "error": null,
+      "duration": "PT0.007391353S",
+      "enqueuedAt": "2025-01-16T17:00:29.188815062Z",
+      "startedAt": "2025-01-16T17:00:29.201180268Z",
+      "finishedAt": "2025-01-16T17:00:29.208571621Z"
+    },
+    {
+      "uid": 9,
+      "batchUid": 9,
+      "indexUid": "kefir",
+      "status": "succeeded",
+      "type": "settingsUpdate",
+      "canceledBy": null,
+      "details": {
+        "faceting": {
+          "maxValuesPerFacet": 100
+        },
+        "pagination": {
+          "maxTotalHits": 1000
+        }
+      },
+      "error": null,
+      "duration": "PT0.007445825S",
+      "enqueuedAt": "2025-01-16T17:00:15.759501709Z",
+      "startedAt": "2025-01-16T17:00:15.77629445Z",
+      "finishedAt": "2025-01-16T17:00:15.783740275Z"
+    },
+    {
+      "uid": 8,
+      "batchUid": 8,
+      "indexUid": "kefir",
+      "status": "succeeded",
+      "type": "settingsUpdate",
+      "canceledBy": null,
+      "details": {
+        "typoTolerance": {
+          "minWordSizeForTypos": {
+            "oneTypo": 4
+          },
+          "disableOnWords": [
+            "kefir"
+          ],
+          "disableOnAttributes": [
+            "surname"
+          ]
+        }
+      },
+      "error": null,
+      "duration": "PT0.012020083S",
+      "enqueuedAt": "2025-01-16T16:59:42.727292501Z",
+      "startedAt": "2025-01-16T16:59:42.744086671Z",
+      "finishedAt": "2025-01-16T16:59:42.756106754Z"
+    },
+    {
+      "uid": 7,
+      "batchUid": 7,
+      "indexUid": "kefir",
+      "status": "succeeded",
+      "type": "settingsUpdate",
+      "canceledBy": null,
+      "details": {
+        "typoTolerance": {
+          "minWordSizeForTypos": {
+            "oneTypo": 4
+          }
+        }
+      },
+      "error": null,
+      "duration": "PT0.007440092S",
+      "enqueuedAt": "2025-01-16T16:58:41.203145044Z",
+      "startedAt": "2025-01-16T16:58:41.2155771Z",
+      "finishedAt": "2025-01-16T16:58:41.223017192Z"
+    },
+    {
+      "uid": 6,
+      "batchUid": 6,
+      "indexUid": "kefir",
+      "status": "succeeded",
+      "type": "settingsUpdate",
+      "canceledBy": null,
+      "details": {
+        "synonyms": {
+          "boubou": [
+            "kefir"
+          ]
+        }
+      },
+      "error": null,
+      "duration": "PT0.007565161S",
+      "enqueuedAt": "2025-01-16T16:54:51.927866243Z",
+      "startedAt": "2025-01-16T16:54:51.940332781Z",
+      "finishedAt": "2025-01-16T16:54:51.947897942Z"
+    },
+    {
+      "uid": 5,
+      "batchUid": 5,
+      "indexUid": "kefir",
+      "status": "succeeded",
+      "type": "settingsUpdate",
+      "canceledBy": null,
+      "details": {
+        "stopWords": [
+          "le",
+          "un"
+        ]
+      },
+      "error": null,
+      "duration": "PT0.016307263S",
+      "enqueuedAt": "2025-01-16T16:53:19.900781991Z",
+      "startedAt": "2025-01-16T16:53:19.913351957Z",
+      "finishedAt": "2025-01-16T16:53:19.92965922Z"
+    },
+    {
+      "uid": 4,
+      "batchUid": 4,
+      "indexUid": "kefir",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": null,
+      "duration": "PT0.087655941S",
+      "enqueuedAt": "2025-01-16T16:52:32.618659861Z",
+      "startedAt": "2025-01-16T16:52:32.631145531Z",
+      "finishedAt": "2025-01-16T16:52:32.718801472Z"
+    },
+    {
+      "uid": 3,
+      "batchUid": 3,
+      "indexUid": "kefir",
+      "status": "succeeded",
+      "type": "settingsUpdate",
+      "canceledBy": null,
+      "details": {
+        "sortableAttributes": [
+          "age"
+        ]
+      },
+      "error": null,
+      "duration": "PT0.007593573S",
+      "enqueuedAt": "2025-01-16T16:47:53.665616298Z",
+      "startedAt": "2025-01-16T16:47:53.677901409Z",
+      "finishedAt": "2025-01-16T16:47:53.685494982Z"
+    },
+    {
+      "uid": 2,
+      "batchUid": 2,
+      "indexUid": "kefir",
+      "status": "succeeded",
+      "type": "settingsUpdate",
+      "canceledBy": null,
+      "details": {
+        "filterableAttributes": [
+          "age",
+          "surname"
+        ]
+      },
+      "error": null,
+      "duration": "PT0.017769760S",
+      "enqueuedAt": "2025-01-16T16:47:41.194872913Z",
+      "startedAt": "2025-01-16T16:47:41.211587682Z",
+      "finishedAt": "2025-01-16T16:47:41.229357442Z"
+    }
+  ],
+  "total": 20,
+  "limit": 20,
+  "from": 21,
+  "next": null
+}

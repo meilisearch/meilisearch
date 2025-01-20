@@ -1,0 +1,29 @@
+---
+source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
+snapshot_kind: text
+---
+{
+  "results": [
+    {
+      "uid": 18,
+      "batchUid": 18,
+      "indexUid": "mieli",
+      "status": "canceled",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": 19,
+      "details": {
+        "receivedDocuments": 19547,
+        "indexedDocuments": 0
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+  ],
+  "total": 1,
+  "limit": 20,
+  "from": 18,
+  "next": null
+}

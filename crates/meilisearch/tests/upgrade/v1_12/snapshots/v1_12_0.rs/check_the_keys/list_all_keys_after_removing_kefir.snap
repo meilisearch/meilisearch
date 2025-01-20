@@ -1,0 +1,26 @@
+---
+source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
+snapshot_kind: text
+---
+{
+  "results": [
+    {
+      "name": "kefir",
+      "description": "the patou",
+      "key": "4d9376547ed779a05dde416148e7e98bd47530e28c500be674c9e60b2accb814",
+      "uid": "dc699ff0-a053-4956-a46a-912e51b3316b",
+      "actions": [
+        "search"
+      ],
+      "indexes": [
+        "*"
+      ],
+      "expiresAt": null,
+      "createdAt": "2025-01-16T14:24:46.264041777Z",
+      "updatedAt": "[date]"
+    }
+  ],
+  "offset": 0,
+  "limit": 20,
+  "total": 1
+}

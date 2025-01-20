@@ -547,6 +547,8 @@ impl FromStr for Kind {
             Ok(Kind::DumpCreation)
         } else if kind.eq_ignore_ascii_case("snapshotCreation") {
             Ok(Kind::SnapshotCreation)
+        } else if kind.eq_ignore_ascii_case("upgradeDatabase") {
+            Ok(Kind::UpgradeDatabase)
         } else {
             Err(ParseTaskKindError(kind.to_owned()))
         }
@@ -704,7 +706,9 @@ pub fn serialize_duration<S: Serializer>(
 
 #[cfg(test)]
 mod tests {
-    use super::Details;
+    use std::str::FromStr;
+
+    use super::{Details, Kind};
     use crate::heed::types::SerdeJson;
     use crate::heed::{BytesDecode, BytesEncode};
 
@@ -719,5 +723,14 @@ mod tests {
         let deserialised = SerdeJson::<Details>::bytes_decode(&serialised).unwrap();
         meili_snap::snapshot!(format!("{:?}", details), @r###"TaskDeletion { matched_tasks: 1, deleted_tasks: None, original_filter: "hello" }"###);
         meili_snap::snapshot!(format!("{:?}", deserialised), @r###"TaskDeletion { matched_tasks: 1, deleted_tasks: None, original_filter: "hello" }"###);
+    }
+
+    #[test]
+    fn all_kind_can_be_from_str() {
+        for kind in enum_iterator::all::<Kind>() {
+            let s = kind.to_string();
+            let k = Kind::from_str(&s).map_err(|e| format!("Could not from_str {s}: {e}")).unwrap();
+            assert_eq!(kind, k, "{kind}.to_string() returned {s} which was parsed as {k}");
+        }
     }
 }

@@ -20,7 +20,7 @@ pub fn upgrade_task_queue(tasks_path: &Path, from: (u32, u32, u32)) -> anyhow::R
         [(v1_12_to_current as fn(&Path) -> anyhow::Result<()>, "Upgrading from v1.12 to v1.13")];
 
     let start = match from {
-        (1, 12, patch) if patch < current_patch => 0,
+        (1, 12, _) => 0,
         (major, minor, patch) => {
             if major > current_major
                 || (major == current_major && minor > current_minor)
@@ -29,10 +29,7 @@ pub fn upgrade_task_queue(tasks_path: &Path, from: (u32, u32, u32)) -> anyhow::R
                 bail!(
                 "Database version {major}.{minor}.{patch} is higher than the binary version {current_major}.{current_minor}.{current_patch}. Downgrade is not supported",
                 );
-            } else if major < current_major
-                || (major == current_major && minor < current_minor)
-                || (major == current_major && minor == current_minor && patch < current_patch)
-            {
+            } else if major < 1 || (major == current_major && minor < 12) {
                 bail!(
                 "Database version {major}.{minor}.{patch} is too old for the experimental dumpless upgrade feature. Please generate a dump using the v{major}.{minor}.{patch} and imports it in the v{current_major}.{current_minor}.{current_patch}",
             );

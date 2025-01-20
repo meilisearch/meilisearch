@@ -8,8 +8,10 @@ pub fn upgrade(index: &Index, progress: Progress) -> Result<()> {
         [(v1_12_to_v1_13 as fn(&Index, Progress) -> Result<()>, "Upgrading from v1.12 to v1.13")];
 
     let start = match from {
-        // If there was no version it means we're coming from the base version specified by the index-scheduler
+        // If there was no version it means we're coming from the v1.12
         None | Some((1, 12, _)) => 0,
+        // We must handle the current version in the match because in case of a failure some index may have been upgraded but not other.
+        Some((1, 13, _)) => return Ok(()),
         Some((major, minor, patch)) => {
             return Err(InternalError::CannotUpgradeToVersion(major, minor, patch).into())
         }

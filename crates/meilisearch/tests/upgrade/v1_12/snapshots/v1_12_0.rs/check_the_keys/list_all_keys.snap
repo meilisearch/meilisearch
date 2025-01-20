@@ -1,0 +1,42 @@
+---
+source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
+snapshot_kind: text
+---
+{
+  "results": [
+    {
+      "name": "Kefir",
+      "description": "My little kefirino key",
+      "key": "760c6345918b5ab1d251c1a3e8f9666547628a710d91f6b1d558ba944ef15746",
+      "uid": "9a77a636-e4e2-4f1a-93ac-978c368fd596",
+      "actions": [
+        "stats.get",
+        "documents.*"
+      ],
+      "indexes": [
+        "kefir"
+      ],
+      "expiresAt": null,
+      "createdAt": "2025-01-16T14:43:20.863318893Z",
+      "updatedAt": "[date]"
+    },
+    {
+      "name": "Default Search API Key",
+      "description": "Use it to search from the frontend",
+      "key": "4d9376547ed779a05dde416148e7e98bd47530e28c500be674c9e60b2accb814",
+      "uid": "dc699ff0-a053-4956-a46a-912e51b3316b",
+      "actions": [
+        "search"
+      ],
+      "indexes": [
+        "*"
+      ],
+      "expiresAt": null,
+      "createdAt": "2025-01-16T14:24:46.264041777Z",
+      "updatedAt": "[date]"
+    }
+  ],
+  "offset": 0,
+  "limit": 20,
+  "total": 2
+}
