@@ -401,7 +401,7 @@ pub struct Opt {
     #[serde(default)]
     pub experimental_logs_mode: LogMode,
 
-    /// Experimental dumpless upgrade. For more information, see: <https://github.com/orgs/meilisearch/discussions/723>
+    /// Experimental dumpless upgrade. For more information, see: <https://github.com/orgs/meilisearch/discussions/804>
     ///
     /// When set, Meilisearch will auto-update its database without using a dump.
     #[clap(long, env = MEILI_EXPERIMENTAL_DUMPLESS_UPGRADE, default_value_t)]
