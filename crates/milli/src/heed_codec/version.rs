@@ -1,5 +1,5 @@
-use std::mem::size_of;
-use std::{borrow::Cow, mem::size_of_val};
+use std::borrow::Cow;
+use std::mem::{size_of, size_of_val};
 
 use byteorder::{BigEndian, ByteOrder};
 use heed::{BoxedError, BytesDecode, BytesEncode};

@@ -6,11 +6,9 @@ use manifest_dir_macros::exist_relative_path;
 use meili_snap::{json_string, snapshot};
 use meilisearch::Opt;
 
-use crate::{
-    common::{default_settings, Server, Value},
-    json,
-    upgrade::copy_dir_all,
-};
+use crate::common::{default_settings, Server, Value};
+use crate::json;
+use crate::upgrade::copy_dir_all;
 
 #[actix_rt::test]
 async fn import_v1_12_0() {

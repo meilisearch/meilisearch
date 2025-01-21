@@ -1,9 +1,8 @@
-use meilisearch_types::{
-    milli,
-    milli::progress::{Progress, VariableNameStep},
-};
+use meilisearch_types::milli;
+use meilisearch_types::milli::progress::{Progress, VariableNameStep};
 
-use crate::{processing::UpgradeDatabaseProgress, Error, IndexScheduler, Result};
+use crate::processing::UpgradeDatabaseProgress;
+use crate::{Error, IndexScheduler, Result};
 
 impl IndexScheduler {
     pub(super) fn process_upgrade(&self, progress: Progress) -> Result<()> {

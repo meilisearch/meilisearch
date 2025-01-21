@@ -1,12 +1,12 @@
 mod v1_12;
 
+use std::path::Path;
+use std::{fs, io};
+
 use meili_snap::snapshot;
 use meilisearch::Opt;
 
 use crate::common::{default_settings, Server};
-
-use std::path::Path;
-use std::{fs, io};
 
 fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> io::Result<()> {
     fs::create_dir_all(&dst)?;

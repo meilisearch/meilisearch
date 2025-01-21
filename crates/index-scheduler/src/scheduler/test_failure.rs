@@ -10,9 +10,8 @@ use meilisearch_types::tasks::KindWithContent;
 use roaring::RoaringBitmap;
 
 use crate::insta_snapshot::snapshot_index_scheduler;
-use crate::test_utils::Breakpoint;
 use crate::test_utils::Breakpoint::*;
-use crate::test_utils::{index_creation_task, read_json, FailureLocation};
+use crate::test_utils::{index_creation_task, read_json, Breakpoint, FailureLocation};
 use crate::IndexScheduler;
 
 #[test]

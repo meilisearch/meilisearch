@@ -1,8 +1,7 @@
 use heed::RwTxn;
 
-use crate::{make_enum_progress, Result};
-
-use crate::{progress::Progress, Index};
+use crate::progress::Progress;
+use crate::{make_enum_progress, Index, Result};
 
 // The field distribution was not computed correctly in the v1.12 until the v1.12.3
 pub(super) fn v1_12_to_v1_12_3(

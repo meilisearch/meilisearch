@@ -1,11 +1,9 @@
 use std::path::Path;
 
 use anyhow::bail;
-use meilisearch_types::{
-    heed,
-    tasks::{KindWithContent, Status, Task},
-    versioning::{VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH},
-};
+use meilisearch_types::heed;
+use meilisearch_types::tasks::{KindWithContent, Status, Task};
+use meilisearch_types::versioning::{VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH};
 use time::OffsetDateTime;
 use tracing::info;
 
