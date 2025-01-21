@@ -52,25 +52,19 @@ async fn no_index_return_empty_list() {
 
 #[actix_rt::test]
 async fn list_multiple_indexes() {
-    let server = Server::new_shared();
-    let index1 = server.unique_index();
-    let index2 = server.unique_index();
+    let server = Server::new().await;
+    server.index("test").create(None).await;
+    let (task, _status_code) = server.index("test1").create(Some("key")).await;
 
-    let (_task1, _) = index1.create(None).await;
-    let (task2, _) = index2.create(Some("key")).await;
-
-    index1.wait_task(task2.uid()).await.succeeded();
+    server.index("test").wait_task(task.uid()).await.succeeded();
 
     let (response, code) = server.list_indexes(None, None).await;
-    dbg!(response.clone());
     assert_eq!(code, 200);
     assert!(response["results"].is_array());
     let arr = response["results"].as_array().unwrap();
-    assert!(arr.len() >= 2);
-    assert!(arr
-        .iter()
-        .any(|entry| entry["uid"] == index1.uid && entry["primaryKey"] == Value::Null));
-    assert!(arr.iter().any(|entry| entry["uid"] == index2.uid && entry["primaryKey"] == "key"));
+    assert_eq!(arr.len(), 2);
+    assert!(arr.iter().any(|entry| entry["uid"] == "test" && entry["primaryKey"] == Value::Null));
+    assert!(arr.iter().any(|entry| entry["uid"] == "test1" && entry["primaryKey"] == "key"));
 }
 
 #[actix_rt::test]
