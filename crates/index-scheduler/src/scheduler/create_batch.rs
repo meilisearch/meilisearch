@@ -436,10 +436,15 @@ impl IndexScheduler {
         let failed = &self.queue.tasks.get_status(rtxn, Status::Failed)?;
 
         // 0. The priority over everything is to upgrade the instance
-        let upgrade = self.queue.tasks.get_kind(rtxn, Kind::UpgradeDatabase)? & (enqueued | failed);
         // There shouldn't be multiple upgrade tasks but just in case we're going to batch all of them at the same time
+        let upgrade = self.queue.tasks.get_kind(rtxn, Kind::UpgradeDatabase)? & (enqueued | failed);
         if !upgrade.is_empty() {
             let mut tasks = self.queue.tasks.get_existing_tasks(rtxn, upgrade)?;
+            // In the case of an upgrade database batch, we want to find back the original batch that tried processing it
+            // and re-use its id
+            if let Some(batch_uid) = tasks.last().unwrap().batch_uid {
+                current_batch.uid = batch_uid;
+            }
             current_batch.processing(&mut tasks);
             return Ok(Some((Batch::UpgradeDatabase { tasks }, current_batch)));
         }
