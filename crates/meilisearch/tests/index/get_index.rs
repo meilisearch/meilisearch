@@ -180,7 +180,7 @@ async fn get_and_paginate_indexes() {
 async fn get_invalid_index_uid() {
     let server = Server::new_shared();
     let (response, code) =
-        server.create_index_fail(json!({ "uid": "this is not a valid index name" }).into()).await;
+        server.create_index_fail(json!({ "uid": "this is not a valid index name" })).await;
 
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
