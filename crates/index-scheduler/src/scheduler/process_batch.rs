@@ -329,6 +329,8 @@ impl IndexScheduler {
 
                 for task in tasks.iter_mut() {
                     task.status = Status::Succeeded;
+                    // Since this task can be retried we must reset its error status
+                    task.error = None;
                 }
 
                 Ok(tasks)

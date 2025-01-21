@@ -9,6 +9,9 @@ impl IndexScheduler {
     pub(super) fn process_upgrade(&self, progress: Progress) -> Result<()> {
         progress.update_progress(UpgradeDatabaseProgress::EnsuringCorrectnessOfTheSwap);
 
+        #[cfg(test)]
+        self.maybe_fail(crate::test_utils::FailureLocation::ProcessUpgrade)?;
+
         enum UpgradeIndex {}
         let indexes = self.index_names()?;
 
@@ -20,9 +23,9 @@ impl IndexScheduler {
             ));
             let index = self.index(uid)?;
             let mut wtxn = index.write_txn()?;
-            let regenerate = milli::update::upgrade::upgrade(&mut wtxn, &index, progress.clone())
+            let regen_stats = milli::update::upgrade::upgrade(&mut wtxn, &index, progress.clone())
                 .map_err(|e| Error::from_milli(e, Some(uid.to_string())))?;
-            if regenerate {
+            if regen_stats {
                 let stats = crate::index_mapper::IndexStats::new(&index, &wtxn)
                     .map_err(|e| Error::from_milli(e, Some(uid.to_string())))?;
                 // Release wtxn as soon as possible because it stops us from registering tasks
