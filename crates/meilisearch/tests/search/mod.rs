@@ -1524,3 +1524,57 @@ async fn change_attributes_settings() {
         )
         .await;
 }
+
+/// Modifying facets with different casing should work correctly
+#[actix_rt::test]
+async fn change_facet_casing() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (response, code) = index
+        .update_settings(json!({
+            "filterableAttributes": ["dog"],
+        }))
+        .await;
+    assert_eq!("202", code.as_str(), "{:?}", response);
+    index.wait_task(response.uid()).await;
+
+    let (response, _code) = index
+        .add_documents(
+            json!([
+                {
+                    "id": 1,
+                    "dog": "Bouvier Bernois"
+                }
+            ]),
+            None,
+        )
+        .await;
+    index.wait_task(response.uid()).await;
+
+    let (response, _code) = index
+        .add_documents(
+            json!([
+                {
+                    "id": 1,
+                    "dog": "bouvier bernois"
+                }
+            ]),
+            None,
+        )
+        .await;
+    index.wait_task(response.uid()).await;
+
+    index
+        .search(json!({ "facets": ["dog"] }), |response, code| {
+            meili_snap::snapshot!(code, @"200 OK");
+            meili_snap::snapshot!(meili_snap::json_string!(response["facetDistribution"]), @r###"
+            {
+              "dog": {
+                "bouvier bernois": 1
+              }
+            }
+            "###);
+        })
+        .await;
+}
