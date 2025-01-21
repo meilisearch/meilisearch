@@ -32,11 +32,17 @@ use milli::{
 use regex::Regex;
 use serde::Serialize;
 use serde_json::{json, Value};
+#[cfg(test)]
+mod mod_test;
+use utoipa::ToSchema;
 
 use crate::error::MeilisearchHttpError;
 
 mod federated;
-pub use federated::{perform_federated_search, FederatedSearch, Federation, FederationOptions};
+pub use federated::{
+    perform_federated_search, FederatedSearch, FederatedSearchResult, Federation,
+    FederationOptions, MergeFacets,
+};
 
 mod ranking_rules;
 
@@ -50,18 +56,20 @@ pub const DEFAULT_HIGHLIGHT_PRE_TAG: fn() -> String = || "<em>".to_string();
 pub const DEFAULT_HIGHLIGHT_POST_TAG: fn() -> String = || "</em>".to_string();
 pub const DEFAULT_SEMANTIC_RATIO: fn() -> SemanticRatio = || SemanticRatio(0.5);
 
-#[derive(Clone, Default, PartialEq, Deserr)]
+#[derive(Clone, Default, PartialEq, Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct SearchQuery {
     #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
     pub q: Option<String>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchVector>)]
     pub vector: Option<Vec<f32>>,
-    #[deserr(default, error = DeserrJsonError<InvalidHybridQuery>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchHybridQuery>)]
     pub hybrid: Option<HybridQuery>,
     #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSearchOffset>)]
+    #[schema(default = DEFAULT_SEARCH_OFFSET)]
     pub offset: usize,
     #[deserr(default = DEFAULT_SEARCH_LIMIT(), error = DeserrJsonError<InvalidSearchLimit>)]
+    #[schema(default = DEFAULT_SEARCH_LIMIT)]
     pub limit: usize,
     #[deserr(default, error = DeserrJsonError<InvalidSearchPage>)]
     pub page: Option<usize>,
@@ -73,15 +81,16 @@ pub struct SearchQuery {
     pub retrieve_vectors: bool,
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToCrop>)]
     pub attributes_to_crop: Option<Vec<String>>,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchCropLength>, default = DEFAULT_CROP_LENGTH())]
+    #[deserr(error = DeserrJsonError<InvalidSearchCropLength>, default = DEFAULT_CROP_LENGTH())]
+    #[schema(default = DEFAULT_CROP_LENGTH)]
     pub crop_length: usize,
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToHighlight>)]
     pub attributes_to_highlight: Option<HashSet<String>>,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchShowMatchesPosition>, default)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchShowMatchesPosition>)]
     pub show_matches_position: bool,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScore>, default)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScore>)]
     pub show_ranking_score: bool,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScoreDetails>, default)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScoreDetails>)]
     pub show_ranking_score_details: bool,
     #[deserr(default, error = DeserrJsonError<InvalidSearchFilter>)]
     pub filter: Option<Value>,
@@ -91,26 +100,28 @@ pub struct SearchQuery {
     pub distinct: Option<String>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchFacets>)]
     pub facets: Option<Vec<String>>,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchHighlightPreTag>, default = DEFAULT_HIGHLIGHT_PRE_TAG())]
+    #[deserr(error = DeserrJsonError<InvalidSearchHighlightPreTag>, default = DEFAULT_HIGHLIGHT_PRE_TAG())]
+    #[schema(default = DEFAULT_HIGHLIGHT_PRE_TAG)]
     pub highlight_pre_tag: String,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchHighlightPostTag>, default = DEFAULT_HIGHLIGHT_POST_TAG())]
+    #[deserr(error = DeserrJsonError<InvalidSearchHighlightPostTag>, default = DEFAULT_HIGHLIGHT_POST_TAG())]
+    #[schema(default = DEFAULT_HIGHLIGHT_POST_TAG)]
     pub highlight_post_tag: String,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchCropMarker>, default = DEFAULT_CROP_MARKER())]
+    #[deserr(error = DeserrJsonError<InvalidSearchCropMarker>, default = DEFAULT_CROP_MARKER())]
+    #[schema(default = DEFAULT_CROP_MARKER)]
     pub crop_marker: String,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchMatchingStrategy>, default)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchMatchingStrategy>)]
     pub matching_strategy: MatchingStrategy,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToSearchOn>, default)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToSearchOn>)]
     pub attributes_to_search_on: Option<Vec<String>>,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchRankingScoreThreshold>, default)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchRankingScoreThreshold>)]
     pub ranking_score_threshold: Option<RankingScoreThreshold>,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchLocales>, default)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchLocales>)]
     pub locales: Option<Vec<Locale>>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Deserr)]
+#[derive(Debug, Clone, Copy, PartialEq, Deserr, ToSchema)]
 #[deserr(try_from(f64) = TryFrom::try_from -> InvalidSearchRankingScoreThreshold)]
 pub struct RankingScoreThreshold(f64);
-
 impl std::convert::TryFrom<f64> for RankingScoreThreshold {
     type Error = InvalidSearchRankingScoreThreshold;
 
@@ -264,12 +275,13 @@ impl fmt::Debug for SearchQuery {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Deserr)]
-#[deserr(error = DeserrJsonError<InvalidHybridQuery>, rename_all = camelCase, deny_unknown_fields)]
+#[derive(Debug, Clone, Default, PartialEq, Deserr, ToSchema)]
+#[deserr(error = DeserrJsonError<InvalidSearchHybridQuery>, rename_all = camelCase, deny_unknown_fields)]
 pub struct HybridQuery {
     #[deserr(default, error = DeserrJsonError<InvalidSearchSemanticRatio>, default)]
+    #[schema(value_type = f32, default)]
     pub semantic_ratio: SemanticRatio,
-    #[deserr(error = DeserrJsonError<InvalidEmbedder>)]
+    #[deserr(error = DeserrJsonError<InvalidSearchEmbedder>)]
     pub embedder: String,
 }
 
@@ -288,8 +300,14 @@ impl SearchKind {
         embedder_name: &str,
         vector_len: Option<usize>,
     ) -> Result<Self, ResponseError> {
-        let (embedder_name, embedder, quantized) =
-            Self::embedder(index_scheduler, index_uid, index, embedder_name, vector_len)?;
+        let (embedder_name, embedder, quantized) = Self::embedder(
+            index_scheduler,
+            index_uid,
+            index,
+            embedder_name,
+            vector_len,
+            Route::Search,
+        )?;
         Ok(Self::SemanticOnly { embedder_name, embedder, quantized })
     }
 
@@ -301,8 +319,14 @@ impl SearchKind {
         semantic_ratio: f32,
         vector_len: Option<usize>,
     ) -> Result<Self, ResponseError> {
-        let (embedder_name, embedder, quantized) =
-            Self::embedder(index_scheduler, index_uid, index, embedder_name, vector_len)?;
+        let (embedder_name, embedder, quantized) = Self::embedder(
+            index_scheduler,
+            index_uid,
+            index,
+            embedder_name,
+            vector_len,
+            Route::Search,
+        )?;
         Ok(Self::Hybrid { embedder_name, embedder, quantized, semantic_ratio })
     }
 
@@ -312,13 +336,21 @@ impl SearchKind {
         index: &Index,
         embedder_name: &str,
         vector_len: Option<usize>,
+        route: Route,
     ) -> Result<(String, Arc<Embedder>, bool), ResponseError> {
         let embedder_configs = index.embedding_configs(&index.read_txn()?)?;
         let embedders = index_scheduler.embedders(index_uid, embedder_configs)?;
 
         let (embedder, _, quantized) = embedders
             .get(embedder_name)
-            .ok_or(milli::UserError::InvalidEmbedder(embedder_name.to_owned()))
+            .ok_or(match route {
+                Route::Search | Route::MultiSearch => {
+                    milli::UserError::InvalidSearchEmbedder(embedder_name.to_owned())
+                }
+                Route::Similar => {
+                    milli::UserError::InvalidSimilarEmbedder(embedder_name.to_owned())
+                }
+            })
             .map_err(milli::Error::from)?;
 
         if let Some(vector_len) = vector_len {
@@ -379,8 +411,9 @@ impl SearchQuery {
 // This struct contains the fields of `SearchQuery` inline.
 // This is because neither deserr nor serde support `flatten` when using `deny_unknown_fields.
 // The `From<SearchQueryWithIndex>` implementation ensures both structs remain up to date.
-#[derive(Debug, Clone, PartialEq, Deserr)]
+#[derive(Debug, Clone, PartialEq, Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
+#[schema(rename_all = "camelCase")]
 pub struct SearchQueryWithIndex {
     #[deserr(error = DeserrJsonError<InvalidIndexUid>, missing_field_error = DeserrJsonError::missing_index_uid)]
     pub index_uid: IndexUid,
@@ -388,7 +421,7 @@ pub struct SearchQueryWithIndex {
     pub q: Option<String>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
     pub vector: Option<Vec<f32>>,
-    #[deserr(default, error = DeserrJsonError<InvalidHybridQuery>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchHybridQuery>)]
     pub hybrid: Option<HybridQuery>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchOffset>)]
     pub offset: Option<usize>,
@@ -528,10 +561,11 @@ impl SearchQueryWithIndex {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Deserr)]
+#[derive(Debug, Clone, PartialEq, Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct SimilarQuery {
     #[deserr(error = DeserrJsonError<InvalidSimilarId>)]
+    #[schema(value_type = String)]
     pub id: ExternalDocumentId,
     #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSimilarOffset>)]
     pub offset: usize,
@@ -539,7 +573,7 @@ pub struct SimilarQuery {
     pub limit: usize,
     #[deserr(default, error = DeserrJsonError<InvalidSimilarFilter>)]
     pub filter: Option<Value>,
-    #[deserr(error = DeserrJsonError<InvalidEmbedder>)]
+    #[deserr(error = DeserrJsonError<InvalidSimilarEmbedder>)]
     pub embedder: String,
     #[deserr(default, error = DeserrJsonError<InvalidSimilarAttributesToRetrieve>)]
     pub attributes_to_retrieve: Option<BTreeSet<String>>,
@@ -550,6 +584,7 @@ pub struct SimilarQuery {
     #[deserr(default, error = DeserrJsonError<InvalidSimilarShowRankingScoreDetails>, default)]
     pub show_ranking_score_details: bool,
     #[deserr(default, error = DeserrJsonError<InvalidSimilarRankingScoreThreshold>, default)]
+    #[schema(value_type = f64)]
     pub ranking_score_threshold: Option<RankingScoreThresholdSimilar>,
 }
 
@@ -585,7 +620,7 @@ impl TryFrom<Value> for ExternalDocumentId {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Deserr)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Deserr, ToSchema)]
 #[deserr(rename_all = camelCase)]
 pub enum MatchingStrategy {
     /// Remove query words from last to first
@@ -632,11 +667,13 @@ impl From<FacetValuesSort> for OrderBy {
     }
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, PartialEq, ToSchema)]
 pub struct SearchHit {
     #[serde(flatten)]
+    #[schema(additional_properties, inline, value_type = HashMap<String, Value>)]
     pub document: Document,
     #[serde(rename = "_formatted", skip_serializing_if = "Document::is_empty")]
+    #[schema(additional_properties, value_type = HashMap<String, Value>)]
     pub formatted: Document,
     #[serde(rename = "_matchesPosition", skip_serializing_if = "Option::is_none")]
     pub matches_position: Option<MatchesPosition>,
@@ -646,8 +683,9 @@ pub struct SearchHit {
     pub ranking_score_details: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
-#[derive(Serialize, Clone, PartialEq)]
+#[derive(Serialize, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
 pub struct SearchResult {
     pub hits: Vec<SearchHit>,
     pub query: String,
@@ -655,6 +693,7 @@ pub struct SearchResult {
     #[serde(flatten)]
     pub hits_info: HitsInfo,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = Option<BTreeMap<String, Value>>)]
     pub facet_distribution: Option<BTreeMap<String, IndexMap<String, u64>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub facet_stats: Option<BTreeMap<String, FacetStats>>,
@@ -709,7 +748,7 @@ impl fmt::Debug for SearchResult {
     }
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Debug, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SimilarResult {
     pub hits: Vec<SearchHit>,
@@ -719,24 +758,27 @@ pub struct SimilarResult {
     pub hits_info: HitsInfo,
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Debug, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
 pub struct SearchResultWithIndex {
     pub index_uid: String,
     #[serde(flatten)]
     pub result: SearchResult,
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Debug, Clone, PartialEq, Eq, ToSchema)]
 #[serde(untagged)]
 pub enum HitsInfo {
     #[serde(rename_all = "camelCase")]
+    #[schema(rename_all = "camelCase")]
     Pagination { hits_per_page: usize, page: usize, total_pages: usize, total_hits: usize },
     #[serde(rename_all = "camelCase")]
+    #[schema(rename_all = "camelCase")]
     OffsetLimit { limit: usize, offset: usize, estimated_total_hits: usize },
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Debug, Clone, PartialEq, ToSchema)]
 pub struct FacetStats {
     pub min: f64,
     pub max: f64,
@@ -1019,15 +1061,17 @@ pub fn perform_search(
     Ok(result)
 }
 
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default, Serialize, ToSchema)]
 pub struct ComputedFacets {
+    #[schema(value_type = BTreeMap<String, BTreeMap<String, u64>>)]
     pub distribution: BTreeMap<String, IndexMap<String, u64>>,
     pub stats: BTreeMap<String, FacetStats>,
 }
 
-enum Route {
+pub enum Route {
     Search,
     MultiSearch,
+    Similar,
 }
 
 fn compute_facet_distribution_stats<S: AsRef<str>>(
@@ -1118,10 +1162,6 @@ struct AttributesFormat {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RetrieveVectors {
-    /// Do not touch the `_vectors` field
-    ///
-    /// this is the behavior when the vectorStore feature is disabled
-    Ignore,
     /// Remove the `_vectors` field
     ///
     /// this is the behavior when the vectorStore feature is enabled, and `retrieveVectors` is `false`
@@ -1133,15 +1173,11 @@ pub enum RetrieveVectors {
 }
 
 impl RetrieveVectors {
-    pub fn new(
-        retrieve_vector: bool,
-        features: index_scheduler::RoFeatures,
-    ) -> Result<Self, index_scheduler::Error> {
-        match (retrieve_vector, features.check_vector("Passing `retrieveVectors` as a parameter")) {
-            (true, Ok(())) => Ok(Self::Retrieve),
-            (true, Err(error)) => Err(error),
-            (false, Ok(())) => Ok(Self::Hide),
-            (false, Err(_)) => Ok(Self::Ignore),
+    pub fn new(retrieve_vector: bool) -> Self {
+        if retrieve_vector {
+            Self::Retrieve
+        } else {
+            Self::Hide
         }
     }
 }
@@ -1207,8 +1243,7 @@ impl<'a> HitMaker<'a> {
             .displayed_fields_ids(rtxn)?
             .map(|fields| fields.into_iter().collect::<BTreeSet<_>>());
 
-        let vectors_fid =
-            fields_ids_map.id(milli::vector::parsed_vectors::RESERVED_VECTORS_FIELD_NAME);
+        let vectors_fid = fields_ids_map.id(milli::constants::RESERVED_VECTORS_FIELD_NAME);
 
         let vectors_is_hidden = match (&displayed_ids, vectors_fid) {
             // displayed_ids is a wildcard, so `_vectors` can be displayed regardless of its fid
@@ -1217,8 +1252,7 @@ impl<'a> HitMaker<'a> {
             (Some(_), None) => {
                 // unwrap as otherwise we'd go to the first one
                 let displayed_names = index.displayed_fields(rtxn)?.unwrap();
-                !displayed_names
-                    .contains(&milli::vector::parsed_vectors::RESERVED_VECTORS_FIELD_NAME)
+                !displayed_names.contains(&milli::constants::RESERVED_VECTORS_FIELD_NAME)
             }
             // displayed_ids is a finit list, so hide if `_vectors` is not part of it
             (Some(map), Some(vectors_fid)) => map.contains(&vectors_fid),
@@ -1293,12 +1327,13 @@ impl<'a> HitMaker<'a> {
     }
 
     pub fn make_hit(&self, id: u32, score: &[ScoreDetails]) -> milli::Result<SearchHit> {
-        let (_, obkv) =
-            self.index.iter_documents(self.rtxn, std::iter::once(id))?.next().unwrap()?;
+        let mut buffer = Vec::new();
+        let dict = self.index.document_decompression_dictionary(self.rtxn)?;
+        let compressed = self.index.compressed_document(self.rtxn, id)?.unwrap();
+        let doc = compressed.decompress_with_optional_dictionary(&mut buffer, dict.as_ref())?;
 
         // First generate a document with all the displayed fields
-        let displayed_document = make_document(&self.displayed_ids, &self.fields_ids_map, obkv)?;
-
+        let displayed_document = make_document(&self.displayed_ids, &self.fields_ids_map, doc)?;
         let add_vectors_fid =
             self.vectors_fid.filter(|_fid| self.retrieve_vectors == RetrieveVectors::Retrieve);
 
@@ -1579,7 +1614,7 @@ pub fn perform_similar(
     Ok(result)
 }
 
-fn insert_geo_distance(sorts: &[String], document: &mut Document) {
+pub fn insert_geo_distance(sorts: &[String], document: &mut Document) {
     lazy_static::lazy_static! {
         static ref GEO_REGEX: Regex =
             Regex::new(r"_geoPoint\(\s*([[:digit:].\-]+)\s*,\s*([[:digit:].\-]+)\s*\)").unwrap();
@@ -1921,120 +1956,4 @@ fn parse_filter_array(arr: &[Value]) -> Result<Option<Filter>, MeilisearchHttpEr
     }
 
     Filter::from_array(ands).map_err(|e| MeilisearchHttpError::from_milli(e, None))
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn test_insert_geo_distance() {
-        let value: Document = serde_json::from_str(
-            r#"{
-              "_geo": {
-                "lat": 50.629973371633746,
-                "lng": 3.0569447399419567
-              },
-              "city": "Lille",
-              "id": "1"
-            }"#,
-        )
-        .unwrap();
-
-        let sorters = &["_geoPoint(50.629973371633746,3.0569447399419567):desc".to_string()];
-        let mut document = value.clone();
-        insert_geo_distance(sorters, &mut document);
-        assert_eq!(document.get("_geoDistance"), Some(&json!(0)));
-
-        let sorters = &["_geoPoint(50.629973371633746, 3.0569447399419567):asc".to_string()];
-        let mut document = value.clone();
-        insert_geo_distance(sorters, &mut document);
-        assert_eq!(document.get("_geoDistance"), Some(&json!(0)));
-
-        let sorters =
-            &["_geoPoint(   50.629973371633746   ,  3.0569447399419567   ):desc".to_string()];
-        let mut document = value.clone();
-        insert_geo_distance(sorters, &mut document);
-        assert_eq!(document.get("_geoDistance"), Some(&json!(0)));
-
-        let sorters = &[
-            "prix:asc",
-            "villeneuve:desc",
-            "_geoPoint(50.629973371633746, 3.0569447399419567):asc",
-            "ubu:asc",
-        ]
-        .map(|s| s.to_string());
-        let mut document = value.clone();
-        insert_geo_distance(sorters, &mut document);
-        assert_eq!(document.get("_geoDistance"), Some(&json!(0)));
-
-        // only the first geoPoint is used to compute the distance
-        let sorters = &[
-            "chien:desc",
-            "_geoPoint(50.629973371633746, 3.0569447399419567):asc",
-            "pangolin:desc",
-            "_geoPoint(100.0, -80.0):asc",
-            "chat:asc",
-        ]
-        .map(|s| s.to_string());
-        let mut document = value.clone();
-        insert_geo_distance(sorters, &mut document);
-        assert_eq!(document.get("_geoDistance"), Some(&json!(0)));
-
-        // there was no _geoPoint so nothing is inserted in the document
-        let sorters = &["chien:asc".to_string()];
-        let mut document = value;
-        insert_geo_distance(sorters, &mut document);
-        assert_eq!(document.get("_geoDistance"), None);
-    }
-
-    #[test]
-    fn test_insert_geo_distance_with_coords_as_string() {
-        let value: Document = serde_json::from_str(
-            r#"{
-              "_geo": {
-                "lat": "50",
-                "lng": 3
-              }
-            }"#,
-        )
-        .unwrap();
-
-        let sorters = &["_geoPoint(50,3):desc".to_string()];
-        let mut document = value.clone();
-        insert_geo_distance(sorters, &mut document);
-        assert_eq!(document.get("_geoDistance"), Some(&json!(0)));
-
-        let value: Document = serde_json::from_str(
-            r#"{
-              "_geo": {
-                "lat": "50",
-                "lng": "3"
-              },
-              "id": "1"
-            }"#,
-        )
-        .unwrap();
-
-        let sorters = &["_geoPoint(50,3):desc".to_string()];
-        let mut document = value.clone();
-        insert_geo_distance(sorters, &mut document);
-        assert_eq!(document.get("_geoDistance"), Some(&json!(0)));
-
-        let value: Document = serde_json::from_str(
-            r#"{
-              "_geo": {
-                "lat": 50,
-                "lng": "3"
-              },
-              "id": "1"
-            }"#,
-        )
-        .unwrap();
-
-        let sorters = &["_geoPoint(50,3):desc".to_string()];
-        let mut document = value.clone();
-        insert_geo_distance(sorters, &mut document);
-        assert_eq!(document.get("_geoDistance"), Some(&json!(0)));
-    }
 }

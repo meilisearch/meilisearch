@@ -5,6 +5,7 @@ use std::result::Result as StdResult;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::documents::{
     DocumentIdExtractionError, DocumentsBatchIndex, DocumentsBatchReader,
     EnrichedDocumentsBatchReader, PrimaryKey, DEFAULT_PRIMARY_KEY,
@@ -93,10 +94,10 @@ pub fn enrich_documents_batch<R: Read + Seek>(
 
     // If the settings specifies that a _geo field must be used therefore we must check the
     // validity of it in all the documents of this batch and this is when we return `Some`.
-    let geo_field_id = match documents_batch_index.id("_geo") {
+    let geo_field_id = match documents_batch_index.id(RESERVED_GEO_FIELD_NAME) {
         Some(geo_field_id)
-            if index.sortable_fields(rtxn)?.contains("_geo")
-                || index.filterable_fields(rtxn)?.contains("_geo") =>
+            if index.sortable_fields(rtxn)?.contains(RESERVED_GEO_FIELD_NAME)
+                || index.filterable_fields(rtxn)?.contains(RESERVED_GEO_FIELD_NAME) =>
         {
             Some(geo_field_id)
         }

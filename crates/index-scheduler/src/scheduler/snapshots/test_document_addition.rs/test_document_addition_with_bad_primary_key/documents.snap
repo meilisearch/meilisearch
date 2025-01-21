@@ -1,0 +1,14 @@
+---
+source: crates/index-scheduler/src/scheduler/test_document_addition.rs
+snapshot_kind: text
+---
+[
+  {
+    "id": 2,
+    "doggo": "jean bob"
+  },
+  {
+    "id": 4,
+    "doggo": "jean bob"
+  }
+]

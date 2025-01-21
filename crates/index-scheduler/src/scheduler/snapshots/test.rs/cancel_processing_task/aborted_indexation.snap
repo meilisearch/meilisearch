@@ -1,0 +1,58 @@
+---
+source: crates/index-scheduler/src/scheduler/test.rs
+snapshot_kind: text
+---
+### Autobatching Enabled = true
+### Processing batch Some(0):
+[0,]
+{uid: 0, details: {"receivedDocuments":1,"indexedDocuments":null}, stats: {"totalNbTasks":1,"status":{"processing":1},"types":{"documentAdditionOrUpdate":1},"indexUids":{"catto":1}}, }
+----------------------------------------------------------------------
+### All Tasks:
+0 {uid: 0, status: enqueued, details: { received_documents: 1, indexed_documents: None }, kind: DocumentAdditionOrUpdate { index_uid: "catto", primary_key: None, method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000000, documents_count: 1, allow_index_creation: true }}
+1 {uid: 1, status: enqueued, details: { matched_tasks: 1, canceled_tasks: None, original_filter: "test_query" }, kind: TaskCancelation { query: "test_query", tasks: RoaringBitmap<[0]> }}
+----------------------------------------------------------------------
+### Status:
+enqueued [0,1,]
+----------------------------------------------------------------------
+### Kind:
+"documentAdditionOrUpdate" [0,]
+"taskCancelation" [1,]
+----------------------------------------------------------------------
+### Index Tasks:
+catto [0,]
+----------------------------------------------------------------------
+### Index Mapper:
+catto: { number_of_documents: 0, field_distribution: {} }
+
+----------------------------------------------------------------------
+### Canceled By:
+
+----------------------------------------------------------------------
+### Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+----------------------------------------------------------------------
+### Started At:
+----------------------------------------------------------------------
+### Finished At:
+----------------------------------------------------------------------
+### All Batches:
+----------------------------------------------------------------------
+### Batch to tasks mapping:
+----------------------------------------------------------------------
+### Batches Status:
+----------------------------------------------------------------------
+### Batches Kind:
+----------------------------------------------------------------------
+### Batches Index Tasks:
+----------------------------------------------------------------------
+### Batches Enqueued At:
+----------------------------------------------------------------------
+### Batches Started At:
+----------------------------------------------------------------------
+### Batches Finished At:
+----------------------------------------------------------------------
+### File Store:
+00000000-0000-0000-0000-000000000000
+
+----------------------------------------------------------------------

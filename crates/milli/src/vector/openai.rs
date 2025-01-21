@@ -1,3 +1,4 @@
+use std::fmt;
 use std::time::Instant;
 
 use ordered_float::OrderedFloat;
@@ -168,7 +169,6 @@ fn infer_api_key() -> String {
         .unwrap_or_default()
 }
 
-#[derive(Debug)]
 pub struct Embedder {
     tokenizer: tiktoken_rs::CoreBPE,
     rest_embedder: RestEmbedder,
@@ -300,5 +300,15 @@ impl Embedder {
 
     pub fn distribution(&self) -> Option<DistributionShift> {
         self.options.distribution()
+    }
+}
+
+impl fmt::Debug for Embedder {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Embedder")
+            .field("tokenizer", &"CoreBPE")
+            .field("rest_embedder", &self.rest_embedder)
+            .field("options", &self.options)
+            .finish()
     }
 }

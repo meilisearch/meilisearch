@@ -8,6 +8,7 @@ use meilisearch_types::error::ResponseError;
 use meilisearch_types::keys::actions;
 use serde::Serialize;
 use tracing::debug;
+use utoipa::{OpenApi, ToSchema};
 
 use super::multi_search_analytics::MultiSearchAggregator;
 use crate::analytics::Analytics;
@@ -17,20 +18,127 @@ use crate::extractors::authentication::{AuthenticationError, GuardedData};
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::routes::indexes::search::search_kind;
 use crate::search::{
-    add_search_rules, perform_federated_search, perform_search, FederatedSearch, RetrieveVectors,
-    SearchQueryWithIndex, SearchResultWithIndex,
+    add_search_rules, perform_federated_search, perform_search, FederatedSearch,
+    FederatedSearchResult, RetrieveVectors, SearchQueryWithIndex, SearchResultWithIndex,
 };
 use crate::search_queue::SearchQueue;
+
+#[derive(OpenApi)]
+#[openapi(
+    paths(multi_search_with_post),
+    tags((
+        name = "Multi-search",
+        description = "The `/multi-search` route allows you to perform multiple search queries on one or more indexes by bundling them into a single HTTP request. Multi-search is also known as federated search.",
+        external_docs(url = "https://www.meilisearch.com/docs/reference/api/multi_search"),
+    )),
+)]
+pub struct MultiSearchApi;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::resource("").route(web::post().to(SeqHandler(multi_search_with_post))));
 }
 
-#[derive(Serialize)]
-struct SearchResults {
+#[derive(Serialize, ToSchema)]
+pub struct SearchResults {
     results: Vec<SearchResultWithIndex>,
 }
 
+/// Perform a multi-search
+///
+/// Bundle multiple search queries in a single API request. Use this endpoint to search through multiple indexes at once.
+#[utoipa::path(
+    post,
+    path = "",
+    tag = "Multi-search",
+    security(("Bearer" = ["search", "*"])),
+    responses(
+        (status = OK, description = "Non federated multi-search", body = SearchResults, content_type = "application/json", example = json!(
+            {
+                "results":[
+                    {
+                        "indexUid":"movies",
+                        "hits":[
+                            {
+                                "id":13682,
+                                "title":"Pooh's Heffalump Movie",
+                            },
+                        ],
+                        "query":"pooh",
+                        "processingTimeMs":26,
+                        "limit":1,
+                        "offset":0,
+                        "estimatedTotalHits":22
+                    },
+                    {
+                        "indexUid":"movies",
+                        "hits":[
+                            {
+                                "id":12,
+                                "title":"Finding Nemo",
+                            },
+                        ],
+                        "query":"nemo",
+                        "processingTimeMs":5,
+                        "limit":1,
+                        "offset":0,
+                        "estimatedTotalHits":11
+                    },
+                    {
+                        "indexUid":"movie_ratings",
+                        "hits":[
+                            {
+                                "id":"Us",
+                                "director": "Jordan Peele",
+                            }
+                        ],
+                        "query":"Us",
+                        "processingTimeMs":0,
+                        "limit":1,
+                        "offset":0,
+                        "estimatedTotalHits":1
+                    }
+                ]
+            }
+        )),
+        (status = OK, description = "Federated multi-search", body = FederatedSearchResult, content_type = "application/json", example = json!(
+            {
+                "hits": [
+                    {
+                        "id": 42,
+                        "title": "Batman returns",
+                        "overview": "The overview of batman returns",
+                        "_federation": {
+                            "indexUid": "movies",
+                            "queriesPosition": 0
+                        }
+                    },
+                    {
+                        "comicsId": "batman-killing-joke",
+                        "description": "This comic is really awesome",
+                        "title": "Batman: the killing joke",
+                        "_federation": {
+                            "indexUid": "comics",
+                            "queriesPosition": 1
+                        }
+                    },
+                ],
+                "processingTimeMs": 0,
+                "limit": 20,
+                "offset": 0,
+                "estimatedTotalHits": 2,
+                "semanticHitCount": 0
+            }
+        )),
+        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+    )
+)]
 pub async fn multi_search_with_post(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
     search_queue: Data<SearchQueue>,
@@ -132,11 +240,9 @@ pub async fn multi_search_with_post(
                         index_scheduler.get_ref(),
                         index_uid_str.clone(),
                         &index,
-                        features,
                     )
                     .with_index(query_index)?;
-                    let retrieve_vector = RetrieveVectors::new(query.retrieve_vectors, features)
-                        .with_index(query_index)?;
+                    let retrieve_vector = RetrieveVectors::new(query.retrieve_vectors);
 
                     let search_result = tokio::task::spawn_blocking(move || {
                         perform_search(

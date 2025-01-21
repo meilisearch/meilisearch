@@ -1,4 +1,3 @@
-#![cfg_attr(all(test, fuzzing), feature(no_coverage))]
 #![allow(clippy::type_complexity)]
 
 #[cfg(not(windows))]
@@ -30,6 +29,7 @@ pub mod vector;
 #[cfg(test)]
 #[macro_use]
 pub mod snapshot_tests;
+pub mod constants;
 mod fieldids_weights_map;
 pub mod progress;
 
@@ -48,7 +48,7 @@ pub use search::new::{
 };
 use serde_json::Value;
 pub use thread_pool_no_abort::{PanicCatched, ThreadPoolNoAbort, ThreadPoolNoAbortBuilder};
-pub use {charabia as tokenizer, heed, rhai};
+pub use {charabia as tokenizer, heed, rhai, zstd};
 
 pub use self::asc_desc::{AscDesc, AscDescError, Member, SortError};
 pub use self::criterion::{default_criteria, Criterion, CriterionError};

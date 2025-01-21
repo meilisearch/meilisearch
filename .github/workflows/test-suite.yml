@@ -31,9 +31,9 @@ jobs:
           apt-get update && apt-get install -y curl
           apt-get install build-essential -y
       - name: Setup test with Rust stable
-        uses: dtolnay/rust-toolchain@1.79
+        uses: dtolnay/rust-toolchain@1.81
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.7.5
+        uses: Swatinem/rust-cache@v2.7.7
       - name: Run cargo check without any default features
         uses: actions-rs/cargo@v1
         with:
@@ -55,8 +55,8 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.7.5
-      - uses: dtolnay/rust-toolchain@1.79
+        uses: Swatinem/rust-cache@v2.7.7
+      - uses: dtolnay/rust-toolchain@1.81
       - name: Run cargo check without any default features
         uses: actions-rs/cargo@v1
         with:
@@ -81,7 +81,7 @@ jobs:
         run: |
           apt-get update
           apt-get install --assume-yes build-essential curl
-      - uses: dtolnay/rust-toolchain@1.79
+      - uses: dtolnay/rust-toolchain@1.81
       - name: Run cargo build with almost all features
         run: |
           cargo build --workspace --locked --release --features "$(cargo xtask list-features --exclude-feature cuda)"
@@ -101,7 +101,7 @@ jobs:
         run: |
           apt-get update
           apt-get install --assume-yes build-essential curl
-      - uses: dtolnay/rust-toolchain@1.79
+      - uses: dtolnay/rust-toolchain@1.81
       - name: Run cargo tree without default features and check lindera is not present
         run: |
           if cargo tree -f '{p} {f}' -e normal --no-default-features | grep -qz lindera; then
@@ -125,9 +125,9 @@ jobs:
         run: |
           apt-get update && apt-get install -y curl
           apt-get install build-essential -y
-      - uses: dtolnay/rust-toolchain@1.79
+      - uses: dtolnay/rust-toolchain@1.81
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.7.5
+        uses: Swatinem/rust-cache@v2.7.7
       - name: Run tests in debug
         uses: actions-rs/cargo@v1
         with:
@@ -139,12 +139,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: dtolnay/rust-toolchain@1.79
+      - uses: dtolnay/rust-toolchain@1.81
         with:
           profile: minimal
           components: clippy
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.7.5
+        uses: Swatinem/rust-cache@v2.7.7
       - name: Run cargo clippy
         uses: actions-rs/cargo@v1
         with:
@@ -156,14 +156,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: dtolnay/rust-toolchain@1.79
+      - uses: dtolnay/rust-toolchain@1.81
         with:
           profile: minimal
           toolchain: nightly-2024-07-09
           override: true
           components: rustfmt
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.7.5
+        uses: Swatinem/rust-cache@v2.7.7
       - name: Run cargo fmt
         # Since we never ran the `build.rs` script in the benchmark directory we are missing one auto-generated import file.
         # Since we want to trigger (and fail) this action as fast as possible, instead of building the benchmark crate

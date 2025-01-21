@@ -7,11 +7,11 @@ use crate::common::Server;
 async fn create_and_get_index() {
     let server = Server::new().await;
     let index = server.index("test");
-    let (_, code) = index.create(None).await;
+    let (task, code) = index.create(None).await;
 
     assert_eq!(code, 202);
 
-    index.wait_task(0).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = index.get().await;
 
@@ -55,9 +55,9 @@ async fn no_index_return_empty_list() {
 async fn list_multiple_indexes() {
     let server = Server::new().await;
     server.index("test").create(None).await;
-    server.index("test1").create(Some("key")).await;
+    let (task, _status_code) = server.index("test1").create(Some("key")).await;
 
-    server.index("test").wait_task(1).await;
+    server.index("test").wait_task(task.uid()).await.succeeded();
 
     let (response, code) = server.list_indexes(None, None).await;
     assert_eq!(code, 200);
@@ -73,8 +73,8 @@ async fn get_and_paginate_indexes() {
     let server = Server::new().await;
     const NB_INDEXES: usize = 50;
     for i in 0..NB_INDEXES {
-        server.index(&format!("test_{i:02}")).create(None).await;
-        server.index(&format!("test_{i:02}")).wait_task(i as u64).await;
+        server.index(format!("test_{i:02}")).create(None).await;
+        server.index(format!("test_{i:02}")).wait_task(i as u64).await;
     }
 
     // basic

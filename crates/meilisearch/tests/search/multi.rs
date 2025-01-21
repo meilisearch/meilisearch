@@ -89,8 +89,8 @@ async fn simple_search_single_index() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = server
         .multi_search(json!({"queries": [
@@ -110,14 +110,7 @@ async fn simple_search_single_index() {
             "color": [
               "blue",
               "red"
-            ],
-            "_vectors": {
-              "manual": [
-                -100,
-                340,
-                90
-              ]
-            }
+            ]
           }
         ],
         "query": "glass",
@@ -135,14 +128,7 @@ async fn simple_search_single_index() {
             "color": [
               "yellow",
               "blue"
-            ],
-            "_vectors": {
-              "manual": [
-                1,
-                2,
-                54
-              ]
-            }
+            ]
           }
         ],
         "query": "captain",
@@ -161,8 +147,8 @@ async fn federation_single_search_single_index() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = server
         .multi_search(json!({"federation": {}, "queries": [
@@ -180,13 +166,6 @@ async fn federation_single_search_single_index() {
             "blue",
             "red"
           ],
-          "_vectors": {
-            "manual": [
-              -100,
-              340,
-              90
-            ]
-          },
           "_federation": {
             "indexUid": "test",
             "queriesPosition": 0,
@@ -208,8 +187,8 @@ async fn federation_multiple_search_single_index() {
     let index = server.index("test");
 
     let documents = SCORE_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = server
         .multi_search(json!({"federation": {}, "queries": [
@@ -283,8 +262,8 @@ async fn federation_two_search_single_index() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = server
         .multi_search(json!({"federation": {}, "queries": [
@@ -303,13 +282,6 @@ async fn federation_two_search_single_index() {
             "blue",
             "red"
           ],
-          "_vectors": {
-            "manual": [
-              -100,
-              340,
-              90
-            ]
-          },
           "_federation": {
             "indexUid": "test",
             "queriesPosition": 0,
@@ -323,13 +295,6 @@ async fn federation_two_search_single_index() {
             "yellow",
             "blue"
           ],
-          "_vectors": {
-            "manual": [
-              1,
-              2,
-              54
-            ]
-          },
           "_federation": {
             "indexUid": "test",
             "queriesPosition": 1,
@@ -351,8 +316,8 @@ async fn simple_search_missing_index_uid() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = server
         .multi_search(json!({"queries": [
@@ -376,8 +341,8 @@ async fn federation_simple_search_missing_index_uid() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = server
         .multi_search(json!({"federation": {}, "queries": [
@@ -401,8 +366,8 @@ async fn simple_search_illegal_index_uid() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = server
         .multi_search(json!({"queries": [
@@ -426,8 +391,8 @@ async fn federation_search_illegal_index_uid() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = server
         .multi_search(json!({"federation": {}, "queries": [
@@ -451,13 +416,13 @@ async fn simple_search_two_indexes() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let index = server.index("nested");
     let documents = NESTED_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
+    let (add_task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(add_task.uid()).await.succeeded();
 
     let (response, code) = server
         .multi_search(json!({"queries": [
@@ -477,14 +442,7 @@ async fn simple_search_two_indexes() {
             "color": [
               "blue",
               "red"
-            ],
-            "_vectors": {
-              "manual": [
-                -100,
-                340,
-                90
-              ]
-            }
+            ]
           }
         ],
         "query": "glass",
@@ -510,14 +468,7 @@ async fn simple_search_two_indexes() {
                 "age": 4
               }
             ],
-            "cattos": "pésti",
-            "_vectors": {
-              "manual": [
-                1,
-                2,
-                3
-              ]
-            }
+            "cattos": "pésti"
           },
           {
             "id": 654,
@@ -532,14 +483,7 @@ async fn simple_search_two_indexes() {
             "cattos": [
               "simba",
               "pestiféré"
-            ],
-            "_vectors": {
-              "manual": [
-                1,
-                2,
-                54
-              ]
-            }
+            ]
           }
         ],
         "query": "pésti",
@@ -558,13 +502,13 @@ async fn federation_two_search_two_indexes() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let index = server.index("nested");
     let documents = NESTED_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = server
         .multi_search(json!({"federation": {}, "queries": [
@@ -583,13 +527,6 @@ async fn federation_two_search_two_indexes() {
             "blue",
             "red"
           ],
-          "_vectors": {
-            "manual": [
-              -100,
-              340,
-              90
-            ]
-          },
           "_federation": {
             "indexUid": "test",
             "queriesPosition": 0,
@@ -611,13 +548,6 @@ async fn federation_two_search_two_indexes() {
             }
           ],
           "cattos": "pésti",
-          "_vectors": {
-            "manual": [
-              1,
-              2,
-              3
-            ]
-          },
           "_federation": {
             "indexUid": "nested",
             "queriesPosition": 1,
@@ -638,13 +568,6 @@ async fn federation_two_search_two_indexes() {
             "simba",
             "pestiféré"
           ],
-          "_vectors": {
-            "manual": [
-              1,
-              2,
-              54
-            ]
-          },
           "_federation": {
             "indexUid": "nested",
             "queriesPosition": 1,
@@ -666,18 +589,18 @@ async fn federation_multiple_search_multiple_indexes() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let index = server.index("nested");
     let documents = NESTED_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let index = server.index("score");
     let documents = SCORE_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(2).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = server
         .multi_search(json!({"federation": {}, "queries": [
@@ -705,13 +628,6 @@ async fn federation_multiple_search_multiple_indexes() {
             "blue",
             "red"
           ],
-          "_vectors": {
-            "manual": [
-              -100,
-              340,
-              90
-            ]
-          },
           "_federation": {
             "indexUid": "test",
             "queriesPosition": 0,
@@ -733,13 +649,6 @@ async fn federation_multiple_search_multiple_indexes() {
             }
           ],
           "cattos": "pésti",
-          "_vectors": {
-            "manual": [
-              1,
-              2,
-              3
-            ]
-          },
           "_federation": {
             "indexUid": "nested",
             "queriesPosition": 2,
@@ -771,13 +680,6 @@ async fn federation_multiple_search_multiple_indexes() {
             "yellow",
             "blue"
           ],
-          "_vectors": {
-            "manual": [
-              1,
-              2,
-              54
-            ]
-          },
           "_federation": {
             "indexUid": "test",
             "queriesPosition": 1,
@@ -791,13 +693,6 @@ async fn federation_multiple_search_multiple_indexes() {
             "yellow",
             "red"
           ],
-          "_vectors": {
-            "manual": [
-              10,
-              -23,
-              32
-            ]
-          },
           "_federation": {
             "indexUid": "test",
             "queriesPosition": 3,
@@ -822,13 +717,6 @@ async fn federation_multiple_search_multiple_indexes() {
             "moumoute",
             "gomez"
           ],
-          "_vectors": {
-            "manual": [
-              10,
-              23,
-              32
-            ]
-          },
           "_federation": {
             "indexUid": "nested",
             "queriesPosition": 4,
@@ -867,13 +755,6 @@ async fn federation_multiple_search_multiple_indexes() {
             "simba",
             "pestiféré"
           ],
-          "_vectors": {
-            "manual": [
-              1,
-              2,
-              54
-            ]
-          },
           "_federation": {
             "indexUid": "nested",
             "queriesPosition": 2,
@@ -896,13 +777,6 @@ async fn federation_multiple_search_multiple_indexes() {
             "green",
             "red"
           ],
-          "_vectors": {
-            "manual": [
-              -100,
-              231,
-              32
-            ]
-          },
           "_federation": {
             "indexUid": "test",
             "queriesPosition": 6,
@@ -924,8 +798,8 @@ async fn search_one_index_doesnt_exist() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = server
         .multi_search(json!({"queries": [
@@ -950,8 +824,8 @@ async fn federation_one_index_doesnt_exist() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = server
         .multi_search(json!({"federation": {}, "queries": [
@@ -1021,13 +895,13 @@ async fn search_one_query_error() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let index = server.index("nested");
     let documents = NESTED_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = server
         .multi_search(json!({"queries": [
@@ -1053,13 +927,13 @@ async fn federation_one_query_error() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let index = server.index("nested");
     let documents = NESTED_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = server
         .multi_search(json!({"federation": {}, "queries": [
@@ -1085,13 +959,13 @@ async fn federation_one_query_sort_error() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let index = server.index("nested");
     let documents = NESTED_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = server
         .multi_search(json!({"federation": {}, "queries": [
@@ -1117,13 +991,13 @@ async fn search_multiple_query_errors() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let index = server.index("nested");
     let documents = NESTED_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = server
         .multi_search(json!({"queries": [
@@ -1149,13 +1023,13 @@ async fn federation_multiple_query_errors() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let index = server.index("nested");
     let documents = NESTED_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = server
         .multi_search(json!({"queries": [
@@ -1181,13 +1055,13 @@ async fn federation_multiple_query_sort_errors() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let index = server.index("nested");
     let documents = NESTED_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = server
         .multi_search(json!({"queries": [
@@ -1213,13 +1087,13 @@ async fn federation_multiple_query_errors_interleaved() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let index = server.index("nested");
     let documents = NESTED_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = server
         .multi_search(json!({"queries": [
@@ -1246,13 +1120,13 @@ async fn federation_multiple_query_sort_errors_interleaved() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let index = server.index("nested");
     let documents = NESTED_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = server
         .multi_search(json!({"queries": [
@@ -1280,14 +1154,14 @@ async fn federation_filter() {
 
     let documents = FRUITS_DOCUMENTS.clone();
     let (value, _) = index.add_documents(documents, None).await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let (value, _) = index
         .update_settings(
             json!({"searchableAttributes": ["name"], "filterableAttributes": ["BOOST"]}),
         )
         .await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let (response, code) = server
         .multi_search(json!({"federation": {}, "queries": [
@@ -1348,7 +1222,7 @@ async fn federation_sort_same_indexes_same_criterion_same_direction() {
 
     let documents = NESTED_DOCUMENTS.clone();
     let (value, _) = index.add_documents(documents, None).await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let (value, _) = index
         .update_settings(json!({
@@ -1363,7 +1237,7 @@ async fn federation_sort_same_indexes_same_criterion_same_direction() {
           ]
         }))
         .await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     // two identical placeholder search should have all results from first query
     let (response, code) = server
@@ -1391,13 +1265,6 @@ async fn federation_sort_same_indexes_same_criterion_same_direction() {
             }
           ],
           "cattos": "pésti",
-          "_vectors": {
-            "manual": [
-              1,
-              2,
-              3
-            ]
-          },
           "_federation": {
             "indexUid": "nested",
             "queriesPosition": 0,
@@ -1412,13 +1279,6 @@ async fn federation_sort_same_indexes_same_criterion_same_direction() {
           "cattos": [
             "enigma"
           ],
-          "_vectors": {
-            "manual": [
-              10,
-              23,
-              32
-            ]
-          },
           "_federation": {
             "indexUid": "nested",
             "queriesPosition": 0,
@@ -1440,13 +1300,6 @@ async fn federation_sort_same_indexes_same_criterion_same_direction() {
             "simba",
             "pestiféré"
           ],
-          "_vectors": {
-            "manual": [
-              1,
-              2,
-              54
-            ]
-          },
           "_federation": {
             "indexUid": "nested",
             "queriesPosition": 0,
@@ -1472,13 +1325,6 @@ async fn federation_sort_same_indexes_same_criterion_same_direction() {
             "moumoute",
             "gomez"
           ],
-          "_vectors": {
-            "manual": [
-              10,
-              23,
-              32
-            ]
-          },
           "_federation": {
             "indexUid": "nested",
             "queriesPosition": 0,
@@ -1520,13 +1366,6 @@ async fn federation_sort_same_indexes_same_criterion_same_direction() {
             }
           ],
           "cattos": "pésti",
-          "_vectors": {
-            "manual": [
-              1,
-              2,
-              3
-            ]
-          },
           "_federation": {
             "indexUid": "nested",
             "queriesPosition": 0,
@@ -1548,13 +1387,6 @@ async fn federation_sort_same_indexes_same_criterion_same_direction() {
             "simba",
             "pestiféré"
           ],
-          "_vectors": {
-            "manual": [
-              1,
-              2,
-              54
-            ]
-          },
           "_federation": {
             "indexUid": "nested",
             "queriesPosition": 0,
@@ -1580,13 +1412,6 @@ async fn federation_sort_same_indexes_same_criterion_same_direction() {
             "moumoute",
             "gomez"
           ],
-          "_vectors": {
-            "manual": [
-              10,
-              23,
-              32
-            ]
-          },
           "_federation": {
             "indexUid": "nested",
             "queriesPosition": 1,
@@ -1611,7 +1436,7 @@ async fn federation_sort_same_indexes_same_criterion_opposite_direction() {
 
     let documents = NESTED_DOCUMENTS.clone();
     let (value, _) = index.add_documents(documents, None).await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let (value, _) = index
         .update_settings(json!({
@@ -1626,7 +1451,7 @@ async fn federation_sort_same_indexes_same_criterion_opposite_direction() {
           ]
         }))
         .await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     // two identical placeholder search should have all results from first query
     let (response, code) = server
@@ -1671,7 +1496,7 @@ async fn federation_sort_same_indexes_different_criterion_same_direction() {
 
     let documents = NESTED_DOCUMENTS.clone();
     let (value, _) = index.add_documents(documents, None).await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let (value, _) = index
         .update_settings(json!({
@@ -1686,7 +1511,7 @@ async fn federation_sort_same_indexes_different_criterion_same_direction() {
           ]
         }))
         .await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     // return mothers and fathers ordered accross fields.
     let (response, code) = server
@@ -1714,13 +1539,6 @@ async fn federation_sort_same_indexes_different_criterion_same_direction() {
             }
           ],
           "cattos": "pésti",
-          "_vectors": {
-            "manual": [
-              1,
-              2,
-              3
-            ]
-          },
           "_federation": {
             "indexUid": "nested",
             "queriesPosition": 1,
@@ -1746,13 +1564,6 @@ async fn federation_sort_same_indexes_different_criterion_same_direction() {
             "moumoute",
             "gomez"
           ],
-          "_vectors": {
-            "manual": [
-              10,
-              23,
-              32
-            ]
-          },
           "_federation": {
             "indexUid": "nested",
             "queriesPosition": 1,
@@ -1767,13 +1578,6 @@ async fn federation_sort_same_indexes_different_criterion_same_direction() {
           "cattos": [
             "enigma"
           ],
-          "_vectors": {
-            "manual": [
-              10,
-              23,
-              32
-            ]
-          },
           "_federation": {
             "indexUid": "nested",
             "queriesPosition": 0,
@@ -1795,13 +1599,6 @@ async fn federation_sort_same_indexes_different_criterion_same_direction() {
             "simba",
             "pestiféré"
           ],
-          "_vectors": {
-            "manual": [
-              1,
-              2,
-              54
-            ]
-          },
           "_federation": {
             "indexUid": "nested",
             "queriesPosition": 1,
@@ -1843,13 +1640,6 @@ async fn federation_sort_same_indexes_different_criterion_same_direction() {
             "simba",
             "pestiféré"
           ],
-          "_vectors": {
-            "manual": [
-              1,
-              2,
-              54
-            ]
-          },
           "_federation": {
             "indexUid": "nested",
             "queriesPosition": 0,
@@ -1872,13 +1662,6 @@ async fn federation_sort_same_indexes_different_criterion_same_direction() {
             }
           ],
           "cattos": "pésti",
-          "_vectors": {
-            "manual": [
-              1,
-              2,
-              3
-            ]
-          },
           "_federation": {
             "indexUid": "nested",
             "queriesPosition": 0,
@@ -1904,13 +1687,6 @@ async fn federation_sort_same_indexes_different_criterion_same_direction() {
             "moumoute",
             "gomez"
           ],
-          "_vectors": {
-            "manual": [
-              10,
-              23,
-              32
-            ]
-          },
           "_federation": {
             "indexUid": "nested",
             "queriesPosition": 1,
@@ -1935,7 +1711,7 @@ async fn federation_sort_same_indexes_different_criterion_opposite_direction() {
 
     let documents = NESTED_DOCUMENTS.clone();
     let (value, _) = index.add_documents(documents, None).await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let (value, _) = index
         .update_settings(json!({
@@ -1950,7 +1726,7 @@ async fn federation_sort_same_indexes_different_criterion_opposite_direction() {
           ]
         }))
         .await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     // two identical placeholder search should have all results from first query
     let (response, code) = server
@@ -1995,7 +1771,7 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
 
     let documents = DOCUMENTS.clone();
     let (value, _) = index.add_documents(documents, None).await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let (value, _) = index
         .update_settings(json!({
@@ -2010,13 +1786,13 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
           ]
         }))
         .await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let index = server.index("batman");
 
     let documents = SCORE_DOCUMENTS.clone();
     let (value, _) = index.add_documents(documents, None).await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let (value, _) = index
         .update_settings(json!({
@@ -2031,7 +1807,7 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
           ]
         }))
         .await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     // return titles ordered accross indexes
     let (response, code) = server
@@ -2101,13 +1877,6 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
             "yellow",
             "blue"
           ],
-          "_vectors": {
-            "manual": [
-              1,
-              2,
-              54
-            ]
-          },
           "_federation": {
             "indexUid": "movies",
             "queriesPosition": 0,
@@ -2122,13 +1891,6 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
             "yellow",
             "red"
           ],
-          "_vectors": {
-            "manual": [
-              10,
-              -23,
-              32
-            ]
-          },
           "_federation": {
             "indexUid": "movies",
             "queriesPosition": 0,
@@ -2143,13 +1905,6 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
             "blue",
             "red"
           ],
-          "_vectors": {
-            "manual": [
-              -100,
-              340,
-              90
-            ]
-          },
           "_federation": {
             "indexUid": "movies",
             "queriesPosition": 0,
@@ -2164,13 +1919,6 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
             "green",
             "red"
           ],
-          "_vectors": {
-            "manual": [
-              -100,
-              231,
-              32
-            ]
-          },
           "_federation": {
             "indexUid": "movies",
             "queriesPosition": 0,
@@ -2185,13 +1933,6 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
             "green",
             "blue"
           ],
-          "_vectors": {
-            "manual": [
-              1,
-              2,
-              3
-            ]
-          },
           "_federation": {
             "indexUid": "movies",
             "queriesPosition": 0,
@@ -2226,13 +1967,6 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
             "yellow",
             "blue"
           ],
-          "_vectors": {
-            "manual": [
-              1,
-              2,
-              54
-            ]
-          },
           "_federation": {
             "indexUid": "movies",
             "queriesPosition": 1,
@@ -2307,7 +2041,7 @@ async fn federation_sort_different_ranking_rules() {
 
     let documents = DOCUMENTS.clone();
     let (value, _) = index.add_documents(documents, None).await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let (value, _) = index
         .update_settings(json!({
@@ -2322,13 +2056,13 @@ async fn federation_sort_different_ranking_rules() {
           ]
         }))
         .await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let index = server.index("batman");
 
     let documents = SCORE_DOCUMENTS.clone();
     let (value, _) = index.add_documents(documents, None).await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let (value, _) = index
         .update_settings(json!({
@@ -2343,7 +2077,7 @@ async fn federation_sort_different_ranking_rules() {
           ]
         }))
         .await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     // return titles ordered accross indexes
     let (response, code) = server
@@ -2413,13 +2147,6 @@ async fn federation_sort_different_ranking_rules() {
             "yellow",
             "blue"
           ],
-          "_vectors": {
-            "manual": [
-              1,
-              2,
-              54
-            ]
-          },
           "_federation": {
             "indexUid": "movies",
             "queriesPosition": 0,
@@ -2434,13 +2161,6 @@ async fn federation_sort_different_ranking_rules() {
             "yellow",
             "red"
           ],
-          "_vectors": {
-            "manual": [
-              10,
-              -23,
-              32
-            ]
-          },
           "_federation": {
             "indexUid": "movies",
             "queriesPosition": 0,
@@ -2455,13 +2175,6 @@ async fn federation_sort_different_ranking_rules() {
             "blue",
             "red"
           ],
-          "_vectors": {
-            "manual": [
-              -100,
-              340,
-              90
-            ]
-          },
           "_federation": {
             "indexUid": "movies",
             "queriesPosition": 0,
@@ -2476,13 +2189,6 @@ async fn federation_sort_different_ranking_rules() {
             "green",
             "red"
           ],
-          "_vectors": {
-            "manual": [
-              -100,
-              231,
-              32
-            ]
-          },
           "_federation": {
             "indexUid": "movies",
             "queriesPosition": 0,
@@ -2497,13 +2203,6 @@ async fn federation_sort_different_ranking_rules() {
             "green",
             "blue"
           ],
-          "_vectors": {
-            "manual": [
-              1,
-              2,
-              3
-            ]
-          },
           "_federation": {
             "indexUid": "movies",
             "queriesPosition": 0,
@@ -2546,7 +2245,7 @@ async fn federation_sort_different_indexes_same_criterion_opposite_direction() {
 
     let documents = DOCUMENTS.clone();
     let (value, _) = index.add_documents(documents, None).await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let (value, _) = index
         .update_settings(json!({
@@ -2561,13 +2260,13 @@ async fn federation_sort_different_indexes_same_criterion_opposite_direction() {
           ]
         }))
         .await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let index = server.index("batman");
 
     let documents = SCORE_DOCUMENTS.clone();
     let (value, _) = index.add_documents(documents, None).await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let (value, _) = index
         .update_settings(json!({
@@ -2582,7 +2281,7 @@ async fn federation_sort_different_indexes_same_criterion_opposite_direction() {
           ]
         }))
         .await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     // all results from query 0
     let (response, code) = server
@@ -2628,7 +2327,7 @@ async fn federation_sort_different_indexes_different_criterion_same_direction() 
 
     let documents = DOCUMENTS.clone();
     let (value, _) = index.add_documents(documents, None).await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let (value, _) = index
         .update_settings(json!({
@@ -2643,13 +2342,13 @@ async fn federation_sort_different_indexes_different_criterion_same_direction() 
           ]
         }))
         .await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let index = server.index("batman");
 
     let documents = SCORE_DOCUMENTS.clone();
     let (value, _) = index.add_documents(documents, None).await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let (value, _) = index
         .update_settings(json!({
@@ -2664,7 +2363,7 @@ async fn federation_sort_different_indexes_different_criterion_same_direction() 
           ]
         }))
         .await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     // return titles ordered accross indexes
     let (response, code) = server
@@ -2714,13 +2413,6 @@ async fn federation_sort_different_indexes_different_criterion_same_direction() 
             "yellow",
             "blue"
           ],
-          "_vectors": {
-            "manual": [
-              1,
-              2,
-              54
-            ]
-          },
           "_federation": {
             "indexUid": "movies",
             "queriesPosition": 0,
@@ -2755,13 +2447,6 @@ async fn federation_sort_different_indexes_different_criterion_same_direction() 
             "yellow",
             "red"
           ],
-          "_vectors": {
-            "manual": [
-              10,
-              -23,
-              32
-            ]
-          },
           "_federation": {
             "indexUid": "movies",
             "queriesPosition": 0,
@@ -2776,13 +2461,6 @@ async fn federation_sort_different_indexes_different_criterion_same_direction() 
             "blue",
             "red"
           ],
-          "_vectors": {
-            "manual": [
-              -100,
-              340,
-              90
-            ]
-          },
           "_federation": {
             "indexUid": "movies",
             "queriesPosition": 0,
@@ -2797,13 +2475,6 @@ async fn federation_sort_different_indexes_different_criterion_same_direction() 
             "green",
             "red"
           ],
-          "_vectors": {
-            "manual": [
-              -100,
-              231,
-              32
-            ]
-          },
           "_federation": {
             "indexUid": "movies",
             "queriesPosition": 0,
@@ -2818,13 +2489,6 @@ async fn federation_sort_different_indexes_different_criterion_same_direction() 
             "green",
             "blue"
           ],
-          "_vectors": {
-            "manual": [
-              1,
-              2,
-              3
-            ]
-          },
           "_federation": {
             "indexUid": "movies",
             "queriesPosition": 0,
@@ -2879,13 +2543,6 @@ async fn federation_sort_different_indexes_different_criterion_same_direction() 
             "yellow",
             "blue"
           ],
-          "_vectors": {
-            "manual": [
-              1,
-              2,
-              54
-            ]
-          },
           "_federation": {
             "indexUid": "movies",
             "queriesPosition": 1,
@@ -2940,7 +2597,7 @@ async fn federation_sort_different_indexes_different_criterion_opposite_directio
 
     let documents = DOCUMENTS.clone();
     let (value, _) = index.add_documents(documents, None).await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let (value, _) = index
         .update_settings(json!({
@@ -2955,13 +2612,13 @@ async fn federation_sort_different_indexes_different_criterion_opposite_directio
           ]
         }))
         .await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let index = server.index("batman");
 
     let documents = SCORE_DOCUMENTS.clone();
     let (value, _) = index.add_documents(documents, None).await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let (value, _) = index
         .update_settings(json!({
@@ -2976,7 +2633,7 @@ async fn federation_sort_different_indexes_different_criterion_opposite_directio
           ]
         }))
         .await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     // all results from query 0 first
     let (response, code) = server
@@ -3020,18 +2677,18 @@ async fn federation_limit_offset() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let index = server.index("nested");
     let documents = NESTED_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let index = server.index("score");
     let documents = SCORE_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(2).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
     {
         let (response, code) = server
             .multi_search(json!({"federation": {}, "queries": [
@@ -3338,18 +2995,18 @@ async fn federation_formatting() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let index = server.index("nested");
     let documents = NESTED_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let index = server.index("score");
     let documents = SCORE_DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(2).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
     {
         let (response, code) = server
             .multi_search(json!({"federation": {}, "queries": [
@@ -3685,14 +3342,14 @@ async fn federation_invalid_weight() {
 
     let documents = FRUITS_DOCUMENTS.clone();
     let (value, _) = index.add_documents(documents, None).await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let (value, _) = index
         .update_settings(
             json!({"searchableAttributes": ["name"], "filterableAttributes": ["BOOST"]}),
         )
         .await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let (response, code) = server
         .multi_search(json!({"federation": {}, "queries": [
@@ -3719,14 +3376,14 @@ async fn federation_null_weight() {
 
     let documents = FRUITS_DOCUMENTS.clone();
     let (value, _) = index.add_documents(documents, None).await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let (value, _) = index
         .update_settings(
             json!({"searchableAttributes": ["name"], "filterableAttributes": ["BOOST"]}),
         )
         .await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let (response, code) = server
         .multi_search(json!({"federation": {}, "queries": [
@@ -3787,7 +3444,7 @@ async fn federation_federated_contains_pagination() {
 
     let documents = FRUITS_DOCUMENTS.clone();
     let (value, _) = index.add_documents(documents, None).await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     // fail when a federated query contains "limit"
     let (response, code) = server
@@ -3867,11 +3524,11 @@ async fn federation_federated_contains_facets() {
         )
         .await;
 
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let documents = FRUITS_DOCUMENTS.clone();
     let (value, _) = index.add_documents(documents, None).await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     // empty facets are actually OK
     let (response, code) = server
@@ -3951,7 +3608,7 @@ async fn federation_non_faceted_for_an_index() {
         )
         .await;
 
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let index = server.index("fruits-no-name");
 
@@ -3961,17 +3618,17 @@ async fn federation_non_faceted_for_an_index() {
         )
         .await;
 
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let index = server.index("fruits-no-facets");
 
     let (value, _) = index.update_settings(json!({"searchableAttributes": ["name"]})).await;
 
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let documents = FRUITS_DOCUMENTS.clone();
     let (value, _) = index.add_documents(documents, None).await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     // fails
     let (response, code) = server
@@ -4071,7 +3728,7 @@ async fn federation_non_federated_contains_federation_option() {
 
     let documents = FRUITS_DOCUMENTS.clone();
     let (value, _) = index.add_documents(documents, None).await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     // fail when a non-federated query contains "federationOptions"
     let (response, code) = server
@@ -4094,13 +3751,6 @@ async fn federation_non_federated_contains_federation_option() {
 #[actix_rt::test]
 async fn federation_vector_single_index() {
     let server = Server::new().await;
-    let (_, code) = server
-        .set_features(json!({
-          "vectorStore": true
-        }))
-        .await;
-
-    snapshot!(code, @"200 OK");
 
     let index = server.index("vectors");
 
@@ -4116,12 +3766,12 @@ async fn federation_vector_single_index() {
           }
         }}))
         .await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let documents = VECTOR_DOCUMENTS.clone();
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     // same embedder
     let (response, code) = server
@@ -4302,13 +3952,6 @@ async fn federation_vector_single_index() {
 #[actix_rt::test]
 async fn federation_vector_two_indexes() {
     let server = Server::new().await;
-    let (_, code) = server
-        .set_features(json!({
-          "vectorStore": true
-        }))
-        .await;
-
-    snapshot!(code, @"200 OK");
 
     let index = server.index("vectors-animal");
 
@@ -4320,12 +3963,12 @@ async fn federation_vector_two_indexes() {
           },
         }}))
         .await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let documents = VECTOR_DOCUMENTS.clone();
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let index = server.index("vectors-sentiment");
 
@@ -4337,12 +3980,12 @@ async fn federation_vector_two_indexes() {
           }
         }}))
         .await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let documents = VECTOR_DOCUMENTS.clone();
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let (response, code) = server
         .multi_search(json!({"federation": {}, "queries": [
@@ -4802,7 +4445,7 @@ async fn federation_facets_different_indexes_same_facet() {
 
     let documents = DOCUMENTS.clone();
     let (value, _) = index.add_documents(documents, None).await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let (value, _) = index
         .update_settings(json!({
@@ -4818,13 +4461,13 @@ async fn federation_facets_different_indexes_same_facet() {
           ]
         }))
         .await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let index = server.index("batman");
 
     let documents = SCORE_DOCUMENTS.clone();
     let (value, _) = index.add_documents(documents, None).await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let (value, _) = index
         .update_settings(json!({
@@ -4840,13 +4483,13 @@ async fn federation_facets_different_indexes_same_facet() {
           ]
         }))
         .await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let index = server.index("batman-2");
 
     let documents = SCORE_DOCUMENTS.clone();
     let (value, _) = index.add_documents(documents, None).await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let (value, _) = index
         .update_settings(json!({
@@ -4862,7 +4505,7 @@ async fn federation_facets_different_indexes_same_facet() {
           ]
         }))
         .await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     // return titles ordered accross indexes
     let (response, code) = server
@@ -5369,7 +5012,7 @@ async fn federation_facets_same_indexes() {
 
     let documents = NESTED_DOCUMENTS.clone();
     let (value, _) = index.add_documents(documents, None).await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let (value, _) = index
         .update_settings(json!({
@@ -5384,13 +5027,13 @@ async fn federation_facets_same_indexes() {
           ]
         }))
         .await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let index = server.index("doggos-2");
 
     let documents = NESTED_DOCUMENTS.clone();
     let (value, _) = index.add_documents(documents, None).await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let (value, _) = index
         .update_settings(json!({
@@ -5405,7 +5048,7 @@ async fn federation_facets_same_indexes() {
           ]
         }))
         .await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let (response, code) = server
         .multi_search(json!({"federation": {
@@ -5670,7 +5313,7 @@ async fn federation_inconsistent_merge_order() {
 
     let documents = DOCUMENTS.clone();
     let (value, _) = index.add_documents(documents, None).await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let (value, _) = index
         .update_settings(json!({
@@ -5686,13 +5329,13 @@ async fn federation_inconsistent_merge_order() {
           ]
         }))
         .await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let index = server.index("movies-2");
 
     let documents = DOCUMENTS.clone();
     let (value, _) = index.add_documents(documents, None).await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let (value, _) = index
         .update_settings(json!({
@@ -5711,13 +5354,13 @@ async fn federation_inconsistent_merge_order() {
           }
         }))
         .await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let index = server.index("batman");
 
     let documents = SCORE_DOCUMENTS.clone();
     let (value, _) = index.add_documents(documents, None).await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let (value, _) = index
         .update_settings(json!({
@@ -5733,7 +5376,7 @@ async fn federation_inconsistent_merge_order() {
           ]
         }))
         .await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     // without merging, it works
     let (response, code) = server

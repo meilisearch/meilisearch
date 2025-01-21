@@ -6,9 +6,7 @@ mod searchable;
 mod vectors;
 
 use bumpalo::Bump;
-pub use cache::{
-    merge_caches_sorted, transpose_and_freeze_caches, BalancedCaches, DelAddRoaringBitmap,
-};
+pub use cache::*;
 pub use documents::*;
 pub use faceted::*;
 pub use geo::*;
@@ -18,12 +16,10 @@ pub use vectors::EmbeddingExtractor;
 use super::indexer::document_changes::{DocumentChanges, IndexingContext};
 use super::steps::IndexingStep;
 use super::thread_local::{FullySend, ThreadLocal};
-use crate::update::GrenadParameters;
 use crate::Result;
 
 pub trait DocidsExtractor {
     fn run_extraction<'pl, 'fid, 'indexer, 'index, 'extractor, DC: DocumentChanges<'pl>, MSP>(
-        grenad_parameters: GrenadParameters,
         document_changes: &DC,
         indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP>,
         extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,

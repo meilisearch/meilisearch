@@ -1,0 +1,70 @@
+---
+source: crates/index-scheduler/src/scheduler/test.rs
+snapshot_kind: text
+---
+### Autobatching Enabled = true
+### Processing batch None:
+[]
+----------------------------------------------------------------------
+### All Tasks:
+0 {uid: 0, batch_uid: 0, status: succeeded, details: { primary_key: None }, kind: IndexCreation { index_uid: "doggos", primary_key: None }}
+1 {uid: 1, status: enqueued, details: { primary_key: None }, kind: IndexCreation { index_uid: "cattos", primary_key: None }}
+2 {uid: 2, status: enqueued, details: { deleted_documents: None }, kind: IndexDeletion { index_uid: "doggos" }}
+----------------------------------------------------------------------
+### Status:
+enqueued [1,2,]
+succeeded [0,]
+----------------------------------------------------------------------
+### Kind:
+"indexCreation" [0,1,]
+"indexDeletion" [2,]
+----------------------------------------------------------------------
+### Index Tasks:
+cattos [1,]
+doggos [0,2,]
+----------------------------------------------------------------------
+### Index Mapper:
+doggos: { number_of_documents: 0, field_distribution: {} }
+
+----------------------------------------------------------------------
+### Canceled By:
+
+----------------------------------------------------------------------
+### Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+----------------------------------------------------------------------
+### Started At:
+[timestamp] [0,]
+----------------------------------------------------------------------
+### Finished At:
+[timestamp] [0,]
+----------------------------------------------------------------------
+### All Batches:
+0 {uid: 0, details: {}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"doggos":1}}, }
+----------------------------------------------------------------------
+### Batch to tasks mapping:
+0 [0,]
+----------------------------------------------------------------------
+### Batches Status:
+succeeded [0,]
+----------------------------------------------------------------------
+### Batches Kind:
+"indexCreation" [0,]
+----------------------------------------------------------------------
+### Batches Index Tasks:
+doggos [0,]
+----------------------------------------------------------------------
+### Batches Enqueued At:
+[timestamp] [0,]
+----------------------------------------------------------------------
+### Batches Started At:
+[timestamp] [0,]
+----------------------------------------------------------------------
+### Batches Finished At:
+[timestamp] [0,]
+----------------------------------------------------------------------
+### File Store:
+
+----------------------------------------------------------------------

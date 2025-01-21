@@ -67,7 +67,7 @@ pub enum EmbedErrorKind {
     #[error("could not authenticate against {embedding} server{server_reply}{hint}", embedding=match *.1 {
         ConfigurationSource::User => "embedding",
         ConfigurationSource::OpenAi => "OpenAI",
-        ConfigurationSource::Ollama => "ollama"
+        ConfigurationSource::Ollama => "Ollama"
     },
     server_reply=option_info(.0.as_deref(), "server replied with "),
     hint=match *.1 {
@@ -86,9 +86,9 @@ pub enum EmbedErrorKind {
     },
     option_info(.0.as_deref(), "server replied with "))]
     RestBadRequest(Option<String>, ConfigurationSource),
-    #[error("received internal error HTTP {0} from embedding server{}", option_info(.1.as_deref(), "server replied with "))]
+    #[error("received internal error HTTP {} from embedding server{}", .0, option_info(.1.as_deref(), "server replied with "))]
     RestInternalServerError(u16, Option<String>),
-    #[error("received unexpected HTTP {0} from embedding server{}", option_info(.1.as_deref(), "server replied with "))]
+    #[error("received unexpected HTTP {} from embedding server{}", .0, option_info(.1.as_deref(), "server replied with "))]
     RestOtherStatusCode(u16, Option<String>),
     #[error("could not reach embedding server:\n  - {0}")]
     RestNetwork(ureq::Transport),
@@ -306,6 +306,10 @@ impl NewEmbedderError {
             fault: FaultSource::User,
         }
     }
+
+    pub(crate) fn ollama_unsupported_url(url: String) -> NewEmbedderError {
+        Self { kind: NewEmbedderErrorKind::OllamaUnsupportedUrl(url), fault: FaultSource::User }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -369,6 +373,8 @@ pub enum NewEmbedderErrorKind {
     LoadModel(candle_core::Error),
     #[error("{0}")]
     CouldNotParseTemplate(String),
+    #[error("unsupported Ollama URL.\n  - For `ollama` sources, the URL must end with `/api/embed` or `/api/embeddings`\n  - Got `{0}`")]
+    OllamaUnsupportedUrl(String),
 }
 
 pub struct PossibleEmbeddingMistakes {

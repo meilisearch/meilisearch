@@ -5,7 +5,7 @@ use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::actix_web::{AwebJson, AwebQueryParameter};
 use deserr::{DeserializeError, Deserr, ValuePointerRef};
-use index_scheduler::{Error, IndexScheduler};
+use index_scheduler::IndexScheduler;
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::{immutable_field_error, DeserrJsonError, DeserrQueryParamError};
 use meilisearch_types::error::deserr_codes::*;
@@ -16,8 +16,11 @@ use meilisearch_types::tasks::KindWithContent;
 use serde::Serialize;
 use time::OffsetDateTime;
 use tracing::debug;
+use utoipa::{IntoParams, OpenApi, ToSchema};
 
-use super::{get_task_id, Pagination, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT};
+use super::{
+    get_task_id, Pagination, PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT,
+};
 use crate::analytics::{Aggregate, Analytics};
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
@@ -29,10 +32,31 @@ pub mod documents;
 pub mod facet_search;
 pub mod search;
 mod search_analytics;
+#[cfg(test)]
+mod search_test;
 pub mod settings;
 mod settings_analytics;
 pub mod similar;
 mod similar_analytics;
+
+#[derive(OpenApi)]
+#[openapi(
+    nest(
+        (path = "/", api = documents::DocumentsApi),
+        (path = "/", api = facet_search::FacetSearchApi),
+        (path = "/", api = similar::SimilarApi),
+        (path = "/", api = settings::SettingsApi),
+    ),
+    paths(list_indexes, create_index, get_index, update_index, delete_index, get_index_stats),
+    tags(
+        (
+            name = "Indexes",
+            description = "An index is an entity that gathers a set of [documents](https://www.meilisearch.com/docs/learn/getting_started/documents) with its own [settings](https://www.meilisearch.com/docs/reference/api/settings). Learn more about indexes.",
+            external_docs(url = "https://www.meilisearch.com/docs/reference/api/indexes"),
+        ),
+    ),
+)]
+pub struct IndexesApi;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
@@ -57,14 +81,18 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     );
 }
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexView {
+    /// Unique identifier for the index
     pub uid: String,
+    /// An `RFC 3339` format for date/time/duration.
     #[serde(with = "time::serde::rfc3339")]
     pub created_at: OffsetDateTime,
+    /// An `RFC 3339` format for date/time/duration.
     #[serde(with = "time::serde::rfc3339")]
     pub updated_at: OffsetDateTime,
+    /// Custom primaryKey for documents
     pub primary_key: Option<String>,
 }
 
@@ -82,49 +110,94 @@ impl IndexView {
     }
 }
 
-#[derive(Deserr, Debug, Clone, Copy)]
+#[derive(Deserr, Debug, Clone, Copy, IntoParams)]
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
+#[into_params(rename_all = "camelCase", parameter_in = Query)]
 pub struct ListIndexes {
+    /// The number of indexes to skip before starting to retrieve anything
+    #[param(value_type = Option<usize>, default, example = 100)]
     #[deserr(default, error = DeserrQueryParamError<InvalidIndexOffset>)]
     pub offset: Param<usize>,
+    /// The number of indexes to retrieve
+    #[param(value_type = Option<usize>, default = 20, example = 1)]
     #[deserr(default = Param(PAGINATION_DEFAULT_LIMIT), error = DeserrQueryParamError<InvalidIndexLimit>)]
     pub limit: Param<usize>,
 }
+
 impl ListIndexes {
     fn as_pagination(self) -> Pagination {
         Pagination { offset: self.offset.0, limit: self.limit.0 }
     }
 }
 
+/// List indexes
+///
+/// List all indexes.
+#[utoipa::path(
+    get,
+    path = "",
+    tag = "Indexes",
+    security(("Bearer" = ["indexes.get", "indexes.*", "*"])),
+    params(ListIndexes),
+    responses(
+        (status = 200, description = "Indexes are returned", body = PaginationView<IndexView>, content_type = "application/json", example = json!(
+            {
+                "results": [
+                    {
+                        "uid": "movies",
+                        "primaryKey": "movie_id",
+                        "createdAt": "2019-11-20T09:40:33.711324Z",
+                        "updatedAt": "2019-11-20T09:40:33.711324Z"
+                    }
+                ],
+                "limit": 1,
+                "offset": 0,
+                "total": 1
+            }
+        )),
+        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+    )
+)]
 pub async fn list_indexes(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_GET }>, Data<IndexScheduler>>,
     paginate: AwebQueryParameter<ListIndexes, DeserrQueryParamError>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!(parameters = ?paginate, "List indexes");
     let filters = index_scheduler.filters();
-    let indexes: Vec<Option<IndexView>> =
-        index_scheduler.try_for_each_index(|uid, index| -> Result<Option<IndexView>, _> {
-            if !filters.is_index_authorized(uid) {
-                return Ok(None);
-            }
-            Ok(Some(
-                IndexView::new(uid.to_string(), index)
-                    .map_err(|e| Error::from_milli(e, Some(uid.to_string())))?,
-            ))
-        })?;
-    // Won't cause to open all indexes because IndexView doesn't keep the `Index` opened.
-    let indexes: Vec<IndexView> = indexes.into_iter().flatten().collect();
-    let ret = paginate.as_pagination().auto_paginate_sized(indexes.into_iter());
+    let (total, indexes) =
+        index_scheduler.get_paginated_indexes_stats(filters, *paginate.offset, *paginate.limit)?;
+    let indexes = indexes
+        .into_iter()
+        .map(|(name, stats)| IndexView {
+            uid: name,
+            created_at: stats.created_at,
+            updated_at: stats.updated_at,
+            primary_key: stats.primary_key,
+        })
+        .collect::<Vec<_>>();
+    let ret = paginate.as_pagination().format_with(total, indexes);
 
     debug!(returns = ?ret, "List indexes");
     Ok(HttpResponse::Ok().json(ret))
 }
 
-#[derive(Deserr, Debug)]
+#[derive(Deserr, Debug, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
+#[schema(rename_all = "camelCase")]
 pub struct IndexCreateRequest {
+    /// The name of the index
+    #[schema(example = "movies")]
     #[deserr(error = DeserrJsonError<InvalidIndexUid>, missing_field_error = DeserrJsonError::missing_index_uid)]
     uid: IndexUid,
+    /// The primary key of the index
+    #[schema(example = "id")]
     #[deserr(default, error = DeserrJsonError<InvalidIndexPrimaryKey>)]
     primary_key: Option<String>,
 }
@@ -148,6 +221,35 @@ impl Aggregate for IndexCreatedAggregate {
     }
 }
 
+/// Create index
+///
+/// Create an index.
+#[utoipa::path(
+    post,
+    path = "",
+    tag = "Indexes",
+    security(("Bearer" = ["indexes.create", "indexes.*", "*"])),
+    request_body = IndexCreateRequest,
+    responses(
+        (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+            {
+                "taskUid": 147,
+                "indexUid": "movies",
+                "status": "enqueued",
+                "type": "indexCreation",
+                "enqueuedAt": "2024-08-08T17:05:55.791772Z"
+            }
+        )),
+        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+    )
+)]
 pub async fn create_index(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_CREATE }>, Data<IndexScheduler>>,
     body: AwebJson<IndexCreateRequest, DeserrJsonError>,
@@ -197,13 +299,42 @@ fn deny_immutable_fields_index(
     }
 }
 
-#[derive(Deserr, Debug)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields = deny_immutable_fields_index)]
-pub struct UpdateIndexRequest {
-    #[deserr(default, error = DeserrJsonError<InvalidIndexPrimaryKey>)]
-    primary_key: Option<String>,
-}
-
+/// Get index
+///
+/// Get information about an index.
+#[utoipa::path(
+    get,
+    path = "/{indexUid}",
+    tag = "Indexes",
+    security(("Bearer" = ["indexes.get", "indexes.*", "*"])),
+    params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
+    responses(
+        (status = 200, description = "The index is returned", body = IndexView, content_type = "application/json", example = json!(
+            {
+                "uid": "movies",
+                "primaryKey": "movie_id",
+                "createdAt": "2019-11-20T09:40:33.711324Z",
+                "updatedAt": "2019-11-20T09:40:33.711324Z"
+            }
+        )),
+        (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "Index `movies` not found.",
+                "code": "index_not_found",
+                "type": "invalid_request",
+                "link": "https://docs.meilisearch.com/errors#index_not_found"
+            }
+        )),
+        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+    )
+)]
 pub async fn get_index(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_GET }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
@@ -236,6 +367,47 @@ impl Aggregate for IndexUpdatedAggregate {
         serde_json::to_value(*self).unwrap_or_default()
     }
 }
+
+#[derive(Deserr, Debug, ToSchema)]
+#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields = deny_immutable_fields_index)]
+#[schema(rename_all = "camelCase")]
+pub struct UpdateIndexRequest {
+    /// The new primary key of the index
+    #[deserr(default, error = DeserrJsonError<InvalidIndexPrimaryKey>)]
+    primary_key: Option<String>,
+}
+
+/// Update index
+///
+/// Update the `primaryKey` of an index.
+/// Return an error if the index doesn't exists yet or if it contains documents.
+#[utoipa::path(
+    patch,
+    path = "/{indexUid}",
+    tag = "Indexes",
+    security(("Bearer" = ["indexes.update", "indexes.*", "*"])),
+    params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
+    request_body = UpdateIndexRequest,
+    responses(
+        (status = ACCEPTED, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+            {
+                "taskUid": 0,
+                "indexUid": "movies",
+                "status": "enqueued",
+                "type": "indexUpdate",
+                "enqueuedAt": "2021-01-01T09:39:00.000000Z"
+            }
+        )),
+        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+    )
+)]
 pub async fn update_index(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_UPDATE }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
@@ -268,6 +440,35 @@ pub async fn update_index(
     Ok(HttpResponse::Accepted().json(task))
 }
 
+/// Delete index
+///
+/// Delete an index.
+#[utoipa::path(
+    delete,
+    path = "/{indexUid}",
+    tag = "Indexes",
+    security(("Bearer" = ["indexes.delete", "indexes.*", "*"])),
+    params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
+    responses(
+        (status = ACCEPTED, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+            {
+                "taskUid": 0,
+                "indexUid": "movies",
+                "status": "enqueued",
+                "type": "indexDeletion",
+                "enqueuedAt": "2021-01-01T09:39:00.000000Z"
+            }
+        )),
+        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+    )
+)]
 pub async fn delete_index(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_DELETE }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
@@ -288,14 +489,15 @@ pub async fn delete_index(
 }
 
 /// Stats of an `Index`, as known to the `stats` route.
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexStats {
     /// Number of documents in the index
     pub number_of_documents: u64,
-    /// Whether the index is currently performing indexation, according to the scheduler.
+    /// Whether or not the index is currently ingesting document
     pub is_indexing: bool,
     /// Association of every field name with the number of times it occurs in the documents.
+    #[schema(value_type = HashMap<String, u64>)]
     pub field_distribution: FieldDistribution,
 }
 
@@ -309,6 +511,44 @@ impl From<index_scheduler::IndexStats> for IndexStats {
     }
 }
 
+/// Get stats of index
+///
+/// Get the stats of an index.
+#[utoipa::path(
+    get,
+    path = "/{indexUid}/stats",
+    tag = "Stats",
+    security(("Bearer" = ["stats.get", "stats.*", "*"])),
+    params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
+    responses(
+        (status = OK, description = "The stats of the index", body = IndexStats, content_type = "application/json", example = json!(
+            {
+                "numberOfDocuments": 10,
+                "isIndexing": true,
+                "fieldDistribution": {
+                    "genre": 10,
+                    "author": 9
+                }
+            }
+        )),
+        (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "Index `movies` not found.",
+                "code": "index_not_found",
+                "type": "invalid_request",
+                "link": "https://docs.meilisearch.com/errors#index_not_found"
+            }
+        )),
+        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+    )
+)]
 pub async fn get_index_stats(
     index_scheduler: GuardedData<ActionPolicy<{ actions::STATS_GET }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,

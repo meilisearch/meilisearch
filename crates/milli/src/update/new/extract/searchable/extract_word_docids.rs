@@ -208,7 +208,7 @@ impl<'extractor> WordDocidsCaches<'extractor> {
 
 pub struct WordDocidsExtractorData<'a> {
     tokenizer: &'a DocumentTokenizer<'a>,
-    grenad_parameters: GrenadParameters,
+    grenad_parameters: &'a GrenadParameters,
     buckets: usize,
 }
 
@@ -240,7 +240,6 @@ pub struct WordDocidsExtractors;
 
 impl WordDocidsExtractors {
     pub fn run_extraction<'pl, 'fid, 'indexer, 'index, 'extractor, DC: DocumentChanges<'pl>, MSP>(
-        grenad_parameters: GrenadParameters,
         document_changes: &DC,
         indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP>,
         extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
@@ -288,7 +287,7 @@ impl WordDocidsExtractors {
 
             let extractor = WordDocidsExtractorData {
                 tokenizer: &document_tokenizer,
-                grenad_parameters,
+                grenad_parameters: indexing_context.grenad_parameters,
                 buckets: rayon::current_num_threads(),
             };
 
@@ -339,7 +338,13 @@ impl WordDocidsExtractors {
                     )
                 };
                 document_tokenizer.tokenize_document(
-                    inner.current(rtxn, index, context.db_fields_ids_map)?,
+                    inner.current(
+                        rtxn,
+                        index,
+                        context.db_fields_ids_map,
+                        context.db_document_decompression_dictionary,
+                        &context.doc_alloc,
+                    )?,
                     new_fields_ids_map,
                     &mut token_fn,
                 )?;
@@ -350,6 +355,8 @@ impl WordDocidsExtractors {
                     &context.rtxn,
                     context.index,
                     context.db_fields_ids_map,
+                    context.db_document_decompression_dictionary,
+                    &context.doc_alloc,
                 )? {
                     return Ok(());
                 }
@@ -365,7 +372,13 @@ impl WordDocidsExtractors {
                     )
                 };
                 document_tokenizer.tokenize_document(
-                    inner.current(rtxn, index, context.db_fields_ids_map)?,
+                    inner.current(
+                        rtxn,
+                        index,
+                        context.db_fields_ids_map,
+                        context.db_document_decompression_dictionary,
+                        &context.doc_alloc,
+                    )?,
                     new_fields_ids_map,
                     &mut token_fn,
                 )?;
@@ -381,7 +394,13 @@ impl WordDocidsExtractors {
                     )
                 };
                 document_tokenizer.tokenize_document(
-                    inner.merged(rtxn, index, context.db_fields_ids_map)?,
+                    inner.merged(
+                        rtxn,
+                        index,
+                        context.db_fields_ids_map,
+                        context.db_document_decompression_dictionary,
+                        &context.doc_alloc,
+                    )?,
                     new_fields_ids_map,
                     &mut token_fn,
                 )?;

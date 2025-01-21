@@ -14,7 +14,7 @@ This module tests the following properties about the exactness ranking rule:
     3. those that contain the most exact words from the remaining query
 
 - if it is followed by other graph-based ranking rules (`typo`, `proximity`, `attribute`).
-Then these rules will only work with
+  Then these rules will only work with
     1. the exact terms selected by `exactness
     2. the full query term otherwise
 */

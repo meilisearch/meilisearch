@@ -149,7 +149,7 @@ pub type WordId = u16;
 /// A given token can partially match a query word for several reasons:
 /// - split words
 /// - multi-word synonyms
-/// In these cases we need to match consecutively several tokens to consider that the match is full.
+///   In these cases we need to match consecutively several tokens to consider that the match is full.
 #[derive(Debug, PartialEq)]
 pub enum MatchType<'a> {
     Full { char_count: usize, byte_len: usize, ids: &'a RangeInclusive<WordId> },

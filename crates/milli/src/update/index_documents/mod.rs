@@ -4,8 +4,8 @@ mod helpers;
 mod transform;
 mod typed_chunk;
 
-use std::collections::HashSet;
-use std::io::{Read, Seek};
+use std::collections::{HashMap, HashSet};
+use std::io::{BufWriter, Read, Seek, Write};
 use std::iter;
 use std::num::NonZeroU32;
 use std::sync::Arc;
@@ -13,9 +13,8 @@ use std::sync::Arc;
 use crossbeam_channel::{Receiver, Sender};
 use enrich::enrich_documents_batch;
 use grenad::{Merger, MergerBuilder};
-use hashbrown::HashMap;
-use heed::types::Str;
-use heed::Database;
+use heed::types::{Bytes, Str};
+use heed::{Database, PutFlags};
 use rand::SeedableRng as _;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
@@ -28,7 +27,8 @@ pub use self::helpers::*;
 pub use self::transform::{Transform, TransformOutput};
 use super::new::StdResult;
 use crate::documents::{obkv_to_object, DocumentsBatchReader};
-use crate::error::{Error, InternalError};
+use crate::error::{Error, InternalError, UserError};
+use crate::heed_codec::{CompressedObkvCodec, CompressedObkvU16};
 use crate::index::{PrefixSearch, PrefixSettings};
 use crate::thread_pool_no_abort::ThreadPoolNoAbortBuilder;
 pub use crate::update::index_documents::helpers::CursorClonableMmap;
@@ -36,7 +36,7 @@ use crate::update::{
     IndexerConfig, UpdateIndexingStep, WordPrefixDocids, WordPrefixIntegerDocids, WordsPrefixesFst,
 };
 use crate::vector::{ArroyWrapper, EmbeddingConfigs};
-use crate::{CboRoaringBitmapCodec, Index, Result, UserError};
+use crate::{CboRoaringBitmapCodec, Index, Result, BEU32};
 
 static MERGED_DATABASE_COUNT: usize = 7;
 static PREFIX_DATABASE_COUNT: usize = 4;
@@ -201,7 +201,7 @@ where
         target = "indexing::details",
         name = "index_documents_raw"
     )]
-    pub fn execute_raw(self, output: TransformOutput) -> Result<u64>
+    pub fn execute_raw(mut self, output: TransformOutput) -> Result<u64>
     where
         FP: Fn(UpdateIndexingStep) + Sync,
         FA: Fn() -> bool + Sync,
@@ -523,6 +523,10 @@ where
             word_fid_docids.map(MergerBuilder::build),
         )?;
 
+        // This call contains an internal condition to ensure we do not always
+        // generate compression dictionaries and always compress documents.
+        self.manage_compression_dictionary()?;
+
         Ok(number_of_documents)
     }
 
@@ -533,7 +537,7 @@ where
         name = "index_documents_prefix_databases"
     )]
     pub fn execute_prefix_databases(
-        self,
+        &mut self,
         word_docids: Option<Merger<CursorClonableMmap, MergeDeladdCboRoaringBitmaps>>,
         exact_word_docids: Option<Merger<CursorClonableMmap, MergeDeladdCboRoaringBitmaps>>,
         word_position_docids: Option<Merger<CursorClonableMmap, MergeDeladdCboRoaringBitmaps>>,
@@ -723,6 +727,64 @@ where
 
         Ok(())
     }
+
+    /// Computes a new dictionay and compress the documents with it in the database.
+    ///
+    /// Documents still need to be directly compressed when being written in the database and a dictionary exists.
+    #[tracing::instrument(
+        level = "trace",
+        skip_all,
+        target = "indexing::compression",
+        name = "compress_documents_database"
+    )]
+    pub fn manage_compression_dictionary(&mut self) -> Result<()> {
+        /// The size of the dictionary generated from a sample of the documents already
+        /// in the database. It will be used when compressing and decompressing documents.
+        const COMPRESSION_DICTIONARY_SIZE: usize = 64_000;
+        /// The minimum number of documents to trigger the generation of the compression dictionary.
+        const COMPRESSION_ON_NUMBER_OF_DOCUMENTS: usize = 10_000;
+
+        if self.index.number_of_documents(self.wtxn)? < COMPRESSION_ON_NUMBER_OF_DOCUMENTS as u64
+            || self.index.document_compression_dictionary(self.wtxn)?.is_some()
+        {
+            return Ok(());
+        }
+
+        let mut sample_file = tempfile::tempfile().map(BufWriter::new)?;
+        let mut sample_sizes = Vec::new();
+        // TODO make this 1_000 be 10k and const
+        let documents = self.index.documents.remap_types::<BEU32, Bytes>();
+        for result in documents.iter(self.wtxn)?.take(COMPRESSION_ON_NUMBER_OF_DOCUMENTS) {
+            let (_id, bytes) = result?;
+            sample_file.write_all(bytes)?;
+            sample_sizes.push(bytes.len());
+        }
+
+        let sample_file = sample_file.into_inner().map_err(|ie| ie.into_error())?;
+        let sample_data = unsafe { memmap2::Mmap::map(&sample_file)? };
+        let dictionary =
+            zstd::dict::from_continuous(&sample_data, &sample_sizes, COMPRESSION_DICTIONARY_SIZE)?;
+        self.index.put_document_compression_dictionary(self.wtxn, &dictionary)?;
+        // safety: We just set the dictionary above. It must be there when we get it back.
+        let dictionary = self.index.document_compression_dictionary(self.wtxn)?.unwrap();
+
+        let mut iter = self.index.documents.iter_mut(self.wtxn)?;
+        while let Some(result) = iter.next() {
+            let (docid, document) = result?;
+            let document = document.as_non_compressed();
+            let compressed = CompressedObkvU16::with_dictionary(document, &dictionary)?;
+            // safety: the compressed document is entirely owned
+            unsafe {
+                iter.put_current_with_options::<CompressedObkvCodec>(
+                    PutFlags::empty(),
+                    &docid,
+                    &compressed,
+                )?;
+            }
+        }
+
+        Ok(())
+    }
 }
 
 /// Run the word prefix docids update operation.
@@ -763,6 +825,7 @@ mod tests {
     use maplit::hashset;
 
     use super::*;
+    use crate::constants::RESERVED_GEO_FIELD_NAME;
     use crate::documents::mmap_from_objects;
     use crate::index::tests::TempIndex;
     use crate::index::IndexEmbeddingConfig;
@@ -813,7 +876,7 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
         let count = index.number_of_documents(&rtxn).unwrap();
         assert_eq!(count, 3);
-        let count = index.all_documents(&rtxn).unwrap().count();
+        let count = index.all_compressed_documents(&rtxn).unwrap().count();
         assert_eq!(count, 3);
 
         drop(rtxn);
@@ -822,6 +885,7 @@ mod tests {
     #[test]
     fn simple_document_merge() {
         let mut index = TempIndex::new();
+        let mut buffer = Vec::new();
         index.index_documents_config.update_method = IndexDocumentsMethod::UpdateDocuments;
 
         // First we send 3 documents with duplicate ids and
@@ -840,16 +904,21 @@ mod tests {
         assert_eq!(count, 1);
 
         // Check that we get only one document from the database.
-        let docs = index.documents(&rtxn, Some(0)).unwrap();
-        assert_eq!(docs.len(), 1);
-        let (id, doc) = docs[0];
+        let mut compressed_docs = index.compressed_documents(&rtxn, Some(0)).unwrap();
+        assert_eq!(compressed_docs.len(), 1);
+        let (id, compressed_doc) = compressed_docs.remove(0);
         assert_eq!(id, 0);
+        let dictionary = index.document_decompression_dictionary(&rtxn).unwrap();
+        let doc = compressed_doc
+            .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())
+            .unwrap();
 
         // Check that this document is equal to the last one sent.
         let mut doc_iter = doc.iter();
         assert_eq!(doc_iter.next(), Some((0, &b"1"[..])));
         assert_eq!(doc_iter.next(), Some((1, &br#""benoit""#[..])));
         assert_eq!(doc_iter.next(), None);
+        drop(dictionary);
         drop(rtxn);
 
         // Second we send 1 document with id 1, to force it to be merged with the previous one.
@@ -861,10 +930,14 @@ mod tests {
         assert_eq!(count, 1);
 
         // Check that we get only one document from the database.
-        let docs = index.documents(&rtxn, Some(0)).unwrap();
-        assert_eq!(docs.len(), 1);
-        let (id, doc) = docs[0];
+        let mut compressed_docs = index.compressed_documents(&rtxn, Some(0)).unwrap();
+        assert_eq!(compressed_docs.len(), 1);
+        let (id, compressed_doc) = compressed_docs.remove(0);
         assert_eq!(id, 0);
+        let dictionary = index.document_decompression_dictionary(&rtxn).unwrap();
+        let doc = compressed_doc
+            .decompress_with_optional_dictionary(&mut buffer, dictionary.as_ref())
+            .unwrap();
 
         // Check that this document is equal to the last one sent.
         let mut doc_iter = doc.iter();
@@ -872,6 +945,7 @@ mod tests {
         assert_eq!(doc_iter.next(), Some((1, &br#""benoit""#[..])));
         assert_eq!(doc_iter.next(), Some((2, &b"25"[..])));
         assert_eq!(doc_iter.next(), None);
+        drop(dictionary);
         drop(rtxn);
     }
 
@@ -944,12 +1018,12 @@ mod tests {
         index.index_documents_config.update_method = IndexDocumentsMethod::ReplaceDocuments;
 
         index.add_documents(documents!([
-          { "id": 2,    "title": "Pride and Prejudice",                    "author": "Jane Austin",              "genre": "romance",    "price": 3.5, "_geo": { "lat": 12, "lng": 42 } },
+          { "id": 2,    "title": "Pride and Prejudice",                    "author": "Jane Austin",              "genre": "romance",    "price": 3.5, RESERVED_GEO_FIELD_NAME: { "lat": 12, "lng": 42 } },
           { "id": 456,  "title": "Le Petit Prince",                        "author": "Antoine de Saint-Exupéry", "genre": "adventure" , "price": 10.0 },
           { "id": 1,    "title": "Alice In Wonderland",                    "author": "Lewis Carroll",            "genre": "fantasy",    "price": 25.99 },
           { "id": 1344, "title": "The Hobbit",                             "author": "J. R. R. Tolkien",         "genre": "fantasy" },
           { "id": 4,    "title": "Harry Potter and the Half-Blood Prince", "author": "J. K. Rowling",            "genre": "fantasy" },
-          { "id": 42,   "title": "The Hitchhiker's Guide to the Galaxy",   "author": "Douglas Adams", "_geo": { "lat": 35, "lng": 23 } }
+          { "id": 42,   "title": "The Hitchhiker's Guide to the Galaxy",   "author": "Douglas Adams", RESERVED_GEO_FIELD_NAME: { "lat": 35, "lng": 23 } }
         ])).unwrap();
 
         db_snap!(index, word_docids, "initial");
@@ -973,7 +1047,7 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
         let count = index.number_of_documents(&rtxn).unwrap();
         assert_eq!(count, 6);
-        let count = index.all_documents(&rtxn).unwrap().count();
+        let count = index.all_compressed_documents(&rtxn).unwrap().count();
         assert_eq!(count, 6);
 
         db_snap!(index, word_docids, "updated");
@@ -989,18 +1063,18 @@ mod tests {
         // We send 6 documents and mix the ones that have _geo and those that don't have it.
         index
             .add_documents(documents!([
-              { "id": 2, "price": 3.5, "_geo": { "lat": 12, "lng": 42 } },
+              { "id": 2, "price": 3.5, RESERVED_GEO_FIELD_NAME: { "lat": 12, "lng": 42 } },
               { "id": 456 },
               { "id": 1 },
               { "id": 1344 },
               { "id": 4 },
-              { "id": 42, "_geo": { "lat": 35, "lng": 23 } }
+              { "id": 42, RESERVED_GEO_FIELD_NAME: { "lat": 35, "lng": 23 } }
             ]))
             .unwrap();
 
         index
             .update_settings(|settings| {
-                settings.set_filterable_fields(hashset!(S("_geo")));
+                settings.set_filterable_fields(hashset!(S(RESERVED_GEO_FIELD_NAME)));
             })
             .unwrap();
     }
@@ -1012,13 +1086,13 @@ mod tests {
 
         index
             .update_settings(|settings| {
-                settings.set_filterable_fields(hashset!(S("_geo")));
+                settings.set_filterable_fields(hashset!(S(RESERVED_GEO_FIELD_NAME)));
             })
             .unwrap();
 
         let error = index
             .add_documents(documents!([
-              { "id": 0, "_geo": { "lng": 42 } }
+              { "id": 0, RESERVED_GEO_FIELD_NAME: { "lng": 42 } }
             ]))
             .unwrap_err();
         assert_eq!(
@@ -1028,7 +1102,7 @@ mod tests {
 
         let error = index
             .add_documents(documents!([
-              { "id": 0, "_geo": { "lat": 42 } }
+              { "id": 0, RESERVED_GEO_FIELD_NAME: { "lat": 42 } }
             ]))
             .unwrap_err();
         assert_eq!(
@@ -1038,7 +1112,7 @@ mod tests {
 
         let error = index
             .add_documents(documents!([
-              { "id": 0, "_geo": { "lat": "lol", "lng": 42 } }
+              { "id": 0, RESERVED_GEO_FIELD_NAME: { "lat": "lol", "lng": 42 } }
             ]))
             .unwrap_err();
         assert_eq!(
@@ -1048,7 +1122,7 @@ mod tests {
 
         let error = index
             .add_documents(documents!([
-              { "id": 0, "_geo": { "lat": [12, 13], "lng": 42 } }
+              { "id": 0, RESERVED_GEO_FIELD_NAME: { "lat": [12, 13], "lng": 42 } }
             ]))
             .unwrap_err();
         assert_eq!(
@@ -1058,7 +1132,7 @@ mod tests {
 
         let error = index
             .add_documents(documents!([
-              { "id": 0, "_geo": { "lat": 12, "lng": "hello" } }
+              { "id": 0, RESERVED_GEO_FIELD_NAME: { "lat": 12, "lng": "hello" } }
             ]))
             .unwrap_err();
         assert_eq!(
@@ -1076,7 +1150,7 @@ mod tests {
                 { "objectId": 123, "title": "Pride and Prejudice", "comment": "A great book" },
                 { "objectId": 456, "title": "Le Petit Prince",     "comment": "A french book" },
                 { "objectId": 1,   "title": "Alice In Wonderland", "comment": "A weird book" },
-                { "objectId": 30,  "title": "Hamlet", "_geo": { "lat": 12, "lng": 89 } }
+                { "objectId": 30,  "title": "Hamlet", RESERVED_GEO_FIELD_NAME: { "lat": 12, "lng": 89 } }
             ]))
             .unwrap();
 
@@ -1091,7 +1165,7 @@ mod tests {
 
         index
             .add_documents(documents!([
-                { "objectId": 30,  "title": "Hamlet", "_geo": { "lat": 12, "lng": 89 } }
+                { "objectId": 30,  "title": "Hamlet", RESERVED_GEO_FIELD_NAME: { "lat": 12, "lng": 89 } }
             ]))
             .unwrap();
 
@@ -1102,7 +1176,7 @@ mod tests {
 
         index
             .add_documents(documents!([
-                { "objectId": 30,  "title": "Hamlet", "_geo": { "lat": 12, "lng": 89 } }
+                { "objectId": 30,  "title": "Hamlet", RESERVED_GEO_FIELD_NAME: { "lat": 12, "lng": 89 } }
             ]))
             .unwrap();
     }
@@ -1391,7 +1465,7 @@ mod tests {
         index.add_documents(documents!({ "a" : { "b" : { "c" :  1 }}})).unwrap();
 
         let rtxn = index.read_txn().unwrap();
-        let all_documents_count = index.all_documents(&rtxn).unwrap().count();
+        let all_documents_count = index.all_compressed_documents(&rtxn).unwrap().count();
         assert_eq!(all_documents_count, 1);
         let external_documents_ids = index.external_documents_ids();
         assert!(external_documents_ids.get(&rtxn, "1").unwrap().is_some());
@@ -2090,33 +2164,6 @@ mod tests {
             .unwrap();
 
         index.add_documents(doc1).unwrap();
-    }
-
-    #[cfg(feature = "default")]
-    #[test]
-    fn store_detected_script_and_language_per_document_during_indexing() {
-        use charabia::{Language, Script};
-        let index = TempIndex::new();
-        index
-            .add_documents(documents!([
-                { "id": 1, "title": "The quick (\"brown\") fox can't jump 32.3 feet, right? Brr, it's 29.3°F!" },
-                { "id": 2, "title": "人人生而自由﹐在尊嚴和權利上一律平等。他們賦有理性和良心﹐並應以兄弟關係的精神互相對待。" },
-                { "id": 3, "title": "הַשּׁוּעָל הַמָּהִיר (״הַחוּם״) לֹא יָכוֹל לִקְפֹּץ 9.94 מֶטְרִים, נָכוֹן? ברר, 1.5°C- בַּחוּץ!" },
-                { "id": 4, "title": "関西国際空港限定トートバッグ すもももももももものうち" },
-                { "id": 5, "title": "ภาษาไทยง่ายนิดเดียว" },
-                { "id": 6, "title": "The quick 在尊嚴和權利上一律平等。" },
-            ]))
-            .unwrap();
-
-        let rtxn = index.read_txn().unwrap();
-        let key_jpn = (Script::Cj, Language::Jpn);
-        let key_cmn = (Script::Cj, Language::Cmn);
-        let cj_jpn_docs = index.script_language_documents_ids(&rtxn, &key_jpn).unwrap().unwrap();
-        let cj_cmn_docs = index.script_language_documents_ids(&rtxn, &key_cmn).unwrap().unwrap();
-        let expected_cj_jpn_docids = [3].iter().collect();
-        assert_eq!(cj_jpn_docs, expected_cj_jpn_docids);
-        let expected_cj_cmn_docids = [1, 5].iter().collect();
-        assert_eq!(cj_cmn_docs, expected_cj_cmn_docids);
     }
 
     #[test]
@@ -2870,7 +2917,7 @@ mod tests {
         // Ensuring all the returned IDs actually exists
         let rtxn = index.read_txn().unwrap();
         let res = index.search(&rtxn).execute().unwrap();
-        index.documents(&rtxn, res.documents_ids).unwrap();
+        index.compressed_documents(&rtxn, res.documents_ids).unwrap();
     }
 
     fn delete_documents<'t>(
@@ -3146,34 +3193,34 @@ mod tests {
         index
             .update_settings_using_wtxn(&mut wtxn, |settings| {
                 settings.set_primary_key(S("id"));
-                settings.set_filterable_fields(hashset!(S("_geo")));
-                settings.set_sortable_fields(hashset!(S("_geo")));
+                settings.set_filterable_fields(hashset!(S(RESERVED_GEO_FIELD_NAME)));
+                settings.set_sortable_fields(hashset!(S(RESERVED_GEO_FIELD_NAME)));
             })
             .unwrap();
         wtxn.commit().unwrap();
 
         let mut wtxn = index.write_txn().unwrap();
         index.add_documents_using_wtxn(&mut wtxn, documents!([
-            { "id": "1",  "city": "Lille",             "_geo": { "lat": 50.6299, "lng": 3.0569 } },
-            { "id": "2",  "city": "Mons-en-Barœul",    "_geo": { "lat": 50.6415, "lng": 3.1106 } },
-            { "id": "3",  "city": "Hellemmes",         "_geo": { "lat": 50.6312, "lng": 3.1106 } },
-            { "id": "4",  "city": "Villeneuve-d'Ascq", "_geo": { "lat": 50.6224, "lng": 3.1476 } },
-            { "id": "5",  "city": "Hem",               "_geo": { "lat": 50.6552, "lng": 3.1897 } },
-            { "id": "6",  "city": "Roubaix",           "_geo": { "lat": 50.6924, "lng": 3.1763 } },
-            { "id": "7",  "city": "Tourcoing",         "_geo": { "lat": 50.7263, "lng": 3.1541 } },
-            { "id": "8",  "city": "Mouscron",          "_geo": { "lat": 50.7453, "lng": 3.2206 } },
-            { "id": "9",  "city": "Tournai",           "_geo": { "lat": 50.6053, "lng": 3.3758 } },
-            { "id": "10", "city": "Ghent",             "_geo": { "lat": 51.0537, "lng": 3.6957 } },
-            { "id": "11", "city": "Brussels",          "_geo": { "lat": 50.8466, "lng": 4.3370 } },
-            { "id": "12", "city": "Charleroi",         "_geo": { "lat": 50.4095, "lng": 4.4347 } },
-            { "id": "13", "city": "Mons",              "_geo": { "lat": 50.4502, "lng": 3.9623 } },
-            { "id": "14", "city": "Valenciennes",      "_geo": { "lat": 50.3518, "lng": 3.5326 } },
-            { "id": "15", "city": "Arras",             "_geo": { "lat": 50.2844, "lng": 2.7637 } },
-            { "id": "16", "city": "Cambrai",           "_geo": { "lat": 50.1793, "lng": 3.2189 } },
-            { "id": "17", "city": "Bapaume",           "_geo": { "lat": 50.1112, "lng": 2.8547 } },
-            { "id": "18", "city": "Amiens",            "_geo": { "lat": 49.9314, "lng": 2.2710 } },
-            { "id": "19", "city": "Compiègne",         "_geo": { "lat": 49.4449, "lng": 2.7913 } },
-            { "id": "20", "city": "Paris",             "_geo": { "lat": 48.9021, "lng": 2.3708 } }
+            { "id": "1",  "city": "Lille",             RESERVED_GEO_FIELD_NAME: { "lat": 50.6299, "lng": 3.0569 } },
+            { "id": "2",  "city": "Mons-en-Barœul",    RESERVED_GEO_FIELD_NAME: { "lat": 50.6415, "lng": 3.1106 } },
+            { "id": "3",  "city": "Hellemmes",         RESERVED_GEO_FIELD_NAME: { "lat": 50.6312, "lng": 3.1106 } },
+            { "id": "4",  "city": "Villeneuve-d'Ascq", RESERVED_GEO_FIELD_NAME: { "lat": 50.6224, "lng": 3.1476 } },
+            { "id": "5",  "city": "Hem",               RESERVED_GEO_FIELD_NAME: { "lat": 50.6552, "lng": 3.1897 } },
+            { "id": "6",  "city": "Roubaix",           RESERVED_GEO_FIELD_NAME: { "lat": 50.6924, "lng": 3.1763 } },
+            { "id": "7",  "city": "Tourcoing",         RESERVED_GEO_FIELD_NAME: { "lat": 50.7263, "lng": 3.1541 } },
+            { "id": "8",  "city": "Mouscron",          RESERVED_GEO_FIELD_NAME: { "lat": 50.7453, "lng": 3.2206 } },
+            { "id": "9",  "city": "Tournai",           RESERVED_GEO_FIELD_NAME: { "lat": 50.6053, "lng": 3.3758 } },
+            { "id": "10", "city": "Ghent",             RESERVED_GEO_FIELD_NAME: { "lat": 51.0537, "lng": 3.6957 } },
+            { "id": "11", "city": "Brussels",          RESERVED_GEO_FIELD_NAME: { "lat": 50.8466, "lng": 4.3370 } },
+            { "id": "12", "city": "Charleroi",         RESERVED_GEO_FIELD_NAME: { "lat": 50.4095, "lng": 4.4347 } },
+            { "id": "13", "city": "Mons",              RESERVED_GEO_FIELD_NAME: { "lat": 50.4502, "lng": 3.9623 } },
+            { "id": "14", "city": "Valenciennes",      RESERVED_GEO_FIELD_NAME: { "lat": 50.3518, "lng": 3.5326 } },
+            { "id": "15", "city": "Arras",             RESERVED_GEO_FIELD_NAME: { "lat": 50.2844, "lng": 2.7637 } },
+            { "id": "16", "city": "Cambrai",           RESERVED_GEO_FIELD_NAME: { "lat": 50.1793, "lng": 3.2189 } },
+            { "id": "17", "city": "Bapaume",           RESERVED_GEO_FIELD_NAME: { "lat": 50.1112, "lng": 2.8547 } },
+            { "id": "18", "city": "Amiens",            RESERVED_GEO_FIELD_NAME: { "lat": 49.9314, "lng": 2.2710 } },
+            { "id": "19", "city": "Compiègne",         RESERVED_GEO_FIELD_NAME: { "lat": 49.4449, "lng": 2.7913 } },
+            { "id": "20", "city": "Paris",             RESERVED_GEO_FIELD_NAME: { "lat": 48.9021, "lng": 2.3708 } }
         ])).unwrap();
         wtxn.commit().unwrap();
 
@@ -3249,7 +3296,7 @@ mod tests {
 
         let rtxn = index.read_txn().unwrap();
         // list all documents
-        let results = index.all_documents(&rtxn).unwrap();
+        let results = index.all_compressed_documents(&rtxn).unwrap();
         for result in results {
             let (id, _) = result.unwrap();
             assert!(
@@ -3332,6 +3379,44 @@ mod tests {
         assert_eq!(Some(&2), results.get("number"));
 
         rtxn.commit().unwrap();
+    }
+
+    #[test]
+    fn incremental_update_without_changing_facet_distribution() {
+        let index = TempIndex::new();
+        index
+            .add_documents(documents!([
+                {"id": 0, "some_field": "aaa", "other_field": "aaa" },
+                {"id": 1, "some_field": "bbb", "other_field": "bbb" },
+            ]))
+            .unwrap();
+        {
+            let rtxn = index.read_txn().unwrap();
+            // count field distribution
+            let results = index.field_distribution(&rtxn).unwrap();
+            assert_eq!(Some(&2), results.get("id"));
+            assert_eq!(Some(&2), results.get("some_field"));
+            assert_eq!(Some(&2), results.get("other_field"));
+        }
+
+        let mut index = index;
+        index.index_documents_config.update_method = IndexDocumentsMethod::UpdateDocuments;
+
+        index
+            .add_documents(documents!([
+                {"id": 0, "other_field": "bbb" },
+                {"id": 1, "some_field": "ccc" },
+            ]))
+            .unwrap();
+
+        {
+            let rtxn = index.read_txn().unwrap();
+            // count field distribution
+            let results = index.field_distribution(&rtxn).unwrap();
+            assert_eq!(Some(&2), results.get("id"));
+            assert_eq!(Some(&2), results.get("some_field"));
+            assert_eq!(Some(&2), results.get("other_field"));
+        }
     }
 
     #[test]

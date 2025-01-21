@@ -22,6 +22,7 @@ use meilisearch_types::milli::score_details::{ScoreDetails, ScoreValue};
 use meilisearch_types::milli::{self, DocumentId, OrderBy, TimeBudget};
 use roaring::RoaringBitmap;
 use serde::Serialize;
+use utoipa::ToSchema;
 
 use super::ranking_rules::{self, RankingRules};
 use super::{
@@ -33,10 +34,11 @@ use crate::routes::indexes::search::search_kind;
 
 pub const DEFAULT_FEDERATED_WEIGHT: f64 = 1.0;
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, deserr::Deserr)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, deserr::Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct FederationOptions {
     #[deserr(default, error = DeserrJsonError<InvalidMultiSearchWeight>)]
+    #[schema(value_type = f64)]
     pub weight: Weight,
 }
 
@@ -70,8 +72,9 @@ impl std::ops::Deref for Weight {
     }
 }
 
-#[derive(Debug, deserr::Deserr)]
+#[derive(Debug, deserr::Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
+#[schema(rename_all = "camelCase")]
 pub struct Federation {
     #[deserr(default = super::DEFAULT_SEARCH_LIMIT(), error = DeserrJsonError<InvalidSearchLimit>)]
     pub limit: usize,
@@ -83,22 +86,26 @@ pub struct Federation {
     pub merge_facets: Option<MergeFacets>,
 }
 
-#[derive(Copy, Clone, Debug, deserr::Deserr, Default)]
+#[derive(Copy, Clone, Debug, deserr::Deserr, Default, ToSchema)]
 #[deserr(error = DeserrJsonError<InvalidMultiSearchMergeFacets>, rename_all = camelCase, deny_unknown_fields)]
+#[schema(rename_all = "camelCase")]
 pub struct MergeFacets {
     #[deserr(default, error = DeserrJsonError<InvalidMultiSearchMaxValuesPerFacet>)]
     pub max_values_per_facet: Option<usize>,
 }
 
-#[derive(Debug, deserr::Deserr)]
+#[derive(Debug, deserr::Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
+#[schema(rename_all = "camelCase")]
 pub struct FederatedSearch {
     pub queries: Vec<SearchQueryWithIndex>,
     #[deserr(default)]
     pub federation: Option<Federation>,
 }
-#[derive(Serialize, Clone)]
+
+#[derive(Serialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
 pub struct FederatedSearchResult {
     pub hits: Vec<SearchHit>,
     pub processing_time_ms: u128,
@@ -109,6 +116,7 @@ pub struct FederatedSearchResult {
     pub semantic_hit_count: Option<u32>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = Option<BTreeMap<String, BTreeMap<String, u64>>>)]
     pub facet_distribution: Option<BTreeMap<String, IndexMap<String, u64>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub facet_stats: Option<BTreeMap<String, FacetStats>>,
@@ -355,7 +363,7 @@ struct SearchResultByIndex {
     facets: Option<ComputedFacets>,
 }
 
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default, Serialize, ToSchema)]
 pub struct FederatedFacets(pub BTreeMap<String, ComputedFacets>);
 
 impl FederatedFacets {
@@ -561,7 +569,7 @@ pub fn perform_federated_search(
 
             let res: Result<(), ResponseError> = (|| {
                 let search_kind =
-                    search_kind(&query, index_scheduler, index_uid.to_string(), &index, features)?;
+                    search_kind(&query, index_scheduler, index_uid.to_string(), &index)?;
 
                 let canonicalization_kind = match (&search_kind, &query.q) {
                     (SearchKind::SemanticOnly { .. }, _) => {
@@ -623,7 +631,7 @@ pub fn perform_federated_search(
                     _ => semantic_hit_count = Some(0),
                 }
 
-                let retrieve_vectors = RetrieveVectors::new(query.retrieve_vectors, features)?;
+                let retrieve_vectors = RetrieveVectors::new(query.retrieve_vectors);
 
                 let time_budget = match cutoff {
                     Some(cutoff) => TimeBudget::new(Duration::from_millis(cutoff)),

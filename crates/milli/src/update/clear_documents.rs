@@ -62,6 +62,7 @@ impl<'t, 'i> ClearDocuments<'t, 'i> {
         self.index.put_field_distribution(self.wtxn, &FieldDistribution::default())?;
         self.index.delete_geo_rtree(self.wtxn)?;
         self.index.delete_geo_faceted_documents_ids(self.wtxn)?;
+        self.index.delete_document_compression_dictionary(self.wtxn)?;
 
         // Remove all user-provided bits from the configs
         let mut configs = self.index.embedding_configs(self.wtxn)?;
@@ -103,6 +104,7 @@ impl<'t, 'i> ClearDocuments<'t, 'i> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::constants::RESERVED_GEO_FIELD_NAME;
     use crate::index::tests::TempIndex;
 
     #[test]
@@ -114,7 +116,7 @@ mod tests {
             .add_documents_using_wtxn(&mut wtxn, documents!([
                 { "id": 0, "name": "kevin", "age": 20 },
                 { "id": 1, "name": "kevina" },
-                { "id": 2, "name": "benoit", "country": "France", "_geo": { "lng": 42, "lat": 35 } }
+                { "id": 2, "name": "benoit", "country": "France", RESERVED_GEO_FIELD_NAME: { "lng": 42, "lat": 35 } }
             ]))
             .unwrap();
 

@@ -7,7 +7,7 @@ use bytemuck::allocation::pod_collect_to_vec;
 use grenad::{MergeFunction, Merger, MergerBuilder};
 use heed::types::Bytes;
 use heed::{BytesDecode, RwTxn};
-use obkv::{KvReader, KvWriter};
+use obkv::{KvReader, KvReaderU16, KvWriter};
 use roaring::RoaringBitmap;
 
 use super::helpers::{
@@ -17,6 +17,7 @@ use super::helpers::{
 };
 use crate::external_documents_ids::{DocumentOperation, DocumentOperationKind};
 use crate::facet::FacetType;
+use crate::heed_codec::CompressedObkvU16;
 use crate::index::db_name::DOCUMENTS;
 use crate::index::IndexEmbeddingConfig;
 use crate::proximity::MAX_DISTANCE;
@@ -137,8 +138,7 @@ pub(crate) fn write_typed_chunk_into_index(
             let _entered = span.enter();
 
             let fields_ids_map = index.fields_ids_map(wtxn)?;
-            let vectors_fid =
-                fields_ids_map.id(crate::vector::parsed_vectors::RESERVED_VECTORS_FIELD_NAME);
+            let vectors_fid = fields_ids_map.id(crate::constants::RESERVED_VECTORS_FIELD_NAME);
 
             let mut builder = MergerBuilder::new(KeepLatestObkv);
             for typed_chunk in typed_chunks {
@@ -159,6 +159,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 .into_iter()
                 .map(|IndexEmbeddingConfig { name, .. }| name)
                 .collect();
+            let dictionary = index.document_compression_dictionary(wtxn)?;
             let mut vectors_buffer = Vec::new();
             while let Some((key, reader)) = iter.next()? {
                 let mut writer: KvWriter<_, FieldId> = KvWriter::memory();
@@ -208,7 +209,15 @@ pub(crate) fn write_typed_chunk_into_index(
                 let db = index.documents.remap_data_type::<Bytes>();
 
                 if !writer.is_empty() {
-                    db.put(wtxn, &docid, &writer.into_inner().unwrap())?;
+                    let uncompressed_document_bytes = writer.into_inner().unwrap();
+                    match dictionary.as_ref() {
+                        Some(dictionary) => {
+                            let doc = KvReaderU16::from_slice(&uncompressed_document_bytes);
+                            let compressed = CompressedObkvU16::with_dictionary(doc, dictionary)?;
+                            db.put(wtxn, &docid, compressed.as_bytes())?
+                        }
+                        None => db.put(wtxn, &docid, &uncompressed_document_bytes)?,
+                    }
                     operations.push(DocumentOperation {
                         external_id: external_id.to_string(),
                         internal_id: docid,

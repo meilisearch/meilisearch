@@ -152,7 +152,7 @@ test_setting_routes!(
     {
         setting: embedders,
         update_verb: patch,
-        default_value: null
+        default_value: {}
     },
     {
         setting: facet_search,
@@ -193,11 +193,11 @@ async fn get_settings() {
     let server = Server::new().await;
     let index = server.index("test");
     let (response, _code) = index.create(None).await;
-    index.wait_task(response.uid()).await;
+    index.wait_task(response.uid()).await.succeeded();
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
     let settings = response.as_object().unwrap();
-    assert_eq!(settings.keys().len(), 19);
+    assert_eq!(settings.keys().len(), 20);
     assert_eq!(settings["displayedAttributes"], json!(["*"]));
     assert_eq!(settings["searchableAttributes"], json!(["*"]));
     assert_eq!(settings["filterableAttributes"], json!([]));
@@ -230,27 +230,16 @@ async fn get_settings() {
     assert_eq!(settings["searchCutoffMs"], json!(null));
     assert_eq!(settings["prefixSearch"], json!("indexingTime"));
     assert_eq!(settings["facetSearch"], json!(true));
+    assert_eq!(settings["embedders"], json!({}));
 }
 
 #[actix_rt::test]
 async fn secrets_are_hidden_in_settings() {
     let server = Server::new().await;
-    let (response, code) = server.set_features(json!({"vectorStore": true})).await;
-
-    meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
-    {
-      "vectorStore": true,
-      "metrics": false,
-      "logsRoute": false,
-      "editDocumentsByFunction": false,
-      "containsFilter": false
-    }
-    "###);
 
     let index = server.index("test");
     let (response, _code) = index.create(None).await;
-    index.wait_task(response.uid()).await;
+    index.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index
         .update_settings(json!({
@@ -285,7 +274,7 @@ async fn secrets_are_hidden_in_settings() {
 
     let (response, code) = index.settings().await;
     meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r#"
     {
       "displayedAttributes": [
         "*"
@@ -346,11 +335,11 @@ async fn secrets_are_hidden_in_settings() {
       "facetSearch": true,
       "prefixSearch": "indexingTime"
     }
-    "###);
+    "#);
 
     let (response, code) = server.get_task(settings_update_uid).await;
     meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response["details"]), @r###"
+    meili_snap::snapshot!(meili_snap::json_string!(response["details"]), @r#"
     {
       "embedders": {
         "default": {
@@ -363,7 +352,7 @@ async fn secrets_are_hidden_in_settings() {
         }
       }
     }
-    "###);
+    "#);
 }
 
 #[actix_rt::test]
@@ -378,15 +367,15 @@ async fn error_update_settings_unknown_field() {
 async fn test_partial_update() {
     let server = Server::new().await;
     let index = server.index("test");
-    let (_response, _code) = index.update_settings(json!({"displayedAttributes": ["foo"]})).await;
-    index.wait_task(0).await;
+    let (task, _code) = index.update_settings(json!({"displayedAttributes": ["foo"]})).await;
+    index.wait_task(task.uid()).await.succeeded();
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
     assert_eq!(response["displayedAttributes"], json!(["foo"]));
     assert_eq!(response["searchableAttributes"], json!(["*"]));
 
-    let (_response, _) = index.update_settings(json!({"searchableAttributes": ["bar"]})).await;
-    index.wait_task(1).await;
+    let (task, _) = index.update_settings(json!({"searchableAttributes": ["bar"]})).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
@@ -398,10 +387,10 @@ async fn test_partial_update() {
 async fn error_delete_settings_unexisting_index() {
     let server = Server::new().await;
     let index = server.index("test");
-    let (_response, code) = index.delete_settings().await;
+    let (task, code) = index.delete_settings().await;
     assert_eq!(code, 202);
 
-    let response = index.wait_task(0).await;
+    let response = index.wait_task(task.uid()).await;
 
     assert_eq!(response["status"], "failed");
 }
@@ -422,12 +411,12 @@ async fn reset_all_settings() {
     let (response, code) = index.add_documents(documents, None).await;
     assert_eq!(code, 202);
     assert_eq!(response["taskUid"], 0);
-    index.wait_task(0).await;
+    index.wait_task(response.uid()).await.succeeded();
 
-    index
+    let (update_task,_status_code) = index
         .update_settings(json!({"displayedAttributes": ["name", "age"], "searchableAttributes": ["name"], "stopWords": ["the"], "filterableAttributes": ["age"], "synonyms": {"puppy": ["dog", "doggo", "potat"] }}))
         .await;
-    index.wait_task(1).await;
+    index.wait_task(update_task.uid()).await.succeeded();
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
     assert_eq!(response["displayedAttributes"], json!(["name", "age"]));
@@ -436,8 +425,8 @@ async fn reset_all_settings() {
     assert_eq!(response["synonyms"], json!({"puppy": ["dog", "doggo", "potat"] }));
     assert_eq!(response["filterableAttributes"], json!(["age"]));
 
-    index.delete_settings().await;
-    index.wait_task(2).await;
+    let (delete_task, _status_code) = index.delete_settings().await;
+    index.wait_task(delete_task.uid()).await.succeeded();
 
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
@@ -456,14 +445,14 @@ async fn reset_all_settings() {
 async fn update_setting_unexisting_index() {
     let server = Server::new().await;
     let index = server.index("test");
-    let (_response, code) = index.update_settings(json!({})).await;
+    let (task, code) = index.update_settings(json!({})).await;
     assert_eq!(code, 202);
-    let response = index.wait_task(0).await;
+    let response = index.wait_task(task.uid()).await;
     assert_eq!(response["status"], "succeeded");
     let (_response, code) = index.get().await;
     assert_eq!(code, 200);
-    index.delete_settings().await;
-    let response = index.wait_task(1).await;
+    let (task, _status_code) = index.delete_settings().await;
+    let response = index.wait_task(task.uid()).await;
     assert_eq!(response["status"], "succeeded");
 }
 
@@ -506,16 +495,16 @@ async fn set_and_reset_distinct_attribute_with_dedicated_route() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    let (_response, _code) = index.update_distinct_attribute(json!("test")).await;
-    index.wait_task(0).await;
+    let (task, _code) = index.update_distinct_attribute(json!("test")).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, _) = index.get_distinct_attribute().await;
 
     assert_eq!(response, "test");
 
-    index.update_distinct_attribute(json!(null)).await;
+    let (task, _status_code) = index.update_distinct_attribute(json!(null)).await;
 
-    index.wait_task(1).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, _) = index.get_distinct_attribute().await;
 

@@ -60,6 +60,10 @@ const MEILI_EXPERIMENTAL_REDUCE_INDEXING_MEMORY_USAGE: &str =
     "MEILI_EXPERIMENTAL_REDUCE_INDEXING_MEMORY_USAGE";
 const MEILI_EXPERIMENTAL_MAX_NUMBER_OF_BATCHED_TASKS: &str =
     "MEILI_EXPERIMENTAL_MAX_NUMBER_OF_BATCHED_TASKS";
+const MEILI_EXPERIMENTAL_LIMIT_BATCHED_TASKS_TOTAL_SIZE: &str =
+    "MEILI_EXPERIMENTAL_LIMIT_BATCHED_TASKS_SIZE";
+const MEILI_EXPERIMENTAL_ENABLE_DOCUMENT_COMPRESSION: &str =
+    "MEILI_EXPERIMENTAL_ENABLE_DOCUMENT_COMPRESSION";
 
 const DEFAULT_CONFIG_FILE_PATH: &str = "./config.toml";
 const DEFAULT_DB_PATH: &str = "./data.ms";
@@ -200,20 +204,23 @@ pub struct Opt {
     #[clap(long, env = MEILI_TASK_WEBHOOK_URL)]
     pub task_webhook_url: Option<Url>,
 
-    /// The Authorization header to send on the webhook URL whenever a task finishes so a third party can be notified.
+    /// The Authorization header to send on the webhook URL whenever
+    /// a task finishes so a third party can be notified.
     #[clap(long, env = MEILI_TASK_WEBHOOK_AUTHORIZATION_HEADER)]
     pub task_webhook_authorization_header: Option<String>,
 
     /// Deactivates Meilisearch's built-in telemetry when provided.
     ///
-    /// Meilisearch automatically collects data from all instances that do not opt out using this flag.
-    /// All gathered data is used solely for the purpose of improving Meilisearch, and can be deleted
+    /// Meilisearch automatically collects data from all instances that
+    /// do not opt out using this flag. All gathered data is used solely
+    /// for the purpose of improving Meilisearch, and can be deleted
     /// at any time.
     #[serde(default)] // we can't send true
     #[clap(long, env = MEILI_NO_ANALYTICS)]
     pub no_analytics: bool,
 
-    /// Sets the maximum size of the index. Value must be given in bytes or explicitly stating a base unit (for instance: 107374182400, '107.7Gb', or '107374 Mb').
+    /// Sets the maximum size of the index. Value must be given in bytes or explicitly
+    /// stating a base unit (for instance: 107374182400, '107.7Gb', or '107374 Mb').
     #[clap(skip = default_max_index_size())]
     #[serde(skip, default = "default_max_index_size")]
     pub max_index_size: Byte,
@@ -333,43 +340,53 @@ pub struct Opt {
 
     /// Defines how much detail should be present in Meilisearch's logs.
     ///
-    /// Meilisearch currently supports six log levels, listed in order of increasing verbosity: OFF, ERROR, WARN, INFO, DEBUG, TRACE.
+    /// Meilisearch currently supports six log levels, listed in order of
+    /// increasing verbosity: OFF, ERROR, WARN, INFO, DEBUG, TRACE.
     #[clap(long, env = MEILI_LOG_LEVEL, default_value_t)]
     #[serde(default)]
     pub log_level: LogLevel,
 
-    /// Experimental contains filter feature. For more information, see: <https://github.com/orgs/meilisearch/discussions/763>
+    /// Experimental contains filter feature. For more information,
+    /// see: <https://github.com/orgs/meilisearch/discussions/763>
     ///
     /// Enables the experimental contains filter operator.
     #[clap(long, env = MEILI_EXPERIMENTAL_CONTAINS_FILTER)]
     #[serde(default)]
     pub experimental_contains_filter: bool,
 
-    /// Experimental metrics feature. For more information, see: <https://github.com/meilisearch/meilisearch/discussions/3518>
+    /// Experimental metrics feature. For more information,
+    /// see: <https://github.com/meilisearch/meilisearch/discussions/3518>
     ///
     /// Enables the Prometheus metrics on the `GET /metrics` endpoint.
     #[clap(long, env = MEILI_EXPERIMENTAL_ENABLE_METRICS)]
     #[serde(default)]
     pub experimental_enable_metrics: bool,
 
-    /// Experimental search queue size. For more information, see: <https://github.com/orgs/meilisearch/discussions/729>
+    /// Experimental search queue size. For more information,
+    /// see: <https://github.com/orgs/meilisearch/discussions/729>
     ///
-    /// Lets you customize the size of the search queue. Meilisearch processes your search requests as fast as possible but once the
-    /// queue is full it starts returning HTTP 503, Service Unavailable.
+    /// Lets you customize the size of the search queue. Meilisearch processes
+    /// your search requests as fast as possible but once the queue is full
+    /// it starts returning HTTP 503, Service Unavailable.
+    ///
     /// The default value is 1000.
     #[clap(long, env = MEILI_EXPERIMENTAL_SEARCH_QUEUE_SIZE, default_value_t = default_experimental_search_queue_size())]
     #[serde(default = "default_experimental_search_queue_size")]
     pub experimental_search_queue_size: usize,
 
-    /// Experimental drop search after. For more information, see: <https://github.com/orgs/meilisearch/discussions/783>
+    /// Experimental drop search after. For more information,
+    /// see: <https://github.com/orgs/meilisearch/discussions/783>
     ///
-    /// Let you customize after how many seconds Meilisearch should consider a search request irrelevant and drop it.
+    /// Let you customize after how many seconds Meilisearch should consider
+    /// a search request irrelevant and drop it.
+    ///
     /// The default value is 60.
     #[clap(long, env = MEILI_EXPERIMENTAL_DROP_SEARCH_AFTER, default_value_t = default_drop_search_after())]
     #[serde(default = "default_drop_search_after")]
     pub experimental_drop_search_after: NonZeroUsize,
 
-    /// Experimental number of searches per core. For more information, see: <https://github.com/orgs/meilisearch/discussions/784>
+    /// Experimental number of searches per core. For more information,
+    /// see: <https://github.com/orgs/meilisearch/discussions/784>
     ///
     /// Lets you customize how many search requests can run on each core concurrently.
     /// The default value is 4.
@@ -377,16 +394,19 @@ pub struct Opt {
     #[serde(default = "default_nb_searches_per_core")]
     pub experimental_nb_searches_per_core: NonZeroUsize,
 
-    /// Experimental logs mode feature. For more information, see: <https://github.com/orgs/meilisearch/discussions/723>
+    /// Experimental logs mode feature. For more information,
+    /// see: <https://github.com/orgs/meilisearch/discussions/723>
     ///
     /// Change the mode of the logs on the console.
     #[clap(long, env = MEILI_EXPERIMENTAL_LOGS_MODE, default_value_t)]
     #[serde(default)]
     pub experimental_logs_mode: LogMode,
 
-    /// Experimental logs route feature. For more information, see: <https://github.com/orgs/meilisearch/discussions/721>
+    /// Experimental logs route feature. For more information,
+    /// see: <https://github.com/orgs/meilisearch/discussions/721>
     ///
-    /// Enables the log routes on the `POST /logs/stream`, `POST /logs/stderr` endpoints, and the `DELETE /logs/stream` to stop receiving logs.
+    /// Enables the log routes on the `POST /logs/stream`, `POST /logs/stderr` endpoints,
+    /// and the `DELETE /logs/stream` to stop receiving logs.
     #[clap(long, env = MEILI_EXPERIMENTAL_ENABLE_LOGS_ROUTE)]
     #[serde(default)]
     pub experimental_enable_logs_route: bool,
@@ -396,20 +416,34 @@ pub struct Opt {
     ///
     /// - /!\ Disable the automatic clean up of old processed tasks, you're in charge of that now
     /// - Lets you specify a custom task ID upon registering a task
-    /// - Lets you execute dry-register a task (get an answer from the route but nothing is actually registered in meilisearch and it won't be processed)
+    /// - Lets you execute dry-register a task (get an answer from the route but nothing is actually
+    ///   registered in meilisearch and it won't be processed)
     #[clap(long, env = MEILI_EXPERIMENTAL_REPLICATION_PARAMETERS)]
     #[serde(default)]
     pub experimental_replication_parameters: bool,
 
-    /// Experimental RAM reduction during indexing, do not use in production, see: <https://github.com/meilisearch/product/discussions/652>
+    /// Experimental RAM reduction during indexing, do not use in production,
+    /// see: <https://github.com/meilisearch/product/discussions/652>
     #[clap(long, env = MEILI_EXPERIMENTAL_REDUCE_INDEXING_MEMORY_USAGE)]
     #[serde(default)]
     pub experimental_reduce_indexing_memory_usage: bool,
 
-    /// Experimentally reduces the maximum number of tasks that will be processed at once, see: <https://github.com/orgs/meilisearch/discussions/713>
+    /// Experimentally reduces the maximum number of tasks that will be processed at once,
+    /// see: <https://github.com/orgs/meilisearch/discussions/713>
     #[clap(long, env = MEILI_EXPERIMENTAL_MAX_NUMBER_OF_BATCHED_TASKS, default_value_t = default_limit_batched_tasks())]
     #[serde(default = "default_limit_batched_tasks")]
     pub experimental_max_number_of_batched_tasks: usize,
+
+    /// Experimentally reduces the maximum total size, in bytes, of tasks that will be processed at once,
+    /// see: <https://github.com/orgs/meilisearch/discussions/801>
+    #[clap(long, env = MEILI_EXPERIMENTAL_LIMIT_BATCHED_TASKS_TOTAL_SIZE, default_value_t = default_limit_batched_tasks_total_size())]
+    #[serde(default = "default_limit_batched_tasks_total_size")]
+    pub experimental_limit_batched_tasks_total_size: u64,
+
+    /// Experimentally enable the document compression feature, see: <https://github.com/orgs/meilisearch/discussions/802>
+    #[clap(long, env = MEILI_EXPERIMENTAL_ENABLE_DOCUMENT_COMPRESSION)]
+    #[serde(default)]
+    pub experimental_enable_document_compression: bool,
 
     #[serde(flatten)]
     #[clap(flatten)]
@@ -482,7 +516,6 @@ impl Opt {
             max_index_size: _,
             max_task_db_size: _,
             http_payload_size_limit,
-            experimental_max_number_of_batched_tasks,
             ssl_cert_path,
             ssl_key_path,
             ssl_auth_path,
@@ -512,6 +545,9 @@ impl Opt {
             experimental_enable_logs_route,
             experimental_replication_parameters,
             experimental_reduce_indexing_memory_usage,
+            experimental_max_number_of_batched_tasks,
+            experimental_limit_batched_tasks_total_size,
+            experimental_enable_document_compression,
         } = self;
         export_to_env_if_not_present(MEILI_DB_PATH, db_path);
         export_to_env_if_not_present(MEILI_HTTP_ADDR, http_addr);
@@ -533,10 +569,6 @@ impl Opt {
         export_to_env_if_not_present(
             MEILI_HTTP_PAYLOAD_SIZE_LIMIT,
             http_payload_size_limit.to_string(),
-        );
-        export_to_env_if_not_present(
-            MEILI_EXPERIMENTAL_MAX_NUMBER_OF_BATCHED_TASKS,
-            experimental_max_number_of_batched_tasks.to_string(),
         );
         if let Some(ssl_cert_path) = ssl_cert_path {
             export_to_env_if_not_present(MEILI_SSL_CERT_PATH, ssl_cert_path);
@@ -595,6 +627,18 @@ impl Opt {
         export_to_env_if_not_present(
             MEILI_EXPERIMENTAL_REDUCE_INDEXING_MEMORY_USAGE,
             experimental_reduce_indexing_memory_usage.to_string(),
+        );
+        export_to_env_if_not_present(
+            MEILI_EXPERIMENTAL_MAX_NUMBER_OF_BATCHED_TASKS,
+            experimental_max_number_of_batched_tasks.to_string(),
+        );
+        export_to_env_if_not_present(
+            MEILI_EXPERIMENTAL_LIMIT_BATCHED_TASKS_TOTAL_SIZE,
+            experimental_limit_batched_tasks_total_size.to_string(),
+        );
+        export_to_env_if_not_present(
+            MEILI_EXPERIMENTAL_ENABLE_DOCUMENT_COMPRESSION,
+            experimental_enable_document_compression.to_string(),
         );
         indexer_options.export_to_env();
     }
@@ -760,8 +804,8 @@ impl MaxMemory {
 /// Returns the total amount of bytes available or `None` if this system isn't supported.
 fn total_memory_bytes() -> Option<u64> {
     if sysinfo::IS_SUPPORTED_SYSTEM {
-        let memory_kind = RefreshKind::new().with_memory(MemoryRefreshKind::new().with_ram());
-        let mut system = System::new_with_specifics(memory_kind);
+        let mem_kind = RefreshKind::nothing().with_memory(MemoryRefreshKind::nothing().with_ram());
+        let mut system = System::new_with_specifics(mem_kind);
         system.refresh_memory();
         Some(system.total_memory())
     } else {
@@ -899,6 +943,10 @@ fn default_limit_batched_tasks() -> usize {
     usize::MAX
 }
 
+fn default_limit_batched_tasks_total_size() -> u64 {
+    u64::MAX
+}
+
 fn default_snapshot_dir() -> PathBuf {
     PathBuf::from(DEFAULT_SNAPSHOT_DIR)
 }
@@ -1017,44 +1065,4 @@ where
         }
     }
     deserializer.deserialize_any(BoolOrInt)
-}
-
-#[cfg(test)]
-mod test {
-
-    use super::*;
-
-    #[test]
-    fn test_valid_opt() {
-        assert!(Opt::try_parse_from(Some("")).is_ok());
-    }
-
-    #[test]
-    #[ignore]
-    fn test_meilli_config_file_path_valid() {
-        temp_env::with_vars(
-            vec![("MEILI_CONFIG_FILE_PATH", Some("../config.toml"))], // Relative path in meilisearch package
-            || {
-                assert!(Opt::try_build().is_ok());
-            },
-        );
-    }
-
-    #[test]
-    #[ignore]
-    fn test_meilli_config_file_path_invalid() {
-        temp_env::with_vars(vec![("MEILI_CONFIG_FILE_PATH", Some("../configgg.toml"))], || {
-            let possible_error_messages = [
-                    "unable to open or read the \"../configgg.toml\" configuration file: No such file or directory (os error 2).",
-                    "unable to open or read the \"../configgg.toml\" configuration file: The system cannot find the file specified. (os error 2).", // Windows
-                ];
-            let error_message = Opt::try_build().unwrap_err().to_string();
-            assert!(
-                possible_error_messages.contains(&error_message.as_str()),
-                "Expected onf of {:?}, got {:?}.",
-                possible_error_messages,
-                error_message
-            );
-        });
-    }
 }

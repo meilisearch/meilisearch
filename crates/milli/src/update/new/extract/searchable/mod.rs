@@ -1,7 +1,3 @@
-mod extract_word_docids;
-mod extract_word_pair_proximity_docids;
-mod tokenize_document;
-
 use std::cell::RefCell;
 use std::marker::PhantomData;
 
@@ -22,9 +18,13 @@ use crate::update::new::DocumentChange;
 use crate::update::GrenadParameters;
 use crate::{Index, Result, MAX_POSITION_PER_ATTRIBUTE};
 
+mod extract_word_docids;
+mod extract_word_pair_proximity_docids;
+mod tokenize_document;
+
 pub struct SearchableExtractorData<'a, EX: SearchableExtractor> {
     tokenizer: &'a DocumentTokenizer<'a>,
-    grenad_parameters: GrenadParameters,
+    grenad_parameters: &'a GrenadParameters,
     buckets: usize,
     _ex: PhantomData<EX>,
 }
@@ -57,7 +57,6 @@ impl<'a, 'extractor, EX: SearchableExtractor + Sync> Extractor<'extractor>
 
 pub trait SearchableExtractor: Sized + Sync {
     fn run_extraction<'pl, 'fid, 'indexer, 'index, 'extractor, DC: DocumentChanges<'pl>, MSP>(
-        grenad_parameters: GrenadParameters,
         document_changes: &DC,
         indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP>,
         extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
@@ -96,7 +95,7 @@ pub trait SearchableExtractor: Sized + Sync {
 
         let extractor_data: SearchableExtractorData<Self> = SearchableExtractorData {
             tokenizer: &document_tokenizer,
-            grenad_parameters,
+            grenad_parameters: indexing_context.grenad_parameters,
             buckets: rayon::current_num_threads(),
             _ex: PhantomData,
         };
@@ -134,7 +133,6 @@ pub trait SearchableExtractor: Sized + Sync {
 
 impl<T: SearchableExtractor> DocidsExtractor for T {
     fn run_extraction<'pl, 'fid, 'indexer, 'index, 'extractor, DC: DocumentChanges<'pl>, MSP>(
-        grenad_parameters: GrenadParameters,
         document_changes: &DC,
         indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP>,
         extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
@@ -143,12 +141,6 @@ impl<T: SearchableExtractor> DocidsExtractor for T {
     where
         MSP: Fn() -> bool + Sync,
     {
-        Self::run_extraction(
-            grenad_parameters,
-            document_changes,
-            indexing_context,
-            extractor_allocs,
-            step,
-        )
+        Self::run_extraction(document_changes, indexing_context, extractor_allocs, step)
     }
 }

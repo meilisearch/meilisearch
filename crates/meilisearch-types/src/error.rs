@@ -7,17 +7,25 @@ use aweb::rt::task::JoinError;
 use convert_case::Casing;
 use milli::heed::{Error as HeedError, MdbError};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
 pub struct ResponseError {
     #[serde(skip)]
     pub code: StatusCode,
+    /// The error message.
     pub message: String,
+    /// The error code.
+    #[schema(value_type = Code)]
     #[serde(rename = "code")]
     error_code: String,
+    /// The error type.
+    #[schema(value_type = ErrorType)]
     #[serde(rename = "type")]
     error_type: String,
+    /// A link to the documentation about this specific error.
     #[serde(rename = "link")]
     error_link: String,
 }
@@ -97,7 +105,9 @@ pub trait ErrorCode {
 }
 
 #[allow(clippy::enum_variant_names)]
-enum ErrorType {
+#[derive(ToSchema)]
+#[schema(rename_all = "snake_case")]
+pub enum ErrorType {
     Internal,
     InvalidRequest,
     Auth,
@@ -129,7 +139,8 @@ impl fmt::Display for ErrorType {
 /// `MyErrorCode::default().error_code()`.
 macro_rules! make_error_codes {
     ($($code_ident:ident, $err_type:ident, $status:ident);*) => {
-        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, ToSchema)]
+        #[schema(rename_all = "snake_case")]
         pub enum Code {
             $($code_ident),*
         }
@@ -232,8 +243,9 @@ InvalidVectorsType                    , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentId                     , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentLimit                  , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentOffset                 , InvalidRequest       , BAD_REQUEST ;
-InvalidEmbedder                       , InvalidRequest       , BAD_REQUEST ;
-InvalidHybridQuery                    , InvalidRequest       , BAD_REQUEST ;
+InvalidSearchEmbedder                 , InvalidRequest       , BAD_REQUEST ;
+InvalidSimilarEmbedder                , InvalidRequest       , BAD_REQUEST ;
+InvalidSearchHybridQuery              , InvalidRequest       , BAD_REQUEST ;
 InvalidIndexLimit                     , InvalidRequest       , BAD_REQUEST ;
 InvalidIndexOffset                    , InvalidRequest       , BAD_REQUEST ;
 InvalidIndexPrimaryKey                , InvalidRequest       , BAD_REQUEST ;
@@ -432,7 +444,8 @@ impl ErrorCode for milli::Error {
                     UserError::InvalidMinTypoWordLenSetting(_, _) => {
                         Code::InvalidSettingsTypoTolerance
                     }
-                    UserError::InvalidEmbedder(_) => Code::InvalidEmbedder,
+                    UserError::InvalidSearchEmbedder(_) => Code::InvalidSearchEmbedder,
+                    UserError::InvalidSimilarEmbedder(_) => Code::InvalidSimilarEmbedder,
                     UserError::VectorEmbeddingError(_) | UserError::DocumentEmbeddingError(_) => {
                         Code::VectorEmbeddingError
                     }

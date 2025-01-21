@@ -115,7 +115,7 @@ async fn create_index_with_primary_key() {
 
     assert_eq!(response["status"], "enqueued");
 
-    let response = index.wait_task(response.uid()).await;
+    let response = index.wait_task(response.uid()).await.succeeded();
 
     assert_eq!(response["status"], "succeeded");
     assert_eq!(response["type"], "indexCreation");
@@ -130,8 +130,7 @@ async fn create_index_with_invalid_primary_key() {
     let index = server.unique_index();
     let (response, code) = index.add_documents(documents, Some("title")).await;
     assert_eq!(code, 202);
-
-    index.wait_task(response.uid()).await;
+    index.wait_task(response.uid()).await.failed();
 
     let (response, code) = index.get().await;
     assert_eq!(code, 200);
@@ -141,8 +140,7 @@ async fn create_index_with_invalid_primary_key() {
 
     let (response, code) = index.add_documents(documents, Some("id")).await;
     assert_eq!(code, 202);
-
-    index.wait_task(response.uid()).await;
+    index.wait_task(response.uid()).await.failed();
 
     let (response, code) = index.get().await;
     assert_eq!(code, 200);

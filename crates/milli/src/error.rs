@@ -10,12 +10,14 @@ use rhai::EvalAltResult;
 use serde_json::Value;
 use thiserror::Error;
 
+use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::documents::{self, DocumentsBatchCursorError};
 use crate::thread_pool_no_abort::PanicCatched;
 use crate::{CriterionError, DocumentId, FieldId, Object, SortError};
 
 pub fn is_reserved_keyword(keyword: &str) -> bool {
-    ["_geo", "_geoDistance", "_geoPoint", "_geoRadius", "_geoBoundingBox"].contains(&keyword)
+    [RESERVED_GEO_FIELD_NAME, "_geoDistance", "_geoPoint", "_geoRadius", "_geoBoundingBox"]
+        .contains(&keyword)
 }
 
 #[derive(Error, Debug)]
@@ -132,7 +134,7 @@ and can not be more than 511 bytes.", .document_id.to_string()
     InvalidVectorsEmbedderConf { document_id: String, error: String },
     #[error("{0}")]
     InvalidFilter(String),
-    #[error("Invalid type for filter subexpression: expected: {}, found: {1}.", .0.join(", "))]
+    #[error("Invalid type for filter subexpression: expected: {}, found: {}.", .0.join(", "), .1)]
     InvalidFilterExpression(&'static [&'static str], Value),
     #[error("Attribute `{}` is not sortable. {}",
         .field,
@@ -220,7 +222,9 @@ and can not be more than 511 bytes.", .document_id.to_string()
     #[error("Too many embedders in the configuration. Found {0}, but limited to 256.")]
     TooManyEmbedders(usize),
     #[error("Cannot find embedder with name `{0}`.")]
-    InvalidEmbedder(String),
+    InvalidSearchEmbedder(String),
+    #[error("Cannot find embedder with name `{0}`.")]
+    InvalidSimilarEmbedder(String),
     #[error("Too many vectors for document with id {0}: found {1}, but limited to 256.")]
     TooManyVectors(String, usize),
     #[error("`.embedders.{embedder_name}`: Field `{field}` unavailable for source `{source_}` (only available for sources: {}). Available fields: {}",

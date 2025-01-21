@@ -9,16 +9,16 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-anyhow = "1.0.86"
+anyhow = "1.0.95"
 arroy_v04_to_v05 = { package = "arroy", git = "https://github.com/meilisearch/arroy/", tag = "DO-NOT-DELETE-upgrade-v04-to-v05" }
-clap = { version = "4.5.9", features = ["derive"] }
+clap = { version = "4.5.24", features = ["derive"] }
 dump = { path = "../dump" }
 file-store = { path = "../file-store" }
-indexmap = {version = "2.7.0", features = ["serde"]}
+indexmap = { version = "2.7.0", features = ["serde"] }
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
-serde = { version = "1.0.209", features = ["derive"] }
-serde_json = {version = "1.0.133", features = ["preserve_order"]}
-tempfile = "3.14.0"
-time = { version = "0.3.36", features = ["formatting", "parsing", "alloc"] }
-uuid = { version = "1.10.0", features = ["v4"], default-features = false }
+serde = { version = "1.0.217", features = ["derive"] }
+serde_json = { version = "1.0.135", features = ["preserve_order"] }
+tempfile = "3.15.0"
+time = { version = "0.3.37", features = ["formatting", "parsing", "alloc"] }
+uuid = { version = "1.11.0", features = ["v4"], default-features = false }

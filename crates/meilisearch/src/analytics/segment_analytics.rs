@@ -177,13 +177,12 @@ impl SegmentAnalytics {
 /// This structure represent the `infos` field we send in the analytics.
 /// It's quite close to the `Opt` structure except all sensitive informations
 /// have been simplified to a boolean.
-/// It's send as-is in amplitude thus you should never update a name of the
+/// It's sent as-is in amplitude thus you should never update a name of the
 /// struct without the approval of the PM.
 #[derive(Debug, Clone, Serialize)]
 struct Infos {
     env: String,
     experimental_contains_filter: bool,
-    experimental_vector_store: bool,
     experimental_enable_metrics: bool,
     experimental_edit_documents_by_function: bool,
     experimental_search_queue_size: usize,
@@ -194,6 +193,8 @@ struct Infos {
     experimental_enable_logs_route: bool,
     experimental_reduce_indexing_memory_usage: bool,
     experimental_max_number_of_batched_tasks: usize,
+    experimental_limit_batched_tasks_total_size: u64,
+    experimental_enable_document_compression: bool,
     gpu_enabled: bool,
     db_path: bool,
     import_dump: bool,
@@ -239,6 +240,8 @@ impl Infos {
             experimental_enable_logs_route,
             experimental_reduce_indexing_memory_usage,
             experimental_max_number_of_batched_tasks,
+            experimental_limit_batched_tasks_total_size,
+            experimental_enable_document_compression,
             http_addr,
             master_key: _,
             env,
@@ -278,7 +281,6 @@ impl Infos {
             indexer_options;
 
         let RuntimeTogglableFeatures {
-            vector_store,
             metrics,
             logs_route,
             edit_documents_by_function,
@@ -290,7 +292,6 @@ impl Infos {
         Self {
             env,
             experimental_contains_filter: experimental_contains_filter | contains_filter,
-            experimental_vector_store: vector_store,
             experimental_edit_documents_by_function: edit_documents_by_function,
             experimental_enable_metrics: experimental_enable_metrics | metrics,
             experimental_search_queue_size,
@@ -300,6 +301,7 @@ impl Infos {
             experimental_replication_parameters,
             experimental_enable_logs_route: experimental_enable_logs_route | logs_route,
             experimental_reduce_indexing_memory_usage,
+            experimental_enable_document_compression,
             gpu_enabled: meilisearch_types::milli::vector::is_cuda_enabled(),
             db_path: db_path != PathBuf::from("./data.ms"),
             import_dump: import_dump.is_some(),
@@ -314,6 +316,7 @@ impl Infos {
             http_addr: http_addr != default_http_addr(),
             http_payload_size_limit,
             experimental_max_number_of_batched_tasks,
+            experimental_limit_batched_tasks_total_size,
             task_queue_webhook: task_webhook_url.is_some(),
             task_webhook_authorization_header: task_webhook_authorization_header.is_some(),
             log_level: log_level.to_string(),
@@ -426,13 +429,9 @@ impl Segment {
             &AuthFilter::default(),
         ) {
             // Replace the version number with the prototype name if any.
-            let version = if let Some(prototype) = build_info::DescribeResult::from_build()
+            let version = build_info::DescribeResult::from_build()
                 .and_then(|describe| describe.as_prototype())
-            {
-                prototype
-            } else {
-                env!("CARGO_PKG_VERSION")
-            };
+                .unwrap_or(env!("CARGO_PKG_VERSION"));
 
             let _ = self
                 .batcher

@@ -13,12 +13,13 @@ use matching_words::{MatchType, PartialMatch};
 use r#match::{Match, MatchPosition};
 use serde::Serialize;
 use simple_token_kind::SimpleTokenKind;
+use utoipa::ToSchema;
 
 const DEFAULT_CROP_MARKER: &str = "…";
 const DEFAULT_HIGHLIGHT_PREFIX: &str = "<em>";
 const DEFAULT_HIGHLIGHT_SUFFIX: &str = "</em>";
 
-/// Structure used to build a Matcher allowing to customize formating tags.
+/// Structure used to build a Matcher allowing to customize formatting tags.
 pub struct MatcherBuilder<'m> {
     matching_words: MatchingWords,
     tokenizer: Tokenizer<'m>,
@@ -100,7 +101,7 @@ impl FormatOptions {
     }
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Debug, Clone, PartialEq, Eq, ToSchema)]
 pub struct MatchBounds {
     pub start: usize,
     pub length: usize,

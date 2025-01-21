@@ -1,0 +1,75 @@
+---
+source: crates/index-scheduler/src/scheduler/test.rs
+snapshot_kind: text
+---
+### Autobatching Enabled = true
+### Processing batch None:
+[]
+----------------------------------------------------------------------
+### All Tasks:
+0 {uid: 0, batch_uid: 0, status: succeeded, details: { received_documents: 1, indexed_documents: Some(1) }, kind: DocumentAdditionOrUpdate { index_uid: "catto", primary_key: None, method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000000, documents_count: 1, allow_index_creation: true }}
+1 {uid: 1, batch_uid: 1, status: succeeded, details: { matched_tasks: 1, canceled_tasks: Some(0), original_filter: "test_query" }, kind: TaskCancelation { query: "test_query", tasks: RoaringBitmap<[0]> }}
+----------------------------------------------------------------------
+### Status:
+enqueued []
+succeeded [0,1,]
+----------------------------------------------------------------------
+### Kind:
+"documentAdditionOrUpdate" [0,]
+"taskCancelation" [1,]
+----------------------------------------------------------------------
+### Index Tasks:
+catto [0,]
+----------------------------------------------------------------------
+### Index Mapper:
+catto: { number_of_documents: 1, field_distribution: {"id": 1} }
+
+----------------------------------------------------------------------
+### Canceled By:
+
+----------------------------------------------------------------------
+### Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+----------------------------------------------------------------------
+### Started At:
+[timestamp] [0,]
+[timestamp] [1,]
+----------------------------------------------------------------------
+### Finished At:
+[timestamp] [0,]
+[timestamp] [1,]
+----------------------------------------------------------------------
+### All Batches:
+0 {uid: 0, details: {"receivedDocuments":1,"indexedDocuments":1}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"documentAdditionOrUpdate":1},"indexUids":{"catto":1}}, }
+1 {uid: 1, details: {"matchedTasks":1,"canceledTasks":0,"originalFilter":"test_query"}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"taskCancelation":1},"indexUids":{}}, }
+----------------------------------------------------------------------
+### Batch to tasks mapping:
+0 [0,]
+1 [1,]
+----------------------------------------------------------------------
+### Batches Status:
+succeeded [0,1,]
+----------------------------------------------------------------------
+### Batches Kind:
+"documentAdditionOrUpdate" [0,]
+"taskCancelation" [1,]
+----------------------------------------------------------------------
+### Batches Index Tasks:
+catto [0,]
+----------------------------------------------------------------------
+### Batches Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+----------------------------------------------------------------------
+### Batches Started At:
+[timestamp] [0,]
+[timestamp] [1,]
+----------------------------------------------------------------------
+### Batches Finished At:
+[timestamp] [0,]
+[timestamp] [1,]
+----------------------------------------------------------------------
+### File Store:
+
+----------------------------------------------------------------------

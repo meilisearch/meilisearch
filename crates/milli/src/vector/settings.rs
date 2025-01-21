@@ -4,6 +4,7 @@ use std::num::NonZeroUsize;
 use deserr::Deserr;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 use super::{ollama, openai, DistributionShift};
 use crate::prompt::{default_max_bytes, PromptData};
@@ -11,48 +12,61 @@ use crate::update::Setting;
 use crate::vector::EmbeddingConfig;
 use crate::UserError;
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Deserr)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Deserr, ToSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 #[deserr(rename_all = camelCase, deny_unknown_fields)]
 pub struct EmbeddingSettings {
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
+    #[schema(value_type = Option<EmbedderSource>)]
     pub source: Setting<EmbedderSource>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
+    #[schema(value_type = Option<String>)]
     pub model: Setting<String>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
+    #[schema(value_type = Option<String>)]
     pub revision: Setting<String>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
+    #[schema(value_type = Option<String>)]
     pub api_key: Setting<String>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
+    #[schema(value_type = Option<String>)]
     pub dimensions: Setting<usize>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
+    #[schema(value_type = Option<bool>)]
     pub binary_quantized: Setting<bool>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
+    #[schema(value_type = Option<bool>)]
     pub document_template: Setting<String>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
+    #[schema(value_type = Option<usize>)]
     pub document_template_max_bytes: Setting<usize>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
+    #[schema(value_type = Option<String>)]
     pub url: Setting<String>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
+    #[schema(value_type = Option<serde_json::Value>)]
     pub request: Setting<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
+    #[schema(value_type = Option<serde_json::Value>)]
     pub response: Setting<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
+    #[schema(value_type = Option<BTreeMap<String, String>>)]
     pub headers: Setting<BTreeMap<String, String>>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
+    #[schema(value_type = Option<DistributionShift>)]
     pub distribution: Setting<DistributionShift>,
 }
 
@@ -539,7 +553,7 @@ impl EmbeddingSettings {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq, Deserr)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq, Deserr, ToSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 #[deserr(rename_all = camelCase, deny_unknown_fields)]
 pub enum EmbedderSource {
