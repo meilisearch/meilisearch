@@ -319,11 +319,9 @@ impl IndexScheduler {
                 let ret = catch_unwind(AssertUnwindSafe(|| self.process_upgrade(progress)));
                 match ret {
                     Ok(Ok(())) => (),
-                    Ok(Err(e)) => return Err(Error::TaskDatabaseUpgrade(Box::new(e))),
+                    Ok(Err(e)) => return Err(Error::DatabaseUpgrade(Box::new(e))),
                     Err(_e) => {
-                        return Err(Error::TaskDatabaseUpgrade(Box::new(
-                            Error::ProcessBatchPanicked,
-                        )));
+                        return Err(Error::DatabaseUpgrade(Box::new(Error::ProcessBatchPanicked)));
                     }
                 }
 

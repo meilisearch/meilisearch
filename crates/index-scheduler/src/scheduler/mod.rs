@@ -223,7 +223,7 @@ impl IndexScheduler {
                     self.queue
                         .tasks
                         .update_task(&mut wtxn, &task)
-                        .map_err(|e| Error::TaskDatabaseUpgrade(Box::new(e)))?;
+                        .map_err(|e| Error::UnrecoverableError(Box::new(e)))?;
                 }
                 if let Some(canceled_by) = canceled_by {
                     self.queue.tasks.canceled_by.put(&mut wtxn, &canceled_by, &canceled)?;
@@ -274,7 +274,7 @@ impl IndexScheduler {
                 let (task_progress, task_progress_obj) = AtomicTaskStep::new(ids.len() as u32);
                 progress.update_progress(task_progress_obj);
 
-                if matches!(err, Error::TaskDatabaseUpgrade(_)) {
+                if matches!(err, Error::DatabaseUpgrade(_)) {
                     tracing::error!(
                         "Upgrade task failed, tasks won't be processed until the following issue is fixed: {err}"
                     );
@@ -287,7 +287,7 @@ impl IndexScheduler {
                         .queue
                         .tasks
                         .get_task(&wtxn, id)
-                        .map_err(|e| Error::TaskDatabaseUpgrade(Box::new(e)))?
+                        .map_err(|e| Error::UnrecoverableError(Box::new(e)))?
                         .ok_or(Error::CorruptedTaskQueue)?;
                     task.status = Status::Failed;
                     task.error = Some(error.clone());
@@ -304,7 +304,7 @@ impl IndexScheduler {
                     self.queue
                         .tasks
                         .update_task(&mut wtxn, &task)
-                        .map_err(|e| Error::TaskDatabaseUpgrade(Box::new(e)))?;
+                        .map_err(|e| Error::UnrecoverableError(Box::new(e)))?;
                 }
             }
         }
@@ -334,7 +334,7 @@ impl IndexScheduler {
                     .queue
                     .tasks
                     .get_task(&rtxn, id)
-                    .map_err(|e| Error::TaskDatabaseUpgrade(Box::new(e)))?
+                    .map_err(|e| Error::UnrecoverableError(Box::new(e)))?
                     .ok_or(Error::CorruptedTaskQueue)?;
                 if let Err(e) = self.queue.delete_persisted_task_data(&task) {
                     tracing::error!(
