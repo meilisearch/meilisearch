@@ -219,12 +219,19 @@ impl<'a> FacetDistribution<'a> {
                 let facet_key = StrRefCodec::bytes_decode(facet_key).unwrap();
 
                 let key: (FieldId, _, &str) = (field_id, any_docid, facet_key);
-                let original_string = self
-                    .index
-                    .field_id_docid_facet_strings
-                    .get(self.rtxn, &key)?
-                    .unwrap()
-                    .to_owned();
+                let optional_original_string =
+                    self.index.field_id_docid_facet_strings.get(self.rtxn, &key)?;
+
+                let original_string = match optional_original_string {
+                    Some(original_string) => original_string.to_owned(),
+                    None => {
+                        tracing::error!(
+                            "Missing original facet string. Using the normalized facet {} instead",
+                            facet_key
+                        );
+                        facet_key.to_string()
+                    }
+                };
 
                 distribution.insert(original_string, nbr_docids);
                 if distribution.len() == self.max_values_per_facet {

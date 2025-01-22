@@ -283,42 +283,60 @@ impl FacetedDocidsExtractor {
 }
 
 struct DelAddFacetValue<'doc> {
-    strings: HashMap<(FieldId, BVec<'doc, u8>), DelAdd, hashbrown::DefaultHashBuilder, &'doc Bump>,
+    strings: HashMap<
+        (FieldId, &'doc str),
+        Option<BVec<'doc, u8>>,
+        hashbrown::DefaultHashBuilder,
+        &'doc Bump,
+    >,
     f64s: HashMap<(FieldId, BVec<'doc, u8>), DelAdd, hashbrown::DefaultHashBuilder, &'doc Bump>,
+    doc_alloc: &'doc Bump,
 }
 
 impl<'doc> DelAddFacetValue<'doc> {
     fn new(doc_alloc: &'doc Bump) -> Self {
-        Self { strings: HashMap::new_in(doc_alloc), f64s: HashMap::new_in(doc_alloc) }
+        Self { strings: HashMap::new_in(doc_alloc), f64s: HashMap::new_in(doc_alloc), doc_alloc }
     }
 
     fn insert_add(&mut self, fid: FieldId, value: BVec<'doc, u8>, kind: FacetKind) {
-        let cache = match kind {
-            FacetKind::String => &mut self.strings,
-            FacetKind::Number => &mut self.f64s,
-            _ => return,
-        };
-
-        let key = (fid, value);
-        if let Some(DelAdd::Deletion) = cache.get(&key) {
-            cache.remove(&key);
-        } else {
-            cache.insert(key, DelAdd::Addition);
+        match kind {
+            FacetKind::Number => {
+                let key = (fid, value);
+                if let Some(DelAdd::Deletion) = self.f64s.get(&key) {
+                    self.f64s.remove(&key);
+                } else {
+                    self.f64s.insert(key, DelAdd::Addition);
+                }
+            }
+            FacetKind::String => {
+                if let Ok(s) = std::str::from_utf8(&value) {
+                    let normalized = crate::normalize_facet(s);
+                    let truncated = self.doc_alloc.alloc_str(truncate_str(&normalized));
+                    self.strings.insert((fid, truncated), Some(value));
+                }
+            }
+            _ => (),
         }
     }
 
     fn insert_del(&mut self, fid: FieldId, value: BVec<'doc, u8>, kind: FacetKind) {
-        let cache = match kind {
-            FacetKind::String => &mut self.strings,
-            FacetKind::Number => &mut self.f64s,
-            _ => return,
-        };
-
-        let key = (fid, value);
-        if let Some(DelAdd::Addition) = cache.get(&key) {
-            cache.remove(&key);
-        } else {
-            cache.insert(key, DelAdd::Deletion);
+        match kind {
+            FacetKind::Number => {
+                let key = (fid, value);
+                if let Some(DelAdd::Addition) = self.f64s.get(&key) {
+                    self.f64s.remove(&key);
+                } else {
+                    self.f64s.insert(key, DelAdd::Deletion);
+                }
+            }
+            FacetKind::String => {
+                if let Ok(s) = std::str::from_utf8(&value) {
+                    let normalized = crate::normalize_facet(s);
+                    let truncated = self.doc_alloc.alloc_str(truncate_str(&normalized));
+                    self.strings.insert((fid, truncated), None);
+                }
+            }
+            _ => (),
         }
     }
 
@@ -329,18 +347,14 @@ impl<'doc> DelAddFacetValue<'doc> {
         doc_alloc: &Bump,
     ) -> crate::Result<()> {
         let mut buffer = bumpalo::collections::Vec::new_in(doc_alloc);
-        for ((fid, value), deladd) in self.strings {
-            if let Ok(s) = std::str::from_utf8(&value) {
-                buffer.clear();
-                buffer.extend_from_slice(&fid.to_be_bytes());
-                buffer.extend_from_slice(&docid.to_be_bytes());
-                let normalized = crate::normalize_facet(s);
-                let truncated = truncate_str(&normalized);
-                buffer.extend_from_slice(truncated.as_bytes());
-                match deladd {
-                    DelAdd::Deletion => sender.delete_facet_string(&buffer)?,
-                    DelAdd::Addition => sender.write_facet_string(&buffer, &value)?,
-                }
+        for ((fid, truncated), value) in self.strings {
+            buffer.clear();
+            buffer.extend_from_slice(&fid.to_be_bytes());
+            buffer.extend_from_slice(&docid.to_be_bytes());
+            buffer.extend_from_slice(truncated.as_bytes());
+            match &value {
+                Some(value) => sender.write_facet_string(&buffer, value)?,
+                None => sender.delete_facet_string(&buffer)?,
             }
         }
 
