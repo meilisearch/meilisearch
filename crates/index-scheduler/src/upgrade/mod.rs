@@ -6,6 +6,7 @@ use time::OffsetDateTime;
 use tracing::info;
 
 use crate::queue::TaskQueue;
+use crate::versioning::Versioning;
 
 trait UpgradeIndexScheduler {
     fn upgrade(&self, env: &Env, wtxn: &mut RwTxn, original: (u32, u32, u32))
@@ -15,6 +16,7 @@ trait UpgradeIndexScheduler {
 
 pub fn upgrade_index_scheduler(
     env: &Env,
+    versioning: &Versioning,
     from: (u32, u32, u32),
     to: (u32, u32, u32),
 ) -> anyhow::Result<()> {
@@ -55,6 +57,7 @@ pub fn upgrade_index_scheduler(
         );
         let mut wtxn = env.write_txn()?;
         upgrade.upgrade(env, &mut wtxn, from)?;
+        versioning.set_version(&mut wtxn, target)?;
         wtxn.commit()?;
         current_version = target;
     }

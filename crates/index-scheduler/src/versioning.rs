@@ -54,8 +54,15 @@ impl Versioning {
         let to = (bin_major, bin_minor, bin_patch);
 
         if from != to {
-            upgrade_index_scheduler(env, from, to)?;
+            upgrade_index_scheduler(env, &this, from, to)?;
         }
+
+        // Once we reach this point it means the upgrade process, if there was one is entirely finished
+        // we can safely say we reached the latest version of the index scheduler
+        let mut wtxn = env.write_txn()?;
+        this.set_current_version(&mut wtxn)?;
+        wtxn.commit()?;
+
         Ok(this)
     }
 }

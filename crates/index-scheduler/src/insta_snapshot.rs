@@ -6,6 +6,7 @@ use meilisearch_types::heed::types::{SerdeBincode, SerdeJson, Str};
 use meilisearch_types::heed::{Database, RoTxn};
 use meilisearch_types::milli::{CboRoaringBitmapCodec, RoaringBitmapCodec, BEU32};
 use meilisearch_types::tasks::{Details, Kind, Status, Task};
+use meilisearch_types::versioning;
 use roaring::RoaringBitmap;
 
 use crate::index_mapper::IndexMapper;
@@ -21,7 +22,7 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
         cleanup_enabled: _,
         processing_tasks,
         env,
-        version: _,
+        version,
         queue,
         scheduler,
 
@@ -38,6 +39,16 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
     let rtxn = env.read_txn().unwrap();
 
     let mut snap = String::new();
+
+    let indx_sched_version = version.get_version(&rtxn).unwrap();
+    let latest_version = (
+        versioning::VERSION_MAJOR.parse().unwrap(),
+        versioning::VERSION_MINOR.parse().unwrap(),
+        versioning::VERSION_PATCH.parse().unwrap(),
+    );
+    if indx_sched_version != Some(latest_version) {
+        snap.push_str(&format!("index scheduler running on version {indx_sched_version:?}\n"));
+    }
 
     let processing = processing_tasks.read().unwrap().clone();
     snap.push_str(&format!("### Autobatching Enabled = {}\n", scheduler.autobatching_enabled));
