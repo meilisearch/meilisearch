@@ -8,7 +8,7 @@ snapshot_kind: text
 ----------------------------------------------------------------------
 ### All Tasks:
 0 {uid: 0, status: enqueued, details: { primary_key: Some("mouse") }, kind: IndexCreation { index_uid: "catto", primary_key: Some("mouse") }}
-1 {uid: 1, batch_uid: 0, status: succeeded, kind: UpgradeDatabase { from: (1, 12, 0) }}
+1 {uid: 1, batch_uid: 0, status: succeeded, details: { from: v1.12.0 }, kind: UpgradeDatabase { from: (1, 12, 0) }}
 2 {uid: 2, status: enqueued, details: { primary_key: Some("bone") }, kind: IndexCreation { index_uid: "doggo", primary_key: Some("bone") }}
 3 {uid: 3, status: enqueued, details: { primary_key: Some("bone") }, kind: IndexCreation { index_uid: "doggo", primary_key: Some("bone") }}
 ----------------------------------------------------------------------
@@ -44,7 +44,7 @@ doggo [2,3,]
 [timestamp] [1,]
 ----------------------------------------------------------------------
 ### All Batches:
-0 {uid: 0, details: {}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"upgradeDatabase":1},"indexUids":{}}, }
+0 {uid: 0, details: {"upgradeFrom":"v1.12.0"}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"upgradeDatabase":1},"indexUids":{}}, }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:
 0 [1,]

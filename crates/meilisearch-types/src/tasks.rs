@@ -269,7 +269,9 @@ impl KindWithContent {
             }),
             KindWithContent::DumpCreation { .. } => Some(Details::Dump { dump_uid: None }),
             KindWithContent::SnapshotCreation => None,
-            KindWithContent::UpgradeDatabase { .. } => None,
+            KindWithContent::UpgradeDatabase { from } => {
+                Some(Details::UpgradeDatabase { from: (from.0, from.1, from.2) })
+            }
         }
     }
 
@@ -328,7 +330,9 @@ impl KindWithContent {
             }),
             KindWithContent::DumpCreation { .. } => Some(Details::Dump { dump_uid: None }),
             KindWithContent::SnapshotCreation => None,
-            KindWithContent::UpgradeDatabase { .. } => None,
+            KindWithContent::UpgradeDatabase { from } => {
+                Some(Details::UpgradeDatabase { from: *from })
+            }
         }
     }
 }
@@ -369,7 +373,9 @@ impl From<&KindWithContent> for Option<Details> {
             }),
             KindWithContent::DumpCreation { .. } => Some(Details::Dump { dump_uid: None }),
             KindWithContent::SnapshotCreation => None,
-            KindWithContent::UpgradeDatabase { .. } => None,
+            KindWithContent::UpgradeDatabase { from } => {
+                Some(Details::UpgradeDatabase { from: *from })
+            }
         }
     }
 }
@@ -623,7 +629,7 @@ pub enum Details {
         swaps: Vec<IndexSwap>,
     },
     UpgradeDatabase {
-        from: (usize, usize, usize),
+        from: (u32, u32, u32),
     },
 }
 

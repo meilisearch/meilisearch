@@ -8,7 +8,7 @@ snapshot_kind: text
 ----------------------------------------------------------------------
 ### All Tasks:
 0 {uid: 0, status: enqueued, details: { primary_key: Some("mouse") }, kind: IndexCreation { index_uid: "catto", primary_key: Some("mouse") }}
-1 {uid: 1, batch_uid: 0, status: failed, error: ResponseError { code: 200, message: "Planned failure for tests.", error_code: "internal", error_type: "internal", error_link: "https://docs.meilisearch.com/errors#internal" }, kind: UpgradeDatabase { from: (1, 12, 0) }}
+1 {uid: 1, batch_uid: 0, status: failed, error: ResponseError { code: 200, message: "Planned failure for tests.", error_code: "internal", error_type: "internal", error_link: "https://docs.meilisearch.com/errors#internal" }, details: { from: v1.12.0 }, kind: UpgradeDatabase { from: (1, 12, 0) }}
 ----------------------------------------------------------------------
 ### Status:
 enqueued [0,]
@@ -38,7 +38,7 @@ catto [0,]
 [timestamp] [1,]
 ----------------------------------------------------------------------
 ### All Batches:
-0 {uid: 0, details: {}, stats: {"totalNbTasks":1,"status":{"failed":1},"types":{"upgradeDatabase":1},"indexUids":{}}, }
+0 {uid: 0, details: {"upgradeFrom":"v1.12.0"}, stats: {"totalNbTasks":1,"status":{"failed":1},"types":{"upgradeDatabase":1},"indexUids":{}}, }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:
 0 [1,]
