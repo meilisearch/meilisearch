@@ -14,9 +14,12 @@ use crate::utils::{
 };
 use crate::{Error, Result, TaskId, BEI128};
 
+/// The number of database used by the task queue
+const NUMBER_OF_DATABASES: u32 = 8;
 /// Database const names for the `IndexScheduler`.
 mod db_name {
     pub const ALL_TASKS: &str = "all-tasks";
+
     pub const STATUS: &str = "status";
     pub const KIND: &str = "kind";
     pub const INDEX_TASKS: &str = "index-tasks";
@@ -59,6 +62,10 @@ impl TaskQueue {
             started_at: self.started_at,
             finished_at: self.finished_at,
         }
+    }
+
+    pub(crate) const fn nb_db() -> u32 {
+        NUMBER_OF_DATABASES
     }
 
     pub(crate) fn new(env: &Env, wtxn: &mut RwTxn) -> Result<Self> {

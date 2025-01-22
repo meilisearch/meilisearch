@@ -210,13 +210,42 @@ enum OnFailure {
 }
 
 pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Arc<AuthController>)> {
+    let index_scheduler_opt = IndexSchedulerOptions {
+        version_file_path: opt.db_path.join(VERSION_FILE_NAME),
+        auth_path: opt.db_path.join("auth"),
+        tasks_path: opt.db_path.join("tasks"),
+        update_file_path: opt.db_path.join("update_files"),
+        indexes_path: opt.db_path.join("indexes"),
+        snapshots_path: opt.snapshot_dir.clone(),
+        dumps_path: opt.dump_dir.clone(),
+        webhook_url: opt.task_webhook_url.as_ref().map(|url| url.to_string()),
+        webhook_authorization_header: opt.task_webhook_authorization_header.clone(),
+        task_db_size: opt.max_task_db_size.as_u64() as usize,
+        index_base_map_size: opt.max_index_size.as_u64() as usize,
+        enable_mdb_writemap: opt.experimental_reduce_indexing_memory_usage,
+        indexer_config: Arc::new((&opt.indexer_options).try_into()?),
+        autobatching_enabled: true,
+        cleanup_enabled: !opt.experimental_replication_parameters,
+        max_number_of_tasks: 1_000_000,
+        max_number_of_batched_tasks: opt.experimental_max_number_of_batched_tasks,
+        batched_tasks_size_limit: opt.experimental_limit_batched_tasks_total_size,
+        index_growth_amount: byte_unit::Byte::from_str("10GiB").unwrap().as_u64() as usize,
+        index_count: DEFAULT_INDEX_COUNT,
+        instance_features: opt.to_instance_features(),
+        auto_upgrade: opt.experimental_dumpless_upgrade,
+    };
+
     let empty_db = is_empty_db(&opt.db_path);
     let (index_scheduler, auth_controller) = if let Some(ref snapshot_path) = opt.import_snapshot {
         let snapshot_path_exists = snapshot_path.exists();
         // the db is empty and the snapshot exists, import it
         if empty_db && snapshot_path_exists {
             match compression::from_tar_gz(snapshot_path, &opt.db_path) {
-                Ok(()) => open_or_create_database_unchecked(opt, OnFailure::RemoveDb)?,
+                Ok(()) => open_or_create_database_unchecked(
+                    opt,
+                    index_scheduler_opt,
+                    OnFailure::RemoveDb,
+                )?,
                 Err(e) => {
                     std::fs::remove_dir_all(&opt.db_path)?;
                     return Err(e);
@@ -233,14 +262,14 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Arc<
             bail!("snapshot doesn't exist at {}", snapshot_path.display())
         // the snapshot and the db exist, and we can ignore the snapshot because of the ignore_snapshot_if_db_exists flag
         } else {
-            open_or_create_database(opt, empty_db)?
+            open_or_create_database(opt, index_scheduler_opt, empty_db)?
         }
     } else if let Some(ref path) = opt.import_dump {
         let src_path_exists = path.exists();
         // the db is empty and the dump exists, import it
         if empty_db && src_path_exists {
             let (mut index_scheduler, mut auth_controller) =
-                open_or_create_database_unchecked(opt, OnFailure::RemoveDb)?;
+                open_or_create_database_unchecked(opt, index_scheduler_opt, OnFailure::RemoveDb)?;
             match import_dump(&opt.db_path, path, &mut index_scheduler, &mut auth_controller) {
                 Ok(()) => (index_scheduler, auth_controller),
                 Err(e) => {
@@ -260,10 +289,10 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Arc<
         // the dump and the db exist and we can ignore the dump because of the ignore_dump_if_db_exists flag
         // or, the dump is missing but we can ignore that because of the ignore_missing_dump flag
         } else {
-            open_or_create_database(opt, empty_db)?
+            open_or_create_database(opt, index_scheduler_opt, empty_db)?
         }
     } else {
-        open_or_create_database(opt, empty_db)?
+        open_or_create_database(opt, index_scheduler_opt, empty_db)?
     };
 
     // We create a loop in a thread that registers snapshotCreation tasks
@@ -291,38 +320,14 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Arc<
 /// Try to start the IndexScheduler and AuthController without checking the VERSION file or anything.
 fn open_or_create_database_unchecked(
     opt: &Opt,
+    index_scheduler_opt: IndexSchedulerOptions,
     on_failure: OnFailure,
 ) -> anyhow::Result<(IndexScheduler, AuthController)> {
     // we don't want to create anything in the data.ms yet, thus we
     // wrap our two builders in a closure that'll be executed later.
     let auth_controller = AuthController::new(&opt.db_path, &opt.master_key);
-    let instance_features = opt.to_instance_features();
-    let index_scheduler_builder = || -> anyhow::Result<_> {
-        Ok(IndexScheduler::new(IndexSchedulerOptions {
-            version_file_path: opt.db_path.join(VERSION_FILE_NAME),
-            auth_path: opt.db_path.join("auth"),
-            tasks_path: opt.db_path.join("tasks"),
-            update_file_path: opt.db_path.join("update_files"),
-            indexes_path: opt.db_path.join("indexes"),
-            snapshots_path: opt.snapshot_dir.clone(),
-            dumps_path: opt.dump_dir.clone(),
-            webhook_url: opt.task_webhook_url.as_ref().map(|url| url.to_string()),
-            webhook_authorization_header: opt.task_webhook_authorization_header.clone(),
-            task_db_size: opt.max_task_db_size.as_u64() as usize,
-            index_base_map_size: opt.max_index_size.as_u64() as usize,
-            enable_mdb_writemap: opt.experimental_reduce_indexing_memory_usage,
-            indexer_config: Arc::new((&opt.indexer_options).try_into()?),
-            autobatching_enabled: true,
-            cleanup_enabled: !opt.experimental_replication_parameters,
-            max_number_of_tasks: 1_000_000,
-            max_number_of_batched_tasks: opt.experimental_max_number_of_batched_tasks,
-            batched_tasks_size_limit: opt.experimental_limit_batched_tasks_total_size,
-            index_growth_amount: byte_unit::Byte::from_str("10GiB").unwrap().as_u64() as usize,
-            index_count: DEFAULT_INDEX_COUNT,
-            instance_features,
-            auto_upgrade: opt.experimental_dumpless_upgrade,
-        })?)
-    };
+    let index_scheduler_builder =
+        || -> anyhow::Result<_> { Ok(IndexScheduler::new(index_scheduler_opt)?) };
 
     match (
         index_scheduler_builder(),
@@ -341,18 +346,18 @@ fn open_or_create_database_unchecked(
 
 /// Ensures Meilisearch version is compatible with the database, returns an error in case of version mismatch.
 fn check_version_and_update_task_queue(
-    db_path: &Path,
-    experimental_dumpless_upgrade: bool,
+    opt: &Opt,
+    index_scheduler_opt: &IndexSchedulerOptions,
 ) -> anyhow::Result<()> {
-    let (major, minor, patch) = get_version(db_path)?;
+    let (major, minor, patch) = get_version(&opt.db_path)?;
 
     let version_major: u32 = VERSION_MAJOR.parse().unwrap();
     let version_minor: u32 = VERSION_MINOR.parse().unwrap();
     let version_patch: u32 = VERSION_PATCH.parse().unwrap();
 
     if major != version_major || minor != version_minor || patch > version_patch {
-        if experimental_dumpless_upgrade {
-            return upgrade_task_queue(&db_path.join("tasks"), (major, minor, patch));
+        if opt.experimental_dumpless_upgrade {
+            return upgrade_task_queue(index_scheduler_opt, (major, minor, patch));
         } else {
             return Err(VersionFileError::VersionMismatch { major, minor, patch }.into());
         }
@@ -364,13 +369,14 @@ fn check_version_and_update_task_queue(
 /// Ensure you're in a valid state and open the IndexScheduler + AuthController for you.
 fn open_or_create_database(
     opt: &Opt,
+    index_scheduler_opt: IndexSchedulerOptions,
     empty_db: bool,
 ) -> anyhow::Result<(IndexScheduler, AuthController)> {
     if !empty_db {
-        check_version_and_update_task_queue(&opt.db_path, opt.experimental_dumpless_upgrade)?;
+        check_version_and_update_task_queue(opt, &index_scheduler_opt)?;
     }
 
-    open_or_create_database_unchecked(opt, OnFailure::KeepDb)
+    open_or_create_database_unchecked(opt, index_scheduler_opt, OnFailure::KeepDb)
 }
 
 fn import_dump(

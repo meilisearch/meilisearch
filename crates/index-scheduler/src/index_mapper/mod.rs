@@ -20,8 +20,13 @@ use crate::{Error, IndexBudget, IndexSchedulerOptions, Result};
 
 mod index_map;
 
-const INDEX_MAPPING: &str = "index-mapping";
-const INDEX_STATS: &str = "index-stats";
+/// The number of database used by index mapper
+const NUMBER_OF_DATABASES: u32 = 2;
+/// Database const names for the `IndexMapper`.
+mod db_name {
+    pub const INDEX_MAPPING: &str = "index-mapping";
+    pub const INDEX_STATS: &str = "index-stats";
+}
 
 /// Structure managing meilisearch's indexes.
 ///
@@ -138,6 +143,10 @@ impl IndexStats {
 }
 
 impl IndexMapper {
+    pub(crate) const fn nb_db() -> u32 {
+        NUMBER_OF_DATABASES
+    }
+
     pub fn new(
         env: &Env,
         wtxn: &mut RwTxn,
@@ -146,8 +155,8 @@ impl IndexMapper {
     ) -> Result<Self> {
         Ok(Self {
             index_map: Arc::new(RwLock::new(IndexMap::new(budget.index_count))),
-            index_mapping: env.create_database(wtxn, Some(INDEX_MAPPING))?,
-            index_stats: env.create_database(wtxn, Some(INDEX_STATS))?,
+            index_mapping: env.create_database(wtxn, Some(db_name::INDEX_MAPPING))?,
+            index_stats: env.create_database(wtxn, Some(db_name::INDEX_STATS))?,
             base_path: options.indexes_path.clone(),
             index_base_map_size: budget.map_size,
             index_growth_amount: options.index_growth_amount,

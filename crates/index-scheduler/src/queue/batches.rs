@@ -17,6 +17,8 @@ use crate::utils::{
 };
 use crate::{Error, Result, BEI128};
 
+/// The number of database used by the batch queue
+const NUMBER_OF_DATABASES: u32 = 7;
 /// Database const names for the `IndexScheduler`.
 mod db_name {
     pub const ALL_BATCHES: &str = "all-batches";
@@ -58,6 +60,10 @@ impl BatchQueue {
             started_at: self.started_at,
             finished_at: self.finished_at,
         }
+    }
+
+    pub(crate) const fn nb_db() -> u32 {
+        NUMBER_OF_DATABASES
     }
 
     pub(super) fn new(env: &Env, wtxn: &mut RwTxn) -> Result<Self> {

@@ -197,6 +197,10 @@ impl IndexScheduler {
         }
     }
 
+    pub(crate) const fn nb_db() -> u32 {
+        Queue::nb_db() + IndexMapper::nb_db() + features::FeatureData::nb_db()
+    }
+
     /// Create an index scheduler and start its run loop.
     #[allow(private_interfaces)] // because test_utils is private
     pub fn new(
@@ -232,7 +236,7 @@ impl IndexScheduler {
 
         let env = unsafe {
             heed::EnvOpenOptions::new()
-                .max_dbs(19)
+                .max_dbs(Self::nb_db())
                 .map_size(budget.task_db_size)
                 .open(&options.tasks_path)
         }?;

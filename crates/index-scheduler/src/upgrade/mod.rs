@@ -8,8 +8,12 @@ use time::OffsetDateTime;
 use tracing::info;
 
 use crate::queue::TaskQueue;
+use crate::IndexSchedulerOptions;
 
-pub fn upgrade_task_queue(tasks_path: &Path, from: (u32, u32, u32)) -> anyhow::Result<()> {
+pub fn upgrade_task_queue(
+    opt: &IndexSchedulerOptions,
+    from: (u32, u32, u32),
+) -> anyhow::Result<()> {
     let current_major: u32 = VERSION_MAJOR.parse().unwrap();
     let current_minor: u32 = VERSION_MINOR.parse().unwrap();
     let current_patch: u32 = VERSION_PATCH.parse().unwrap();
@@ -40,15 +44,14 @@ pub fn upgrade_task_queue(tasks_path: &Path, from: (u32, u32, u32)) -> anyhow::R
     info!("Upgrading the task queue");
     for (upgrade, upgrade_name) in upgrade_functions[start..].iter() {
         info!("{upgrade_name}");
-        (upgrade)(tasks_path)?;
+        (upgrade)(&opt.tasks_path)?;
     }
 
     let env = unsafe {
         heed::EnvOpenOptions::new()
-            .max_dbs(19)
-            // Since that's the only database memory-mapped currently we don't need to check the budget yet
-            .map_size(100 * 1024 * 1024)
-            .open(tasks_path)
+            .max_dbs(TaskQueue::nb_db())
+            .map_size(opt.task_db_size)
+            .open(&opt.tasks_path)
     }?;
     let mut wtxn = env.write_txn()?;
     let queue = TaskQueue::new(&env, &mut wtxn)?;
