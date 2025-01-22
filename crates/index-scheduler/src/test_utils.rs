@@ -406,7 +406,8 @@ impl IndexSchedulerHandle {
             .recv_timeout(std::time::Duration::from_secs(1)) {
                 Ok((_, true)) => continue,
                 Ok((b, false)) => panic!("The scheduler was supposed to be down but successfully moved to the next breakpoint: {b:?}"),
-                Err(RecvTimeoutError::Timeout | RecvTimeoutError::Disconnected) => break,
+                Err(RecvTimeoutError::Timeout) => panic!(),
+                Err(RecvTimeoutError::Disconnected) => break,
             }
         }
     }
