@@ -339,7 +339,7 @@ fn open_or_create_database_unchecked(
     }
 }
 
-/// Ensures Meilisearch version is compatible with the database, returns an error versions mismatch.
+/// Ensures Meilisearch version is compatible with the database, returns an error in case of version mismatch.
 fn check_version_and_update_task_queue(
     db_path: &Path,
     experimental_dumpless_upgrade: bool,

@@ -25,11 +25,11 @@ pub fn upgrade_task_queue(tasks_path: &Path, from: (u32, u32, u32)) -> anyhow::R
                 || (major == current_major && minor == current_minor && patch > current_patch)
             {
                 bail!(
-                "Database version {major}.{minor}.{patch} is higher than the binary version {current_major}.{current_minor}.{current_patch}. Downgrade is not supported",
+                "Database version {major}.{minor}.{patch} is higher than the Meilisearch version {current_major}.{current_minor}.{current_patch}. Downgrade is not supported",
                 );
             } else if major < 1 || (major == current_major && minor < 12) {
                 bail!(
-                "Database version {major}.{minor}.{patch} is too old for the experimental dumpless upgrade feature. Please generate a dump using the v{major}.{minor}.{patch} and imports it in the v{current_major}.{current_minor}.{current_patch}",
+                "Database version {major}.{minor}.{patch} is too old for the experimental dumpless upgrade feature. Please generate a dump using the v{major}.{minor}.{patch} and import it in the v{current_major}.{current_minor}.{current_patch}",
             );
             } else {
                 bail!("Unknown database version: v{major}.{minor}.{patch}");

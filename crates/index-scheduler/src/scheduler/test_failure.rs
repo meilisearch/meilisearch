@@ -300,7 +300,7 @@ fn upgrade_failure() {
     handle.advance_one_successful_batch();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_processing_everything");
 
-    // When deleting the single upgrade task it should remove the three associated batches
+    // When deleting the single upgrade task it should remove the associated batch
     let _task = index_scheduler
         .register(
             KindWithContent::TaskDeletion {
