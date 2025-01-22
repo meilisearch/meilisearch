@@ -239,16 +239,22 @@ impl IndexSchedulerHandle {
         drop(index_scheduler);
         let Self { _tempdir: tempdir, index_scheduler, test_breakpoint_rcv, last_breakpoint: _ } =
             self;
+        let env = index_scheduler.env.clone();
         drop(index_scheduler);
 
         // We must ensure that the `run` function has stopped running before restarting the index scheduler
         loop {
             match test_breakpoint_rcv.recv_timeout(Duration::from_secs(5)) {
-                Ok(_) => continue,
+                Ok((_, true)) => continue,
+                Ok((b, false)) => {
+                    panic!("Scheduler is not stopped and passed {b:?}")
+                }
                 Err(RecvTimeoutError::Timeout) => panic!("The indexing loop is stuck somewhere"),
                 Err(RecvTimeoutError::Disconnected) => break,
             }
         }
+        let closed = env.prepare_for_closing().wait_timeout(Duration::from_secs(5));
+        assert!(closed, "The index scheduler couldn't close itself, it seems like someone else is holding the env somewhere");
 
         let (scheduler, mut handle) =
             IndexScheduler::test_with_custom_config(planned_failures, |config| {
