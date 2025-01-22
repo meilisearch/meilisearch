@@ -21,6 +21,7 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
         cleanup_enabled: _,
         processing_tasks,
         env,
+        version: _,
         queue,
         scheduler,
 

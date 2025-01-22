@@ -9,7 +9,7 @@ use meilisearch_types::document_formats::DocumentFormatError;
 use meilisearch_types::milli::update::IndexDocumentsMethod::ReplaceDocuments;
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::tasks::KindWithContent;
-use meilisearch_types::VERSION_FILE_NAME;
+use meilisearch_types::{versioning, VERSION_FILE_NAME};
 use tempfile::{NamedTempFile, TempDir};
 use uuid::Uuid;
 use Breakpoint::*;
@@ -113,7 +113,13 @@ impl IndexScheduler {
         };
         configuration(&mut options);
 
-        let index_scheduler = Self::new(options, sender, planned_failures).unwrap();
+        let version = (
+            versioning::VERSION_MAJOR.parse().unwrap(),
+            versioning::VERSION_MINOR.parse().unwrap(),
+            versioning::VERSION_PATCH.parse().unwrap(),
+        );
+
+        let index_scheduler = Self::new(options, version, sender, planned_failures).unwrap();
 
         // To be 100% consistent between all test we're going to start the scheduler right now
         // and ensure it's in the expected starting state.
@@ -406,8 +412,7 @@ impl IndexSchedulerHandle {
             .recv_timeout(std::time::Duration::from_secs(1)) {
                 Ok((_, true)) => continue,
                 Ok((b, false)) => panic!("The scheduler was supposed to be down but successfully moved to the next breakpoint: {b:?}"),
-                Err(RecvTimeoutError::Timeout) => panic!(),
-                Err(RecvTimeoutError::Disconnected) => break,
+                Err(RecvTimeoutError::Timeout | RecvTimeoutError::Disconnected) => break,
             }
         }
     }

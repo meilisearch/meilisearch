@@ -93,15 +93,16 @@ impl FeatureData {
         NUMBER_OF_DATABASES
     }
 
-    pub fn new(env: &Env, instance_features: InstanceTogglableFeatures) -> Result<Self> {
-        let mut wtxn = env.write_txn()?;
+    pub fn new(
+        env: &Env,
+        wtxn: &mut RwTxn,
+        instance_features: InstanceTogglableFeatures,
+    ) -> Result<Self> {
         let runtime_features_db =
-            env.create_database(&mut wtxn, Some(db_name::EXPERIMENTAL_FEATURES))?;
-        wtxn.commit()?;
+            env.create_database(wtxn, Some(db_name::EXPERIMENTAL_FEATURES))?;
 
-        let txn = env.read_txn()?;
         let persisted_features: RuntimeTogglableFeatures =
-            runtime_features_db.get(&txn, db_name::EXPERIMENTAL_FEATURES)?.unwrap_or_default();
+            runtime_features_db.get(wtxn, db_name::EXPERIMENTAL_FEATURES)?.unwrap_or_default();
         let InstanceTogglableFeatures { metrics, logs_route, contains_filter } = instance_features;
         let runtime = Arc::new(RwLock::new(RuntimeTogglableFeatures {
             metrics: metrics || persisted_features.metrics,

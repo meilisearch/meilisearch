@@ -32,7 +32,6 @@ use analytics::Analytics;
 use anyhow::bail;
 use error::PayloadError;
 use extractors::payload::PayloadConfig;
-use index_scheduler::upgrade::upgrade_task_queue;
 use index_scheduler::{IndexScheduler, IndexSchedulerOptions};
 use meilisearch_auth::AuthController;
 use meilisearch_types::milli::constants::VERSION_MAJOR;
@@ -41,7 +40,8 @@ use meilisearch_types::milli::update::{IndexDocumentsConfig, IndexDocumentsMetho
 use meilisearch_types::settings::apply_settings_to_builder;
 use meilisearch_types::tasks::KindWithContent;
 use meilisearch_types::versioning::{
-    create_current_version_file, get_version, VersionFileError, VERSION_MINOR, VERSION_PATCH,
+    create_current_version_file, get_version, update_version_file_for_dumpless_upgrade,
+    VersionFileError, VERSION_MINOR, VERSION_PATCH,
 };
 use meilisearch_types::{compression, milli, VERSION_FILE_NAME};
 pub use option::Opt;
@@ -234,6 +234,10 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Arc<
         instance_features: opt.to_instance_features(),
         auto_upgrade: opt.experimental_dumpless_upgrade,
     };
+    let bin_major: u32 = VERSION_MAJOR.parse().unwrap();
+    let bin_minor: u32 = VERSION_MINOR.parse().unwrap();
+    let bin_patch: u32 = VERSION_PATCH.parse().unwrap();
+    let binary_version = (bin_major, bin_minor, bin_patch);
 
     let empty_db = is_empty_db(&opt.db_path);
     let (index_scheduler, auth_controller) = if let Some(ref snapshot_path) = opt.import_snapshot {
@@ -245,6 +249,7 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Arc<
                     opt,
                     index_scheduler_opt,
                     OnFailure::RemoveDb,
+                    binary_version, // the db is empty
                 )?,
                 Err(e) => {
                     std::fs::remove_dir_all(&opt.db_path)?;
@@ -262,14 +267,18 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Arc<
             bail!("snapshot doesn't exist at {}", snapshot_path.display())
         // the snapshot and the db exist, and we can ignore the snapshot because of the ignore_snapshot_if_db_exists flag
         } else {
-            open_or_create_database(opt, index_scheduler_opt, empty_db)?
+            open_or_create_database(opt, index_scheduler_opt, empty_db, binary_version)?
         }
     } else if let Some(ref path) = opt.import_dump {
         let src_path_exists = path.exists();
         // the db is empty and the dump exists, import it
         if empty_db && src_path_exists {
-            let (mut index_scheduler, mut auth_controller) =
-                open_or_create_database_unchecked(opt, index_scheduler_opt, OnFailure::RemoveDb)?;
+            let (mut index_scheduler, mut auth_controller) = open_or_create_database_unchecked(
+                opt,
+                index_scheduler_opt,
+                OnFailure::RemoveDb,
+                binary_version, // the db is empty
+            )?;
             match import_dump(&opt.db_path, path, &mut index_scheduler, &mut auth_controller) {
                 Ok(()) => (index_scheduler, auth_controller),
                 Err(e) => {
@@ -289,10 +298,10 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Arc<
         // the dump and the db exist and we can ignore the dump because of the ignore_dump_if_db_exists flag
         // or, the dump is missing but we can ignore that because of the ignore_missing_dump flag
         } else {
-            open_or_create_database(opt, index_scheduler_opt, empty_db)?
+            open_or_create_database(opt, index_scheduler_opt, empty_db, binary_version)?
         }
     } else {
-        open_or_create_database(opt, index_scheduler_opt, empty_db)?
+        open_or_create_database(opt, index_scheduler_opt, empty_db, binary_version)?
     };
 
     // We create a loop in a thread that registers snapshotCreation tasks
@@ -322,12 +331,13 @@ fn open_or_create_database_unchecked(
     opt: &Opt,
     index_scheduler_opt: IndexSchedulerOptions,
     on_failure: OnFailure,
+    version: (u32, u32, u32),
 ) -> anyhow::Result<(IndexScheduler, AuthController)> {
     // we don't want to create anything in the data.ms yet, thus we
     // wrap our two builders in a closure that'll be executed later.
     let auth_controller = AuthController::new(&opt.db_path, &opt.master_key);
     let index_scheduler_builder =
-        || -> anyhow::Result<_> { Ok(IndexScheduler::new(index_scheduler_opt)?) };
+        || -> anyhow::Result<_> { Ok(IndexScheduler::new(index_scheduler_opt, version)?) };
 
     match (
         index_scheduler_builder(),
@@ -345,25 +355,29 @@ fn open_or_create_database_unchecked(
 }
 
 /// Ensures Meilisearch version is compatible with the database, returns an error in case of version mismatch.
-fn check_version_and_update_task_queue(
-    opt: &Opt,
-    index_scheduler_opt: &IndexSchedulerOptions,
-) -> anyhow::Result<()> {
-    let (major, minor, patch) = get_version(&opt.db_path)?;
+/// Returns the version that was contained in the version file
+fn check_version(opt: &Opt, binary_version: (u32, u32, u32)) -> anyhow::Result<(u32, u32, u32)> {
+    let (bin_major, bin_minor, bin_patch) = binary_version;
+    let (db_major, db_minor, db_patch) = get_version(&opt.db_path)?;
 
-    let version_major: u32 = VERSION_MAJOR.parse().unwrap();
-    let version_minor: u32 = VERSION_MINOR.parse().unwrap();
-    let version_patch: u32 = VERSION_PATCH.parse().unwrap();
-
-    if major != version_major || minor != version_minor || patch > version_patch {
+    if db_major != bin_major || db_minor != bin_minor || db_patch > bin_patch {
         if opt.experimental_dumpless_upgrade {
-            return upgrade_task_queue(index_scheduler_opt, (major, minor, patch));
+            update_version_file_for_dumpless_upgrade(
+                &opt.db_path,
+                (db_major, db_minor, db_patch),
+                (bin_major, bin_minor, bin_patch),
+            )?;
         } else {
-            return Err(VersionFileError::VersionMismatch { major, minor, patch }.into());
+            return Err(VersionFileError::VersionMismatch {
+                major: db_major,
+                minor: db_minor,
+                patch: db_patch,
+            }
+            .into());
         }
     }
 
-    Ok(())
+    Ok((db_major, db_minor, db_patch))
 }
 
 /// Ensure you're in a valid state and open the IndexScheduler + AuthController for you.
@@ -371,12 +385,11 @@ fn open_or_create_database(
     opt: &Opt,
     index_scheduler_opt: IndexSchedulerOptions,
     empty_db: bool,
+    binary_version: (u32, u32, u32),
 ) -> anyhow::Result<(IndexScheduler, AuthController)> {
-    if !empty_db {
-        check_version_and_update_task_queue(opt, &index_scheduler_opt)?;
-    }
+    let version = if !empty_db { check_version(opt, binary_version)? } else { binary_version };
 
-    open_or_create_database_unchecked(opt, index_scheduler_opt, OnFailure::KeepDb)
+    open_or_create_database_unchecked(opt, index_scheduler_opt, OnFailure::KeepDb, version)
 }
 
 fn import_dump(

@@ -33,6 +33,7 @@ mod test_utils;
 pub mod upgrade;
 mod utils;
 pub mod uuid_codec;
+mod versioning;
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 pub type TaskId = u32;
@@ -66,6 +67,7 @@ use queue::Queue;
 use roaring::RoaringBitmap;
 use scheduler::Scheduler;
 use time::OffsetDateTime;
+use versioning::Versioning;
 
 use crate::index_mapper::IndexMapper;
 use crate::utils::clamp_to_page_size;
@@ -134,16 +136,17 @@ pub struct IndexScheduler {
     /// The list of tasks currently processing
     pub(crate) processing_tasks: Arc<RwLock<ProcessingTasks>>,
 
+    /// A database containing only the version of the index-scheduler
+    pub version: versioning::Versioning,
     /// The queue containing both the tasks and the batches.
     pub queue: queue::Queue,
-
-    pub scheduler: scheduler::Scheduler,
-
     /// In charge of creating, opening, storing and returning indexes.
     pub(crate) index_mapper: IndexMapper,
-
     /// In charge of fetching and setting the status of experimental features.
     features: features::FeatureData,
+
+    /// Everything related to the processing of the tasks
+    pub scheduler: scheduler::Scheduler,
 
     /// Whether we should automatically cleanup the task queue or not.
     pub(crate) cleanup_enabled: bool,
@@ -179,6 +182,7 @@ impl IndexScheduler {
         IndexScheduler {
             env: self.env.clone(),
             processing_tasks: self.processing_tasks.clone(),
+            version: self.version.clone(),
             queue: self.queue.private_clone(),
             scheduler: self.scheduler.private_clone(),
 
@@ -198,13 +202,14 @@ impl IndexScheduler {
     }
 
     pub(crate) const fn nb_db() -> u32 {
-        Queue::nb_db() + IndexMapper::nb_db() + features::FeatureData::nb_db()
+        Versioning::nb_db() + Queue::nb_db() + IndexMapper::nb_db() + features::FeatureData::nb_db()
     }
 
     /// Create an index scheduler and start its run loop.
     #[allow(private_interfaces)] // because test_utils is private
     pub fn new(
         options: IndexSchedulerOptions,
+        from_db_version: (u32, u32, u32),
         #[cfg(test)] test_breakpoint_sdr: crossbeam_channel::Sender<(test_utils::Breakpoint, bool)>,
         #[cfg(test)] planned_failures: Vec<(usize, test_utils::FailureLocation)>,
     ) -> Result<Self> {
@@ -241,9 +246,11 @@ impl IndexScheduler {
                 .open(&options.tasks_path)
         }?;
 
-        let features = features::FeatureData::new(&env, options.instance_features)?;
+        // We **must** starts by upgrading the version because it'll also upgrade the required database before we can open them
+        let version = versioning::Versioning::new(&env, from_db_version)?;
 
         let mut wtxn = env.write_txn()?;
+        let features = features::FeatureData::new(&env, &mut wtxn, options.instance_features)?;
         let queue = Queue::new(&env, &mut wtxn, &options)?;
         let index_mapper = IndexMapper::new(&env, &mut wtxn, &options, budget)?;
         wtxn.commit()?;
@@ -251,6 +258,7 @@ impl IndexScheduler {
         // allow unreachable_code to get rids of the warning in the case of a test build.
         let this = Self {
             processing_tasks: Arc::new(RwLock::new(ProcessingTasks::new())),
+            version,
             queue,
             scheduler: Scheduler::new(&options),
 
