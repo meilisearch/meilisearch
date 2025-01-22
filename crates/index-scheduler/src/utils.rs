@@ -174,6 +174,33 @@ pub(crate) fn remove_task_datetime(
     Ok(())
 }
 
+pub(crate) fn remove_n_tasks_datetime_earlier_than(
+    wtxn: &mut RwTxn,
+    database: Database<BEI128, CboRoaringBitmapCodec>,
+    earlier_than: OffsetDateTime,
+    mut count: usize,
+    task_id: TaskId,
+) -> Result<()> {
+    let earlier_than = earlier_than.unix_timestamp_nanos();
+    let mut iter = database.rev_range_mut(wtxn, &(..earlier_than))?;
+    while let Some((current, mut existing)) = iter.next().transpose()? {
+        count -= existing.remove(task_id) as usize;
+
+        if existing.is_empty() {
+            // safety: We don't keep references to the database
+            unsafe { iter.del_current()? };
+        } else {
+            // safety: We don't keep references to the database
+            unsafe { iter.put_current(&current, &existing)? };
+        }
+        if count == 0 {
+            break;
+        }
+    }
+
+    Ok(())
+}
+
 pub(crate) fn keep_ids_within_datetimes(
     rtxn: &RoTxn,
     ids: &mut RoaringBitmap,

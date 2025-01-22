@@ -16,7 +16,10 @@ use crate::processing::{
     InnerSwappingTwoIndexes, SwappingTheIndexes, TaskCancelationProgress, TaskDeletionProgress,
     UpdateIndexProgress,
 };
-use crate::utils::{self, swap_index_uid_in_task, ProcessingBatch};
+use crate::utils::{
+    self, remove_n_tasks_datetime_earlier_than, remove_task_datetime, swap_index_uid_in_task,
+    ProcessingBatch,
+};
 use crate::{Error, IndexScheduler, Result, TaskId};
 
 impl IndexScheduler {
@@ -418,7 +421,6 @@ impl IndexScheduler {
         to_delete_tasks -= &enqueued_tasks;
 
         // 2. We now have a list of tasks to delete, delete them
-
         let mut affected_indexes = HashSet::new();
         let mut affected_statuses = HashSet::new();
         let mut affected_kinds = HashSet::new();
@@ -515,9 +517,34 @@ impl IndexScheduler {
                 tasks -= &to_delete_tasks;
                 // We must remove the batch entirely
                 if tasks.is_empty() {
-                    self.queue.batches.all_batches.delete(wtxn, &batch_id)?;
-                    self.queue.batch_to_tasks_mapping.delete(wtxn, &batch_id)?;
+                    if let Some(batch) = self.queue.batches.get_batch(wtxn, batch_id)? {
+                        remove_n_tasks_datetime_earlier_than(
+                            wtxn,
+                            self.queue.batches.started_at,
+                            batch.started_at,
+                            if batch.stats.total_nb_tasks >= 2 { 2 } else { 1 },
+                            batch_id,
+                        )?;
+                        remove_task_datetime(
+                            wtxn,
+                            self.queue.batches.started_at,
+                            batch.started_at,
+                            batch_id,
+                        )?;
+                        if let Some(finished_at) = batch.finished_at {
+                            remove_task_datetime(
+                                wtxn,
+                                self.queue.batches.finished_at,
+                                finished_at,
+                                batch_id,
+                            )?;
+                        }
+
+                        self.queue.batches.all_batches.delete(wtxn, &batch_id)?;
+                        self.queue.batch_to_tasks_mapping.delete(wtxn, &batch_id)?;
+                    }
                 }
+
                 // Anyway, we must remove the batch from all its reverse indexes.
                 // The only way to do that is to check
 
