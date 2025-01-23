@@ -59,7 +59,8 @@ pub fn extractor_writer_bbqueue(
     bbbuffers.resize_with(current_num_threads, || BBBuffer::new(bbbuffer_capacity));
 
     let capacity = bbbuffers.first().unwrap().capacity();
-    // Read the const description to understand this
+    // 1. Due to fragmentation in the bbbuffer, we can only accept up to half the capacity in a single message.
+    // 2. Read the documentation for `MAX_FRAME_HEADER_SIZE` for more information about why it is here.
     let max_grant = capacity.saturating_div(2).checked_sub(MAX_FRAME_HEADER_SIZE).unwrap();
 
     let producers = ThreadLocal::with_capacity(bbbuffers.len());
