@@ -45,7 +45,17 @@ impl Versioning {
         let mut wtxn = env.write_txn()?;
         let version = env.create_database(&mut wtxn, Some(db_name::VERSION))?;
         let this = Self { version };
-        let from = this.get_version(&wtxn)?.unwrap_or(db_version);
+        let from = match this.get_version(&wtxn)? {
+            Some(version) => version,
+            None => {
+                let assumed_version = match db_version {
+                    (1, 12, _) => db_version,
+                    _ => (1, 12, 7),
+                };
+                this.set_version(&mut wtxn, assumed_version)?;
+                assumed_version
+            }
+        };
         wtxn.commit()?;
 
         let bin_major: u32 = versioning::VERSION_MAJOR.parse().unwrap();
