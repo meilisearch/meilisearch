@@ -115,7 +115,7 @@ async fn check_the_index_scheduler(server: &Server) {
         {
           "uid": "kefir",
           "createdAt": "2025-01-16T16:45:16.020663157Z",
-          "updatedAt": "2025-01-16T17:18:43.296777845Z",
+          "updatedAt": "2025-01-23T11:36:22.634859166Z",
           "primaryKey": "id"
         }
       ],
@@ -128,8 +128,8 @@ async fn check_the_index_scheduler(server: &Server) {
     let (stats, _) = server.stats().await;
     snapshot!(stats, @r#"
     {
-      "databaseSize": 425984,
-      "lastUpdate": "2025-01-16T17:18:43.296777845Z",
+      "databaseSize": 438272,
+      "lastUpdate": "2025-01-23T11:36:22.634859166Z",
       "indexes": {
         "kefir": {
           "numberOfDocuments": 1,
@@ -207,8 +207,8 @@ async fn check_the_index_scheduler(server: &Server) {
     let (stats, _) = server.stats().await;
     snapshot!(stats, @r#"
     {
-      "databaseSize": 425984,
-      "lastUpdate": "2025-01-16T17:18:43.296777845Z",
+      "databaseSize": 438272,
+      "lastUpdate": "2025-01-23T11:36:22.634859166Z",
       "indexes": {
         "kefir": {
           "numberOfDocuments": 1,

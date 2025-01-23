@@ -5,8 +5,8 @@ snapshot_kind: text
 {
   "results": [
     {
-      "uid": 21,
-      "batchUid": 20,
+      "uid": 25,
+      "batchUid": 24,
       "indexUid": null,
       "status": "succeeded",
       "type": "upgradeDatabase",
@@ -20,6 +20,83 @@ snapshot_kind: text
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
+    },
+    {
+      "uid": 24,
+      "batchUid": 23,
+      "indexUid": "mieli",
+      "status": "succeeded",
+      "type": "indexDeletion",
+      "canceledBy": null,
+      "details": {
+        "deletedDocuments": 0
+      },
+      "error": null,
+      "duration": "PT0.004146631S",
+      "enqueuedAt": "2025-01-23T11:38:57.000009177Z",
+      "startedAt": "2025-01-23T11:38:57.012591321Z",
+      "finishedAt": "2025-01-23T11:38:57.016737952Z"
+    },
+    {
+      "uid": 23,
+      "batchUid": 22,
+      "indexUid": "kefir",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": null,
+      "duration": "PT0.102738497S",
+      "enqueuedAt": "2025-01-23T11:36:22.53917994Z",
+      "startedAt": "2025-01-23T11:36:22.551906856Z",
+      "finishedAt": "2025-01-23T11:36:22.654645353Z"
+    },
+    {
+      "uid": 22,
+      "batchUid": 21,
+      "indexUid": "kefir",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "error": {
+        "message": "Document doesn't have a `id` attribute: `{\"age\":1.4}`.",
+        "code": "missing_document_id",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#missing_document_id"
+      },
+      "duration": "PT0.005108474S",
+      "enqueuedAt": "2025-01-23T11:36:04.115475071Z",
+      "startedAt": "2025-01-23T11:36:04.132670526Z",
+      "finishedAt": "2025-01-23T11:36:04.137779Z"
+    },
+    {
+      "uid": 21,
+      "batchUid": 20,
+      "indexUid": "mieli",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "error": {
+        "message": "The primary key inference failed as the engine did not find any field ending with `id` in its name. Please specify the primary key manually using the `primaryKey` query parameter.",
+        "code": "index_primary_key_no_candidate_found",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#index_primary_key_no_candidate_found"
+      },
+      "duration": "PT0.027954894S",
+      "enqueuedAt": "2025-01-23T11:35:53.625718309Z",
+      "startedAt": "2025-01-23T11:35:53.631082795Z",
+      "finishedAt": "2025-01-23T11:35:53.659037689Z"
     },
     {
       "uid": 20,
@@ -421,8 +498,8 @@ snapshot_kind: text
       "finishedAt": "2025-01-16T16:45:16.131303739Z"
     }
   ],
-  "total": 22,
+  "total": 26,
   "limit": 1000,
-  "from": 21,
+  "from": 25,
   "next": null
 }

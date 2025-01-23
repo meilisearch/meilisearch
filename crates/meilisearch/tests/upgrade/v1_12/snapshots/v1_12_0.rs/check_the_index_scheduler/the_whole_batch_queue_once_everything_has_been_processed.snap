@@ -5,7 +5,7 @@ snapshot_kind: text
 {
   "results": [
     {
-      "uid": 20,
+      "uid": 24,
       "progress": null,
       "details": {
         "upgradeFrom": "v1.12.0",
@@ -24,6 +24,97 @@ snapshot_kind: text
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
+    },
+    {
+      "uid": 23,
+      "progress": null,
+      "details": {
+        "deletedDocuments": 0
+      },
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "succeeded": 1
+        },
+        "types": {
+          "indexDeletion": 1
+        },
+        "indexUids": {
+          "mieli": 1
+        }
+      },
+      "duration": "PT0.004146631S",
+      "startedAt": "2025-01-23T11:38:57.012591321Z",
+      "finishedAt": "2025-01-23T11:38:57.016737952Z"
+    },
+    {
+      "uid": 22,
+      "progress": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "succeeded": 1
+        },
+        "types": {
+          "documentAdditionOrUpdate": 1
+        },
+        "indexUids": {
+          "kefir": 1
+        }
+      },
+      "duration": "PT0.102738497S",
+      "startedAt": "2025-01-23T11:36:22.551906856Z",
+      "finishedAt": "2025-01-23T11:36:22.654645353Z"
+    },
+    {
+      "uid": 21,
+      "progress": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "failed": 1
+        },
+        "types": {
+          "documentAdditionOrUpdate": 1
+        },
+        "indexUids": {
+          "kefir": 1
+        }
+      },
+      "duration": "PT0.005108474S",
+      "startedAt": "2025-01-23T11:36:04.132670526Z",
+      "finishedAt": "2025-01-23T11:36:04.137779Z"
+    },
+    {
+      "uid": 20,
+      "progress": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "failed": 1
+        },
+        "types": {
+          "documentAdditionOrUpdate": 1
+        },
+        "indexUids": {
+          "mieli": 1
+        }
+      },
+      "duration": "PT0.027954894S",
+      "startedAt": "2025-01-23T11:35:53.631082795Z",
+      "finishedAt": "2025-01-23T11:35:53.659037689Z"
     },
     {
       "uid": 19,
@@ -526,8 +617,8 @@ snapshot_kind: text
       "finishedAt": "2025-01-16T16:45:16.131303739Z"
     }
   ],
-  "total": 21,
+  "total": 25,
   "limit": 1000,
-  "from": 20,
+  "from": 24,
   "next": null
 }
