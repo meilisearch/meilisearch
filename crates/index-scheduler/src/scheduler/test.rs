@@ -713,68 +713,70 @@ fn basic_get_stats() {
     let kind = index_creation_task("whalo", "fish");
     let _task = index_scheduler.register(kind, None, false).unwrap();
 
-    snapshot!(json_string!(index_scheduler.get_stats().unwrap()), @r###"
-        {
-          "indexes": {
-            "catto": 1,
-            "doggo": 1,
-            "whalo": 1
-          },
-          "statuses": {
-            "canceled": 0,
-            "enqueued": 3,
-            "failed": 0,
-            "processing": 0,
-            "succeeded": 0
-          },
-          "types": {
-            "documentAdditionOrUpdate": 0,
-            "documentDeletion": 0,
-            "documentEdition": 0,
-            "dumpCreation": 0,
-            "indexCreation": 3,
-            "indexDeletion": 0,
-            "indexSwap": 0,
-            "indexUpdate": 0,
-            "settingsUpdate": 0,
-            "snapshotCreation": 0,
-            "taskCancelation": 0,
-            "taskDeletion": 0
-          }
-        }
-        "###);
+    snapshot!(json_string!(index_scheduler.get_stats().unwrap()), @r#"
+    {
+      "indexes": {
+        "catto": 1,
+        "doggo": 1,
+        "whalo": 1
+      },
+      "statuses": {
+        "canceled": 0,
+        "enqueued": 3,
+        "failed": 0,
+        "processing": 0,
+        "succeeded": 0
+      },
+      "types": {
+        "documentAdditionOrUpdate": 0,
+        "documentDeletion": 0,
+        "documentEdition": 0,
+        "dumpCreation": 0,
+        "indexCreation": 3,
+        "indexDeletion": 0,
+        "indexSwap": 0,
+        "indexUpdate": 0,
+        "settingsUpdate": 0,
+        "snapshotCreation": 0,
+        "taskCancelation": 0,
+        "taskDeletion": 0,
+        "upgradeDatabase": 0
+      }
+    }
+    "#);
 
     handle.advance_till([Start, BatchCreated]);
-    snapshot!(json_string!(index_scheduler.get_stats().unwrap()), @r###"
-        {
-          "indexes": {
-            "catto": 1,
-            "doggo": 1,
-            "whalo": 1
-          },
-          "statuses": {
-            "canceled": 0,
-            "enqueued": 2,
-            "failed": 0,
-            "processing": 1,
-            "succeeded": 0
-          },
-          "types": {
-            "documentAdditionOrUpdate": 0,
-            "documentDeletion": 0,
-            "documentEdition": 0,
-            "dumpCreation": 0,
-            "indexCreation": 3,
-            "indexDeletion": 0,
-            "indexSwap": 0,
-            "indexUpdate": 0,
-            "settingsUpdate": 0,
-            "snapshotCreation": 0,
-            "taskCancelation": 0,
-            "taskDeletion": 0
-          }
-        }
-        "###);
+    snapshot!(json_string!(index_scheduler.get_stats().unwrap()), @r#"
+    {
+      "indexes": {
+        "catto": 1,
+        "doggo": 1,
+        "whalo": 1
+      },
+      "statuses": {
+        "canceled": 0,
+        "enqueued": 2,
+        "failed": 0,
+        "processing": 1,
+        "succeeded": 0
+      },
+      "types": {
+        "documentAdditionOrUpdate": 0,
+        "documentDeletion": 0,
+        "documentEdition": 0,
+        "dumpCreation": 0,
+        "indexCreation": 3,
+        "indexDeletion": 0,
+        "indexSwap": 0,
+        "indexUpdate": 0,
+        "settingsUpdate": 0,
+        "snapshotCreation": 0,
+        "taskCancelation": 0,
+        "taskDeletion": 0,
+        "upgradeDatabase": 0
+      }
+    }
+    "#);
 
     handle.advance_till([
         InsideProcessBatch,
@@ -784,36 +786,37 @@ fn basic_get_stats() {
         Start,
         BatchCreated,
     ]);
-    snapshot!(json_string!(index_scheduler.get_stats().unwrap()), @r###"
-        {
-          "indexes": {
-            "catto": 1,
-            "doggo": 1,
-            "whalo": 1
-          },
-          "statuses": {
-            "canceled": 0,
-            "enqueued": 1,
-            "failed": 0,
-            "processing": 1,
-            "succeeded": 1
-          },
-          "types": {
-            "documentAdditionOrUpdate": 0,
-            "documentDeletion": 0,
-            "documentEdition": 0,
-            "dumpCreation": 0,
-            "indexCreation": 3,
-            "indexDeletion": 0,
-            "indexSwap": 0,
-            "indexUpdate": 0,
-            "settingsUpdate": 0,
-            "snapshotCreation": 0,
-            "taskCancelation": 0,
-            "taskDeletion": 0
-          }
-        }
-        "###);
+    snapshot!(json_string!(index_scheduler.get_stats().unwrap()), @r#"
+    {
+      "indexes": {
+        "catto": 1,
+        "doggo": 1,
+        "whalo": 1
+      },
+      "statuses": {
+        "canceled": 0,
+        "enqueued": 1,
+        "failed": 0,
+        "processing": 1,
+        "succeeded": 1
+      },
+      "types": {
+        "documentAdditionOrUpdate": 0,
+        "documentDeletion": 0,
+        "documentEdition": 0,
+        "dumpCreation": 0,
+        "indexCreation": 3,
+        "indexDeletion": 0,
+        "indexSwap": 0,
+        "indexUpdate": 0,
+        "settingsUpdate": 0,
+        "snapshotCreation": 0,
+        "taskCancelation": 0,
+        "taskDeletion": 0,
+        "upgradeDatabase": 0
+      }
+    }
+    "#);
 
     // now we make one more batch, the started_at field of the new tasks will be past `second_start_time`
     handle.advance_till([
@@ -824,36 +827,37 @@ fn basic_get_stats() {
         Start,
         BatchCreated,
     ]);
-    snapshot!(json_string!(index_scheduler.get_stats().unwrap()), @r###"
-        {
-          "indexes": {
-            "catto": 1,
-            "doggo": 1,
-            "whalo": 1
-          },
-          "statuses": {
-            "canceled": 0,
-            "enqueued": 0,
-            "failed": 0,
-            "processing": 1,
-            "succeeded": 2
-          },
-          "types": {
-            "documentAdditionOrUpdate": 0,
-            "documentDeletion": 0,
-            "documentEdition": 0,
-            "dumpCreation": 0,
-            "indexCreation": 3,
-            "indexDeletion": 0,
-            "indexSwap": 0,
-            "indexUpdate": 0,
-            "settingsUpdate": 0,
-            "snapshotCreation": 0,
-            "taskCancelation": 0,
-            "taskDeletion": 0
-          }
-        }
-        "###);
+    snapshot!(json_string!(index_scheduler.get_stats().unwrap()), @r#"
+    {
+      "indexes": {
+        "catto": 1,
+        "doggo": 1,
+        "whalo": 1
+      },
+      "statuses": {
+        "canceled": 0,
+        "enqueued": 0,
+        "failed": 0,
+        "processing": 1,
+        "succeeded": 2
+      },
+      "types": {
+        "documentAdditionOrUpdate": 0,
+        "documentDeletion": 0,
+        "documentEdition": 0,
+        "dumpCreation": 0,
+        "indexCreation": 3,
+        "indexDeletion": 0,
+        "indexSwap": 0,
+        "indexUpdate": 0,
+        "settingsUpdate": 0,
+        "snapshotCreation": 0,
+        "taskCancelation": 0,
+        "taskDeletion": 0,
+        "upgradeDatabase": 0
+      }
+    }
+    "#);
 }
 
 #[test]
@@ -899,7 +903,7 @@ fn create_and_list_index() {
 
     index_scheduler.index("kefir").unwrap();
     let list = index_scheduler.get_paginated_indexes_stats(&AuthFilter::default(), 0, 20).unwrap();
-    snapshot!(json_string!(list, { "[1][0][1].created_at" => "[date]", "[1][0][1].updated_at" => "[date]" }), @r#"
+    snapshot!(json_string!(list, { "[1][0][1].created_at" => "[date]", "[1][0][1].updated_at" => "[date]", "[1][0][1].used_database_size" => "[bytes]", "[1][0][1].database_size" => "[bytes]" }), @r#"
     [
       1,
       [
@@ -907,8 +911,8 @@ fn create_and_list_index() {
           "kefir",
           {
             "number_of_documents": 0,
-            "database_size": 24576,
-            "used_database_size": 8192,
+            "database_size": "[bytes]",
+            "used_database_size": "[bytes]",
             "primary_key": null,
             "field_distribution": {},
             "created_at": "[date]",

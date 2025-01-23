@@ -1,0 +1,78 @@
+---
+source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
+snapshot_kind: text
+---
+{
+  "displayedAttributes": [
+    "*"
+  ],
+  "searchableAttributes": [
+    "*"
+  ],
+  "filterableAttributes": [
+    "age",
+    "surname"
+  ],
+  "sortableAttributes": [
+    "age"
+  ],
+  "rankingRules": [
+    "words",
+    "typo",
+    "proximity",
+    "attribute",
+    "sort",
+    "exactness"
+  ],
+  "stopWords": [
+    "le",
+    "un"
+  ],
+  "nonSeparatorTokens": [],
+  "separatorTokens": [],
+  "dictionary": [],
+  "synonyms": {
+    "boubou": [
+      "kefir"
+    ]
+  },
+  "distinctAttribute": null,
+  "proximityPrecision": "byWord",
+  "typoTolerance": {
+    "enabled": true,
+    "minWordSizeForTypos": {
+      "oneTypo": 4,
+      "twoTypos": 9
+    },
+    "disableOnWords": [
+      "kefir"
+    ],
+    "disableOnAttributes": [
+      "surname"
+    ]
+  },
+  "faceting": {
+    "maxValuesPerFacet": 99,
+    "sortFacetValuesBy": {
+      "*": "alpha",
+      "age": "count"
+    }
+  },
+  "pagination": {
+    "maxTotalHits": 15
+  },
+  "embedders": {},
+  "searchCutoffMs": 8000,
+  "localizedAttributes": [
+    {
+      "attributePatterns": [
+        "description"
+      ],
+      "locales": [
+        "fra"
+      ]
+    }
+  ],
+  "facetSearch": true,
+  "prefixSearch": "indexingTime"
+}

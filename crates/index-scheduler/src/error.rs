@@ -147,7 +147,9 @@ pub enum Error {
     #[error("Corrupted task queue.")]
     CorruptedTaskQueue,
     #[error(transparent)]
-    TaskDatabaseUpdate(Box<Self>),
+    DatabaseUpgrade(Box<Self>),
+    #[error(transparent)]
+    UnrecoverableError(Box<Self>),
     #[error(transparent)]
     HeedTransaction(heed::Error),
 
@@ -202,7 +204,8 @@ impl Error {
             | Error::Anyhow(_) => true,
             Error::CreateBatch(_)
             | Error::CorruptedTaskQueue
-            | Error::TaskDatabaseUpdate(_)
+            | Error::DatabaseUpgrade(_)
+            | Error::UnrecoverableError(_)
             | Error::HeedTransaction(_) => false,
             #[cfg(test)]
             Error::PlannedFailure => false,
@@ -266,7 +269,8 @@ impl ErrorCode for Error {
             Error::Anyhow(_) => Code::Internal,
             Error::CorruptedTaskQueue => Code::Internal,
             Error::CorruptedDump => Code::Internal,
-            Error::TaskDatabaseUpdate(_) => Code::Internal,
+            Error::DatabaseUpgrade(_) => Code::Internal,
+            Error::UnrecoverableError(_) => Code::Internal,
             Error::CreateBatch(_) => Code::Internal,
 
             // This one should never be seen by the end user

@@ -1,0 +1,397 @@
+---
+source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
+---
+{
+  "results": [
+    {
+      "uid": 25,
+      "batchUid": 24,
+      "indexUid": null,
+      "status": "succeeded",
+      "type": "upgradeDatabase",
+      "canceledBy": null,
+      "details": {
+        "upgradeFrom": "v1.12.0",
+        "upgradeTo": "v1.13.0"
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    },
+    {
+      "uid": 24,
+      "batchUid": 23,
+      "indexUid": "mieli",
+      "status": "succeeded",
+      "type": "indexDeletion",
+      "canceledBy": null,
+      "details": {
+        "deletedDocuments": 0
+      },
+      "error": null,
+      "duration": "PT0.004146631S",
+      "enqueuedAt": "2025-01-23T11:38:57.000009177Z",
+      "startedAt": "2025-01-23T11:38:57.012591321Z",
+      "finishedAt": "2025-01-23T11:38:57.016737952Z"
+    },
+    {
+      "uid": 23,
+      "batchUid": 22,
+      "indexUid": "kefir",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": null,
+      "duration": "PT0.102738497S",
+      "enqueuedAt": "2025-01-23T11:36:22.53917994Z",
+      "startedAt": "2025-01-23T11:36:22.551906856Z",
+      "finishedAt": "2025-01-23T11:36:22.654645353Z"
+    },
+    {
+      "uid": 22,
+      "batchUid": 21,
+      "indexUid": "kefir",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "error": {
+        "message": "Document doesn't have a `id` attribute: `{\"age\":1.4}`.",
+        "code": "missing_document_id",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#missing_document_id"
+      },
+      "duration": "PT0.005108474S",
+      "enqueuedAt": "2025-01-23T11:36:04.115475071Z",
+      "startedAt": "2025-01-23T11:36:04.132670526Z",
+      "finishedAt": "2025-01-23T11:36:04.137779Z"
+    },
+    {
+      "uid": 21,
+      "batchUid": 20,
+      "indexUid": "mieli",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "error": {
+        "message": "The primary key inference failed as the engine did not find any field ending with `id` in its name. Please specify the primary key manually using the `primaryKey` query parameter.",
+        "code": "index_primary_key_no_candidate_found",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#index_primary_key_no_candidate_found"
+      },
+      "duration": "PT0.027954894S",
+      "enqueuedAt": "2025-01-23T11:35:53.625718309Z",
+      "startedAt": "2025-01-23T11:35:53.631082795Z",
+      "finishedAt": "2025-01-23T11:35:53.659037689Z"
+    },
+    {
+      "uid": 20,
+      "batchUid": 19,
+      "indexUid": "mieli",
+      "status": "succeeded",
+      "type": "indexDeletion",
+      "canceledBy": null,
+      "details": {
+        "deletedDocuments": 19546
+      },
+      "error": null,
+      "duration": "PT0.006903297S",
+      "enqueuedAt": "2025-01-20T11:50:52.862223877Z",
+      "startedAt": "2025-01-20T11:50:52.874106134Z",
+      "finishedAt": "2025-01-20T11:50:52.881009431Z"
+    },
+    {
+      "uid": 19,
+      "batchUid": 18,
+      "indexUid": null,
+      "status": "succeeded",
+      "type": "taskCancelation",
+      "canceledBy": null,
+      "details": {
+        "matchedTasks": 1,
+        "canceledTasks": 1,
+        "originalFilter": "?statuses=processing%2Cenqueued"
+      },
+      "error": null,
+      "duration": "PT0.000481257S",
+      "enqueuedAt": "2025-01-20T11:48:04.618121963Z",
+      "startedAt": "2025-01-20T11:48:04.92820416Z",
+      "finishedAt": "2025-01-20T11:48:04.928685417Z"
+    },
+    {
+      "uid": 18,
+      "batchUid": 18,
+      "indexUid": "mieli",
+      "status": "canceled",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": 19,
+      "details": {
+        "receivedDocuments": 19547,
+        "indexedDocuments": 0
+      },
+      "error": null,
+      "duration": "PT0.000481257S",
+      "enqueuedAt": "2025-01-20T11:48:04.596815611Z",
+      "startedAt": "2025-01-20T11:48:04.92820416Z",
+      "finishedAt": "2025-01-20T11:48:04.928685417Z"
+    },
+    {
+      "uid": 17,
+      "batchUid": 17,
+      "indexUid": null,
+      "status": "succeeded",
+      "type": "taskCancelation",
+      "canceledBy": null,
+      "details": {
+        "matchedTasks": 0,
+        "canceledTasks": 0,
+        "originalFilter": "?statuses=processing%2Cenqueued"
+      },
+      "error": null,
+      "duration": "PT0.000407005S",
+      "enqueuedAt": "2025-01-20T11:47:53.498618093Z",
+      "startedAt": "2025-01-20T11:47:53.509403957Z",
+      "finishedAt": "2025-01-20T11:47:53.509810962Z"
+    },
+    {
+      "uid": 16,
+      "batchUid": 16,
+      "indexUid": null,
+      "status": "succeeded",
+      "type": "taskCancelation",
+      "canceledBy": null,
+      "details": {
+        "matchedTasks": 0,
+        "canceledTasks": 0,
+        "originalFilter": "?statuses=processing%2Cenqueued"
+      },
+      "error": null,
+      "duration": "PT0.000403716S",
+      "enqueuedAt": "2025-01-20T11:47:48.426597451Z",
+      "startedAt": "2025-01-20T11:47:48.430653005Z",
+      "finishedAt": "2025-01-20T11:47:48.431056721Z"
+    },
+    {
+      "uid": 15,
+      "batchUid": 15,
+      "indexUid": null,
+      "status": "succeeded",
+      "type": "taskCancelation",
+      "canceledBy": null,
+      "details": {
+        "matchedTasks": 0,
+        "canceledTasks": 0,
+        "originalFilter": "?statuses=processing"
+      },
+      "error": null,
+      "duration": "PT0.000417016S",
+      "enqueuedAt": "2025-01-20T11:47:42.414346511Z",
+      "startedAt": "2025-01-20T11:47:42.429678617Z",
+      "finishedAt": "2025-01-20T11:47:42.430095633Z"
+    },
+    {
+      "uid": 14,
+      "batchUid": 14,
+      "indexUid": "mieli",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 19547,
+        "indexedDocuments": 19546
+      },
+      "error": null,
+      "duration": "PT12.086284842S",
+      "enqueuedAt": "2025-01-20T11:47:03.079292487Z",
+      "startedAt": "2025-01-20T11:47:03.092181576Z",
+      "finishedAt": "2025-01-20T11:47:15.178466418Z"
+    },
+    {
+      "uid": 13,
+      "batchUid": 13,
+      "indexUid": "kefir",
+      "status": "succeeded",
+      "type": "settingsUpdate",
+      "canceledBy": null,
+      "details": {
+        "localizedAttributes": [
+          {
+            "attributePatterns": [
+              "description"
+            ],
+            "locales": [
+              "fr"
+            ]
+          }
+        ]
+      },
+      "error": null,
+      "duration": "PT0.011506614S",
+      "enqueuedAt": "2025-01-16T17:18:43.280901282Z",
+      "startedAt": "2025-01-16T17:18:43.29334923Z",
+      "finishedAt": "2025-01-16T17:18:43.304855844Z"
+    },
+    {
+      "uid": 12,
+      "batchUid": 12,
+      "indexUid": "kefir",
+      "status": "succeeded",
+      "type": "settingsUpdate",
+      "canceledBy": null,
+      "details": {
+        "faceting": {
+          "sortFacetValuesBy": {
+            "*": "alpha",
+            "age": "count"
+          }
+        }
+      },
+      "error": null,
+      "duration": "PT0.007640163S",
+      "enqueuedAt": "2025-01-16T17:02:52.527382964Z",
+      "startedAt": "2025-01-16T17:02:52.539749853Z",
+      "finishedAt": "2025-01-16T17:02:52.547390016Z"
+    },
+    {
+      "uid": 11,
+      "batchUid": 11,
+      "indexUid": "kefir",
+      "status": "succeeded",
+      "type": "settingsUpdate",
+      "canceledBy": null,
+      "details": {
+        "searchCutoffMs": 8000
+      },
+      "error": null,
+      "duration": "PT0.007307840S",
+      "enqueuedAt": "2025-01-16T17:01:14.100316617Z",
+      "startedAt": "2025-01-16T17:01:14.112756687Z",
+      "finishedAt": "2025-01-16T17:01:14.120064527Z"
+    },
+    {
+      "uid": 10,
+      "batchUid": 10,
+      "indexUid": "kefir",
+      "status": "succeeded",
+      "type": "settingsUpdate",
+      "canceledBy": null,
+      "details": {
+        "faceting": {
+          "maxValuesPerFacet": 99
+        },
+        "pagination": {
+          "maxTotalHits": 15
+        }
+      },
+      "error": null,
+      "duration": "PT0.007391353S",
+      "enqueuedAt": "2025-01-16T17:00:29.188815062Z",
+      "startedAt": "2025-01-16T17:00:29.201180268Z",
+      "finishedAt": "2025-01-16T17:00:29.208571621Z"
+    },
+    {
+      "uid": 9,
+      "batchUid": 9,
+      "indexUid": "kefir",
+      "status": "succeeded",
+      "type": "settingsUpdate",
+      "canceledBy": null,
+      "details": {
+        "faceting": {
+          "maxValuesPerFacet": 100
+        },
+        "pagination": {
+          "maxTotalHits": 1000
+        }
+      },
+      "error": null,
+      "duration": "PT0.007445825S",
+      "enqueuedAt": "2025-01-16T17:00:15.759501709Z",
+      "startedAt": "2025-01-16T17:00:15.77629445Z",
+      "finishedAt": "2025-01-16T17:00:15.783740275Z"
+    },
+    {
+      "uid": 8,
+      "batchUid": 8,
+      "indexUid": "kefir",
+      "status": "succeeded",
+      "type": "settingsUpdate",
+      "canceledBy": null,
+      "details": {
+        "typoTolerance": {
+          "minWordSizeForTypos": {
+            "oneTypo": 4
+          },
+          "disableOnWords": [
+            "kefir"
+          ],
+          "disableOnAttributes": [
+            "surname"
+          ]
+        }
+      },
+      "error": null,
+      "duration": "PT0.012020083S",
+      "enqueuedAt": "2025-01-16T16:59:42.727292501Z",
+      "startedAt": "2025-01-16T16:59:42.744086671Z",
+      "finishedAt": "2025-01-16T16:59:42.756106754Z"
+    },
+    {
+      "uid": 7,
+      "batchUid": 7,
+      "indexUid": "kefir",
+      "status": "succeeded",
+      "type": "settingsUpdate",
+      "canceledBy": null,
+      "details": {
+        "typoTolerance": {
+          "minWordSizeForTypos": {
+            "oneTypo": 4
+          }
+        }
+      },
+      "error": null,
+      "duration": "PT0.007440092S",
+      "enqueuedAt": "2025-01-16T16:58:41.203145044Z",
+      "startedAt": "2025-01-16T16:58:41.2155771Z",
+      "finishedAt": "2025-01-16T16:58:41.223017192Z"
+    },
+    {
+      "uid": 6,
+      "batchUid": 6,
+      "indexUid": "kefir",
+      "status": "succeeded",
+      "type": "settingsUpdate",
+      "canceledBy": null,
+      "details": {
+        "synonyms": {
+          "boubou": [
+            "kefir"
+          ]
+        }
+      },
+      "error": null,
+      "duration": "PT0.007565161S",
+      "enqueuedAt": "2025-01-16T16:54:51.927866243Z",
+      "startedAt": "2025-01-16T16:54:51.940332781Z",
+      "finishedAt": "2025-01-16T16:54:51.947897942Z"
+    }
+  ],
+  "total": 24,
+  "limit": 20,
+  "from": 25,
+  "next": 5
+}

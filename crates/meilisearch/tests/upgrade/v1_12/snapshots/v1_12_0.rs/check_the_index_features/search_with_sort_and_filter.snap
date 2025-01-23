@@ -1,0 +1,25 @@
+---
+source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
+snapshot_kind: text
+---
+{
+  "hits": [
+    {
+      "id": 1,
+      "name": "kefir",
+      "surname": [
+        "kef",
+        "kefkef",
+        "kefirounet",
+        "boubou"
+      ],
+      "age": 1.4,
+      "description": "kefir est un petit chien blanc très mignon"
+    }
+  ],
+  "query": "",
+  "processingTimeMs": "[duration]",
+  "limit": 20,
+  "offset": 0,
+  "estimatedTotalHits": 1
+}

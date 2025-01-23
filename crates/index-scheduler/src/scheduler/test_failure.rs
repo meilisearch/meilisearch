@@ -6,6 +6,7 @@ use meili_snap::snapshot;
 use meilisearch_types::milli::obkv_to_json;
 use meilisearch_types::milli::update::IndexDocumentsMethod::*;
 use meilisearch_types::milli::update::Setting;
+use meilisearch_types::tasks::Kind;
 use meilisearch_types::tasks::KindWithContent;
 
 use crate::insta_snapshot::snapshot_index_scheduler;
@@ -248,4 +249,79 @@ fn panic_in_process_batch_for_index_creation() {
     assert_eq!(*index_scheduler.run_loop_iteration.read().unwrap(), 1);
     // No matter what happens in process_batch, the index_scheduler should be internally consistent
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "index_creation_failed");
+}
+
+#[test]
+fn upgrade_failure() {
+    // By starting the index-scheduler at the v1.12.0 an upgrade task should be automatically enqueued
+    let (index_scheduler, mut handle) =
+        IndexScheduler::test_with_custom_config(vec![(1, FailureLocation::ProcessUpgrade)], |_| {
+            Some((1, 12, 0))
+        });
+    snapshot!(snapshot_index_scheduler(&index_scheduler), name: "register_automatic_upgrade_task");
+
+    let kind = index_creation_task("catto", "mouse");
+    let _task = index_scheduler.register(kind, None, false).unwrap();
+    snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_a_task_while_the_upgrade_task_is_enqueued");
+
+    handle.advance_one_failed_batch();
+    snapshot!(snapshot_index_scheduler(&index_scheduler), name: "upgrade_task_failed");
+
+    // We can still register tasks
+    let kind = index_creation_task("doggo", "bone");
+    let _task = index_scheduler.register(kind, None, false).unwrap();
+
+    // But the scheduler is down and won't process anything ever again
+    handle.scheduler_is_down();
+
+    // =====> After a restart is it still working as expected?
+    let (index_scheduler, mut handle) =
+        handle.restart(index_scheduler, true, vec![(1, FailureLocation::ProcessUpgrade)], |_| {
+            Some((1, 12, 0)) // the upgrade task should be rerun automatically and nothing else should be enqueued
+        });
+
+    handle.advance_one_failed_batch();
+    snapshot!(snapshot_index_scheduler(&index_scheduler), name: "upgrade_task_failed_again");
+    // We can still register tasks
+    let kind = index_creation_task("doggo", "bone");
+    let _task = index_scheduler.register(kind, None, false).unwrap();
+    // And the scheduler is still down and won't process anything ever again
+    handle.scheduler_is_down();
+
+    // =====> After a rerestart and without failure can we upgrade the indexes and process the tasks
+    let (index_scheduler, mut handle) =
+        handle.restart(index_scheduler, true, vec![], |_| Some((1, 12, 0)));
+
+    handle.advance_one_successful_batch();
+    snapshot!(snapshot_index_scheduler(&index_scheduler), name: "upgrade_task_succeeded");
+    // We can still register tasks
+    let kind = index_creation_task("girafo", "leaves");
+    let _task = index_scheduler.register(kind, None, false).unwrap();
+    // The scheduler is up and running
+    handle.advance_one_successful_batch();
+    handle.advance_one_successful_batch();
+    handle.advance_one_failed_batch(); // doggo already exists
+    handle.advance_one_successful_batch();
+    snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_processing_everything");
+
+    let (upgrade_tasks_ids, _) = index_scheduler
+        .get_task_ids_from_authorized_indexes(
+            &crate::Query { types: Some(vec![Kind::UpgradeDatabase]), ..Default::default() },
+            &Default::default(),
+        )
+        .unwrap();
+    // When deleting the single upgrade task it should remove the associated batch
+    let _task = index_scheduler
+        .register(
+            KindWithContent::TaskDeletion {
+                query: String::from("types=upgradeDatabase"),
+                tasks: upgrade_tasks_ids,
+            },
+            None,
+            false,
+        )
+        .unwrap();
+
+    handle.advance_one_successful_batch();
+    snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_removing_the_upgrade_tasks");
 }

@@ -1,0 +1,45 @@
+---
+source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
+---
+{
+  "results": [
+    {
+      "uid": 1,
+      "batchUid": 1,
+      "indexUid": "kefir",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    },
+    {
+      "uid": 0,
+      "batchUid": 0,
+      "indexUid": "kefir",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": null,
+      "duration": "PT0.111055654S",
+      "enqueuedAt": "2025-01-16T16:45:16.003570092Z",
+      "startedAt": "2025-01-16T16:45:16.020248085Z",
+      "finishedAt": "2025-01-16T16:45:16.131303739Z"
+    }
+  ],
+  "total": 2,
+  "limit": 20,
+  "from": 1,
+  "next": null
+}

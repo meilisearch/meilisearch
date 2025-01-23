@@ -1,9 +1,10 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::Ordering;
 
 use meilisearch_types::batches::BatchId;
 use meilisearch_types::heed::{RoTxn, RwTxn};
-use meilisearch_types::milli::progress::Progress;
+use meilisearch_types::milli::progress::{Progress, VariableNameStep};
 use meilisearch_types::milli::{self};
 use meilisearch_types::tasks::{Details, IndexSwap, KindWithContent, Status, Task};
 use milli::update::Settings as MilliSettings;
@@ -13,7 +14,7 @@ use super::create_batch::Batch;
 use crate::processing::{
     AtomicBatchStep, AtomicTaskStep, CreateIndexProgress, DeleteIndexProgress,
     InnerSwappingTwoIndexes, SwappingTheIndexes, TaskCancelationProgress, TaskDeletionProgress,
-    UpdateIndexProgress, VariableNameStep,
+    UpdateIndexProgress,
 };
 use crate::utils::{self, swap_index_uid_in_task, ProcessingBatch};
 use crate::{Error, IndexScheduler, Result, TaskId};
@@ -297,7 +298,7 @@ impl IndexScheduler {
                 }
                 progress.update_progress(SwappingTheIndexes::SwappingTheIndexes);
                 for (step, swap) in swaps.iter().enumerate() {
-                    progress.update_progress(VariableNameStep::new(
+                    progress.update_progress(VariableNameStep::<SwappingTheIndexes>::new(
                         format!("swapping index {} and {}", swap.indexes.0, swap.indexes.1),
                         step as u32,
                         swaps.len() as u32,
@@ -313,6 +314,27 @@ impl IndexScheduler {
                 wtxn.commit()?;
                 task.status = Status::Succeeded;
                 Ok(vec![task])
+            }
+            Batch::UpgradeDatabase { mut tasks } => {
+                let KindWithContent::UpgradeDatabase { from } = tasks.last().unwrap().kind else {
+                    unreachable!();
+                };
+                let ret = catch_unwind(AssertUnwindSafe(|| self.process_upgrade(from, progress)));
+                match ret {
+                    Ok(Ok(())) => (),
+                    Ok(Err(e)) => return Err(Error::DatabaseUpgrade(Box::new(e))),
+                    Err(_e) => {
+                        return Err(Error::DatabaseUpgrade(Box::new(Error::ProcessBatchPanicked)));
+                    }
+                }
+
+                for task in tasks.iter_mut() {
+                    task.status = Status::Succeeded;
+                    // Since this task can be retried we must reset its error status
+                    task.error = None;
+                }
+
+                Ok(tasks)
             }
         }
     }

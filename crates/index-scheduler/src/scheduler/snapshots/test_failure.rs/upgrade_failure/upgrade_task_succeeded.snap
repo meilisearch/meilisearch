@@ -1,0 +1,72 @@
+---
+source: crates/index-scheduler/src/scheduler/test_failure.rs
+snapshot_kind: text
+---
+### Autobatching Enabled = true
+### Processing batch None:
+[]
+----------------------------------------------------------------------
+### All Tasks:
+0 {uid: 0, batch_uid: 0, status: succeeded, details: { from: (1, 12, 0), to: (1, 13, 0) }, kind: UpgradeDatabase { from: (1, 12, 0) }}
+1 {uid: 1, status: enqueued, details: { primary_key: Some("mouse") }, kind: IndexCreation { index_uid: "catto", primary_key: Some("mouse") }}
+2 {uid: 2, status: enqueued, details: { primary_key: Some("bone") }, kind: IndexCreation { index_uid: "doggo", primary_key: Some("bone") }}
+3 {uid: 3, status: enqueued, details: { primary_key: Some("bone") }, kind: IndexCreation { index_uid: "doggo", primary_key: Some("bone") }}
+----------------------------------------------------------------------
+### Status:
+enqueued [1,2,3,]
+succeeded [0,]
+failed []
+----------------------------------------------------------------------
+### Kind:
+"indexCreation" [1,2,3,]
+"upgradeDatabase" [0,]
+----------------------------------------------------------------------
+### Index Tasks:
+catto [1,]
+doggo [2,3,]
+----------------------------------------------------------------------
+### Index Mapper:
+
+----------------------------------------------------------------------
+### Canceled By:
+
+----------------------------------------------------------------------
+### Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+----------------------------------------------------------------------
+### Started At:
+[timestamp] [0,]
+----------------------------------------------------------------------
+### Finished At:
+[timestamp] [0,]
+----------------------------------------------------------------------
+### All Batches:
+0 {uid: 0, details: {"upgradeFrom":"v1.12.0","upgradeTo":"v1.13.0"}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"upgradeDatabase":1},"indexUids":{}}, }
+----------------------------------------------------------------------
+### Batch to tasks mapping:
+0 [0,]
+----------------------------------------------------------------------
+### Batches Status:
+succeeded [0,]
+failed []
+----------------------------------------------------------------------
+### Batches Kind:
+"upgradeDatabase" [0,]
+----------------------------------------------------------------------
+### Batches Index Tasks:
+----------------------------------------------------------------------
+### Batches Enqueued At:
+[timestamp] [0,]
+----------------------------------------------------------------------
+### Batches Started At:
+[timestamp] [0,]
+----------------------------------------------------------------------
+### Batches Finished At:
+[timestamp] [0,]
+----------------------------------------------------------------------
+### File Store:
+
+----------------------------------------------------------------------

@@ -20,14 +20,16 @@ use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use self::batches::BatchQueue;
-use self::tasks::TaskQueue;
+pub(crate) use self::batches::BatchQueue;
+pub(crate) use self::tasks::TaskQueue;
 use crate::processing::ProcessingTasks;
 use crate::utils::{
     check_index_swap_validity, filter_out_references_to_newer_tasks, ProcessingBatch,
 };
 use crate::{Error, IndexSchedulerOptions, Result, TaskId};
 
+/// The number of database used by queue itself
+const NUMBER_OF_DATABASES: u32 = 1;
 /// Database const names for the `IndexScheduler`.
 mod db_name {
     pub const BATCH_TO_TASKS_MAPPING: &str = "batch-to-tasks-mapping";
@@ -146,6 +148,10 @@ impl Queue {
             file_store: self.file_store.clone(),
             max_number_of_tasks: self.max_number_of_tasks,
         }
+    }
+
+    pub(crate) const fn nb_db() -> u32 {
+        tasks::TaskQueue::nb_db() + batches::BatchQueue::nb_db() + NUMBER_OF_DATABASES
     }
 
     /// Create an index scheduler and start its run loop.

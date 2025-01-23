@@ -7,7 +7,12 @@ use meilisearch_types::heed::{Database, Env, RwTxn};
 use crate::error::FeatureNotEnabledError;
 use crate::Result;
 
-const EXPERIMENTAL_FEATURES: &str = "experimental-features";
+/// The number of database used by features
+const NUMBER_OF_DATABASES: u32 = 1;
+/// Database const names for the `FeatureData`.
+mod db_name {
+    pub const EXPERIMENTAL_FEATURES: &str = "experimental-features";
+}
 
 #[derive(Clone)]
 pub(crate) struct FeatureData {
@@ -84,14 +89,20 @@ impl RoFeatures {
 }
 
 impl FeatureData {
-    pub fn new(env: &Env, instance_features: InstanceTogglableFeatures) -> Result<Self> {
-        let mut wtxn = env.write_txn()?;
-        let runtime_features_db = env.create_database(&mut wtxn, Some(EXPERIMENTAL_FEATURES))?;
-        wtxn.commit()?;
+    pub(crate) const fn nb_db() -> u32 {
+        NUMBER_OF_DATABASES
+    }
 
-        let txn = env.read_txn()?;
+    pub fn new(
+        env: &Env,
+        wtxn: &mut RwTxn,
+        instance_features: InstanceTogglableFeatures,
+    ) -> Result<Self> {
+        let runtime_features_db =
+            env.create_database(wtxn, Some(db_name::EXPERIMENTAL_FEATURES))?;
+
         let persisted_features: RuntimeTogglableFeatures =
-            runtime_features_db.get(&txn, EXPERIMENTAL_FEATURES)?.unwrap_or_default();
+            runtime_features_db.get(wtxn, db_name::EXPERIMENTAL_FEATURES)?.unwrap_or_default();
         let InstanceTogglableFeatures { metrics, logs_route, contains_filter } = instance_features;
         let runtime = Arc::new(RwLock::new(RuntimeTogglableFeatures {
             metrics: metrics || persisted_features.metrics,
@@ -108,7 +119,7 @@ impl FeatureData {
         mut wtxn: RwTxn,
         features: RuntimeTogglableFeatures,
     ) -> Result<()> {
-        self.persisted.put(&mut wtxn, EXPERIMENTAL_FEATURES, &features)?;
+        self.persisted.put(&mut wtxn, db_name::EXPERIMENTAL_FEATURES, &features)?;
         wtxn.commit()?;
 
         // safe to unwrap, the lock will only fail if:

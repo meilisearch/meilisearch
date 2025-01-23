@@ -63,7 +63,7 @@ fn main() {
                 Some(path) => TempDir::new_in(path).unwrap(),
                 None => TempDir::new().unwrap(),
             };
-            let index = Index::new(options, tempdir.path()).unwrap();
+            let index = Index::new(options, tempdir.path(), true).unwrap();
             let indexer_config = IndexerConfig::default();
 
             std::thread::scope(|s| {

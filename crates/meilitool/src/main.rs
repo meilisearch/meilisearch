@@ -187,7 +187,7 @@ fn export_a_dump(
     db_path: PathBuf,
     dump_dir: PathBuf,
     skip_enqueued_tasks: bool,
-    detected_version: (String, String, String),
+    detected_version: (u32, u32, u32),
 ) -> Result<(), anyhow::Error> {
     let started_at = OffsetDateTime::now_utc();
 
@@ -253,12 +253,7 @@ fn export_a_dump(
                 if status == Status::Enqueued {
                     let content_file = file_store.get_update(content_file_uuid)?;
 
-                    if (
-                        detected_version.0.as_str(),
-                        detected_version.1.as_str(),
-                        detected_version.2.as_str(),
-                    ) < ("1", "12", "0")
-                    {
+                    if (detected_version.0, detected_version.1, detected_version.2) < (1, 12, 0) {
                         eprintln!("Dumping the enqueued tasks reading them in obkv format...");
                         let reader =
                             DocumentsBatchReader::from_reader(content_file).with_context(|| {
@@ -303,7 +298,7 @@ fn export_a_dump(
     for result in index_mapping.iter(&rtxn)? {
         let (uid, uuid) = result?;
         let index_path = db_path.join("indexes").join(uuid.to_string());
-        let index = Index::new(EnvOpenOptions::new(), &index_path).with_context(|| {
+        let index = Index::new(EnvOpenOptions::new(), &index_path, false).with_context(|| {
             format!("While trying to open the index at path {:?}", index_path.display())
         })?;
 

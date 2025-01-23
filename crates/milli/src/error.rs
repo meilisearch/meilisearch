@@ -74,6 +74,8 @@ pub enum InternalError {
     AbortedIndexation,
     #[error("The matching words list contains at least one invalid member")]
     InvalidMatchingWords,
+    #[error("Cannot upgrade to the following version: v{0}.{1}.{2}.")]
+    CannotUpgradeToVersion(u32, u32, u32),
     #[error(transparent)]
     ArroyError(#[from] arroy::Error),
     #[error(transparent)]

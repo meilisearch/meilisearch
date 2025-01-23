@@ -1,0 +1,505 @@
+---
+source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
+---
+{
+  "results": [
+    {
+      "uid": 24,
+      "progress": null,
+      "details": {
+        "upgradeFrom": "v1.12.0",
+        "upgradeTo": "v1.13.0"
+      },
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "succeeded": 1
+        },
+        "types": {
+          "upgradeDatabase": 1
+        },
+        "indexUids": {}
+      },
+      "duration": "[duration]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    },
+    {
+      "uid": 23,
+      "progress": null,
+      "details": {
+        "deletedDocuments": 0
+      },
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "succeeded": 1
+        },
+        "types": {
+          "indexDeletion": 1
+        },
+        "indexUids": {
+          "mieli": 1
+        }
+      },
+      "duration": "PT0.004146631S",
+      "startedAt": "2025-01-23T11:38:57.012591321Z",
+      "finishedAt": "2025-01-23T11:38:57.016737952Z"
+    },
+    {
+      "uid": 22,
+      "progress": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "succeeded": 1
+        },
+        "types": {
+          "documentAdditionOrUpdate": 1
+        },
+        "indexUids": {
+          "kefir": 1
+        }
+      },
+      "duration": "PT0.102738497S",
+      "startedAt": "2025-01-23T11:36:22.551906856Z",
+      "finishedAt": "2025-01-23T11:36:22.654645353Z"
+    },
+    {
+      "uid": 21,
+      "progress": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "failed": 1
+        },
+        "types": {
+          "documentAdditionOrUpdate": 1
+        },
+        "indexUids": {
+          "kefir": 1
+        }
+      },
+      "duration": "PT0.005108474S",
+      "startedAt": "2025-01-23T11:36:04.132670526Z",
+      "finishedAt": "2025-01-23T11:36:04.137779Z"
+    },
+    {
+      "uid": 20,
+      "progress": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "failed": 1
+        },
+        "types": {
+          "documentAdditionOrUpdate": 1
+        },
+        "indexUids": {
+          "mieli": 1
+        }
+      },
+      "duration": "PT0.027954894S",
+      "startedAt": "2025-01-23T11:35:53.631082795Z",
+      "finishedAt": "2025-01-23T11:35:53.659037689Z"
+    },
+    {
+      "uid": 19,
+      "progress": null,
+      "details": {
+        "deletedDocuments": 19546
+      },
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "succeeded": 1
+        },
+        "types": {
+          "indexDeletion": 1
+        },
+        "indexUids": {
+          "mieli": 1
+        }
+      },
+      "duration": "PT0.006903297S",
+      "startedAt": "2025-01-20T11:50:52.874106134Z",
+      "finishedAt": "2025-01-20T11:50:52.881009431Z"
+    },
+    {
+      "uid": 18,
+      "progress": null,
+      "details": {
+        "receivedDocuments": 19547,
+        "indexedDocuments": 0,
+        "matchedTasks": 1,
+        "canceledTasks": 1,
+        "originalFilter": "?statuses=processing%2Cenqueued"
+      },
+      "stats": {
+        "totalNbTasks": 2,
+        "status": {
+          "succeeded": 1,
+          "canceled": 1
+        },
+        "types": {
+          "documentAdditionOrUpdate": 1,
+          "taskCancelation": 1
+        },
+        "indexUids": {
+          "mieli": 1
+        }
+      },
+      "duration": "PT0.000481257S",
+      "startedAt": "2025-01-20T11:48:04.92820416Z",
+      "finishedAt": "2025-01-20T11:48:04.928685417Z"
+    },
+    {
+      "uid": 17,
+      "progress": null,
+      "details": {
+        "matchedTasks": 0,
+        "canceledTasks": 0,
+        "originalFilter": "?statuses=processing%2Cenqueued"
+      },
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "succeeded": 1
+        },
+        "types": {
+          "taskCancelation": 1
+        },
+        "indexUids": {}
+      },
+      "duration": "PT0.000407005S",
+      "startedAt": "2025-01-20T11:47:53.509403957Z",
+      "finishedAt": "2025-01-20T11:47:53.509810962Z"
+    },
+    {
+      "uid": 16,
+      "progress": null,
+      "details": {
+        "matchedTasks": 0,
+        "canceledTasks": 0,
+        "originalFilter": "?statuses=processing%2Cenqueued"
+      },
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "succeeded": 1
+        },
+        "types": {
+          "taskCancelation": 1
+        },
+        "indexUids": {}
+      },
+      "duration": "PT0.000403716S",
+      "startedAt": "2025-01-20T11:47:48.430653005Z",
+      "finishedAt": "2025-01-20T11:47:48.431056721Z"
+    },
+    {
+      "uid": 15,
+      "progress": null,
+      "details": {
+        "matchedTasks": 0,
+        "canceledTasks": 0,
+        "originalFilter": "?statuses=processing"
+      },
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "succeeded": 1
+        },
+        "types": {
+          "taskCancelation": 1
+        },
+        "indexUids": {}
+      },
+      "duration": "PT0.000417016S",
+      "startedAt": "2025-01-20T11:47:42.429678617Z",
+      "finishedAt": "2025-01-20T11:47:42.430095633Z"
+    },
+    {
+      "uid": 14,
+      "progress": null,
+      "details": {
+        "receivedDocuments": 19547,
+        "indexedDocuments": 19546
+      },
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "succeeded": 1
+        },
+        "types": {
+          "documentAdditionOrUpdate": 1
+        },
+        "indexUids": {
+          "mieli": 1
+        }
+      },
+      "duration": "PT12.086284842S",
+      "startedAt": "2025-01-20T11:47:03.092181576Z",
+      "finishedAt": "2025-01-20T11:47:15.178466418Z"
+    },
+    {
+      "uid": 13,
+      "progress": null,
+      "details": {
+        "localizedAttributes": [
+          {
+            "attributePatterns": [
+              "description"
+            ],
+            "locales": [
+              "fr"
+            ]
+          }
+        ]
+      },
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "succeeded": 1
+        },
+        "types": {
+          "settingsUpdate": 1
+        },
+        "indexUids": {
+          "kefir": 1
+        }
+      },
+      "duration": "PT0.011506614S",
+      "startedAt": "2025-01-16T17:18:43.29334923Z",
+      "finishedAt": "2025-01-16T17:18:43.304855844Z"
+    },
+    {
+      "uid": 12,
+      "progress": null,
+      "details": {
+        "faceting": {
+          "sortFacetValuesBy": {
+            "*": "alpha",
+            "age": "count"
+          }
+        }
+      },
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "succeeded": 1
+        },
+        "types": {
+          "settingsUpdate": 1
+        },
+        "indexUids": {
+          "kefir": 1
+        }
+      },
+      "duration": "PT0.007640163S",
+      "startedAt": "2025-01-16T17:02:52.539749853Z",
+      "finishedAt": "2025-01-16T17:02:52.547390016Z"
+    },
+    {
+      "uid": 11,
+      "progress": null,
+      "details": {
+        "searchCutoffMs": 8000
+      },
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "succeeded": 1
+        },
+        "types": {
+          "settingsUpdate": 1
+        },
+        "indexUids": {
+          "kefir": 1
+        }
+      },
+      "duration": "PT0.007307840S",
+      "startedAt": "2025-01-16T17:01:14.112756687Z",
+      "finishedAt": "2025-01-16T17:01:14.120064527Z"
+    },
+    {
+      "uid": 10,
+      "progress": null,
+      "details": {
+        "faceting": {
+          "maxValuesPerFacet": 99
+        },
+        "pagination": {
+          "maxTotalHits": 15
+        }
+      },
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "succeeded": 1
+        },
+        "types": {
+          "settingsUpdate": 1
+        },
+        "indexUids": {
+          "kefir": 1
+        }
+      },
+      "duration": "PT0.007391353S",
+      "startedAt": "2025-01-16T17:00:29.201180268Z",
+      "finishedAt": "2025-01-16T17:00:29.208571621Z"
+    },
+    {
+      "uid": 9,
+      "progress": null,
+      "details": {
+        "faceting": {
+          "maxValuesPerFacet": 100
+        },
+        "pagination": {
+          "maxTotalHits": 1000
+        }
+      },
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "succeeded": 1
+        },
+        "types": {
+          "settingsUpdate": 1
+        },
+        "indexUids": {
+          "kefir": 1
+        }
+      },
+      "duration": "PT0.007445825S",
+      "startedAt": "2025-01-16T17:00:15.77629445Z",
+      "finishedAt": "2025-01-16T17:00:15.783740275Z"
+    },
+    {
+      "uid": 8,
+      "progress": null,
+      "details": {
+        "typoTolerance": {
+          "minWordSizeForTypos": {
+            "oneTypo": 4
+          },
+          "disableOnWords": [
+            "kefir"
+          ],
+          "disableOnAttributes": [
+            "surname"
+          ]
+        }
+      },
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "succeeded": 1
+        },
+        "types": {
+          "settingsUpdate": 1
+        },
+        "indexUids": {
+          "kefir": 1
+        }
+      },
+      "duration": "PT0.012020083S",
+      "startedAt": "2025-01-16T16:59:42.744086671Z",
+      "finishedAt": "2025-01-16T16:59:42.756106754Z"
+    },
+    {
+      "uid": 7,
+      "progress": null,
+      "details": {
+        "typoTolerance": {
+          "minWordSizeForTypos": {
+            "oneTypo": 4
+          }
+        }
+      },
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "succeeded": 1
+        },
+        "types": {
+          "settingsUpdate": 1
+        },
+        "indexUids": {
+          "kefir": 1
+        }
+      },
+      "duration": "PT0.007440092S",
+      "startedAt": "2025-01-16T16:58:41.2155771Z",
+      "finishedAt": "2025-01-16T16:58:41.223017192Z"
+    },
+    {
+      "uid": 6,
+      "progress": null,
+      "details": {
+        "synonyms": {
+          "boubou": [
+            "kefir"
+          ]
+        }
+      },
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "succeeded": 1
+        },
+        "types": {
+          "settingsUpdate": 1
+        },
+        "indexUids": {
+          "kefir": 1
+        }
+      },
+      "duration": "PT0.007565161S",
+      "startedAt": "2025-01-16T16:54:51.940332781Z",
+      "finishedAt": "2025-01-16T16:54:51.947897942Z"
+    },
+    {
+      "uid": 5,
+      "progress": null,
+      "details": {
+        "stopWords": [
+          "le",
+          "un"
+        ]
+      },
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "succeeded": 1
+        },
+        "types": {
+          "settingsUpdate": 1
+        },
+        "indexUids": {
+          "kefir": 1
+        }
+      },
+      "duration": "PT0.016307263S",
+      "startedAt": "2025-01-16T16:53:19.913351957Z",
+      "finishedAt": "2025-01-16T16:53:19.92965922Z"
+    }
+  ],
+  "total": 23,
+  "limit": 20,
+  "from": 24,
+  "next": 4
+}

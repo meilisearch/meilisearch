@@ -1,0 +1,40 @@
+---
+source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
+snapshot_kind: text
+---
+{
+  "results": [
+    {
+      "uid": 18,
+      "progress": null,
+      "details": {
+        "receivedDocuments": 19547,
+        "indexedDocuments": 0,
+        "matchedTasks": 1,
+        "canceledTasks": 1,
+        "originalFilter": "?statuses=processing%2Cenqueued"
+      },
+      "stats": {
+        "totalNbTasks": 2,
+        "status": {
+          "succeeded": 1,
+          "canceled": 1
+        },
+        "types": {
+          "documentAdditionOrUpdate": 1,
+          "taskCancelation": 1
+        },
+        "indexUids": {
+          "mieli": 1
+        }
+      },
+      "duration": "[duration]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+  ],
+  "total": 1,
+  "limit": 20,
+  "from": 18,
+  "next": null
+}
