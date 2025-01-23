@@ -169,17 +169,17 @@ async fn check_the_index_scheduler(server: &Server) {
     let (tasks, _) = server.tasks_filter("canceledBy=19").await;
     snapshot!(json_string!(tasks, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]" }), name: "tasks_filter_canceledBy_equal_19");
     let (tasks, _) = server.tasks_filter("beforeEnqueuedAt=2025-01-16T16:47:41Z").await;
-    snapshot!(json_string!(tasks, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]" }), name: "tasks_filter_beforeEnqueuedAt_equal_2025-01-16T16:47:41");
+    snapshot!(json_string!(tasks, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]" }), name: "tasks_filter_beforeEnqueuedAt_equal_2025-01-16T16_47_41");
     let (tasks, _) = server.tasks_filter("afterEnqueuedAt=2025-01-16T16:47:41Z").await;
-    snapshot!(json_string!(tasks, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]" }), name: "tasks_filter_afterEnqueuedAt_equal_2025-01-16T16:47:41");
+    snapshot!(json_string!(tasks, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]" }), name: "tasks_filter_afterEnqueuedAt_equal_2025-01-16T16_47_41");
     let (tasks, _) = server.tasks_filter("beforeStartedAt=2025-01-16T16:47:41Z").await;
-    snapshot!(json_string!(tasks, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]" }), name: "tasks_filter_beforeStartedAt_equal_2025-01-16T16:47:41");
+    snapshot!(json_string!(tasks, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]" }), name: "tasks_filter_beforeStartedAt_equal_2025-01-16T16_47_41");
     let (tasks, _) = server.tasks_filter("afterStartedAt=2025-01-16T16:47:41Z").await;
-    snapshot!(json_string!(tasks, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]" }), name: "tasks_filter_afterStartedAt_equal_2025-01-16T16:47:41");
+    snapshot!(json_string!(tasks, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]" }), name: "tasks_filter_afterStartedAt_equal_2025-01-16T16_47_41");
     let (tasks, _) = server.tasks_filter("beforeFinishedAt=2025-01-16T16:47:41Z").await;
-    snapshot!(json_string!(tasks, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]" }), name: "tasks_filter_beforeFinishedAt_equal_2025-01-16T16:47:41");
+    snapshot!(json_string!(tasks, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]" }), name: "tasks_filter_beforeFinishedAt_equal_2025-01-16T16_47_41");
     let (tasks, _) = server.tasks_filter("afterFinishedAt=2025-01-16T16:47:41Z").await;
-    snapshot!(json_string!(tasks, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]" }), name: "tasks_filter_afterFinishedAt_equal_2025-01-16T16:47:41");
+    snapshot!(json_string!(tasks, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]" }), name: "tasks_filter_afterFinishedAt_equal_2025-01-16T16_47_41");
 
     // Tests all the batches query parameters
     let (batches, _) = server.batches_filter("uids=10").await;
@@ -192,17 +192,17 @@ async fn check_the_index_scheduler(server: &Server) {
     let (batches, _) = server.batches_filter("canceledBy=19").await;
     snapshot!(json_string!(batches, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]" }), name: "batches_filter_canceledBy_equal_19");
     let (batches, _) = server.batches_filter("beforeEnqueuedAt=2025-01-16T16:47:41Z").await;
-    snapshot!(json_string!(batches, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]" }), name: "batches_filter_beforeEnqueuedAt_equal_2025-01-16T16:47:41");
+    snapshot!(json_string!(batches, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]" }), name: "batches_filter_beforeEnqueuedAt_equal_2025-01-16T16_47_41");
     let (batches, _) = server.batches_filter("afterEnqueuedAt=2025-01-16T16:47:41Z").await;
-    snapshot!(json_string!(batches, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]" }), name: "batches_filter_afterEnqueuedAt_equal_2025-01-16T16:47:41");
+    snapshot!(json_string!(batches, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]" }), name: "batches_filter_afterEnqueuedAt_equal_2025-01-16T16_47_41");
     let (batches, _) = server.batches_filter("beforeStartedAt=2025-01-16T16:47:41Z").await;
-    snapshot!(json_string!(batches, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]" }), name: "batches_filter_beforeStartedAt_equal_2025-01-16T16:47:41");
+    snapshot!(json_string!(batches, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]" }), name: "batches_filter_beforeStartedAt_equal_2025-01-16T16_47_41");
     let (batches, _) = server.batches_filter("afterStartedAt=2025-01-16T16:47:41Z").await;
-    snapshot!(json_string!(batches, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]" }), name: "batches_filter_afterStartedAt_equal_2025-01-16T16:47:41");
+    snapshot!(json_string!(batches, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]" }), name: "batches_filter_afterStartedAt_equal_2025-01-16T16_47_41");
     let (batches, _) = server.batches_filter("beforeFinishedAt=2025-01-16T16:47:41Z").await;
-    snapshot!(json_string!(batches, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]" }), name: "batches_filter_beforeFinishedAt_equal_2025-01-16T16:47:41");
+    snapshot!(json_string!(batches, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]" }), name: "batches_filter_beforeFinishedAt_equal_2025-01-16T16_47_41");
     let (batches, _) = server.batches_filter("afterFinishedAt=2025-01-16T16:47:41Z").await;
-    snapshot!(json_string!(batches, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]" }), name: "batches_filter_afterFinishedAt_equal_2025-01-16T16:47:41");
+    snapshot!(json_string!(batches, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]" }), name: "batches_filter_afterFinishedAt_equal_2025-01-16T16_47_41");
 
     let (stats, _) = server.stats().await;
     snapshot!(stats, @r#"
