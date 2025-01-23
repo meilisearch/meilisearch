@@ -68,8 +68,8 @@ impl OfflineUpgrade {
             (1, 9, _) => 0,
             (1, 10, _) => 1,
             (1, 11, _) => 2,
-            (1, 12, 0 | 1 | 2) => 3,
-            (1, 12, 3 | 4 | 5) => no_upgrade,
+            (1, 12, 0..=2) => 3,
+            (1, 12, 3..=5) => no_upgrade,
             _ => {
                 bail!("Unsupported current version {current_major}.{current_minor}.{current_patch}. Can only upgrade from versions in range [{}-{}]",
                       FIRST_SUPPORTED_UPGRADE_FROM_VERSION,
@@ -83,7 +83,7 @@ impl OfflineUpgrade {
             (1, 10, _) => 0,
             (1, 11, _) => 1,
             (1, 12, x) if x == 0 || x == 1 || x == 2 => 2,
-            (1, 12, 3 | 4 | 5) => 3,
+            (1, 12, 3..=5) => 3,
             _ => {
                 bail!("Unsupported target version {target_major}.{target_minor}.{target_patch}. Can only upgrade to versions in range [{}-{}]",
                       FIRST_SUPPORTED_UPGRADE_TO_VERSION,
@@ -95,8 +95,13 @@ impl OfflineUpgrade {
 
         if start_at == no_upgrade {
             println!("No upgrade operation to perform, writing VERSION file");
-            create_version_file(&self.db_path, target_major, target_minor, target_patch)
-                .context("while writing VERSION file after the upgrade")?;
+            create_version_file(
+                &self.db_path,
+                &target_major.to_string(),
+                &target_minor.to_string(),
+                &target_patch.to_string(),
+            )
+            .context("while writing VERSION file after the upgrade")?;
             println!("Success");
             return Ok(());
         }
