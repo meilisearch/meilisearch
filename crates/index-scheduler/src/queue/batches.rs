@@ -228,14 +228,16 @@ impl BatchQueue {
             })?;
         }
 
-        // Update the enqueued_at, we cannot retrieve the previous enqueued at from the previous batch and
+        // Update the enqueued_at: we cannot retrieve the previous enqueued at from the previous batch, and
         // must instead go through the db looking for it. We cannot look at the task contained in this batch either
         // because they may have been removed.
-        // What we know though is that the task date from before the enqueued_at and only two timestamp have been written
+        // What we know, though, is that the task date is from before the enqueued_at, and max two timestamps have been written
         // to the DB per batches.
         if let Some(ref old_batch) = old_batch {
             let started_at = old_batch.started_at.unix_timestamp_nanos();
-            let mut exit = false;
+
+            // We have either one or two enqueued at to remove
+            let mut exit = old_batch.stats.total_nb_tasks.clamp(0, 2);
             let mut iterator = self.enqueued_at.rev_iter_mut(wtxn)?;
             while let Some(entry) = iterator.next() {
                 let (key, mut value) = entry?;
@@ -243,14 +245,13 @@ impl BatchQueue {
                     continue;
                 }
                 if value.remove(old_batch.uid) {
+                    exit = exit.saturating_sub(1);
                     // Safe because the key and value are owned
                     unsafe {
                         iterator.put_current(&key, &value)?;
                     }
-                    if exit {
+                    if exit == 0 {
                         break;
-                    } else {
-                        exit = true;
                     }
                 }
             }
