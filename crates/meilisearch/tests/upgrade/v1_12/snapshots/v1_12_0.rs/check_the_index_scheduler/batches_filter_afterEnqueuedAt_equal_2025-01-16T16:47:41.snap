@@ -8,7 +8,8 @@ snapshot_kind: text
       "uid": 20,
       "progress": null,
       "details": {
-        "upgradeFrom": "v1.12.0"
+        "upgradeFrom": "v1.12.0",
+        "upgradeTo": "v1.13.0"
       },
       "stats": {
         "totalNbTasks": 1,

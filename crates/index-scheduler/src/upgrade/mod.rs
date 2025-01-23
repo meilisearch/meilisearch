@@ -75,7 +75,7 @@ pub fn upgrade_index_scheduler(
             finished_at: None,
             error: None,
             canceled_by: None,
-            details: Some(Details::UpgradeDatabase { from }),
+            details: Some(Details::UpgradeDatabase { from, to }),
             status: Status::Enqueued,
             kind: KindWithContent::UpgradeDatabase { from },
         },

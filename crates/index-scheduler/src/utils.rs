@@ -548,7 +548,7 @@ impl crate::IndexScheduler {
                     Details::Dump { dump_uid: _ } => {
                         assert_eq!(kind.as_kind(), Kind::DumpCreation);
                     }
-                    Details::UpgradeDatabase { from: _ } => {
+                    Details::UpgradeDatabase { from: _, to: _ } => {
                         assert_eq!(kind.as_kind(), Kind::UpgradeDatabase);
                     }
                 }

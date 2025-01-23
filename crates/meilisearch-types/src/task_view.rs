@@ -116,6 +116,8 @@ pub struct DetailsView {
     pub swaps: Option<Vec<IndexSwap>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub upgrade_from: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub upgrade_to: Option<String>,
 }
 
 impl DetailsView {
@@ -236,10 +238,17 @@ impl DetailsView {
                     Some(left)
                 }
             },
+            // We want the earliest version
             upgrade_from: match (self.upgrade_from.clone(), other.upgrade_from.clone()) {
                 (None, None) => None,
                 (None, Some(from)) | (Some(from), None) => Some(from),
-                (Some(_), Some(from)) => Some(from),
+                (Some(from), Some(_)) => Some(from),
+            },
+            // And the latest
+            upgrade_to: match (self.upgrade_to.clone(), other.upgrade_to.clone()) {
+                (None, None) => None,
+                (None, Some(to)) | (Some(to), None) => Some(to),
+                (Some(_), Some(to)) => Some(to),
             },
         }
     }
@@ -318,8 +327,9 @@ impl From<Details> for DetailsView {
             Details::IndexSwap { swaps } => {
                 DetailsView { swaps: Some(swaps), ..Default::default() }
             }
-            Details::UpgradeDatabase { from } => DetailsView {
+            Details::UpgradeDatabase { from, to } => DetailsView {
                 upgrade_from: Some(format!("v{}.{}.{}", from.0, from.1, from.2)),
+                upgrade_to: Some(format!("v{}.{}.{}", to.0, to.1, to.2)),
                 ..Default::default()
             },
         }

@@ -16,7 +16,7 @@ use crate::batches::BatchId;
 use crate::error::ResponseError;
 use crate::keys::Key;
 use crate::settings::{Settings, Unchecked};
-use crate::InstanceUid;
+use crate::{versioning, InstanceUid};
 
 pub type TaskId = u32;
 
@@ -269,9 +269,14 @@ impl KindWithContent {
             }),
             KindWithContent::DumpCreation { .. } => Some(Details::Dump { dump_uid: None }),
             KindWithContent::SnapshotCreation => None,
-            KindWithContent::UpgradeDatabase { from } => {
-                Some(Details::UpgradeDatabase { from: (from.0, from.1, from.2) })
-            }
+            KindWithContent::UpgradeDatabase { from } => Some(Details::UpgradeDatabase {
+                from: (from.0, from.1, from.2),
+                to: (
+                    versioning::VERSION_MAJOR.parse().unwrap(),
+                    versioning::VERSION_MINOR.parse().unwrap(),
+                    versioning::VERSION_PATCH.parse().unwrap(),
+                ),
+            }),
         }
     }
 
@@ -330,9 +335,14 @@ impl KindWithContent {
             }),
             KindWithContent::DumpCreation { .. } => Some(Details::Dump { dump_uid: None }),
             KindWithContent::SnapshotCreation => None,
-            KindWithContent::UpgradeDatabase { from } => {
-                Some(Details::UpgradeDatabase { from: *from })
-            }
+            KindWithContent::UpgradeDatabase { from } => Some(Details::UpgradeDatabase {
+                from: *from,
+                to: (
+                    versioning::VERSION_MAJOR.parse().unwrap(),
+                    versioning::VERSION_MINOR.parse().unwrap(),
+                    versioning::VERSION_PATCH.parse().unwrap(),
+                ),
+            }),
         }
     }
 }
@@ -373,9 +383,14 @@ impl From<&KindWithContent> for Option<Details> {
             }),
             KindWithContent::DumpCreation { .. } => Some(Details::Dump { dump_uid: None }),
             KindWithContent::SnapshotCreation => None,
-            KindWithContent::UpgradeDatabase { from } => {
-                Some(Details::UpgradeDatabase { from: *from })
-            }
+            KindWithContent::UpgradeDatabase { from } => Some(Details::UpgradeDatabase {
+                from: *from,
+                to: (
+                    versioning::VERSION_MAJOR.parse().unwrap(),
+                    versioning::VERSION_MINOR.parse().unwrap(),
+                    versioning::VERSION_PATCH.parse().unwrap(),
+                ),
+            }),
         }
     }
 }
@@ -630,6 +645,7 @@ pub enum Details {
     },
     UpgradeDatabase {
         from: (u32, u32, u32),
+        to: (u32, u32, u32),
     },
 }
 
