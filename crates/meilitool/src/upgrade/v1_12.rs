@@ -173,10 +173,11 @@ fn rebuild_field_distribution(db_path: &Path) -> anyhow::Result<()> {
 
             println!("\t- Rebuilding field distribution");
 
-            let index = meilisearch_types::milli::Index::new(EnvOpenOptions::new(), &index_path)
-                .with_context(|| {
-                    format!("while opening index {uid} at '{}'", index_path.display())
-                })?;
+            let index =
+                meilisearch_types::milli::Index::new(EnvOpenOptions::new(), &index_path, false)
+                    .with_context(|| {
+                        format!("while opening index {uid} at '{}'", index_path.display())
+                    })?;
 
             let mut index_txn = index.write_txn()?;
 

@@ -178,6 +178,7 @@ impl Index {
         path: P,
         created_at: time::OffsetDateTime,
         updated_at: time::OffsetDateTime,
+        creation: bool,
     ) -> Result<Index> {
         use db_name::*;
 
@@ -253,7 +254,7 @@ impl Index {
             embedder_category_id,
             documents,
         };
-        if this.get_version(&wtxn)?.is_none() {
+        if this.get_version(&wtxn)?.is_none() && creation {
             this.put_version(
                 &mut wtxn,
                 (
@@ -270,9 +271,13 @@ impl Index {
         Ok(this)
     }
 
-    pub fn new<P: AsRef<Path>>(options: heed::EnvOpenOptions, path: P) -> Result<Index> {
+    pub fn new<P: AsRef<Path>>(
+        options: heed::EnvOpenOptions,
+        path: P,
+        creation: bool,
+    ) -> Result<Index> {
         let now = time::OffsetDateTime::now_utc();
-        Self::new_with_creation_dates(options, path, now, now)
+        Self::new_with_creation_dates(options, path, now, now, creation)
     }
 
     fn set_creation_dates(
@@ -1802,7 +1807,7 @@ pub(crate) mod tests {
             let mut options = EnvOpenOptions::new();
             options.map_size(size);
             let _tempdir = TempDir::new_in(".").unwrap();
-            let inner = Index::new(options, _tempdir.path()).unwrap();
+            let inner = Index::new(options, _tempdir.path(), true).unwrap();
             let indexer_config = IndexerConfig::default();
             let index_documents_config = IndexDocumentsConfig::default();
             Self { inner, indexer_config, index_documents_config, _tempdir }

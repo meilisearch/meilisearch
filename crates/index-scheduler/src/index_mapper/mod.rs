@@ -198,6 +198,7 @@ impl IndexMapper {
                         date,
                         self.enable_mdb_writemap,
                         self.index_base_map_size,
+                        true,
                     )
                     .map_err(|e| Error::from_milli(e, Some(uuid.to_string())))?;
                 let index_rtxn = index.read_txn()?;
@@ -396,6 +397,7 @@ impl IndexMapper {
                                     None,
                                     self.enable_mdb_writemap,
                                     self.index_base_map_size,
+                                    false,
                                 )
                                 .map_err(|e| Error::from_milli(e, Some(uuid.to_string())))?;
                         }

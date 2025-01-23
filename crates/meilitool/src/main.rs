@@ -303,7 +303,7 @@ fn export_a_dump(
     for result in index_mapping.iter(&rtxn)? {
         let (uid, uuid) = result?;
         let index_path = db_path.join("indexes").join(uuid.to_string());
-        let index = Index::new(EnvOpenOptions::new(), &index_path).with_context(|| {
+        let index = Index::new(EnvOpenOptions::new(), &index_path, false).with_context(|| {
             format!("While trying to open the index at path {:?}", index_path.display())
         })?;
 

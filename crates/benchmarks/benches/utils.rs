@@ -68,7 +68,7 @@ pub fn base_setup(conf: &Conf) -> Index {
     let mut options = EnvOpenOptions::new();
     options.map_size(100 * 1024 * 1024 * 1024); // 100 GB
     options.max_readers(100);
-    let index = Index::new(options, conf.database_name).unwrap();
+    let index = Index::new(options, conf.database_name, true).unwrap();
 
     let config = IndexerConfig::default();
     let mut wtxn = index.write_txn().unwrap();
