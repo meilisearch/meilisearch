@@ -10,10 +10,11 @@ use roaring::RoaringBitmap;
 use rstar::RTree;
 use serde::{Deserialize, Serialize};
 
-use crate::constants::RESERVED_VECTORS_FIELD_NAME;
+use crate::constants::{RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME};
 use crate::documents::PrimaryKey;
 use crate::error::{InternalError, UserError};
 use crate::fields_ids_map::FieldsIdsMap;
+use crate::filterable_fields::matching_field_ids;
 use crate::heed_codec::facet::{
     FacetGroupKeyCodec, FacetGroupValueCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec,
     FieldIdCodec, OrderedF64Codec,
@@ -25,8 +26,9 @@ use crate::vector::{ArroyWrapper, Embedding, EmbeddingConfig};
 use crate::{
     default_criteria, CboRoaringBitmapCodec, Criterion, DocumentId, ExternalDocumentsIds,
     FacetDistribution, FieldDistribution, FieldId, FieldIdMapMissingEntry, FieldIdWordCountCodec,
-    FieldidsWeightsMap, GeoPoint, LocalizedAttributesRule, ObkvCodec, Result, RoaringBitmapCodec,
-    RoaringBitmapLenCodec, Search, U8StrStrCodec, Weight, BEU16, BEU32, BEU64,
+    FieldidsWeightsMap, FilterableAttributesSettings, GeoPoint, LocalizedAttributesRule, ObkvCodec,
+    Result, RoaringBitmapCodec, RoaringBitmapLenCodec, Search, U8StrStrCodec, Weight, BEU16, BEU32,
+    BEU64,
 };
 
 pub const DEFAULT_MIN_WORD_LEN_ONE_TYPO: u8 = 5;
@@ -787,7 +789,7 @@ impl Index {
     pub(crate) fn put_filterable_fields(
         &self,
         wtxn: &mut RwTxn<'_>,
-        fields: &HashSet<String>,
+        fields: &Vec<FilterableAttributesSettings>,
     ) -> heed::Result<()> {
         self.main.remap_types::<Str, SerdeJson<_>>().put(
             wtxn,
@@ -802,7 +804,10 @@ impl Index {
     }
 
     /// Returns the filterable fields names.
-    pub fn filterable_fields(&self, rtxn: &RoTxn<'_>) -> heed::Result<HashSet<String>> {
+    pub fn filterable_fields(
+        &self,
+        rtxn: &RoTxn<'_>,
+    ) -> heed::Result<Vec<FilterableAttributesSettings>> {
         Ok(self
             .main
             .remap_types::<Str, SerdeJson<_>>()
@@ -815,14 +820,9 @@ impl Index {
         let fields = self.filterable_fields(rtxn)?;
         let fields_ids_map = self.fields_ids_map(rtxn)?;
 
-        let mut fields_ids = HashSet::new();
-        for name in fields {
-            if let Some(field_id) = fields_ids_map.id(&name) {
-                fields_ids.insert(field_id);
-            }
-        }
+        let matching_field_ids = matching_field_ids(&fields, &fields_ids_map);
 
-        Ok(fields_ids)
+        Ok(matching_field_ids)
     }
 
     /* sortable fields */
@@ -876,6 +876,13 @@ impl Index {
         )
     }
 
+    /// Returns true if the geo feature is activated.
+    pub fn is_geo_activated(&self, rtxn: &RoTxn<'_>) -> Result<bool> {
+        let geo_filter = self.filterable_fields(rtxn)?.iter().any(|field| field.has_geo());
+        let geo_sortable = self.sortable_fields(rtxn)?.contains(RESERVED_GEO_FIELD_NAME);
+        Ok(geo_filter || geo_sortable)
+    }
+
     /// Returns the faceted fields names.
     pub fn faceted_fields(&self, rtxn: &RoTxn<'_>) -> heed::Result<HashSet<String>> {
         Ok(self
@@ -906,7 +913,8 @@ impl Index {
     ///
     /// The user faceted fields are the union of all the filterable, sortable, distinct, and Asc/Desc fields.
     pub fn user_defined_faceted_fields(&self, rtxn: &RoTxn<'_>) -> Result<HashSet<String>> {
-        let filterable_fields = self.filterable_fields(rtxn)?;
+        let fields_ids_map = self.fields_ids_map(rtxn)?;
+        let filterable_fields = self.filterable_fields_ids(rtxn)?;
         let sortable_fields = self.sortable_fields(rtxn)?;
         let distinct_field = self.distinct_field(rtxn)?;
         let asc_desc_fields =
@@ -915,7 +923,14 @@ impl Index {
                 _otherwise => None,
             });
 
-        let mut faceted_fields = filterable_fields;
+        let mut faceted_fields: HashSet<_> = filterable_fields
+            .into_iter()
+            .filter_map(|field_id| {
+                let field_name = fields_ids_map.name(field_id);
+                debug_assert!(field_name.is_some(), "field name not found for {field_id}");
+                field_name.map(|field| field.to_string())
+            })
+            .collect();
         faceted_fields.extend(sortable_fields);
         faceted_fields.extend(asc_desc_fields);
         if let Some(field) = distinct_field {
@@ -923,21 +938,6 @@ impl Index {
         }
 
         Ok(faceted_fields)
-    }
-
-    /// Identical to `user_defined_faceted_fields`, but returns ids instead.
-    pub fn user_defined_faceted_fields_ids(&self, rtxn: &RoTxn<'_>) -> Result<HashSet<FieldId>> {
-        let fields = self.user_defined_faceted_fields(rtxn)?;
-        let fields_ids_map = self.fields_ids_map(rtxn)?;
-
-        let mut fields_ids = HashSet::new();
-        for name in fields {
-            if let Some(field_id) = fields_ids_map.id(&name) {
-                fields_ids.insert(field_id);
-            }
-        }
-
-        Ok(fields_ids)
     }
 
     /* faceted documents ids */
