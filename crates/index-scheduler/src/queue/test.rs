@@ -165,6 +165,7 @@ fn test_disable_auto_deletion_of_tasks() {
     let (index_scheduler, mut handle) = IndexScheduler::test_with_custom_config(vec![], |config| {
         config.cleanup_enabled = false;
         config.max_number_of_tasks = 2;
+        None
     });
 
     index_scheduler
@@ -228,6 +229,7 @@ fn test_disable_auto_deletion_of_tasks() {
 fn test_auto_deletion_of_tasks() {
     let (index_scheduler, mut handle) = IndexScheduler::test_with_custom_config(vec![], |config| {
         config.max_number_of_tasks = 2;
+        None
     });
 
     index_scheduler
@@ -325,6 +327,7 @@ fn test_task_queue_is_full() {
     let (index_scheduler, mut handle) = IndexScheduler::test_with_custom_config(vec![], |config| {
         // that's the minimum map size possible
         config.task_db_size = 1048576;
+        None
     });
 
     index_scheduler

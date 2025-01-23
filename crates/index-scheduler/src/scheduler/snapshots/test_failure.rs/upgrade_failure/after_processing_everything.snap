@@ -7,8 +7,8 @@ snapshot_kind: text
 []
 ----------------------------------------------------------------------
 ### All Tasks:
-0 {uid: 0, batch_uid: 1, status: succeeded, details: { primary_key: Some("mouse") }, kind: IndexCreation { index_uid: "catto", primary_key: Some("mouse") }}
-1 {uid: 1, batch_uid: 0, status: succeeded, details: { from: v1.12.0 }, kind: UpgradeDatabase { from: (1, 12, 0) }}
+0 {uid: 0, batch_uid: 0, status: succeeded, details: { from: (1, 12, 0), to: (1, 13, 0) }, kind: UpgradeDatabase { from: (1, 12, 0) }}
+1 {uid: 1, batch_uid: 1, status: succeeded, details: { primary_key: Some("mouse") }, kind: IndexCreation { index_uid: "catto", primary_key: Some("mouse") }}
 2 {uid: 2, batch_uid: 2, status: succeeded, details: { primary_key: Some("bone") }, kind: IndexCreation { index_uid: "doggo", primary_key: Some("bone") }}
 3 {uid: 3, batch_uid: 3, status: failed, error: ResponseError { code: 200, message: "Index `doggo` already exists.", error_code: "index_already_exists", error_type: "invalid_request", error_link: "https://docs.meilisearch.com/errors#index_already_exists" }, details: { primary_key: Some("bone") }, kind: IndexCreation { index_uid: "doggo", primary_key: Some("bone") }}
 4 {uid: 4, batch_uid: 4, status: succeeded, details: { primary_key: Some("leaves") }, kind: IndexCreation { index_uid: "girafo", primary_key: Some("leaves") }}
@@ -19,11 +19,11 @@ succeeded [0,1,2,4,]
 failed [3,]
 ----------------------------------------------------------------------
 ### Kind:
-"indexCreation" [0,2,3,4,]
-"upgradeDatabase" [1,]
+"indexCreation" [1,2,3,4,]
+"upgradeDatabase" [0,]
 ----------------------------------------------------------------------
 ### Index Tasks:
-catto [0,]
+catto [1,]
 doggo [2,3,]
 girafo [4,]
 ----------------------------------------------------------------------
@@ -44,29 +44,29 @@ girafo: { number_of_documents: 0, field_distribution: {} }
 [timestamp] [4,]
 ----------------------------------------------------------------------
 ### Started At:
-[timestamp] [1,]
 [timestamp] [0,]
+[timestamp] [1,]
 [timestamp] [2,]
 [timestamp] [3,]
 [timestamp] [4,]
 ----------------------------------------------------------------------
 ### Finished At:
-[timestamp] [1,]
 [timestamp] [0,]
+[timestamp] [1,]
 [timestamp] [2,]
 [timestamp] [3,]
 [timestamp] [4,]
 ----------------------------------------------------------------------
 ### All Batches:
-0 {uid: 0, details: {"upgradeFrom":"v1.12.0"}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"upgradeDatabase":1},"indexUids":{}}, }
+0 {uid: 0, details: {"upgradeFrom":"v1.12.0","upgradeTo":"v1.13.0"}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"upgradeDatabase":1},"indexUids":{}}, }
 1 {uid: 1, details: {"primaryKey":"mouse"}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"catto":1}}, }
 2 {uid: 2, details: {"primaryKey":"bone"}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"doggo":1}}, }
 3 {uid: 3, details: {"primaryKey":"bone"}, stats: {"totalNbTasks":1,"status":{"failed":1},"types":{"indexCreation":1},"indexUids":{"doggo":1}}, }
 4 {uid: 4, details: {"primaryKey":"leaves"}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"girafo":1}}, }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:
-0 [1,]
-1 [0,]
+0 [0,]
+1 [1,]
 2 [2,]
 3 [3,]
 4 [4,]
@@ -85,8 +85,8 @@ doggo [2,3,]
 girafo [4,]
 ----------------------------------------------------------------------
 ### Batches Enqueued At:
-[timestamp] [1,]
 [timestamp] [0,]
+[timestamp] [1,]
 [timestamp] [2,]
 [timestamp] [3,]
 [timestamp] [4,]

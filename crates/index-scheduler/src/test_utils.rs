@@ -75,12 +75,13 @@ impl IndexScheduler {
     ) -> (Self, IndexSchedulerHandle) {
         Self::test_with_custom_config(planned_failures, |config| {
             config.autobatching_enabled = autobatching_enabled;
+            None
         })
     }
 
     pub(crate) fn test_with_custom_config(
         planned_failures: Vec<(usize, FailureLocation)>,
-        configuration: impl Fn(&mut IndexSchedulerOptions),
+        configuration: impl Fn(&mut IndexSchedulerOptions) -> Option<(u32, u32, u32)>,
     ) -> (Self, IndexSchedulerHandle) {
         let tempdir = TempDir::new().unwrap();
         let (sender, receiver) = crossbeam_channel::bounded(0);
@@ -111,13 +112,13 @@ impl IndexScheduler {
             instance_features: Default::default(),
             auto_upgrade: true, // Don't cost much and will ensure the happy path works
         };
-        configuration(&mut options);
-
-        let version = (
-            versioning::VERSION_MAJOR.parse().unwrap(),
-            versioning::VERSION_MINOR.parse().unwrap(),
-            versioning::VERSION_PATCH.parse().unwrap(),
-        );
+        let version = configuration(&mut options).unwrap_or_else(|| {
+            (
+                versioning::VERSION_MAJOR.parse().unwrap(),
+                versioning::VERSION_MINOR.parse().unwrap(),
+                versioning::VERSION_PATCH.parse().unwrap(),
+            )
+        });
 
         let index_scheduler = Self::new(options, version, sender, planned_failures).unwrap();
 
@@ -241,6 +242,7 @@ impl IndexSchedulerHandle {
         index_scheduler: IndexScheduler,
         autobatching_enabled: bool,
         planned_failures: Vec<(usize, FailureLocation)>,
+        configuration: impl Fn(&mut IndexSchedulerOptions) -> Option<(u32, u32, u32)>,
     ) -> (IndexScheduler, Self) {
         drop(index_scheduler);
         let Self { _tempdir: tempdir, index_scheduler, test_breakpoint_rcv, last_breakpoint: _ } =
@@ -264,6 +266,7 @@ impl IndexSchedulerHandle {
 
         let (scheduler, mut handle) =
             IndexScheduler::test_with_custom_config(planned_failures, |config| {
+                let version = configuration(config);
                 config.autobatching_enabled = autobatching_enabled;
                 config.version_file_path = tempdir.path().join(VERSION_FILE_NAME);
                 config.auth_path = tempdir.path().join("auth");
@@ -272,6 +275,7 @@ impl IndexSchedulerHandle {
                 config.indexes_path = tempdir.path().join("indexes");
                 config.snapshots_path = tempdir.path().join("snapshots");
                 config.dumps_path = tempdir.path().join("dumps");
+                version
             });
         handle._tempdir = tempdir;
         (scheduler, handle)
