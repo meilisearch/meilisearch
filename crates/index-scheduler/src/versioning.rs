@@ -47,13 +47,10 @@ impl Versioning {
         let this = Self { version };
         let from = match this.get_version(&wtxn)? {
             Some(version) => version,
+            // fresh DB: use the db version
             None => {
-                let assumed_version = match db_version {
-                    (1, 12, _) => db_version,
-                    _ => (1, 12, 7),
-                };
-                this.set_version(&mut wtxn, assumed_version)?;
-                assumed_version
+                this.set_version(&mut wtxn, db_version)?;
+                db_version
             }
         };
         wtxn.commit()?;
