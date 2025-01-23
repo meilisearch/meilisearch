@@ -316,7 +316,10 @@ impl IndexScheduler {
                 Ok(vec![task])
             }
             Batch::UpgradeDatabase { mut tasks } => {
-                let ret = catch_unwind(AssertUnwindSafe(|| self.process_upgrade(progress)));
+                let KindWithContent::UpgradeDatabase { from } = tasks.last().unwrap().kind else {
+                    unreachable!();
+                };
+                let ret = catch_unwind(AssertUnwindSafe(|| self.process_upgrade(from, progress)));
                 match ret {
                     Ok(Ok(())) => (),
                     Ok(Err(e)) => return Err(Error::DatabaseUpgrade(Box::new(e))),

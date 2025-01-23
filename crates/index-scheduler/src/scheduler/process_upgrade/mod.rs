@@ -4,7 +4,11 @@ use meilisearch_types::milli::progress::{Progress, VariableNameStep};
 use crate::{Error, IndexScheduler, Result};
 
 impl IndexScheduler {
-    pub(super) fn process_upgrade(&self, progress: Progress) -> Result<()> {
+    pub(super) fn process_upgrade(
+        &self,
+        db_version: (u32, u32, u32),
+        progress: Progress,
+    ) -> Result<()> {
         #[cfg(test)]
         self.maybe_fail(crate::test_utils::FailureLocation::ProcessUpgrade)?;
 
@@ -19,9 +23,13 @@ impl IndexScheduler {
             ));
             let index = self.index(uid)?;
             let mut index_wtxn = index.write_txn()?;
-            let regen_stats =
-                milli::update::upgrade::upgrade(&mut index_wtxn, &index, progress.clone())
-                    .map_err(|e| Error::from_milli(e, Some(uid.to_string())))?;
+            let regen_stats = milli::update::upgrade::upgrade(
+                &mut index_wtxn,
+                &index,
+                db_version,
+                progress.clone(),
+            )
+            .map_err(|e| Error::from_milli(e, Some(uid.to_string())))?;
             if regen_stats {
                 let stats = crate::index_mapper::IndexStats::new(&index, &index_wtxn)
                     .map_err(|e| Error::from_milli(e, Some(uid.to_string())))?;
