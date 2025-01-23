@@ -116,7 +116,7 @@ async fn check_the_index_scheduler(server: &Server) {
           "uid": "kefir",
           "createdAt": "2025-01-16T16:45:16.020663157Z",
           "updatedAt": "2025-01-16T17:18:43.296777845Z",
-          "primaryKey": null
+          "primaryKey": "id"
         }
       ],
       "offset": 0,
