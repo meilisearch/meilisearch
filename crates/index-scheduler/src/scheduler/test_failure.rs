@@ -8,7 +8,6 @@ use meilisearch_types::milli::update::IndexDocumentsMethod::*;
 use meilisearch_types::milli::update::Setting;
 use meilisearch_types::tasks::Kind;
 use meilisearch_types::tasks::KindWithContent;
-use roaring::RoaringBitmap;
 
 use crate::insta_snapshot::snapshot_index_scheduler;
 use crate::test_utils::Breakpoint::*;

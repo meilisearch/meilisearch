@@ -60,6 +60,7 @@ pub fn upgrade(
             upgrade_path.len() as u32,
         ));
         regenerate_stats |= upgrade.upgrade(wtxn, index, from, progress.clone())?;
+        index.put_version(wtxn, target)?;
         current_version = target;
     }
 
