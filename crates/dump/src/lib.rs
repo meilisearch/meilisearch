@@ -141,6 +141,9 @@ pub enum KindDump {
         instance_uid: Option<InstanceUid>,
     },
     SnapshotCreation,
+    UpgradeDatabase {
+        from: (u32, u32, u32),
+    },
 }
 
 impl From<Task> for TaskDump {
@@ -210,6 +213,9 @@ impl From<KindWithContent> for KindDump {
                 KindDump::DumpCreation { keys, instance_uid }
             }
             KindWithContent::SnapshotCreation => KindDump::SnapshotCreation,
+            KindWithContent::UpgradeDatabase { from: version } => {
+                KindDump::UpgradeDatabase { from: version }
+            }
         }
     }
 }
@@ -458,7 +464,7 @@ pub(crate) mod test {
     }
 
     fn create_test_features() -> RuntimeTogglableFeatures {
-        RuntimeTogglableFeatures { vector_store: true, ..Default::default() }
+        RuntimeTogglableFeatures::default()
     }
 
     #[test]

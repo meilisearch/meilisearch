@@ -4,17 +4,14 @@ use std::sync::atomic::Ordering;
 
 use dump::IndexMetadata;
 use meilisearch_types::milli::constants::RESERVED_VECTORS_FIELD_NAME;
-use meilisearch_types::milli::documents::{obkv_to_object, DocumentsBatchReader};
-use meilisearch_types::milli::progress::Progress;
+use meilisearch_types::milli::progress::{Progress, VariableNameStep};
 use meilisearch_types::milli::vector::parsed_vectors::{ExplicitVectors, VectorOrArrayOfVectors};
 use meilisearch_types::milli::{self};
 use meilisearch_types::tasks::{Details, KindWithContent, Status, Task};
 use time::macros::format_description;
 use time::OffsetDateTime;
 
-use crate::processing::{
-    AtomicDocumentStep, AtomicTaskStep, DumpCreationProgress, VariableNameStep,
-};
+use crate::processing::{AtomicDocumentStep, AtomicTaskStep, DumpCreationProgress};
 use crate::{Error, IndexScheduler, Result};
 
 impl IndexScheduler {
@@ -72,6 +69,13 @@ impl IndexScheduler {
                 t.started_at = Some(started_at);
                 t.finished_at = Some(finished_at);
             }
+
+            // Patch the task to remove the batch uid, because as of v1.12.5 batches are not persisted.
+            // This prevent from referencing *future* batches not actually associated with the task.
+            //
+            // See <https://github.com/meilisearch/meilisearch/issues/5247> for details.
+            t.batch_uid = None;
+
             let mut dump_content_file = dump_tasks.push_task(&t.into())?;
 
             // 2.1. Dump the `content_file` associated with the task if there is one and the task is not finished yet.
@@ -82,19 +86,15 @@ impl IndexScheduler {
                 if status == Status::Enqueued {
                     let content_file = self.queue.file_store.get_update(content_file)?;
 
-                    let reader = DocumentsBatchReader::from_reader(content_file)
-                        .map_err(|e| Error::from_milli(e.into(), None))?;
-
-                    let (mut cursor, documents_batch_index) = reader.into_cursor_and_fields_index();
-
-                    while let Some(doc) =
-                        cursor.next_document().map_err(|e| Error::from_milli(e.into(), None))?
+                    for document in
+                        serde_json::de::Deserializer::from_reader(content_file).into_iter()
                     {
-                        dump_content_file.push_document(
-                            &obkv_to_object(doc, &documents_batch_index)
-                                .map_err(|e| Error::from_milli(e, None))?,
-                        )?;
+                        let document = document.map_err(|e| {
+                            Error::from_milli(milli::InternalError::SerdeJson(e).into(), None)
+                        })?;
+                        dump_content_file.push_document(&document)?;
                     }
+
                     dump_content_file.flush()?;
                 }
             }
@@ -107,7 +107,11 @@ impl IndexScheduler {
         let nb_indexes = self.index_mapper.index_mapping.len(&rtxn)? as u32;
         let mut count = 0;
         let () = self.index_mapper.try_for_each_index(&rtxn, |uid, index| -> Result<()> {
-            progress.update_progress(VariableNameStep::new(uid.to_string(), count, nb_indexes));
+            progress.update_progress(VariableNameStep::<DumpCreationProgress>::new(
+                uid.to_string(),
+                count,
+                nb_indexes,
+            ));
             count += 1;
 
             let rtxn = index.read_txn()?;

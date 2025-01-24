@@ -16,7 +16,7 @@ use crate::batches::BatchId;
 use crate::error::ResponseError;
 use crate::keys::Key;
 use crate::settings::{Settings, Unchecked};
-use crate::InstanceUid;
+use crate::{versioning, InstanceUid};
 
 pub type TaskId = u32;
 
@@ -50,6 +50,7 @@ impl Task {
             | SnapshotCreation
             | TaskCancelation { .. }
             | TaskDeletion { .. }
+            | UpgradeDatabase { .. }
             | IndexSwap { .. } => None,
             DocumentAdditionOrUpdate { index_uid, .. }
             | DocumentEdition { index_uid, .. }
@@ -84,7 +85,8 @@ impl Task {
             | KindWithContent::TaskCancelation { .. }
             | KindWithContent::TaskDeletion { .. }
             | KindWithContent::DumpCreation { .. }
-            | KindWithContent::SnapshotCreation => None,
+            | KindWithContent::SnapshotCreation
+            | KindWithContent::UpgradeDatabase { .. } => None,
         }
     }
 }
@@ -150,6 +152,9 @@ pub enum KindWithContent {
         instance_uid: Option<InstanceUid>,
     },
     SnapshotCreation,
+    UpgradeDatabase {
+        from: (u32, u32, u32),
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -175,6 +180,7 @@ impl KindWithContent {
             KindWithContent::TaskDeletion { .. } => Kind::TaskDeletion,
             KindWithContent::DumpCreation { .. } => Kind::DumpCreation,
             KindWithContent::SnapshotCreation => Kind::SnapshotCreation,
+            KindWithContent::UpgradeDatabase { .. } => Kind::UpgradeDatabase,
         }
     }
 
@@ -185,7 +191,8 @@ impl KindWithContent {
             DumpCreation { .. }
             | SnapshotCreation
             | TaskCancelation { .. }
-            | TaskDeletion { .. } => vec![],
+            | TaskDeletion { .. }
+            | UpgradeDatabase { .. } => vec![],
             DocumentAdditionOrUpdate { index_uid, .. }
             | DocumentEdition { index_uid, .. }
             | DocumentDeletion { index_uid, .. }
@@ -262,6 +269,14 @@ impl KindWithContent {
             }),
             KindWithContent::DumpCreation { .. } => Some(Details::Dump { dump_uid: None }),
             KindWithContent::SnapshotCreation => None,
+            KindWithContent::UpgradeDatabase { from } => Some(Details::UpgradeDatabase {
+                from: (from.0, from.1, from.2),
+                to: (
+                    versioning::VERSION_MAJOR.parse().unwrap(),
+                    versioning::VERSION_MINOR.parse().unwrap(),
+                    versioning::VERSION_PATCH.parse().unwrap(),
+                ),
+            }),
         }
     }
 
@@ -320,6 +335,14 @@ impl KindWithContent {
             }),
             KindWithContent::DumpCreation { .. } => Some(Details::Dump { dump_uid: None }),
             KindWithContent::SnapshotCreation => None,
+            KindWithContent::UpgradeDatabase { from } => Some(Details::UpgradeDatabase {
+                from: *from,
+                to: (
+                    versioning::VERSION_MAJOR.parse().unwrap(),
+                    versioning::VERSION_MINOR.parse().unwrap(),
+                    versioning::VERSION_PATCH.parse().unwrap(),
+                ),
+            }),
         }
     }
 }
@@ -360,6 +383,14 @@ impl From<&KindWithContent> for Option<Details> {
             }),
             KindWithContent::DumpCreation { .. } => Some(Details::Dump { dump_uid: None }),
             KindWithContent::SnapshotCreation => None,
+            KindWithContent::UpgradeDatabase { from } => Some(Details::UpgradeDatabase {
+                from: *from,
+                to: (
+                    versioning::VERSION_MAJOR.parse().unwrap(),
+                    versioning::VERSION_MINOR.parse().unwrap(),
+                    versioning::VERSION_PATCH.parse().unwrap(),
+                ),
+            }),
         }
     }
 }
@@ -468,6 +499,7 @@ pub enum Kind {
     TaskDeletion,
     DumpCreation,
     SnapshotCreation,
+    UpgradeDatabase,
 }
 
 impl Kind {
@@ -484,6 +516,7 @@ impl Kind {
             | Kind::TaskCancelation
             | Kind::TaskDeletion
             | Kind::DumpCreation
+            | Kind::UpgradeDatabase
             | Kind::SnapshotCreation => false,
         }
     }
@@ -503,6 +536,7 @@ impl Display for Kind {
             Kind::TaskDeletion => write!(f, "taskDeletion"),
             Kind::DumpCreation => write!(f, "dumpCreation"),
             Kind::SnapshotCreation => write!(f, "snapshotCreation"),
+            Kind::UpgradeDatabase => write!(f, "upgradeDatabase"),
         }
     }
 }
@@ -534,6 +568,8 @@ impl FromStr for Kind {
             Ok(Kind::DumpCreation)
         } else if kind.eq_ignore_ascii_case("snapshotCreation") {
             Ok(Kind::SnapshotCreation)
+        } else if kind.eq_ignore_ascii_case("upgradeDatabase") {
+            Ok(Kind::UpgradeDatabase)
         } else {
             Err(ParseTaskKindError(kind.to_owned()))
         }
@@ -607,6 +643,10 @@ pub enum Details {
     IndexSwap {
         swaps: Vec<IndexSwap>,
     },
+    UpgradeDatabase {
+        from: (u32, u32, u32),
+        to: (u32, u32, u32),
+    },
 }
 
 impl Details {
@@ -627,6 +667,7 @@ impl Details {
             Self::SettingsUpdate { .. }
             | Self::IndexInfo { .. }
             | Self::Dump { .. }
+            | Self::UpgradeDatabase { .. }
             | Self::IndexSwap { .. } => (),
         }
 
@@ -687,7 +728,9 @@ pub fn serialize_duration<S: Serializer>(
 
 #[cfg(test)]
 mod tests {
-    use super::Details;
+    use std::str::FromStr;
+
+    use super::{Details, Kind};
     use crate::heed::types::SerdeJson;
     use crate::heed::{BytesDecode, BytesEncode};
 
@@ -702,5 +745,14 @@ mod tests {
         let deserialised = SerdeJson::<Details>::bytes_decode(&serialised).unwrap();
         meili_snap::snapshot!(format!("{:?}", details), @r###"TaskDeletion { matched_tasks: 1, deleted_tasks: None, original_filter: "hello" }"###);
         meili_snap::snapshot!(format!("{:?}", deserialised), @r###"TaskDeletion { matched_tasks: 1, deleted_tasks: None, original_filter: "hello" }"###);
+    }
+
+    #[test]
+    fn all_kind_can_be_from_str() {
+        for kind in enum_iterator::all::<Kind>() {
+            let s = kind.to_string();
+            let k = Kind::from_str(&s).map_err(|e| format!("Could not from_str {s}: {e}")).unwrap();
+            assert_eq!(kind, k, "{kind}.to_string() returned {s} which was parsed as {k}");
+        }
     }
 }

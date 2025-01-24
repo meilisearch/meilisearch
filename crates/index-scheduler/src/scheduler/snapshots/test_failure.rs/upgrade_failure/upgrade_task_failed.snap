@@ -1,0 +1,65 @@
+---
+source: crates/index-scheduler/src/scheduler/test_failure.rs
+snapshot_kind: text
+---
+### Autobatching Enabled = true
+### Processing batch None:
+[]
+----------------------------------------------------------------------
+### All Tasks:
+0 {uid: 0, batch_uid: 0, status: failed, error: ResponseError { code: 200, message: "Planned failure for tests.", error_code: "internal", error_type: "internal", error_link: "https://docs.meilisearch.com/errors#internal" }, details: { from: (1, 12, 0), to: (1, 13, 0) }, kind: UpgradeDatabase { from: (1, 12, 0) }}
+1 {uid: 1, status: enqueued, details: { primary_key: Some("mouse") }, kind: IndexCreation { index_uid: "catto", primary_key: Some("mouse") }}
+----------------------------------------------------------------------
+### Status:
+enqueued [1,]
+failed [0,]
+----------------------------------------------------------------------
+### Kind:
+"indexCreation" [1,]
+"upgradeDatabase" [0,]
+----------------------------------------------------------------------
+### Index Tasks:
+catto [1,]
+----------------------------------------------------------------------
+### Index Mapper:
+
+----------------------------------------------------------------------
+### Canceled By:
+
+----------------------------------------------------------------------
+### Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+----------------------------------------------------------------------
+### Started At:
+[timestamp] [0,]
+----------------------------------------------------------------------
+### Finished At:
+[timestamp] [0,]
+----------------------------------------------------------------------
+### All Batches:
+0 {uid: 0, details: {"upgradeFrom":"v1.12.0","upgradeTo":"v1.13.0"}, stats: {"totalNbTasks":1,"status":{"failed":1},"types":{"upgradeDatabase":1},"indexUids":{}}, }
+----------------------------------------------------------------------
+### Batch to tasks mapping:
+0 [0,]
+----------------------------------------------------------------------
+### Batches Status:
+failed [0,]
+----------------------------------------------------------------------
+### Batches Kind:
+"upgradeDatabase" [0,]
+----------------------------------------------------------------------
+### Batches Index Tasks:
+----------------------------------------------------------------------
+### Batches Enqueued At:
+[timestamp] [0,]
+----------------------------------------------------------------------
+### Batches Started At:
+[timestamp] [0,]
+----------------------------------------------------------------------
+### Batches Finished At:
+[timestamp] [0,]
+----------------------------------------------------------------------
+### File Store:
+
+----------------------------------------------------------------------

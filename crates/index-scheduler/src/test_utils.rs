@@ -1,10 +1,18 @@
 use std::io::{BufWriter, Write};
 use std::sync::Arc;
+use std::time::Duration;
 
+use big_s::S;
+use crossbeam_channel::RecvTimeoutError;
 use file_store::File;
 use meilisearch_types::document_formats::DocumentFormatError;
 use meilisearch_types::milli::update::IndexDocumentsMethod::ReplaceDocuments;
+use meilisearch_types::milli::update::IndexerConfig;
+use meilisearch_types::tasks::KindWithContent;
+use meilisearch_types::{versioning, VERSION_FILE_NAME};
+use tempfile::{NamedTempFile, TempDir};
 use uuid::Uuid;
+use Breakpoint::*;
 
 use crate::insta_snapshot::snapshot_index_scheduler;
 use crate::{Error, IndexScheduler, IndexSchedulerOptions};
@@ -28,19 +36,12 @@ pub(crate) enum FailureLocation {
     InsideCreateBatch,
     InsideProcessBatch,
     PanicInsideProcessBatch,
+    ProcessUpgrade,
     AcquiringWtxn,
     UpdatingTaskAfterProcessBatchSuccess { task_uid: u32 },
     UpdatingTaskAfterProcessBatchFailure,
     CommittingWtxn,
 }
-
-use big_s::S;
-use crossbeam_channel::RecvTimeoutError;
-use meilisearch_types::milli::update::IndexerConfig;
-use meilisearch_types::tasks::KindWithContent;
-use meilisearch_types::VERSION_FILE_NAME;
-use tempfile::{NamedTempFile, TempDir};
-use Breakpoint::*;
 
 impl IndexScheduler {
     /// Blocks the thread until the test handle asks to progress to/through this breakpoint.
@@ -55,7 +56,6 @@ impl IndexScheduler {
     /// As soon as we find it, the index scheduler is unblocked but then wait again on the call to
     /// `test_breakpoint_sdr.send(b, true)`. This message will only be able to send once the
     /// test asks to progress to the next `(b2, false)`.
-    #[cfg(test)]
     pub(crate) fn breakpoint(&self, b: Breakpoint) {
         // We send two messages. The first one will sync with the call
         // to `handle.wait_until(b)`. The second one will block until the
@@ -75,12 +75,13 @@ impl IndexScheduler {
     ) -> (Self, IndexSchedulerHandle) {
         Self::test_with_custom_config(planned_failures, |config| {
             config.autobatching_enabled = autobatching_enabled;
+            None
         })
     }
 
     pub(crate) fn test_with_custom_config(
         planned_failures: Vec<(usize, FailureLocation)>,
-        configuration: impl Fn(&mut IndexSchedulerOptions),
+        configuration: impl Fn(&mut IndexSchedulerOptions) -> Option<(u32, u32, u32)>,
     ) -> (Self, IndexSchedulerHandle) {
         let tempdir = TempDir::new().unwrap();
         let (sender, receiver) = crossbeam_channel::bounded(0);
@@ -109,10 +110,17 @@ impl IndexScheduler {
             max_number_of_batched_tasks: usize::MAX,
             batched_tasks_size_limit: u64::MAX,
             instance_features: Default::default(),
+            auto_upgrade: true, // Don't cost much and will ensure the happy path works
         };
-        configuration(&mut options);
+        let version = configuration(&mut options).unwrap_or_else(|| {
+            (
+                versioning::VERSION_MAJOR.parse().unwrap(),
+                versioning::VERSION_MINOR.parse().unwrap(),
+                versioning::VERSION_PATCH.parse().unwrap(),
+            )
+        });
 
-        let index_scheduler = Self::new(options, sender, planned_failures).unwrap();
+        let index_scheduler = Self::new(options, version, sender, planned_failures).unwrap();
 
         // To be 100% consistent between all test we're going to start the scheduler right now
         // and ensure it's in the expected starting state.
@@ -224,6 +232,55 @@ pub struct IndexSchedulerHandle {
 }
 
 impl IndexSchedulerHandle {
+    /// Restarts the index-scheduler on the same database.
+    /// To use this function you must give back the index-scheduler that was given to you when
+    /// creating the handle the first time.
+    /// If the index-scheduler has been cloned in the meantime you must drop all copy otherwise
+    /// the function will panic.
+    pub(crate) fn restart(
+        self,
+        index_scheduler: IndexScheduler,
+        autobatching_enabled: bool,
+        planned_failures: Vec<(usize, FailureLocation)>,
+        configuration: impl Fn(&mut IndexSchedulerOptions) -> Option<(u32, u32, u32)>,
+    ) -> (IndexScheduler, Self) {
+        drop(index_scheduler);
+        let Self { _tempdir: tempdir, index_scheduler, test_breakpoint_rcv, last_breakpoint: _ } =
+            self;
+        let env = index_scheduler.env.clone();
+        drop(index_scheduler);
+
+        // We must ensure that the `run` function has stopped running before restarting the index scheduler
+        loop {
+            match test_breakpoint_rcv.recv_timeout(Duration::from_secs(5)) {
+                Ok((_, true)) => continue,
+                Ok((b, false)) => {
+                    panic!("Scheduler is not stopped and passed {b:?}")
+                }
+                Err(RecvTimeoutError::Timeout) => panic!("The indexing loop is stuck somewhere"),
+                Err(RecvTimeoutError::Disconnected) => break,
+            }
+        }
+        let closed = env.prepare_for_closing().wait_timeout(Duration::from_secs(5));
+        assert!(closed, "The index scheduler couldn't close itself, it seems like someone else is holding the env somewhere");
+
+        let (scheduler, mut handle) =
+            IndexScheduler::test_with_custom_config(planned_failures, |config| {
+                let version = configuration(config);
+                config.autobatching_enabled = autobatching_enabled;
+                config.version_file_path = tempdir.path().join(VERSION_FILE_NAME);
+                config.auth_path = tempdir.path().join("auth");
+                config.tasks_path = tempdir.path().join("db_path");
+                config.update_file_path = tempdir.path().join("file_store");
+                config.indexes_path = tempdir.path().join("indexes");
+                config.snapshots_path = tempdir.path().join("snapshots");
+                config.dumps_path = tempdir.path().join("dumps");
+                version
+            });
+        handle._tempdir = tempdir;
+        (scheduler, handle)
+    }
+
     /// Advance the scheduler to the next tick.
     /// Panic
     /// * If the scheduler is waiting for a task to be registered.
@@ -348,5 +405,19 @@ impl IndexSchedulerHandle {
                 }
         }
         self.advance_till([AfterProcessing]);
+    }
+
+    // Wait for one failed batch.
+    #[track_caller]
+    pub(crate) fn scheduler_is_down(&mut self) {
+        loop {
+            match self
+            .test_breakpoint_rcv
+            .recv_timeout(std::time::Duration::from_secs(1)) {
+                Ok((_, true)) => continue,
+                Ok((b, false)) => panic!("The scheduler was supposed to be down but successfully moved to the next breakpoint: {b:?}"),
+                Err(RecvTimeoutError::Timeout | RecvTimeoutError::Disconnected) => break,
+            }
+        }
     }
 }

@@ -1,5 +1,6 @@
 use std::any::TypeId;
 use std::borrow::Cow;
+use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, RwLock};
 
@@ -88,19 +89,24 @@ impl<Name: NamedStep> Step for AtomicSubStep<Name> {
     }
 }
 
+#[doc(hidden)]
+pub use convert_case as _private_convert_case;
+#[doc(hidden)]
+pub use enum_iterator as _private_enum_iterator;
+
 #[macro_export]
 macro_rules! make_enum_progress {
     ($visibility:vis enum $name:ident { $($variant:ident,)+ }) => {
         #[repr(u8)]
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Sequence)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, $crate::progress::_private_enum_iterator::Sequence)]
         #[allow(clippy::enum_variant_names)]
         $visibility enum $name {
             $($variant),+
         }
 
-        impl Step for $name {
-            fn name(&self) -> Cow<'static, str> {
-                use convert_case::Casing;
+        impl $crate::progress::Step for $name {
+            fn name(&self) -> std::borrow::Cow<'static, str> {
+                use $crate::progress::_private_convert_case::Casing;
 
                 match self {
                     $(
@@ -114,6 +120,7 @@ macro_rules! make_enum_progress {
             }
 
             fn total(&self) -> u32 {
+                use $crate::progress::_private_enum_iterator::Sequence;
                 Self::CARDINALITY as u32
             }
         }
@@ -152,4 +159,42 @@ pub struct ProgressStepView {
     pub current_step: Cow<'static, str>,
     pub finished: u32,
     pub total: u32,
+}
+
+/// Used when the name can change but it's still the same step.
+/// To avoid conflicts on the `TypeId`, create a unique type every time you use this step:
+/// ```text
+/// enum UpgradeVersion {}    
+///
+/// progress.update_progress(VariableNameStep::<UpgradeVersion>::new(
+///     "v1 to v2",
+///     0,
+///     10,
+/// ));
+/// ```
+pub struct VariableNameStep<U: Send + Sync + 'static> {
+    name: String,
+    current: u32,
+    total: u32,
+    phantom: PhantomData<U>,
+}
+
+impl<U: Send + Sync + 'static> VariableNameStep<U> {
+    pub fn new(name: impl Into<String>, current: u32, total: u32) -> Self {
+        Self { name: name.into(), current, total, phantom: PhantomData }
+    }
+}
+
+impl<U: Send + Sync + 'static> Step for VariableNameStep<U> {
+    fn name(&self) -> Cow<'static, str> {
+        self.name.clone().into()
+    }
+
+    fn current(&self) -> u32 {
+        self.current
+    }
+
+    fn total(&self) -> u32 {
+        self.total
+    }
 }

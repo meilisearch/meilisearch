@@ -16,9 +16,9 @@ use crate::{try_opening_database, try_opening_poly_database};
 
 pub fn v1_10_to_v1_11(
     db_path: &Path,
-    _origin_major: &str,
-    _origin_minor: &str,
-    _origin_patch: &str,
+    _origin_major: u32,
+    _origin_minor: u32,
+    _origin_patch: u32,
 ) -> anyhow::Result<()> {
     println!("Upgrading from v1.10.0 to v1.11.0");
 

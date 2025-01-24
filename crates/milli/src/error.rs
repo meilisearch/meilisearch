@@ -74,6 +74,8 @@ pub enum InternalError {
     AbortedIndexation,
     #[error("The matching words list contains at least one invalid member")]
     InvalidMatchingWords,
+    #[error("Cannot upgrade to the following version: v{0}.{1}.{2}.")]
+    CannotUpgradeToVersion(u32, u32, u32),
     #[error(transparent)]
     ArroyError(#[from] arroy::Error),
     #[error(transparent)]
@@ -222,7 +224,9 @@ and can not be more than 511 bytes.", .document_id.to_string()
     #[error("Too many embedders in the configuration. Found {0}, but limited to 256.")]
     TooManyEmbedders(usize),
     #[error("Cannot find embedder with name `{0}`.")]
-    InvalidEmbedder(String),
+    InvalidSearchEmbedder(String),
+    #[error("Cannot find embedder with name `{0}`.")]
+    InvalidSimilarEmbedder(String),
     #[error("Too many vectors for document with id {0}: found {1}, but limited to 256.")]
     TooManyVectors(String, usize),
     #[error("`.embedders.{embedder_name}`: Field `{field}` unavailable for source `{source_}` (only available for sources: {}). Available fields: {}",

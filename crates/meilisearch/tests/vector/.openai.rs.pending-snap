@@ -1,0 +1,1 @@
+{"run_id":"1737725573-949900000","line":1913,"new":{"module_name":"integration__vector__openai","snapshot_name":"timeout","metadata":{"source":"crates/meilisearch/tests/vector/openai.rs","assertion_line":1913},"snapshot":"\"failed\""},"old":{"module_name":"integration__vector__openai","metadata":{},"snapshot":"\"succeeded\""}}

@@ -9,12 +9,17 @@ use time::OffsetDateTime;
 
 use super::{Query, Queue};
 use crate::processing::ProcessingTasks;
-use crate::utils::{self, insert_task_datetime, keep_ids_within_datetimes, map_bound};
+use crate::utils::{
+    self, insert_task_datetime, keep_ids_within_datetimes, map_bound, remove_task_datetime,
+};
 use crate::{Error, Result, TaskId, BEI128};
 
+/// The number of database used by the task queue
+const NUMBER_OF_DATABASES: u32 = 8;
 /// Database const names for the `IndexScheduler`.
 mod db_name {
     pub const ALL_TASKS: &str = "all-tasks";
+
     pub const STATUS: &str = "status";
     pub const KIND: &str = "kind";
     pub const INDEX_TASKS: &str = "index-tasks";
@@ -59,7 +64,11 @@ impl TaskQueue {
         }
     }
 
-    pub(super) fn new(env: &Env, wtxn: &mut RwTxn) -> Result<Self> {
+    pub(crate) const fn nb_db() -> u32 {
+        NUMBER_OF_DATABASES
+    }
+
+    pub(crate) fn new(env: &Env, wtxn: &mut RwTxn) -> Result<Self> {
         Ok(Self {
             all_tasks: env.create_database(wtxn, Some(db_name::ALL_TASKS))?,
             status: env.create_database(wtxn, Some(db_name::STATUS))?,
@@ -90,12 +99,14 @@ impl TaskQueue {
 
     pub(crate) fn update_task(&self, wtxn: &mut RwTxn, task: &Task) -> Result<()> {
         let old_task = self.get_task(wtxn, task.uid)?.ok_or(Error::CorruptedTaskQueue)?;
+        let reprocessing = old_task.status != Status::Enqueued;
 
         debug_assert!(old_task != *task);
         debug_assert_eq!(old_task.uid, task.uid);
-        debug_assert!(old_task.batch_uid.is_none() && task.batch_uid.is_some());
+
+        // If we're processing a task that failed it may already contains a batch_uid
         debug_assert!(
-            old_task.batch_uid.is_none() && task.batch_uid.is_some(),
+            reprocessing || (old_task.batch_uid.is_none() && task.batch_uid.is_some()),
             "\n==> old: {old_task:?}\n==> new: {task:?}"
         );
 
@@ -122,13 +133,25 @@ impl TaskQueue {
             "Cannot update a task's enqueued_at time"
         );
         if old_task.started_at != task.started_at {
-            assert!(old_task.started_at.is_none(), "Cannot update a task's started_at time");
+            assert!(
+                reprocessing || old_task.started_at.is_none(),
+                "Cannot update a task's started_at time"
+            );
+            if let Some(started_at) = old_task.started_at {
+                remove_task_datetime(wtxn, self.started_at, started_at, task.uid)?;
+            }
             if let Some(started_at) = task.started_at {
                 insert_task_datetime(wtxn, self.started_at, started_at, task.uid)?;
             }
         }
         if old_task.finished_at != task.finished_at {
-            assert!(old_task.finished_at.is_none(), "Cannot update a task's finished_at time");
+            assert!(
+                reprocessing || old_task.finished_at.is_none(),
+                "Cannot update a task's finished_at time"
+            );
+            if let Some(finished_at) = old_task.finished_at {
+                remove_task_datetime(wtxn, self.finished_at, finished_at, task.uid)?;
+            }
             if let Some(finished_at) = task.finished_at {
                 insert_task_datetime(wtxn, self.finished_at, finished_at, task.uid)?;
             }
