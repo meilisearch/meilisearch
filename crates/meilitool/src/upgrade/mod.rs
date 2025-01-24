@@ -44,9 +44,9 @@ impl OfflineUpgrade {
         }
 
         const FIRST_SUPPORTED_UPGRADE_FROM_VERSION: &str = "1.9.0";
-        const LAST_SUPPORTED_UPGRADE_FROM_VERSION: &str = "1.12.5";
+        const LAST_SUPPORTED_UPGRADE_FROM_VERSION: &str = "1.12.7";
         const FIRST_SUPPORTED_UPGRADE_TO_VERSION: &str = "1.10.0";
-        const LAST_SUPPORTED_UPGRADE_TO_VERSION: &str = "1.12.5";
+        const LAST_SUPPORTED_UPGRADE_TO_VERSION: &str = "1.12.7";
 
         let upgrade_list = [
             (
@@ -69,7 +69,7 @@ impl OfflineUpgrade {
             (1, 10, _) => 1,
             (1, 11, _) => 2,
             (1, 12, 0..=2) => 3,
-            (1, 12, 3..=5) => no_upgrade,
+            (1, 12, 3..=7) => no_upgrade,
             _ => {
                 bail!("Unsupported current version {current_major}.{current_minor}.{current_patch}. Can only upgrade from versions in range [{}-{}]",
                       FIRST_SUPPORTED_UPGRADE_FROM_VERSION,
@@ -82,8 +82,8 @@ impl OfflineUpgrade {
         let ends_at = match (target_major, target_minor, target_patch) {
             (1, 10, _) => 0,
             (1, 11, _) => 1,
-            (1, 12, x) if x == 0 || x == 1 || x == 2 => 2,
-            (1, 12, 3..=5) => 3,
+            (1, 12, 0..=2) => 2,
+            (1, 12, 3..=7) => 3,
             _ => {
                 bail!("Unsupported target version {target_major}.{target_minor}.{target_patch}. Can only upgrade to versions in range [{}-{}]",
                       FIRST_SUPPORTED_UPGRADE_TO_VERSION,
