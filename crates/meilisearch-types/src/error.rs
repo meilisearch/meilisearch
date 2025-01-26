@@ -371,8 +371,7 @@ VectorEmbeddingError                  , InvalidRequest       , BAD_REQUEST ;
 NotFoundSimilarId                     , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentEditionContext         , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentEditionFunctionFilter  , InvalidRequest       , BAD_REQUEST ;
-EditDocumentsByFunctionError          , InvalidRequest       , BAD_REQUEST ;
-CouldNotUpgrade                       , InvalidRequest       , BAD_REQUEST
+EditDocumentsByFunctionError          , InvalidRequest       , BAD_REQUEST
 }
 
 impl ErrorCode for JoinError {
