@@ -101,6 +101,16 @@ impl DumpReader {
         }
     }
 
+    pub fn batches(&mut self) -> Result<Box<dyn Iterator<Item = Result<v6::Batch>> + '_>> {
+        match self {
+            DumpReader::Current(current) => Ok(current.dumps()),
+            // There was no batches in the previous version
+            DumpReader::Compat(_compat) => {
+                Ok(Box::new(std::iter::empty()) as Box<dyn Iterator<Item = Result<v6::Batch>> + '_>)
+            }
+        }
+    }
+
     pub fn keys(&mut self) -> Result<Box<dyn Iterator<Item = Result<v6::Key>> + '_>> {
         match self {
             DumpReader::Current(current) => Ok(current.keys()),

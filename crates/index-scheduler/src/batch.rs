@@ -26,7 +26,7 @@ use std::sync::atomic::Ordering;
 
 use bumpalo::collections::CollectIn;
 use bumpalo::Bump;
-use dump::IndexMetadata;
+use dump::{BatchDump, IndexMetadata};
 use meilisearch_types::batch_view::BatchView;
 use meilisearch_types::batches::BatchId;
 use meilisearch_types::heed::{RoTxn, RwTxn};
@@ -881,7 +881,12 @@ impl IndexScheduler {
                         batch.started_at = started_at;
                         batch.finished_at = Some(finished_at);
                     }
-                    dump_batches.push_batch(&BatchView::from_batch(&batch))?;
+                    // a missing or empty batch shouldn't exists but if it happens we should just skip it
+                    if let Some(tasks) = self.batch_to_tasks_mapping.get(&rtxn, &batch.uid)? {
+                        if !tasks.is_empty() {
+                            dump_batches.push_batch(&BatchDump { original: batch, tasks })?;
+                        }
+                    }
                     atomic.fetch_add(1, Ordering::Relaxed);
                 }
                 dump_batches.flush()?;

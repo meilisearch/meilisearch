@@ -18,6 +18,7 @@ pub type Checked = meilisearch_types::settings::Checked;
 pub type Unchecked = meilisearch_types::settings::Unchecked;
 
 pub type Task = crate::TaskDump;
+pub type Batch = crate::BatchDump;
 pub type Key = meilisearch_types::keys::Key;
 pub type RuntimeTogglableFeatures = meilisearch_types::features::RuntimeTogglableFeatures;
 
@@ -48,6 +49,7 @@ pub struct V6Reader {
     instance_uid: Option<Uuid>,
     metadata: Metadata,
     tasks: BufReader<File>,
+    batches: BufReader<File>,
     keys: BufReader<File>,
     features: Option<RuntimeTogglableFeatures>,
 }
@@ -82,6 +84,7 @@ impl V6Reader {
             metadata: serde_json::from_reader(&*meta_file)?,
             instance_uid,
             tasks: BufReader::new(File::open(dump.path().join("tasks").join("queue.jsonl"))?),
+            batches: BufReader::new(File::open(dump.path().join("batches").join("queue.jsonl"))?),
             keys: BufReader::new(File::open(dump.path().join("keys.jsonl"))?),
             features,
             dump,
@@ -124,7 +127,7 @@ impl V6Reader {
         &mut self,
     ) -> Box<dyn Iterator<Item = Result<(Task, Option<Box<super::UpdateFile>>)>> + '_> {
         Box::new((&mut self.tasks).lines().map(|line| -> Result<_> {
-            let task: Task = serde_json::from_str(&line?).unwrap();
+            let task: Task = serde_json::from_str(&line?)?;
 
             let update_file_path = self
                 .dump
@@ -143,6 +146,14 @@ impl V6Reader {
                 Ok((task, None))
             }
         }))
+    }
+
+    pub fn dumps(&mut self) -> Box<dyn Iterator<Item = Result<Batch>> + '_> {
+        Box::new(
+            (&mut self.batches)
+                .lines()
+                .map(|line| -> Result<_> { Ok(serde_json::from_str(&line?)?) }),
+        )
     }
 
     pub fn keys(&mut self) -> Box<dyn Iterator<Item = Result<Key>> + '_> {

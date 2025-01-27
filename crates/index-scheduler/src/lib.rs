@@ -43,7 +43,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
-use dump::{KindDump, TaskDump, UpdateFile};
+use dump::{BatchDump, KindDump, TaskDump, UpdateFile};
 pub use error::Error;
 pub use features::RoFeatures;
 use file_store::FileStore;
@@ -1996,6 +1996,10 @@ pub struct Dump<'a> {
     statuses: HashMap<Status, RoaringBitmap>,
     kinds: HashMap<Kind, RoaringBitmap>,
 
+    batch_indexes: HashMap<String, RoaringBitmap>,
+    batch_statuses: HashMap<Status, RoaringBitmap>,
+    batch_kinds: HashMap<Kind, RoaringBitmap>,
+
     batch_to_tasks_mapping: HashMap<TaskId, RoaringBitmap>,
 }
 
@@ -2010,6 +2014,9 @@ impl<'a> Dump<'a> {
             indexes: HashMap::new(),
             statuses: HashMap::new(),
             kinds: HashMap::new(),
+            batch_indexes: HashMap::new(),
+            batch_statuses: HashMap::new(),
+            batch_kinds: HashMap::new(),
             batch_to_tasks_mapping: HashMap::new(),
         })
     }
@@ -2171,63 +2178,35 @@ impl<'a> Dump<'a> {
 
     /// Register a new task coming from a dump in the scheduler.
     /// By taking a mutable ref we're pretty sure no one will ever import a dump while actix is running.
-    pub fn register_dumped_batch(&mut self, batch: BatchView) -> Result<()> {
-        let batch = Batch {
-            uid: batch.uid,
-            // Batch cannot be processing while we import it
-            progress: None,
-            details: batch.details,
-            stats: batch.stats,
-            started_at: batch.started_at,
-            finished_at: batch.finished_at,
-        };
+    pub fn register_dumped_batch(&mut self, dump: BatchDump) -> Result<()> {
+        let BatchDump { original, tasks } = dump;
 
-        self.index_scheduler.all_batches.put(&mut self.wtxn, &batch.uid, &batch)?;
-
-        for index in batch.indexes() {
-            match self.indexes.get_mut(index) {
-                Some(bitmap) => {
-                    bitmap.insert(batch.uid);
-                }
-                None => {
-                    let mut bitmap = RoaringBitmap::new();
-                    bitmap.insert(batch.uid);
-                    self.indexes.insert(index.to_string(), bitmap);
-                }
-            };
-        }
+        self.index_scheduler.all_batches.put(&mut self.wtxn, &original.uid, &original)?;
+        self.index_scheduler..put(&mut self.wtxn, &original.uid, &original)?;
 
         utils::insert_task_datetime(
             &mut self.wtxn,
-            self.index_scheduler.enqueued_at,
-            batch.enqueued_at,
-            batch.uid,
+            self.index_scheduler.batch_enqueued_at,
+            original.started_at, // TODO: retrieve the enqueued_at from the dump
+            original.uid,
         )?;
 
-        // we can't override the started_at & finished_at, so we must only set it if the tasks is finished and won't change
-        if matches!(batch.status, Status::Succeeded | Status::Failed | Status::Canceled) {
-            if let Some(started_at) = batch.started_at {
-                utils::insert_task_datetime(
-                    &mut self.wtxn,
-                    self.index_scheduler.started_at,
-                    started_at,
-                    batch.uid,
-                )?;
-            }
-            if let Some(finished_at) = batch.finished_at {
-                utils::insert_task_datetime(
-                    &mut self.wtxn,
-                    self.index_scheduler.finished_at,
-                    finished_at,
-                    batch.uid,
-                )?;
-            }
+        utils::insert_task_datetime(
+            &mut self.wtxn,
+            self.index_scheduler.started_at,
+            original.started_at,
+            original.uid,
+        )?;
+        if let Some(finished_at) = original.finished_at {
+            utils::insert_task_datetime(
+                &mut self.wtxn,
+                self.index_scheduler.finished_at,
+                finished_at,
+                original.uid,
+            )?;
         }
 
-        self.statuses.entry(batch.status).or_default().insert(batch.uid);
-        self.kinds.entry(batch.kind.as_kind()).or_default().insert(batch.uid);
-
-        Ok(batch)
+        Ok(())
     }
 
     /// Commit all the changes and exit the importing dump state

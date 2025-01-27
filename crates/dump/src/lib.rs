@@ -1,7 +1,8 @@
 #![allow(clippy::type_complexity)]
 #![allow(clippy::wrong_self_convention)]
 
-use meilisearch_types::batches::BatchId;
+use meilisearch_types::batch_view::BatchView;
+use meilisearch_types::batches::{Batch, BatchId};
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::keys::Key;
 use meilisearch_types::milli::update::IndexDocumentsMethod;
@@ -89,6 +90,13 @@ pub struct TaskDump {
         default
     )]
     pub finished_at: Option<OffsetDateTime>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchDump {
+    pub original: Batch,
+    pub tasks: RoaringBitmap,
 }
 
 // A `Kind` specific version made for the dump. If modified you may break the dump.

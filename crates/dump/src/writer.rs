@@ -14,7 +14,7 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::reader::Document;
-use crate::{IndexMetadata, Metadata, Result, TaskDump, CURRENT_DUMP_VERSION};
+use crate::{BatchDump, IndexMetadata, Metadata, Result, TaskDump, CURRENT_DUMP_VERSION};
 
 pub struct DumpWriter {
     dir: TempDir,
@@ -174,7 +174,7 @@ impl BatchWriter {
 
     /// Pushes batches in the dump.
     /// The batches doesn't contains any private information thus we don't need a special type like with the tasks.
-    pub fn push_batch(&mut self, batch: &BatchView) -> Result<()> {
+    pub fn push_batch(&mut self, batch: &BatchDump) -> Result<()> {
         self.queue.write_all(&serde_json::to_vec(batch)?)?;
         self.queue.write_all(b"\n")?;
         Ok(())
