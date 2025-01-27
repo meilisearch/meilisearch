@@ -1,1 +1,0 @@
-{"run_id":"1737725573-949900000","line":492,"new":{"module_name":"integration__similar__errors","snapshot_name":"filter_invalid_attribute_string","metadata":{"source":"crates/meilisearch/tests/similar/errors.rs","assertion_line":492},"snapshot":"500 Internal Server Error"},"old":{"module_name":"integration__similar__errors","metadata":{},"snapshot":"202 Accepted"}}

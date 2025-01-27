@@ -1,9 +1,0 @@
-{"run_id":"1737725573-949900000","line":48,"new":{"module_name":"integration__settings__prefix_search_settings","snapshot_name":"add_docs_and_disable","metadata":{"source":"crates/meilisearch/tests/settings/prefix_search_settings.rs","assertion_line":48},"snapshot":"[\n  {\n    \"id\": 2,\n    \"a\": \"Soup of day so\",\n    \"b\": \"manythe manythelazyfish\",\n    \"_formatted\": {\n      \"id\": \"2\",\n      \"a\": \"<em>So</em>up of day <em>so</em>\",\n      \"b\": \"manythe manythelazyfish\"\n    }\n  },\n  {\n    \"id\": 1,\n    \"a\": \"Soup of the day\",\n    \"b\": \"manythefishou\",\n    \"_formatted\": {\n      \"id\": \"1\",\n      \"a\": \"<em>So</em>up of the day\",\n      \"b\": \"manythefishou\"\n    }\n  },\n  {\n    \"id\": 3,\n    \"a\": \"the Soup of day\",\n    \"b\": \"manythelazyfish\",\n    \"_formatted\": {\n      \"id\": \"3\",\n      \"a\": \"the <em>So</em>up of day\",\n      \"b\": \"manythelazyfish\"\n    }\n  }\n]"},"old":{"module_name":"integration__settings__prefix_search_settings","metadata":{},"snapshot":"[\n  {\n    \"id\": 2,\n    \"a\": \"Soup of day so\",\n    \"b\": \"manythe manythelazyfish\",\n    \"_formatted\": {\n      \"id\": \"2\",\n      \"a\": \"Soup of day <em>so</em>\",\n      \"b\": \"manythe manythelazyfish\"\n    }\n  }\n]"}}
-{"run_id":"1737725573-949900000","line":381,"new":null,"old":null}
-{"run_id":"1737725573-949900000","line":382,"new":null,"old":null}
-{"run_id":"1737725573-949900000","line":381,"new":null,"old":null}
-{"run_id":"1737725573-949900000","line":382,"new":null,"old":null}
-{"run_id":"1737725573-949900000","line":421,"new":null,"old":null}
-{"run_id":"1737725573-949900000","line":422,"new":null,"old":null}
-{"run_id":"1737725573-949900000","line":421,"new":null,"old":null}
-{"run_id":"1737725573-949900000","line":422,"new":null,"old":null}
