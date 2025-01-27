@@ -14,16 +14,6 @@
   },
   "precommands": [
     {
-      "route": "experimental-features",
-      "method": "PATCH",
-      "body": {
-        "inline": {
-          "vectorStore": true
-        }
-      },
-      "synchronous": "DontWait"
-    },
-    {
       "route": "indexes/movies/settings",
       "method": "PATCH",
       "body": {
