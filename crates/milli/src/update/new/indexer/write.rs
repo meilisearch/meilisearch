@@ -76,7 +76,7 @@ pub(super) fn write_to_db(
     Ok(())
 }
 
-#[tracing::instrument(level = "trace", skip_all, target = "indexing::vectors")]
+#[tracing::instrument(level = "debug", skip_all, target = "indexing::vectors")]
 pub(super) fn build_vectors<MSP>(
     index: &Index,
     wtxn: &mut RwTxn<'_>,

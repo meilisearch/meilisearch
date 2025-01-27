@@ -1,5 +1,5 @@
 <p align="center">
-  <img alt="the milli logo" src="../assets/milli-logo.svg">
+  <img alt="the milli logo" src="../../assets/milli-logo.svg">
 </p>
 
 <p align="center">a concurrent indexer combined with fast and relevant search algorithms</p>
