@@ -4,6 +4,7 @@ use charabia::Language;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
+use crate::attribute_patterns::PatternMatch;
 use crate::fields_ids_map::FieldsIdsMap;
 use crate::{AttributePatterns, FieldId};
 
@@ -27,7 +28,7 @@ impl LocalizedAttributesRule {
         Self { attribute_patterns: AttributePatterns::from(attribute_patterns), locales }
     }
 
-    pub fn match_str(&self, str: &str) -> bool {
+    pub fn match_str(&self, str: &str) -> PatternMatch {
         self.attribute_patterns.match_str(str)
     }
 
@@ -57,7 +58,7 @@ impl LocalizedFieldIds {
             for (field_id, field_name) in fields {
                 let mut locales = Vec::new();
                 for rule in rules {
-                    if rule.match_str(field_name) {
+                    if rule.match_str(field_name) == PatternMatch::Match {
                         locales.extend(rule.locales.iter());
                         // Take the first rule that matches
                         break;

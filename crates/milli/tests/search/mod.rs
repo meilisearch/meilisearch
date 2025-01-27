@@ -11,7 +11,10 @@ use milli::progress::Progress;
 use milli::update::new::indexer;
 use milli::update::{IndexDocumentsMethod, IndexerConfig, Settings};
 use milli::vector::EmbeddingConfigs;
-use milli::{AscDesc, Criterion, DocumentId, Index, Member, TermsMatchingStrategy};
+use milli::{
+    AscDesc, Criterion, DocumentId, FilterableAttributesSettings, Index, Member,
+    TermsMatchingStrategy,
+};
 use serde::{Deserialize, Deserializer};
 use slice_group_by::GroupBy;
 
@@ -42,14 +45,14 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     let mut builder = Settings::new(&mut wtxn, &index, &config);
 
     builder.set_criteria(criteria.to_vec());
-    builder.set_filterable_fields(hashset! {
-        S("tag"),
-        S("asc_desc_rank"),
-        S("_geo"),
-        S("opt1"),
-        S("opt1.opt2"),
-        S("tag_in")
-    });
+    builder.set_filterable_fields(vec![
+        FilterableAttributesSettings::Field(S("tag")),
+        FilterableAttributesSettings::Field(S("asc_desc_rank")),
+        FilterableAttributesSettings::Field(S("_geo")),
+        FilterableAttributesSettings::Field(S("opt1")),
+        FilterableAttributesSettings::Field(S("opt1.opt2")),
+        FilterableAttributesSettings::Field(S("tag_in")),
+    ]);
     builder.set_sortable_fields(hashset! {
         S("tag"),
         S("asc_desc_rank"),

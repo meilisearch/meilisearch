@@ -19,7 +19,10 @@ use maplit::hashset;
 
 use super::collect_field_values;
 use crate::index::tests::TempIndex;
-use crate::{AscDesc, Criterion, Index, Member, Search, SearchResult, TermsMatchingStrategy};
+use crate::{
+    AscDesc, Criterion, FilterableAttributesSettings, Index, Member, Search, SearchResult,
+    TermsMatchingStrategy,
+};
 
 fn create_index() -> TempIndex {
     let index = TempIndex::new();
@@ -236,7 +239,7 @@ fn test_distinct_placeholder_no_ranking_rules() {
     // Set the letter as filterable and unset the distinct attribute.
     index
         .update_settings(|s| {
-            s.set_filterable_fields(hashset! { S("letter") });
+            s.set_filterable_fields(vec![FilterableAttributesSettings::Field("letter".to_owned())]);
             s.reset_distinct_field();
         })
         .unwrap();

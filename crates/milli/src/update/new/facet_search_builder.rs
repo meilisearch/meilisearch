@@ -9,6 +9,7 @@ use heed::{BytesDecode, BytesEncode, RoTxn, RwTxn};
 
 use super::fst_merger_builder::FstMergerBuilder;
 use super::KvReaderDelAdd;
+use crate::attribute_patterns::PatternMatch;
 use crate::heed_codec::facet::FacetGroupKey;
 use crate::update::del_add::{DelAdd, KvWriterDelAdd};
 use crate::update::{create_sorter, MergeDeladdBtreesetString};
@@ -92,7 +93,7 @@ impl<'indexer> FacetSearchBuilder<'indexer> {
             let locales = self
                 .localized_attributes_rules
                 .iter()
-                .find(|rule| rule.match_str(field_name))
+                .find(|rule| rule.match_str(field_name) == PatternMatch::Match)
                 .map(|rule| rule.locales.clone());
 
             e.insert(locales);

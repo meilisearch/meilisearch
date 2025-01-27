@@ -4,10 +4,10 @@ use heed::RoTxn;
 use super::document::{
     Document as _, DocumentFromDb, DocumentFromVersions, MergedDocument, Versions,
 };
-use super::extract::perm_json_p;
 use super::vector_document::{
     MergedVectorDocument, VectorDocumentFromDb, VectorDocumentFromVersions,
 };
+use crate::attribute_patterns::PatternMatch;
 use crate::documents::FieldIdMapper;
 use crate::vector::EmbeddingConfigs;
 use crate::{DocumentId, Index, Result};
@@ -173,7 +173,7 @@ impl<'doc> Update<'doc> {
     /// Otherwise `false`.
     pub fn has_changed_for_fields<'t, Mapper: FieldIdMapper>(
         &self,
-        fields: Option<&[&str]>,
+        selector: &mut impl FnMut(&str) -> PatternMatch,
         rtxn: &'t RoTxn,
         index: &'t Index,
         mapper: &'t Mapper,
@@ -185,7 +185,7 @@ impl<'doc> Update<'doc> {
         for entry in self.updated().iter_top_level_fields() {
             let (key, updated_value) = entry?;
 
-            if perm_json_p::select_field(key, fields, &[]) == perm_json_p::Selection::Skip {
+            if selector(key) == PatternMatch::NoMatch {
                 continue;
             }
 
@@ -229,7 +229,7 @@ impl<'doc> Update<'doc> {
             for entry in current.iter_top_level_fields() {
                 let (key, _) = entry?;
 
-                if perm_json_p::select_field(key, fields, &[]) == perm_json_p::Selection::Skip {
+                if selector(key) == PatternMatch::NoMatch {
                     continue;
                 }
                 current_selected_field_count += 1;

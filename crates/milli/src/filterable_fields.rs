@@ -1,10 +1,12 @@
 use deserr::{DeserializeError, Deserr, ValuePointerRef};
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use utoipa::ToSchema;
 
 use crate::{
-    constants::RESERVED_GEO_FIELD_NAME, is_faceted_by, AttributePatterns, FieldId, FieldsIdsMap,
+    attribute_patterns::{match_field_legacy, PatternMatch},
+    constants::RESERVED_GEO_FIELD_NAME,
+    AttributePatterns, FieldId, FieldsIdsMap,
 };
 
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug, ToSchema)]
@@ -15,16 +17,24 @@ pub enum FilterableAttributesSettings {
 }
 
 impl FilterableAttributesSettings {
-    pub fn match_str(&self, field: &str) -> bool {
+    pub fn match_str(&self, field: &str) -> PatternMatch {
         match self {
-            FilterableAttributesSettings::Field(field_name) => is_faceted_by(field, field_name),
-            FilterableAttributesSettings::Pattern(patterns) => patterns.patterns.match_str(field),
+            FilterableAttributesSettings::Field(pattern) => match_field_legacy(pattern, field),
+            FilterableAttributesSettings::Pattern(patterns) => patterns.match_str(field),
         }
     }
 
     pub fn has_geo(&self) -> bool {
-        /// TODO: This is a temporary solution to check if the geo field is activated.
         matches!(self, FilterableAttributesSettings::Field(field_name) if field_name == RESERVED_GEO_FIELD_NAME)
+    }
+
+    pub fn features(&self) -> FilterableAttributesFeatures {
+        match self {
+            FilterableAttributesSettings::Field(_) => {
+                FilterableAttributesFeatures::legacy_default()
+            }
+            FilterableAttributesSettings::Pattern(patterns) => patterns.features(),
+        }
     }
 }
 
@@ -36,12 +46,62 @@ pub struct FilterableAttributesPatterns {
     pub features: Option<FilterableAttributesFeatures>,
 }
 
+impl FilterableAttributesPatterns {
+    pub fn match_str(&self, field: &str) -> PatternMatch {
+        self.patterns.match_str(field)
+    }
+
+    pub fn features(&self) -> FilterableAttributesFeatures {
+        self.features.clone().unwrap_or_default()
+    }
+}
+
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug, Deserr, ToSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 #[deserr(rename_all = camelCase, deny_unknown_fields)]
 pub struct FilterableAttributesFeatures {
-    facet_search: Option<String>,
-    filter: Option<String>,
+    facet_search: bool,
+    filter: FilterFeature,
+}
+
+impl Default for FilterableAttributesFeatures {
+    fn default() -> Self {
+        Self { facet_search: false, filter: FilterFeature::Equal }
+    }
+}
+
+impl FilterableAttributesFeatures {
+    pub fn legacy_default() -> Self {
+        Self { facet_search: true, filter: FilterFeature::Order }
+    }
+
+    pub fn no_features() -> Self {
+        Self { facet_search: false, filter: FilterFeature::Disabled }
+    }
+
+    pub fn is_filterable(&self) -> bool {
+        self.filter != FilterFeature::Disabled
+    }
+
+    /// Check if `IS NULL` is allowed
+    pub fn is_filterable_null(&self) -> bool {
+        self.filter != FilterFeature::Disabled
+    }
+
+    /// Check if `IS EMPTY` is allowed
+    pub fn is_filterable_empty(&self) -> bool {
+        self.filter != FilterFeature::Disabled
+    }
+
+    /// Check if `<`, `>`, `<=`, `>=` or `TO` are allowed
+    pub fn is_filterable_order(&self) -> bool {
+        self.filter == FilterFeature::Order
+    }
+
+    /// Check if the facet search is allowed
+    pub fn is_facet_searchable(&self) -> bool {
+        self.facet_search
+    }
 }
 
 impl<E: DeserializeError> Deserr<E> for FilterableAttributesSettings {
@@ -59,6 +119,13 @@ impl<E: DeserializeError> Deserr<E> for FilterableAttributesSettings {
     }
 }
 
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug, Deserr, ToSchema)]
+pub enum FilterFeature {
+    Disabled,
+    Equal,
+    Order,
+}
+
 pub fn matching_field_ids(
     filterable_attributes: &[FilterableAttributesSettings],
     fields_ids_map: &FieldsIdsMap,
@@ -66,10 +133,77 @@ pub fn matching_field_ids(
     let mut result = HashSet::new();
     for (field_id, field_name) in fields_ids_map.iter() {
         for filterable_attribute in filterable_attributes {
-            if filterable_attribute.match_str(field_name) {
+            if filterable_attribute.match_str(field_name) == PatternMatch::Match {
                 result.insert(field_id);
             }
         }
     }
     result
+}
+
+pub fn matching_field_names<'fim>(
+    filterable_attributes: &[FilterableAttributesSettings],
+    fields_ids_map: &'fim FieldsIdsMap,
+) -> BTreeSet<&'fim str> {
+    filtered_matching_field_names(filterable_attributes, fields_ids_map, &|_| true)
+}
+
+pub fn filtered_matching_field_names<'fim>(
+    filterable_attributes: &[FilterableAttributesSettings],
+    fields_ids_map: &'fim FieldsIdsMap,
+    filter: &impl Fn(&FilterableAttributesFeatures) -> bool,
+) -> BTreeSet<&'fim str> {
+    let mut result = BTreeSet::new();
+    for (_, field_name) in fields_ids_map.iter() {
+        for filterable_attribute in filterable_attributes {
+            if filterable_attribute.match_str(field_name) == PatternMatch::Match {
+                let features = filterable_attribute.features();
+                if filter(&features) {
+                    result.insert(field_name);
+                }
+            }
+        }
+    }
+    result
+}
+
+pub fn matching_features(
+    field_name: &str,
+    filterable_attributes: &[FilterableAttributesSettings],
+) -> Option<FilterableAttributesFeatures> {
+    for filterable_attribute in filterable_attributes {
+        if filterable_attribute.match_str(field_name) == PatternMatch::Match {
+            return Some(filterable_attribute.features());
+        }
+    }
+    None
+}
+
+pub fn is_field_filterable(
+    field_name: &str,
+    filterable_attributes: &[FilterableAttributesSettings],
+) -> bool {
+    matching_features(field_name, filterable_attributes)
+        .map_or(false, |features| features.is_filterable())
+}
+
+pub fn match_pattern_by_features(
+    field_name: &str,
+    filterable_attributes: &[FilterableAttributesSettings],
+    filter: &impl Fn(&FilterableAttributesFeatures) -> bool,
+) -> PatternMatch {
+    let mut selection = PatternMatch::NoMatch;
+    // Check if the field name matches any pattern that is facet searchable or filterable
+    for pattern in filterable_attributes {
+        let features = pattern.features();
+        if filter(&features) {
+            match pattern.match_str(field_name) {
+                PatternMatch::Match => return PatternMatch::Match,
+                PatternMatch::Parent => selection = PatternMatch::Parent,
+                PatternMatch::NoMatch => (),
+            }
+        }
+    }
+
+    selection
 }

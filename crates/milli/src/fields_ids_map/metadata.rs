@@ -5,7 +5,11 @@ use charabia::Language;
 use heed::RoTxn;
 
 use super::FieldsIdsMap;
-use crate::{FieldId, FilterableAttributesSettings, Index, LocalizedAttributesRule, Result};
+use crate::attribute_patterns::PatternMatch;
+use crate::{
+    FieldId, FilterableAttributesFeatures, FilterableAttributesSettings, Index,
+    LocalizedAttributesRule, Result,
+};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Metadata {
@@ -106,6 +110,34 @@ impl Metadata {
         let rule = rules.get((localized_attributes_rule_id - 1) as usize).unwrap();
         Some(rule.locales())
     }
+
+    pub fn filterable_attributes<'rules>(
+        &self,
+        rules: &'rules [FilterableAttributesSettings],
+    ) -> Option<&'rules FilterableAttributesSettings> {
+        let filterable_attributes_rule_id = self.filterable_attributes_rule_id?.get();
+        // - 1: `filterable_attributes_rule_id` is NonZero
+        let rule = rules.get((filterable_attributes_rule_id - 1) as usize).unwrap();
+        Some(rule)
+    }
+
+    pub fn filterable_attributes_features(
+        &self,
+        rules: &[FilterableAttributesSettings],
+    ) -> FilterableAttributesFeatures {
+        self.filterable_attributes(rules)
+            .map(|rule| rule.features())
+            // if there is no filterable attributes rule, return no features
+            .unwrap_or_else(FilterableAttributesFeatures::no_features)
+    }
+
+    pub fn is_sortable(&self) -> bool {
+        self.sortable
+    }
+
+    pub fn is_searchable(&self) -> bool {
+        self.searchable
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -158,19 +190,14 @@ impl MetadataBuilder {
             .localized_attributes
             .iter()
             .flat_map(|v| v.iter())
-            .position(|rule| rule.match_str(field))
+            .position(|rule| rule.match_str(field) == PatternMatch::Match)
             // saturating_add(1): make `id` `NonZero`
             .map(|id| NonZeroU16::new(id.saturating_add(1).try_into().unwrap()).unwrap());
 
         let filterable_attributes_rule_id = self
             .filterable_attributes
             .iter()
-            .position(|attribute| match attribute {
-                FilterableAttributesSettings::Field(field_name) => field_name == field,
-                FilterableAttributesSettings::Pattern(patterns) => {
-                    patterns.patterns.match_str(field)
-                }
-            })
+            .position(|attribute| attribute.match_str(field) == PatternMatch::Match)
             // saturating_add(1): make `id` `NonZero`
             .map(|id| NonZeroU16::new(id.saturating_add(1).try_into().unwrap()).unwrap());
 

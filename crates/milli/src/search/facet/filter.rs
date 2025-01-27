@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 use std::fmt::{Debug, Display};
 use std::ops::Bound::{self, Excluded, Included};
 
@@ -12,13 +12,16 @@ use serde_json::Value;
 use super::facet_range_search;
 use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::error::{Error, UserError};
+use crate::filterable_fields::{
+    filtered_matching_field_names, is_field_filterable, matching_features,
+};
 use crate::heed_codec::facet::{
     FacetGroupKey, FacetGroupKeyCodec, FacetGroupValue, FacetGroupValueCodec, OrderedF64Codec,
 };
 use crate::index::db_name::FACET_ID_STRING_DOCIDS;
 use crate::{
-    distance_between_two_points, lat_lng_to_xyz, FieldId, Index, InternalError, Result,
-    SerializationError,
+    distance_between_two_points, lat_lng_to_xyz, FieldId, FilterableAttributesFeatures,
+    FilterableAttributesSettings, Index, InternalError, Result, SerializationError,
 };
 
 /// The maximum number of filters the filter AST can process.
@@ -60,7 +63,7 @@ impl Display for BadGeoError {
 
 #[derive(Debug)]
 enum FilterError<'a> {
-    AttributeNotFilterable { attribute: &'a str, filterable_fields: HashSet<String> },
+    AttributeNotFilterable { attribute: &'a str, filterable_fields: BTreeSet<&'a str> },
     ParseGeoError(BadGeoError),
     TooDeep,
 }
@@ -233,10 +236,15 @@ impl<'a> Filter<'a> {
         let filterable_fields = index.filterable_fields(rtxn)?;
         for fid in self.condition.fids(MAX_FILTER_DEPTH) {
             let attribute = fid.value();
-            if !crate::is_faceted(attribute, &filterable_fields) {
+            if !is_field_filterable(attribute, &filterable_fields) {
+                let fields_ids_map = index.fields_ids_map(rtxn)?;
                 return Err(fid.as_external_error(FilterError::AttributeNotFilterable {
                     attribute,
-                    filterable_fields,
+                    filterable_fields: filtered_matching_field_names(
+                        &filterable_fields,
+                        &fields_ids_map,
+                        &|features| features.is_filterable(),
+                    ),
                 }))?;
             }
         }
@@ -249,6 +257,7 @@ impl<'a> Filter<'a> {
         field_id: FieldId,
         universe: Option<&RoaringBitmap>,
         operator: &Condition<'a>,
+        features: &FilterableAttributesFeatures,
     ) -> Result<RoaringBitmap> {
         let numbers_db = index.facet_id_f64_docids;
         let strings_db = index.facet_id_string_docids;
@@ -258,6 +267,17 @@ impl<'a> Filter<'a> {
         // field id and the level.
 
         let (left, right) = match operator {
+            // return an error if the filter is not allowed for this field
+            Condition::GreaterThan(_)
+            | Condition::GreaterThanOrEqual(_)
+            | Condition::LowerThan(_)
+            | Condition::LowerThanOrEqual(_)
+            | Condition::Between { .. }
+                if !features.is_filterable_order() =>
+            {
+                /// TODO produce an dedicated error for this
+                todo!("filtering on non-ordered fields is not supported, return an error")
+            }
             Condition::GreaterThan(val) => {
                 (Excluded(val.parse_finite_float()?), Included(f64::MAX))
             }
@@ -307,7 +327,8 @@ impl<'a> Filter<'a> {
             }
             Condition::NotEqual(val) => {
                 let operator = Condition::Equal(val.clone());
-                let docids = Self::evaluate_operator(rtxn, index, field_id, None, &operator)?;
+                let docids =
+                    Self::evaluate_operator(rtxn, index, field_id, None, &operator, features)?;
                 let all_ids = index.documents_ids(rtxn)?;
                 return Ok(all_ids - docids);
             }
@@ -409,7 +430,7 @@ impl<'a> Filter<'a> {
         &self,
         rtxn: &heed::RoTxn<'_>,
         index: &Index,
-        filterable_fields: &HashSet<String>,
+        filterable_fields: &[FilterableAttributesSettings],
         universe: Option<&RoaringBitmap>,
     ) -> Result<RoaringBitmap> {
         if universe.map_or(false, |u| u.is_empty()) {
@@ -434,36 +455,56 @@ impl<'a> Filter<'a> {
                 }
             }
             FilterCondition::In { fid, els } => {
-                if crate::is_faceted(fid.value(), filterable_fields) {
-                    let field_ids_map = index.fields_ids_map(rtxn)?;
-                    if let Some(fid) = field_ids_map.id(fid.value()) {
-                        els.iter()
-                            .map(|el| Condition::Equal(el.clone()))
-                            .map(|op| Self::evaluate_operator(rtxn, index, fid, universe, &op))
-                            .union()
-                    } else {
-                        Ok(RoaringBitmap::new())
+                match matching_features(fid.value(), filterable_fields) {
+                    Some(features) if features.is_filterable() => {
+                        let field_ids_map = index.fields_ids_map(rtxn)?;
+                        if let Some(fid) = field_ids_map.id(fid.value()) {
+                            els.iter()
+                                .map(|el| Condition::Equal(el.clone()))
+                                .map(|op| {
+                                    Self::evaluate_operator(
+                                        rtxn, index, fid, universe, &op, &features,
+                                    )
+                                })
+                                .union()
+                        } else {
+                            Ok(RoaringBitmap::new())
+                        }
                     }
-                } else {
-                    Err(fid.as_external_error(FilterError::AttributeNotFilterable {
-                        attribute: fid.value(),
-                        filterable_fields: filterable_fields.clone(),
-                    }))?
+                    _ => {
+                        let field_ids_map = index.fields_ids_map(rtxn)?;
+                        Err(fid.as_external_error(FilterError::AttributeNotFilterable {
+                            attribute: fid.value(),
+                            filterable_fields: filtered_matching_field_names(
+                                filterable_fields,
+                                &field_ids_map,
+                                &|features| features.is_filterable(),
+                            ),
+                        }))?
+                    }
                 }
             }
             FilterCondition::Condition { fid, op } => {
-                if crate::is_faceted(fid.value(), filterable_fields) {
-                    let field_ids_map = index.fields_ids_map(rtxn)?;
-                    if let Some(fid) = field_ids_map.id(fid.value()) {
-                        Self::evaluate_operator(rtxn, index, fid, universe, op)
-                    } else {
-                        Ok(RoaringBitmap::new())
+                match matching_features(fid.value(), filterable_fields) {
+                    Some(features) if features.is_filterable() => {
+                        let field_ids_map = index.fields_ids_map(rtxn)?;
+                        if let Some(fid) = field_ids_map.id(fid.value()) {
+                            Self::evaluate_operator(rtxn, index, fid, universe, op, &features)
+                        } else {
+                            Ok(RoaringBitmap::new())
+                        }
                     }
-                } else {
-                    Err(fid.as_external_error(FilterError::AttributeNotFilterable {
-                        attribute: fid.value(),
-                        filterable_fields: filterable_fields.clone(),
-                    }))?
+                    _ => {
+                        let field_ids_map = index.fields_ids_map(rtxn)?;
+                        Err(fid.as_external_error(FilterError::AttributeNotFilterable {
+                            attribute: fid.value(),
+                            filterable_fields: filtered_matching_field_names(
+                                filterable_fields,
+                                &field_ids_map,
+                                &|features| features.is_filterable(),
+                            ),
+                        }))?
+                    }
                 }
             }
             FilterCondition::Or(subfilters) => subfilters
@@ -502,7 +543,7 @@ impl<'a> Filter<'a> {
                 }
             }
             FilterCondition::GeoLowerThan { point, radius } => {
-                if filterable_fields.contains(RESERVED_GEO_FIELD_NAME) {
+                if index.is_geo_filtering_activated(rtxn)? {
                     let base_point: [f64; 2] =
                         [point[0].parse_finite_float()?, point[1].parse_finite_float()?];
                     if !(-90.0..=90.0).contains(&base_point[0]) {
@@ -530,14 +571,19 @@ impl<'a> Filter<'a> {
 
                     Ok(result)
                 } else {
+                    let field_ids_map = index.fields_ids_map(rtxn)?;
                     Err(point[0].as_external_error(FilterError::AttributeNotFilterable {
                         attribute: RESERVED_GEO_FIELD_NAME,
-                        filterable_fields: filterable_fields.clone(),
+                        filterable_fields: filtered_matching_field_names(
+                            filterable_fields,
+                            &field_ids_map,
+                            &|features| features.is_filterable(),
+                        ),
                     }))?
                 }
             }
             FilterCondition::GeoBoundingBox { top_right_point, bottom_left_point } => {
-                if filterable_fields.contains(RESERVED_GEO_FIELD_NAME) {
+                if index.is_geo_filtering_activated(rtxn)? {
                     let top_right: [f64; 2] = [
                         top_right_point[0].parse_finite_float()?,
                         top_right_point[1].parse_finite_float()?,
@@ -662,10 +708,15 @@ impl<'a> Filter<'a> {
 
                     Ok(selected_lat & selected_lng)
                 } else {
+                    let field_ids_map = index.fields_ids_map(rtxn)?;
                     Err(top_right_point[0].as_external_error(
                         FilterError::AttributeNotFilterable {
                             attribute: RESERVED_GEO_FIELD_NAME,
-                            filterable_fields: filterable_fields.clone(),
+                            filterable_fields: filtered_matching_field_names(
+                                filterable_fields,
+                                &field_ids_map,
+                                &|features| features.is_filterable(),
+                            ),
                         },
                     ))?
                 }
@@ -687,12 +738,11 @@ mod tests {
 
     use big_s::S;
     use either::Either;
-    use maplit::hashset;
     use roaring::RoaringBitmap;
 
     use crate::constants::RESERVED_GEO_FIELD_NAME;
     use crate::index::tests::TempIndex;
-    use crate::Filter;
+    use crate::{Filter, FilterableAttributesSettings};
 
     #[test]
     fn empty_db() {
@@ -700,7 +750,9 @@ mod tests {
         //Set the filterable fields to be the channel.
         index
             .update_settings(|settings| {
-                settings.set_filterable_fields(hashset! { S("PrIcE") });
+                settings.set_filterable_fields(vec![FilterableAttributesSettings::Field(
+                    "PrIcE".to_string(),
+                )]);
             })
             .unwrap();
 
@@ -804,7 +856,9 @@ mod tests {
         index
             .update_settings(|settings| {
                 settings.set_searchable_fields(vec![S("title")]);
-                settings.set_filterable_fields(hashset! { S("title") });
+                settings.set_filterable_fields(vec![FilterableAttributesSettings::Field(
+                    "title".to_string(),
+                )]);
             })
             .unwrap();
 
@@ -870,7 +924,9 @@ mod tests {
 
         index
             .update_settings(|settings| {
-                settings.set_filterable_fields(hashset!(S("monitor_diagonal")));
+                settings.set_filterable_fields(vec![FilterableAttributesSettings::Field(
+                    "monitor_diagonal".to_string(),
+                )]);
             })
             .unwrap();
 
@@ -901,7 +957,9 @@ mod tests {
 
         index
             .update_settings(|settings| {
-                settings.set_filterable_fields(hashset! { S(RESERVED_GEO_FIELD_NAME) });
+                settings.set_filterable_fields(vec![FilterableAttributesSettings::Field(S(
+                    RESERVED_GEO_FIELD_NAME,
+                ))]);
             })
             .unwrap();
 
@@ -948,7 +1006,10 @@ mod tests {
         index
             .update_settings(|settings| {
                 settings.set_searchable_fields(vec![S(RESERVED_GEO_FIELD_NAME), S("price")]); // to keep the fields order
-                settings.set_filterable_fields(hashset! { S(RESERVED_GEO_FIELD_NAME), S("price") });
+                settings.set_filterable_fields(vec![
+                    FilterableAttributesSettings::Field(S(RESERVED_GEO_FIELD_NAME)),
+                    FilterableAttributesSettings::Field("price".to_string()),
+                ]);
             })
             .unwrap();
 
@@ -998,7 +1059,10 @@ mod tests {
         index
             .update_settings(|settings| {
                 settings.set_searchable_fields(vec![S(RESERVED_GEO_FIELD_NAME), S("price")]); // to keep the fields order
-                settings.set_filterable_fields(hashset! { S(RESERVED_GEO_FIELD_NAME), S("price") });
+                settings.set_filterable_fields(vec![
+                    FilterableAttributesSettings::Field(S(RESERVED_GEO_FIELD_NAME)),
+                    FilterableAttributesSettings::Field("price".to_string()),
+                ]);
             })
             .unwrap();
 
@@ -1108,7 +1172,9 @@ mod tests {
         index
             .update_settings(|settings| {
                 settings.set_searchable_fields(vec![S("price")]); // to keep the fields order
-                settings.set_filterable_fields(hashset! { S("price") });
+                settings.set_filterable_fields(vec![FilterableAttributesSettings::Field(
+                    "price".to_string(),
+                )]);
             })
             .unwrap();
         index
@@ -1164,7 +1230,11 @@ mod tests {
         index
             .update_settings(|settings| {
                 settings.set_primary_key("id".to_owned());
-                settings.set_filterable_fields(hashset! { S("id"), S("one"), S("two") });
+                settings.set_filterable_fields(vec![
+                    FilterableAttributesSettings::Field("id".to_string()),
+                    FilterableAttributesSettings::Field("one".to_string()),
+                    FilterableAttributesSettings::Field("two".to_string()),
+                ]);
             })
             .unwrap();
 
