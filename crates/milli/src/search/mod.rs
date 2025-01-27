@@ -9,6 +9,7 @@ use roaring::bitmap::RoaringBitmap;
 pub use self::facet::{FacetDistribution, Filter, OrderBy, DEFAULT_VALUES_PER_FACET};
 pub use self::new::matches::{FormatOptions, MatchBounds, MatcherBuilder, MatchingWords};
 use self::new::{execute_vector_search, PartialSearchResult};
+use crate::filterable_fields::{is_field_filterable, matching_field_names};
 use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::vector::Embedder;
 use crate::{
@@ -188,9 +189,15 @@ impl<'a> Search<'a> {
 
         if let Some(distinct) = &self.distinct {
             let filterable_fields = ctx.index.filterable_fields(ctx.txn)?;
-            if !crate::is_faceted(distinct, &filterable_fields) {
+            // check if the distinct field is in the filterable fields
+            if !is_field_filterable(distinct, &filterable_fields) {
+                // if not, remove the hidden fields from the filterable fields to generate the error message
+                let fields_ids_map = ctx.index.fields_ids_map(ctx.txn)?;
+                let matching_field_names =
+                    matching_field_names(&filterable_fields, &fields_ids_map);
                 let (valid_fields, hidden_fields) =
-                    ctx.index.remove_hidden_fields(ctx.txn, filterable_fields)?;
+                    ctx.index.remove_hidden_fields(ctx.txn, matching_field_names)?;
+                // and return the error
                 return Err(Error::UserError(UserError::InvalidDistinctAttribute {
                     field: distinct.clone(),
                     valid_fields,

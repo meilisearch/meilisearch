@@ -1,5 +1,5 @@
 use deserr::Deserr;
-use milli::LocalizedAttributesRule;
+use milli::{AttributePatterns, LocalizedAttributesRule};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
@@ -7,7 +7,7 @@ use utoipa::ToSchema;
 #[deserr(rename_all = camelCase)]
 #[serde(rename_all = "camelCase")]
 pub struct LocalizedAttributesRuleView {
-    pub attribute_patterns: Vec<String>,
+    pub attribute_patterns: AttributePatterns,
     pub locales: Vec<Locale>,
 }
 

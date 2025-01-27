@@ -803,7 +803,7 @@ impl Index {
         self.main.remap_key_type::<Str>().delete(wtxn, main_key::FILTERABLE_FIELDS_KEY)
     }
 
-    /// Returns the filterable fields names.
+    /// Returns the filterable fields setting value.
     pub fn filterable_fields(
         &self,
         rtxn: &RoTxn<'_>,
@@ -815,7 +815,7 @@ impl Index {
             .unwrap_or_default())
     }
 
-    /// Identical to `filterable_fields`, but returns ids instead.
+    /// Returns the filterable fields ids.
     pub fn filterable_fields_ids(&self, rtxn: &RoTxn<'_>) -> Result<HashSet<FieldId>> {
         let fields = self.filterable_fields(rtxn)?;
         let fields_ids_map = self.fields_ids_map(rtxn)?;
@@ -878,67 +878,79 @@ impl Index {
 
     /// Returns true if the geo feature is activated.
     pub fn is_geo_activated(&self, rtxn: &RoTxn<'_>) -> Result<bool> {
-        let geo_filter = self.filterable_fields(rtxn)?.iter().any(|field| field.has_geo());
-        let geo_sortable = self.sortable_fields(rtxn)?.contains(RESERVED_GEO_FIELD_NAME);
+        let geo_filter = self.is_geo_filtering_activated(rtxn)?;
+        let geo_sortable = self.is_geo_sorting_activated(rtxn)?;
         Ok(geo_filter || geo_sortable)
     }
 
-    /// Returns the faceted fields names.
-    pub fn faceted_fields(&self, rtxn: &RoTxn<'_>) -> heed::Result<HashSet<String>> {
-        Ok(self
-            .main
-            .remap_types::<Str, SerdeJson<_>>()
-            .get(rtxn, main_key::HIDDEN_FACETED_FIELDS_KEY)?
-            .unwrap_or_default())
+    /// Returns true if the geo sorting feature is activated.
+    pub fn is_geo_sorting_activated(&self, rtxn: &RoTxn<'_>) -> Result<bool> {
+        let geo_sortable = self.sortable_fields(rtxn)?.contains(RESERVED_GEO_FIELD_NAME);
+        Ok(geo_sortable)
     }
 
-    /// Identical to `faceted_fields`, but returns ids instead.
-    pub fn faceted_fields_ids(&self, rtxn: &RoTxn<'_>) -> Result<HashSet<FieldId>> {
-        let fields = self.faceted_fields(rtxn)?;
-        let fields_ids_map = self.fields_ids_map(rtxn)?;
-
-        let mut fields_ids = HashSet::new();
-        for name in fields {
-            if let Some(field_id) = fields_ids_map.id(&name) {
-                fields_ids.insert(field_id);
-            }
-        }
-
-        Ok(fields_ids)
+    /// Returns true if the geo filtering feature is activated.
+    pub fn is_geo_filtering_activated(&self, rtxn: &RoTxn<'_>) -> Result<bool> {
+        let geo_filter = self.filterable_fields(rtxn)?.iter().any(|field| field.has_geo());
+        Ok(geo_filter)
     }
+
+    // /// Returns the faceted fields names.
+    // pub fn faceted_fields(&self, rtxn: &RoTxn<'_>) -> heed::Result<HashSet<String>> {
+    //     Ok(self
+    //         .main
+    //         .remap_types::<Str, SerdeJson<_>>()
+    //         .get(rtxn, main_key::HIDDEN_FACETED_FIELDS_KEY)?
+    //         .unwrap_or_default())
+    // }
+
+    // /// Identical to `faceted_fields`, but returns ids instead.
+    // pub fn faceted_fields_ids(&self, rtxn: &RoTxn<'_>) -> Result<HashSet<FieldId>> {
+    //     let fields = self.faceted_fields(rtxn)?;
+    //     let fields_ids_map = self.fields_ids_map(rtxn)?;
+
+    //     let mut fields_ids = HashSet::new();
+    //     for name in fields {
+    //         if let Some(field_id) = fields_ids_map.id(&name) {
+    //             fields_ids.insert(field_id);
+    //         }
+    //     }
+
+    //     Ok(fields_ids)
+    // }
 
     /* faceted documents ids */
 
     /// Returns the user defined faceted fields names.
     ///
     /// The user faceted fields are the union of all the filterable, sortable, distinct, and Asc/Desc fields.
-    pub fn user_defined_faceted_fields(&self, rtxn: &RoTxn<'_>) -> Result<HashSet<String>> {
-        let fields_ids_map = self.fields_ids_map(rtxn)?;
-        let filterable_fields = self.filterable_fields_ids(rtxn)?;
-        let sortable_fields = self.sortable_fields(rtxn)?;
-        let distinct_field = self.distinct_field(rtxn)?;
-        let asc_desc_fields =
-            self.criteria(rtxn)?.into_iter().filter_map(|criterion| match criterion {
-                Criterion::Asc(field) | Criterion::Desc(field) => Some(field),
-                _otherwise => None,
-            });
+    // pub fn user_defined_faceted_fields(&self, rtxn: &RoTxn<'_>) -> Result<HashSet<String>> {
+    //     let fields_ids_map = self.fields_ids_map(rtxn)?;
+    //     let filterable_fields = self.filterable_fields_ids(rtxn)?;
+    //     let sortable_fields = self.sortable_fields(rtxn)?;
+    //     let distinct_field = self.distinct_field(rtxn)?;
+    //     let asc_desc_fields =
+    //         self.criteria(rtxn)?.into_iter().filter_map(|criterion| match criterion {
+    //             Criterion::Asc(field) | Criterion::Desc(field) => Some(field),
+    //             _otherwise => None,
+    //         });
 
-        let mut faceted_fields: HashSet<_> = filterable_fields
-            .into_iter()
-            .filter_map(|field_id| {
-                let field_name = fields_ids_map.name(field_id);
-                debug_assert!(field_name.is_some(), "field name not found for {field_id}");
-                field_name.map(|field| field.to_string())
-            })
-            .collect();
-        faceted_fields.extend(sortable_fields);
-        faceted_fields.extend(asc_desc_fields);
-        if let Some(field) = distinct_field {
-            faceted_fields.insert(field.to_owned());
-        }
+    //     let mut faceted_fields: HashSet<_> = filterable_fields
+    //         .into_iter()
+    //         .filter_map(|field_id| {
+    //             let field_name = fields_ids_map.name(field_id);
+    //             debug_assert!(field_name.is_some(), "field name not found for {field_id}");
+    //             field_name.map(|field| field.to_string())
+    //         })
+    //         .collect();
+    //     faceted_fields.extend(sortable_fields);
+    //     faceted_fields.extend(asc_desc_fields);
+    //     if let Some(field) = distinct_field {
+    //         faceted_fields.insert(field.to_owned());
+    //     }
 
-        Ok(faceted_fields)
-    }
+    //     Ok(faceted_fields)
+    // }
 
     /* faceted documents ids */
 
@@ -1728,7 +1740,7 @@ pub(crate) mod tests {
     use big_s::S;
     use bumpalo::Bump;
     use heed::{EnvOpenOptions, RwTxn};
-    use maplit::{btreemap, hashset};
+    use maplit::btreemap;
     use memmap2::Mmap;
     use tempfile::TempDir;
 
@@ -1744,7 +1756,8 @@ pub(crate) mod tests {
     use crate::vector::settings::{EmbedderSource, EmbeddingSettings};
     use crate::vector::EmbeddingConfigs;
     use crate::{
-        db_snap, obkv_to_json, Filter, Index, Search, SearchResult, ThreadPoolNoAbortBuilder,
+        db_snap, obkv_to_json, Filter, FilterableAttributesSettings, Index, Search, SearchResult,
+        ThreadPoolNoAbortBuilder,
     };
 
     pub(crate) struct TempIndex {
@@ -2174,7 +2187,9 @@ pub(crate) mod tests {
 
         index
             .update_settings(|settings| {
-                settings.set_filterable_fields(hashset! { S(RESERVED_GEO_FIELD_NAME) });
+                settings.set_filterable_fields(vec![FilterableAttributesSettings::Field(
+                    RESERVED_GEO_FIELD_NAME.to_string(),
+                )]);
             })
             .unwrap();
         index
@@ -2282,7 +2297,9 @@ pub(crate) mod tests {
 
         index
             .update_settings(|settings| {
-                settings.set_filterable_fields(hashset! { S("doggo") });
+                settings.set_filterable_fields(vec![FilterableAttributesSettings::Field(
+                    "doggo".to_string(),
+                )]);
             })
             .unwrap();
         index
@@ -2319,15 +2336,14 @@ pub(crate) mod tests {
 
     #[test]
     fn replace_documents_external_ids_and_soft_deletion_check() {
-        use big_s::S;
-        use maplit::hashset;
-
         let index = TempIndex::new();
 
         index
             .update_settings(|settings| {
                 settings.set_primary_key("id".to_owned());
-                settings.set_filterable_fields(hashset! { S("doggo") });
+                settings.set_filterable_fields(vec![FilterableAttributesSettings::Field(
+                    "doggo".to_string(),
+                )]);
             })
             .unwrap();
 
@@ -2860,8 +2876,9 @@ pub(crate) mod tests {
         index
             .update_settings(|settings| {
                 settings.set_primary_key("id".to_string());
-                settings
-                    .set_filterable_fields(HashSet::from([RESERVED_GEO_FIELD_NAME.to_string()]));
+                settings.set_filterable_fields(vec![FilterableAttributesSettings::Field(
+                    RESERVED_GEO_FIELD_NAME.to_string(),
+                )]);
             })
             .unwrap();
 
@@ -2895,8 +2912,9 @@ pub(crate) mod tests {
         index
             .update_settings(|settings| {
                 settings.set_primary_key("id".to_string());
-                settings
-                    .set_filterable_fields(HashSet::from([RESERVED_GEO_FIELD_NAME.to_string()]));
+                settings.set_filterable_fields(vec![FilterableAttributesSettings::Field(
+                    RESERVED_GEO_FIELD_NAME.to_string(),
+                )]);
             })
             .unwrap();
 
@@ -2929,7 +2947,9 @@ pub(crate) mod tests {
         index
             .update_settings(|settings| {
                 settings.set_searchable_fields(vec![S("name")]);
-                settings.set_filterable_fields(HashSet::from([S("age")]));
+                settings.set_filterable_fields(vec![FilterableAttributesSettings::Field(
+                    "age".to_string(),
+                )]);
             })
             .unwrap();
 
@@ -2951,7 +2971,9 @@ pub(crate) mod tests {
         index
             .update_settings(|settings| {
                 settings.set_searchable_fields(vec![S("name"), S("realName")]);
-                settings.set_filterable_fields(HashSet::from([S("age")]));
+                settings.set_filterable_fields(vec![FilterableAttributesSettings::Field(
+                    "age".to_string(),
+                )]);
             })
             .unwrap();
 
@@ -3050,7 +3072,10 @@ pub(crate) mod tests {
         index
             .update_settings(|settings| {
                 settings.set_searchable_fields(vec![S("_vectors"), S("_vectors.doggo")]);
-                settings.set_filterable_fields(hashset![S("_vectors"), S("_vectors.doggo")]);
+                settings.set_filterable_fields(vec![
+                    FilterableAttributesSettings::Field("_vectors".to_string()),
+                    FilterableAttributesSettings::Field("_vectors.doggo".to_string()),
+                ]);
             })
             .unwrap();
 

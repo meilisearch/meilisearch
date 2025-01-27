@@ -31,7 +31,10 @@ use crate::vector::settings::{
     WriteBackToDocuments,
 };
 use crate::vector::{Embedder, EmbeddingConfig, EmbeddingConfigs};
-use crate::{FieldId, FieldsIdsMap, Index, LocalizedAttributesRule, LocalizedFieldIds, Result};
+use crate::{
+    FieldId, FieldsIdsMap, FilterableAttributesSettings, Index, LocalizedAttributesRule,
+    LocalizedFieldIds, Result,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum Setting<T> {
@@ -155,7 +158,7 @@ pub struct Settings<'a, 't, 'i> {
 
     searchable_fields: Setting<Vec<String>>,
     displayed_fields: Setting<Vec<String>>,
-    filterable_fields: Setting<HashSet<String>>,
+    filterable_fields: Setting<Vec<FilterableAttributesSettings>>,
     sortable_fields: Setting<HashSet<String>>,
     criteria: Setting<Vec<Criterion>>,
     stop_words: Setting<BTreeSet<String>>,
@@ -241,8 +244,8 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         self.filterable_fields = Setting::Reset;
     }
 
-    pub fn set_filterable_fields(&mut self, names: HashSet<String>) {
-        self.filterable_fields = Setting::Set(names);
+    pub fn set_filterable_fields(&mut self, rules: Vec<FilterableAttributesSettings>) {
+        self.filterable_fields = Setting::Set(rules);
     }
 
     pub fn set_sortable_fields(&mut self, names: HashSet<String>) {
@@ -760,11 +763,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
     fn update_filterable(&mut self) -> Result<()> {
         match self.filterable_fields {
             Setting::Set(ref fields) => {
-                let mut new_facets = HashSet::new();
-                for name in fields {
-                    new_facets.insert(name.clone());
-                }
-                self.index.put_filterable_fields(self.wtxn, &new_facets)?;
+                self.index.put_filterable_fields(self.wtxn, fields)?;
             }
             Setting::Reset => {
                 self.index.delete_filterable_fields(self.wtxn)?;
@@ -1895,7 +1894,7 @@ pub fn validate_embedding_settings(
 mod tests {
     use big_s::S;
     use heed::types::Bytes;
-    use maplit::{btreemap, btreeset, hashset};
+    use maplit::{btreemap, btreeset};
     use meili_snap::snapshot;
 
     use super::*;
@@ -2105,7 +2104,9 @@ mod tests {
         // Set the filterable fields to be the age.
         index
             .update_settings(|settings| {
-                settings.set_filterable_fields(hashset! { S("age") });
+                settings.set_filterable_fields(vec![FilterableAttributesSettings::Field(
+                    "age".to_string(),
+                )]);
             })
             .unwrap();
 
@@ -2121,7 +2122,7 @@ mod tests {
         // Check that the displayed fields are correctly set.
         let rtxn = index.read_txn().unwrap();
         let fields_ids = index.filterable_fields(&rtxn).unwrap();
-        assert_eq!(fields_ids, hashset! { S("age") });
+        assert_eq!(fields_ids, vec![FilterableAttributesSettings::Field("age".to_string(),)]);
         // Only count the field_id 0 and level 0 facet values.
         // TODO we must support typed CSVs for numbers to be understood.
         let fidmap = index.fields_ids_map(&rtxn).unwrap();
@@ -2163,14 +2164,23 @@ mod tests {
         // Set the filterable fields to be the age and the name.
         index
             .update_settings(|settings| {
-                settings.set_filterable_fields(hashset! { S("age"),  S("name") });
+                settings.set_filterable_fields(vec![
+                    FilterableAttributesSettings::Field("age".to_string()),
+                    FilterableAttributesSettings::Field("name".to_string()),
+                ]);
             })
             .unwrap();
 
         // Check that the displayed fields are correctly set.
         let rtxn = index.read_txn().unwrap();
         let fields_ids = index.filterable_fields(&rtxn).unwrap();
-        assert_eq!(fields_ids, hashset! { S("age"),  S("name") });
+        assert_eq!(
+            fields_ids,
+            vec![
+                FilterableAttributesSettings::Field("age".to_string()),
+                FilterableAttributesSettings::Field("name".to_string()),
+            ]
+        );
 
         let rtxn = index.read_txn().unwrap();
         // Only count the field_id 2 and level 0 facet values.
@@ -2195,14 +2205,16 @@ mod tests {
         // Remove the age from the filterable fields.
         index
             .update_settings(|settings| {
-                settings.set_filterable_fields(hashset! { S("name") });
+                settings.set_filterable_fields(vec![FilterableAttributesSettings::Field(
+                    "name".to_string(),
+                )]);
             })
             .unwrap();
 
         // Check that the displayed fields are correctly set.
         let rtxn = index.read_txn().unwrap();
         let fields_ids = index.filterable_fields(&rtxn).unwrap();
-        assert_eq!(fields_ids, hashset! { S("name") });
+        assert_eq!(fields_ids, vec![FilterableAttributesSettings::Field("name".to_string())]);
 
         let rtxn = index.read_txn().unwrap();
         // Only count the field_id 2 and level 0 facet values.
@@ -2532,7 +2544,10 @@ mod tests {
         index
             .update_settings(|settings| {
                 settings.set_displayed_fields(vec!["hello".to_string()]);
-                settings.set_filterable_fields(hashset! { S("age"), S("toto") });
+                settings.set_filterable_fields(vec![
+                    FilterableAttributesSettings::Field("age".to_string()),
+                    FilterableAttributesSettings::Field("toto".to_string()),
+                ]);
                 settings.set_criteria(vec![Criterion::Asc(S("toto"))]);
             })
             .unwrap();
@@ -2649,7 +2664,9 @@ mod tests {
         // Set the genres setting
         index
             .update_settings(|settings| {
-                settings.set_filterable_fields(hashset! { S("genres") });
+                settings.set_filterable_fields(vec![FilterableAttributesSettings::Field(
+                    "genres".to_string(),
+                )]);
             })
             .unwrap();
 
