@@ -2,7 +2,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::Ordering;
 
-use meilisearch_types::batches::BatchId;
+use meilisearch_types::batches::{BatchEnqueuedAt, BatchId};
 use meilisearch_types::heed::{RoTxn, RwTxn};
 use meilisearch_types::milli::progress::{Progress, VariableNameStep};
 use meilisearch_types::milli::{self};
@@ -16,7 +16,10 @@ use crate::processing::{
     InnerSwappingTwoIndexes, SwappingTheIndexes, TaskCancelationProgress, TaskDeletionProgress,
     UpdateIndexProgress,
 };
-use crate::utils::{self, swap_index_uid_in_task, ProcessingBatch};
+use crate::utils::{
+    self, remove_n_tasks_datetime_earlier_than, remove_task_datetime, swap_index_uid_in_task,
+    ProcessingBatch,
+};
 use crate::{Error, IndexScheduler, Result, TaskId};
 
 impl IndexScheduler {
@@ -418,7 +421,6 @@ impl IndexScheduler {
         to_delete_tasks -= &enqueued_tasks;
 
         // 2. We now have a list of tasks to delete, delete them
-
         let mut affected_indexes = HashSet::new();
         let mut affected_statuses = HashSet::new();
         let mut affected_kinds = HashSet::new();
@@ -515,9 +517,51 @@ impl IndexScheduler {
                 tasks -= &to_delete_tasks;
                 // We must remove the batch entirely
                 if tasks.is_empty() {
-                    self.queue.batches.all_batches.delete(wtxn, &batch_id)?;
-                    self.queue.batch_to_tasks_mapping.delete(wtxn, &batch_id)?;
+                    if let Some(batch) = self.queue.batches.get_batch(wtxn, batch_id)? {
+                        if let Some(BatchEnqueuedAt { earliest, oldest }) = batch.enqueued_at {
+                            remove_task_datetime(
+                                wtxn,
+                                self.queue.batches.enqueued_at,
+                                earliest,
+                                batch_id,
+                            )?;
+                            remove_task_datetime(
+                                wtxn,
+                                self.queue.batches.enqueued_at,
+                                oldest,
+                                batch_id,
+                            )?;
+                        } else {
+                            // If we don't have the enqueued at in the batch it means the database comes from the v1.12
+                            // and we still need to find the date by scrolling the database
+                            remove_n_tasks_datetime_earlier_than(
+                                wtxn,
+                                self.queue.batches.enqueued_at,
+                                batch.started_at,
+                                batch.stats.total_nb_tasks.clamp(1, 2) as usize,
+                                batch_id,
+                            )?;
+                        }
+                        remove_task_datetime(
+                            wtxn,
+                            self.queue.batches.started_at,
+                            batch.started_at,
+                            batch_id,
+                        )?;
+                        if let Some(finished_at) = batch.finished_at {
+                            remove_task_datetime(
+                                wtxn,
+                                self.queue.batches.finished_at,
+                                finished_at,
+                                batch_id,
+                            )?;
+                        }
+
+                        self.queue.batches.all_batches.delete(wtxn, &batch_id)?;
+                        self.queue.batch_to_tasks_mapping.delete(wtxn, &batch_id)?;
+                    }
                 }
+
                 // Anyway, we must remove the batch from all its reverse indexes.
                 // The only way to do that is to check
 

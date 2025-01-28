@@ -12,8 +12,8 @@ use time::OffsetDateTime;
 use super::{Query, Queue};
 use crate::processing::ProcessingTasks;
 use crate::utils::{
-    insert_task_datetime, keep_ids_within_datetimes, map_bound, remove_task_datetime,
-    ProcessingBatch,
+    insert_task_datetime, keep_ids_within_datetimes, map_bound,
+    remove_n_tasks_datetime_earlier_than, remove_task_datetime, ProcessingBatch,
 };
 use crate::{Error, Result, BEI128};
 
@@ -181,6 +181,7 @@ impl BatchQueue {
                 stats: batch.stats,
                 started_at: batch.started_at,
                 finished_at: batch.finished_at,
+                enqueued_at: batch.enqueued_at,
             },
         )?;
 
@@ -234,34 +235,25 @@ impl BatchQueue {
         // What we know, though, is that the task date is from before the enqueued_at, and max two timestamps have been written
         // to the DB per batches.
         if let Some(ref old_batch) = old_batch {
-            let started_at = old_batch.started_at.unix_timestamp_nanos();
-
-            // We have either one or two enqueued at to remove
-            let mut exit = old_batch.stats.total_nb_tasks.clamp(0, 2);
-            let mut iterator = self.enqueued_at.rev_iter_mut(wtxn)?;
-            while let Some(entry) = iterator.next() {
-                let (key, mut value) = entry?;
-                if key > started_at {
-                    continue;
-                }
-                if value.remove(old_batch.uid) {
-                    exit = exit.saturating_sub(1);
-                    // Safe because the key and value are owned
-                    unsafe {
-                        iterator.put_current(&key, &value)?;
-                    }
-                    if exit == 0 {
-                        break;
-                    }
-                }
+            if let Some(enqueued_at) = old_batch.enqueued_at {
+                remove_task_datetime(wtxn, self.enqueued_at, enqueued_at.earliest, old_batch.uid)?;
+                remove_task_datetime(wtxn, self.enqueued_at, enqueued_at.oldest, old_batch.uid)?;
+            } else {
+                // If we don't have the enqueued at in the batch it means the database comes from the v1.12
+                // and we still need to find the date by scrolling the database
+                remove_n_tasks_datetime_earlier_than(
+                    wtxn,
+                    self.enqueued_at,
+                    old_batch.started_at,
+                    old_batch.stats.total_nb_tasks.clamp(1, 2) as usize,
+                    old_batch.uid,
+                )?;
             }
         }
-        if let Some(enqueued_at) = batch.oldest_enqueued_at {
-            insert_task_datetime(wtxn, self.enqueued_at, enqueued_at, batch.uid)?;
-        }
-        if let Some(enqueued_at) = batch.earliest_enqueued_at {
-            insert_task_datetime(wtxn, self.enqueued_at, enqueued_at, batch.uid)?;
-        }
+        // A finished batch MUST contains at least one task and have an enqueued_at
+        let enqueued_at = batch.enqueued_at.as_ref().unwrap();
+        insert_task_datetime(wtxn, self.enqueued_at, enqueued_at.earliest, batch.uid)?;
+        insert_task_datetime(wtxn, self.enqueued_at, enqueued_at.oldest, batch.uid)?;
 
         // Update the started at and finished at
         if let Some(ref old_batch) = old_batch {

@@ -3,7 +3,7 @@
 use std::collections::{BTreeSet, HashSet};
 use std::ops::Bound;
 
-use meilisearch_types::batches::{Batch, BatchId, BatchStats};
+use meilisearch_types::batches::{Batch, BatchEnqueuedAt, BatchId, BatchStats};
 use meilisearch_types::heed::{Database, RoTxn, RwTxn};
 use meilisearch_types::milli::CboRoaringBitmapCodec;
 use meilisearch_types::task_view::DetailsView;
@@ -30,8 +30,7 @@ pub struct ProcessingBatch {
     pub kinds: HashSet<Kind>,
     pub indexes: HashSet<String>,
     pub canceled_by: HashSet<TaskId>,
-    pub oldest_enqueued_at: Option<OffsetDateTime>,
-    pub earliest_enqueued_at: Option<OffsetDateTime>,
+    pub enqueued_at: Option<BatchEnqueuedAt>,
     pub started_at: OffsetDateTime,
     pub finished_at: Option<OffsetDateTime>,
 }
@@ -51,8 +50,7 @@ impl ProcessingBatch {
             kinds: HashSet::default(),
             indexes: HashSet::default(),
             canceled_by: HashSet::default(),
-            oldest_enqueued_at: None,
-            earliest_enqueued_at: None,
+            enqueued_at: None,
             started_at: OffsetDateTime::now_utc(),
             finished_at: None,
         }
@@ -80,14 +78,18 @@ impl ProcessingBatch {
             if let Some(canceled_by) = task.canceled_by {
                 self.canceled_by.insert(canceled_by);
             }
-            self.oldest_enqueued_at =
-                Some(self.oldest_enqueued_at.map_or(task.enqueued_at, |oldest_enqueued_at| {
-                    task.enqueued_at.min(oldest_enqueued_at)
-                }));
-            self.earliest_enqueued_at =
-                Some(self.earliest_enqueued_at.map_or(task.enqueued_at, |earliest_enqueued_at| {
-                    task.enqueued_at.max(earliest_enqueued_at)
-                }));
+            match self.enqueued_at.as_mut() {
+                Some(BatchEnqueuedAt { earliest, oldest }) => {
+                    *oldest = task.enqueued_at.min(*oldest);
+                    *earliest = task.enqueued_at.max(*earliest);
+                }
+                None => {
+                    self.enqueued_at = Some(BatchEnqueuedAt {
+                        earliest: task.enqueued_at,
+                        oldest: task.enqueued_at,
+                    });
+                }
+            }
         }
     }
 
@@ -138,6 +140,7 @@ impl ProcessingBatch {
             stats: self.stats.clone(),
             started_at: self.started_at,
             finished_at: self.finished_at,
+            enqueued_at: self.enqueued_at,
         }
     }
 }
@@ -168,6 +171,33 @@ pub(crate) fn remove_task_datetime(
             database.delete(wtxn, &timestamp)?;
         } else {
             database.put(wtxn, &timestamp, &RoaringBitmap::from_iter(existing))?;
+        }
+    }
+
+    Ok(())
+}
+
+pub(crate) fn remove_n_tasks_datetime_earlier_than(
+    wtxn: &mut RwTxn,
+    database: Database<BEI128, CboRoaringBitmapCodec>,
+    earlier_than: OffsetDateTime,
+    mut count: usize,
+    task_id: TaskId,
+) -> Result<()> {
+    let earlier_than = earlier_than.unix_timestamp_nanos();
+    let mut iter = database.rev_range_mut(wtxn, &(..earlier_than))?;
+    while let Some((current, mut existing)) = iter.next().transpose()? {
+        count -= existing.remove(task_id) as usize;
+
+        if existing.is_empty() {
+            // safety: We don't keep references to the database
+            unsafe { iter.del_current()? };
+        } else {
+            // safety: We don't keep references to the database
+            unsafe { iter.put_current(&current, &existing)? };
+        }
+        if count == 0 {
+            break;
         }
     }
 
@@ -329,14 +359,27 @@ impl crate::IndexScheduler {
                 kind,
             } = task;
             assert_eq!(uid, task.uid);
-            if let Some(ref batch) = batch_uid {
+            if task.status != Status::Enqueued {
+                let batch_uid = batch_uid.expect("All non enqueued tasks must be part of a batch");
                 assert!(self
                     .queue
                     .batch_to_tasks_mapping
-                    .get(&rtxn, batch)
+                    .get(&rtxn, &batch_uid)
                     .unwrap()
                     .unwrap()
                     .contains(uid));
+                let batch = self.queue.batches.get_batch(&rtxn, batch_uid).unwrap().unwrap();
+                assert_eq!(batch.uid, batch_uid);
+                if task.status == Status::Processing {
+                    assert!(batch.progress.is_some());
+                } else {
+                    assert!(batch.progress.is_none());
+                }
+                assert_eq!(batch.started_at, task.started_at.unwrap());
+                assert_eq!(batch.finished_at, task.finished_at);
+                let enqueued_at = batch.enqueued_at.unwrap();
+                assert!(task.enqueued_at >= enqueued_at.oldest);
+                assert!(task.enqueued_at <= enqueued_at.earliest);
             }
             if let Some(task_index_uid) = &task_index_uid {
                 assert!(self

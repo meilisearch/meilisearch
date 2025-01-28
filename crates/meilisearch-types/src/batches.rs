@@ -24,6 +24,18 @@ pub struct Batch {
     pub started_at: OffsetDateTime,
     #[serde(with = "time::serde::rfc3339::option")]
     pub finished_at: Option<OffsetDateTime>,
+
+    // Enqueued at is never displayed and is only required when removing a batch.
+    // It's always some except when upgrading from a database pre v1.12
+    pub enqueued_at: Option<BatchEnqueuedAt>,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+pub struct BatchEnqueuedAt {
+    #[serde(with = "time::serde::rfc3339")]
+    pub earliest: OffsetDateTime,
+    #[serde(with = "time::serde::rfc3339")]
+    pub oldest: OffsetDateTime,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize, ToSchema)]
