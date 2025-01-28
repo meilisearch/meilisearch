@@ -64,7 +64,6 @@ pub(crate) enum IndexOperation {
     DocumentOperation {
         index_uid: String,
         primary_key: Option<String>,
-        method: IndexDocumentsMethod,
         operations: Vec<DocumentOperation>,
         tasks: Vec<Task>,
     },
