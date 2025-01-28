@@ -96,11 +96,12 @@ async fn list_batches_pagination_and_reverse() {
 async fn list_batches_with_star_filters() {
     let server = Server::new().await;
     let index = server.index("test");
-    let (batch, _code) = index.create(None).await;
-    index.wait_task(batch.uid()).await.succeeded();
-    index
-        .add_documents(serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(), None)
-        .await;
+    let (task, _code) = index.create(None).await;
+    index.wait_task(task.uid()).await.succeeded();
+    let index = server.index("test");
+    let (task, _code) = index.create(None).await;
+    index.wait_task(task.uid()).await.failed();
+
     let (response, code) = index.service.get("/batches?indexUids=test").await;
     assert_eq!(code, 200);
     assert_eq!(response["results"].as_array().unwrap().len(), 2);
@@ -187,9 +188,6 @@ async fn list_batches_invalid_canceled_by_filter() {
     let index = server.index("test");
     let (task, _status_code) = index.create(None).await;
     index.wait_task(task.uid()).await.succeeded();
-    index
-        .add_documents(serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(), None)
-        .await;
 
     let (response, code) = index.filtered_batches(&[], &[], &["0"]).await;
     assert_eq!(code, 200, "{}", response);
@@ -202,9 +200,8 @@ async fn list_batches_status_and_type_filtered() {
     let index = server.index("test");
     let (task, _status_code) = index.create(None).await;
     index.wait_task(task.uid()).await.succeeded();
-    index
-        .add_documents(serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(), None)
-        .await;
+    let (task, _status_code) = index.update(Some("id")).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = index.filtered_batches(&["indexCreation"], &["failed"], &[]).await;
     assert_eq!(code, 200, "{}", response);
@@ -212,7 +209,7 @@ async fn list_batches_status_and_type_filtered() {
 
     let (response, code) = index
         .filtered_batches(
-            &["indexCreation", "documentAdditionOrUpdate"],
+            &["indexCreation", "IndexUpdate"],
             &["succeeded", "processing", "enqueued"],
             &[],
         )
