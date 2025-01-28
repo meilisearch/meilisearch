@@ -156,8 +156,7 @@ impl<'i> FacetsUpdate<'i> {
 
         // See self::comparison_bench::benchmark_facet_indexing
         if self.data_size >= (self.database.len(wtxn)? / 500) {
-            let field_ids =
-                self.index.faceted_fields_ids(wtxn)?.iter().copied().collect::<Vec<_>>();
+            let field_ids = self.index.facet_leveled_field_ids(wtxn)?;
             let bulk_update = FacetsUpdateBulk::new(
                 self.index,
                 field_ids,

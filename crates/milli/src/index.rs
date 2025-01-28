@@ -10,11 +10,12 @@ use roaring::RoaringBitmap;
 use rstar::RTree;
 use serde::{Deserialize, Serialize};
 
+use crate::attribute_patterns::PatternMatch;
 use crate::constants::{RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME};
 use crate::documents::PrimaryKey;
 use crate::error::{InternalError, UserError};
 use crate::fields_ids_map::FieldsIdsMap;
-use crate::filterable_fields::matching_field_ids;
+use crate::filterable_fields::{match_pattern_by_features, matching_field_ids};
 use crate::heed_codec::facet::{
     FacetGroupKeyCodec, FacetGroupValueCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec,
     FieldIdCodec, OrderedF64Codec,
@@ -893,6 +894,27 @@ impl Index {
     pub fn is_geo_filtering_activated(&self, rtxn: &RoTxn<'_>) -> Result<bool> {
         let geo_filter = self.filterable_fields(rtxn)?.iter().any(|field| field.has_geo());
         Ok(geo_filter)
+    }
+
+    /// Returns the field ids of the fields that are filterable using the ordering operators or are sortable.
+    pub fn facet_leveled_field_ids(&self, rtxn: &RoTxn<'_>) -> Result<Vec<FieldId>> {
+        let filterable_fields = self.filterable_fields(rtxn)?;
+        let sortable_fields = self.sortable_fields(rtxn)?;
+        let fields_ids_map = self.fields_ids_map(rtxn)?;
+
+        let mut fields_ids = Vec::new();
+        for (field_id, field_name) in fields_ids_map.iter() {
+            if match_pattern_by_features(field_name, &filterable_fields, &|features| {
+                features.is_filterable_order()
+            }) == PatternMatch::Match
+            {
+                fields_ids.push(field_id);
+            } else if sortable_fields.contains(field_name) {
+                fields_ids.push(field_id);
+            }
+        }
+
+        Ok(fields_ids)
     }
 
     // /// Returns the faceted fields names.
