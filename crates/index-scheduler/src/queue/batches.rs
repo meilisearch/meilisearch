@@ -245,7 +245,7 @@ impl BatchQueue {
                     wtxn,
                     self.enqueued_at,
                     old_batch.started_at,
-                    if old_batch.stats.total_nb_tasks >= 2 { 2 } else { 1 },
+                    old_batch.stats.total_nb_tasks.clamp(1, 2) as usize,
                     old_batch.uid,
                 )?;
             }

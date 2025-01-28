@@ -538,7 +538,7 @@ impl IndexScheduler {
                                 wtxn,
                                 self.queue.batches.enqueued_at,
                                 batch.started_at,
-                                if batch.stats.total_nb_tasks >= 2 { 2 } else { 1 },
+                                batch.stats.total_nb_tasks.clamp(1, 2) as usize,
                                 batch_id,
                             )?;
                         }
