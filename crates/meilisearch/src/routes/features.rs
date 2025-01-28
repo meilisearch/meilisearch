@@ -193,7 +193,7 @@ async fn patch_features(
     };
 
     // explicitly destructure for analytics rather than using the `Serialize` implementation, because
-    // the it renames to camelCase, which we don't want for analytics.
+    // it renames to camelCase, which we don't want for analytics.
     // **Do not** ignore fields with `..` or `_` here, because we want to add them in the future.
     let meilisearch_types::features::RuntimeTogglableFeatures {
         metrics,
