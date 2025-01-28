@@ -203,20 +203,30 @@ impl Embedder {
         texts: &[&str],
         threads: &ThreadPoolNoAbort,
     ) -> Result<Vec<Embedding>, EmbedError> {
-        threads
-            .install(move || {
-                let embeddings: Result<Vec<Vec<Embedding>>, _> = texts
-                    .par_chunks(self.prompt_count_in_chunk_hint())
-                    .map(move |chunk| self.embed_ref(chunk, None))
-                    .collect();
+        if threads.active_operations() >= REQUEST_PARALLELISM {
+            let embeddings: Result<Vec<Vec<Embedding>>, _> = texts
+                .chunks(self.prompt_count_in_chunk_hint())
+                .map(move |chunk| self.embed_ref(chunk, None))
+                .collect();
 
-                let embeddings = embeddings?;
-                Ok(embeddings.into_iter().flatten().collect())
-            })
-            .map_err(|error| EmbedError {
-                kind: EmbedErrorKind::PanicInThreadPool(error),
-                fault: FaultSource::Bug,
-            })?
+            let embeddings = embeddings?;
+            Ok(embeddings.into_iter().flatten().collect())
+        } else {
+            threads
+                .install(move || {
+                    let embeddings: Result<Vec<Vec<Embedding>>, _> = texts
+                        .par_chunks(self.prompt_count_in_chunk_hint())
+                        .map(move |chunk| self.embed_ref(chunk, None))
+                        .collect();
+
+                    let embeddings = embeddings?;
+                    Ok(embeddings.into_iter().flatten().collect())
+                })
+                .map_err(|error| EmbedError {
+                    kind: EmbedErrorKind::PanicInThreadPool(error),
+                    fault: FaultSource::Bug,
+                })?
+        }
     }
 
     pub fn chunk_count_hint(&self) -> usize {
