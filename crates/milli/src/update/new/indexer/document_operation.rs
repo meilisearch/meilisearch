@@ -23,6 +23,7 @@ use crate::update::new::{Deletion, Insertion, Update};
 use crate::update::{AvailableIds, IndexDocumentsMethod};
 use crate::{DocumentId, Error, FieldsIdsMap, Index, InternalError, Result, UserError};
 
+#[derive(Default)]
 pub struct DocumentOperation<'pl> {
     operations: Vec<Payload<'pl>>,
     method: MergeMethod,
