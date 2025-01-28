@@ -51,7 +51,7 @@ pub use features::RoFeatures;
 use flate2::bufread::GzEncoder;
 use flate2::Compression;
 use meilisearch_types::batches::Batch;
-use meilisearch_types::features::{InstanceTogglableFeatures, RuntimeTogglableFeatures};
+use meilisearch_types::features::{InstanceTogglableFeatures, Network, RuntimeTogglableFeatures};
 use meilisearch_types::heed::byteorder::BE;
 use meilisearch_types::heed::types::I128;
 use meilisearch_types::heed::{self, Env, RoTxn};
@@ -770,7 +770,16 @@ impl IndexScheduler {
         Ok(())
     }
 
-    // TODO: consider using a type alias or a struct embedder/template
+    pub fn put_network(&self, network: Network) -> Result<()> {
+        let wtxn = self.env.write_txn().map_err(Error::HeedTransaction)?;
+        self.features.put_network(wtxn, network)?;
+        Ok(())
+    }
+
+    pub fn network(&self) -> Network {
+        self.features.network()
+    }
+
     pub fn embedders(
         &self,
         index_uid: String,
