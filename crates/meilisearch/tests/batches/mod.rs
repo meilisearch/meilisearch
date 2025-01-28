@@ -41,9 +41,8 @@ async fn list_batches() {
     let index = server.index("test");
     let (task, _status_code) = index.create(None).await;
     index.wait_task(task.uid()).await.succeeded();
-    index
-        .add_documents(serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(), None)
-        .await;
+    let (task, _status_code) = index.create(None).await;
+    index.wait_task(task.uid()).await.failed();
     let (response, code) = index.list_batches().await;
     assert_eq!(code, 200);
     assert_eq!(
