@@ -638,6 +638,7 @@ impl Embedder {
         }
     }
 
+    #[tracing::instrument(level = "debug", skip_all, target = "indexing::vector")]
     pub fn embed_chunks_ref(
         &self,
         texts: &[&str],
