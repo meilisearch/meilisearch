@@ -359,14 +359,27 @@ impl crate::IndexScheduler {
                 kind,
             } = task;
             assert_eq!(uid, task.uid);
-            if let Some(ref batch) = batch_uid {
+            if task.status != Status::Enqueued {
+                let batch_uid = batch_uid.expect("All non enqueued tasks must be part of a batch");
                 assert!(self
                     .queue
                     .batch_to_tasks_mapping
-                    .get(&rtxn, batch)
+                    .get(&rtxn, &batch_uid)
                     .unwrap()
                     .unwrap()
                     .contains(uid));
+                let batch = self.queue.batches.get_batch(&rtxn, batch_uid).unwrap().unwrap();
+                assert_eq!(batch.uid, batch_uid);
+                if task.status == Status::Processing {
+                    assert!(batch.progress.is_some());
+                } else {
+                    assert!(batch.progress.is_none());
+                }
+                assert_eq!(batch.started_at, task.started_at.unwrap());
+                assert_eq!(batch.finished_at, task.finished_at);
+                let enqueued_at = batch.enqueued_at.unwrap();
+                assert!(task.enqueued_at >= enqueued_at.oldest);
+                assert!(task.enqueued_at <= enqueued_at.earliest);
             }
             if let Some(task_index_uid) = &task_index_uid {
                 assert!(self

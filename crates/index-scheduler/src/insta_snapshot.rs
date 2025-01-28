@@ -345,10 +345,10 @@ pub fn snapshot_batch(batch: &Batch) -> String {
     if let Some(finished_at) = finished_at {
         assert!(finished_at > started_at);
     }
-    if let Some(BatchEnqueuedAt { earliest, oldest }) = enqueued_at {
-        assert!(started_at > earliest);
-        assert!(earliest >= oldest);
-    }
+    let BatchEnqueuedAt { earliest, oldest } = enqueued_at.unwrap();
+    assert!(*started_at > earliest);
+    assert!(earliest >= oldest);
+
     snap.push('{');
     snap.push_str(&format!("uid: {uid}, "));
     snap.push_str(&format!("details: {}, ", serde_json::to_string(details).unwrap()));
