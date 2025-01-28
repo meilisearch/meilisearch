@@ -2,7 +2,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::Ordering;
 
-use meilisearch_types::batches::BatchId;
+use meilisearch_types::batches::{BatchEnqueuedAt, BatchId};
 use meilisearch_types::heed::{RoTxn, RwTxn};
 use meilisearch_types::milli::progress::{Progress, VariableNameStep};
 use meilisearch_types::milli::{self};
@@ -518,13 +518,30 @@ impl IndexScheduler {
                 // We must remove the batch entirely
                 if tasks.is_empty() {
                     if let Some(batch) = self.queue.batches.get_batch(wtxn, batch_id)? {
-                        remove_n_tasks_datetime_earlier_than(
-                            wtxn,
-                            self.queue.batches.started_at,
-                            batch.started_at,
-                            if batch.stats.total_nb_tasks >= 2 { 2 } else { 1 },
-                            batch_id,
-                        )?;
+                        if let Some(BatchEnqueuedAt { earliest, oldest }) = batch.enqueued_at {
+                            remove_task_datetime(
+                                wtxn,
+                                self.queue.batches.enqueued_at,
+                                earliest,
+                                batch_id,
+                            )?;
+                            remove_task_datetime(
+                                wtxn,
+                                self.queue.batches.enqueued_at,
+                                oldest,
+                                batch_id,
+                            )?;
+                        } else {
+                            // If we don't have the enqueued at in the batch it means the database comes from the v1.12
+                            // and we still need to find the date by scrolling the database
+                            remove_n_tasks_datetime_earlier_than(
+                                wtxn,
+                                self.queue.batches.enqueued_at,
+                                batch.started_at,
+                                if batch.stats.total_nb_tasks >= 2 { 2 } else { 1 },
+                                batch_id,
+                            )?;
+                        }
                         remove_task_datetime(
                             wtxn,
                             self.queue.batches.started_at,

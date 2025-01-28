@@ -3,7 +3,7 @@
 use std::collections::{BTreeSet, HashSet};
 use std::ops::Bound;
 
-use meilisearch_types::batches::{Batch, BatchId, BatchStats};
+use meilisearch_types::batches::{Batch, BatchEnqueuedAt, BatchId, BatchStats};
 use meilisearch_types::heed::{Database, RoTxn, RwTxn};
 use meilisearch_types::milli::CboRoaringBitmapCodec;
 use meilisearch_types::task_view::DetailsView;
@@ -30,8 +30,7 @@ pub struct ProcessingBatch {
     pub kinds: HashSet<Kind>,
     pub indexes: HashSet<String>,
     pub canceled_by: HashSet<TaskId>,
-    pub oldest_enqueued_at: Option<OffsetDateTime>,
-    pub earliest_enqueued_at: Option<OffsetDateTime>,
+    pub enqueued_at: Option<BatchEnqueuedAt>,
     pub started_at: OffsetDateTime,
     pub finished_at: Option<OffsetDateTime>,
 }
@@ -51,8 +50,7 @@ impl ProcessingBatch {
             kinds: HashSet::default(),
             indexes: HashSet::default(),
             canceled_by: HashSet::default(),
-            oldest_enqueued_at: None,
-            earliest_enqueued_at: None,
+            enqueued_at: None,
             started_at: OffsetDateTime::now_utc(),
             finished_at: None,
         }
@@ -80,14 +78,18 @@ impl ProcessingBatch {
             if let Some(canceled_by) = task.canceled_by {
                 self.canceled_by.insert(canceled_by);
             }
-            self.oldest_enqueued_at =
-                Some(self.oldest_enqueued_at.map_or(task.enqueued_at, |oldest_enqueued_at| {
-                    task.enqueued_at.min(oldest_enqueued_at)
-                }));
-            self.earliest_enqueued_at =
-                Some(self.earliest_enqueued_at.map_or(task.enqueued_at, |earliest_enqueued_at| {
-                    task.enqueued_at.max(earliest_enqueued_at)
-                }));
+            match self.enqueued_at.as_mut() {
+                Some(BatchEnqueuedAt { earliest, oldest }) => {
+                    *oldest = task.enqueued_at.min(*oldest);
+                    *earliest = task.enqueued_at.max(*earliest);
+                }
+                None => {
+                    self.enqueued_at = Some(BatchEnqueuedAt {
+                        earliest: task.enqueued_at,
+                        oldest: task.enqueued_at,
+                    });
+                }
+            }
         }
     }
 
@@ -138,6 +140,7 @@ impl ProcessingBatch {
             stats: self.stats.clone(),
             started_at: self.started_at,
             finished_at: self.finished_at,
+            enqueued_at: self.enqueued_at,
         }
     }
 }

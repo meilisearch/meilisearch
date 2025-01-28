@@ -181,6 +181,7 @@ impl BatchQueue {
                 stats: batch.stats,
                 started_at: batch.started_at,
                 finished_at: batch.finished_at,
+                enqueued_at: batch.enqueued_at,
             },
         )?;
 
@@ -234,33 +235,36 @@ impl BatchQueue {
         // What we know, though, is that the task date is from before the enqueued_at, and max two timestamps have been written
         // to the DB per batches.
         if let Some(ref old_batch) = old_batch {
-            let started_at = old_batch.started_at.unix_timestamp_nanos();
+            if let Some(enqueued_at) = old_batch.enqueued_at {
+                remove_task_datetime(wtxn, self.enqueued_at, enqueued_at.earliest, old_batch.uid)?;
+                remove_task_datetime(wtxn, self.enqueued_at, enqueued_at.oldest, old_batch.uid)?;
+            } else {
+                let started_at = old_batch.started_at.unix_timestamp_nanos();
 
-            // We have either one or two enqueued at to remove
-            let mut exit = old_batch.stats.total_nb_tasks.clamp(0, 2);
-            let mut iterator = self.enqueued_at.rev_iter_mut(wtxn)?;
-            while let Some(entry) = iterator.next() {
-                let (key, mut value) = entry?;
-                if key > started_at {
-                    continue;
-                }
-                if value.remove(old_batch.uid) {
-                    exit = exit.saturating_sub(1);
-                    // Safe because the key and value are owned
-                    unsafe {
-                        iterator.put_current(&key, &value)?;
+                // We have either one or two enqueued at to remove
+                let mut exit = old_batch.stats.total_nb_tasks.clamp(0, 2);
+                let mut iterator = self.enqueued_at.rev_iter_mut(wtxn)?;
+                while let Some(entry) = iterator.next() {
+                    let (key, mut value) = entry?;
+                    if key > started_at {
+                        continue;
                     }
-                    if exit == 0 {
-                        break;
+                    if value.remove(old_batch.uid) {
+                        exit = exit.saturating_sub(1);
+                        // Safe because the key and value are owned
+                        unsafe {
+                            iterator.put_current(&key, &value)?;
+                        }
+                        if exit == 0 {
+                            break;
+                        }
                     }
                 }
             }
         }
-        if let Some(enqueued_at) = batch.oldest_enqueued_at {
-            insert_task_datetime(wtxn, self.enqueued_at, enqueued_at, batch.uid)?;
-        }
-        if let Some(enqueued_at) = batch.earliest_enqueued_at {
-            insert_task_datetime(wtxn, self.enqueued_at, enqueued_at, batch.uid)?;
+        if let Some(enqueued_at) = batch.enqueued_at.as_ref() {
+            insert_task_datetime(wtxn, self.enqueued_at, enqueued_at.earliest, batch.uid)?;
+            insert_task_datetime(wtxn, self.enqueued_at, enqueued_at.oldest, batch.uid)?;
         }
 
         // Update the started at and finished at
