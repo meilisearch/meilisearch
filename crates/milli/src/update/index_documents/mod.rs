@@ -1951,11 +1951,11 @@ mod tests {
         let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
         let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
-        indexer.add_documents(&doc1).unwrap();
-        indexer.add_documents(&doc2).unwrap();
-        indexer.add_documents(&doc3).unwrap();
-        indexer.add_documents(&doc4).unwrap();
+        let mut indexer = indexer::DocumentOperation::new();
+        indexer.replace_documents(&doc1).unwrap();
+        indexer.replace_documents(&doc2).unwrap();
+        indexer.replace_documents(&doc3).unwrap();
+        indexer.replace_documents(&doc4).unwrap();
 
         let indexer_alloc = Bump::new();
         let (_document_changes, operation_stats, _primary_key) = indexer
@@ -2112,8 +2112,8 @@ mod tests {
 
         let indexer_alloc = Bump::new();
         let embedders = EmbeddingConfigs::default();
-        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
-        indexer.add_documents(&documents).unwrap();
+        let mut indexer = indexer::DocumentOperation::new();
+        indexer.replace_documents(&documents).unwrap();
         indexer.delete_documents(&["2"]);
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(
@@ -2165,14 +2165,14 @@ mod tests {
             { "id": 2, "doggo": { "name": "bob", "age": 20 } },
             { "id": 3, "name": "jean", "age": 25 },
         ]);
-        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::UpdateDocuments);
-        indexer.add_documents(&documents).unwrap();
+        let mut indexer = indexer::DocumentOperation::new();
+        indexer.update_documents(&documents).unwrap();
 
         let documents = documents!([
             { "id": 2, "catto": "jorts" },
             { "id": 3, "legs": 4 },
         ]);
-        indexer.add_documents(&documents).unwrap();
+        indexer.update_documents(&documents).unwrap();
         indexer.delete_documents(&["1", "2"]);
 
         let indexer_alloc = Bump::new();
@@ -2227,8 +2227,8 @@ mod tests {
         ]);
         let indexer_alloc = Bump::new();
         let embedders = EmbeddingConfigs::default();
-        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::UpdateDocuments);
-        indexer.add_documents(&documents).unwrap();
+        let mut indexer = indexer::DocumentOperation::new();
+        indexer.update_documents(&documents).unwrap();
 
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(
@@ -2278,8 +2278,8 @@ mod tests {
         ]);
         let indexer_alloc = Bump::new();
         let embedders = EmbeddingConfigs::default();
-        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::UpdateDocuments);
-        indexer.add_documents(&documents).unwrap();
+        let mut indexer = indexer::DocumentOperation::new();
+        indexer.update_documents(&documents).unwrap();
         indexer.delete_documents(&["1", "2"]);
 
         let (document_changes, _operation_stats, primary_key) = indexer
@@ -2327,14 +2327,14 @@ mod tests {
 
         let indexer_alloc = Bump::new();
         let embedders = EmbeddingConfigs::default();
-        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::UpdateDocuments);
+        let mut indexer = indexer::DocumentOperation::new();
         indexer.delete_documents(&["1", "2"]);
 
         let documents = documents!([
             { "id": 2, "doggo": { "name": "jean", "age": 20 } },
             { "id": 3, "name": "bob", "age": 25 },
         ]);
-        indexer.add_documents(&documents).unwrap();
+        indexer.update_documents(&documents).unwrap();
 
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(
@@ -2382,7 +2382,7 @@ mod tests {
 
         let indexer_alloc = Bump::new();
         let embedders = EmbeddingConfigs::default();
-        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::UpdateDocuments);
+        let mut indexer = indexer::DocumentOperation::new();
 
         indexer.delete_documents(&["1", "2", "1", "2"]);
 
@@ -2391,7 +2391,7 @@ mod tests {
             { "id": 2, "doggo": { "name": "jean", "age": 20 } },
             { "id": 3, "name": "bob", "age": 25 },
         ]);
-        indexer.add_documents(&documents).unwrap();
+        indexer.update_documents(&documents).unwrap();
 
         indexer.delete_documents(&["1", "2", "1", "2"]);
 
@@ -2440,12 +2440,12 @@ mod tests {
 
         let indexer_alloc = Bump::new();
         let embedders = EmbeddingConfigs::default();
-        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::UpdateDocuments);
+        let mut indexer = indexer::DocumentOperation::new();
 
         let documents = documents!([
             { "id": 1, "doggo": "kevin" },
         ]);
-        indexer.add_documents(&documents).unwrap();
+        indexer.update_documents(&documents).unwrap();
 
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(
@@ -2489,7 +2489,7 @@ mod tests {
 
         let indexer_alloc = Bump::new();
         let embedders = EmbeddingConfigs::default();
-        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+        let mut indexer = indexer::DocumentOperation::new();
 
         indexer.delete_documents(&["1"]);
 
@@ -2497,7 +2497,7 @@ mod tests {
             { "id": 1, "catto": "jorts" },
         ]);
 
-        indexer.add_documents(&documents).unwrap();
+        indexer.replace_documents(&documents).unwrap();
 
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(
@@ -2683,14 +2683,14 @@ mod tests {
 
         let indexer_alloc = Bump::new();
         let embedders = EmbeddingConfigs::default();
-        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+        let mut indexer = indexer::DocumentOperation::new();
 
         // OP
 
         let documents = documents!([
             { "id": 1, "doggo": "bernese" },
         ]);
-        indexer.add_documents(&documents).unwrap();
+        indexer.replace_documents(&documents).unwrap();
 
         // FINISHING
         let (document_changes, _operation_stats, primary_key) = indexer
@@ -2743,14 +2743,14 @@ mod tests {
 
         let indexer_alloc = Bump::new();
         let embedders = EmbeddingConfigs::default();
-        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+        let mut indexer = indexer::DocumentOperation::new();
 
         indexer.delete_documents(&["1"]);
 
         let documents = documents!([
             { "id": 0, "catto": "jorts" },
         ]);
-        indexer.add_documents(&documents).unwrap();
+        indexer.replace_documents(&documents).unwrap();
 
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(
@@ -2801,12 +2801,12 @@ mod tests {
 
         let indexer_alloc = Bump::new();
         let embedders = EmbeddingConfigs::default();
-        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+        let mut indexer = indexer::DocumentOperation::new();
 
         let documents = documents!([
             { "id": 1, "catto": "jorts" },
         ]);
-        indexer.add_documents(&documents).unwrap();
+        indexer.replace_documents(&documents).unwrap();
 
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(

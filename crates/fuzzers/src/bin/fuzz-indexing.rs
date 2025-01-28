@@ -12,7 +12,7 @@ use milli::documents::mmap_from_objects;
 use milli::heed::EnvOpenOptions;
 use milli::progress::Progress;
 use milli::update::new::indexer;
-use milli::update::{IndexDocumentsMethod, IndexerConfig};
+use milli::update::IndexerConfig;
 use milli::vector::EmbeddingConfigs;
 use milli::Index;
 use serde_json::Value;
