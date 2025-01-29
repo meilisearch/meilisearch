@@ -172,7 +172,20 @@ impl IndexScheduler {
                         cloned_index_scheduler.process_batch(batch, processing_batch, progress)
                     })
                     .unwrap();
-                handle.join().unwrap_or(Err(Error::ProcessBatchPanicked))
+
+                match handle.join() {
+                    Ok(ret) => ret,
+                    Err(panic) => {
+                        let msg = match panic.downcast_ref::<&'static str>() {
+                            Some(s) => *s,
+                            None => match panic.downcast_ref::<String>() {
+                                Some(s) => &s[..],
+                                None => "Box<dyn Any>",
+                            },
+                        };
+                        Err(Error::ProcessBatchPanicked(msg.to_string()))
+                    }
+                }
             })
         };
 

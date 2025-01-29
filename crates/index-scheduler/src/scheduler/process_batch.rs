@@ -326,8 +326,17 @@ impl IndexScheduler {
                 match ret {
                     Ok(Ok(())) => (),
                     Ok(Err(e)) => return Err(Error::DatabaseUpgrade(Box::new(e))),
-                    Err(_e) => {
-                        return Err(Error::DatabaseUpgrade(Box::new(Error::ProcessBatchPanicked)));
+                    Err(e) => {
+                        let msg = match e.downcast_ref::<&'static str>() {
+                            Some(s) => *s,
+                            None => match e.downcast_ref::<String>() {
+                                Some(s) => &s[..],
+                                None => "Box<dyn Any>",
+                            },
+                        };
+                        return Err(Error::DatabaseUpgrade(Box::new(Error::ProcessBatchPanicked(
+                            msg.to_string(),
+                        ))));
                     }
                 }
 
