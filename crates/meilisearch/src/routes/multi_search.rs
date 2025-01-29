@@ -20,6 +20,7 @@ use crate::routes::indexes::search::search_kind;
 use crate::search::{
     add_search_rules, perform_federated_search, perform_search, FederatedSearch,
     FederatedSearchResult, RetrieveVectors, SearchQueryWithIndex, SearchResultWithIndex,
+    PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE,
 };
 use crate::search_queue::SearchQueue;
 
@@ -187,18 +188,22 @@ pub async fn multi_search_with_post(
 
     let response = match federation {
         Some(federation) => {
-            let search_result = tokio::task::spawn_blocking(move || {
-                perform_federated_search(&index_scheduler, queries, federation, features)
-            })
-            .await;
+            // check remote header
+            let is_proxy = req
+                .headers()
+                .get(PROXY_SEARCH_HEADER)
+                .is_some_and(|value| value.as_bytes() == PROXY_SEARCH_HEADER_VALUE.as_bytes());
+            let search_result =
+                perform_federated_search(&index_scheduler, queries, federation, features, is_proxy)
+                    .await;
             permit.drop().await;
 
-            if let Ok(Ok(_)) = search_result {
+            if search_result.is_ok() {
                 multi_aggregate.succeed();
             }
 
             analytics.publish(multi_aggregate, &req);
-            HttpResponse::Ok().json(search_result??)
+            HttpResponse::Ok().json(search_result?)
         }
         None => {
             // Explicitly expect a `(ResponseError, usize)` for the error type rather than `ResponseError` only,

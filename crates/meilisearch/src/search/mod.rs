@@ -41,7 +41,7 @@ use crate::error::MeilisearchHttpError;
 mod federated;
 pub use federated::{
     perform_federated_search, FederatedSearch, FederatedSearchResult, Federation,
-    FederationOptions, MergeFacets,
+    FederationOptions, MergeFacets, PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE,
 };
 
 mod ranking_rules;
