@@ -20,6 +20,7 @@ pub type Unchecked = meilisearch_types::settings::Unchecked;
 pub type Task = crate::TaskDump;
 pub type Key = meilisearch_types::keys::Key;
 pub type RuntimeTogglableFeatures = meilisearch_types::features::RuntimeTogglableFeatures;
+pub type Network = meilisearch_types::features::Network;
 
 // ===== Other types to clarify the code of the compat module
 // everything related to the tasks
@@ -50,6 +51,7 @@ pub struct V6Reader {
     tasks: BufReader<File>,
     keys: BufReader<File>,
     features: Option<RuntimeTogglableFeatures>,
+    network: Option<Network>,
 }
 
 impl V6Reader {
@@ -78,12 +80,30 @@ impl V6Reader {
             None
         };
 
+        let network_file = match fs::read(dump.path().join("network.json")) {
+            Ok(network_file) => Some(network_file),
+            Err(error) => match error.kind() {
+                // Allows the file to be missing, this will only result in all experimental features disabled.
+                ErrorKind::NotFound => {
+                    debug!("`network.json` not found in dump");
+                    None
+                }
+                _ => return Err(error.into()),
+            },
+        };
+        let network = if let Some(network_file) = network_file {
+            Some(serde_json::from_reader(&*network_file)?)
+        } else {
+            None
+        };
+
         Ok(V6Reader {
             metadata: serde_json::from_reader(&*meta_file)?,
             instance_uid,
             tasks: BufReader::new(File::open(dump.path().join("tasks").join("queue.jsonl"))?),
             keys: BufReader::new(File::open(dump.path().join("keys.jsonl"))?),
             features,
+            network,
             dump,
         })
     }
@@ -153,6 +173,10 @@ impl V6Reader {
 
     pub fn features(&self) -> Option<RuntimeTogglableFeatures> {
         self.features
+    }
+
+    pub fn network(&self) -> Option<&Network> {
+        self.network.as_ref()
     }
 }
 

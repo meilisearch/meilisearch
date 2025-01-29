@@ -114,6 +114,13 @@ impl DumpReader {
             DumpReader::Compat(compat) => compat.features(),
         }
     }
+
+    pub fn network(&self) -> Result<Option<&v6::Network>> {
+        match self {
+            DumpReader::Current(current) => Ok(current.network()),
+            DumpReader::Compat(compat) => compat.network(),
+        }
+    }
 }
 
 impl From<V6Reader> for DumpReader {
