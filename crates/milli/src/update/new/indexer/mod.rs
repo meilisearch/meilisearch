@@ -93,6 +93,13 @@ where
         },
     );
 
+    tracing::debug!(
+        "Indexation allocated memory metrics - \
+        Total BBQueue size: {total_bbbuffer_capacity}, \
+        Total extractor memory: {:?}",
+        grenad_parameters.max_memory,
+    );
+
     let (extractor_sender, writer_receiver) = pool
         .install(|| extractor_writer_bbqueue(&mut bbbuffers, total_bbbuffer_capacity, 1000))
         .unwrap();
