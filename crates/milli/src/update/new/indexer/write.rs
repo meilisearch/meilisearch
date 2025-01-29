@@ -80,8 +80,8 @@ pub(super) fn write_to_db(
     let congestion_pct = (blocking_attempts as f64 / direct_attempts as f64) * 100.0;
     tracing::debug!(
         "Channel congestion metrics - \
-        Direct send attempts: {direct_attempts}, \
-        Blocking send attempts: {blocking_attempts} \
+        Attempts: {direct_attempts}, \
+        Blocked attempts: {blocking_attempts} \
         ({congestion_pct:.1}% congestion)"
     );
 
