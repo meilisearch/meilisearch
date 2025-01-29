@@ -24,7 +24,7 @@ use crate::update::new::thread_local::{FullySend, ThreadLocal};
 use crate::update::new::DocumentChange;
 use crate::update::GrenadParameters;
 use crate::{
-    DocumentId, FieldId, FilterableAttributesFeatures, FilterableAttributesSettings, Result,
+    DocumentId, FieldId, FilterableAttributesFeatures, FilterableAttributesRule, Result,
     MAX_FACET_VALUE_LENGTH,
 };
 
@@ -32,7 +32,7 @@ pub struct FacetedExtractorData<'a, 'b> {
     sender: &'a FieldIdDocidFacetSender<'a, 'b>,
     grenad_parameters: &'a GrenadParameters,
     buckets: usize,
-    filterable_attributes: Vec<FilterableAttributesSettings>,
+    filterable_attributes: Vec<FilterableAttributesRule>,
     sortable_fields: HashSet<String>,
 }
 
@@ -71,7 +71,7 @@ pub struct FacetedDocidsExtractor;
 impl FacetedDocidsExtractor {
     fn extract_document_change(
         context: &DocumentChangeContext<RefCell<BalancedCaches>>,
-        filterable_attributes: &[FilterableAttributesSettings],
+        filterable_attributes: &[FilterableAttributesRule],
         sortable_fields: &HashSet<String>,
         document_change: DocumentChange,
         sender: &FieldIdDocidFacetSender,
@@ -424,7 +424,7 @@ impl FacetedDocidsExtractor {
     {
         let index = indexing_context.index;
         let rtxn = index.read_txn()?;
-        let filterable_attributes = index.filterable_fields(&rtxn)?;
+        let filterable_attributes = index.filterable_attributes_rules(&rtxn)?;
         let sortable_fields = index.sortable_fields(&rtxn)?;
         let datastore = ThreadLocal::new();
 

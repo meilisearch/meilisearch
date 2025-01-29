@@ -29,7 +29,7 @@ impl GeoExtractor {
         grenad_parameters: GrenadParameters,
     ) -> Result<Option<Self>> {
         if index.is_geo_activated(rtxn)? {
-            Ok(Some(GeoExtractor { grenad_parameters }))
+            Ok(Some(GeoExtractor {filterable_attributes_ruless }))
         } else {
             Ok(None)
         }

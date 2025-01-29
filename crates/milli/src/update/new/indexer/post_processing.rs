@@ -117,9 +117,11 @@ fn compute_facet_search_database(
 ) -> Result<()> {
     let rtxn = index.read_txn()?;
     let localized_attributes_rules = index.localized_attributes_rules(&rtxn)?;
+    let filterable_attributes_rules = index.filterable_attributes_rules(&rtxn)?;
     let mut facet_search_builder = FacetSearchBuilder::new(
         global_fields_ids_map,
         localized_attributes_rules.unwrap_or_default(),
+        filterable_attributes_rules,
     );
 
     let previous_facet_id_string_docids = index
@@ -165,7 +167,13 @@ fn compute_facet_level_database(
     wtxn: &mut RwTxn,
     mut facet_field_ids_delta: FacetFieldIdsDelta,
 ) -> Result<()> {
+    let facet_leveled_field_ids = index.facet_leveled_field_ids(&*wtxn)?;
     for (fid, delta) in facet_field_ids_delta.consume_facet_string_delta() {
+        // skip field ids that should not be facet leveled
+        if !facet_leveled_field_ids.contains(&fid) {
+            continue;
+        }
+
         let span = tracing::trace_span!(target: "indexing::facet_field_ids", "string");
         let _entered = span.enter();
         match delta {

@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::Display;
 use std::ops::ControlFlow;
 use std::{fmt, mem};
@@ -9,9 +9,8 @@ use indexmap::IndexMap;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
 
-use crate::error::UserError;
 use crate::facet::FacetType;
-use crate::filterable_fields::{is_field_filterable, matching_field_names};
+use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, Metadata, MetadataBuilder};
 use crate::heed_codec::facet::{
     FacetGroupKeyCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec, OrderedF64Codec,
 };
@@ -19,7 +18,7 @@ use crate::heed_codec::{BytesRefCodec, StrRefCodec};
 use crate::search::facet::facet_distribution_iter::{
     count_iterate_over_facet_distribution, lexicographically_iterate_over_facet_distribution,
 };
-use crate::{FieldId, FieldsIdsMap, Index, Result};
+use crate::{FieldId, FilterableAttributesRule, Index, Result};
 
 /// The default number of values by facets that will
 /// be fetched from the key-value store.
@@ -281,18 +280,22 @@ impl<'a> FacetDistribution<'a> {
     }
 
     pub fn compute_stats(&self) -> Result<BTreeMap<String, (f64, f64)>> {
-        let fields_ids_map = self.index.fields_ids_map(self.rtxn)?;
         let candidates = if let Some(candidates) = self.candidates.clone() {
             candidates
         } else {
             return Ok(Default::default());
         };
 
-        let fields = self.faceted_fields_names(&fields_ids_map)?;
+        let fields_ids_map = self.index.fields_ids_map(self.rtxn)?;
+        let fields_ids_map = FieldIdMapWithMetadata::new(
+            fields_ids_map,
+            MetadataBuilder::from_index(self.index, self.rtxn)?,
+        );
+        let filterable_attributes_rules = self.index.filterable_attributes_rules(self.rtxn)?;
 
         let mut distribution = BTreeMap::new();
-        for (fid, name) in fields_ids_map.iter() {
-            if crate::is_faceted(name, &fields) {
+        for (fid, name, metadata) in fields_ids_map.iter() {
+            if self.select_field(name, &metadata, &filterable_attributes_rules) {
                 let min_value = if let Some(min_value) = crate::search::facet::facet_min_value(
                     self.index,
                     self.rtxn,
@@ -323,12 +326,15 @@ impl<'a> FacetDistribution<'a> {
 
     pub fn execute(&self) -> Result<BTreeMap<String, IndexMap<String, u64>>> {
         let fields_ids_map = self.index.fields_ids_map(self.rtxn)?;
-
-        let fields = self.faceted_fields_names(&fields_ids_map)?;
+        let fields_ids_map = FieldIdMapWithMetadata::new(
+            fields_ids_map,
+            MetadataBuilder::from_index(self.index, self.rtxn)?,
+        );
+        let filterable_attributes_rules = self.index.filterable_attributes_rules(self.rtxn)?;
 
         let mut distribution = BTreeMap::new();
-        for (fid, name) in fields_ids_map.iter() {
-            if crate::is_faceted(name, &fields) {
+        for (fid, name, metadata) in fields_ids_map.iter() {
+            if self.select_field(name, &metadata, &filterable_attributes_rules) {
                 let order_by = self
                     .facets
                     .as_ref()
@@ -342,38 +348,21 @@ impl<'a> FacetDistribution<'a> {
         Ok(distribution)
     }
 
-    fn faceted_fields_names(&self, fields_ids_map: &FieldsIdsMap) -> Result<Vec<String>> {
-        /// TODO: @many: this is a bit of a mess, we should refactor it
-        let filterable_fields = self.index.filterable_fields(self.rtxn)?;
-        let fields = match &self.facets {
-            Some(facets) => {
-                let invalid_fields: HashSet<_> = facets
-                    .iter()
-                    .map(|(name, _)| name)
-                    .filter(|facet| !is_field_filterable(facet, &filterable_fields))
-                    .collect();
-                if !invalid_fields.is_empty() {
-                    let valid_facets_name =
-                        matching_field_names(&filterable_fields, &fields_ids_map);
-                    return Err(UserError::InvalidFacetsDistribution {
-                        invalid_facets_name: invalid_fields.into_iter().cloned().collect(),
-                        valid_facets_name: valid_facets_name
-                            .into_iter()
-                            .map(String::from)
-                            .collect(),
-                    }
-                    .into());
-                } else {
-                    facets.iter().map(|(name, _)| name).cloned().collect()
-                }
-            }
-            None => matching_field_names(&filterable_fields, &fields_ids_map)
-                .into_iter()
-                .map(String::from)
-                .collect(),
-        };
+    /// Select a field if it is faceted and in the facets.
+    fn select_field(
+        &self,
+        name: &str,
+        metadata: &Metadata,
+        filterable_attributes_rules: &[FilterableAttributesRule],
+    ) -> bool {
+        if !metadata.is_faceted(filterable_attributes_rules) {
+            return false;
+        }
 
-        Ok(fields)
+        match &self.facets {
+            Some(facets) => facets.contains_key(name),
+            None => true,
+        }
     }
 }
 
@@ -405,7 +394,7 @@ mod tests {
 
     use crate::documents::mmap_from_objects;
     use crate::index::tests::TempIndex;
-    use crate::{milli_snap, FacetDistribution, FilterableAttributesSettings, OrderBy};
+    use crate::{milli_snap, FacetDistribution, FilterableAttributesRule, OrderBy};
 
     #[test]
     fn few_candidates_few_facet_values() {
@@ -416,8 +405,7 @@ mod tests {
 
         index
             .update_settings(|settings| {
-                settings
-                    .set_filterable_fields(vec![FilterableAttributesSettings::Field(S("colour"))])
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(S("colour"))])
             })
             .unwrap();
 
@@ -490,8 +478,7 @@ mod tests {
 
         index
             .update_settings(|settings| {
-                settings
-                    .set_filterable_fields(vec![FilterableAttributesSettings::Field(S("colour"))])
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(S("colour"))])
             })
             .unwrap();
 
@@ -578,8 +565,7 @@ mod tests {
 
         index
             .update_settings(|settings| {
-                settings
-                    .set_filterable_fields(vec![FilterableAttributesSettings::Field(S("colour"))])
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(S("colour"))])
             })
             .unwrap();
 
@@ -640,8 +626,7 @@ mod tests {
 
         index
             .update_settings(|settings| {
-                settings
-                    .set_filterable_fields(vec![FilterableAttributesSettings::Field(S("colour"))])
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(S("colour"))])
             })
             .unwrap();
 
@@ -694,8 +679,7 @@ mod tests {
 
         index
             .update_settings(|settings| {
-                settings
-                    .set_filterable_fields(vec![FilterableAttributesSettings::Field(S("colour"))])
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(S("colour"))])
             })
             .unwrap();
 
@@ -748,8 +732,7 @@ mod tests {
 
         index
             .update_settings(|settings| {
-                settings
-                    .set_filterable_fields(vec![FilterableAttributesSettings::Field(S("colour"))])
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(S("colour"))])
             })
             .unwrap();
 
@@ -802,8 +785,7 @@ mod tests {
 
         index
             .update_settings(|settings| {
-                settings
-                    .set_filterable_fields(vec![FilterableAttributesSettings::Field(S("colour"))])
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(S("colour"))])
             })
             .unwrap();
 

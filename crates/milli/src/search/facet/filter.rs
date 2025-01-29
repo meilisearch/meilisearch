@@ -12,7 +12,7 @@ use serde_json::Value;
 use super::facet_range_search;
 use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::error::{Error, UserError};
-use crate::filterable_fields::{
+use crate::filterable_attributes_rules::{
     filtered_matching_field_names, is_field_filterable, matching_features,
 };
 use crate::heed_codec::facet::{
@@ -21,7 +21,7 @@ use crate::heed_codec::facet::{
 use crate::index::db_name::FACET_ID_STRING_DOCIDS;
 use crate::{
     distance_between_two_points, lat_lng_to_xyz, FieldId, FilterableAttributesFeatures,
-    FilterableAttributesSettings, Index, InternalError, Result, SerializationError,
+    FilterableAttributesRule, Index, InternalError, Result, SerializationError,
 };
 
 /// The maximum number of filters the filter AST can process.
@@ -233,22 +233,22 @@ impl<'a> Filter<'a> {
 impl<'a> Filter<'a> {
     pub fn evaluate(&self, rtxn: &heed::RoTxn<'_>, index: &Index) -> Result<RoaringBitmap> {
         // to avoid doing this for each recursive call we're going to do it ONCE ahead of time
-        let filterable_fields = index.filterable_fields(rtxn)?;
+        let filterable_attributes_rules = index.filterable_attributes_rules(rtxn)?;
         for fid in self.condition.fids(MAX_FILTER_DEPTH) {
             let attribute = fid.value();
-            if !is_field_filterable(attribute, &filterable_fields) {
+            if !is_field_filterable(attribute, &filterable_attributes_rules) {
                 let fields_ids_map = index.fields_ids_map(rtxn)?;
                 return Err(fid.as_external_error(FilterError::AttributeNotFilterable {
                     attribute,
                     filterable_fields: filtered_matching_field_names(
-                        &filterable_fields,
+                        &filterable_attributes_rules,
                         &fields_ids_map,
                         &|features| features.is_filterable(),
                     ),
                 }))?;
             }
         }
-        self.inner_evaluate(rtxn, index, &filterable_fields, None)
+        self.inner_evaluate(rtxn, index, &filterable_attributes_rules, None)
     }
 
     fn evaluate_operator(
@@ -277,6 +277,18 @@ impl<'a> Filter<'a> {
             {
                 /// TODO produce an dedicated error for this
                 todo!("filtering on non-ordered fields is not supported, return an error")
+            }
+            Condition::Empty if !features.is_filterable_empty() => {
+                /// TODO produce an dedicated error for this
+                todo!("filtering on non-empty fields is not supported, return an error")
+            }
+            Condition::Null if !features.is_filterable_null() => {
+                /// TODO produce an dedicated error for this
+                todo!("filtering on non-null fields is not supported, return an error")
+            }
+            Condition::Exists if !features.is_filterable_exists() => {
+                /// TODO produce an dedicated error for this
+                todo!("filtering on non-exists fields is not supported, return an error")
             }
             Condition::GreaterThan(val) => {
                 (Excluded(val.parse_finite_float()?), Included(f64::MAX))
@@ -430,7 +442,7 @@ impl<'a> Filter<'a> {
         &self,
         rtxn: &heed::RoTxn<'_>,
         index: &Index,
-        filterable_fields: &[FilterableAttributesSettings],
+        filterable_fields: &[FilterableAttributesRule],
         universe: Option<&RoaringBitmap>,
     ) -> Result<RoaringBitmap> {
         if universe.map_or(false, |u| u.is_empty()) {
@@ -742,7 +754,7 @@ mod tests {
 
     use crate::constants::RESERVED_GEO_FIELD_NAME;
     use crate::index::tests::TempIndex;
-    use crate::{Filter, FilterableAttributesSettings};
+    use crate::{Filter, FilterableAttributesRule};
 
     #[test]
     fn empty_db() {
@@ -750,7 +762,7 @@ mod tests {
         //Set the filterable fields to be the channel.
         index
             .update_settings(|settings| {
-                settings.set_filterable_fields(vec![FilterableAttributesSettings::Field(
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
                     "PrIcE".to_string(),
                 )]);
             })
@@ -856,7 +868,7 @@ mod tests {
         index
             .update_settings(|settings| {
                 settings.set_searchable_fields(vec![S("title")]);
-                settings.set_filterable_fields(vec![FilterableAttributesSettings::Field(
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
                     "title".to_string(),
                 )]);
             })
@@ -924,7 +936,7 @@ mod tests {
 
         index
             .update_settings(|settings| {
-                settings.set_filterable_fields(vec![FilterableAttributesSettings::Field(
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
                     "monitor_diagonal".to_string(),
                 )]);
             })
@@ -957,7 +969,7 @@ mod tests {
 
         index
             .update_settings(|settings| {
-                settings.set_filterable_fields(vec![FilterableAttributesSettings::Field(S(
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(S(
                     RESERVED_GEO_FIELD_NAME,
                 ))]);
             })
@@ -1007,8 +1019,8 @@ mod tests {
             .update_settings(|settings| {
                 settings.set_searchable_fields(vec![S(RESERVED_GEO_FIELD_NAME), S("price")]); // to keep the fields order
                 settings.set_filterable_fields(vec![
-                    FilterableAttributesSettings::Field(S(RESERVED_GEO_FIELD_NAME)),
-                    FilterableAttributesSettings::Field("price".to_string()),
+                    FilterableAttributesRule::Field(S(RESERVED_GEO_FIELD_NAME)),
+                    FilterableAttributesRule::Field("price".to_string()),
                 ]);
             })
             .unwrap();
@@ -1060,8 +1072,8 @@ mod tests {
             .update_settings(|settings| {
                 settings.set_searchable_fields(vec![S(RESERVED_GEO_FIELD_NAME), S("price")]); // to keep the fields order
                 settings.set_filterable_fields(vec![
-                    FilterableAttributesSettings::Field(S(RESERVED_GEO_FIELD_NAME)),
-                    FilterableAttributesSettings::Field("price".to_string()),
+                    FilterableAttributesRule::Field(S(RESERVED_GEO_FIELD_NAME)),
+                    FilterableAttributesRule::Field("price".to_string()),
                 ]);
             })
             .unwrap();
@@ -1172,7 +1184,7 @@ mod tests {
         index
             .update_settings(|settings| {
                 settings.set_searchable_fields(vec![S("price")]); // to keep the fields order
-                settings.set_filterable_fields(vec![FilterableAttributesSettings::Field(
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
                     "price".to_string(),
                 )]);
             })
@@ -1231,9 +1243,9 @@ mod tests {
             .update_settings(|settings| {
                 settings.set_primary_key("id".to_owned());
                 settings.set_filterable_fields(vec![
-                    FilterableAttributesSettings::Field("id".to_string()),
-                    FilterableAttributesSettings::Field("one".to_string()),
-                    FilterableAttributesSettings::Field("two".to_string()),
+                    FilterableAttributesRule::Field("id".to_string()),
+                    FilterableAttributesRule::Field("one".to_string()),
+                    FilterableAttributesRule::Field("two".to_string()),
                 ]);
             })
             .unwrap();

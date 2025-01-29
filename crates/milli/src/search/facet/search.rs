@@ -10,7 +10,7 @@ use roaring::RoaringBitmap;
 use tracing::error;
 
 use crate::error::UserError;
-use crate::filterable_fields::{is_field_filterable, matching_field_names};
+use crate::filterable_attributes_rules::{is_field_filterable, matching_field_names};
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupValue};
 use crate::search::build_dfa;
 use crate::{DocumentId, FieldId, OrderBy, Result, Search};
@@ -74,7 +74,7 @@ impl<'a> SearchForFacetValues<'a> {
         let index = self.search_query.index;
         let rtxn = self.search_query.rtxn;
 
-        let filterable_fields = index.filterable_fields(rtxn)?;
+        let filterable_fields = index.filterable_attributes_rules(rtxn)?;
         if !is_field_filterable(&self.facet, &filterable_fields) {
             let fields_ids_map = index.fields_ids_map(rtxn)?;
             let matching_field_names = matching_field_names(&filterable_fields, &fields_ids_map);

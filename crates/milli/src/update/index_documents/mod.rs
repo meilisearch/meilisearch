@@ -765,14 +765,14 @@ mod tests {
     use super::*;
     use crate::constants::RESERVED_GEO_FIELD_NAME;
     use crate::documents::mmap_from_objects;
-    use crate::filterable_fields::filtered_matching_field_names;
+    use crate::filterable_attributes_rules::filtered_matching_field_names;
     use crate::index::tests::TempIndex;
     use crate::index::IndexEmbeddingConfig;
     use crate::progress::Progress;
     use crate::search::TermsMatchingStrategy;
     use crate::update::new::indexer;
     use crate::update::Setting;
-    use crate::{db_snap, Filter, FilterableAttributesSettings, Search, UserError};
+    use crate::{db_snap, Filter, FilterableAttributesRule, Search, UserError};
 
     #[test]
     fn simple_document_replacement() {
@@ -1002,7 +1002,7 @@ mod tests {
 
         index
             .update_settings(|settings| {
-                settings.set_filterable_fields(vec![FilterableAttributesSettings::Field(
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
                     RESERVED_GEO_FIELD_NAME.to_string(),
                 )]);
             })
@@ -1016,7 +1016,7 @@ mod tests {
 
         index
             .update_settings(|settings| {
-                settings.set_filterable_fields(vec![FilterableAttributesSettings::Field(
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
                     RESERVED_GEO_FIELD_NAME.to_string(),
                 )]);
             })
@@ -1235,9 +1235,9 @@ mod tests {
                 settings.set_searchable_fields(searchable_fields);
 
                 let faceted_fields = vec![
-                    FilterableAttributesSettings::Field("title".to_string()),
-                    FilterableAttributesSettings::Field("nested.object".to_string()),
-                    FilterableAttributesSettings::Field("nested.machin".to_string()),
+                    FilterableAttributesRule::Field("title".to_string()),
+                    FilterableAttributesRule::Field("nested.object".to_string()),
+                    FilterableAttributesRule::Field("nested.machin".to_string()),
                 ];
                 settings.set_filterable_fields(faceted_fields);
             })
@@ -1245,7 +1245,7 @@ mod tests {
 
         let rtxn = index.read_txn().unwrap();
 
-        let filterable_fields = index.filterable_fields(&rtxn).unwrap();
+        let filterable_fields = index.filterable_attributes_rules(&rtxn).unwrap();
         let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
         let facets =
             filtered_matching_field_names(&filterable_fields, &fields_ids_map, &|features| {
@@ -1447,7 +1447,7 @@ mod tests {
 
         index
             .update_settings(|settings| {
-                settings.set_filterable_fields(vec![FilterableAttributesSettings::Field(
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
                     "dog".to_string(),
                 )]);
             })
@@ -1468,7 +1468,7 @@ mod tests {
 
         let rtxn = index.read_txn().unwrap();
 
-        let filterable_fields = index.filterable_fields(&rtxn).unwrap();
+        let filterable_fields = index.filterable_attributes_rules(&rtxn).unwrap();
         let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
         let facets =
             filtered_matching_field_names(&filterable_fields, &fields_ids_map, &|features| {
@@ -1496,7 +1496,7 @@ mod tests {
 
         let rtxn = index.read_txn().unwrap();
 
-        let filterable_fields = index.filterable_fields(&rtxn).unwrap();
+        let filterable_fields = index.filterable_attributes_rules(&rtxn).unwrap();
         let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
         let facets =
             filtered_matching_field_names(&filterable_fields, &fields_ids_map, &|features| {
@@ -1527,7 +1527,7 @@ mod tests {
 
         let rtxn = index.read_txn().unwrap();
 
-        let filterable_fields = index.filterable_fields(&rtxn).unwrap();
+        let filterable_fields = index.filterable_attributes_rules(&rtxn).unwrap();
         let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
         let facets =
             filtered_matching_field_names(&filterable_fields, &fields_ids_map, &|features| {
@@ -1743,7 +1743,7 @@ mod tests {
 
         let check_ok = |index: &Index| {
             let rtxn = index.read_txn().unwrap();
-            let filterable_fields = index.filterable_fields(&rtxn).unwrap();
+            let filterable_fields = index.filterable_attributes_rules(&rtxn).unwrap();
             let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
             let facets =
                 filtered_matching_field_names(&filterable_fields, &fields_ids_map, &|features| {
@@ -1769,7 +1769,7 @@ mod tests {
             assert_eq!(bitmap_colour_blue.into_iter().collect::<Vec<_>>(), vec![7]);
         };
 
-        let faceted_fields = vec![FilterableAttributesSettings::Field("colour".to_string())];
+        let faceted_fields = vec![FilterableAttributesRule::Field("colour".to_string())];
 
         let index = TempIndex::new();
         index.add_documents(content()).unwrap();
@@ -1854,7 +1854,7 @@ mod tests {
 
         let check_ok = |index: &Index| {
             let rtxn = index.read_txn().unwrap();
-            let filterable_fields = index.filterable_fields(&rtxn).unwrap();
+            let filterable_fields = index.filterable_attributes_rules(&rtxn).unwrap();
             let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
             let facets =
                 filtered_matching_field_names(&filterable_fields, &fields_ids_map, &|features| {
@@ -1880,7 +1880,7 @@ mod tests {
             assert_eq!(bitmap_colour_blue.into_iter().collect::<Vec<_>>(), vec![3]);
         };
 
-        let faceted_fields = vec![FilterableAttributesSettings::Field("colour".to_string())];
+        let faceted_fields = vec![FilterableAttributesRule::Field("colour".to_string())];
 
         let index = TempIndex::new();
         index.add_documents(content()).unwrap();
@@ -1923,7 +1923,7 @@ mod tests {
 
         let check_ok = |index: &Index| {
             let rtxn = index.read_txn().unwrap();
-            let filterable_fields = index.filterable_fields(&rtxn).unwrap();
+            let filterable_fields = index.filterable_attributes_rules(&rtxn).unwrap();
             let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
             let facets =
                 filtered_matching_field_names(&filterable_fields, &fields_ids_map, &|features| {
@@ -1948,7 +1948,7 @@ mod tests {
             assert_eq!(bitmap_tags_blue.into_iter().collect::<Vec<_>>(), vec![12]);
         };
 
-        let faceted_fields = vec![FilterableAttributesSettings::Field("tags".to_string())];
+        let faceted_fields = vec![FilterableAttributesRule::Field("tags".to_string())];
 
         let index = TempIndex::new();
         index.add_documents(content()).unwrap();
@@ -2132,7 +2132,7 @@ mod tests {
 
         index
             .update_settings(|settings| {
-                settings.set_filterable_fields(vec![FilterableAttributesSettings::Field(
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
                     "title".to_string(),
                 )]);
             })
@@ -2990,8 +2990,8 @@ mod tests {
             .update_settings_using_wtxn(&mut wtxn, |settings| {
                 settings.set_primary_key(S("docid"));
                 settings.set_filterable_fields(vec![
-                    FilterableAttributesSettings::Field("label".to_string()),
-                    FilterableAttributesSettings::Field("label2".to_string()),
+                    FilterableAttributesRule::Field("label".to_string()),
+                    FilterableAttributesRule::Field("label2".to_string()),
                 ]);
             })
             .unwrap();
@@ -3171,7 +3171,7 @@ mod tests {
         index
             .update_settings_using_wtxn(&mut wtxn, |settings| {
                 settings.set_primary_key(S("id"));
-                settings.set_filterable_fields(vec![FilterableAttributesSettings::Field(
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
                     RESERVED_GEO_FIELD_NAME.to_string(),
                 )]);
                 settings.set_sortable_fields(hashset!(S(RESERVED_GEO_FIELD_NAME)));
