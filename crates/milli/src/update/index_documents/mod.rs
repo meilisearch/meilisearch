@@ -771,7 +771,7 @@ mod tests {
     use crate::search::TermsMatchingStrategy;
     use crate::update::new::indexer;
     use crate::update::Setting;
-    use crate::{db_snap, Filter, Search, UserError};
+    use crate::{all_obkv_to_json, db_snap, Filter, Search, UserError};
 
     #[test]
     fn simple_document_replacement() {
@@ -1972,6 +1972,174 @@ mod tests {
 
         assert_eq!(operation_stats.iter().filter(|ps| ps.error.is_none()).count(), 1);
         assert_eq!(operation_stats.iter().filter(|ps| ps.error.is_some()).count(), 3);
+    }
+
+    #[test]
+    fn mixing_documents_replace_with_updates() {
+        let index = TempIndex::new_with_map_size(4096 * 100);
+
+        let doc1 = documents! {[{
+            "id": 1,
+            "title": "asdsad",
+            "description": "Wat wat wat, wat"
+        }]};
+
+        let doc2 = documents! {[{
+            "id": 1,
+            "title": "something",
+        }]};
+
+        let doc3 = documents! {[{
+            "id": 1,
+            "title": "another something",
+        }]};
+
+        let doc4 = documents! {[{
+            "id": 1,
+            "description": "This is it!",
+        }]};
+
+        let rtxn = index.inner.read_txn().unwrap();
+        let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
+        let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+        let mut indexer = indexer::DocumentOperation::new();
+        indexer.replace_documents(&doc1).unwrap();
+        indexer.update_documents(&doc2).unwrap();
+        indexer.update_documents(&doc3).unwrap();
+        indexer.update_documents(&doc4).unwrap();
+
+        let indexer_alloc = Bump::new();
+        let (document_changes, operation_stats, primary_key) = indexer
+            .into_changes(
+                &indexer_alloc,
+                &index.inner,
+                &rtxn,
+                None,
+                &mut new_fields_ids_map,
+                &|| false,
+                Progress::default(),
+            )
+            .unwrap();
+
+        assert_eq!(operation_stats.iter().filter(|ps| ps.error.is_none()).count(), 4);
+
+        let mut wtxn = index.write_txn().unwrap();
+        indexer::index(
+            &mut wtxn,
+            &index.inner,
+            &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
+            index.indexer_config.grenad_parameters(),
+            &db_fields_ids_map,
+            new_fields_ids_map,
+            primary_key,
+            &document_changes,
+            EmbeddingConfigs::default(),
+            &|| false,
+            &Progress::default(),
+        )
+        .unwrap();
+        wtxn.commit().unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+        let obkv = index.document(&rtxn, 0).unwrap();
+        let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+
+        let json_document = all_obkv_to_json(obkv, &fields_ids_map).unwrap();
+        let expected = serde_json::json!({
+            "id": 1,
+            "title": "another something",
+            "description": "This is it!",
+        });
+        let expected = expected.as_object().unwrap();
+        assert_eq!(&json_document, expected);
+    }
+
+    #[test]
+    fn mixing_documents_replace_with_updates_even_more() {
+        let index = TempIndex::new_with_map_size(4096 * 100);
+
+        let doc1 = documents! {[{
+            "id": 1,
+            "title": "asdsad",
+            "description": "Wat wat wat, wat"
+        }]};
+
+        let doc2 = documents! {[{
+            "id": 1,
+            "title": "something",
+        }]};
+
+        let doc3 = documents! {[{
+            "id": 1,
+            "title": "another something",
+        }]};
+
+        let doc4 = documents! {[{
+            "id": 1,
+            "title": "Woooof",
+        }]};
+
+        let doc5 = documents! {[{
+            "id": 1,
+            "description": "This is it!",
+        }]};
+
+        let rtxn = index.inner.read_txn().unwrap();
+        let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
+        let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+        let mut indexer = indexer::DocumentOperation::new();
+        indexer.replace_documents(&doc1).unwrap();
+        indexer.update_documents(&doc2).unwrap();
+        indexer.update_documents(&doc3).unwrap();
+        indexer.replace_documents(&doc4).unwrap();
+        indexer.update_documents(&doc5).unwrap();
+
+        let indexer_alloc = Bump::new();
+        let (document_changes, operation_stats, primary_key) = indexer
+            .into_changes(
+                &indexer_alloc,
+                &index.inner,
+                &rtxn,
+                None,
+                &mut new_fields_ids_map,
+                &|| false,
+                Progress::default(),
+            )
+            .unwrap();
+
+        assert_eq!(operation_stats.iter().filter(|ps| ps.error.is_none()).count(), 5);
+
+        let mut wtxn = index.write_txn().unwrap();
+        indexer::index(
+            &mut wtxn,
+            &index.inner,
+            &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
+            index.indexer_config.grenad_parameters(),
+            &db_fields_ids_map,
+            new_fields_ids_map,
+            primary_key,
+            &document_changes,
+            EmbeddingConfigs::default(),
+            &|| false,
+            &Progress::default(),
+        )
+        .unwrap();
+        wtxn.commit().unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+        let obkv = index.document(&rtxn, 0).unwrap();
+        let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+
+        let json_document = all_obkv_to_json(obkv, &fields_ids_map).unwrap();
+        let expected = serde_json::json!({
+            "id": 1,
+            "title": "Woooof",
+            "description": "This is it!",
+        });
+        let expected = expected.as_object().unwrap();
+        assert_eq!(&json_document, expected);
     }
 
     #[test]
