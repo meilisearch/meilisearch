@@ -234,7 +234,7 @@ where
         );
         let mut datastore = ThreadLocal::with_capacity(rayon::current_num_threads());
         {
-            let span = tracing::trace_span!(target: "indexing::documents::extract", "vectors");
+            let span = tracing::debug_span!(target: "indexing::documents::extract", "vectors");
             let _entered = span.enter();
 
             extract(
@@ -247,7 +247,7 @@ where
             )?;
         }
         {
-            let span = tracing::trace_span!(target: "indexing::documents::merge", "vectors");
+            let span = tracing::debug_span!(target: "indexing::documents::merge", "vectors");
             let _entered = span.enter();
 
             for config in &mut index_embeddings {
