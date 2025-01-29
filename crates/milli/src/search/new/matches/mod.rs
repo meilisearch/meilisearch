@@ -11,7 +11,7 @@ use either::Either;
 pub use matching_words::MatchingWords;
 use matching_words::{MatchType, PartialMatch};
 use r#match::{Match, MatchPosition};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use simple_token_kind::SimpleTokenKind;
 use utoipa::ToSchema;
 
@@ -101,11 +101,11 @@ impl FormatOptions {
     }
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq, Eq, ToSchema)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, ToSchema)]
 pub struct MatchBounds {
     pub start: usize,
     pub length: usize,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub indices: Option<Vec<usize>>,
 }
 
