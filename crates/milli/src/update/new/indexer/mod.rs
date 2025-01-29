@@ -21,6 +21,7 @@ use crate::progress::Progress;
 use crate::update::GrenadParameters;
 use crate::vector::{ArroyWrapper, EmbeddingConfigs};
 use crate::{FieldsIdsMap, GlobalFieldsIdsMap, Index, InternalError, Result, ThreadPoolNoAbort};
+use std::sync::Once;
 
 pub(crate) mod de;
 pub mod document_changes;
@@ -32,6 +33,8 @@ mod partial_dump;
 mod post_processing;
 mod update_by_function;
 mod write;
+
+static LOG_MEMORY_METRICS_ONCE: Once = Once::new();
 
 /// This is the main function of this crate.
 ///
@@ -93,12 +96,14 @@ where
         },
     );
 
-    tracing::debug!(
-        "Indexation allocated memory metrics - \
-        Total BBQueue size: {total_bbbuffer_capacity}, \
-        Total extractor memory: {:?}",
-        grenad_parameters.max_memory,
-    );
+    LOG_MEMORY_METRICS_ONCE.call_once(|| {
+        tracing::debug!(
+            "Indexation allocated memory metrics - \
+            Total BBQueue size: {total_bbbuffer_capacity}, \
+            Total extractor memory: {:?}",
+            grenad_parameters.max_memory,
+        );
+    });
 
     let (extractor_sender, writer_receiver) = pool
         .install(|| extractor_writer_bbqueue(&mut bbbuffers, total_bbbuffer_capacity, 1000))
