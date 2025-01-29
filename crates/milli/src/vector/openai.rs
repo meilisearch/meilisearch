@@ -255,14 +255,18 @@ impl Embedder {
         text_chunks: Vec<Vec<String>>,
         threads: &ThreadPoolNoAbort,
     ) -> Result<Vec<Vec<Embedding>>, EmbedError> {
-        threads
-            .install(move || {
-                text_chunks.into_par_iter().map(move |chunk| self.embed(&chunk, None)).collect()
-            })
-            .map_err(|error| EmbedError {
-                kind: EmbedErrorKind::PanicInThreadPool(error),
-                fault: FaultSource::Bug,
-            })?
+        if threads.active_operations() >= REQUEST_PARALLELISM {
+            text_chunks.into_iter().map(move |chunk| self.embed(&chunk, None)).collect()
+        } else {
+            threads
+                .install(move || {
+                    text_chunks.into_par_iter().map(move |chunk| self.embed(&chunk, None)).collect()
+                })
+                .map_err(|error| EmbedError {
+                    kind: EmbedErrorKind::PanicInThreadPool(error),
+                    fault: FaultSource::Bug,
+                })?
+        }
     }
 
     pub(crate) fn embed_chunks_ref(
