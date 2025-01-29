@@ -386,7 +386,7 @@ pub fn snap_settings(index: &Index) -> String {
     write_setting_to_snap!(criteria);
     write_setting_to_snap!(displayed_fields);
     write_setting_to_snap!(distinct_field);
-    write_setting_to_snap!(filterable_fields);
+    write_setting_to_snap!(filterable_attributes_rules);
     write_setting_to_snap!(sortable_fields);
     write_setting_to_snap!(synonyms);
     write_setting_to_snap!(authorize_typos);

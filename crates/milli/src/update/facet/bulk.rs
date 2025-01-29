@@ -374,7 +374,7 @@ mod tests {
     use crate::heed_codec::StrRefCodec;
     use crate::index::tests::TempIndex;
     use crate::update::facet::test_helpers::{ordered_string, FacetIndex};
-    use crate::{db_snap, milli_snap, FilterableAttributesSettings};
+    use crate::{db_snap, milli_snap, FilterableAttributesRule};
 
     #[test]
     fn insert() {
@@ -474,7 +474,7 @@ mod tests {
         index
             .update_settings(|settings| {
                 settings.set_primary_key("id".to_owned());
-                settings.set_filterable_fields(vec![FilterableAttributesSettings::Field(
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
                     "id".to_string(),
                 )]);
             })

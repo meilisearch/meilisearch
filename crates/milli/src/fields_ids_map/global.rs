@@ -105,6 +105,11 @@ impl<'indexing> GlobalFieldsIdsMap<'indexing> {
 
         self.local.name(id)
     }
+
+    /// Get the metadata of a field based on its id.
+    pub fn metadata(&self, id: FieldId) -> Option<Metadata> {
+        self.local.metadata(id).or_else(|| self.global.read().unwrap().metadata(id))
+    }
 }
 
 impl<'indexing> MutFieldIdMapper for GlobalFieldsIdsMap<'indexing> {

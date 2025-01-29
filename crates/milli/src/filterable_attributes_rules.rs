@@ -11,29 +11,27 @@ use crate::{
 
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug, ToSchema)]
 #[serde(untagged)]
-pub enum FilterableAttributesSettings {
+pub enum FilterableAttributesRule {
     Field(String),
     Pattern(FilterableAttributesPatterns),
 }
 
-impl FilterableAttributesSettings {
+impl FilterableAttributesRule {
     pub fn match_str(&self, field: &str) -> PatternMatch {
         match self {
-            FilterableAttributesSettings::Field(pattern) => match_field_legacy(pattern, field),
-            FilterableAttributesSettings::Pattern(patterns) => patterns.match_str(field),
+            FilterableAttributesRule::Field(pattern) => match_field_legacy(pattern, field),
+            FilterableAttributesRule::Pattern(patterns) => patterns.match_str(field),
         }
     }
 
     pub fn has_geo(&self) -> bool {
-        matches!(self, FilterableAttributesSettings::Field(field_name) if field_name == RESERVED_GEO_FIELD_NAME)
+        matches!(self, FilterableAttributesRule::Field(field_name) if field_name == RESERVED_GEO_FIELD_NAME)
     }
 
     pub fn features(&self) -> FilterableAttributesFeatures {
         match self {
-            FilterableAttributesSettings::Field(_) => {
-                FilterableAttributesFeatures::legacy_default()
-            }
-            FilterableAttributesSettings::Pattern(patterns) => patterns.features(),
+            FilterableAttributesRule::Field(_) => FilterableAttributesFeatures::legacy_default(),
+            FilterableAttributesRule::Pattern(patterns) => patterns.features(),
         }
     }
 }
@@ -93,6 +91,11 @@ impl FilterableAttributesFeatures {
         self.filter != FilterFeature::Disabled
     }
 
+    /// Check if `IS EXISTS` is allowed
+    pub fn is_filterable_exists(&self) -> bool {
+        self.filter != FilterFeature::Disabled
+    }
+
     /// Check if `<`, `>`, `<=`, `>=` or `TO` are allowed
     pub fn is_filterable_order(&self) -> bool {
         self.filter == FilterFeature::Order
@@ -104,7 +107,7 @@ impl FilterableAttributesFeatures {
     }
 }
 
-impl<E: DeserializeError> Deserr<E> for FilterableAttributesSettings {
+impl<E: DeserializeError> Deserr<E> for FilterableAttributesRule {
     fn deserialize_from_value<V: deserr::IntoValue>(
         value: deserr::Value<V>,
         location: ValuePointerRef,
@@ -127,7 +130,7 @@ pub enum FilterFeature {
 }
 
 pub fn matching_field_ids(
-    filterable_attributes: &[FilterableAttributesSettings],
+    filterable_attributes: &[FilterableAttributesRule],
     fields_ids_map: &FieldsIdsMap,
 ) -> HashSet<FieldId> {
     let mut result = HashSet::new();
@@ -142,14 +145,14 @@ pub fn matching_field_ids(
 }
 
 pub fn matching_field_names<'fim>(
-    filterable_attributes: &[FilterableAttributesSettings],
+    filterable_attributes: &[FilterableAttributesRule],
     fields_ids_map: &'fim FieldsIdsMap,
 ) -> BTreeSet<&'fim str> {
     filtered_matching_field_names(filterable_attributes, fields_ids_map, &|_| true)
 }
 
 pub fn filtered_matching_field_names<'fim>(
-    filterable_attributes: &[FilterableAttributesSettings],
+    filterable_attributes: &[FilterableAttributesRule],
     fields_ids_map: &'fim FieldsIdsMap,
     filter: &impl Fn(&FilterableAttributesFeatures) -> bool,
 ) -> BTreeSet<&'fim str> {
@@ -169,7 +172,7 @@ pub fn filtered_matching_field_names<'fim>(
 
 pub fn matching_features(
     field_name: &str,
-    filterable_attributes: &[FilterableAttributesSettings],
+    filterable_attributes: &[FilterableAttributesRule],
 ) -> Option<FilterableAttributesFeatures> {
     for filterable_attribute in filterable_attributes {
         if filterable_attribute.match_str(field_name) == PatternMatch::Match {
@@ -181,7 +184,7 @@ pub fn matching_features(
 
 pub fn is_field_filterable(
     field_name: &str,
-    filterable_attributes: &[FilterableAttributesSettings],
+    filterable_attributes: &[FilterableAttributesRule],
 ) -> bool {
     matching_features(field_name, filterable_attributes)
         .map_or(false, |features| features.is_filterable())
@@ -189,7 +192,7 @@ pub fn is_field_filterable(
 
 pub fn match_pattern_by_features(
     field_name: &str,
-    filterable_attributes: &[FilterableAttributesSettings],
+    filterable_attributes: &[FilterableAttributesRule],
     filter: &impl Fn(&FilterableAttributesFeatures) -> bool,
 ) -> PatternMatch {
     let mut selection = PatternMatch::NoMatch;

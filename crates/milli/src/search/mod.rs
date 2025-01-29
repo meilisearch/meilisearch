@@ -9,7 +9,7 @@ use roaring::bitmap::RoaringBitmap;
 pub use self::facet::{FacetDistribution, Filter, OrderBy, DEFAULT_VALUES_PER_FACET};
 pub use self::new::matches::{FormatOptions, MatchBounds, MatcherBuilder, MatchingWords};
 use self::new::{execute_vector_search, PartialSearchResult};
-use crate::filterable_fields::{is_field_filterable, matching_field_names};
+use crate::filterable_attributes_rules::{is_field_filterable, matching_field_names};
 use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::vector::Embedder;
 use crate::{
@@ -188,7 +188,7 @@ impl<'a> Search<'a> {
         }
 
         if let Some(distinct) = &self.distinct {
-            let filterable_fields = ctx.index.filterable_fields(ctx.txn)?;
+            let filterable_fields = ctx.index.filterable_attributes_rules(ctx.txn)?;
             // check if the distinct field is in the filterable fields
             if !is_field_filterable(distinct, &filterable_fields) {
                 // if not, remove the hidden fields from the filterable fields to generate the error message

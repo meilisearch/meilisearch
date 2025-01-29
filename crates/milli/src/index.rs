@@ -15,7 +15,7 @@ use crate::constants::{RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME};
 use crate::documents::PrimaryKey;
 use crate::error::{InternalError, UserError};
 use crate::fields_ids_map::FieldsIdsMap;
-use crate::filterable_fields::{match_pattern_by_features, matching_field_ids};
+use crate::filterable_attributes_rules::match_pattern_by_features;
 use crate::heed_codec::facet::{
     FacetGroupKeyCodec, FacetGroupValueCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec,
     FieldIdCodec, OrderedF64Codec,
@@ -27,7 +27,7 @@ use crate::vector::{ArroyWrapper, Embedding, EmbeddingConfig};
 use crate::{
     default_criteria, CboRoaringBitmapCodec, Criterion, DocumentId, ExternalDocumentsIds,
     FacetDistribution, FieldDistribution, FieldId, FieldIdMapMissingEntry, FieldIdWordCountCodec,
-    FieldidsWeightsMap, FilterableAttributesSettings, GeoPoint, LocalizedAttributesRule, ObkvCodec,
+    FieldidsWeightsMap, FilterableAttributesRule, GeoPoint, LocalizedAttributesRule, ObkvCodec,
     Result, RoaringBitmapCodec, RoaringBitmapLenCodec, Search, U8StrStrCodec, Weight, BEU16, BEU32,
     BEU64,
 };
@@ -786,11 +786,11 @@ impl Index {
 
     /* filterable fields */
 
-    /// Writes the filterable fields names in the database.
-    pub(crate) fn put_filterable_fields(
+    /// Writes the filterable attributes rules in the database.
+    pub(crate) fn put_filterable_attributes_rules(
         &self,
         wtxn: &mut RwTxn<'_>,
-        fields: &Vec<FilterableAttributesSettings>,
+        fields: &Vec<FilterableAttributesRule>,
     ) -> heed::Result<()> {
         self.main.remap_types::<Str, SerdeJson<_>>().put(
             wtxn,
@@ -799,16 +799,19 @@ impl Index {
         )
     }
 
-    /// Deletes the filterable fields ids in the database.
-    pub(crate) fn delete_filterable_fields(&self, wtxn: &mut RwTxn<'_>) -> heed::Result<bool> {
+    /// Deletes the filterable attributes rules in the database.
+    pub(crate) fn delete_filterable_attributes_rules(
+        &self,
+        wtxn: &mut RwTxn<'_>,
+    ) -> heed::Result<bool> {
         self.main.remap_key_type::<Str>().delete(wtxn, main_key::FILTERABLE_FIELDS_KEY)
     }
 
-    /// Returns the filterable fields setting value.
-    pub fn filterable_fields(
+    /// Returns the filterable attributes rules.
+    pub fn filterable_attributes_rules(
         &self,
         rtxn: &RoTxn<'_>,
-    ) -> heed::Result<Vec<FilterableAttributesSettings>> {
+    ) -> heed::Result<Vec<FilterableAttributesRule>> {
         Ok(self
             .main
             .remap_types::<Str, SerdeJson<_>>()
@@ -817,14 +820,14 @@ impl Index {
     }
 
     /// Returns the filterable fields ids.
-    pub fn filterable_fields_ids(&self, rtxn: &RoTxn<'_>) -> Result<HashSet<FieldId>> {
-        let fields = self.filterable_fields(rtxn)?;
-        let fields_ids_map = self.fields_ids_map(rtxn)?;
+    // pub fn filterable_fields_ids(&self, rtxn: &RoTxn<'_>) -> Result<HashSet<FieldId>> {
+    //     let fields = self.filterable_attributes_rules(rtxn)?;
+    //     let fields_ids_map = self.fields_ids_map(rtxn)?;
 
-        let matching_field_ids = matching_field_ids(&fields, &fields_ids_map);
+    //     let matching_field_ids = matching_field_ids(&fields, &fields_ids_map);
 
-        Ok(matching_field_ids)
-    }
+    //     Ok(matching_field_ids)
+    // }
 
     /* sortable fields */
 
@@ -865,17 +868,17 @@ impl Index {
     /* faceted fields */
 
     /// Writes the faceted fields in the database.
-    pub(crate) fn put_faceted_fields(
-        &self,
-        wtxn: &mut RwTxn<'_>,
-        fields: &HashSet<String>,
-    ) -> heed::Result<()> {
-        self.main.remap_types::<Str, SerdeJson<_>>().put(
-            wtxn,
-            main_key::HIDDEN_FACETED_FIELDS_KEY,
-            fields,
-        )
-    }
+    // pub(crate) fn put_faceted_fields(
+    //     &self,
+    //     wtxn: &mut RwTxn<'_>,
+    //     fields: &HashSet<String>,
+    // ) -> heed::Result<()> {
+    //     self.main.remap_types::<Str, SerdeJson<_>>().put(
+    //         wtxn,
+    //         main_key::HIDDEN_FACETED_FIELDS_KEY,
+    //         fields,
+    //     )
+    // }
 
     /// Returns true if the geo feature is activated.
     pub fn is_geo_activated(&self, rtxn: &RoTxn<'_>) -> Result<bool> {
@@ -892,25 +895,26 @@ impl Index {
 
     /// Returns true if the geo filtering feature is activated.
     pub fn is_geo_filtering_activated(&self, rtxn: &RoTxn<'_>) -> Result<bool> {
-        let geo_filter = self.filterable_fields(rtxn)?.iter().any(|field| field.has_geo());
+        let geo_filter =
+            self.filterable_attributes_rules(rtxn)?.iter().any(|field| field.has_geo());
         Ok(geo_filter)
     }
 
     /// Returns the field ids of the fields that are filterable using the ordering operators or are sortable.
-    pub fn facet_leveled_field_ids(&self, rtxn: &RoTxn<'_>) -> Result<Vec<FieldId>> {
-        let filterable_fields = self.filterable_fields(rtxn)?;
+    pub fn facet_leveled_field_ids(&self, rtxn: &RoTxn<'_>) -> Result<HashSet<FieldId>> {
+        let filterable_fields = self.filterable_attributes_rules(rtxn)?;
         let sortable_fields = self.sortable_fields(rtxn)?;
         let fields_ids_map = self.fields_ids_map(rtxn)?;
 
-        let mut fields_ids = Vec::new();
+        let mut fields_ids = HashSet::new();
         for (field_id, field_name) in fields_ids_map.iter() {
             if match_pattern_by_features(field_name, &filterable_fields, &|features| {
                 features.is_filterable_order()
             }) == PatternMatch::Match
             {
-                fields_ids.push(field_id);
+                fields_ids.insert(field_id);
             } else if sortable_fields.contains(field_name) {
-                fields_ids.push(field_id);
+                fields_ids.insert(field_id);
             }
         }
 
@@ -1778,7 +1782,7 @@ pub(crate) mod tests {
     use crate::vector::settings::{EmbedderSource, EmbeddingSettings};
     use crate::vector::EmbeddingConfigs;
     use crate::{
-        db_snap, obkv_to_json, Filter, FilterableAttributesSettings, Index, Search, SearchResult,
+        db_snap, obkv_to_json, Filter, FilterableAttributesRule, Index, Search, SearchResult,
         ThreadPoolNoAbortBuilder,
     };
 
@@ -2209,7 +2213,7 @@ pub(crate) mod tests {
 
         index
             .update_settings(|settings| {
-                settings.set_filterable_fields(vec![FilterableAttributesSettings::Field(
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
                     RESERVED_GEO_FIELD_NAME.to_string(),
                 )]);
             })
@@ -2319,7 +2323,7 @@ pub(crate) mod tests {
 
         index
             .update_settings(|settings| {
-                settings.set_filterable_fields(vec![FilterableAttributesSettings::Field(
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
                     "doggo".to_string(),
                 )]);
             })
@@ -2363,7 +2367,7 @@ pub(crate) mod tests {
         index
             .update_settings(|settings| {
                 settings.set_primary_key("id".to_owned());
-                settings.set_filterable_fields(vec![FilterableAttributesSettings::Field(
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
                     "doggo".to_string(),
                 )]);
             })
@@ -2898,7 +2902,7 @@ pub(crate) mod tests {
         index
             .update_settings(|settings| {
                 settings.set_primary_key("id".to_string());
-                settings.set_filterable_fields(vec![FilterableAttributesSettings::Field(
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
                     RESERVED_GEO_FIELD_NAME.to_string(),
                 )]);
             })
@@ -2934,7 +2938,7 @@ pub(crate) mod tests {
         index
             .update_settings(|settings| {
                 settings.set_primary_key("id".to_string());
-                settings.set_filterable_fields(vec![FilterableAttributesSettings::Field(
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
                     RESERVED_GEO_FIELD_NAME.to_string(),
                 )]);
             })
@@ -2969,7 +2973,7 @@ pub(crate) mod tests {
         index
             .update_settings(|settings| {
                 settings.set_searchable_fields(vec![S("name")]);
-                settings.set_filterable_fields(vec![FilterableAttributesSettings::Field(
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
                     "age".to_string(),
                 )]);
             })
@@ -2993,7 +2997,7 @@ pub(crate) mod tests {
         index
             .update_settings(|settings| {
                 settings.set_searchable_fields(vec![S("name"), S("realName")]);
-                settings.set_filterable_fields(vec![FilterableAttributesSettings::Field(
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
                     "age".to_string(),
                 )]);
             })
@@ -3095,8 +3099,8 @@ pub(crate) mod tests {
             .update_settings(|settings| {
                 settings.set_searchable_fields(vec![S("_vectors"), S("_vectors.doggo")]);
                 settings.set_filterable_fields(vec![
-                    FilterableAttributesSettings::Field("_vectors".to_string()),
-                    FilterableAttributesSettings::Field("_vectors.doggo".to_string()),
+                    FilterableAttributesRule::Field("_vectors".to_string()),
+                    FilterableAttributesRule::Field("_vectors.doggo".to_string()),
                 ]);
             })
             .unwrap();

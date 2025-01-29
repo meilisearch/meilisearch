@@ -15,7 +15,7 @@ mod error;
 mod external_documents_ids;
 pub mod facet;
 mod fields_ids_map;
-mod filterable_fields;
+mod filterable_attributes_rules;
 pub mod heed_codec;
 pub mod index;
 mod localized_attributes_rules;
@@ -61,8 +61,8 @@ pub use self::error::{
 pub use self::external_documents_ids::ExternalDocumentsIds;
 pub use self::fieldids_weights_map::FieldidsWeightsMap;
 pub use self::fields_ids_map::{FieldsIdsMap, GlobalFieldsIdsMap};
-pub use self::filterable_fields::{
-    FilterableAttributesFeatures, FilterableAttributesPatterns, FilterableAttributesSettings,
+pub use self::filterable_attributes_rules::{
+    FilterableAttributesFeatures, FilterableAttributesPatterns, FilterableAttributesRule,
 };
 pub use self::heed_codec::{
     BEU16StrCodec, BEU32StrCodec, BoRoaringBitmapCodec, BoRoaringBitmapLenCodec,

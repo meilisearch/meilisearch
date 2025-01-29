@@ -14,8 +14,9 @@ use crate::heed_codec::facet::FacetGroupKey;
 use crate::update::del_add::{DelAdd, KvWriterDelAdd};
 use crate::update::{create_sorter, MergeDeladdBtreesetString};
 use crate::{
-    BEU16StrCodec, FieldId, GlobalFieldsIdsMap, Index, LocalizedAttributesRule, Result,
-    MAX_FACET_VALUE_LENGTH,
+    BEU16StrCodec, FieldId, FieldIdMapMissingEntry, FilterableAttributesFeatures,
+    FilterableAttributesRule, GlobalFieldsIdsMap, Index, InternalError, LocalizedAttributesRule,
+    Result, MAX_FACET_VALUE_LENGTH,
 };
 
 pub struct FacetSearchBuilder<'indexer> {
@@ -23,6 +24,7 @@ pub struct FacetSearchBuilder<'indexer> {
     normalized_facet_string_docids_sorter: Sorter<MergeDeladdBtreesetString>,
     global_fields_ids_map: GlobalFieldsIdsMap<'indexer>,
     localized_attributes_rules: Vec<LocalizedAttributesRule>,
+    filterable_attributes_rules: Vec<FilterableAttributesRule>,
     // Buffered data below
     buffer: Vec<u8>,
     localized_field_ids: HashMap<FieldId, Option<Vec<Language>>>,
@@ -32,6 +34,7 @@ impl<'indexer> FacetSearchBuilder<'indexer> {
     pub fn new(
         global_fields_ids_map: GlobalFieldsIdsMap<'indexer>,
         localized_attributes_rules: Vec<LocalizedAttributesRule>,
+        filterable_attributes_rules: Vec<FilterableAttributesRule>,
     ) -> Self {
         let registered_facets = HashMap::new();
         let normalized_facet_string_docids_sorter = create_sorter(
@@ -50,6 +53,7 @@ impl<'indexer> FacetSearchBuilder<'indexer> {
             buffer: Vec::new(),
             global_fields_ids_map,
             localized_attributes_rules,
+            filterable_attributes_rules,
             localized_field_ids: HashMap::new(),
         }
     }
@@ -60,6 +64,13 @@ impl<'indexer> FacetSearchBuilder<'indexer> {
         facet_key: FacetGroupKey<&str>,
     ) -> Result<()> {
         let FacetGroupKey { field_id, level: _level, left_bound } = facet_key;
+
+        let filterable_attributes_features = self.filterable_attributes_features(field_id)?;
+
+        // if facet search is disabled, we don't need to register the facet
+        if !filterable_attributes_features.is_facet_searchable() {
+            return Ok(());
+        };
 
         if deladd == DelAdd::Addition {
             self.registered_facets.entry(field_id).and_modify(|count| *count += 1).or_insert(1);
@@ -82,6 +93,24 @@ impl<'indexer> FacetSearchBuilder<'indexer> {
         self.normalized_facet_string_docids_sorter.insert(key_bytes, &self.buffer)?;
 
         Ok(())
+    }
+
+    fn filterable_attributes_features(
+        &mut self,
+        field_id: u16,
+    ) -> Result<FilterableAttributesFeatures> {
+        let Some(filterable_attributes_features) =
+            self.global_fields_ids_map.metadata(field_id).map(|metadata| {
+                metadata.filterable_attributes_features(&self.filterable_attributes_rules)
+            })
+        else {
+            return Err(InternalError::FieldIdMapMissingEntry(FieldIdMapMissingEntry::FieldId {
+                field_id,
+                process: "facet_search_builder::register_from_key",
+            })
+            .into());
+        };
+        Ok(filterable_attributes_features)
     }
 
     fn locales(&mut self, field_id: FieldId) -> Option<&[Language]> {
