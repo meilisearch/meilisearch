@@ -127,7 +127,7 @@ pub struct WriterBbqueueReceiver<'a> {
     /// over the bbqueue channel.
     sent_messages_attempts: Arc<AtomicUsize>,
     /// The number of times an attempt to send a
-    /// messages failed and we had to pause for a bit.
+    /// message failed and we had to pause for a bit.
     blocking_sent_messages_attempts: Arc<AtomicUsize>,
 }
 
@@ -710,7 +710,7 @@ where
 {
     loop {
         // An attempt means trying multiple times
-        // and succeeded to send or not.
+        // whether is succeeded or not.
         sent_messages_attempts.fetch_add(1, atomic::Ordering::Relaxed);
 
         for _ in 0..10_000 {
@@ -737,7 +737,7 @@ where
         }
 
         // We made an attempt to send a message in the
-        // bbqueue channel but it didn't succeeded.
+        // bbqueue channel but it didn't succeed.
         blocking_sent_messages_attempts.fetch_add(1, atomic::Ordering::Relaxed);
 
         // We prefer to yield and allow the writing thread
