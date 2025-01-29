@@ -302,6 +302,12 @@ pub enum Action {
     #[serde(rename = "experimental.update")]
     #[deserr(rename = "experimental.update")]
     ExperimentalFeaturesUpdate,
+    #[serde(rename = "network.get")]
+    #[deserr(rename = "network.get")]
+    NetworkGet,
+    #[serde(rename = "network.update")]
+    #[deserr(rename = "network.update")]
+    NetworkUpdate,
 }
 
 impl Action {
@@ -341,6 +347,8 @@ impl Action {
             KEYS_DELETE => Some(Self::KeysDelete),
             EXPERIMENTAL_FEATURES_GET => Some(Self::ExperimentalFeaturesGet),
             EXPERIMENTAL_FEATURES_UPDATE => Some(Self::ExperimentalFeaturesUpdate),
+            NETWORK_GET => Some(Self::NetworkGet),
+            NETWORK_UPDATE => Some(Self::NetworkUpdate),
             _otherwise => None,
         }
     }
@@ -386,4 +394,7 @@ pub mod actions {
     pub const KEYS_DELETE: u8 = KeysDelete.repr();
     pub const EXPERIMENTAL_FEATURES_GET: u8 = ExperimentalFeaturesGet.repr();
     pub const EXPERIMENTAL_FEATURES_UPDATE: u8 = ExperimentalFeaturesUpdate.repr();
+
+    pub const NETWORK_GET: u8 = NetworkGet.repr();
+    pub const NETWORK_UPDATE: u8 = NetworkUpdate.repr();
 }

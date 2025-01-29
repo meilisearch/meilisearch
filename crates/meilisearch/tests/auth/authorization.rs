@@ -68,6 +68,8 @@ pub static AUTHORIZATIONS: Lazy<HashMap<(&'static str, &'static str), HashSet<&'
             ("GET",     "/keys") =>                                            hashset!{"keys.get", "*"},
             ("GET",     "/experimental-features") =>                           hashset!{"experimental.get", "*"},
             ("PATCH",   "/experimental-features") =>                           hashset!{"experimental.update", "*"},
+            ("GET",   "/network") =>                                           hashset!{"network.get", "*"},
+            ("PATCH",   "/network") =>                                         hashset!{"network.update", "*"},
         };
 
         authorizations
