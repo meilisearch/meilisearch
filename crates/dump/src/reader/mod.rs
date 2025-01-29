@@ -23,6 +23,7 @@ mod v6;
 pub type Document = serde_json::Map<String, serde_json::Value>;
 pub type UpdateFile = dyn Iterator<Item = Result<Document>>;
 
+#[allow(clippy::large_enum_variant)]
 pub enum DumpReader {
     Current(V6Reader),
     Compat(CompatV5ToV6),
@@ -335,6 +336,7 @@ pub(crate) mod test {
         }
 
         assert_eq!(dump.features().unwrap().unwrap(), RuntimeTogglableFeatures::default());
+        assert_eq!(dump.network().unwrap(), None);
     }
 
     #[test]
@@ -378,6 +380,27 @@ pub(crate) mod test {
         assert_eq!(test.documents().unwrap().count(), 1);
 
         assert_eq!(dump.features().unwrap().unwrap(), RuntimeTogglableFeatures::default());
+    }
+
+    #[test]
+    fn import_dump_v6_network() {
+        let dump = File::open("tests/assets/v6-with-network.dump").unwrap();
+        let dump = DumpReader::open(dump).unwrap();
+
+        // top level infos
+        insta::assert_snapshot!(dump.date().unwrap(), @"2025-01-29 15:45:32.738676 +00:00:00");
+        insta::assert_debug_snapshot!(dump.instance_uid().unwrap(), @"None");
+
+        // network
+
+        let network = dump.network().unwrap().unwrap();
+        insta::assert_snapshot!(network.local.as_ref().unwrap(), @"ms-0");
+        insta::assert_snapshot!(network.remotes.get("ms-0").as_ref().unwrap().url, @"http://localhost:7700");
+        insta::assert_snapshot!(network.remotes.get("ms-0").as_ref().unwrap().search_api_key.is_none(), @"true");
+        insta::assert_snapshot!(network.remotes.get("ms-1").as_ref().unwrap().url, @"http://localhost:7701");
+        insta::assert_snapshot!(network.remotes.get("ms-1").as_ref().unwrap().search_api_key.is_none(), @"true");
+        insta::assert_snapshot!(network.remotes.get("ms-2").as_ref().unwrap().url, @"http://ms-5679.example.meilisearch.io");
+        insta::assert_snapshot!(network.remotes.get("ms-2").as_ref().unwrap().search_api_key.as_ref().unwrap(), @"foo");
     }
 
     #[test]

@@ -326,7 +326,7 @@ fn test_auto_deletion_of_tasks() {
 fn test_task_queue_is_full() {
     let (index_scheduler, mut handle) = IndexScheduler::test_with_custom_config(vec![], |config| {
         // that's the minimum map size possible
-        config.task_db_size = 1048576;
+        config.task_db_size = 1048576 * 3;
         None
     });
 

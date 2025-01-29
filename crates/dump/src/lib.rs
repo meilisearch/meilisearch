@@ -229,7 +229,7 @@ pub(crate) mod test {
     use big_s::S;
     use maplit::{btreemap, btreeset};
     use meilisearch_types::facet_values_sort::FacetValuesSort;
-    use meilisearch_types::features::RuntimeTogglableFeatures;
+    use meilisearch_types::features::{Network, Remote, RuntimeTogglableFeatures};
     use meilisearch_types::index_uid_pattern::IndexUidPattern;
     use meilisearch_types::keys::{Action, Key};
     use meilisearch_types::milli;
@@ -455,6 +455,10 @@ pub(crate) mod test {
 
         dump.create_experimental_features(features).unwrap();
 
+        // ========== network
+        let network = create_test_network();
+        dump.create_network(network).unwrap();
+
         // create the dump
         let mut file = tempfile::tempfile().unwrap();
         dump.persist_to(&mut file).unwrap();
@@ -465,6 +469,13 @@ pub(crate) mod test {
 
     fn create_test_features() -> RuntimeTogglableFeatures {
         RuntimeTogglableFeatures::default()
+    }
+
+    fn create_test_network() -> Network {
+        Network {
+            local: Some("myself".to_string()),
+            remotes: maplit::btreemap! {"other".to_string() => Remote { url: "http://test".to_string(), search_api_key: Some("apiKey".to_string()) }},
+        }
     }
 
     #[test]
@@ -515,5 +526,9 @@ pub(crate) mod test {
         // ==== checking the features
         let expected = create_test_features();
         assert_eq!(dump.features().unwrap().unwrap(), expected);
+
+        // ==== checking the network
+        let expected = create_test_network();
+        assert_eq!(&expected, dump.network().unwrap().unwrap());
     }
 }
