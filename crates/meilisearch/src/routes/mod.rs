@@ -34,6 +34,7 @@ use crate::routes::features::RuntimeTogglableFeatures;
 use crate::routes::indexes::documents::{DocumentDeletionByFilter, DocumentEditionByFunction};
 use crate::routes::indexes::IndexView;
 use crate::routes::multi_search::SearchResults;
+use crate::routes::network::{Network, Remote};
 use crate::routes::swap_indexes::SwapIndexesPayload;
 use crate::search::{
     FederatedSearch, FederatedSearchResult, Federation, FederationOptions, MergeFacets,
@@ -54,6 +55,7 @@ mod logs;
 mod metrics;
 mod multi_search;
 mod multi_search_analytics;
+pub mod network;
 mod open_api_utils;
 mod snapshot;
 mod swap_indexes;
@@ -75,6 +77,7 @@ pub mod tasks;
         (path = "/multi-search", api = multi_search::MultiSearchApi),
         (path = "/swap-indexes", api = swap_indexes::SwapIndexesApi),
         (path = "/experimental-features", api = features::ExperimentalFeaturesApi),
+        (path = "/network", api = network::NetworkApi),
     ),
     paths(get_health, get_version, get_stats),
     tags(
@@ -85,7 +88,7 @@ pub mod tasks;
         url = "/",
         description = "Local server",
     )),
-    components(schemas(PaginationView<KeyView>, PaginationView<IndexView>, IndexView, DocumentDeletionByFilter, AllBatches, BatchStats, ProgressStepView, ProgressView, BatchView, RuntimeTogglableFeatures, SwapIndexesPayload, DocumentEditionByFunction, MergeFacets, FederationOptions, SearchQueryWithIndex, Federation, FederatedSearch, FederatedSearchResult, SearchResults, SearchResultWithIndex, SimilarQuery, SimilarResult, PaginationView<serde_json::Value>, BrowseQuery, UpdateIndexRequest, IndexUid, IndexCreateRequest, KeyView, Action, CreateApiKey, UpdateStderrLogs, LogMode, GetLogs, IndexStats, Stats, HealthStatus, HealthResponse, VersionResponse, Code, ErrorType, AllTasks, TaskView, Status, DetailsView, ResponseError, Settings<Unchecked>, Settings<Checked>, TypoSettings, MinWordSizeTyposSetting, FacetingSettings, PaginationSettings, SummarizedTaskView, Kind))
+    components(schemas(PaginationView<KeyView>, PaginationView<IndexView>, IndexView, DocumentDeletionByFilter, AllBatches, BatchStats, ProgressStepView, ProgressView, BatchView, RuntimeTogglableFeatures, SwapIndexesPayload, DocumentEditionByFunction, MergeFacets, FederationOptions, SearchQueryWithIndex, Federation, FederatedSearch, FederatedSearchResult, SearchResults, SearchResultWithIndex, SimilarQuery, SimilarResult, PaginationView<serde_json::Value>, BrowseQuery, UpdateIndexRequest, IndexUid, IndexCreateRequest, KeyView, Action, CreateApiKey, UpdateStderrLogs, LogMode, GetLogs, IndexStats, Stats, HealthStatus, HealthResponse, VersionResponse, Code, ErrorType, AllTasks, TaskView, Status, DetailsView, ResponseError, Settings<Unchecked>, Settings<Checked>, TypoSettings, MinWordSizeTyposSetting, FacetingSettings, PaginationSettings, SummarizedTaskView, Kind, Network, Remote))
 )]
 pub struct MeilisearchApi;
 
@@ -103,7 +106,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(web::scope("/multi-search").configure(multi_search::configure))
         .service(web::scope("/swap-indexes").configure(swap_indexes::configure))
         .service(web::scope("/metrics").configure(metrics::configure))
-        .service(web::scope("/experimental-features").configure(features::configure));
+        .service(web::scope("/experimental-features").configure(features::configure))
+        .service(web::scope("/network").configure(network::configure));
 
     #[cfg(feature = "swagger")]
     {
