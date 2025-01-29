@@ -431,9 +431,12 @@ fn import_dump(
         keys.push(key);
     }
 
-    // 3. Import the runtime features.
+    // 3. Import the runtime features and network
     let features = dump_reader.features()?.unwrap_or_default();
     index_scheduler.put_runtime_features(features)?;
+
+    let network = dump_reader.network()?.cloned().unwrap_or_default();
+    index_scheduler.put_network(network)?;
 
     let indexer_config = index_scheduler.indexer_config();
 

@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use flate2::write::GzEncoder;
 use flate2::Compression;
-use meilisearch_types::features::RuntimeTogglableFeatures;
+use meilisearch_types::features::{Network, RuntimeTogglableFeatures};
 use meilisearch_types::keys::Key;
 use meilisearch_types::settings::{Checked, Settings};
 use serde_json::{Map, Value};
@@ -59,6 +59,10 @@ impl DumpWriter {
             self.dir.path().join("experimental-features.json"),
             serde_json::to_string(&features)?,
         )?)
+    }
+
+    pub fn create_network(&self, network: Network) -> Result<()> {
+        Ok(std::fs::write(self.dir.path().join("network.json"), serde_json::to_string(&network)?)?)
     }
 
     pub fn persist_to(self, mut writer: impl Write) -> Result<()> {

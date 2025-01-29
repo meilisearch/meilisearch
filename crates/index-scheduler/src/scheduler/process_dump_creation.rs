@@ -219,6 +219,8 @@ impl IndexScheduler {
         progress.update_progress(DumpCreationProgress::DumpTheExperimentalFeatures);
         let features = self.features().runtime_features();
         dump.create_experimental_features(features)?;
+        let network = self.network();
+        dump.create_network(network)?;
 
         let dump_uid = started_at.format(format_description!(
                     "[year repr:full][month repr:numerical][day padding:zero]-[hour padding:zero][minute padding:zero][second padding:zero][subsecond digits:3]"
