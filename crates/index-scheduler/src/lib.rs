@@ -2024,9 +2024,11 @@ impl<'a> Dump<'a> {
                 let mut writer = io::BufWriter::new(file);
                 for doc in content_file {
                     let doc = doc?;
-                    serde_json::to_writer(&mut writer, &doc).map_err(|e| {
-                        Error::from_milli(milli::InternalError::SerdeJson(e).into(), None)
-                    })?;
+                    serde_json::to_writer(&mut writer, &doc)
+                        .map_err(|e| {
+                            Error::from_milli(milli::InternalError::SerdeJson(e).into(), None)
+                        })
+                        .unwrap();
                 }
                 let file = writer.into_inner().map_err(|e| e.into_error())?;
                 file.persist()?;

@@ -27,7 +27,7 @@ pub fn extract_document_facets<'doc>(
         let selection = perm_json_p::select_field(field_name, Some(attributes_to_extract), &[]);
         if selection != perm_json_p::Selection::Skip {
             // parse json.
-            match serde_json::value::to_value(value).map_err(InternalError::SerdeJson)? {
+            match serde_json::value::to_value(value).map_err(InternalError::SerdeJson).unwrap() {
                 Value::Object(object) => {
                     perm_json_p::seek_leaf_values_in_object(
                         &object,

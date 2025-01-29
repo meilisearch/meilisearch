@@ -206,7 +206,7 @@ fn tokens_from_document<'a>(
             if let Some(field_bytes) = KvReaderDelAdd::from_slice(field_bytes).get(del_add) {
                 // parse json.
                 let value =
-                    serde_json::from_slice(field_bytes).map_err(InternalError::SerdeJson)?;
+                    serde_json::from_slice(field_bytes).map_err(InternalError::SerdeJson).unwrap();
 
                 // prepare writing destination.
                 buffers.obkv_positions_buffer.clear();

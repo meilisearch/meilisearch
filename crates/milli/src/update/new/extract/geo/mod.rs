@@ -256,15 +256,16 @@ pub fn extract_geo_coordinates(
     external_id: &str,
     raw_value: &RawValue,
 ) -> Result<Option<[f64; 2]>> {
-    let mut geo = match serde_json::from_str(raw_value.get()).map_err(InternalError::SerdeJson)? {
-        Value::Null => return Ok(None),
-        Value::Object(map) => map,
-        value => {
-            return Err(
-                GeoError::NotAnObject { document_id: Value::from(external_id), value }.into()
-            )
-        }
-    };
+    let mut geo =
+        match serde_json::from_str(raw_value.get()).map_err(InternalError::SerdeJson).unwrap() {
+            Value::Null => return Ok(None),
+            Value::Object(map) => map,
+            value => {
+                return Err(
+                    GeoError::NotAnObject { document_id: Value::from(external_id), value }.into()
+                )
+            }
+        };
 
     let [lat, lng] = match (geo.remove("lat"), geo.remove("lng")) {
         (Some(lat), Some(lng)) => {

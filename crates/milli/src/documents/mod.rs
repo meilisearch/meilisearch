@@ -33,7 +33,7 @@ pub fn obkv_to_object(obkv: &KvReader<FieldId>, index: &DocumentsBatchIndex) -> 
             let field_name = index
                 .name(field_id)
                 .ok_or(FieldIdMapMissingEntry::FieldId { field_id, process: "obkv_to_object" })?;
-            let value = serde_json::from_slice(value).map_err(InternalError::SerdeJson)?;
+            let value = serde_json::from_slice(value).map_err(InternalError::SerdeJson).unwrap();
             Ok((field_name.to_string(), value))
         })
         .collect()
@@ -84,7 +84,8 @@ impl DocumentsBatchIndex {
             let key =
                 self.0.get_by_left(&k).ok_or(crate::error::InternalError::DatabaseClosing)?.clone();
             let value = serde_json::from_slice::<serde_json::Value>(v)
-                .map_err(crate::error::InternalError::SerdeJson)?;
+                .map_err(crate::error::InternalError::SerdeJson)
+                .unwrap();
             map.insert(key, value);
         }
 

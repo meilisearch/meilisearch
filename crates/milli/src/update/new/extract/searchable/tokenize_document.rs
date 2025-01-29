@@ -94,7 +94,7 @@ impl<'a> DocumentTokenizer<'a> {
             };
 
             // parse json.
-            match serde_json::to_value(value).map_err(InternalError::SerdeJson)? {
+            match serde_json::to_value(value).map_err(InternalError::SerdeJson).unwrap() {
                 Value::Object(object) => seek_leaf_values_in_object(
                     &object,
                     None,

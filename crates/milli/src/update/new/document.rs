@@ -86,7 +86,7 @@ impl<'t, Mapper: FieldIdMapper> Document<'t> for DocumentFromDb<'t, Mapper> {
 
             let res = (|| {
                 let value =
-                    serde_json::from_slice(value).map_err(crate::InternalError::SerdeJson)?;
+                    serde_json::from_slice(value).map_err(crate::InternalError::SerdeJson).unwrap();
 
                 Ok((name, value))
             })();
@@ -139,7 +139,7 @@ impl<'t, Mapper: FieldIdMapper> DocumentFromDb<'t, Mapper> {
             return Ok(None);
         };
         let Some(value) = self.content.get(fid) else { return Ok(None) };
-        Ok(Some(serde_json::from_slice(value).map_err(InternalError::SerdeJson)?))
+        Ok(Some(serde_json::from_slice(value).map_err(InternalError::SerdeJson).unwrap()))
     }
 }
 

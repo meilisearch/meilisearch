@@ -58,9 +58,9 @@ impl UpdateByFunction {
 
         let ast = engine.compile(code).map_err(UserError::DocumentEditionCompilationError)?;
         let context = match context {
-            Some(context) => {
-                Some(serde_json::from_value(context.into()).map_err(InternalError::SerdeJson)?)
-            }
+            Some(context) => Some(
+                serde_json::from_value(context.into()).map_err(InternalError::SerdeJson).unwrap(),
+            ),
             None => None,
         };
 
@@ -137,9 +137,11 @@ impl<'index> DocumentChanges<'index> for UpdateByFunctionChanges<'index> {
                 Some(new_rhai_document) => {
                     let mut buffer = bumpalo::collections::Vec::new_in(doc_alloc);
                     serde_json::to_writer(&mut buffer, &new_rhai_document)
-                        .map_err(InternalError::SerdeJson)?;
+                        .map_err(InternalError::SerdeJson)
+                        .unwrap();
                     let raw_new_doc = serde_json::from_slice(buffer.into_bump_slice())
-                        .map_err(InternalError::SerdeJson)?;
+                        .map_err(InternalError::SerdeJson)
+                        .unwrap();
 
                     // Note: This condition is not perfect. Sometimes it detect changes
                     //       like with floating points numbers and consider updating
@@ -166,7 +168,8 @@ impl<'index> DocumentChanges<'index> for UpdateByFunctionChanges<'index> {
                                 FxBuildHasher,
                                 doc_alloc,
                             )
-                            .map_err(InternalError::SerdeJson)?;
+                            .map_err(InternalError::SerdeJson)
+                            .unwrap();
 
                             Ok(Some(DocumentChange::Update(Update::create(
                                 docid,
@@ -200,7 +203,7 @@ fn obkv_to_rhaimap(obkv: &KvReaderFieldId, fields_ids_map: &FieldsIdsMap) -> Res
                 field_id: id,
                 process: "all_obkv_to_rhaimap",
             })?;
-            let value = serde_json::from_slice(value).map_err(InternalError::SerdeJson)?;
+            let value = serde_json::from_slice(value).map_err(InternalError::SerdeJson).unwrap();
             Ok((name.into(), value))
         })
         .collect();

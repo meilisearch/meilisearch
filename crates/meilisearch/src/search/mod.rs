@@ -1337,7 +1337,7 @@ impl<'a> HitMaker<'a> {
                     ExplicitVectors { embeddings: Some(vector.into()), regenerate: !user_provided };
                 vectors.insert(
                     name,
-                    serde_json::to_value(embeddings).map_err(InternalError::SerdeJson)?,
+                    serde_json::to_value(embeddings).map_err(InternalError::SerdeJson).unwrap(),
                 );
             }
             document.insert("_vectors".into(), vectors.into());
@@ -1717,7 +1717,7 @@ fn make_document(
 
     // recreate the original json
     for (key, value) in obkv.iter() {
-        let value = serde_json::from_slice(value).map_err(InternalError::SerdeJson)?;
+        let value = serde_json::from_slice(value).map_err(InternalError::SerdeJson).unwrap();
         let key = field_ids_map.name(key).expect("Missing field name").to_string();
 
         document.insert(key, value);

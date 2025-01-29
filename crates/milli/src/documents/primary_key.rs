@@ -92,7 +92,8 @@ impl<'a> PrimaryKey<'a> {
             PrimaryKey::Flat { name: _, field_id } => match document.get(*field_id) {
                 Some(document_id_bytes) => {
                     let document_id = serde_json::from_slice(document_id_bytes)
-                        .map_err(InternalError::SerdeJson)?;
+                        .map_err(InternalError::SerdeJson)
+                        .unwrap();
                     match validate_document_id_value(document_id) {
                         Ok(document_id) => Ok(Ok(document_id)),
                         Err(user_error) => {
@@ -108,7 +109,8 @@ impl<'a> PrimaryKey<'a> {
                     if let Some(field_id) = fields.id(first_level_name) {
                         if let Some(value_bytes) = document.get(field_id) {
                             let object = serde_json::from_slice(value_bytes)
-                                .map_err(InternalError::SerdeJson)?;
+                                .map_err(InternalError::SerdeJson)
+                                .unwrap();
                             fetch_matching_values(object, right, &mut matching_documents_ids);
 
                             if matching_documents_ids.len() >= 2 {
@@ -151,11 +153,12 @@ impl<'a> PrimaryKey<'a> {
                 };
 
                 let document_id: &RawValue =
-                    serde_json::from_slice(document_id).map_err(InternalError::SerdeJson)?;
+                    serde_json::from_slice(document_id).map_err(InternalError::SerdeJson).unwrap();
 
                 let document_id = document_id
                     .deserialize_any(crate::update::new::indexer::de::DocumentIdVisitor(indexer))
-                    .map_err(InternalError::SerdeJson)?;
+                    .map_err(InternalError::SerdeJson)
+                    .unwrap();
 
                 let external_document_id = match document_id {
                     Ok(document_id) => Ok(document_id),
@@ -173,7 +176,7 @@ impl<'a> PrimaryKey<'a> {
 
                     let Some(value) = document.get(fid) else { continue };
                     let value: &RawValue =
-                        serde_json::from_slice(value).map_err(InternalError::SerdeJson)?;
+                        serde_json::from_slice(value).map_err(InternalError::SerdeJson).unwrap();
                     match match_component(first_level, right, value, indexer, &mut docid) {
                         ControlFlow::Continue(()) => continue,
                         ControlFlow::Break(Ok(_)) => {
@@ -183,7 +186,7 @@ impl<'a> PrimaryKey<'a> {
                             .into())
                         }
                         ControlFlow::Break(Err(err)) => {
-                            return Err(InternalError::SerdeJson(err).into())
+                            panic!("{err}");
                         }
                     }
                 }

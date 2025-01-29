@@ -123,7 +123,8 @@ pub fn enrich_documents_batch<R: Read + Seek>(
             }
         }
 
-        let document_id = serde_json::to_vec(&document_id).map_err(InternalError::SerdeJson)?;
+        let document_id =
+            serde_json::to_vec(&document_id).map_err(InternalError::SerdeJson).unwrap();
         external_ids.insert(count.to_be_bytes(), document_id)?;
 
         count += 1;
@@ -237,7 +238,7 @@ pub fn validate_geo_from_json(id: &DocumentId, bytes: &[u8]) -> Result<StdResult
     let debug_id = || {
         serde_json::from_slice(id.value().as_bytes()).unwrap_or_else(|_| Value::from(id.debug()))
     };
-    match serde_json::from_slice(bytes).map_err(InternalError::SerdeJson)? {
+    match serde_json::from_slice(bytes).map_err(InternalError::SerdeJson).unwrap() {
         Value::Object(mut object) => match (object.remove("lat"), object.remove("lng")) {
             (Some(lat), Some(lng)) => {
                 match (extract_finite_float_from_value(lat), extract_finite_float_from_value(lng)) {

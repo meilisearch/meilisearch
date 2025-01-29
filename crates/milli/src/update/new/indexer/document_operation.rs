@@ -158,7 +158,7 @@ fn extract_addition_payload_changes<'r, 'pl: 'r>(
 
     let mut previous_offset = 0;
     let mut iter = Deserializer::from_slice(payload).into_iter::<&RawValue>();
-    while let Some(doc) = iter.next().transpose().map_err(InternalError::SerdeJson)? {
+    while let Some(doc) = iter.next().transpose().map_err(InternalError::SerdeJson).unwrap() {
         *bytes = previous_offset as u64;
 
         // Only guess the primary key if it is the first document

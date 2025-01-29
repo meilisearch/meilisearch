@@ -839,12 +839,14 @@ impl IndexScheduler {
                             for document in
                                 serde_json::de::Deserializer::from_reader(content_file).into_iter()
                             {
-                                let document = document.map_err(|e| {
-                                    Error::from_milli(
-                                        milli::InternalError::SerdeJson(e).into(),
-                                        None,
-                                    )
-                                })?;
+                                let document = document
+                                    .map_err(|e| {
+                                        Error::from_milli(
+                                            milli::InternalError::SerdeJson(e).into(),
+                                            None,
+                                        )
+                                    })
+                                    .unwrap();
                                 dump_content_file.push_document(&document)?;
                             }
 

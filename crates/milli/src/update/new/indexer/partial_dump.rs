@@ -78,7 +78,8 @@ where
         let external_document_id = external_document_id.to_de();
 
         let document = RawMap::from_raw_value_and_hasher(document, FxBuildHasher, doc_alloc)
-            .map_err(InternalError::SerdeJson)?;
+            .map_err(InternalError::SerdeJson)
+            .unwrap();
 
         let insertion = Insertion::create(docid, external_document_id, Versions::single(document));
         Ok(Some(DocumentChange::Insertion(insertion)))

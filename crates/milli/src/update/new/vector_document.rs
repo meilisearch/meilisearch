@@ -105,7 +105,8 @@ impl<'t> VectorDocumentFromDb<'t> {
         let vectors_field = match vectors {
             Some(vectors) => Some(
                 RawMap::from_raw_value_and_hasher(vectors, FxBuildHasher, doc_alloc)
-                    .map_err(InternalError::SerdeJson)?,
+                    .map_err(InternalError::SerdeJson)
+                    .unwrap(),
             ),
             None => None,
         };

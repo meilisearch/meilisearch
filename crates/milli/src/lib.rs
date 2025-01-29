@@ -228,7 +228,8 @@ pub fn obkv_to_json(
                 field_id: id,
                 process: "obkv_to_json",
             })?;
-            let value = serde_json::from_slice(value).map_err(error::InternalError::SerdeJson)?;
+            let value =
+                serde_json::from_slice(value).map_err(error::InternalError::SerdeJson).unwrap();
             Ok((name.to_owned(), value))
         })
         .collect()
