@@ -496,6 +496,72 @@ impl SearchQueryWithIndex {
         self.facets.as_deref().filter(|v| !v.is_empty())
     }
 
+    pub fn from_index_query_federation(
+        index_uid: IndexUid,
+        query: SearchQuery,
+        federation_options: Option<FederationOptions>,
+    ) -> Self {
+        let SearchQuery {
+            q,
+            vector,
+            hybrid,
+            offset,
+            limit,
+            page,
+            hits_per_page,
+            attributes_to_retrieve,
+            retrieve_vectors,
+            attributes_to_crop,
+            crop_length,
+            attributes_to_highlight,
+            show_matches_position,
+            show_ranking_score,
+            show_ranking_score_details,
+            filter,
+            sort,
+            distinct,
+            facets,
+            highlight_pre_tag,
+            highlight_post_tag,
+            crop_marker,
+            matching_strategy,
+            attributes_to_search_on,
+            ranking_score_threshold,
+            locales,
+        } = query;
+
+        SearchQueryWithIndex {
+            index_uid,
+            q,
+            vector,
+            hybrid,
+            offset: if offset == DEFAULT_SEARCH_OFFSET() { None } else { Some(offset) },
+            limit: if limit == DEFAULT_SEARCH_LIMIT() { None } else { Some(limit) },
+            page,
+            hits_per_page,
+            attributes_to_retrieve,
+            retrieve_vectors,
+            attributes_to_crop,
+            crop_length,
+            attributes_to_highlight,
+            show_ranking_score,
+            show_ranking_score_details,
+            show_matches_position,
+            filter,
+            sort,
+            distinct,
+            facets,
+            highlight_pre_tag,
+            highlight_post_tag,
+            crop_marker,
+            matching_strategy,
+            attributes_to_search_on,
+            ranking_score_threshold,
+            locales,
+            federation_options,
+        }
+    }
+
     pub fn into_index_query_federation(self) -> (IndexUid, SearchQuery, Option<FederationOptions>) {
         let SearchQueryWithIndex {
             index_uid,
