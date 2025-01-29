@@ -299,7 +299,8 @@ pub(crate) mod test {
         ├---- experimental-features.json
         ├---- instance_uid.uuid
         ├---- keys.jsonl
-        └---- metadata.json
+        ├---- metadata.json
+        └---- network.json
         "###);
 
         // ==== checking the top level infos
