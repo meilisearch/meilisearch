@@ -166,13 +166,41 @@ impl IndexScheduler {
             let processing_batch = &mut processing_batch;
             let progress = progress.clone();
             std::thread::scope(|s| {
+                let p = progress.clone();
                 let handle = std::thread::Builder::new()
                     .name(String::from("batch-operation"))
                     .spawn_scoped(s, move || {
-                        cloned_index_scheduler.process_batch(batch, processing_batch, progress)
+                        cloned_index_scheduler.process_batch(batch, processing_batch, p)
                     })
                     .unwrap();
-                handle.join().unwrap_or(Err(Error::ProcessBatchPanicked))
+
+                match handle.join() {
+                    Ok(ret) => {
+                        if ret.is_err() {
+                            if let Ok(progress_view) =
+                                serde_json::to_string(&progress.as_progress_view())
+                            {
+                                tracing::warn!("Batch failed while doing: {progress_view}")
+                            }
+                        }
+                        ret
+                    }
+                    Err(panic) => {
+                        if let Ok(progress_view) =
+                            serde_json::to_string(&progress.as_progress_view())
+                        {
+                            tracing::warn!("Batch failed while doing: {progress_view}")
+                        }
+                        let msg = match panic.downcast_ref::<&'static str>() {
+                            Some(s) => *s,
+                            None => match panic.downcast_ref::<String>() {
+                                Some(s) => &s[..],
+                                None => "Box<dyn Any>",
+                            },
+                        };
+                        Err(Error::ProcessBatchPanicked(msg.to_string()))
+                    }
+                }
             })
         };
 
