@@ -443,7 +443,7 @@ fn compact_index(db_path: PathBuf, index_name: &str) -> anyhow::Result<()> {
         drop(new_file);
 
         println!("Everything's done 🎉");
-        return Ok(())
+        return Ok(());
     }
 
     bail!("Target index {index_name} not found!")
