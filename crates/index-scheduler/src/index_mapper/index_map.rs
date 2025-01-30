@@ -305,6 +305,9 @@ fn create_or_open_index(
     let mut options = EnvOpenOptions::new();
     options.map_size(clamp_to_page_size(map_size));
 
+    // You can find more details about this experimental
+    // environment variable on the following GitHub discussion:
+    // <https://github.com/orgs/meilisearch/discussions/806>
     let max_readers = match std::env::var("MEILI_EXPERIMENTAL_INDEX_MAX_READERS") {
         Ok(value) => u32::from_str(&value).unwrap(),
         Err(VarError::NotPresent) => 1024,
