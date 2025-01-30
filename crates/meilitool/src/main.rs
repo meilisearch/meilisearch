@@ -95,9 +95,9 @@ enum Command {
     ///
     /// Note that the compaction will open the index, copy and compact the index into another file
     /// **on the same disk as the index** and replace the previous index with the newly compacted
-    /// one. Which means that the disk must have enough room for at most two time the index size.
+    /// one. This means that the disk must have enough room for at most two times the index size.
     ///
-    /// To make sure not to loose any data, this tool takes a mutable transaction on the index
+    /// To make sure not to lose any data, this tool takes a mutable transaction on the index
     /// before running the copy and compaction. This way the current indexation must finish before
     /// the compaction operation can start. Once the compaction is done, the big index is replaced
     /// by the compacted one and the mutable transaction is released.
