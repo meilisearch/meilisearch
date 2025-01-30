@@ -86,6 +86,19 @@ impl RoFeatures {
             .into())
         }
     }
+
+    pub fn check_proxy_search(&self, disabled_action: &'static str) -> Result<()> {
+        if self.runtime.proxy_search {
+            Ok(())
+        } else {
+            Err(FeatureNotEnabledError {
+                disabled_action,
+                feature: "proxy search",
+                issue_link: "https://github.com/orgs/meilisearch/discussions/805",
+            }
+            .into())
+        }
+    }
 }
 
 impl FeatureData {
