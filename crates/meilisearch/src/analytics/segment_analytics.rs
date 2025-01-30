@@ -196,6 +196,7 @@ struct Infos {
     experimental_reduce_indexing_memory_usage: bool,
     experimental_max_number_of_batched_tasks: usize,
     experimental_limit_batched_tasks_total_size: u64,
+    experimental_network: bool,
     gpu_enabled: bool,
     db_path: bool,
     import_dump: bool,
@@ -286,6 +287,7 @@ impl Infos {
             logs_route,
             edit_documents_by_function,
             contains_filter,
+            network,
         } = features;
 
         // We're going to override every sensible information.
@@ -303,6 +305,7 @@ impl Infos {
             experimental_replication_parameters,
             experimental_enable_logs_route: experimental_enable_logs_route | logs_route,
             experimental_reduce_indexing_memory_usage,
+            experimental_network: network,
             gpu_enabled: meilisearch_types::milli::vector::is_cuda_enabled(),
             db_path: db_path != PathBuf::from("./data.ms"),
             import_dump: import_dump.is_some(),

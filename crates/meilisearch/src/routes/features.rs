@@ -50,6 +50,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             logs_route: Some(false),
             edit_documents_by_function: Some(false),
             contains_filter: Some(false),
+            network: Some(false),
         })),
         (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
             {
@@ -88,6 +89,8 @@ pub struct RuntimeTogglableFeatures {
     pub edit_documents_by_function: Option<bool>,
     #[deserr(default)]
     pub contains_filter: Option<bool>,
+    #[deserr(default)]
+    pub network: Option<bool>,
 }
 
 impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogglableFeatures {
@@ -97,6 +100,7 @@ impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogg
             logs_route,
             edit_documents_by_function,
             contains_filter,
+            network,
         } = value;
 
         Self {
@@ -104,6 +108,7 @@ impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogg
             logs_route: Some(logs_route),
             edit_documents_by_function: Some(edit_documents_by_function),
             contains_filter: Some(contains_filter),
+            network: Some(network),
         }
     }
 }
@@ -114,6 +119,7 @@ pub struct PatchExperimentalFeatureAnalytics {
     logs_route: bool,
     edit_documents_by_function: bool,
     contains_filter: bool,
+    network: bool,
 }
 
 impl Aggregate for PatchExperimentalFeatureAnalytics {
@@ -127,6 +133,7 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
             logs_route: new.logs_route,
             edit_documents_by_function: new.edit_documents_by_function,
             contains_filter: new.contains_filter,
+            network: new.network,
         })
     }
 
@@ -149,6 +156,7 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
             logs_route: Some(false),
             edit_documents_by_function: Some(false),
             contains_filter: Some(false),
+            network: Some(false),
          })),
         (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
             {
@@ -181,6 +189,7 @@ async fn patch_features(
             .edit_documents_by_function
             .unwrap_or(old_features.edit_documents_by_function),
         contains_filter: new_features.0.contains_filter.unwrap_or(old_features.contains_filter),
+        network: new_features.0.network.unwrap_or(old_features.network),
     };
 
     // explicitly destructure for analytics rather than using the `Serialize` implementation, because
@@ -191,6 +200,7 @@ async fn patch_features(
         logs_route,
         edit_documents_by_function,
         contains_filter,
+        network,
     } = new_features;
 
     analytics.publish(
@@ -199,6 +209,7 @@ async fn patch_features(
             logs_route,
             edit_documents_by_function,
             contains_filter,
+            network,
         },
         &req,
     );

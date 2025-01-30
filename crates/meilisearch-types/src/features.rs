@@ -7,6 +7,7 @@ pub struct RuntimeTogglableFeatures {
     pub logs_route: bool,
     pub edit_documents_by_function: bool,
     pub contains_filter: bool,
+    pub network: bool,
 }
 
 #[derive(Default, Debug, Clone, Copy)]

@@ -86,6 +86,19 @@ impl RoFeatures {
             .into())
         }
     }
+
+    pub fn check_network(&self, disabled_action: &'static str) -> Result<()> {
+        if self.runtime.network {
+            Ok(())
+        } else {
+            Err(FeatureNotEnabledError {
+                disabled_action,
+                feature: "network",
+                issue_link: "https://github.com/orgs/meilisearch/discussions/805",
+            }
+            .into())
+        }
+    }
 }
 
 impl FeatureData {
