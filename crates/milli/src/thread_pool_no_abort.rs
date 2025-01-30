@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use rayon::{ThreadPool, ThreadPoolBuilder};
@@ -9,6 +9,8 @@ use thiserror::Error;
 #[derive(Debug)]
 pub struct ThreadPoolNoAbort {
     thread_pool: ThreadPool,
+    /// The number of active operations.
+    active_operations: AtomicUsize,
     /// Set to true if the thread pool catched a panic.
     pool_catched_panic: Arc<AtomicBool>,
 }
@@ -19,7 +21,9 @@ impl ThreadPoolNoAbort {
         OP: FnOnce() -> R + Send,
         R: Send,
     {
+        self.active_operations.fetch_add(1, Ordering::Relaxed);
         let output = self.thread_pool.install(op);
+        self.active_operations.fetch_sub(1, Ordering::Relaxed);
         // While reseting the pool panic catcher we return an error if we catched one.
         if self.pool_catched_panic.swap(false, Ordering::SeqCst) {
             Err(PanicCatched)
@@ -30,6 +34,11 @@ impl ThreadPoolNoAbort {
 
     pub fn current_num_threads(&self) -> usize {
         self.thread_pool.current_num_threads()
+    }
+
+    /// The number of active operations.
+    pub fn active_operations(&self) -> usize {
+        self.active_operations.load(Ordering::Relaxed)
     }
 }
 
@@ -64,6 +73,10 @@ impl ThreadPoolNoAbortBuilder {
             let catched_panic = pool_catched_panic.clone();
             move |_result| catched_panic.store(true, Ordering::SeqCst)
         });
-        Ok(ThreadPoolNoAbort { thread_pool: self.0.build()?, pool_catched_panic })
+        Ok(ThreadPoolNoAbort {
+            thread_pool: self.0.build()?,
+            active_operations: AtomicUsize::new(0),
+            pool_catched_panic,
+        })
     }
 }
