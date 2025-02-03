@@ -167,6 +167,10 @@ impl Server<Owned> {
         self.service.patch("/experimental-features", value).await
     }
 
+    pub async fn set_network(&self, value: Value) -> (Value, StatusCode) {
+        self.service.patch("/network", value).await
+    }
+
     pub async fn get_metrics(&self) -> (Value, StatusCode) {
         self.service.get("/metrics").await
     }
@@ -391,6 +395,10 @@ impl<State> Server<State> {
 
     pub async fn get_features(&self) -> (Value, StatusCode) {
         self.service.get("/experimental-features").await
+    }
+
+    pub async fn get_network(&self) -> (Value, StatusCode) {
+        self.service.get("/network").await
     }
 }
 
