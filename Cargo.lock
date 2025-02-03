@@ -2839,8 +2839,7 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 [[package]]
 name = "heed"
 version = "0.22.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a56c94661ddfb51aa9cdfbf102cfcc340aa69267f95ebccc4af08d7c530d393"
+source = "git+https://github.com/meilisearch/heed?branch=allow-nested-rtxn-from-wtxn#05d9f224e274eaffcb023b9008028325769248cf"
 dependencies = [
  "bitflags 2.9.4",
  "byteorder",
@@ -2858,14 +2857,12 @@ dependencies = [
 [[package]]
 name = "heed-traits"
 version = "0.20.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb3130048d404c57ce5a1ac61a903696e8fcde7e8c2991e9fcfc1f27c3ef74ff"
+source = "git+https://github.com/meilisearch/heed?branch=allow-nested-rtxn-from-wtxn#05d9f224e274eaffcb023b9008028325769248cf"
 
 [[package]]
 name = "heed-types"
 version = "0.21.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13c255bdf46e07fb840d120a36dcc81f385140d7191c76a7391672675c01a55d"
+source = "git+https://github.com/meilisearch/heed?branch=allow-nested-rtxn-from-wtxn#05d9f224e274eaffcb023b9008028325769248cf"
 dependencies = [
  "bincode 1.3.3",
  "byteorder",
@@ -3890,8 +3887,7 @@ checksum = "241eaef5fd12c88705a01fc1066c48c4b36e0dd4377dcdc7ec3942cea7a69956"
 [[package]]
 name = "lmdb-master-sys"
 version = "0.2.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "864808e0b19fb6dd3b70ba94ee671b82fce17554cf80aeb0a155c65bb08027df"
+source = "git+https://github.com/meilisearch/heed?branch=allow-nested-rtxn-from-wtxn#05d9f224e274eaffcb023b9008028325769248cf"
 dependencies = [
  "cc",
  "doxygen-rs",
