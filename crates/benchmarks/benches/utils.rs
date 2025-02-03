@@ -12,7 +12,7 @@ use memmap2::Mmap;
 use milli::heed::EnvOpenOptions;
 use milli::progress::Progress;
 use milli::update::new::indexer;
-use milli::update::{IndexDocumentsMethod, IndexerConfig, Settings};
+use milli::update::{IndexerConfig, Settings};
 use milli::vector::EmbeddingConfigs;
 use milli::{Criterion, Filter, Index, Object, TermsMatchingStrategy};
 use serde_json::Value;
@@ -99,8 +99,8 @@ pub fn base_setup(conf: &Conf) -> Index {
     let mut new_fields_ids_map = db_fields_ids_map.clone();
 
     let documents = documents_from(conf.dataset, conf.dataset_format);
-    let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
-    indexer.add_documents(&documents).unwrap();
+    let mut indexer = indexer::DocumentOperation::new();
+    indexer.replace_documents(&documents).unwrap();
 
     let indexer_alloc = Bump::new();
     let (document_changes, _operation_stats, primary_key) = indexer

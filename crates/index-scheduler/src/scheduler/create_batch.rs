@@ -54,7 +54,8 @@ pub(crate) enum Batch {
 
 #[derive(Debug)]
 pub(crate) enum DocumentOperation {
-    Add(Uuid),
+    Replace(Uuid),
+    Update(Uuid),
     Delete(Vec<String>),
 }
 
@@ -64,7 +65,6 @@ pub(crate) enum IndexOperation {
     DocumentOperation {
         index_uid: String,
         primary_key: Option<String>,
-        method: IndexDocumentsMethod,
         operations: Vec<DocumentOperation>,
         tasks: Vec<Task>,
     },
@@ -254,7 +254,7 @@ impl IndexScheduler {
                     _ => unreachable!(),
                 }
             }
-            BatchKind::DocumentOperation { method, operation_ids, .. } => {
+            BatchKind::DocumentOperation { operation_ids, .. } => {
                 let tasks = self.queue.get_existing_tasks_for_processing_batch(
                     rtxn,
                     current_batch,
@@ -276,9 +276,17 @@ impl IndexScheduler {
 
                 for task in tasks.iter() {
                     match task.kind {
-                        KindWithContent::DocumentAdditionOrUpdate { content_file, .. } => {
-                            operations.push(DocumentOperation::Add(content_file));
-                        }
+                        KindWithContent::DocumentAdditionOrUpdate {
+                            content_file, method, ..
+                        } => match method {
+                            IndexDocumentsMethod::ReplaceDocuments => {
+                                operations.push(DocumentOperation::Replace(content_file))
+                            }
+                            IndexDocumentsMethod::UpdateDocuments => {
+                                operations.push(DocumentOperation::Update(content_file))
+                            }
+                            _ => unreachable!("Unknown document merging method"),
+                        },
                         KindWithContent::DocumentDeletion { ref documents_ids, .. } => {
                             operations.push(DocumentOperation::Delete(documents_ids.clone()));
                         }
@@ -290,7 +298,6 @@ impl IndexScheduler {
                     op: IndexOperation::DocumentOperation {
                         index_uid,
                         primary_key,
-                        method,
                         operations,
                         tasks,
                     },

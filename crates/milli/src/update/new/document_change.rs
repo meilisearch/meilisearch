@@ -27,7 +27,7 @@ pub struct Update<'doc> {
     docid: DocumentId,
     external_document_id: &'doc str,
     new: Versions<'doc>,
-    has_deletion: bool,
+    from_scratch: bool,
 }
 
 pub struct Insertion<'doc> {
@@ -109,9 +109,9 @@ impl<'doc> Update<'doc> {
         docid: DocumentId,
         external_document_id: &'doc str,
         new: Versions<'doc>,
-        has_deletion: bool,
+        from_scratch: bool,
     ) -> Self {
-        Update { docid, new, external_document_id, has_deletion }
+        Update { docid, new, external_document_id, from_scratch }
     }
 
     pub fn docid(&self) -> DocumentId {
@@ -154,7 +154,7 @@ impl<'doc> Update<'doc> {
         index: &'t Index,
         mapper: &'t Mapper,
     ) -> Result<MergedDocument<'_, 'doc, 't, Mapper>> {
-        if self.has_deletion {
+        if self.from_scratch {
             Ok(MergedDocument::without_db(DocumentFromVersions::new(&self.new)))
         } else {
             MergedDocument::with_db(
@@ -207,8 +207,8 @@ impl<'doc> Update<'doc> {
             cached_current = Some(current);
         }
 
-        if !self.has_deletion {
-            // no field deletion, so fields that don't appear in `updated` cannot have changed
+        if !self.from_scratch {
+            // no field deletion or update, so fields that don't appear in `updated` cannot have changed
             return Ok(changed);
         }
 
@@ -257,7 +257,7 @@ impl<'doc> Update<'doc> {
         doc_alloc: &'doc Bump,
         embedders: &'doc EmbeddingConfigs,
     ) -> Result<Option<MergedVectorDocument<'doc>>> {
-        if self.has_deletion {
+        if self.from_scratch {
             MergedVectorDocument::without_db(
                 self.external_document_id,
                 &self.new,

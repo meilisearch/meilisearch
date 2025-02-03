@@ -62,23 +62,21 @@ impl IndexScheduler {
 
                 Ok(tasks)
             }
-            IndexOperation::DocumentOperation {
-                index_uid,
-                primary_key,
-                method,
-                operations,
-                mut tasks,
-            } => {
+            IndexOperation::DocumentOperation { index_uid, primary_key, operations, mut tasks } => {
                 progress.update_progress(DocumentOperationProgress::RetrievingConfig);
                 // TODO: at some point, for better efficiency we might want to reuse the bumpalo for successive batches.
                 // this is made difficult by the fact we're doing private clones of the index scheduler and sending it
                 // to a fresh thread.
                 let mut content_files = Vec::new();
                 for operation in &operations {
-                    if let DocumentOperation::Add(content_uuid) = operation {
-                        let content_file = self.queue.file_store.get_update(*content_uuid)?;
-                        let mmap = unsafe { memmap2::Mmap::map(&content_file)? };
-                        content_files.push(mmap);
+                    match operation {
+                        DocumentOperation::Replace(content_uuid)
+                        | DocumentOperation::Update(content_uuid) => {
+                            let content_file = self.queue.file_store.get_update(*content_uuid)?;
+                            let mmap = unsafe { memmap2::Mmap::map(&content_file)? };
+                            content_files.push(mmap);
+                        }
+                        _ => (),
                     }
                 }
 
@@ -87,17 +85,23 @@ impl IndexScheduler {
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
                 let mut content_files_iter = content_files.iter();
-                let mut indexer = indexer::DocumentOperation::new(method);
+                let mut indexer = indexer::DocumentOperation::new();
                 let embedders = index
                     .embedding_configs(index_wtxn)
                     .map_err(|e| Error::from_milli(e, Some(index_uid.clone())))?;
                 let embedders = self.embedders(index_uid.clone(), embedders)?;
                 for operation in operations {
                     match operation {
-                        DocumentOperation::Add(_content_uuid) => {
+                        DocumentOperation::Replace(_content_uuid) => {
                             let mmap = content_files_iter.next().unwrap();
                             indexer
-                                .add_documents(mmap)
+                                .replace_documents(mmap)
+                                .map_err(|e| Error::from_milli(e, Some(index_uid.clone())))?;
+                        }
+                        DocumentOperation::Update(_content_uuid) => {
+                            let mmap = content_files_iter.next().unwrap();
+                            indexer
+                                .update_documents(mmap)
                                 .map_err(|e| Error::from_milli(e, Some(index_uid.clone())))?;
                         }
                         DocumentOperation::Delete(document_ids) => {

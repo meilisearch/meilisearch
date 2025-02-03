@@ -1839,9 +1839,15 @@ pub(crate) mod tests {
 
             let embedders =
                 InnerIndexSettings::from_index(&self.inner, &rtxn, None)?.embedding_configs;
-            let mut indexer =
-                indexer::DocumentOperation::new(self.index_documents_config.update_method);
-            indexer.add_documents(&documents).unwrap();
+            let mut indexer = indexer::DocumentOperation::new();
+            match self.index_documents_config.update_method {
+                IndexDocumentsMethod::ReplaceDocuments => {
+                    indexer.replace_documents(&documents).unwrap()
+                }
+                IndexDocumentsMethod::UpdateDocuments => {
+                    indexer.update_documents(&documents).unwrap()
+                }
+            }
 
             let indexer_alloc = Bump::new();
             let (document_changes, operation_stats, primary_key) = indexer.into_changes(
@@ -1928,8 +1934,7 @@ pub(crate) mod tests {
             let embedders =
                 InnerIndexSettings::from_index(&self.inner, &rtxn, None)?.embedding_configs;
 
-            let mut indexer =
-                indexer::DocumentOperation::new(self.index_documents_config.update_method);
+            let mut indexer = indexer::DocumentOperation::new();
             let external_document_ids: Vec<_> =
                 external_document_ids.iter().map(AsRef::as_ref).collect();
             indexer.delete_documents(external_document_ids.as_slice());
@@ -2006,13 +2011,13 @@ pub(crate) mod tests {
         let mut new_fields_ids_map = db_fields_ids_map.clone();
 
         let embedders = EmbeddingConfigs::default();
-        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+        let mut indexer = indexer::DocumentOperation::new();
         let payload = documents!([
             { "id": 1, "name": "kevin" },
             { "id": 2, "name": "bob", "age": 20 },
             { "id": 2, "name": "bob", "age": 20 },
         ]);
-        indexer.add_documents(&payload).unwrap();
+        indexer.replace_documents(&payload).unwrap();
 
         let indexer_alloc = Bump::new();
         let (document_changes, _operation_stats, primary_key) = indexer

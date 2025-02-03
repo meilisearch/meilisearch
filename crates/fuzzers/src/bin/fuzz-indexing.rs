@@ -12,7 +12,7 @@ use milli::documents::mmap_from_objects;
 use milli::heed::EnvOpenOptions;
 use milli::progress::Progress;
 use milli::update::new::indexer;
-use milli::update::{IndexDocumentsMethod, IndexerConfig};
+use milli::update::IndexerConfig;
 use milli::vector::EmbeddingConfigs;
 use milli::Index;
 use serde_json::Value;
@@ -89,9 +89,7 @@ fn main() {
 
                             let indexer_alloc = Bump::new();
                             let embedders = EmbeddingConfigs::default();
-                            let mut indexer = indexer::DocumentOperation::new(
-                                IndexDocumentsMethod::ReplaceDocuments,
-                            );
+                            let mut indexer = indexer::DocumentOperation::new();
 
                             let mut operations = Vec::new();
                             for op in batch.0 {
@@ -115,7 +113,7 @@ fn main() {
                             for op in &operations {
                                 match op {
                                     Either::Left(documents) => {
-                                        indexer.add_documents(documents).unwrap()
+                                        indexer.replace_documents(documents).unwrap()
                                     }
                                     Either::Right(ids) => indexer.delete_documents(ids),
                                 }

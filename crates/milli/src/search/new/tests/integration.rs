@@ -7,7 +7,7 @@ use maplit::{btreemap, hashset};
 
 use crate::progress::Progress;
 use crate::update::new::indexer;
-use crate::update::{IndexDocumentsMethod, IndexerConfig, Settings};
+use crate::update::{IndexerConfig, Settings};
 use crate::vector::EmbeddingConfigs;
 use crate::{db_snap, Criterion, Index};
 pub const CONTENT: &str = include_str!("../../../../tests/assets/test_set.ndjson");
@@ -55,7 +55,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     let mut new_fields_ids_map = db_fields_ids_map.clone();
 
     let embedders = EmbeddingConfigs::default();
-    let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+    let mut indexer = indexer::DocumentOperation::new();
 
     let mut file = tempfile::tempfile().unwrap();
     file.write_all(CONTENT.as_bytes()).unwrap();
@@ -63,7 +63,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     let payload = unsafe { memmap2::Mmap::map(&file).unwrap() };
 
     // index documents
-    indexer.add_documents(&payload).unwrap();
+    indexer.replace_documents(&payload).unwrap();
 
     let indexer_alloc = Bump::new();
     let (document_changes, operation_stats, primary_key) = indexer

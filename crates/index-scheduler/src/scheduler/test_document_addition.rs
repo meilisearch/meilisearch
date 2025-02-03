@@ -298,11 +298,8 @@ fn test_mixed_document_addition() {
     }
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_registering_the_10_tasks");
 
-    // Only half of the task should've been processed since we can't autobatch replace and update together.
-    handle.advance_n_successful_batches(5);
-    snapshot!(snapshot_index_scheduler(&index_scheduler), name: "five_tasks_processed");
-
-    handle.advance_n_successful_batches(5);
+    // All tasks should've been batched and processed together since any indexing task (updates with replacements) can be batched together
+    handle.advance_n_successful_batches(1);
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "all_tasks_processed");
 
     // has everything being pushed successfully in milli?
