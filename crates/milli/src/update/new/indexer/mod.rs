@@ -199,12 +199,17 @@ where
             &indexing_context.must_stop_processing,
         )?;
 
-        post_processing::post_process(
-            indexing_context,
-            wtxn,
-            global_fields_ids_map,
-            facet_field_ids_delta,
-        )?;
+        pool.install(|| {
+            // The post processing step is using rayon to process
+            // stuff in parallel and therefore need the thread pool.
+            post_processing::post_process(
+                indexing_context,
+                wtxn,
+                global_fields_ids_map,
+                facet_field_ids_delta,
+            )
+        })
+        .unwrap()?;
 
         indexing_context.progress.update_progress(IndexingStep::Finalizing);
 
