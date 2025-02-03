@@ -398,7 +398,7 @@ fn compact_index(db_path: PathBuf, index_name: &str) -> anyhow::Result<()> {
         }
 
         let index_path = db_path.join("indexes").join(uuid.to_string());
-        let index = Index::new(EnvOpenOptions::new(), &index_path).with_context(|| {
+        let index = Index::new(EnvOpenOptions::new(), &index_path, false).with_context(|| {
             format!("While trying to open the index at path {:?}", index_path.display())
         })?;
 
