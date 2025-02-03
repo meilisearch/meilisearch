@@ -208,7 +208,7 @@ impl<'doc> Update<'doc> {
         }
 
         if !self.from_scratch {
-            // no field deletion, so fields that don't appear in `updated` cannot have changed
+            // no field deletion or update, so fields that don't appear in `updated` cannot have changed
             return Ok(changed);
         }
 
