@@ -93,7 +93,7 @@ jobs:
     name: Test with Ollama
     runs-on: ubuntu-latest
     env:
-      MEILI_TEST_OLLAMA_SERVER: "true"
+      MEILI_TEST_OLLAMA_SERVER: "http://localhost:11434"
     steps:
       - uses: actions/checkout@v1
       - name: Install Ollama
