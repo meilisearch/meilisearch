@@ -88,6 +88,10 @@ impl Server<Owned> {
         self.service.api_key = Some(api_key.as_ref().to_string());
     }
 
+    pub fn clear_api_key(&mut self) {
+        self.service.api_key = None;
+    }
+
     /// Fetch and use the default admin key for nexts http requests.
     pub async fn use_admin_key(&mut self, master_key: impl AsRef<str>) {
         self.use_api_key(master_key);
