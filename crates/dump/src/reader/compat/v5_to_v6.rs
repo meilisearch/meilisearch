@@ -196,6 +196,10 @@ impl CompatV5ToV6 {
     pub fn features(&self) -> Result<Option<v6::RuntimeTogglableFeatures>> {
         Ok(None)
     }
+
+    pub fn network(&self) -> Result<Option<&v6::Network>> {
+        Ok(None)
+    }
 }
 
 pub enum CompatIndexV5ToV6 {

@@ -30,7 +30,7 @@ use milli::{
     MatchBounds, MatcherBuilder, SortError, TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
 };
 use regex::Regex;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 #[cfg(test)]
 mod mod_test;
@@ -41,7 +41,7 @@ use crate::error::MeilisearchHttpError;
 mod federated;
 pub use federated::{
     perform_federated_search, FederatedSearch, FederatedSearchResult, Federation,
-    FederationOptions, MergeFacets,
+    FederationOptions, MergeFacets, PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE,
 };
 
 mod ranking_rules;
@@ -119,7 +119,7 @@ pub struct SearchQuery {
     pub locales: Option<Vec<Locale>>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Deserr, ToSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Deserr, ToSchema, Serialize)]
 #[deserr(try_from(f64) = TryFrom::try_from -> InvalidSearchRankingScoreThreshold)]
 pub struct RankingScoreThreshold(f64);
 impl std::convert::TryFrom<f64> for RankingScoreThreshold {
@@ -275,11 +275,13 @@ impl fmt::Debug for SearchQuery {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Deserr, ToSchema)]
+#[derive(Debug, Clone, Default, PartialEq, Deserr, ToSchema, Serialize)]
 #[deserr(error = DeserrJsonError<InvalidSearchHybridQuery>, rename_all = camelCase, deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
 pub struct HybridQuery {
     #[deserr(default, error = DeserrJsonError<InvalidSearchSemanticRatio>, default)]
     #[schema(value_type = f32, default)]
+    #[serde(default)]
     pub semantic_ratio: SemanticRatio,
     #[deserr(error = DeserrJsonError<InvalidSearchEmbedder>)]
     pub embedder: String,
@@ -369,7 +371,7 @@ impl SearchKind {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Deserr)]
+#[derive(Debug, Clone, Copy, PartialEq, Deserr, Serialize)]
 #[deserr(try_from(f32) = TryFrom::try_from -> InvalidSearchSemanticRatio)]
 pub struct SemanticRatio(f32);
 
@@ -411,8 +413,9 @@ impl SearchQuery {
 // This struct contains the fields of `SearchQuery` inline.
 // This is because neither deserr nor serde support `flatten` when using `deny_unknown_fields.
 // The `From<SearchQueryWithIndex>` implementation ensures both structs remain up to date.
-#[derive(Debug, Clone, PartialEq, Deserr, ToSchema)]
+#[derive(Debug, Clone, Serialize, PartialEq, Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct SearchQueryWithIndex {
     #[deserr(error = DeserrJsonError<InvalidIndexUid>, missing_field_error = DeserrJsonError::missing_index_uid)]
@@ -491,6 +494,72 @@ impl SearchQueryWithIndex {
 
     pub fn has_facets(&self) -> Option<&[String]> {
         self.facets.as_deref().filter(|v| !v.is_empty())
+    }
+
+    pub fn from_index_query_federation(
+        index_uid: IndexUid,
+        query: SearchQuery,
+        federation_options: Option<FederationOptions>,
+    ) -> Self {
+        let SearchQuery {
+            q,
+            vector,
+            hybrid,
+            offset,
+            limit,
+            page,
+            hits_per_page,
+            attributes_to_retrieve,
+            retrieve_vectors,
+            attributes_to_crop,
+            crop_length,
+            attributes_to_highlight,
+            show_matches_position,
+            show_ranking_score,
+            show_ranking_score_details,
+            filter,
+            sort,
+            distinct,
+            facets,
+            highlight_pre_tag,
+            highlight_post_tag,
+            crop_marker,
+            matching_strategy,
+            attributes_to_search_on,
+            ranking_score_threshold,
+            locales,
+        } = query;
+
+        SearchQueryWithIndex {
+            index_uid,
+            q,
+            vector,
+            hybrid,
+            offset: if offset == DEFAULT_SEARCH_OFFSET() { None } else { Some(offset) },
+            limit: if limit == DEFAULT_SEARCH_LIMIT() { None } else { Some(limit) },
+            page,
+            hits_per_page,
+            attributes_to_retrieve,
+            retrieve_vectors,
+            attributes_to_crop,
+            crop_length,
+            attributes_to_highlight,
+            show_ranking_score,
+            show_ranking_score_details,
+            show_matches_position,
+            filter,
+            sort,
+            distinct,
+            facets,
+            highlight_pre_tag,
+            highlight_post_tag,
+            crop_marker,
+            matching_strategy,
+            attributes_to_search_on,
+            ranking_score_threshold,
+            locales,
+            federation_options,
+        }
     }
 
     pub fn into_index_query_federation(self) -> (IndexUid, SearchQuery, Option<FederationOptions>) {
@@ -620,8 +689,9 @@ impl TryFrom<Value> for ExternalDocumentId {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Deserr, ToSchema)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Deserr, ToSchema, Serialize)]
 #[deserr(rename_all = camelCase)]
+#[serde(rename_all = "camelCase")]
 pub enum MatchingStrategy {
     /// Remove query words from last to first
     Last,
@@ -667,19 +737,19 @@ impl From<FacetValuesSort> for OrderBy {
     }
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct SearchHit {
     #[serde(flatten)]
     #[schema(additional_properties, inline, value_type = HashMap<String, Value>)]
     pub document: Document,
-    #[serde(rename = "_formatted", skip_serializing_if = "Document::is_empty")]
+    #[serde(default, rename = "_formatted", skip_serializing_if = "Document::is_empty")]
     #[schema(additional_properties, value_type = HashMap<String, Value>)]
     pub formatted: Document,
-    #[serde(rename = "_matchesPosition", skip_serializing_if = "Option::is_none")]
+    #[serde(default, rename = "_matchesPosition", skip_serializing_if = "Option::is_none")]
     pub matches_position: Option<MatchesPosition>,
-    #[serde(rename = "_rankingScore", skip_serializing_if = "Option::is_none")]
+    #[serde(default, rename = "_rankingScore", skip_serializing_if = "Option::is_none")]
     pub ranking_score: Option<f64>,
-    #[serde(rename = "_rankingScoreDetails", skip_serializing_if = "Option::is_none")]
+    #[serde(default, rename = "_rankingScoreDetails", skip_serializing_if = "Option::is_none")]
     pub ranking_score_details: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
@@ -767,7 +837,7 @@ pub struct SearchResultWithIndex {
     pub result: SearchResult,
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq, Eq, ToSchema)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, ToSchema)]
 #[serde(untagged)]
 pub enum HitsInfo {
     #[serde(rename_all = "camelCase")]
@@ -778,7 +848,7 @@ pub enum HitsInfo {
     OffsetLimit { limit: usize, offset: usize, estimated_total_hits: usize },
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq, ToSchema)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ToSchema)]
 pub struct FacetStats {
     pub min: f64,
     pub max: f64,
@@ -1061,7 +1131,7 @@ pub fn perform_search(
     Ok(result)
 }
 
-#[derive(Debug, Clone, Default, Serialize, ToSchema)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
 pub struct ComputedFacets {
     #[schema(value_type = BTreeMap<String, BTreeMap<String, u64>>)]
     pub distribution: BTreeMap<String, IndexMap<String, u64>>,

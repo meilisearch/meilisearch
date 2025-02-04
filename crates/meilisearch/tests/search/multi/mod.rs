@@ -5,6 +5,8 @@ use crate::common::Server;
 use crate::json;
 use crate::search::{SCORE_DOCUMENTS, VECTOR_DOCUMENTS};
 
+mod proxy;
+
 #[actix_rt::test]
 async fn search_empty_list() {
     let server = Server::new().await;
