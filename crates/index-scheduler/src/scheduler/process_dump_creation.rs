@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::BufWriter;
 use std::sync::atomic::Ordering;
@@ -11,7 +12,9 @@ use meilisearch_types::tasks::{Details, KindWithContent, Status, Task};
 use time::macros::format_description;
 use time::OffsetDateTime;
 
-use crate::processing::{AtomicDocumentStep, AtomicTaskStep, DumpCreationProgress};
+use crate::processing::{
+    AtomicBatchStep, AtomicDocumentStep, AtomicTaskStep, DumpCreationProgress,
+};
 use crate::{Error, IndexScheduler, Result};
 
 impl IndexScheduler {
@@ -102,7 +105,40 @@ impl IndexScheduler {
         }
         dump_tasks.flush()?;
 
-        // 3. Dump the indexes
+        // 3. dump the batches
+        progress.update_progress(DumpCreationProgress::DumpTheBatches);
+        let mut dump_batches = dump.create_batches_queue()?;
+
+        let (atomic, update_batch_progress) =
+            AtomicBatchStep::new(self.queue.batches.all_batches.len(&rtxn)? as u32);
+        progress.update_progress(update_batch_progress);
+
+        for ret in self.queue.batches.all_batches.iter(&rtxn)? {
+            if self.scheduler.must_stop_processing.get() {
+                return Err(Error::AbortedTask);
+            }
+
+            let (_, mut b) = ret?;
+            // In the case we're dumping ourselves we want to be marked as finished
+            // to not loop over ourselves indefinitely.
+            if b.uid == task.uid {
+                let finished_at = OffsetDateTime::now_utc();
+
+                // We're going to fake the date because we don't know if everything is going to go well.
+                // But we need to dump the task as finished and successful.
+                // If something fail everything will be set appropriately in the end.
+                let mut statuses = BTreeMap::new();
+                statuses.insert(Status::Succeeded, b.stats.total_nb_tasks);
+                b.stats.status = statuses;
+                b.finished_at = Some(finished_at);
+            }
+
+            dump_batches.push_batch(&b)?;
+            atomic.fetch_add(1, Ordering::Relaxed);
+        }
+        dump_batches.flush()?;
+
+        // 4. Dump the indexes
         progress.update_progress(DumpCreationProgress::DumpTheIndexes);
         let nb_indexes = self.index_mapper.index_mapping.len(&rtxn)? as u32;
         let mut count = 0;
@@ -142,7 +178,7 @@ impl IndexScheduler {
             let documents = index
                 .all_documents(&rtxn)
                 .map_err(|e| Error::from_milli(e, Some(uid.to_string())))?;
-            // 3.1. Dump the documents
+            // 4.1. Dump the documents
             for ret in documents {
                 if self.scheduler.must_stop_processing.get() {
                     return Err(Error::AbortedTask);
@@ -204,7 +240,7 @@ impl IndexScheduler {
                 atomic.fetch_add(1, Ordering::Relaxed);
             }
 
-            // 3.2. Dump the settings
+            // 4.2. Dump the settings
             let settings = meilisearch_types::settings::settings(
                 index,
                 &rtxn,
@@ -215,7 +251,7 @@ impl IndexScheduler {
             Ok(())
         })?;
 
-        // 4. Dump experimental feature settings
+        // 5. Dump experimental feature settings
         progress.update_progress(DumpCreationProgress::DumpTheExperimentalFeatures);
         let features = self.features().runtime_features();
         dump.create_experimental_features(features)?;
