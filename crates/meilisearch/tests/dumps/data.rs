@@ -22,6 +22,7 @@ pub enum GetDump {
     TestV5,
 
     TestV6WithExperimental,
+    TestV6WithBatchesAndEnqueuedTasks,
 }
 
 impl GetDump {
@@ -74,6 +75,10 @@ impl GetDump {
                 "tests/assets/v6_v1.6.0_use_deactivated_experimental_setting.dump"
             )
             .into(),
+            GetDump::TestV6WithBatchesAndEnqueuedTasks => {
+                exist_relative_path!("tests/assets/v6_v1.13.0_batches_and_enqueued_tasks.dump")
+                    .into()
+            }
         }
     }
 }
