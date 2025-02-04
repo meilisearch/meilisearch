@@ -228,6 +228,7 @@ pub(crate) mod test {
 
     use big_s::S;
     use maplit::{btreemap, btreeset};
+    use meilisearch_types::batches::{Batch, BatchEnqueuedAt, BatchStats};
     use meilisearch_types::facet_values_sort::FacetValuesSort;
     use meilisearch_types::features::{Network, Remote, RuntimeTogglableFeatures};
     use meilisearch_types::index_uid_pattern::IndexUidPattern;
@@ -235,7 +236,8 @@ pub(crate) mod test {
     use meilisearch_types::milli;
     use meilisearch_types::milli::update::Setting;
     use meilisearch_types::settings::{Checked, FacetingSettings, Settings};
-    use meilisearch_types::tasks::{Details, Status};
+    use meilisearch_types::task_view::DetailsView;
+    use meilisearch_types::tasks::{Details, Kind, Status};
     use serde_json::{json, Map, Value};
     use time::macros::datetime;
     use uuid::Uuid;
@@ -303,6 +305,30 @@ pub(crate) mod test {
             _kind: std::marker::PhantomData,
         };
         settings.check()
+    }
+
+    pub fn create_test_batches() -> Vec<Batch> {
+        vec![Batch {
+            uid: 0,
+            details: DetailsView {
+                received_documents: Some(12),
+                indexed_documents: Some(Some(10)),
+                ..DetailsView::default()
+            },
+            progress: None,
+            stats: BatchStats {
+                total_nb_tasks: 1,
+                status: maplit::btreemap! { Status::Succeeded => 1 },
+                types: maplit::btreemap! { Kind::DocumentAdditionOrUpdate => 1 },
+                index_uids: maplit::btreemap! { "doggo".to_string() => 1 },
+            },
+            enqueued_at: Some(BatchEnqueuedAt {
+                earliest: datetime!(2022-11-11 0:00 UTC),
+                oldest: datetime!(2022-11-11 0:00 UTC),
+            }),
+            started_at: datetime!(2022-11-20 0:00 UTC),
+            finished_at: Some(datetime!(2022-11-21 0:00 UTC)),
+        }]
     }
 
     pub fn create_test_tasks() -> Vec<(TaskDump, Option<Vec<Document>>)> {
@@ -426,6 +452,15 @@ pub(crate) mod test {
         }
         index.flush().unwrap();
         index.settings(&settings).unwrap();
+
+        // ========== pushing the batch queue
+        let batches = create_test_batches();
+
+        let mut batch_queue = dump.create_batches_queue().unwrap();
+        for batch in &batches {
+            batch_queue.push_batch(batch).unwrap();
+        }
+        batch_queue.flush().unwrap();
 
         // ========== pushing the task queue
         let tasks = create_test_tasks();

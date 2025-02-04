@@ -571,9 +571,15 @@ fn import_dump(
         index_scheduler.refresh_index_stats(&uid)?;
     }
 
+    // 5. Import the queue
     let mut index_scheduler_dump = index_scheduler.register_dumped_task()?;
+    // 5.1. Import the batches
+    for ret in dump_reader.batches()? {
+        let batch = ret?;
+        index_scheduler_dump.register_dumped_batch(batch)?;
+    }
 
-    // 5. Import the tasks.
+    // 5.2. Import the tasks
     for ret in dump_reader.tasks()? {
         let (task, file) = ret?;
         index_scheduler_dump.register_dumped_task(task, file)?;
