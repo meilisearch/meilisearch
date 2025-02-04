@@ -101,7 +101,7 @@ jobs:
           curl -fsSL https://ollama.com/install.sh | sudo -E sh
       - name: Start serving
         run: |
-          # Run the background, there is no way to daemonise at the moment
+          # Run it in the background, there is no way to daemonise at the moment
           ollama serve &
 
           # A short pause is required before the HTTP port is opened
@@ -110,11 +110,10 @@ jobs:
           # This endpoint blocks until ready
           time curl -i http://localhost:11434
 
-      - name: Pull nomic-embed-text
-        run: ollama pull nomic-embed-text
-
-      - name: Pull all-minilm
-        run: ollama pull all-minilm
+      - name: Pull nomic-embed-text & all-minilm
+        run: |
+          ollama pull nomic-embed-text
+          ollama pull all-minilm
 
       - name: Run cargo test
         uses: actions-rs/cargo@v1
