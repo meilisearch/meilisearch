@@ -43,6 +43,8 @@ pub type ResponseError = meilisearch_types::error::ResponseError;
 pub type Code = meilisearch_types::error::Code;
 pub type RankingRuleView = meilisearch_types::settings::RankingRuleView;
 
+pub type FilterableAttributesRule = meilisearch_types::milli::FilterableAttributesRule;
+
 pub struct V6Reader {
     dump: TempDir,
     instance_uid: Option<Uuid>,

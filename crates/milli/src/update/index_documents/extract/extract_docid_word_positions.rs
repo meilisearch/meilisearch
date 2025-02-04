@@ -150,9 +150,12 @@ fn searchable_fields_changed(
     obkv: &KvReader<FieldId>,
     settings_diff: &InnerIndexSettingsDiff,
 ) -> bool {
-    let searchable_fields = &settings_diff.new.searchable_fields_ids;
     for (field_id, field_bytes) in obkv.iter() {
-        if searchable_fields.contains(&field_id) {
+        let Some(metadata) = settings_diff.new.fields_ids_map.metadata(field_id) else {
+            debug_assert!(false, "Field id {} is not in the fields ids map", field_id);
+            continue;
+        };
+        if metadata.is_searchable() {
             let del_add = KvReaderDelAdd::from_slice(field_bytes);
             match (del_add.get(DelAdd::Deletion), del_add.get(DelAdd::Addition)) {
                 // if both fields are None, check the next field.
@@ -200,8 +203,12 @@ fn tokens_from_document<'a>(
     buffers.obkv_buffer.clear();
     let mut document_writer = KvWriterU16::new(&mut buffers.obkv_buffer);
     for (field_id, field_bytes) in obkv.iter() {
+        let Some(metadata) = settings.fields_ids_map.metadata(field_id) else {
+            debug_assert!(false, "Field id {} is not in the fields ids map", field_id);
+            continue;
+        };
         // if field is searchable.
-        if settings.searchable_fields_ids.contains(&field_id) {
+        if metadata.is_searchable() {
             // extract deletion or addition only.
             if let Some(field_bytes) = KvReaderDelAdd::from_slice(field_bytes).get(del_add) {
                 // parse json.
@@ -216,7 +223,7 @@ fn tokens_from_document<'a>(
                 buffers.field_buffer.clear();
                 if let Some(field) = json_to_string(&value, &mut buffers.field_buffer) {
                     // create an iterator of token with their positions.
-                    let locales = settings.localized_searchable_fields_ids.locales(field_id);
+                    let locales = metadata.locales(&settings.localized_attributes_rules);
                     let tokens = process_tokens(tokenizer.tokenize_with_allow_list(field, locales))
                         .take_while(|(p, _)| (*p as u32) < max_positions_per_attributes);
 

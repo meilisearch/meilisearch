@@ -217,7 +217,7 @@ where
 
         // update the internal facet and searchable list,
         // because they might have changed due to the nested documents flattening.
-        settings_diff.new.recompute_facets(self.wtxn, self.index)?;
+        // settings_diff.new.recompute_facets(self.wtxn, self.index)?;
         settings_diff.new.recompute_searchables(self.wtxn, self.index)?;
 
         let settings_diff = Arc::new(settings_diff);

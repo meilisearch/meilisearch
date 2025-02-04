@@ -76,9 +76,9 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
     let mut strings_key_buffer = Vec::new();
 
     let old_faceted_fids: BTreeSet<_> =
-        settings_diff.old.faceted_fields_ids.iter().copied().collect();
+        settings_diff.list_faceted_fields_from_fid_map(DelAdd::Deletion);
     let new_faceted_fids: BTreeSet<_> =
-        settings_diff.new.faceted_fields_ids.iter().copied().collect();
+        settings_diff.list_faceted_fields_from_fid_map(DelAdd::Addition);
 
     if !settings_diff.settings_update_only || settings_diff.reindex_facets() {
         let mut cursor = obkv_documents.into_cursor()?;

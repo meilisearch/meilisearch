@@ -227,7 +227,14 @@ mod test {
 
         let fields_ids_map = FieldIdMapWithMetadata::new(
             fields_ids_map,
-            MetadataBuilder::new(Default::default(), Default::default(), Default::default(), None),
+            MetadataBuilder::new(
+                Default::default(),
+                Default::default(),
+                Default::default(),
+                None,
+                None,
+                Default::default(),
+            ),
         );
 
         let fields_ids_map_lock = std::sync::RwLock::new(fields_ids_map);

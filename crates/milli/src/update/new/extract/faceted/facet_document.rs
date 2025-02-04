@@ -8,22 +8,30 @@ use crate::update::new::document::Document;
 use crate::update::new::extract::geo::extract_geo_coordinates;
 use crate::update::new::extract::perm_json_p;
 use crate::{
-    FieldId, FilterableAttributesSettings, GlobalFieldsIdsMap, InternalError, Result, UserError,
+    FieldId, FilterableAttributesRule, GlobalFieldsIdsMap, InternalError, Result, UserError,
 };
 
-use super::match_faceted_field;
+use crate::filterable_attributes_rules::match_faceted_field;
 
 pub fn extract_document_facets<'doc>(
     document: impl Document<'doc>,
     external_document_id: &str,
     field_id_map: &mut GlobalFieldsIdsMap,
-    filterable_attributes: &[FilterableAttributesSettings],
+    filterable_attributes: &[FilterableAttributesRule],
     sortable_fields: &HashSet<String>,
+    asc_desc_fields: &HashSet<String>,
+    distinct_field: &Option<String>,
     facet_fn: &mut impl FnMut(FieldId, Metadata, perm_json_p::Depth, &Value) -> Result<()>,
 ) -> Result<()> {
     // return the match result for the given field name.
     let match_field = |field_name: &str| -> PatternMatch {
-        match_faceted_field(field_name, filterable_attributes, sortable_fields)
+        match_faceted_field(
+            field_name,
+            filterable_attributes,
+            sortable_fields,
+            asc_desc_fields,
+            distinct_field,
+        )
     };
 
     // extract the field if it is faceted (facet searchable, filterable, sortable)
