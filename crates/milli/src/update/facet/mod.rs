@@ -159,7 +159,7 @@ impl<'i> FacetsUpdate<'i> {
             let field_ids = self.index.facet_leveled_field_ids(wtxn)?;
             let bulk_update = FacetsUpdateBulk::new(
                 self.index,
-                field_ids,
+                field_ids.into_iter().collect(),
                 self.facet_type,
                 self.delta_data,
                 self.group_size,

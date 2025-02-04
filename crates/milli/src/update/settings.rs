@@ -11,12 +11,15 @@ use roaring::RoaringBitmap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use time::OffsetDateTime;
 
-use super::del_add::DelAddOperation;
+use super::del_add::{DelAdd, DelAddOperation};
 use super::index_documents::{IndexDocumentsConfig, Transform};
 use super::IndexerConfig;
-use crate::constants::{RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME};
+use crate::attribute_patterns::PatternMatch;
+use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::criterion::Criterion;
 use crate::error::UserError;
+use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
+use crate::filterable_attributes_rules::match_faceted_field;
 use crate::index::{
     IndexEmbeddingConfig, PrefixSearch, DEFAULT_MIN_WORD_LEN_ONE_TYPO,
     DEFAULT_MIN_WORD_LEN_TWO_TYPOS,
@@ -31,10 +34,7 @@ use crate::vector::settings::{
     WriteBackToDocuments,
 };
 use crate::vector::{Embedder, EmbeddingConfig, EmbeddingConfigs};
-use crate::{
-    FieldId, FieldsIdsMap, FilterableAttributesSettings, Index, LocalizedAttributesRule,
-    LocalizedFieldIds, Result,
-};
+use crate::{FieldId, FilterableAttributesRule, Index, LocalizedAttributesRule, Result};
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum Setting<T> {
@@ -158,7 +158,7 @@ pub struct Settings<'a, 't, 'i> {
 
     searchable_fields: Setting<Vec<String>>,
     displayed_fields: Setting<Vec<String>>,
-    filterable_fields: Setting<Vec<FilterableAttributesSettings>>,
+    filterable_fields: Setting<Vec<FilterableAttributesRule>>,
     sortable_fields: Setting<HashSet<String>>,
     criteria: Setting<Vec<Criterion>>,
     stop_words: Setting<BTreeSet<String>>,
@@ -244,7 +244,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         self.filterable_fields = Setting::Reset;
     }
 
-    pub fn set_filterable_fields(&mut self, rules: Vec<FilterableAttributesSettings>) {
+    pub fn set_filterable_fields(&mut self, rules: Vec<FilterableAttributesRule>) {
         self.filterable_fields = Setting::Set(rules);
     }
 
@@ -519,7 +519,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
     }
 
     /// Updates the index's searchable attributes.
-    fn update_searchable(&mut self) -> Result<bool> {
+    fn update_user_defined_searchable_attributes(&mut self) -> Result<bool> {
         match self.searchable_fields {
             Setting::Set(ref fields) => {
                 // Check to see if the searchable fields changed before doing anything else
@@ -532,26 +532,10 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                     return Ok(false);
                 }
 
-                // Since we're updating the settings we can only add new fields at the end of the field id map
-                let mut fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
                 // fields are deduplicated, only the first occurrence is taken into account
                 let names = fields.iter().unique().map(String::as_str).collect::<Vec<_>>();
 
-                // Add all the searchable attributes to the field map, and then add the
-                // remaining fields from the old field map to the new one
-                for name in names.iter() {
-                    // The fields ids map won't change the field id of already present elements thus only the
-                    // new fields will be inserted.
-                    fields_ids_map.insert(name).ok_or(UserError::AttributeLimitReached)?;
-                }
-
-                self.index.put_all_searchable_fields_from_fields_ids_map(
-                    self.wtxn,
-                    &names,
-                    &fields_ids_map.nested_ids(RESERVED_VECTORS_FIELD_NAME),
-                    &fields_ids_map,
-                )?;
-                self.index.put_fields_ids_map(self.wtxn, &fields_ids_map)?;
+                self.index.put_user_defined_searchable_fields(self.wtxn, &names)?;
                 Ok(true)
             }
             Setting::Reset => Ok(self.index.delete_all_searchable_fields(self.wtxn)?),
@@ -763,10 +747,10 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
     fn update_filterable(&mut self) -> Result<()> {
         match self.filterable_fields {
             Setting::Set(ref fields) => {
-                self.index.put_filterable_fields(self.wtxn, fields)?;
+                self.index.put_filterable_attributes_rules(self.wtxn, fields)?;
             }
             Setting::Reset => {
-                self.index.delete_filterable_fields(self.wtxn)?;
+                self.index.delete_filterable_attributes_rules(self.wtxn)?;
             }
             Setting::NotSet => (),
         }
@@ -1256,7 +1240,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         self.update_separator_tokens()?;
         self.update_dictionary()?;
         self.update_synonyms()?;
-        self.update_searchable()?;
+        self.update_user_defined_searchable_attributes()?;
         self.update_exact_attributes()?;
         self.update_proximity_precision()?;
         self.update_prefix_search()?;
@@ -1266,7 +1250,8 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         let embedding_config_updates = self.update_embedding_configs()?;
 
         let mut new_inner_settings = InnerIndexSettings::from_index(self.index, self.wtxn, None)?;
-        new_inner_settings.recompute_facets(self.wtxn, self.index)?;
+        // new_inner_settings.recompute_facets(self.wtxn, self.index)?;
+        new_inner_settings.recompute_searchables(self.wtxn, self.index)?;
 
         let primary_key_id = self
             .index
@@ -1318,8 +1303,8 @@ impl InnerIndexSettingsDiff {
         settings_update_only: bool,
     ) -> Self {
         let only_additional_fields = match (
-            &old_settings.user_defined_searchable_fields,
-            &new_settings.user_defined_searchable_fields,
+            &old_settings.user_defined_searchable_attributes,
+            &new_settings.user_defined_searchable_attributes,
         ) {
             (None, None) | (Some(_), None) | (None, Some(_)) => None, // None means *
             (Some(old), Some(new)) => {
@@ -1341,14 +1326,14 @@ impl InnerIndexSettingsDiff {
                 || old_settings.dictionary != new_settings.dictionary
                 || old_settings.proximity_precision != new_settings.proximity_precision
                 || old_settings.prefix_search != new_settings.prefix_search
-                || old_settings.localized_searchable_fields_ids
-                    != new_settings.localized_searchable_fields_ids
+                || old_settings.localized_attributes_rules
+                    != new_settings.localized_attributes_rules
         };
 
         let cache_exact_attributes = old_settings.exact_attributes != new_settings.exact_attributes;
 
-        let cache_user_defined_searchables = old_settings.user_defined_searchable_fields
-            != new_settings.user_defined_searchable_fields;
+        let cache_user_defined_searchables = old_settings.user_defined_searchable_attributes
+            != new_settings.user_defined_searchable_attributes;
 
         // if the user-defined searchables changed, then we need to reindex prompts.
         if cache_user_defined_searchables {
@@ -1431,30 +1416,39 @@ impl InnerIndexSettingsDiff {
         }
     }
 
+    /// List the faceted fields from the inner fid map.
+    /// This is used to list the faceted fields when we are reindexing,
+    /// but it can't be used in document addition because the field id map must be exhaustive.
+    pub fn list_faceted_fields_from_fid_map(&self, del_add: DelAdd) -> BTreeSet<FieldId> {
+        let settings = match del_add {
+            DelAdd::Deletion => &self.old,
+            DelAdd::Addition => &self.new,
+        };
+
+        settings
+            .fields_ids_map
+            .iter_id_metadata()
+            .filter(|(_, metadata)| metadata.is_faceted(&settings.filterable_attributes_rules))
+            .map(|(id, _)| id)
+            .collect()
+    }
+
     pub fn facet_fids_changed(&self) -> bool {
         let existing_fields = &self.new.existing_fields;
-        if existing_fields.iter().any(|field| field.contains('.')) {
-            return true;
-        }
+        let new_faceted_fields: HashSet<_> = existing_fields
+            .iter()
+            .filter(|field| self.new.match_faceted_field(field) == PatternMatch::Match)
+            .collect();
+        let old_faceted_fields: HashSet<_> = existing_fields
+            .iter()
+            .filter(|field| self.old.match_faceted_field(field) == PatternMatch::Match)
+            .collect();
 
-        let old_faceted_fields = &self.old.user_defined_faceted_fields;
-        if old_faceted_fields.iter().any(|field| field.contains('.')) {
-            return true;
-        }
-
-        // If there is new faceted fields we indicate that we must reindex as we must
-        // index new fields as facets. It means that the distinct attribute,
-        // an Asc/Desc criterion or a filtered attribute as be added or removed.
-        let new_faceted_fields = &self.new.user_defined_faceted_fields;
-        if new_faceted_fields.iter().any(|field| field.contains('.')) {
-            return true;
-        }
-
-        (existing_fields - old_faceted_fields) != (existing_fields - new_faceted_fields)
+        old_faceted_fields != new_faceted_fields
     }
 
     pub fn global_facet_settings_changed(&self) -> bool {
-        self.old.localized_faceted_fields_ids != self.new.localized_faceted_fields_ids
+        self.old.localized_attributes_rules != self.new.localized_attributes_rules
             || self.old.facet_search != self.new.facet_search
     }
 
@@ -1475,9 +1469,9 @@ impl InnerIndexSettingsDiff {
             || (!self.settings_update_only && self.new.geo_fields_ids.is_some())
     }
 
-    pub fn modified_faceted_fields(&self) -> HashSet<String> {
-        &self.old.user_defined_faceted_fields ^ &self.new.user_defined_faceted_fields
-    }
+    // pub fn modified_faceted_fields(&self) -> HashSet<String> {
+    //     &self.old.user_defined_faceted_fields ^ &self.new.user_defined_faceted_fields
+    // }
 }
 
 #[derive(Clone)]
@@ -1485,20 +1479,18 @@ pub(crate) struct InnerIndexSettings {
     pub stop_words: Option<fst::Set<Vec<u8>>>,
     pub allowed_separators: Option<BTreeSet<String>>,
     pub dictionary: Option<BTreeSet<String>>,
-    pub fields_ids_map: FieldsIdsMap,
-    pub user_defined_faceted_fields: HashSet<String>,
-    pub user_defined_searchable_fields: Option<Vec<String>>,
-    pub faceted_fields_ids: HashSet<FieldId>,
-    pub searchable_fields_ids: Vec<FieldId>,
+    pub fields_ids_map: FieldIdMapWithMetadata,
+    pub localized_attributes_rules: Vec<LocalizedAttributesRule>,
+    pub filterable_attributes_rules: Vec<FilterableAttributesRule>,
+    pub asc_desc_fields: HashSet<String>,
+    pub distinct_field: Option<String>,
+    pub user_defined_searchable_attributes: Option<Vec<String>>,
+    pub sortable_fields: HashSet<String>,
     pub exact_attributes: HashSet<FieldId>,
     pub proximity_precision: ProximityPrecision,
     pub embedding_configs: EmbeddingConfigs,
     pub existing_fields: HashSet<String>,
     pub geo_fields_ids: Option<(FieldId, FieldId)>,
-    pub non_searchable_fields_ids: Vec<FieldId>,
-    pub non_faceted_fields_ids: Vec<FieldId>,
-    pub localized_searchable_fields_ids: LocalizedFieldIds,
-    pub localized_faceted_fields_ids: LocalizedFieldIds,
     pub prefix_search: PrefixSearch,
     pub facet_search: bool,
 }
@@ -1514,12 +1506,6 @@ impl InnerIndexSettings {
         let allowed_separators = index.allowed_separators(rtxn)?;
         let dictionary = index.dictionary(rtxn)?;
         let mut fields_ids_map = index.fields_ids_map(rtxn)?;
-        let user_defined_searchable_fields = index.user_defined_searchable_fields(rtxn)?;
-        let user_defined_searchable_fields =
-            user_defined_searchable_fields.map(|sf| sf.into_iter().map(String::from).collect());
-        let user_defined_faceted_fields = index.user_defined_faceted_fields(rtxn)?;
-        let mut searchable_fields_ids = index.searchable_fields_ids(rtxn)?;
-        let mut faceted_fields_ids = index.faceted_fields_ids(rtxn)?;
         let exact_attributes = index.exact_attributes_ids(rtxn)?;
         let proximity_precision = index.proximity_precision(rtxn)?.unwrap_or_default();
         let embedding_configs = match embedding_configs {
@@ -1535,81 +1521,72 @@ impl InnerIndexSettings {
             .collect();
         // index.fields_ids_map($a)? ==>> fields_ids_map
         let geo_fields_ids = match fields_ids_map.id(RESERVED_GEO_FIELD_NAME) {
-            Some(gfid) => {
-                let is_sortable = index.sortable_fields_ids(rtxn)?.contains(&gfid);
-                let is_filterable = index.filterable_fields_ids(rtxn)?.contains(&gfid);
+            Some(_) if index.is_geo_activated(rtxn)? => {
                 // if `_geo` is faceted then we get the `lat` and `lng`
-                if is_sortable || is_filterable {
-                    let field_ids = fields_ids_map
-                        .insert("_geo.lat")
-                        .zip(fields_ids_map.insert("_geo.lng"))
-                        .ok_or(UserError::AttributeLimitReached)?;
-                    Some(field_ids)
-                } else {
-                    None
-                }
+                let field_ids = fields_ids_map
+                    .insert("_geo.lat")
+                    .zip(fields_ids_map.insert("_geo.lng"))
+                    .ok_or(UserError::AttributeLimitReached)?;
+                Some(field_ids)
             }
-            None => None,
+            _ => None,
         };
-        let localized_attributes_rules = index.localized_attributes_rules(rtxn)?;
-        let localized_searchable_fields_ids = LocalizedFieldIds::new(
-            &localized_attributes_rules,
-            &fields_ids_map,
-            searchable_fields_ids.iter().cloned(),
-        );
-        let localized_faceted_fields_ids = LocalizedFieldIds::new(
-            &localized_attributes_rules,
-            &fields_ids_map,
-            faceted_fields_ids.iter().cloned(),
-        );
-
-        let vectors_fids = fields_ids_map.nested_ids(RESERVED_VECTORS_FIELD_NAME);
-        searchable_fields_ids.retain(|id| !vectors_fids.contains(id));
-        faceted_fields_ids.retain(|id| !vectors_fids.contains(id));
+        let localized_attributes_rules =
+            index.localized_attributes_rules(rtxn)?.unwrap_or_default();
+        let filterable_attributes_rules = index.filterable_attributes_rules(rtxn)?;
+        let sortable_fields = index.sortable_fields(rtxn)?;
+        let asc_desc_fields = index.asc_desc_fields(rtxn)?;
+        let distinct_field = index.distinct_field(rtxn)?.map(|f| f.to_string());
+        let user_defined_searchable_attributes = index
+            .user_defined_searchable_fields(rtxn)?
+            .map(|fields| fields.into_iter().map(|f| f.to_string()).collect());
+        let builder = MetadataBuilder::from_index(index, rtxn)?;
+        let fields_ids_map = FieldIdMapWithMetadata::new(fields_ids_map, builder);
 
         Ok(Self {
             stop_words,
             allowed_separators,
             dictionary,
             fields_ids_map,
-            user_defined_faceted_fields,
-            user_defined_searchable_fields,
-            faceted_fields_ids,
-            searchable_fields_ids,
+            localized_attributes_rules,
+            filterable_attributes_rules,
+            asc_desc_fields,
+            distinct_field,
+            user_defined_searchable_attributes,
+            sortable_fields,
             exact_attributes,
             proximity_precision,
             embedding_configs,
             existing_fields,
             geo_fields_ids,
-            non_searchable_fields_ids: vectors_fids.clone(),
-            non_faceted_fields_ids: vectors_fids.clone(),
-            localized_searchable_fields_ids,
-            localized_faceted_fields_ids,
             prefix_search,
             facet_search,
         })
     }
 
-    // find and insert the new field ids
-    pub fn recompute_facets(&mut self, wtxn: &mut heed::RwTxn<'_>, index: &Index) -> Result<()> {
-        let new_facets = self
-            .fields_ids_map
-            .iter()
-            .filter(|(fid, _field)| !self.non_faceted_fields_ids.contains(fid))
-            .filter(|(_fid, field)| crate::is_faceted(field, &self.user_defined_faceted_fields))
-            .map(|(_fid, field)| field.to_string())
-            .collect();
-        index.put_faceted_fields(wtxn, &new_facets)?;
-
-        self.faceted_fields_ids = index.faceted_fields_ids(wtxn)?;
-        let localized_attributes_rules = index.localized_attributes_rules(wtxn)?;
-        self.localized_faceted_fields_ids = LocalizedFieldIds::new(
-            &localized_attributes_rules,
-            &self.fields_ids_map,
-            self.faceted_fields_ids.iter().cloned(),
-        );
-        Ok(())
+    pub fn match_faceted_field(&self, field: &str) -> PatternMatch {
+        match_faceted_field(
+            field,
+            &self.filterable_attributes_rules,
+            &self.sortable_fields,
+            &self.asc_desc_fields,
+            &self.distinct_field,
+        )
     }
+
+    // find and insert the new field ids
+    // pub fn recompute_facets(&mut self, wtxn: &mut heed::RwTxn<'_>, index: &Index) -> Result<()> {
+    //     let new_facets = self
+    //         .fields_ids_map
+    //         .iter()
+    //         .filter(|(_fid, field, metadata)| {
+    //             metadata.is_faceted(&self.filterable_attributes_rules)
+    //         })
+    //         .map(|(_fid, field, _metadata)| field.to_string())
+    //         .collect();
+    //     index.put_faceted_fields(wtxn, &new_facets)?;
+    //     Ok(())
+    // }
 
     // find and insert the new field ids
     pub fn recompute_searchables(
@@ -1618,7 +1595,7 @@ impl InnerIndexSettings {
         index: &Index,
     ) -> Result<()> {
         let searchable_fields = self
-            .user_defined_searchable_fields
+            .user_defined_searchable_attributes
             .as_ref()
             .map(|searchable| searchable.iter().map(|s| s.as_str()).collect::<Vec<_>>());
 
@@ -1627,17 +1604,9 @@ impl InnerIndexSettings {
             index.put_all_searchable_fields_from_fields_ids_map(
                 wtxn,
                 &searchable_fields,
-                &self.non_searchable_fields_ids,
                 &self.fields_ids_map,
             )?;
         }
-        self.searchable_fields_ids = index.searchable_fields_ids(wtxn)?;
-        let localized_attributes_rules = index.localized_attributes_rules(wtxn)?;
-        self.localized_searchable_fields_ids = LocalizedFieldIds::new(
-            &localized_attributes_rules,
-            &self.fields_ids_map,
-            self.searchable_fields_ids.iter().cloned(),
-        );
 
         Ok(())
     }
@@ -2104,7 +2073,7 @@ mod tests {
         // Set the filterable fields to be the age.
         index
             .update_settings(|settings| {
-                settings.set_filterable_fields(vec![FilterableAttributesSettings::Field(
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
                     "age".to_string(),
                 )]);
             })
@@ -2121,8 +2090,8 @@ mod tests {
 
         // Check that the displayed fields are correctly set.
         let rtxn = index.read_txn().unwrap();
-        let fields_ids = index.filterable_fields(&rtxn).unwrap();
-        assert_eq!(fields_ids, vec![FilterableAttributesSettings::Field("age".to_string(),)]);
+        let fields_ids = index.filterable_attributes_rules(&rtxn).unwrap();
+        assert_eq!(fields_ids, vec![FilterableAttributesRule::Field("age".to_string(),)]);
         // Only count the field_id 0 and level 0 facet values.
         // TODO we must support typed CSVs for numbers to be understood.
         let fidmap = index.fields_ids_map(&rtxn).unwrap();
@@ -2165,20 +2134,20 @@ mod tests {
         index
             .update_settings(|settings| {
                 settings.set_filterable_fields(vec![
-                    FilterableAttributesSettings::Field("age".to_string()),
-                    FilterableAttributesSettings::Field("name".to_string()),
+                    FilterableAttributesRule::Field("age".to_string()),
+                    FilterableAttributesRule::Field("name".to_string()),
                 ]);
             })
             .unwrap();
 
         // Check that the displayed fields are correctly set.
         let rtxn = index.read_txn().unwrap();
-        let fields_ids = index.filterable_fields(&rtxn).unwrap();
+        let fields_ids = index.filterable_attributes_rules(&rtxn).unwrap();
         assert_eq!(
             fields_ids,
             vec![
-                FilterableAttributesSettings::Field("age".to_string()),
-                FilterableAttributesSettings::Field("name".to_string()),
+                FilterableAttributesRule::Field("age".to_string()),
+                FilterableAttributesRule::Field("name".to_string()),
             ]
         );
 
@@ -2205,7 +2174,7 @@ mod tests {
         // Remove the age from the filterable fields.
         index
             .update_settings(|settings| {
-                settings.set_filterable_fields(vec![FilterableAttributesSettings::Field(
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
                     "name".to_string(),
                 )]);
             })
@@ -2213,8 +2182,8 @@ mod tests {
 
         // Check that the displayed fields are correctly set.
         let rtxn = index.read_txn().unwrap();
-        let fields_ids = index.filterable_fields(&rtxn).unwrap();
-        assert_eq!(fields_ids, vec![FilterableAttributesSettings::Field("name".to_string())]);
+        let fields_ids = index.filterable_attributes_rules(&rtxn).unwrap();
+        assert_eq!(fields_ids, vec![FilterableAttributesRule::Field("name".to_string())]);
 
         let rtxn = index.read_txn().unwrap();
         // Only count the field_id 2 and level 0 facet values.
@@ -2545,8 +2514,8 @@ mod tests {
             .update_settings(|settings| {
                 settings.set_displayed_fields(vec!["hello".to_string()]);
                 settings.set_filterable_fields(vec![
-                    FilterableAttributesSettings::Field("age".to_string()),
-                    FilterableAttributesSettings::Field("toto".to_string()),
+                    FilterableAttributesRule::Field("age".to_string()),
+                    FilterableAttributesRule::Field("toto".to_string()),
                 ]);
                 settings.set_criteria(vec![Criterion::Asc(S("toto"))]);
             })
@@ -2664,7 +2633,7 @@ mod tests {
         // Set the genres setting
         index
             .update_settings(|settings| {
-                settings.set_filterable_fields(vec![FilterableAttributesSettings::Field(
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
                     "genres".to_string(),
                 )]);
             })

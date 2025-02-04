@@ -6,6 +6,7 @@ use heed::RoTxn;
 
 use super::FieldsIdsMap;
 use crate::attribute_patterns::PatternMatch;
+use crate::constants::{RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME};
 use crate::{
     is_faceted_by, FieldId, FilterableAttributesFeatures, FilterableAttributesRule, Index,
     LocalizedAttributesRule, Result,
@@ -13,8 +14,11 @@ use crate::{
 
 #[derive(Debug, Clone, Copy)]
 pub struct Metadata {
-    pub searchable: bool,
+    pub searchable: Option<u16>,
     pub sortable: bool,
+    pub distinct: bool,
+    pub asc_desc: bool,
+    pub geo: bool,
     localized_attributes_rule_id: Option<NonZeroU16>,
     filterable_attributes_rule_id: Option<NonZeroU16>,
 }
@@ -136,21 +140,33 @@ impl Metadata {
     }
 
     pub fn is_searchable(&self) -> bool {
+        self.searchable.is_some()
+    }
+
+    pub fn searchable_weight(&self) -> Option<u16> {
         self.searchable
     }
 
-    /// Returns `true` if the field is part of the facet databases. (sortable, filterable, or facet searchable)
+    pub fn is_distinct(&self) -> bool {
+        self.distinct
+    }
+
+    pub fn is_asc_desc(&self) -> bool {
+        self.asc_desc
+    }
+
+    pub fn is_geo(&self) -> bool {
+        self.geo
+    }
+
+    /// Returns `true` if the field is part of the facet databases. (sortable, distinct, asc_desc, filterable or facet searchable)
     pub fn is_faceted(&self, rules: &[FilterableAttributesRule]) -> bool {
-        if self.is_sortable() {
+        if self.is_distinct() || self.is_sortable() || self.is_asc_desc() {
             return true;
         }
 
         let features = self.filterable_attributes_features(&rules);
-        if features.is_filterable() {
-            return true;
-        }
-
-        if features.is_facet_searchable() {
+        if features.is_filterable() || features.is_facet_searchable() {
             return true;
         }
 
@@ -164,6 +180,8 @@ pub struct MetadataBuilder {
     filterable_attributes: Vec<FilterableAttributesRule>,
     sortable_attributes: HashSet<String>,
     localized_attributes: Option<Vec<LocalizedAttributesRule>>,
+    distinct_attribute: Option<String>,
+    asc_desc_attributes: HashSet<String>,
 }
 
 impl MetadataBuilder {
@@ -176,44 +194,97 @@ impl MetadataBuilder {
         let filterable_attributes = index.filterable_attributes_rules(rtxn)?;
         let sortable_attributes = index.sortable_fields(rtxn)?;
         let localized_attributes = index.localized_attributes_rules(rtxn)?;
+        let distinct_attribute = index.distinct_field(rtxn)?.map(|s| s.to_string());
+        let asc_desc_attributes = index.asc_desc_fields(rtxn)?;
 
         Ok(Self {
             searchable_attributes,
             filterable_attributes,
             sortable_attributes,
             localized_attributes,
+            distinct_attribute,
+            asc_desc_attributes,
         })
     }
 
-    // pub fn new(
-    //     searchable_attributes: Option<Vec<String>>,
-    //     filterable_attributes: Vec<FilterableAttributesRule>,
-    //     sortable_attributes: HashSet<String>,
-    //     localized_attributes: Option<Vec<LocalizedAttributesRule>>,
-    // ) -> Self {
-    //     let searchable_attributes = match searchable_attributes {
-    //         Some(fields) if fields.iter().any(|f| f == "*") => None,
-    //         None => None,
-    //         Some(fields) => Some(fields),
-    //     };
+    #[cfg(test)]
+    /// Build a new `MetadataBuilder` from the given parameters.
+    ///
+    /// This is used for testing, prefer using `MetadataBuilder::from_index` instead.
+    pub fn new(
+        searchable_attributes: Option<Vec<String>>,
+        filterable_attributes: Vec<FilterableAttributesRule>,
+        sortable_attributes: HashSet<String>,
+        localized_attributes: Option<Vec<LocalizedAttributesRule>>,
+        distinct_attribute: Option<String>,
+        asc_desc_attributes: HashSet<String>,
+    ) -> Self {
+        let searchable_attributes = match searchable_attributes {
+            Some(fields) if fields.iter().any(|f| f == "*") => None,
+            None => None,
+            Some(fields) => Some(fields),
+        };
 
-    //     Self {
-    //         searchable_attributes,
-    //         filterable_attributes,
-    //         sortable_attributes,
-    //         localized_attributes,
-    //     }
-    // }
+        Self {
+            searchable_attributes,
+            filterable_attributes,
+            sortable_attributes,
+            localized_attributes,
+            distinct_attribute,
+            asc_desc_attributes,
+        }
+    }
 
     pub fn metadata_for_field(&self, field: &str) -> Metadata {
-        let searchable = match &self.searchable_attributes {
-            // A field is searchable if it is faceted by a searchable attribute
-            Some(attributes) => attributes.iter().any(|pattern| is_faceted_by(field, pattern)),
-            None => true,
-        };
+        if is_faceted_by(field, RESERVED_VECTORS_FIELD_NAME) {
+            // Vectors fields are not searchable, filterable, distinct or asc_desc
+            return Metadata {
+                searchable: None,
+                sortable: false,
+                distinct: false,
+                asc_desc: false,
+                geo: false,
+                localized_attributes_rule_id: None,
+                filterable_attributes_rule_id: None,
+            };
+        }
 
         // A field is sortable if it is faceted by a sortable attribute
         let sortable = self.sortable_attributes.iter().any(|pattern| is_faceted_by(field, pattern));
+
+        let filterable_attributes_rule_id = self
+            .filterable_attributes
+            .iter()
+            .position(|attribute| attribute.match_str(field) == PatternMatch::Match)
+            // saturating_add(1): make `id` `NonZero`
+            .map(|id| NonZeroU16::new(id.saturating_add(1).try_into().unwrap()).unwrap());
+
+        if is_faceted_by(field, RESERVED_GEO_FIELD_NAME) {
+            // Geo fields are not searchable, distinct or asc_desc
+            return Metadata {
+                searchable: None,
+                sortable,
+                distinct: false,
+                asc_desc: false,
+                geo: true,
+                localized_attributes_rule_id: None,
+                filterable_attributes_rule_id,
+            };
+        }
+
+        let searchable = match &self.searchable_attributes {
+            // A field is searchable if it is faceted by a searchable attribute
+            Some(attributes) => attributes
+                .iter()
+                .enumerate()
+                .find(|(_i, pattern)| is_faceted_by(field, pattern))
+                .map(|(i, _)| i as u16),
+            None => None,
+        };
+
+        let distinct =
+            self.distinct_attribute.as_ref().is_some_and(|distinct_field| field == distinct_field);
+        let asc_desc = self.asc_desc_attributes.contains(field);
 
         let localized_attributes_rule_id = self
             .localized_attributes
@@ -223,16 +294,12 @@ impl MetadataBuilder {
             // saturating_add(1): make `id` `NonZero`
             .map(|id| NonZeroU16::new(id.saturating_add(1).try_into().unwrap()).unwrap());
 
-        let filterable_attributes_rule_id = self
-            .filterable_attributes
-            .iter()
-            .position(|attribute| attribute.match_str(field) == PatternMatch::Match)
-            // saturating_add(1): make `id` `NonZero`
-            .map(|id| NonZeroU16::new(id.saturating_add(1).try_into().unwrap()).unwrap());
-
         Metadata {
             searchable,
             sortable,
+            distinct,
+            asc_desc,
+            geo: false,
             localized_attributes_rule_id,
             filterable_attributes_rule_id,
         }

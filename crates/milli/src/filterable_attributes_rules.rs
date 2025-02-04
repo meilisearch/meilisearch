@@ -4,7 +4,7 @@ use std::collections::{BTreeSet, HashSet};
 use utoipa::ToSchema;
 
 use crate::{
-    attribute_patterns::{match_field_legacy, PatternMatch},
+    attribute_patterns::{match_distinct_field, match_field_legacy, PatternMatch},
     constants::RESERVED_GEO_FIELD_NAME,
     AttributePatterns, FieldId, FieldsIdsMap,
 };
@@ -205,6 +205,42 @@ pub fn match_pattern_by_features(
                 PatternMatch::Parent => selection = PatternMatch::Parent,
                 PatternMatch::NoMatch => (),
             }
+        }
+    }
+
+    selection
+}
+
+/// Match a field against a set of filterable, facet searchable fields, distinct field, sortable fields, and asc_desc fields.
+pub fn match_faceted_field(
+    field_name: &str,
+    filterable_fields: &[FilterableAttributesRule],
+    sortable_fields: &HashSet<String>,
+    asc_desc_fields: &HashSet<String>,
+    distinct_field: &Option<String>,
+) -> PatternMatch {
+    // Check if the field matches any filterable or facet searchable field
+    let mut selection = match_pattern_by_features(field_name, &filterable_fields, &|features| {
+        features.is_facet_searchable() || features.is_filterable()
+    });
+
+    // If the field matches the pattern, return Match
+    if selection == PatternMatch::Match {
+        return selection;
+    }
+
+    match match_distinct_field(distinct_field.as_deref(), field_name) {
+        PatternMatch::Match => return PatternMatch::Match,
+        PatternMatch::Parent => selection = PatternMatch::Parent,
+        PatternMatch::NoMatch => (),
+    }
+
+    // Otherwise, check if the field matches any sortable/asc_desc field
+    for pattern in sortable_fields.iter().chain(asc_desc_fields.iter()) {
+        match match_field_legacy(&pattern, field_name) {
+            PatternMatch::Match => return PatternMatch::Match,
+            PatternMatch::Parent => selection = PatternMatch::Parent,
+            PatternMatch::NoMatch => (),
         }
     }
 

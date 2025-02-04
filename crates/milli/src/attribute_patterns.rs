@@ -74,6 +74,21 @@ pub fn match_field_legacy(pattern: &str, field: &str) -> PatternMatch {
     }
 }
 
+/// Match a field against a distinct field.
+pub fn match_distinct_field(distinct_field: Option<&str>, field: &str) -> PatternMatch {
+    if let Some(distinct_field) = distinct_field {
+        if field == distinct_field {
+            // If the field matches exactly the distinct field, return Match
+            return PatternMatch::Match;
+        } else if is_faceted_by(distinct_field, field) {
+            // If the field is a parent field of the distinct field, return Parent
+            return PatternMatch::Parent;
+        }
+    }
+    // If the field does not match the distinct field and is not a parent of a nested field that matches the distinct field, return NoMatch
+    PatternMatch::NoMatch
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PatternMatch {
     /// The field is a parent of the of a nested field that matches the pattern

@@ -115,7 +115,7 @@ pub(super) fn update_index(
         index.put_primary_key(wtxn, new_primary_key.name())?;
     }
     let mut inner_index_settings = InnerIndexSettings::from_index(index, wtxn, Some(embedders))?;
-    inner_index_settings.recompute_facets(wtxn, index)?;
+    // inner_index_settings.recompute_facets(wtxn, index)?;
     inner_index_settings.recompute_searchables(wtxn, index)?;
     index.put_field_distribution(wtxn, &field_distribution)?;
     index.put_documents_ids(wtxn, &document_ids)?;

@@ -9,8 +9,9 @@ use serde_json::Value;
 
 use super::super::cache::BalancedCaches;
 use super::facet_document::extract_document_facets;
-use super::{match_faceted_field, FacetKind};
+use super::FacetKind;
 use crate::fields_ids_map::metadata::Metadata;
+use crate::filterable_attributes_rules::match_faceted_field;
 use crate::heed_codec::facet::OrderedF64Codec;
 use crate::update::del_add::DelAdd;
 use crate::update::new::channel::FieldIdDocidFacetSender;
@@ -34,6 +35,8 @@ pub struct FacetedExtractorData<'a, 'b> {
     buckets: usize,
     filterable_attributes: Vec<FilterableAttributesRule>,
     sortable_fields: HashSet<String>,
+    asc_desc_fields: HashSet<String>,
+    distinct_field: Option<String>,
 }
 
 impl<'a, 'b, 'extractor> Extractor<'extractor> for FacetedExtractorData<'a, 'b> {
@@ -58,6 +61,8 @@ impl<'a, 'b, 'extractor> Extractor<'extractor> for FacetedExtractorData<'a, 'b> 
                 context,
                 &self.filterable_attributes,
                 &self.sortable_fields,
+                &self.asc_desc_fields,
+                &self.distinct_field,
                 change,
                 self.sender,
             )?
@@ -73,6 +78,8 @@ impl FacetedDocidsExtractor {
         context: &DocumentChangeContext<RefCell<BalancedCaches>>,
         filterable_attributes: &[FilterableAttributesRule],
         sortable_fields: &HashSet<String>,
+        asc_desc_fields: &HashSet<String>,
+        distinct_field: &Option<String>,
         document_change: DocumentChange,
         sender: &FieldIdDocidFacetSender,
     ) -> Result<()> {
@@ -89,6 +96,8 @@ impl FacetedDocidsExtractor {
                 new_fields_ids_map.deref_mut(),
                 filterable_attributes,
                 sortable_fields,
+                asc_desc_fields,
+                distinct_field,
                 &mut |fid, meta, depth, value| {
                     let features = meta.filterable_attributes_features(filterable_attributes);
                     Self::facet_fn_with_options(
@@ -109,7 +118,13 @@ impl FacetedDocidsExtractor {
             DocumentChange::Update(inner) => {
                 if !inner.has_changed_for_fields(
                     &mut |field_name| {
-                        match_faceted_field(field_name, filterable_attributes, sortable_fields)
+                        match_faceted_field(
+                            field_name,
+                            filterable_attributes,
+                            sortable_fields,
+                            asc_desc_fields,
+                            distinct_field,
+                        )
                     },
                     rtxn,
                     index,
@@ -124,6 +139,8 @@ impl FacetedDocidsExtractor {
                     new_fields_ids_map.deref_mut(),
                     filterable_attributes,
                     sortable_fields,
+                    asc_desc_fields,
+                    distinct_field,
                     &mut |fid, meta, depth, value| {
                         let features = meta.filterable_attributes_features(filterable_attributes);
                         Self::facet_fn_with_options(
@@ -148,6 +165,8 @@ impl FacetedDocidsExtractor {
                     new_fields_ids_map.deref_mut(),
                     filterable_attributes,
                     sortable_fields,
+                    asc_desc_fields,
+                    distinct_field,
                     &mut |fid, meta, depth, value| {
                         let features = meta.filterable_attributes_features(filterable_attributes);
                         Self::facet_fn_with_options(
@@ -172,6 +191,8 @@ impl FacetedDocidsExtractor {
                 new_fields_ids_map.deref_mut(),
                 filterable_attributes,
                 sortable_fields,
+                asc_desc_fields,
+                distinct_field,
                 &mut |fid, meta, depth, value| {
                     let features = meta.filterable_attributes_features(filterable_attributes);
                     Self::facet_fn_with_options(
@@ -426,6 +447,8 @@ impl FacetedDocidsExtractor {
         let rtxn = index.read_txn()?;
         let filterable_attributes = index.filterable_attributes_rules(&rtxn)?;
         let sortable_fields = index.sortable_fields(&rtxn)?;
+        let asc_desc_fields = index.asc_desc_fields(&rtxn)?;
+        let distinct_field = index.distinct_field(&rtxn)?.map(|s| s.to_string());
         let datastore = ThreadLocal::new();
 
         {
@@ -439,6 +462,8 @@ impl FacetedDocidsExtractor {
                 sender,
                 filterable_attributes,
                 sortable_fields,
+                asc_desc_fields,
+                distinct_field,
             };
             extract(
                 document_changes,

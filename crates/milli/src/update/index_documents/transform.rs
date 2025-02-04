@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::collections::btree_map::Entry as BEntry;
 use std::collections::hash_map::Entry as HEntry;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
 use std::io::{Read, Seek};
 
@@ -18,8 +18,10 @@ use super::helpers::{
     ObkvsMergeAdditionsAndDeletions,
 };
 use super::{create_writer, IndexDocumentsMethod, IndexerConfig, KeepFirst};
+use crate::attribute_patterns::PatternMatch;
 use crate::documents::{DocumentsBatchIndex, EnrichedDocument, EnrichedDocumentsBatchReader};
 use crate::error::{Error, InternalError, UserError};
+use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
 use crate::index::{db_name, main_key};
 use crate::update::del_add::{
     into_del_add_obkv, into_del_add_obkv_conditional_operation, DelAdd, DelAddOperation,
@@ -31,9 +33,7 @@ use crate::update::{AvailableIds, UpdateIndexingStep};
 use crate::vector::parsed_vectors::{ExplicitVectors, VectorOrArrayOfVectors};
 use crate::vector::settings::WriteBackToDocuments;
 use crate::vector::ArroyWrapper;
-use crate::{
-    is_faceted_by, FieldDistribution, FieldId, FieldIdMapMissingEntry, FieldsIdsMap, Index, Result,
-};
+use crate::{FieldDistribution, FieldId, FieldIdMapMissingEntry, Index, Result};
 
 pub struct TransformOutput {
     pub primary_key: String,
@@ -52,7 +52,7 @@ pub struct TransformOutput {
 /// containing all those documents.
 pub struct Transform<'a, 'i> {
     pub index: &'i Index,
-    fields_ids_map: FieldsIdsMap,
+    fields_ids_map: FieldIdMapWithMetadata,
 
     indexer_settings: &'a IndexerConfig,
     pub index_documents_method: IndexDocumentsMethod,
@@ -84,7 +84,7 @@ pub enum Operation {
 ///
 /// If new fields are present in the addition, they are added to the index field ids map.
 fn create_fields_mapping(
-    index_field_map: &mut FieldsIdsMap,
+    index_field_map: &mut FieldIdMapWithMetadata,
     batch_field_map: &DocumentsBatchIndex,
 ) -> Result<HashMap<FieldId, FieldId>> {
     batch_field_map
@@ -141,10 +141,13 @@ impl<'a, 'i> Transform<'a, 'i> {
             true,
         );
         let documents_ids = index.documents_ids(wtxn)?;
+        let fields_ids_map = index.fields_ids_map(wtxn)?;
+        let builder = MetadataBuilder::from_index(index, wtxn)?;
+        let fields_ids_map = FieldIdMapWithMetadata::new(fields_ids_map, builder);
 
         Ok(Transform {
             index,
-            fields_ids_map: index.fields_ids_map(wtxn)?,
+            fields_ids_map,
             indexer_settings,
             available_documents_ids: AvailableIds::new(&documents_ids),
             original_sorter,
@@ -354,7 +357,7 @@ impl<'a, 'i> Transform<'a, 'i> {
             documents_seen: documents_count,
         });
 
-        self.index.put_fields_ids_map(wtxn, &self.fields_ids_map)?;
+        self.index.put_fields_ids_map(wtxn, self.fields_ids_map.as_fields_ids_map())?;
         self.index.put_primary_key(wtxn, &primary_key)?;
         self.documents_count += documents_count;
         // Now that we have a valid sorter that contains the user id and the obkv we
@@ -371,7 +374,7 @@ impl<'a, 'i> Transform<'a, 'i> {
     )]
     fn flatten_from_fields_ids_map(
         obkv: &KvReader<FieldId>,
-        fields_ids_map: &mut FieldsIdsMap,
+        fields_ids_map: &mut FieldIdMapWithMetadata,
     ) -> Result<Option<Vec<u8>>> {
         if obkv
             .iter()
@@ -657,7 +660,6 @@ impl<'a, 'i> Transform<'a, 'i> {
     fn rebind_existing_document(
         old_obkv: &KvReader<FieldId>,
         settings_diff: &InnerIndexSettingsDiff,
-        modified_faceted_fields: &HashSet<String>,
         mut injected_vectors: serde_json::Map<String, serde_json::Value>,
         old_vectors_fid: Option<FieldId>,
         original_obkv_buffer: Option<&mut Vec<u8>>,
@@ -667,23 +669,26 @@ impl<'a, 'i> Transform<'a, 'i> {
         let is_primary_key = |id: FieldId| -> bool { settings_diff.primary_key_id == Some(id) };
 
         // If only a faceted field has been added, keep only this field.
-        let global_facet_settings_changed = settings_diff.global_facet_settings_changed();
         let facet_fids_changed = settings_diff.facet_fids_changed();
-        let necessary_faceted_field =
-            |id: FieldId| -> bool {
+
+        let necessary_faceted_field = |id: FieldId| -> Option<DelAddOperation> {
+            if facet_fids_changed {
                 let field_name = settings_diff.new.fields_ids_map.name(id).unwrap();
-                if global_facet_settings_changed {
-                    settings_diff.new.user_defined_faceted_fields.iter().any(|long| {
-                        is_faceted_by(long, field_name) || is_faceted_by(field_name, long)
-                    })
-                } else if facet_fids_changed {
-                    modified_faceted_fields.iter().any(|long| {
-                        is_faceted_by(long, field_name) || is_faceted_by(field_name, long)
-                    })
-                } else {
-                    false
+                // if the faceted fields changed, we need to keep all the field that are
+                // faceted in the old or new settings.
+                match (
+                    settings_diff.old.match_faceted_field(field_name),
+                    settings_diff.new.match_faceted_field(field_name),
+                ) {
+                    (PatternMatch::NoMatch, PatternMatch::NoMatch) => None,
+                    (PatternMatch::NoMatch, _) => Some(DelAddOperation::Addition),
+                    (_, PatternMatch::NoMatch) => Some(DelAddOperation::Deletion),
+                    (_, _) => Some(DelAddOperation::DeletionAndAddition),
                 }
-            };
+            } else {
+                None
+            }
+        };
 
         // Alway provide all fields when vectors are involved because
         // we need the fields for the prompt/templating.
@@ -734,8 +739,11 @@ impl<'a, 'i> Transform<'a, 'i> {
                 }
             }
 
-            if is_primary_key(id) || necessary_faceted_field(id) || reindex_vectors {
+            if is_primary_key(id) || reindex_vectors {
                 operations.insert(id, DelAddOperation::DeletionAndAddition);
+                obkv_writer.insert(id, val)?;
+            } else if let Some(operation) = necessary_faceted_field(id) {
+                operations.insert(id, operation);
                 obkv_writer.insert(id, val)?;
             } else if let Some(operation) = settings_diff.reindex_searchable_id(id) {
                 operations.insert(id, operation);
@@ -856,7 +864,6 @@ impl<'a, 'i> Transform<'a, 'i> {
             };
 
         if original_sorter.is_some() || flattened_sorter.is_some() {
-            let modified_faceted_fields = settings_diff.modified_faceted_fields();
             let mut original_obkv_buffer = Vec::new();
             let mut flattened_obkv_buffer = Vec::new();
             let mut document_sorter_key_buffer = Vec::new();
@@ -897,7 +904,6 @@ impl<'a, 'i> Transform<'a, 'i> {
                 Self::rebind_existing_document(
                     old_obkv,
                     &settings_diff,
-                    &modified_faceted_fields,
                     injected_vectors,
                     old_vectors_fid,
                     Some(&mut original_obkv_buffer).filter(|_| original_sorter.is_some()),

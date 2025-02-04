@@ -318,7 +318,16 @@ impl<T> From<v5::Settings<T>> for v6::Settings<v6::Unchecked> {
         v6::Settings {
             displayed_attributes: v6::Setting::from(settings.displayed_attributes).into(),
             searchable_attributes: v6::Setting::from(settings.searchable_attributes).into(),
-            filterable_attributes: settings.filterable_attributes.into(),
+            filterable_attributes: match settings.filterable_attributes {
+                v5::settings::Setting::Set(filterable_attributes) => v6::Setting::Set(
+                    filterable_attributes
+                        .into_iter()
+                        .map(|attr| v6::FilterableAttributesRule::Field(attr))
+                        .collect(),
+                ),
+                v5::settings::Setting::Reset => v6::Setting::Reset,
+                v5::settings::Setting::NotSet => v6::Setting::NotSet,
+            },
             sortable_attributes: settings.sortable_attributes.into(),
             ranking_rules: {
                 match settings.ranking_rules {
