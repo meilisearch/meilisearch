@@ -31,6 +31,7 @@ use crate::routes::{create_all_stats, Stats};
 use crate::Opt;
 
 const ANALYTICS_HEADER: &str = "X-Meilisearch-Client";
+const MEILI_SERVER_PROVIDER: &str = "MEILI_SERVER_PROVIDER";
 
 /// Write the instance-uid in the `data.ms` and in `~/.config/MeiliSearch/path-to-db-instance-uid`. Ignore the errors.
 fn write_user_id(db_path: &Path, user_id: &InstanceUid) {
@@ -357,7 +358,7 @@ impl Segment {
                     "cores": sys.cpus().len(),
                     "ram_size": sys.total_memory(),
                     "disk_size": disks.iter().map(|disk| disk.total_space()).max(),
-                    "server_provider": std::env::var("MEILI_SERVER_PROVIDER").ok(),
+                    "server_provider": std::env::var(MEILI_SERVER_PROVIDER).ok(),
             })
         });
         let number_of_documents =
@@ -380,10 +381,18 @@ impl Segment {
         index_scheduler: Arc<IndexScheduler>,
         auth_controller: Arc<AuthController>,
     ) {
-        const INTERVAL: Duration = Duration::from_secs(60 * 60); // one hour
-                                                                 // The first batch must be sent after one hour.
+        let interval: Duration = match std::env::var(MEILI_SERVER_PROVIDER) {
+            Ok(provider) if provider.starts_with("meili_cloud:") => {
+                Duration::from_secs(60 * 60) // one hour
+            }
+            _ => {
+                // We're an open source instance
+                Duration::from_secs(60 * 60 * 24) // one day
+            }
+        };
+
         let mut interval =
-            tokio::time::interval_at(tokio::time::Instant::now() + INTERVAL, INTERVAL);
+            tokio::time::interval_at(tokio::time::Instant::now() + interval, interval);
 
         loop {
             select! {
