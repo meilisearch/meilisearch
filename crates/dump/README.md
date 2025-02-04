@@ -10,8 +10,10 @@ dump
 ├── instance-uid.uuid
 ├── keys.jsonl
 ├── metadata.json
-└── tasks
-    ├── update_files
-    │   └── [task_id].jsonl
+├── tasks
+│   ├── update_files
+│   │   └── [task_id].jsonl
+│   └── queue.jsonl
+└── batches
     └── queue.jsonl
 ```

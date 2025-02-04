@@ -30,7 +30,21 @@ pub struct Batch {
     pub enqueued_at: Option<BatchEnqueuedAt>,
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+impl PartialEq for Batch {
+    fn eq(&self, other: &Self) -> bool {
+        let Self { uid, progress, details, stats, started_at, finished_at, enqueued_at } = self;
+
+        *uid == other.uid
+            && progress.is_none() == other.progress.is_none()
+            && details == &other.details
+            && stats == &other.stats
+            && started_at == &other.started_at
+            && finished_at == &other.finished_at
+            && enqueued_at == &other.enqueued_at
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BatchEnqueuedAt {
     #[serde(with = "time::serde::rfc3339")]
     pub earliest: OffsetDateTime,
@@ -38,7 +52,7 @@ pub struct BatchEnqueuedAt {
     pub oldest: OffsetDateTime,
 }
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct BatchStats {
