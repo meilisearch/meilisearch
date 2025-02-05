@@ -88,6 +88,10 @@ impl Server<Owned> {
         self.service.api_key = Some(api_key.as_ref().to_string());
     }
 
+    pub fn clear_api_key(&mut self) {
+        self.service.api_key = None;
+    }
+
     /// Fetch and use the default admin key for nexts http requests.
     pub async fn use_admin_key(&mut self, master_key: impl AsRef<str>) {
         self.use_api_key(master_key);
@@ -161,6 +165,10 @@ impl Server<Owned> {
 
     pub async fn set_features(&self, value: Value) -> (Value, StatusCode) {
         self.service.patch("/experimental-features", value).await
+    }
+
+    pub async fn set_network(&self, value: Value) -> (Value, StatusCode) {
+        self.service.patch("/network", value).await
     }
 
     pub async fn get_metrics(&self) -> (Value, StatusCode) {
@@ -387,6 +395,10 @@ impl<State> Server<State> {
 
     pub async fn get_features(&self) -> (Value, StatusCode) {
         self.service.get("/experimental-features").await
+    }
+
+    pub async fn get_network(&self) -> (Value, StatusCode) {
+        self.service.get("/network").await
     }
 }
 
