@@ -178,6 +178,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
                     if current_score < ranking_score_threshold {
                         all_candidates -= bucket | &ranking_rule_universes[cur_ranking_rule_index];
                         back!();
+                        cur_ranking_rule_index += 1;
                         continue;
                     }
                 }
@@ -213,6 +214,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
             continue;
         }
 
+
         let Some(next_bucket) = ranking_rules[cur_ranking_rule_index].next_bucket(
             ctx,
             logger,
@@ -242,7 +244,9 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
             if current_score < ranking_score_threshold {
                 all_candidates -=
                     next_bucket.candidates | &ranking_rule_universes[cur_ranking_rule_index];
+
                 back!();
+                cur_ranking_rule_index += 1;
                 continue;
             }
         }
