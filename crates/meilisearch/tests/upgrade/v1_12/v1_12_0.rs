@@ -2,9 +2,11 @@
 // It must test pretty much all the features of meilisearch because the other tests will only tests
 // the new features they introduced.
 
+use index_scheduler::versioning::Versioning;
 use manifest_dir_macros::exist_relative_path;
 use meili_snap::{json_string, snapshot};
 use meilisearch::Opt;
+use meilisearch_types::heed;
 
 use crate::common::{default_settings, Server, Value};
 use crate::json;
@@ -267,4 +269,56 @@ async fn check_the_index_features(server: &Server) {
     let (results, _status) =
         kefir.search_post(json!({ "sort": ["age:asc"], "filter": "surname = kefirounet" })).await;
     snapshot!(results, name: "search_with_sort_and_filter");
+}
+
+#[actix_rt::test]
+async fn import_v1_12_0_with_version_file_error() {
+    let temp = tempfile::tempdir().unwrap();
+    let original_db_path = exist_relative_path!("tests/upgrade/v1_12/v1_12_0.ms");
+    let options = Opt {
+        experimental_dumpless_upgrade: true,
+        master_key: Some("kefir".to_string()),
+        ..default_settings(temp.path())
+    };
+    copy_dir_all(original_db_path, &options.db_path).unwrap();
+
+    // We're going to drop the write permission on the VERSION file to force Meilisearch to fail its startup.
+    let version_path = options.db_path.join("VERSION");
+    let metadata = std::fs::metadata(&version_path).unwrap();
+    let mut permissions = metadata.permissions();
+    permissions.set_readonly(true);
+    std::fs::set_permissions(&version_path, permissions.clone()).unwrap();
+
+    let err = Server::new_with_options(options.clone()).await.map(|_| ()).unwrap_err();
+    snapshot!(err, @"Permission denied (os error 13)");
+
+    let env = unsafe {
+        heed::EnvOpenOptions::new()
+            .max_dbs(Versioning::nb_db())
+            .map_size(1024 * 1024 * 1024)
+            .open(options.db_path.join("tasks"))
+    }
+    .unwrap();
+
+    // Even though the v1.12 don't have a version in its index-scheduler initially, after
+    // failing the startup the version should have been written before even trying to
+    // update the version file
+    let mut wtxn = env.write_txn().unwrap();
+    let versioning = Versioning::raw_new(&env, &mut wtxn).unwrap();
+    let version = versioning.get_version(&wtxn).unwrap().unwrap();
+    snapshot!(format!("{version:?}"), @"(1, 12, 0)");
+    drop(wtxn);
+    env.prepare_for_closing().wait();
+
+    // Finally we check that even after a first failure the engine can still start and work as expected
+    #[allow(clippy::permissions_set_readonly_false)]
+    permissions.set_readonly(false);
+    std::fs::set_permissions(&version_path, permissions).unwrap();
+
+    let mut server = Server::new_with_options(options).await.unwrap();
+    server.use_api_key("kefir");
+
+    check_the_keys(&server).await;
+    check_the_index_scheduler(&server).await;
+    check_the_index_features(&server).await;
 }
