@@ -1,6 +1,6 @@
 use crate::{upgrade::upgrade_index_scheduler, Result};
 use meilisearch_types::{
-    heed::{types::Str, Database, Env, RoTxn, RwTxn},
+    heed::{self, types::Str, Database, Env, RoTxn, RwTxn},
     milli::heed_codec::version::VersionCodec,
     versioning,
 };
@@ -21,30 +21,38 @@ pub struct Versioning {
 }
 
 impl Versioning {
-    pub(crate) const fn nb_db() -> u32 {
+    pub const fn nb_db() -> u32 {
         NUMBER_OF_DATABASES
     }
 
-    pub fn get_version(&self, rtxn: &RoTxn) -> Result<Option<(u32, u32, u32)>> {
-        Ok(self.version.get(rtxn, entry_name::MAIN)?)
+    pub fn get_version(&self, rtxn: &RoTxn) -> Result<Option<(u32, u32, u32)>, heed::Error> {
+        self.version.get(rtxn, entry_name::MAIN)
     }
 
-    pub fn set_version(&self, wtxn: &mut RwTxn, version: (u32, u32, u32)) -> Result<()> {
-        Ok(self.version.put(wtxn, entry_name::MAIN, &version)?)
+    pub fn set_version(
+        &self,
+        wtxn: &mut RwTxn,
+        version: (u32, u32, u32),
+    ) -> Result<(), heed::Error> {
+        self.version.put(wtxn, entry_name::MAIN, &version)
     }
 
-    pub fn set_current_version(&self, wtxn: &mut RwTxn) -> Result<()> {
+    pub fn set_current_version(&self, wtxn: &mut RwTxn) -> Result<(), heed::Error> {
         let major = versioning::VERSION_MAJOR.parse().unwrap();
         let minor = versioning::VERSION_MINOR.parse().unwrap();
         let patch = versioning::VERSION_PATCH.parse().unwrap();
         self.set_version(wtxn, (major, minor, patch))
     }
 
-    /// Create an index scheduler and start its run loop.
+    /// Return `Self` without checking anything about the version
+    pub fn raw_new(env: &Env, wtxn: &mut RwTxn) -> Result<Self, heed::Error> {
+        let version = env.create_database(wtxn, Some(db_name::VERSION))?;
+        Ok(Self { version })
+    }
+
     pub(crate) fn new(env: &Env, db_version: (u32, u32, u32)) -> Result<Self> {
         let mut wtxn = env.write_txn()?;
-        let version = env.create_database(&mut wtxn, Some(db_name::VERSION))?;
-        let this = Self { version };
+        let this = Self::raw_new(env, &mut wtxn)?;
         let from = match this.get_version(&wtxn)? {
             Some(version) => version,
             // fresh DB: use the db version

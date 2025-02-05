@@ -33,7 +33,7 @@ mod test_utils;
 pub mod upgrade;
 mod utils;
 pub mod uuid_codec;
-mod versioning;
+pub mod versioning;
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 pub type TaskId = u32;
