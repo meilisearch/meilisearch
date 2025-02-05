@@ -126,9 +126,10 @@ async fn check_the_index_scheduler(server: &Server) {
     "#);
     // And their metadata are still right
     let (stats, _) = server.stats().await;
-    snapshot!(stats, @r#"
+    snapshot!(stats, @r###"
     {
       "databaseSize": 438272,
+      "usedDatabaseSize": 196608,
       "lastUpdate": "2025-01-23T11:36:22.634859166Z",
       "indexes": {
         "kefir": {
@@ -144,7 +145,7 @@ async fn check_the_index_scheduler(server: &Server) {
         }
       }
     }
-    "#);
+    "###);
 
     // Wait until the upgrade has been applied to all indexes to avoid flakyness
     let (tasks, _) = server.tasks_filter("types=upgradeDatabase&limit=1").await;
@@ -205,9 +206,10 @@ async fn check_the_index_scheduler(server: &Server) {
     snapshot!(json_string!(batches, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]" }), name: "batches_filter_afterFinishedAt_equal_2025-01-16T16_47_41");
 
     let (stats, _) = server.stats().await;
-    snapshot!(stats, @r#"
+    snapshot!(stats, @r###"
     {
       "databaseSize": 438272,
+      "usedDatabaseSize": 196608,
       "lastUpdate": "2025-01-23T11:36:22.634859166Z",
       "indexes": {
         "kefir": {
@@ -223,7 +225,7 @@ async fn check_the_index_scheduler(server: &Server) {
         }
       }
     }
-    "#);
+    "###);
     let index = server.index("kefir");
     let (stats, _) = index.stats().await;
     snapshot!(stats, @r#"
