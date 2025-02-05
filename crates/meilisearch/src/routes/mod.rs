@@ -359,9 +359,9 @@ pub async fn running() -> HttpResponse {
 #[derive(Serialize, Debug, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Stats {
-    /// The size of the database, in bytes.
+    /// The disk space used by the database, in bytes.
     pub database_size: u64,
-    #[serde(skip)]
+    /// The size of the database, in bytes.
     pub used_database_size: u64,
     /// The date of the last update in the RFC 3339 formats. Can be `null` if no update has ever been processed.
     #[serde(serialize_with = "time::serde::rfc3339::option::serialize")]
@@ -383,6 +383,7 @@ pub struct Stats {
         (status = 200, description = "The stats of the instance", body = Stats, content_type = "application/json", example = json!(
             {
                 "databaseSize": 567,
+                "usedDatabaseSize": 456,
                 "lastUpdate": "2019-11-20T09:40:33.711324Z",
                 "indexes": {
                     "movies": {
