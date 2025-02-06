@@ -2,11 +2,9 @@
 // It must test pretty much all the features of meilisearch because the other tests will only tests
 // the new features they introduced.
 
-use index_scheduler::versioning::Versioning;
 use manifest_dir_macros::exist_relative_path;
 use meili_snap::{json_string, snapshot};
 use meilisearch::Opt;
-use meilisearch_types::heed;
 
 use crate::common::{default_settings, Server, Value};
 use crate::json;
@@ -272,7 +270,11 @@ async fn check_the_index_features(server: &Server) {
 }
 
 #[actix_rt::test]
+#[cfg(target_os = "macos")] // The test should work everywhere but in the github CI it only works on macOS
 async fn import_v1_12_0_with_version_file_error() {
+    use index_scheduler::versioning::Versioning;
+    use meilisearch_types::heed;
+
     let temp = tempfile::tempdir().unwrap();
     let original_db_path = exist_relative_path!("tests/upgrade/v1_12/v1_12_0.ms");
     let options = Opt {
@@ -284,10 +286,13 @@ async fn import_v1_12_0_with_version_file_error() {
 
     // We're going to drop the write permission on the VERSION file to force Meilisearch to fail its startup.
     let version_path = options.db_path.join("VERSION");
-    let metadata = std::fs::metadata(&version_path).unwrap();
-    let mut permissions = metadata.permissions();
-    permissions.set_readonly(true);
-    std::fs::set_permissions(&version_path, permissions.clone()).unwrap();
+
+    let file = std::fs::File::options().write(true).open(&version_path).unwrap();
+    let mut perms = file.metadata().unwrap().permissions();
+    perms.set_readonly(true);
+    file.set_permissions(perms).unwrap();
+    file.sync_all().unwrap();
+    drop(file);
 
     let err = Server::new_with_options(options.clone()).await.map(|_| ()).unwrap_err();
     snapshot!(err, @"Permission denied (os error 13)");
@@ -311,9 +316,13 @@ async fn import_v1_12_0_with_version_file_error() {
     env.prepare_for_closing().wait();
 
     // Finally we check that even after a first failure the engine can still start and work as expected
+    let file = std::fs::File::open(&version_path).unwrap();
+    let mut perms = file.metadata().unwrap().permissions();
     #[allow(clippy::permissions_set_readonly_false)]
-    permissions.set_readonly(false);
-    std::fs::set_permissions(&version_path, permissions).unwrap();
+    perms.set_readonly(false);
+    file.set_permissions(perms).unwrap();
+    file.sync_all().unwrap();
+    drop(file);
 
     let mut server = Server::new_with_options(options).await.unwrap();
     server.use_api_key("kefir");
