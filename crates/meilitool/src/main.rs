@@ -501,9 +501,13 @@ fn export_documents(
             }
 
             let mut stdout = BufWriter::new(std::io::stdout());
-            for ret in index.all_documents(&rtxn)?.skip(offset.unwrap_or(0)) {
+            for (i, ret) in index.all_documents(&rtxn)?.skip(offset.unwrap_or(0)).enumerate() {
                 let (id, doc) = ret?;
                 let mut document = obkv_to_json(&all_fields, &fields_ids_map, doc)?;
+
+                if i % 10_000 == 0 {
+                    eprintln!("Starting the {}th document", i + offset.unwrap_or(0));
+                }
 
                 if !ignore_vectors {
                     'inject_vectors: {
