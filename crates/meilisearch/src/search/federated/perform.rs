@@ -95,12 +95,16 @@ pub async fn perform_federated_search(
         facet_order,
     } = search_by_index;
 
+    let before_waiting_remote_results = std::time::Instant::now();
+
     // 2.3. Wait for proxy search requests to complete
     let (mut remote_results, remote_errors) = remote_search.finish().await;
 
+    let after_waiting_remote_results = std::time::Instant::now();
+
     // 3. merge hits and metadata across indexes and hosts
     // 3.1. merge metadata
-    let (estimated_total_hits, degraded, used_negative_operator, facets) =
+    let (estimated_total_hits, degraded, used_negative_operator, facets, max_remote_duration) =
         merge_metadata(&mut results_by_index, &remote_results);
 
     // 3.2. merge hits
@@ -122,9 +126,15 @@ pub async fn perform_federated_search(
     let (facet_distribution, facet_stats, facets_by_index) =
         facet_order.merge(federation.merge_facets, remote_results, facets);
 
+    let after_merge = std::time::Instant::now();
+
+    let local_duration = (before_waiting_remote_results - before_search)
+        + (after_merge - after_waiting_remote_results);
+    let max_duration = Duration::max(local_duration, max_remote_duration);
+
     Ok(FederatedSearchResult {
         hits: merged_hits,
-        processing_time_ms: before_search.elapsed().as_millis(),
+        processing_time_ms: max_duration.as_millis(),
         hits_info: HitsInfo::OffsetLimit {
             limit: federation.limit,
             offset: federation.offset,
@@ -370,11 +380,12 @@ struct SearchResultByIndex {
 fn merge_metadata(
     results_by_index: &mut Vec<SearchResultByIndex>,
     remote_results: &Vec<FederatedSearchResult>,
-) -> (usize, bool, bool, FederatedFacets) {
+) -> (usize, bool, bool, FederatedFacets, Duration) {
     let mut estimated_total_hits = 0;
     let mut degraded = false;
     let mut used_negative_operator = false;
     let mut facets: FederatedFacets = FederatedFacets::default();
+    let mut max_remote_duration = Duration::ZERO;
     for SearchResultByIndex {
         index,
         hits: _,
@@ -395,7 +406,7 @@ fn merge_metadata(
     }
     for FederatedSearchResult {
         hits: _,
-        processing_time_ms: _,
+        processing_time_ms,
         hits_info,
         semantic_hit_count: _,
         facet_distribution: _,
@@ -406,6 +417,8 @@ fn merge_metadata(
         remote_errors: _,
     } in remote_results
     {
+        let this_remote_duration = Duration::from_millis(*processing_time_ms as u64);
+        max_remote_duration = Duration::max(this_remote_duration, max_remote_duration);
         estimated_total_hits += match hits_info {
             HitsInfo::Pagination { total_hits: estimated_total_hits, .. }
             | HitsInfo::OffsetLimit { estimated_total_hits, .. } => estimated_total_hits,
@@ -415,7 +428,7 @@ fn merge_metadata(
         degraded |= degraded_for_host;
         used_negative_operator |= host_used_negative_operator;
     }
-    (estimated_total_hits, degraded, used_negative_operator, facets)
+    (estimated_total_hits, degraded, used_negative_operator, facets, max_remote_duration)
 }
 
 type LocalQueriesByIndex = BTreeMap<String, Vec<QueryByIndex>>;
