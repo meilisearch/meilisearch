@@ -191,13 +191,16 @@ where
 
         indexing_context.progress.update_progress(IndexingStep::WritingEmbeddingsToDatabase);
 
-        build_vectors(
-            index,
-            wtxn,
-            index_embeddings,
-            &mut arroy_writers,
-            &indexing_context.must_stop_processing,
-        )?;
+        pool.install(|| {
+            build_vectors(
+                index,
+                wtxn,
+                index_embeddings,
+                &mut arroy_writers,
+                &indexing_context.must_stop_processing,
+            )
+        })
+        .unwrap()?;
 
         post_processing::post_process(
             indexing_context,
