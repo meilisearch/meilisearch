@@ -6,8 +6,8 @@ use xtask::bench::BenchDeriveArgs;
 /// List features available in the workspace
 #[derive(Parser, Debug)]
 struct ListFeaturesDeriveArgs {
-    /// Feature to exclude from the list. Repeat the argument to exclude multiple features
-    #[arg(short, long)]
+    /// Feature to exclude from the list. Use a comma to separate multiple features.
+    #[arg(short, long, value_delimiter = ',')]
     exclude_feature: Vec<String>,
 }
 

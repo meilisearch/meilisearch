@@ -84,10 +84,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.81
       - name: Run cargo build with almost all features
         run: |
-          cargo build --workspace --locked --release --features "$(cargo xtask list-features --exclude-feature cuda)"
+          cargo build --workspace --locked --release --features "$(cargo xtask list-features --exclude-feature cuda,test-ollama)"
       - name: Run cargo test with almost all features
         run: |
-          cargo test --workspace --locked --release --features "$(cargo xtask list-features --exclude-feature cuda)"
+          cargo test --workspace --locked --release --features "$(cargo xtask list-features --exclude-feature cuda,test-ollama)"
 
   ollama-ubuntu:
     name: Test with Ollama
@@ -119,7 +119,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --locked --release --all ollama
+          args: --locked --release --all --features test-ollama ollama
 
   test-disabled-tokenization:
     name: Test disabled tokenization
