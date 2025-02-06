@@ -501,7 +501,8 @@ fn export_documents(
             }
 
             let mut stdout = BufWriter::new(std::io::stdout());
-            for (i, ret) in index.all_documents(&rtxn)?.skip(offset.unwrap_or(0)).enumerate() {
+            let all_documents = index.documents_ids(&rtxn)?.into_iter().skip(offset.unwrap_or(0));
+            for (i, ret) in index.iter_documents(&rtxn, all_documents)?.enumerate() {
                 let (id, doc) = ret?;
                 let mut document = obkv_to_json(&all_fields, &fields_ids_map, doc)?;
 
