@@ -1,8 +1,9 @@
-use std::fs::{self, File};
-use std::io::{self, ErrorKind, Write};
+use std::fs;
+use std::io::{ErrorKind, Write};
 use std::path::Path;
 
 use milli::heed;
+use tempfile::NamedTempFile;
 
 /// The name of the file that contains the version of the database.
 pub const VERSION_FILE_NAME: &str = "VERSION";
@@ -12,7 +13,7 @@ pub static VERSION_MINOR: &str = env!("CARGO_PKG_VERSION_MINOR");
 pub static VERSION_PATCH: &str = env!("CARGO_PKG_VERSION_PATCH");
 
 /// Persists the version of the current Meilisearch binary to a VERSION file
-pub fn create_current_version_file(db_path: &Path) -> io::Result<()> {
+pub fn create_current_version_file(db_path: &Path) -> anyhow::Result<()> {
     create_version_file(db_path, VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH)
 }
 
@@ -21,12 +22,14 @@ pub fn create_version_file(
     major: &str,
     minor: &str,
     patch: &str,
-) -> io::Result<()> {
+) -> anyhow::Result<()> {
     let version_path = db_path.join(VERSION_FILE_NAME);
-    let mut file = File::create(&version_path)?;
+    // In order to persist the file later we must create it in the `data.ms` and not in `/tmp`
+    let mut file = NamedTempFile::new_in(db_path)?;
     file.write_all(format!("{}.{}.{}", major, minor, patch).as_bytes())?;
     file.flush()?;
-    file.sync_all()
+    file.persist(version_path)?;
+    Ok(())
 }
 
 pub fn get_version(db_path: &Path) -> Result<(u32, u32, u32), VersionFileError> {
@@ -36,7 +39,7 @@ pub fn get_version(db_path: &Path) -> Result<(u32, u32, u32), VersionFileError> 
         Ok(version) => parse_version(&version),
         Err(error) => match error.kind() {
             ErrorKind::NotFound => Err(VersionFileError::MissingVersionFile),
-            _ => Err(error.into()),
+            _ => Err(anyhow::Error::from(error).into()),
         },
     }
 }
@@ -91,5 +94,5 @@ pub enum VersionFileError {
     ErrorWhileModifyingTheDatabase(#[from] heed::Error),
 
     #[error(transparent)]
-    IoError(#[from] std::io::Error),
+    AnyhowError(#[from] anyhow::Error),
 }
