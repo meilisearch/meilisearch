@@ -145,6 +145,7 @@ zip = { version = "2.2.2", optional = true }
 [features]
 default = ["meilisearch-types/all-tokenizations", "mini-dashboard"]
 swagger = ["utoipa-scalar"]
+test-ollama = []
 mini-dashboard = [
     "static-files",
     "anyhow",

@@ -1,4 +1,6 @@
 mod binary_quantized;
+#[cfg(feature = "test-ollama")]
+mod ollama;
 mod openai;
 mod rest;
 mod settings;

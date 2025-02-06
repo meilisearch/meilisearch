@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   schedule:
     # Everyday at 5:00am
-    - cron: '0 5 * * *'
+    - cron: "0 5 * * *"
   pull_request:
   push:
     # trying and staging branches are for Bors config
@@ -84,10 +84,42 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.81
       - name: Run cargo build with almost all features
         run: |
-          cargo build --workspace --locked --release --features "$(cargo xtask list-features --exclude-feature cuda)"
+          cargo build --workspace --locked --release --features "$(cargo xtask list-features --exclude-feature cuda,test-ollama)"
       - name: Run cargo test with almost all features
         run: |
-          cargo test --workspace --locked --release --features "$(cargo xtask list-features --exclude-feature cuda)"
+          cargo test --workspace --locked --release --features "$(cargo xtask list-features --exclude-feature cuda,test-ollama)"
+
+  ollama-ubuntu:
+    name: Test with Ollama
+    runs-on: ubuntu-latest
+    env:
+      MEILI_TEST_OLLAMA_SERVER: "http://localhost:11434"
+    steps:
+      - uses: actions/checkout@v1
+      - name: Install Ollama
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sudo -E sh
+      - name: Start serving
+        run: |
+          # Run it in the background, there is no way to daemonise at the moment
+          ollama serve &
+
+          # A short pause is required before the HTTP port is opened
+          sleep 5
+
+          # This endpoint blocks until ready
+          time curl -i http://localhost:11434
+
+      - name: Pull nomic-embed-text & all-minilm
+        run: |
+          ollama pull nomic-embed-text
+          ollama pull all-minilm
+
+      - name: Run cargo test
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --locked --release --all --features test-ollama ollama
 
   test-disabled-tokenization:
     name: Test disabled tokenization
