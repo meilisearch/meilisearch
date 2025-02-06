@@ -31,7 +31,6 @@ macro_rules! make_setting_routes {
                 meilisearch_types::settings::Settings { $($attr: _,)* _kind: _ } => {}
             }
         };
-        
         $(
             make_setting_route!($route, $update_verb, $type, $err_ty, $attr, $camelcase_attr, $analytics);
         )*
