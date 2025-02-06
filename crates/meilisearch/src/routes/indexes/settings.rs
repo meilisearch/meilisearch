@@ -25,23 +25,10 @@ use crate::Opt;
 /// It also generates a `configure` function that configures the routes for the settings.
 macro_rules! make_setting_routes {
     ($({route: $route:literal, update_verb: $update_verb:ident, value_type: $type:ty, err_type: $err_ty:ty, attr: $attr:ident, camelcase_attr: $camelcase_attr:literal, analytics: $analytics:ident},)*) => {
-        #[allow(dead_code)]
-        const _: () = {
-            // First, verify that all fields in Settings are listed in the macro
-            const fn __verify_settings_exist() {
-                // This pattern match will fail at compile time if any field is missing from the macro
-                // or if a field exists in the macro but not in Settings
-                let _: fn(meilisearch_types::settings::Settings<meilisearch_types::settings::Unchecked>) = |s| {
-                    match s {
-                        meilisearch_types::settings::Settings {
-                            $($attr: _,)*
-                            _kind: _,
-                        } => {}
-                    }
-                };
-
-                // if any field is missing or has the wrong type
-                let _: fn(meilisearch_types::settings::Settings<meilisearch_types::settings::Unchecked>) = |_| {};
+        const _: fn(&meilisearch_types::settings::Settings<meilisearch_types::settings::Unchecked>) = |s| {
+            // This pattern match will fail at compile time if any field in Settings is not listed in the macro
+            match *s {
+                meilisearch_types::settings::Settings { $($attr: _,)* _kind: _ } => {}
             }
         };
         
