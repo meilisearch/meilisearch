@@ -1,5 +1,5 @@
-use std::fs;
-use std::io::{self, ErrorKind};
+use std::fs::{self, File};
+use std::io::{self, ErrorKind, Write};
 use std::path::Path;
 
 use milli::heed;
@@ -23,7 +23,10 @@ pub fn create_version_file(
     patch: &str,
 ) -> io::Result<()> {
     let version_path = db_path.join(VERSION_FILE_NAME);
-    fs::write(version_path, format!("{}.{}.{}", major, minor, patch))
+    let mut file = File::create(&version_path)?;
+    file.write_all(format!("{}.{}.{}", major, minor, patch).as_bytes())?;
+    file.flush()?;
+    file.sync_all()
 }
 
 pub fn get_version(db_path: &Path) -> Result<(u32, u32, u32), VersionFileError> {
