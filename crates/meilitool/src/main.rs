@@ -83,6 +83,10 @@ enum Command {
         /// Do not export vectors with the documents.
         #[arg(long)]
         ignore_vectors: bool,
+
+        /// The number of documents to skip.
+        #[arg(long)]
+        offset: Option<usize>,
     },
 
     /// Attempts to upgrade from one major version to the next without a dump.
@@ -131,8 +135,8 @@ fn main() -> anyhow::Result<()> {
         Command::ExportADump { dump_dir, skip_enqueued_tasks } => {
             export_a_dump(db_path, dump_dir, skip_enqueued_tasks, detected_version)
         }
-        Command::ExportDocuments { index_name, ignore_vectors } => {
-            export_documents(db_path, index_name, ignore_vectors)
+        Command::ExportDocuments { index_name, ignore_vectors, offset } => {
+            export_documents(db_path, index_name, ignore_vectors, offset)
         }
         Command::OfflineUpgrade { target_version } => {
             let target_version = parse_version(&target_version).context("While parsing `--target-version`. Make sure `--target-version` is in the format MAJOR.MINOR.PATCH")?;
@@ -468,6 +472,7 @@ fn export_documents(
     db_path: PathBuf,
     index_name: String,
     ignore_vectors: bool,
+    offset: Option<usize>,
 ) -> anyhow::Result<()> {
     let index_scheduler_path = db_path.join("tasks");
     let env = unsafe { EnvOpenOptions::new().max_dbs(100).open(&index_scheduler_path) }
@@ -491,8 +496,12 @@ fn export_documents(
             let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
             let embedding_configs = index.embedding_configs(&rtxn)?;
 
+            if let Some(offset) = offset {
+                eprintln!("Skipping {offset} documents");
+            }
+
             let mut stdout = BufWriter::new(std::io::stdout());
-            for ret in index.all_documents(&rtxn)? {
+            for ret in index.all_documents(&rtxn)?.skip(offset.unwrap_or(0)) {
                 let (id, doc) = ret?;
                 let mut document = obkv_to_json(&all_fields, &fields_ids_map, doc)?;
 
