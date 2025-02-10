@@ -11,6 +11,7 @@ use rstar::RTree;
 use serde::{Deserialize, Serialize};
 
 use crate::constants::{self, RESERVED_VECTORS_FIELD_NAME};
+use crate::database_stats::DatabaseStats;
 use crate::documents::PrimaryKey;
 use crate::error::{InternalError, UserError};
 use crate::fields_ids_map::FieldsIdsMap;
@@ -401,6 +402,11 @@ impl Index {
             .remap_types::<Str, RoaringBitmapLenCodec>()
             .get(rtxn, main_key::DOCUMENTS_IDS_KEY)?;
         Ok(count.unwrap_or_default())
+    }
+
+    /// Returns the stats of the database.
+    pub fn documents_database_stats(&self, rtxn: &RoTxn<'_>) -> Result<DatabaseStats> {
+        Ok(DatabaseStats::new(self.documents.remap_types::<Bytes, Bytes>(), rtxn)?)
     }
 
     /* primary key */
