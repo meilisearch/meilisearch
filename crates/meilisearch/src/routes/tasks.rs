@@ -655,24 +655,7 @@ async fn get_task(
     security(("Bearer" = ["tasks.get", "tasks.*", "*"])),
     params(("taskUid", format = UInt32, example = 0, description = "The task identifier", nullable = false)),
     responses(
-        (status = 200, description = "Task successfully retrieved", body = TaskView, content_type = "application/x-ndjson", example = json!(
-            {
-                "uid": 1,
-                "indexUid": "movies",
-                "status": "succeeded",
-                "type": "documentAdditionOrUpdate",
-                "canceledBy": null,
-                "details": {
-                    "receivedDocuments": 79000,
-                    "indexedDocuments": 79000
-                },
-                "error": null,
-                "duration": "PT1S",
-                "enqueuedAt": "2021-01-01T09:39:00.000000Z",
-                "startedAt": "2021-01-01T09:39:01.000000Z",
-                "finishedAt": "2021-01-01T09:39:02.000000Z"
-            }
-        )),
+        (status = 200, description = "The content of the task update", body = serde_json::Value, content_type = "application/x-ndjson"),
         (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
@@ -695,7 +678,6 @@ async fn get_task_update_file(
     index_scheduler: GuardedData<ActionPolicy<{ actions::TASKS_GET }>, Data<IndexScheduler>>,
     task_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
-    /// TODO change the example
     let task_uid_string = task_uid.into_inner();
 
     let task_uid: TaskId = match task_uid_string.parse() {
