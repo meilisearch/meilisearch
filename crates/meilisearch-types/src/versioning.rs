@@ -1,6 +1,9 @@
 use std::fs;
-use std::io::{self, ErrorKind};
+use std::io::{ErrorKind, Write};
 use std::path::Path;
+
+use milli::heed;
+use tempfile::NamedTempFile;
 
 /// The name of the file that contains the version of the database.
 pub const VERSION_FILE_NAME: &str = "VERSION";
@@ -10,37 +13,7 @@ pub static VERSION_MINOR: &str = env!("CARGO_PKG_VERSION_MINOR");
 pub static VERSION_PATCH: &str = env!("CARGO_PKG_VERSION_PATCH");
 
 /// Persists the version of the current Meilisearch binary to a VERSION file
-pub fn update_version_file_for_dumpless_upgrade(
-    db_path: &Path,
-    from: (u32, u32, u32),
-    to: (u32, u32, u32),
-) -> Result<(), VersionFileError> {
-    let (from_major, from_minor, from_patch) = from;
-    let (to_major, to_minor, to_patch) = to;
-
-    if from_major > to_major
-        || (from_major == to_major && from_minor > to_minor)
-        || (from_major == to_major && from_minor == to_minor && from_patch > to_patch)
-    {
-        Err(VersionFileError::DowngradeNotSupported {
-            major: from_major,
-            minor: from_minor,
-            patch: from_patch,
-        })
-    } else if from_major < 1 || (from_major == to_major && from_minor < 12) {
-        Err(VersionFileError::TooOldForAutomaticUpgrade {
-            major: from_major,
-            minor: from_minor,
-            patch: from_patch,
-        })
-    } else {
-        create_current_version_file(db_path)?;
-        Ok(())
-    }
-}
-
-/// Persists the version of the current Meilisearch binary to a VERSION file
-pub fn create_current_version_file(db_path: &Path) -> io::Result<()> {
+pub fn create_current_version_file(db_path: &Path) -> anyhow::Result<()> {
     create_version_file(db_path, VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH)
 }
 
@@ -49,9 +22,14 @@ pub fn create_version_file(
     major: &str,
     minor: &str,
     patch: &str,
-) -> io::Result<()> {
+) -> anyhow::Result<()> {
     let version_path = db_path.join(VERSION_FILE_NAME);
-    fs::write(version_path, format!("{}.{}.{}", major, minor, patch))
+    // In order to persist the file later we must create it in the `data.ms` and not in `/tmp`
+    let mut file = NamedTempFile::new_in(db_path)?;
+    file.write_all(format!("{}.{}.{}", major, minor, patch).as_bytes())?;
+    file.flush()?;
+    file.persist(version_path)?;
+    Ok(())
 }
 
 pub fn get_version(db_path: &Path) -> Result<(u32, u32, u32), VersionFileError> {
@@ -61,7 +39,7 @@ pub fn get_version(db_path: &Path) -> Result<(u32, u32, u32), VersionFileError> 
         Ok(version) => parse_version(&version),
         Err(error) => match error.kind() {
             ErrorKind::NotFound => Err(VersionFileError::MissingVersionFile),
-            _ => Err(error.into()),
+            _ => Err(anyhow::Error::from(error).into()),
         },
     }
 }
@@ -112,7 +90,9 @@ pub enum VersionFileError {
     DowngradeNotSupported { major: u32, minor: u32, patch: u32 },
     #[error("Database version {major}.{minor}.{patch} is too old for the experimental dumpless upgrade feature. Please generate a dump using the v{major}.{minor}.{patch} and import it in the v{VERSION_MAJOR}.{VERSION_MINOR}.{VERSION_PATCH}")]
     TooOldForAutomaticUpgrade { major: u32, minor: u32, patch: u32 },
+    #[error("Error while modifying the database: {0}")]
+    ErrorWhileModifyingTheDatabase(#[from] heed::Error),
 
     #[error(transparent)]
-    IoError(#[from] std::io::Error),
+    AnyhowError(#[from] anyhow::Error),
 }
