@@ -6,6 +6,7 @@ use std::{fs, thread};
 use meilisearch_types::heed::types::{SerdeJson, Str};
 use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn};
 use meilisearch_types::milli;
+use meilisearch_types::milli::database_stats::DatabaseStats;
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::{FieldDistribution, Index};
 use serde::{Deserialize, Serialize};
@@ -98,8 +99,9 @@ pub enum IndexStatus {
 /// The statistics that can be computed from an `Index` object.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct IndexStats {
-    /// Number of documents in the index.
-    pub number_of_documents: u64,
+    /// Stats of the documents database.
+    #[serde(default)]
+    pub documents_database_stats: DatabaseStats,
     /// Size taken up by the index' DB, in bytes.
     ///
     /// This includes the size taken by both the used and free pages of the DB, and as the free pages
@@ -138,9 +140,9 @@ impl IndexStats {
     pub fn new(index: &Index, rtxn: &RoTxn) -> milli::Result<Self> {
         let arroy_stats = index.arroy_stats(rtxn)?;
         Ok(IndexStats {
-            number_of_documents: index.number_of_documents(rtxn)?,
             number_of_embeddings: Some(arroy_stats.number_of_embeddings),
             number_of_embedded_documents: Some(arroy_stats.documents.len()),
+            documents_database_stats: index.documents_database_stats(rtxn)?,
             database_size: index.on_disk_size()?,
             used_database_size: index.used_size()?,
             primary_key: index.primary_key(rtxn)?.map(|s| s.to_string()),

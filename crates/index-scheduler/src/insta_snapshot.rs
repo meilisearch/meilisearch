@@ -365,7 +365,8 @@ pub fn snapshot_index_mapper(rtxn: &RoTxn, mapper: &IndexMapper) -> String {
         let stats = mapper.stats_of(rtxn, &name).unwrap();
         s.push_str(&format!(
             "{name}: {{ number_of_documents: {}, field_distribution: {:?} }}\n",
-            stats.number_of_documents, stats.field_distribution
+            stats.documents_database_stats.number_of_entries(),
+            stats.field_distribution
         ));
     }
 

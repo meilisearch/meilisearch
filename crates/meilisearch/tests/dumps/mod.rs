@@ -187,6 +187,9 @@ async fn import_dump_v1_movie_with_settings() {
         @r###"
     {
       "numberOfDocuments": 53,
+      "rawDocumentDbSize": 21965,
+      "maxDocumentSize": 743,
+      "avgDocumentSize": 414,
       "isIndexing": false,
       "numberOfEmbeddings": 0,
       "numberOfEmbeddedDocuments": 0,
