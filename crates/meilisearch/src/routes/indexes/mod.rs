@@ -494,6 +494,12 @@ pub async fn delete_index(
 pub struct IndexStats {
     /// Number of documents in the index
     pub number_of_documents: u64,
+    /// Size of the documents database, in bytes.
+    pub raw_document_db_size: u64,
+    /// Maximum size of a document in the documents database.
+    pub max_document_size: u64,
+    /// Average size of a document in the documents database.
+    pub avg_document_size: u64,
     /// Whether or not the index is currently ingesting document
     pub is_indexing: bool,
     /// Association of every field name with the number of times it occurs in the documents.
@@ -504,7 +510,10 @@ pub struct IndexStats {
 impl From<index_scheduler::IndexStats> for IndexStats {
     fn from(stats: index_scheduler::IndexStats) -> Self {
         IndexStats {
-            number_of_documents: stats.inner_stats.number_of_documents,
+            number_of_documents: stats.inner_stats.documents_database_stats.number_of_entries(),
+            raw_document_db_size: stats.inner_stats.documents_database_stats.total_value_size(),
+            max_document_size: stats.inner_stats.documents_database_stats.max_value_size(),
+            avg_document_size: stats.inner_stats.documents_database_stats.average_value_size(),
             is_indexing: stats.is_indexing,
             field_distribution: stats.inner_stats.field_distribution,
         }
