@@ -1,3 +1,5 @@
+use std::io::ErrorKind;
+
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::actix_web::AwebQueryParameter;
@@ -710,10 +712,15 @@ async fn get_task_update_file(
     if let Some(task) = tasks.first() {
         match task.content_uuid() {
             Some(uuid) => {
+                let mut tfile = match index_scheduler.queue.update_file(uuid) {
+                    Ok(file) => tokio::fs::File::from_std(file),
+                    Err(file_store::Error::IoError(e)) if e.kind() == ErrorKind::NotFound => {
+                        return Err(index_scheduler::Error::TaskFileNotFound(task_uid).into())
+                    }
+                    Err(e) => return Err(e.into()),
+                };
                 // Yes, that's awful to put everything in memory when we could have streamed it from
                 // disk but it's really (really) complex to do with the current state of async Rust.
-                let file = index_scheduler.queue.update_file(uuid)?;
-                let mut tfile = tokio::fs::File::from_std(file);
                 let mut content = String::new();
                 tfile.read_to_string(&mut content).await?;
                 Ok(HttpResponse::Ok().content_type("application/x-ndjson").body(content))
