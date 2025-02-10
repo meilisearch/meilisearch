@@ -268,4 +268,3 @@ async fn check_the_index_features(server: &Server) {
         kefir.search_post(json!({ "sort": ["age:asc"], "filter": "surname = kefirounet" })).await;
     snapshot!(results, name: "search_with_sort_and_filter");
 }
-

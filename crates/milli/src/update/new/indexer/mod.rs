@@ -1,5 +1,5 @@
 use std::sync::atomic::AtomicBool;
-use std::sync::RwLock;
+use std::sync::{Once, RwLock};
 use std::thread::{self, Builder};
 
 use big_s::S;
@@ -21,7 +21,6 @@ use crate::progress::Progress;
 use crate::update::GrenadParameters;
 use crate::vector::{ArroyWrapper, EmbeddingConfigs};
 use crate::{FieldsIdsMap, GlobalFieldsIdsMap, Index, InternalError, Result, ThreadPoolNoAbort};
-use std::sync::Once;
 
 pub(crate) mod de;
 pub mod document_changes;

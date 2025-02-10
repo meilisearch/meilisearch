@@ -1,9 +1,10 @@
-use crate::{upgrade::upgrade_index_scheduler, Result};
-use meilisearch_types::{
-    heed::{self, types::Str, Database, Env, RoTxn, RwTxn},
-    milli::heed_codec::version::VersionCodec,
-    versioning,
-};
+use meilisearch_types::heed::types::Str;
+use meilisearch_types::heed::{self, Database, Env, RoTxn, RwTxn};
+use meilisearch_types::milli::heed_codec::version::VersionCodec;
+use meilisearch_types::versioning;
+
+use crate::upgrade::upgrade_index_scheduler;
+use crate::Result;
 
 /// The number of database used by queue itself
 const NUMBER_OF_DATABASES: u32 = 1;

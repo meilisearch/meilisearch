@@ -1,10 +1,9 @@
 use heed::RwTxn;
 
+use super::UpgradeIndex;
 use crate::constants::{VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH};
 use crate::progress::Progress;
 use crate::{make_enum_progress, Index, Result};
-
-use super::UpgradeIndex;
 
 #[allow(non_camel_case_types)]
 pub(super) struct V1_12_To_V1_12_3 {}
