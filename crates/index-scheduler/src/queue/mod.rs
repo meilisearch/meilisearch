@@ -8,6 +8,7 @@ mod tasks_test;
 mod test;
 
 use std::collections::BTreeMap;
+use std::fs::File as StdFile;
 use std::time::Duration;
 
 use file_store::FileStore;
@@ -214,6 +215,11 @@ impl Queue {
             Some(content_file) => self.delete_update_file(content_file),
             None => Ok(()),
         }
+    }
+
+    /// Open and returns the task's content File.
+    pub fn update_file(&self, uuid: Uuid) -> file_store::Result<StdFile> {
+        self.file_store.get_update(uuid)
     }
 
     /// Delete a file from the index scheduler.

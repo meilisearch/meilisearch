@@ -109,6 +109,8 @@ pub enum Error {
     InvalidIndexUid { index_uid: String },
     #[error("Task `{0}` not found.")]
     TaskNotFound(TaskId),
+    #[error("Task `{0}` does not provide any content file.")]
+    TaskFileNotFound(TaskId),
     #[error("Batch `{0}` not found.")]
     BatchNotFound(BatchId),
     #[error("Query parameters to filter the tasks to delete are missing. Available query parameters are: `uids`, `indexUids`, `statuses`, `types`, `canceledBy`, `beforeEnqueuedAt`, `afterEnqueuedAt`, `beforeStartedAt`, `afterStartedAt`, `beforeFinishedAt`, `afterFinishedAt`.")]
@@ -189,6 +191,7 @@ impl Error {
             | Error::InvalidTaskCanceledBy { .. }
             | Error::InvalidIndexUid { .. }
             | Error::TaskNotFound(_)
+            | Error::TaskFileNotFound(_)
             | Error::BatchNotFound(_)
             | Error::TaskDeletionWithEmptyQuery
             | Error::TaskCancelationWithEmptyQuery
@@ -250,6 +253,7 @@ impl ErrorCode for Error {
             Error::InvalidTaskCanceledBy { .. } => Code::InvalidTaskCanceledBy,
             Error::InvalidIndexUid { .. } => Code::InvalidIndexUid,
             Error::TaskNotFound(_) => Code::TaskNotFound,
+            Error::TaskFileNotFound(_) => Code::TaskFileNotFound,
             Error::BatchNotFound(_) => Code::BatchNotFound,
             Error::TaskDeletionWithEmptyQuery => Code::MissingTaskFilters,
             Error::TaskCancelationWithEmptyQuery => Code::MissingTaskFilters,

@@ -16,6 +16,7 @@ use serde::Serialize;
 use time::format_description::well_known::Rfc3339;
 use time::macros::format_description;
 use time::{Date, Duration, OffsetDateTime, Time};
+use tokio::io::AsyncReadExt;
 use tokio::task;
 use utoipa::{IntoParams, OpenApi, ToSchema};
 
@@ -44,7 +45,10 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .route(web::delete().to(SeqHandler(delete_tasks))),
     )
     .service(web::resource("/cancel").route(web::post().to(SeqHandler(cancel_tasks))))
-    .service(web::resource("/{task_id}").route(web::get().to(SeqHandler(get_task))));
+    .service(web::resource("/{task_id}").route(web::get().to(SeqHandler(get_task))))
+    .service(
+        web::resource("/{task_id}/file").route(web::get().to(SeqHandler(get_task_update_file))),
+    );
 }
 
 #[derive(Debug, Deserr, IntoParams)]
@@ -634,6 +638,88 @@ async fn get_task(
     if let Some(task) = tasks.first() {
         let task_view = TaskView::from_task(task);
         Ok(HttpResponse::Ok().json(task_view))
+    } else {
+        Err(index_scheduler::Error::TaskNotFound(task_uid).into())
+    }
+}
+
+/// Get a task's update file.
+///
+/// Get a [task's file](https://www.meilisearch.com/docs/learn/async/asynchronous_operations).
+#[utoipa::path(
+    get,
+    path = "/{taskUid}/file",
+    tag = "Tasks",
+    security(("Bearer" = ["tasks.get", "tasks.*", "*"])),
+    params(("taskUid", format = UInt32, example = 0, description = "The task identifier", nullable = false)),
+    responses(
+        (status = 200, description = "Task successfully retrieved", body = TaskView, content_type = "application/x-ndjson", example = json!(
+            {
+                "uid": 1,
+                "indexUid": "movies",
+                "status": "succeeded",
+                "type": "documentAdditionOrUpdate",
+                "canceledBy": null,
+                "details": {
+                    "receivedDocuments": 79000,
+                    "indexedDocuments": 79000
+                },
+                "error": null,
+                "duration": "PT1S",
+                "enqueuedAt": "2021-01-01T09:39:00.000000Z",
+                "startedAt": "2021-01-01T09:39:01.000000Z",
+                "finishedAt": "2021-01-01T09:39:02.000000Z"
+            }
+        )),
+        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+        (status = 404, description = "The task uid does not exists", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "Task :taskUid not found.",
+                "code": "task_not_found",
+                "type": "invalid_request",
+                "link": "https://docs.meilisearch.com/errors/#task_not_found"
+            }
+        ))
+    )
+)]
+async fn get_task_update_file(
+    index_scheduler: GuardedData<ActionPolicy<{ actions::TASKS_GET }>, Data<IndexScheduler>>,
+    task_uid: web::Path<String>,
+) -> Result<HttpResponse, ResponseError> {
+    /// TODO change the example
+    let task_uid_string = task_uid.into_inner();
+
+    let task_uid: TaskId = match task_uid_string.parse() {
+        Ok(id) => id,
+        Err(_e) => {
+            return Err(index_scheduler::Error::InvalidTaskUid { task_uid: task_uid_string }.into())
+        }
+    };
+
+    let query = index_scheduler::Query { uids: Some(vec![task_uid]), ..Query::default() };
+    let filters = index_scheduler.filters();
+    let (tasks, _) = index_scheduler.get_tasks_from_authorized_indexes(&query, filters)?;
+
+    if let Some(task) = tasks.first() {
+        match task.content_uuid() {
+            Some(uuid) => {
+                // Yes, that's awful to put everything in memory when we could have streamed it from
+                // disk but it's really (really) complex to do with the current state of async Rust.
+                let file = index_scheduler.queue.update_file(uuid)?;
+                let mut tfile = tokio::fs::File::from_std(file);
+                let mut content = String::new();
+                tfile.read_to_string(&mut content).await?;
+                Ok(HttpResponse::Ok().content_type("application/x-ndjson").body(content))
+            }
+            None => Err(index_scheduler::Error::TaskFileNotFound(task_uid).into()),
+        }
     } else {
         Err(index_scheduler::Error::TaskNotFound(task_uid).into())
     }

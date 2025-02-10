@@ -372,6 +372,7 @@ RemoteRemoteError                     , System               , BAD_GATEWAY ;
 RemoteTimeout                         , System               , BAD_GATEWAY ;
 TooManySearchRequests                 , System               , SERVICE_UNAVAILABLE ;
 TaskNotFound                          , InvalidRequest       , NOT_FOUND ;
+TaskFileNotFound                      , InvalidRequest       , NOT_FOUND ;
 BatchNotFound                         , InvalidRequest       , NOT_FOUND ;
 TooManyOpenFiles                      , System               , UNPROCESSABLE_ENTITY ;
 TooManyVectors                        , InvalidRequest       , BAD_REQUEST ;
