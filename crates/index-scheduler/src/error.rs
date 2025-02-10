@@ -109,7 +109,7 @@ pub enum Error {
     InvalidIndexUid { index_uid: String },
     #[error("Task `{0}` not found.")]
     TaskNotFound(TaskId),
-    #[error("Task `{0}` does not provide any content file.")]
+    #[error("Task `{0}` does not contain any documents. Only `documentAdditionOrUpdate` tasks with the statuses `enqueued` or `processing` contain documents")]
     TaskFileNotFound(TaskId),
     #[error("Batch `{0}` not found.")]
     BatchNotFound(BatchId),
