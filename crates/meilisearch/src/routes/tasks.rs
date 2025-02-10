@@ -679,6 +679,7 @@ async fn get_task_documents_file(
     index_scheduler: GuardedData<ActionPolicy<{ actions::TASKS_GET }>, Data<IndexScheduler>>,
     task_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
+    index_scheduler.features().check_get_task_documents_route()?;
     let task_uid_string = task_uid.into_inner();
 
     let task_uid: TaskId = match task_uid_string.parse() {

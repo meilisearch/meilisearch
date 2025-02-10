@@ -1909,7 +1909,8 @@ async fn import_dump_v6_containing_experimental_features() {
       "logsRoute": false,
       "editDocumentsByFunction": false,
       "containsFilter": false,
-      "network": false
+      "network": false,
+      "getTaskDocumentsRoute": false
     }
     "###);
 
@@ -2071,7 +2072,8 @@ async fn generate_and_import_dump_containing_vectors() {
       "logsRoute": false,
       "editDocumentsByFunction": false,
       "containsFilter": false,
-      "network": false
+      "network": false,
+      "getTaskDocumentsRoute": false
     }
     "###);
 

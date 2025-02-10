@@ -10,6 +10,7 @@ pub struct RuntimeTogglableFeatures {
     pub edit_documents_by_function: bool,
     pub contains_filter: bool,
     pub network: bool,
+    pub get_task_documents_route: bool,
 }
 
 #[derive(Default, Debug, Clone, Copy)]

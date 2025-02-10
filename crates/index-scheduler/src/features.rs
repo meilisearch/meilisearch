@@ -105,6 +105,19 @@ impl RoFeatures {
             .into())
         }
     }
+
+    pub fn check_get_task_documents_route(&self) -> Result<()> {
+        if self.runtime.get_task_documents_route {
+            Ok(())
+        } else {
+            Err(FeatureNotEnabledError {
+                disabled_action: "Getting the documents of an enqueued task",
+                feature: "get task documents route",
+                issue_link: "https://github.com/orgs/meilisearch/discussions/808",
+            }
+            .into())
+        }
+    }
 }
 
 impl FeatureData {
