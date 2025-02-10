@@ -49,7 +49,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     .service(web::resource("/cancel").route(web::post().to(SeqHandler(cancel_tasks))))
     .service(web::resource("/{task_id}").route(web::get().to(SeqHandler(get_task))))
     .service(
-        web::resource("/{task_id}/file").route(web::get().to(SeqHandler(get_task_update_file))),
+        web::resource("/{task_id}/documents")
+            .route(web::get().to(SeqHandler(get_task_documents_file))),
     );
 }
 
@@ -645,12 +646,12 @@ async fn get_task(
     }
 }
 
-/// Get a task's update file.
+/// Get a task's documents.
 ///
-/// Get a [task's file](https://www.meilisearch.com/docs/learn/async/asynchronous_operations).
+/// Get a [task's documents file](https://www.meilisearch.com/docs/learn/async/asynchronous_operations).
 #[utoipa::path(
     get,
-    path = "/{taskUid}/file",
+    path = "/{taskUid}/documents",
     tag = "Tasks",
     security(("Bearer" = ["tasks.get", "tasks.*", "*"])),
     params(("taskUid", format = UInt32, example = 0, description = "The task identifier", nullable = false)),
@@ -674,7 +675,7 @@ async fn get_task(
         ))
     )
 )]
-async fn get_task_update_file(
+async fn get_task_documents_file(
     index_scheduler: GuardedData<ActionPolicy<{ actions::TASKS_GET }>, Data<IndexScheduler>>,
     task_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
