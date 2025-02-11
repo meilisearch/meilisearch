@@ -93,7 +93,7 @@ impl KeyWriter {
     }
 
     pub fn push_key(&mut self, key: &Key) -> Result<()> {
-        self.keys.write_all(&serde_json::to_vec(key)?)?;
+        serde_json::to_writer(&mut self.keys, &key)?;
         self.keys.write_all(b"\n")?;
         Ok(())
     }
@@ -123,7 +123,7 @@ impl TaskWriter {
     /// Pushes tasks in the dump.
     /// If the tasks has an associated `update_file` it'll use the `task_id` as its name.
     pub fn push_task(&mut self, task: &TaskDump) -> Result<UpdateFile> {
-        self.queue.write_all(&serde_json::to_vec(task)?)?;
+        serde_json::to_writer(&mut self.queue, &task)?;
         self.queue.write_all(b"\n")?;
 
         Ok(UpdateFile::new(self.update_files.join(format!("{}.jsonl", task.uid))))
@@ -148,7 +148,7 @@ impl BatchWriter {
 
     /// Pushes batches in the dump.
     pub fn push_batch(&mut self, batch: &Batch) -> Result<()> {
-        self.queue.write_all(&serde_json::to_vec(batch)?)?;
+        serde_json::to_writer(&mut self.queue, &batch)?;
         self.queue.write_all(b"\n")?;
         Ok(())
     }
@@ -170,8 +170,8 @@ impl UpdateFile {
     }
 
     pub fn push_document(&mut self, document: &Document) -> Result<()> {
-        if let Some(writer) = self.writer.as_mut() {
-            writer.write_all(&serde_json::to_vec(document)?)?;
+        if let Some(mut writer) = self.writer.as_mut() {
+            serde_json::to_writer(&mut writer, &document)?;
             writer.write_all(b"\n")?;
         } else {
             let file = File::create(&self.path).unwrap();
