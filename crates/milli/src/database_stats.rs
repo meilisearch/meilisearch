@@ -63,11 +63,19 @@ impl DatabaseStats {
     }
 
     pub fn average_key_size(&self) -> u64 {
-        self.total_key_size / self.number_of_entries
+        if self.total_key_size == 0 {
+            0
+        } else {
+            self.total_key_size / self.number_of_entries
+        }
     }
 
     pub fn average_value_size(&self) -> u64 {
-        self.total_value_size / self.number_of_entries
+        if self.total_value_size == 0 {
+            0
+        } else {
+            self.total_value_size / self.number_of_entries
+        }
     }
 
     pub fn number_of_entries(&self) -> u64 {
