@@ -1,15 +1,16 @@
 use std::fs::{read_dir, read_to_string, remove_file, File};
 use std::io::{BufWriter, Write as _};
 use std::path::PathBuf;
+use std::ptr;
 use std::time::Instant;
 
 use anyhow::{bail, Context};
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use dump::{DumpWriter, IndexMetadata};
 use file_store::FileStore;
 use meilisearch_auth::AuthController;
 use meilisearch_types::batches::Batch;
-use meilisearch_types::heed::types::{SerdeJson, Str};
+use meilisearch_types::heed::types::{Bytes, SerdeJson, Str};
 use meilisearch_types::heed::{
     CompactionOption, Database, Env, EnvOpenOptions, RoTxn, RwTxn, Unspecified,
 };
@@ -124,6 +125,25 @@ enum Command {
     /// the compaction operation can start. Once the compaction is done, the big index is replaced
     /// by the compacted one and the mutable transaction is released.
     CompactIndex { index_name: String },
+
+    /// Uses the hair dryer the dedicate pages hot in cache
+    ///
+    /// To make the index faster we must make sure it is hot in the DB cache that's the cure of
+    /// memory-mapping but also it's strengh. This command is designed to make a spcific part of
+    /// the index hot in cache.
+    HairDryer {
+        #[arg(long, value_delimiter = ',')]
+        index_name: Vec<String>,
+
+        #[arg(long, value_delimiter = ',')]
+        index_part: Vec<IndexPart>,
+    },
+}
+
+#[derive(Clone, ValueEnum)]
+enum IndexPart {
+    /// Will make the arroy index hot.
+    Arroy,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -144,6 +164,9 @@ fn main() -> anyhow::Result<()> {
             OfflineUpgrade { db_path, current_version: detected_version, target_version }.upgrade()
         }
         Command::CompactIndex { index_name } => compact_index(db_path, &index_name),
+        Command::HairDryer { index_name, index_part } => {
+            hair_dryer(db_path, &index_name, &index_part)
+        }
     }
 }
 
@@ -580,6 +603,70 @@ fn export_documents(
             }
 
             stdout.flush()?;
+        } else {
+            eprintln!("Found index {uid} but it's not the right index...");
+        }
+    }
+
+    Ok(())
+}
+
+fn hair_dryer(
+    db_path: PathBuf,
+    index_names: &[String],
+    index_parts: &[IndexPart],
+) -> anyhow::Result<()> {
+    let index_scheduler_path = db_path.join("tasks");
+    let env = unsafe { EnvOpenOptions::new().max_dbs(100).open(&index_scheduler_path) }
+        .with_context(|| format!("While trying to open {:?}", index_scheduler_path.display()))?;
+
+    let rtxn = env.read_txn()?;
+    let index_mapping: Database<Str, UuidCodec> =
+        try_opening_database(&env, &rtxn, "index-mapping")?;
+
+    for result in index_mapping.iter(&rtxn)? {
+        let (uid, uuid) = result?;
+        if index_names.iter().any(|i| i == uid) {
+            let index_path = db_path.join("indexes").join(uuid.to_string());
+            let index =
+                Index::new(EnvOpenOptions::new(), &index_path, false).with_context(|| {
+                    format!("While trying to open the index at path {:?}", index_path.display())
+                })?;
+
+            let rtxn = index.read_txn()?;
+            for part in index_parts {
+                match part {
+                    IndexPart::Arroy => {
+                        let mut count = 0;
+                        let total = index.vector_arroy.len(&rtxn)?;
+                        eprintln!("Hair drying arroy for {uid}...");
+                        for (i, result) in index
+                            .vector_arroy
+                            .remap_types::<Bytes, Bytes>()
+                            .iter(&rtxn)?
+                            .enumerate()
+                        {
+                            let (key, value) = result?;
+                            count += key.len() + value.len();
+
+                            unsafe {
+                                // All of this just to avoid compiler optimizations 🤞
+                                // We must read all the bytes to make the pages hot in cache.
+                                // <https://doc.rust-lang.org/std/ptr/fn.read_volatile.html>
+                                ptr::read_volatile(&key[0]);
+                                ptr::read_volatile(&key[key.len() - 1]);
+                                ptr::read_volatile(&value[0]);
+                                ptr::read_volatile(&value[value.len() - 1]);
+                            }
+
+                            if i % 10_000 == 0 {
+                                eprintln!("Visited {i}/{total} keys")
+                            }
+                        }
+                        eprintln!("Done hair drying a total of at least {count} bytes.");
+                    }
+                }
+            }
         } else {
             eprintln!("Found index {uid} but it's not the right index...");
         }
