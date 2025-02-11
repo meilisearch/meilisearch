@@ -27,6 +27,12 @@ use crate::Opt;
 /// It also generates a `configure` function that configures the routes for the settings.
 macro_rules! make_setting_routes {
     ($({route: $route:literal, update_verb: $update_verb:ident, value_type: $type:ty, err_type: $err_ty:ty, attr: $attr:ident, camelcase_attr: $camelcase_attr:literal, analytics: $analytics:ident},)*) => {
+        const _: fn(&meilisearch_types::settings::Settings<meilisearch_types::settings::Unchecked>) = |s| {
+            // This pattern match will fail at compile time if any field in Settings is not listed in the macro
+            match *s {
+                meilisearch_types::settings::Settings { $($attr: _,)* _kind: _ } => {}
+            }
+        };
         $(
             make_setting_route!($route, $update_verb, $type, $err_ty, $attr, $camelcase_attr, $analytics);
         )*
@@ -60,7 +66,7 @@ macro_rules! make_setting_routes {
 
 #[macro_export]
 macro_rules! make_setting_route {
-    ($route:literal, $update_verb:ident, $type:ty, $err_ty:ty, $attr:ident, $camelcase_attr:literal, $analytics:ident) => {
+    ($route:literal, $update_verb:ident, $type:ty, $err_type:ty, $attr:ident, $camelcase_attr:literal, $analytics:ident) => {
         pub mod $attr {
             use actix_web::web::Data;
             use actix_web::{web, HttpRequest, HttpResponse, Resource};
@@ -180,7 +186,7 @@ macro_rules! make_setting_route {
                     Data<IndexScheduler>,
                 >,
                 index_uid: actix_web::web::Path<String>,
-                body: deserr::actix_web::AwebJson<Option<$type>, $err_ty>,
+                body: deserr::actix_web::AwebJson<Option<$type>, $err_type>,
                 req: HttpRequest,
                 opt: web::Data<Opt>,
                 analytics: web::Data<Analytics>,
