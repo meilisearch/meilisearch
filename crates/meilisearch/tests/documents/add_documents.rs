@@ -1803,6 +1803,275 @@ async fn add_documents_with_geo_field() {
       "finishedAt": "[date]"
     }
     "###);
+
+    let (response, code) = index.get_all_documents(GetAllDocumentsOptions::default()).await;
+
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    @r###"
+    {
+      "results": [
+        {
+          "id": "1"
+        },
+        {
+          "id": "2",
+          "_geo": null
+        },
+        {
+          "id": "3",
+          "_geo": {
+            "lat": 1,
+            "lng": 1
+          }
+        },
+        {
+          "id": "4",
+          "_geo": {
+            "lat": "1",
+            "lng": "1"
+          }
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 4
+    }
+    "###);
+
+    let (response, code) = index
+        .search_post(json!({"sort": ["_geoPoint(50.629973371633746,3.0569447399419567):desc"]}))
+        .await;
+    snapshot!(code, @"200 OK");
+    // we are expecting docs 4 and 3 first as they have geo
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }),
+    @r###"
+    {
+      "hits": [
+        {
+          "id": "4",
+          "_geo": {
+            "lat": "1",
+            "lng": "1"
+          },
+          "_geoDistance": 5522018
+        },
+        {
+          "id": "3",
+          "_geo": {
+            "lat": 1,
+            "lng": 1
+          },
+          "_geoDistance": 5522018
+        },
+        {
+          "id": "1"
+        },
+        {
+          "id": "2",
+          "_geo": null
+        }
+      ],
+      "query": "",
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 4
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn update_documents_with_geo_field() {
+    let server = Server::new().await;
+    let index = server.index("doggo");
+    index.update_settings(json!({"sortableAttributes": ["_geo"]})).await;
+
+    let documents = json!([
+        {
+            "id": "1",
+        },
+        {
+            "id": "2",
+            "_geo": null,
+        },
+        {
+            "id": "3",
+            "_geo": { "lat": 1, "lng": 1 },
+        },
+        {
+            "id": "4",
+            "_geo": { "lat": "1", "lng": "1" },
+        },
+    ]);
+
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    let response = index.wait_task(task.uid()).await;
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "uid": 1,
+      "batchUid": 1,
+      "indexUid": "doggo",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 4,
+        "indexedDocuments": 4
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    let (response, code) = index
+        .search_post(json!({"sort": ["_geoPoint(50.629973371633746,3.0569447399419567):desc"]}))
+        .await;
+    snapshot!(code, @"200 OK");
+    // we are expecting docs 4 and 3 first as they have geo
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }),
+    @r###"
+    {
+      "hits": [
+        {
+          "id": "4",
+          "_geo": {
+            "lat": "1",
+            "lng": "1"
+          },
+          "_geoDistance": 5522018
+        },
+        {
+          "id": "3",
+          "_geo": {
+            "lat": 1,
+            "lng": 1
+          },
+          "_geoDistance": 5522018
+        },
+        {
+          "id": "1"
+        },
+        {
+          "id": "2",
+          "_geo": null
+        }
+      ],
+      "query": "",
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 4
+    }
+    "###);
+
+    let updated_documents = json!([{
+      "id": "3",
+      "doggo": "kefir",
+    }]);
+    let (task, _status_code) = index.update_documents(updated_documents, None).await;
+    let response = index.wait_task(task.uid()).await;
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "uid": 2,
+      "batchUid": 2,
+      "indexUid": "doggo",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+    let (response, code) = index.get_all_documents(GetAllDocumentsOptions::default()).await;
+
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    @r###"
+    {
+      "results": [
+        {
+          "id": "1"
+        },
+        {
+          "id": "2",
+          "_geo": null
+        },
+        {
+          "id": "3",
+          "_geo": {
+            "lat": 1,
+            "lng": 1
+          },
+          "doggo": "kefir"
+        },
+        {
+          "id": "4",
+          "_geo": {
+            "lat": "1",
+            "lng": "1"
+          }
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 4
+    }
+    "###);
+
+    let (response, code) = index
+        .search_post(json!({"sort": ["_geoPoint(50.629973371633746,3.0569447399419567):desc"]}))
+        .await;
+    snapshot!(code, @"200 OK");
+    // the search response should not have changed: we are expecting docs 4 and 3 first as they have geo
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }),
+    @r###"
+    {
+      "hits": [
+        {
+          "id": "4",
+          "_geo": {
+            "lat": "1",
+            "lng": "1"
+          },
+          "_geoDistance": 5522018
+        },
+        {
+          "id": "3",
+          "_geo": {
+            "lat": 1,
+            "lng": 1
+          },
+          "doggo": "kefir",
+          "_geoDistance": 5522018
+        },
+        {
+          "id": "1"
+        },
+        {
+          "id": "2",
+          "_geo": null
+        }
+      ],
+      "query": "",
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 4
+    }
+    "###);
 }
 
 #[actix_rt::test]

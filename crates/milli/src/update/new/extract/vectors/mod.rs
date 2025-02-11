@@ -99,7 +99,8 @@ impl<'a, 'b, 'extractor> Extractor<'extractor> for EmbeddingExtractor<'a, 'b> {
                         context.db_fields_ids_map,
                         &context.doc_alloc,
                     )?;
-                    let new_vectors = update.updated_vectors(&context.doc_alloc, self.embedders)?;
+                    let new_vectors =
+                        update.only_changed_vectors(&context.doc_alloc, self.embedders)?;
 
                     if let Some(new_vectors) = &new_vectors {
                         unused_vectors_distribution.append(new_vectors)?;

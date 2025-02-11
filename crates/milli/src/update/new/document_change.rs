@@ -144,7 +144,7 @@ impl<'doc> Update<'doc> {
         )?)
     }
 
-    pub fn updated(&self) -> DocumentFromVersions<'_, 'doc> {
+    pub fn only_changed_fields(&self) -> DocumentFromVersions<'_, 'doc> {
         DocumentFromVersions::new(&self.new)
     }
 
@@ -182,7 +182,7 @@ impl<'doc> Update<'doc> {
         let mut cached_current = None;
         let mut updated_selected_field_count = 0;
 
-        for entry in self.updated().iter_top_level_fields() {
+        for entry in self.only_changed_fields().iter_top_level_fields() {
             let (key, updated_value) = entry?;
 
             if perm_json_p::select_field(key, fields, &[]) == perm_json_p::Selection::Skip {
@@ -241,7 +241,7 @@ impl<'doc> Update<'doc> {
         Ok(has_deleted_fields)
     }
 
-    pub fn updated_vectors(
+    pub fn only_changed_vectors(
         &self,
         doc_alloc: &'doc Bump,
         embedders: &'doc EmbeddingConfigs,
