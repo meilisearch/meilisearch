@@ -109,7 +109,7 @@ impl IndexScheduler {
         progress.update_progress(DumpCreationProgress::DumpTheBatches);
         let mut dump_batches = dump.create_batches_queue()?;
 
-        let (atomic, update_batch_progress) =
+        let (atomic_batch_progress, update_batch_progress) =
             AtomicBatchStep::new(self.queue.batches.all_batches.len(&rtxn)? as u32);
         progress.update_progress(update_batch_progress);
 
@@ -134,7 +134,7 @@ impl IndexScheduler {
             }
 
             dump_batches.push_batch(&b)?;
-            atomic.fetch_add(1, Ordering::Relaxed);
+            atomic_batch_progress.fetch_add(1, Ordering::Relaxed);
         }
         dump_batches.flush()?;
 
