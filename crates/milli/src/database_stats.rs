@@ -30,7 +30,7 @@ impl DatabaseStats {
     ///
     /// This function iterates over the whole database and computes the stats.
     /// It is not efficient and should be cached somewhere.
-    pub(crate) fn new<'a>(database: Database<Bytes, Bytes>, rtxn: &RoTxn<'a>) -> Result<Self> {
+    pub(crate) fn new(database: Database<Bytes, Bytes>, rtxn: &RoTxn<'_>) -> Result<Self> {
         let mut database_stats = Self {
             number_of_entries: 0,
             total_key_size: 0,
