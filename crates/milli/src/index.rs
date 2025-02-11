@@ -406,7 +406,7 @@ impl Index {
 
     /// Returns the stats of the database.
     pub fn documents_database_stats(&self, rtxn: &RoTxn<'_>) -> Result<DatabaseStats> {
-        Ok(DatabaseStats::new(self.documents.remap_types::<Bytes, Bytes>(), rtxn)?)
+        DatabaseStats::new(self.documents.remap_types::<Bytes, Bytes>(), rtxn)
     }
 
     /* primary key */
