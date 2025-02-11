@@ -620,6 +620,8 @@ fn hair_dryer(
     let env = unsafe { EnvOpenOptions::new().max_dbs(100).open(&index_scheduler_path) }
         .with_context(|| format!("While trying to open {:?}", index_scheduler_path.display()))?;
 
+    eprintln!("Trying to get a read transaction on the index scheduler...");
+
     let rtxn = env.read_txn()?;
     let index_mapping: Database<Str, UuidCodec> =
         try_opening_database(&env, &rtxn, "index-mapping")?;
@@ -632,6 +634,8 @@ fn hair_dryer(
                 Index::new(EnvOpenOptions::new(), &index_path, false).with_context(|| {
                     format!("While trying to open the index at path {:?}", index_path.display())
                 })?;
+
+            eprintln!("Trying to get a read transaction on the {uid} index...");
 
             let rtxn = index.read_txn()?;
             for part in index_parts {
