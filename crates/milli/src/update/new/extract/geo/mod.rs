@@ -199,7 +199,7 @@ impl<'extractor> Extractor<'extractor> for GeoExtractor {
                         .transpose()?;
 
                     let updated_geo = update
-                        .updated()
+                        .merged(rtxn, index, db_fields_ids_map)?
                         .geo_field()?
                         .map(|geo| extract_geo_coordinates(external_id, geo))
                         .transpose()?;
