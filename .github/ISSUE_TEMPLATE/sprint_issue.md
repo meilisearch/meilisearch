@@ -27,7 +27,9 @@ Related product discussion:
 - [ ] Update the openAPI file with utoipa:
   - [ ] If a new module has been introduced, create a new structure deriving [the OpenAPI proc-macro](https://docs.rs/utoipa/latest/utoipa/derive.OpenApi.html) and nest it in the main [openAPI structure](https://github.com/meilisearch/meilisearch/blob/f2185438eed60fa32d25b15480c5ee064f6fba4a/crates/meilisearch/src/routes/mod.rs#L64-L78).
   - [ ] If a new route has been introduced, add the [path decorator](https://docs.rs/utoipa/latest/utoipa/attr.path.html) to it and add the route at the top of the file in its openAPI structure.
-  - [ ] If a structure which is deserialized or serialized in the API has been introduced or modified, it must derive the [`schema`](https://docs.rs/utoipa/latest/utoipa/macro.schema.html) or the [`IntoParams`](https://docs.rs/utoipa/latest/utoipa/derive.IntoParams.html) proc-macro .
+  - [ ] If a structure which is deserialized or serialized in the API has been introduced or modified, it must derive the [`schema`](https://docs.rs/utoipa/latest/utoipa/macro.schema.html) or the [`IntoParams`](https://docs.rs/utoipa/latest/utoipa/derive.IntoParams.html) proc-macro.
+        If it's a **new** structure you must also add it to the big list of structures [in the main `OpenApi` structure](https://github.com/meilisearch/meilisearch/blob/f2185438eed60fa32d25b15480c5ee064f6fba4a/crates/meilisearch/src/routes/mod.rs#L88).
+  - [ ] Once everything is done, start Meilisearch with the swagger flag: `cargo run --features swagger`, open `http://localhost:7700/scalar` on your browser, and ensure everything works as expected.
   - For more info, refer to [this presentation](https://pitch.com/v/generating-the-openapi-file-jrn3nh).
 
 ### Reminders when modifying the Setting API
