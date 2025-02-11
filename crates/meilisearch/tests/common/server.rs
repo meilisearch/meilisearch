@@ -163,6 +163,10 @@ impl Server<Owned> {
         self.service.get("/tasks").await
     }
 
+    pub async fn batches(&self) -> (Value, StatusCode) {
+        self.service.get("/batches").await
+    }
+
     pub async fn set_features(&self, value: Value) -> (Value, StatusCode) {
         self.service.patch("/experimental-features", value).await
     }

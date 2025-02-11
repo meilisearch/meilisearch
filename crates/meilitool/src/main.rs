@@ -8,6 +8,7 @@ use clap::{Parser, Subcommand};
 use dump::{DumpWriter, IndexMetadata};
 use file_store::FileStore;
 use meilisearch_auth::AuthController;
+use meilisearch_types::batches::Batch;
 use meilisearch_types::heed::types::{SerdeJson, Str};
 use meilisearch_types::heed::{
     CompactionOption, Database, Env, EnvOpenOptions, RoTxn, RwTxn, Unspecified,
@@ -279,70 +280,86 @@ fn export_a_dump(
 
     eprintln!("Successfully dumped {count} keys!");
 
+    eprintln!("Dumping the queue");
     let rtxn = env.read_txn()?;
     let all_tasks: Database<BEU32, SerdeJson<Task>> =
         try_opening_database(&env, &rtxn, "all-tasks")?;
+    let all_batches: Database<BEU32, SerdeJson<Batch>> =
+        try_opening_database(&env, &rtxn, "all-batches")?;
     let index_mapping: Database<Str, UuidCodec> =
         try_opening_database(&env, &rtxn, "index-mapping")?;
 
-    if skip_enqueued_tasks {
-        eprintln!("Skip dumping the enqueued tasks...");
-    } else {
-        let mut dump_tasks = dump.create_tasks_queue()?;
-        let mut count = 0;
-        for ret in all_tasks.iter(&rtxn)? {
-            let (_, t) = ret?;
-            let status = t.status;
-            let content_file = t.content_uuid();
+    eprintln!("Dumping the tasks");
+    let mut dump_tasks = dump.create_tasks_queue()?;
+    let mut count_tasks = 0;
+    let mut count_enqueued_tasks = 0;
+    for ret in all_tasks.iter(&rtxn)? {
+        let (_, t) = ret?;
+        let status = t.status;
+        let content_file = t.content_uuid();
 
-            let mut dump_content_file = dump_tasks.push_task(&t.into())?;
+        if status == Status::Enqueued && skip_enqueued_tasks {
+            continue;
+        }
 
-            // 3.1. Dump the `content_file` associated with the task if there is one and the task is not finished yet.
-            if let Some(content_file_uuid) = content_file {
-                if status == Status::Enqueued {
-                    let content_file = file_store.get_update(content_file_uuid)?;
+        let mut dump_content_file = dump_tasks.push_task(&t.into())?;
 
-                    if (detected_version.0, detected_version.1, detected_version.2) < (1, 12, 0) {
-                        eprintln!("Dumping the enqueued tasks reading them in obkv format...");
-                        let reader =
-                            DocumentsBatchReader::from_reader(content_file).with_context(|| {
-                                format!("While reading content file {:?}", content_file_uuid)
-                            })?;
-                        let (mut cursor, documents_batch_index) =
-                            reader.into_cursor_and_fields_index();
-                        while let Some(doc) = cursor.next_document().with_context(|| {
-                            format!("While iterating on content file {:?}", content_file_uuid)
-                        })? {
-                            dump_content_file
-                                .push_document(&obkv_to_object(doc, &documents_batch_index)?)?;
-                        }
-                    } else {
-                        eprintln!(
-                            "Dumping the enqueued tasks reading them in JSON stream format..."
-                        );
-                        for document in
-                            serde_json::de::Deserializer::from_reader(content_file).into_iter()
-                        {
-                            let document = document.with_context(|| {
-                                format!("While reading content file {:?}", content_file_uuid)
-                            })?;
-                            dump_content_file.push_document(&document)?;
-                        }
+        // 3.1. Dump the `content_file` associated with the task if there is one and the task is not finished yet.
+        if let Some(content_file_uuid) = content_file {
+            if status == Status::Enqueued {
+                let content_file = file_store.get_update(content_file_uuid)?;
+
+                if (detected_version.0, detected_version.1, detected_version.2) < (1, 12, 0) {
+                    eprintln!("Dumping the enqueued tasks reading them in obkv format...");
+                    let reader =
+                        DocumentsBatchReader::from_reader(content_file).with_context(|| {
+                            format!("While reading content file {:?}", content_file_uuid)
+                        })?;
+                    let (mut cursor, documents_batch_index) = reader.into_cursor_and_fields_index();
+                    while let Some(doc) = cursor.next_document().with_context(|| {
+                        format!("While iterating on content file {:?}", content_file_uuid)
+                    })? {
+                        dump_content_file
+                            .push_document(&obkv_to_object(doc, &documents_batch_index)?)?;
                     }
-
-                    dump_content_file.flush()?;
-                    count += 1;
+                } else {
+                    eprintln!("Dumping the enqueued tasks reading them in JSON stream format...");
+                    for document in
+                        serde_json::de::Deserializer::from_reader(content_file).into_iter()
+                    {
+                        let document = document.with_context(|| {
+                            format!("While reading content file {:?}", content_file_uuid)
+                        })?;
+                        dump_content_file.push_document(&document)?;
+                    }
                 }
+
+                dump_content_file.flush()?;
+                count_enqueued_tasks += 1;
             }
         }
-        dump_tasks.flush()?;
-
-        eprintln!("Successfully dumped {count} enqueued tasks!");
+        count_tasks += 1;
     }
+    dump_tasks.flush()?;
+    eprintln!(
+        "Successfully dumped {count_tasks} tasks including {count_enqueued_tasks} enqueued tasks!"
+    );
 
+    // 4. dump the batches
+    eprintln!("Dumping the batches");
+    let mut dump_batches = dump.create_batches_queue()?;
+    let mut count = 0;
+
+    for ret in all_batches.iter(&rtxn)? {
+        let (_, b) = ret?;
+        dump_batches.push_batch(&b)?;
+        count += 1;
+    }
+    dump_batches.flush()?;
+    eprintln!("Successfully dumped {count} batches!");
+
+    // 5. Dump the indexes
     eprintln!("Dumping the indexes...");
-
-    // 4. Dump the indexes
     let mut count = 0;
     for result in index_mapping.iter(&rtxn)? {
         let (uid, uuid) = result?;
@@ -363,14 +380,14 @@ fn export_a_dump(
         let fields_ids_map = index.fields_ids_map(&rtxn)?;
         let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
 
-        // 4.1. Dump the documents
+        // 5.1. Dump the documents
         for ret in index.all_documents(&rtxn)? {
             let (_id, doc) = ret?;
             let document = obkv_to_json(&all_fields, &fields_ids_map, doc)?;
             index_dumper.push_document(&document)?;
         }
 
-        // 4.2. Dump the settings
+        // 5.2. Dump the settings
         let settings = meilisearch_types::settings::settings(
             &index,
             &rtxn,

@@ -1,0 +1,78 @@
+---
+source: crates/meilisearch/tests/dumps/mod.rs
+snapshot_kind: text
+---
+{
+  "results": [
+    {
+      "uid": 3,
+      "batchUid": null,
+      "indexUid": null,
+      "status": "succeeded",
+      "type": "dumpCreation",
+      "canceledBy": null,
+      "details": {
+        "dumpUid": null
+      },
+      "error": null,
+      "duration": "PT0.000629059S",
+      "enqueuedAt": "2025-02-04T10:22:31.318175268Z",
+      "startedAt": "2025-02-04T10:22:31.331701375Z",
+      "finishedAt": "2025-02-04T10:22:31.332330434Z"
+    },
+    {
+      "uid": 2,
+      "batchUid": 2,
+      "indexUid": "kefir",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": null,
+      "duration": "[date]",
+      "enqueuedAt": "2025-02-04T10:15:49.212484063Z",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    },
+    {
+      "uid": 1,
+      "batchUid": null,
+      "indexUid": "kefir",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": null,
+      "duration": "PT0.144827890S",
+      "enqueuedAt": "2025-02-04T10:15:21.258630973Z",
+      "startedAt": "2025-02-04T10:15:21.275640274Z",
+      "finishedAt": "2025-02-04T10:15:21.420468164Z"
+    },
+    {
+      "uid": 0,
+      "batchUid": null,
+      "indexUid": "kefir",
+      "status": "succeeded",
+      "type": "indexCreation",
+      "canceledBy": null,
+      "details": {
+        "primaryKey": null
+      },
+      "error": null,
+      "duration": "PT0.032902186S",
+      "enqueuedAt": "2025-02-04T10:14:43.550379968Z",
+      "startedAt": "2025-02-04T10:14:43.559526162Z",
+      "finishedAt": "2025-02-04T10:14:43.592428348Z"
+    }
+  ],
+  "total": 4,
+  "limit": 20,
+  "from": 3,
+  "next": null
+}

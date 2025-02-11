@@ -96,6 +96,7 @@ make_enum_progress! {
         StartTheDumpCreation,
         DumpTheApiKeys,
         DumpTheTasks,
+        DumpTheBatches,
         DumpTheIndexes,
         DumpTheExperimentalFeatures,
         CompressTheDump,
