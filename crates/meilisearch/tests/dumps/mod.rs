@@ -2019,15 +2019,16 @@ async fn import_dump_v6_containing_batches_and_enqueued_tasks() {
 
     let (response, code) = server.get_features().await;
     meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r#"
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
       "metrics": false,
       "logsRoute": false,
       "editDocumentsByFunction": false,
       "containsFilter": false,
-      "network": false
+      "network": false,
+      "getTaskDocumentsRoute": false
     }
-    "#);
+    "###);
 
     let index = server.index("kefir");
     let (documents, _) = index.get_all_documents_raw("").await;
