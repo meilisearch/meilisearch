@@ -135,6 +135,8 @@ async fn check_the_index_scheduler(server: &Server) {
         "kefir": {
           "numberOfDocuments": 1,
           "isIndexing": false,
+          "numberOfEmbeddings": 0,
+          "numberOfEmbeddedDocuments": 0,
           "fieldDistribution": {
             "age": 1,
             "description": 1,
@@ -215,6 +217,8 @@ async fn check_the_index_scheduler(server: &Server) {
         "kefir": {
           "numberOfDocuments": 1,
           "isIndexing": false,
+          "numberOfEmbeddings": 0,
+          "numberOfEmbeddedDocuments": 0,
           "fieldDistribution": {
             "age": 1,
             "description": 1,
@@ -228,10 +232,12 @@ async fn check_the_index_scheduler(server: &Server) {
     "###);
     let index = server.index("kefir");
     let (stats, _) = index.stats().await;
-    snapshot!(stats, @r#"
+    snapshot!(stats, @r###"
     {
       "numberOfDocuments": 1,
       "isIndexing": false,
+      "numberOfEmbeddings": 0,
+      "numberOfEmbeddedDocuments": 0,
       "fieldDistribution": {
         "age": 1,
         "description": 1,
@@ -240,7 +246,7 @@ async fn check_the_index_scheduler(server: &Server) {
         "surname": 1
       }
     }
-    "#);
+    "###);
 
     // Delete all the tasks of a specific batch
     let (task, _) = server.delete_tasks("batchUids=10").await;

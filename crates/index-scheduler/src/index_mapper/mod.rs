@@ -106,6 +106,12 @@ pub struct IndexStats {
     /// are not returned to the disk after a deletion, this number is typically larger than
     /// `used_database_size` that only includes the size of the used pages.
     pub database_size: u64,
+    /// Number of embeddings in the index.
+    /// Option: retrocompatible with the stats of the pre-v1.13.0 versions of meilisearch
+    pub number_of_embeddings: Option<u64>,
+    /// Number of embedded documents in the index.
+    /// Option: retrocompatible with the stats of the pre-v1.13.0 versions of meilisearch
+    pub number_of_embedded_documents: Option<u64>,
     /// Size taken by the used pages of the index' DB, in bytes.
     ///
     /// As the DB backend does not return to the disk the pages that are not currently used by the DB,
@@ -130,8 +136,11 @@ impl IndexStats {
     ///
     /// - rtxn: a RO transaction for the index, obtained from `Index::read_txn()`.
     pub fn new(index: &Index, rtxn: &RoTxn) -> milli::Result<Self> {
+        let arroy_stats = index.arroy_stats(rtxn)?;
         Ok(IndexStats {
             number_of_documents: index.number_of_documents(rtxn)?,
+            number_of_embeddings: Some(arroy_stats.number_of_embeddings),
+            number_of_embedded_documents: Some(arroy_stats.documents.len()),
             database_size: index.on_disk_size()?,
             used_database_size: index.used_size()?,
             primary_key: index.primary_key(rtxn)?.map(|s| s.to_string()),

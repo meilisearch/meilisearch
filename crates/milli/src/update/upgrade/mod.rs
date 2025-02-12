@@ -1,7 +1,9 @@
 mod v1_12;
+mod v1_13;
 
 use heed::RwTxn;
-use v1_12::{V1_12_3_To_Current, V1_12_To_V1_12_3};
+use v1_12::{V1_12_3_To_V1_13_0, V1_12_To_V1_12_3};
+use v1_13::V1_13_0_To_Current;
 
 use crate::progress::{Progress, VariableNameStep};
 use crate::{Index, InternalError, Result};
@@ -26,11 +28,13 @@ pub fn upgrade(
     progress: Progress,
 ) -> Result<bool> {
     let from = index.get_version(wtxn)?.unwrap_or(db_version);
-    let upgrade_functions: &[&dyn UpgradeIndex] = &[&V1_12_To_V1_12_3 {}, &V1_12_3_To_Current()];
+    let upgrade_functions: &[&dyn UpgradeIndex] =
+        &[&V1_12_To_V1_12_3 {}, &V1_12_3_To_V1_13_0 {}, &V1_13_0_To_Current()];
 
     let start = match from {
         (1, 12, 0..=2) => 0,
         (1, 12, 3..) => 1,
+        (1, 13, 0) => 2,
         // We must handle the current version in the match because in case of a failure some index may have been upgraded but not other.
         (1, 13, _) => return Ok(false),
         (major, minor, patch) => {

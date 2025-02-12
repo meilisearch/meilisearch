@@ -27,9 +27,24 @@ async fn import_dump_v1_movie_raw() {
 
     let (stats, code) = index.stats().await;
     snapshot!(code, @"200 OK");
-    assert_eq!(
-        stats,
-        json!({ "numberOfDocuments": 53, "isIndexing": false, "fieldDistribution": {"genres": 53, "id": 53, "overview": 53, "poster": 53, "release_date": 53, "title": 53 }})
+    snapshot!(
+      json_string!(stats),
+      @r###"
+    {
+      "numberOfDocuments": 53,
+      "isIndexing": false,
+      "numberOfEmbeddings": 0,
+      "numberOfEmbeddedDocuments": 0,
+      "fieldDistribution": {
+        "genres": 53,
+        "id": 53,
+        "overview": 53,
+        "poster": 53,
+        "release_date": 53,
+        "title": 53
+      }
+    }
+    "###
     );
 
     let (settings, code) = index.settings().await;
@@ -173,6 +188,8 @@ async fn import_dump_v1_movie_with_settings() {
     {
       "numberOfDocuments": 53,
       "isIndexing": false,
+      "numberOfEmbeddings": 0,
+      "numberOfEmbeddedDocuments": 0,
       "fieldDistribution": {
         "genres": 53,
         "id": 53,
@@ -333,9 +350,24 @@ async fn import_dump_v1_rubygems_with_settings() {
 
     let (stats, code) = index.stats().await;
     snapshot!(code, @"200 OK");
-    assert_eq!(
-        stats,
-        json!({ "numberOfDocuments": 53, "isIndexing": false, "fieldDistribution": {"description": 53, "id": 53, "name": 53, "summary": 53, "total_downloads": 53, "version": 53 }})
+    snapshot!(
+      json_string!(stats),
+      @r###"
+    {
+      "numberOfDocuments": 53,
+      "isIndexing": false,
+      "numberOfEmbeddings": 0,
+      "numberOfEmbeddedDocuments": 0,
+      "fieldDistribution": {
+        "description": 53,
+        "id": 53,
+        "name": 53,
+        "summary": 53,
+        "total_downloads": 53,
+        "version": 53
+      }
+    }
+    "###
     );
 
     let (settings, code) = index.settings().await;
@@ -483,9 +515,24 @@ async fn import_dump_v2_movie_raw() {
 
     let (stats, code) = index.stats().await;
     snapshot!(code, @"200 OK");
-    assert_eq!(
-        stats,
-        json!({ "numberOfDocuments": 53, "isIndexing": false, "fieldDistribution": {"genres": 53, "id": 53, "overview": 53, "poster": 53, "release_date": 53, "title": 53 }})
+    snapshot!(
+      json_string!(stats),
+      @r###"
+    {
+      "numberOfDocuments": 53,
+      "isIndexing": false,
+      "numberOfEmbeddings": 0,
+      "numberOfEmbeddedDocuments": 0,
+      "fieldDistribution": {
+        "genres": 53,
+        "id": 53,
+        "overview": 53,
+        "poster": 53,
+        "release_date": 53,
+        "title": 53
+      }
+    }
+    "###
     );
 
     let (settings, code) = index.settings().await;
@@ -623,9 +670,24 @@ async fn import_dump_v2_movie_with_settings() {
 
     let (stats, code) = index.stats().await;
     snapshot!(code, @"200 OK");
-    assert_eq!(
-        stats,
-        json!({ "numberOfDocuments": 53, "isIndexing": false, "fieldDistribution": {"genres": 53, "id": 53, "overview": 53, "poster": 53, "release_date": 53, "title": 53 }})
+    snapshot!(
+      json_string!(stats),
+      @r###"
+    {
+      "numberOfDocuments": 53,
+      "isIndexing": false,
+      "numberOfEmbeddings": 0,
+      "numberOfEmbeddedDocuments": 0,
+      "fieldDistribution": {
+        "genres": 53,
+        "id": 53,
+        "overview": 53,
+        "poster": 53,
+        "release_date": 53,
+        "title": 53
+      }
+    }
+    "###
     );
 
     let (settings, code) = index.settings().await;
@@ -773,9 +835,24 @@ async fn import_dump_v2_rubygems_with_settings() {
 
     let (stats, code) = index.stats().await;
     snapshot!(code, @"200 OK");
-    assert_eq!(
-        stats,
-        json!({ "numberOfDocuments": 53, "isIndexing": false, "fieldDistribution": {"description": 53, "id": 53, "name": 53, "summary": 53, "total_downloads": 53, "version": 53 }})
+    snapshot!(
+      json_string!(stats),
+      @r###"
+    {
+      "numberOfDocuments": 53,
+      "isIndexing": false,
+      "numberOfEmbeddings": 0,
+      "numberOfEmbeddedDocuments": 0,
+      "fieldDistribution": {
+        "description": 53,
+        "id": 53,
+        "name": 53,
+        "summary": 53,
+        "total_downloads": 53,
+        "version": 53
+      }
+    }
+    "###
     );
 
     let (settings, code) = index.settings().await;
@@ -920,9 +997,24 @@ async fn import_dump_v3_movie_raw() {
 
     let (stats, code) = index.stats().await;
     snapshot!(code, @"200 OK");
-    assert_eq!(
-        stats,
-        json!({ "numberOfDocuments": 53, "isIndexing": false, "fieldDistribution": {"genres": 53, "id": 53, "overview": 53, "poster": 53, "release_date": 53, "title": 53 }})
+    snapshot!(
+      json_string!(stats),
+      @r###"
+    {
+      "numberOfDocuments": 53,
+      "isIndexing": false,
+      "numberOfEmbeddings": 0,
+      "numberOfEmbeddedDocuments": 0,
+      "fieldDistribution": {
+        "genres": 53,
+        "id": 53,
+        "overview": 53,
+        "poster": 53,
+        "release_date": 53,
+        "title": 53
+      }
+    }
+    "###
     );
 
     let (settings, code) = index.settings().await;
@@ -1060,9 +1152,24 @@ async fn import_dump_v3_movie_with_settings() {
 
     let (stats, code) = index.stats().await;
     snapshot!(code, @"200 OK");
-    assert_eq!(
-        stats,
-        json!({ "numberOfDocuments": 53, "isIndexing": false, "fieldDistribution": {"genres": 53, "id": 53, "overview": 53, "poster": 53, "release_date": 53, "title": 53 }})
+    snapshot!(
+      json_string!(stats),
+      @r###"
+    {
+      "numberOfDocuments": 53,
+      "isIndexing": false,
+      "numberOfEmbeddings": 0,
+      "numberOfEmbeddedDocuments": 0,
+      "fieldDistribution": {
+        "genres": 53,
+        "id": 53,
+        "overview": 53,
+        "poster": 53,
+        "release_date": 53,
+        "title": 53
+      }
+    }
+    "###
     );
 
     let (settings, code) = index.settings().await;
@@ -1210,9 +1317,24 @@ async fn import_dump_v3_rubygems_with_settings() {
 
     let (stats, code) = index.stats().await;
     snapshot!(code, @"200 OK");
-    assert_eq!(
-        stats,
-        json!({ "numberOfDocuments": 53, "isIndexing": false, "fieldDistribution": {"description": 53, "id": 53, "name": 53, "summary": 53, "total_downloads": 53, "version": 53 }})
+    snapshot!(
+      json_string!(stats),
+      @r###"
+    {
+      "numberOfDocuments": 53,
+      "isIndexing": false,
+      "numberOfEmbeddings": 0,
+      "numberOfEmbeddedDocuments": 0,
+      "fieldDistribution": {
+        "description": 53,
+        "id": 53,
+        "name": 53,
+        "summary": 53,
+        "total_downloads": 53,
+        "version": 53
+      }
+    }
+    "###
     );
 
     let (settings, code) = index.settings().await;
@@ -1357,9 +1479,24 @@ async fn import_dump_v4_movie_raw() {
 
     let (stats, code) = index.stats().await;
     snapshot!(code, @"200 OK");
-    assert_eq!(
-        stats,
-        json!({ "numberOfDocuments": 53, "isIndexing": false, "fieldDistribution": {"genres": 53, "id": 53, "overview": 53, "poster": 53, "release_date": 53, "title": 53 }})
+    snapshot!(
+      json_string!(stats),
+      @r###"
+    {
+      "numberOfDocuments": 53,
+      "isIndexing": false,
+      "numberOfEmbeddings": 0,
+      "numberOfEmbeddedDocuments": 0,
+      "fieldDistribution": {
+        "genres": 53,
+        "id": 53,
+        "overview": 53,
+        "poster": 53,
+        "release_date": 53,
+        "title": 53
+      }
+    }
+    "###
     );
 
     let (settings, code) = index.settings().await;
@@ -1497,9 +1634,24 @@ async fn import_dump_v4_movie_with_settings() {
 
     let (stats, code) = index.stats().await;
     snapshot!(code, @"200 OK");
-    assert_eq!(
-        stats,
-        json!({ "numberOfDocuments": 53, "isIndexing": false, "fieldDistribution": {"genres": 53, "id": 53, "overview": 53, "poster": 53, "release_date": 53, "title": 53 }})
+    snapshot!(
+      json_string!(stats),
+      @r###"
+    {
+      "numberOfDocuments": 53,
+      "isIndexing": false,
+      "numberOfEmbeddings": 0,
+      "numberOfEmbeddedDocuments": 0,
+      "fieldDistribution": {
+        "genres": 53,
+        "id": 53,
+        "overview": 53,
+        "poster": 53,
+        "release_date": 53,
+        "title": 53
+      }
+    }
+    "###
     );
 
     let (settings, code) = index.settings().await;
@@ -1647,9 +1799,24 @@ async fn import_dump_v4_rubygems_with_settings() {
 
     let (stats, code) = index.stats().await;
     snapshot!(code, @"200 OK");
-    assert_eq!(
-        stats,
-        json!({ "numberOfDocuments": 53, "isIndexing": false, "fieldDistribution": {"description": 53, "id": 53, "name": 53, "summary": 53, "total_downloads": 53, "version": 53 }})
+    snapshot!(
+      json_string!(stats),
+      @r###"
+    {
+      "numberOfDocuments": 53,
+      "isIndexing": false,
+      "numberOfEmbeddings": 0,
+      "numberOfEmbeddedDocuments": 0,
+      "fieldDistribution": {
+        "description": 53,
+        "id": 53,
+        "name": 53,
+        "summary": 53,
+        "total_downloads": 53,
+        "version": 53
+      }
+    }
+    "###
     );
 
     let (settings, code) = index.settings().await;
@@ -1798,33 +1965,35 @@ async fn import_dump_v5() {
         server.wait_task(task["uid"].as_u64().unwrap()).await;
     }
 
-    let expected_stats = json!({
-        "numberOfDocuments": 10,
-        "isIndexing": false,
-        "fieldDistribution": {
-            "cast": 10,
-            "director": 10,
-            "genres": 10,
-            "id": 10,
-            "overview": 10,
-            "popularity": 10,
-            "poster_path": 10,
-            "producer": 10,
-            "production_companies": 10,
-            "release_date": 10,
-            "tagline": 10,
-            "title": 10,
-            "vote_average": 10,
-            "vote_count": 10
-        }
-    });
-
     let index1 = server.index("test");
     let index2 = server.index("test2");
 
     let (stats, code) = index1.stats().await;
     snapshot!(code, @"200 OK");
-    assert_eq!(stats, expected_stats);
+    snapshot!(json_string!(stats), @r###"
+    {
+      "numberOfDocuments": 10,
+      "isIndexing": false,
+      "numberOfEmbeddings": 0,
+      "numberOfEmbeddedDocuments": 0,
+      "fieldDistribution": {
+        "cast": 10,
+        "director": 10,
+        "genres": 10,
+        "id": 10,
+        "overview": 10,
+        "popularity": 10,
+        "poster_path": 10,
+        "producer": 10,
+        "production_companies": 10,
+        "release_date": 10,
+        "tagline": 10,
+        "title": 10,
+        "vote_average": 10,
+        "vote_count": 10
+      }
+    }
+    "###);
 
     let (docs, code) = index2.get_all_documents(GetAllDocumentsOptions::default()).await;
     snapshot!(code, @"200 OK");
@@ -1835,7 +2004,32 @@ async fn import_dump_v5() {
 
     let (stats, code) = index2.stats().await;
     snapshot!(code, @"200 OK");
-    assert_eq!(stats, expected_stats);
+    snapshot!(
+      json_string!(stats),
+      @r###"
+    {
+      "numberOfDocuments": 10,
+      "isIndexing": false,
+      "numberOfEmbeddings": 0,
+      "numberOfEmbeddedDocuments": 0,
+      "fieldDistribution": {
+        "cast": 10,
+        "director": 10,
+        "genres": 10,
+        "id": 10,
+        "overview": 10,
+        "popularity": 10,
+        "poster_path": 10,
+        "producer": 10,
+        "production_companies": 10,
+        "release_date": 10,
+        "tagline": 10,
+        "title": 10,
+        "vote_average": 10,
+        "vote_count": 10
+      }
+    }
+    "###);
 
     let (keys, code) = server.list_api_keys("").await;
     snapshot!(code, @"200 OK");
