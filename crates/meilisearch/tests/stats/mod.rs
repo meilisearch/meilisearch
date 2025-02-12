@@ -1,3 +1,4 @@
+use meili_snap::{json_string, snapshot};
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 
@@ -73,4 +74,254 @@ async fn stats() {
     assert_eq!(response["indexes"]["test"]["fieldDistribution"]["id"], 2);
     assert_eq!(response["indexes"]["test"]["fieldDistribution"]["name"], 1);
     assert_eq!(response["indexes"]["test"]["fieldDistribution"]["age"], 1);
+}
+
+#[actix_rt::test]
+async fn add_remove_embeddings() {
+    let server = Server::new().await;
+    let index = server.index("doggo");
+
+    let (response, code) = index
+        .update_settings(json!({
+          "embedders": {
+            "manual": {
+                "source": "userProvided",
+                "dimensions": 3,
+            },
+            "handcrafted": {
+                "source": "userProvided",
+                "dimensions": 3,
+            },
+
+          },
+        }))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(response.uid()).await.succeeded();
+
+    // 2 embedded documents for 4 embeddings in total
+    let documents = json!([
+      {"id": 0, "name": "kefir", "_vectors": { "manual": [0, 0, 0], "handcrafted": [0, 0, 0] }},
+      {"id": 1, "name": "echo", "_vectors": { "manual": [1, 1, 1], "handcrafted": [1, 1, 1] }},
+    ]);
+
+    let (response, code) = index.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+    index.wait_task(response.uid()).await.succeeded();
+
+    let (stats, _code) = index.stats().await;
+    snapshot!(json_string!(stats), @r###"
+    {
+      "numberOfDocuments": 2,
+      "isIndexing": false,
+      "numberOfEmbeddings": 4,
+      "numberOfEmbeddedDocuments": 2,
+      "fieldDistribution": {
+        "id": 2,
+        "name": 2
+      }
+    }
+    "###);
+
+    // 2 embedded documents for 3 embeddings in total
+    let documents = json!([
+      {"id": 1, "name": "echo", "_vectors": { "manual": [1, 1, 1], "handcrafted": null }},
+    ]);
+
+    let (response, code) = index.update_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+    index.wait_task(response.uid()).await.succeeded();
+
+    let (stats, _code) = index.stats().await;
+    snapshot!(json_string!(stats), @r###"
+    {
+      "numberOfDocuments": 2,
+      "isIndexing": false,
+      "numberOfEmbeddings": 3,
+      "numberOfEmbeddedDocuments": 2,
+      "fieldDistribution": {
+        "id": 2,
+        "name": 2
+      }
+    }
+    "###);
+
+    // 2 embedded documents for 2 embeddings in total
+    let documents = json!([
+        {"id": 0, "name": "kefir", "_vectors": { "manual": null, "handcrafted": [0, 0, 0] }},
+    ]);
+
+    let (response, code) = index.update_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+    index.wait_task(response.uid()).await.succeeded();
+
+    let (stats, _code) = index.stats().await;
+    snapshot!(json_string!(stats), @r###"
+    {
+      "numberOfDocuments": 2,
+      "isIndexing": false,
+      "numberOfEmbeddings": 2,
+      "numberOfEmbeddedDocuments": 2,
+      "fieldDistribution": {
+        "id": 2,
+        "name": 2
+      }
+    }
+    "###);
+
+    // 1 embedded documents for 2 embeddings in total
+    let documents = json!([
+        {"id": 0, "name": "kefir", "_vectors": { "manual": [0, 0, 0], "handcrafted": [0, 0, 0] }},
+        {"id": 1, "name": "echo", "_vectors": { "manual": null, "handcrafted": null }},
+    ]);
+
+    let (response, code) = index.update_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+    index.wait_task(response.uid()).await.succeeded();
+
+    let (stats, _code) = index.stats().await;
+    snapshot!(json_string!(stats), @r###"
+    {
+      "numberOfDocuments": 2,
+      "isIndexing": false,
+      "numberOfEmbeddings": 2,
+      "numberOfEmbeddedDocuments": 1,
+      "fieldDistribution": {
+        "id": 2,
+        "name": 2
+      }
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn add_remove_embedded_documents() {
+    let server = Server::new().await;
+    let index = server.index("doggo");
+
+    let (response, code) = index
+        .update_settings(json!({
+          "embedders": {
+            "manual": {
+                "source": "userProvided",
+                "dimensions": 3,
+            },
+            "handcrafted": {
+                "source": "userProvided",
+                "dimensions": 3,
+            },
+
+          },
+        }))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(response.uid()).await.succeeded();
+
+    // 2 embedded documents for 4 embeddings in total
+    let documents = json!([
+      {"id": 0, "name": "kefir", "_vectors": { "manual": [0, 0, 0], "handcrafted": [0, 0, 0] }},
+      {"id": 1, "name": "echo", "_vectors": { "manual": [1, 1, 1], "handcrafted": [1, 1, 1] }},
+    ]);
+
+    let (response, code) = index.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+    index.wait_task(response.uid()).await.succeeded();
+
+    let (stats, _code) = index.stats().await;
+    snapshot!(json_string!(stats), @r###"
+    {
+      "numberOfDocuments": 2,
+      "isIndexing": false,
+      "numberOfEmbeddings": 4,
+      "numberOfEmbeddedDocuments": 2,
+      "fieldDistribution": {
+        "id": 2,
+        "name": 2
+      }
+    }
+    "###);
+
+    // delete one embedded document, remaining 1 embedded documents for 2 embeddings in total
+    let (response, code) = index.delete_document(0).await;
+    snapshot!(code, @"202 Accepted");
+    index.wait_task(response.uid()).await.succeeded();
+
+    let (stats, _code) = index.stats().await;
+    snapshot!(json_string!(stats), @r###"
+    {
+      "numberOfDocuments": 1,
+      "isIndexing": false,
+      "numberOfEmbeddings": 2,
+      "numberOfEmbeddedDocuments": 1,
+      "fieldDistribution": {
+        "id": 1,
+        "name": 1
+      }
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn update_embedder_settings() {
+    let server = Server::new().await;
+    let index = server.index("doggo");
+
+    // 2 embedded documents for 3 embeddings in total
+    // but no embedders are added in the settings yet so we expect 0 embedded documents for 0 embeddings in total
+    let documents = json!([
+      {"id": 0, "name": "kefir", "_vectors": { "manual": [0, 0, 0], "handcrafted": [0, 0, 0] }},
+      {"id": 1, "name": "echo", "_vectors": { "manual": [1, 1, 1], "handcrafted": null }},
+    ]);
+
+    let (response, code) = index.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+    index.wait_task(response.uid()).await.succeeded();
+
+    let (stats, _code) = index.stats().await;
+    snapshot!(json_string!(stats), @r###"
+    {
+      "numberOfDocuments": 2,
+      "isIndexing": false,
+      "numberOfEmbeddings": 0,
+      "numberOfEmbeddedDocuments": 0,
+      "fieldDistribution": {
+        "id": 2,
+        "name": 2
+      }
+    }
+    "###);
+
+    // add embedders to the settings
+    // 2 embedded documents for 3 embeddings in total
+    let (response, code) = index
+        .update_settings(json!({
+          "embedders": {
+            "manual": {
+                "source": "userProvided",
+                "dimensions": 3,
+            },
+            "handcrafted": {
+                "source": "userProvided",
+                "dimensions": 3,
+            },
+
+          },
+        }))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(response.uid()).await.succeeded();
+
+    let (stats, _code) = index.stats().await;
+    snapshot!(json_string!(stats), @r###"
+    {
+      "numberOfDocuments": 2,
+      "isIndexing": false,
+      "numberOfEmbeddings": 3,
+      "numberOfEmbeddedDocuments": 2,
+      "fieldDistribution": {
+        "id": 2,
+        "name": 2
+      }
+    }
+    "###);
 }
