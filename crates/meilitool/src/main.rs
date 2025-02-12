@@ -1,7 +1,6 @@
 use std::fs::{read_dir, read_to_string, remove_file, File};
 use std::io::{BufWriter, Write as _};
 use std::path::PathBuf;
-use std::ptr;
 use std::time::Instant;
 
 use anyhow::{bail, Context};
@@ -651,17 +650,12 @@ fn hair_dryer(
                             .enumerate()
                         {
                             let (key, value) = result?;
-                            count += key.len() + value.len();
 
-                            unsafe {
-                                // All of this just to avoid compiler optimizations 🤞
-                                // We must read all the bytes to make the pages hot in cache.
-                                // <https://doc.rust-lang.org/std/ptr/fn.read_volatile.html>
-                                ptr::read_volatile(&key[0]);
-                                ptr::read_volatile(&key[key.len() - 1]);
-                                ptr::read_volatile(&value[0]);
-                                ptr::read_volatile(&value[value.len() - 1]);
-                            }
+                            // All of this just to avoid compiler optimizations 🤞
+                            // We must read all the bytes to make the pages hot in cache.
+                            // <https://doc.rust-lang.org/std/hint/fn.black_box.html>
+                            count += std::hint::black_box(key.iter().fold(0, |acc, _| acc + 1));
+                            count += std::hint::black_box(value.iter().fold(0, |acc, _| acc + 1));
 
                             if i % 10_000 == 0 {
                                 let perc = (i as f64) / (total as f64) * 100.0;
