@@ -99,10 +99,10 @@ async fn add_remove_embeddings() {
     snapshot!(code, @"202 Accepted");
     server.wait_task(response.uid()).await.succeeded();
 
-    // 2 embedded documents for 4 embeddings in total
+    // 2 embedded documents for 5 embeddings in total
     let documents = json!([
       {"id": 0, "name": "kefir", "_vectors": { "manual": [0, 0, 0], "handcrafted": [0, 0, 0] }},
-      {"id": 1, "name": "echo", "_vectors": { "manual": [1, 1, 1], "handcrafted": [1, 1, 1] }},
+      {"id": 1, "name": "echo", "_vectors": { "manual": [1, 1, 1], "handcrafted": [[1, 1, 1], [2, 2, 2]] }},
     ]);
 
     let (response, code) = index.add_documents(documents, None).await;
@@ -114,7 +114,7 @@ async fn add_remove_embeddings() {
     {
       "numberOfDocuments": 2,
       "isIndexing": false,
-      "numberOfEmbeddings": 4,
+      "numberOfEmbeddings": 5,
       "numberOfEmbeddedDocuments": 2,
       "fieldDistribution": {
         "id": 2,
@@ -217,10 +217,10 @@ async fn add_remove_embedded_documents() {
     snapshot!(code, @"202 Accepted");
     server.wait_task(response.uid()).await.succeeded();
 
-    // 2 embedded documents for 4 embeddings in total
+    // 2 embedded documents for 5 embeddings in total
     let documents = json!([
       {"id": 0, "name": "kefir", "_vectors": { "manual": [0, 0, 0], "handcrafted": [0, 0, 0] }},
-      {"id": 1, "name": "echo", "_vectors": { "manual": [1, 1, 1], "handcrafted": [1, 1, 1] }},
+      {"id": 1, "name": "echo", "_vectors": { "manual": [1, 1, 1], "handcrafted": [[1, 1, 1], [2, 2, 2]] }},
     ]);
 
     let (response, code) = index.add_documents(documents, None).await;
@@ -232,7 +232,7 @@ async fn add_remove_embedded_documents() {
     {
       "numberOfDocuments": 2,
       "isIndexing": false,
-      "numberOfEmbeddings": 4,
+      "numberOfEmbeddings": 5,
       "numberOfEmbeddedDocuments": 2,
       "fieldDistribution": {
         "id": 2,
@@ -241,7 +241,7 @@ async fn add_remove_embedded_documents() {
     }
     "###);
 
-    // delete one embedded document, remaining 1 embedded documents for 2 embeddings in total
+    // delete one embedded document, remaining 1 embedded documents for 3 embeddings in total
     let (response, code) = index.delete_document(0).await;
     snapshot!(code, @"202 Accepted");
     index.wait_task(response.uid()).await.succeeded();
@@ -251,7 +251,7 @@ async fn add_remove_embedded_documents() {
     {
       "numberOfDocuments": 1,
       "isIndexing": false,
-      "numberOfEmbeddings": 2,
+      "numberOfEmbeddings": 3,
       "numberOfEmbeddedDocuments": 1,
       "fieldDistribution": {
         "id": 1,
