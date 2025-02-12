@@ -664,7 +664,8 @@ fn hair_dryer(
                             }
 
                             if i % 10_000 == 0 {
-                                eprintln!("Visited {i}/{total} keys")
+                                let perc = (i as f64) / (total as f64) * 100.0;
+                                eprintln!("Visited {i}/{total} ({perc:.2}%) keys")
                             }
                         }
                         eprintln!("Done hair drying a total of at least {count} bytes.");
