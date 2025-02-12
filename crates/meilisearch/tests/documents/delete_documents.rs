@@ -161,6 +161,8 @@ async fn delete_document_by_filter() {
     {
       "numberOfDocuments": 4,
       "isIndexing": false,
+      "numberOfEmbeddings": 0,
+      "numberOfEmbeddedDocuments": 0,
       "fieldDistribution": {
         "color": 3,
         "id": 4
@@ -208,6 +210,8 @@ async fn delete_document_by_filter() {
     {
       "numberOfDocuments": 2,
       "isIndexing": false,
+      "numberOfEmbeddings": 0,
+      "numberOfEmbeddedDocuments": 0,
       "fieldDistribution": {
         "color": 1,
         "id": 2
@@ -274,6 +278,8 @@ async fn delete_document_by_filter() {
     {
       "numberOfDocuments": 1,
       "isIndexing": false,
+      "numberOfEmbeddings": 0,
+      "numberOfEmbeddedDocuments": 0,
       "fieldDistribution": {
         "color": 1,
         "id": 1

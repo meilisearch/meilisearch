@@ -173,6 +173,8 @@ async fn import_dump_v1_movie_with_settings() {
     {
       "numberOfDocuments": 53,
       "isIndexing": false,
+      "numberOfEmbeddings": 0,
+      "numberOfEmbeddedDocuments": 0,
       "fieldDistribution": {
         "genres": 53,
         "id": 53,
