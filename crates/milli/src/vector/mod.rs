@@ -410,8 +410,43 @@ impl ArroyWrapper {
     fn quantized_db(&self) -> arroy::Database<BinaryQuantizedCosine> {
         self.database.remap_data_type()
     }
+
+    pub fn aggregate_stats(
+        &self,
+        rtxn: &RoTxn,
+        stats: &mut ArroyStats,
+    ) -> Result<(), arroy::Error> {
+        if self.quantized {
+            for reader in self.readers(rtxn, self.quantized_db()) {
+                let reader = reader?;
+                let documents = reader.item_ids();
+                if documents.is_empty() {
+                    break;
+                }
+                stats.documents |= documents;
+                stats.number_of_embeddings += documents.len() as u64;
+            }
+        } else {
+            for reader in self.readers(rtxn, self.angular_db()) {
+                let reader = reader?;
+                let documents = reader.item_ids();
+                if documents.is_empty() {
+                    break;
+                }
+                stats.documents |= documents;
+                stats.number_of_embeddings += documents.len() as u64;
+            }
+        }
+
+        Ok(())
+    }
 }
 
+#[derive(Debug, Default, Clone)]
+pub struct ArroyStats {
+    pub number_of_embeddings: u64,
+    pub documents: RoaringBitmap,
+}
 /// One or multiple embeddings stored consecutively in a flat vector.
 pub struct Embeddings<F> {
     data: Vec<F>,

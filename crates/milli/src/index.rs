@@ -22,7 +22,7 @@ use crate::heed_codec::version::VersionCodec;
 use crate::heed_codec::{BEU16StrCodec, FstSetCodec, StrBEU16Codec, StrRefCodec};
 use crate::order_by_map::OrderByMap;
 use crate::proximity::ProximityPrecision;
-use crate::vector::{ArroyWrapper, Embedding, EmbeddingConfig};
+use crate::vector::{ArroyStats, ArroyWrapper, Embedding, EmbeddingConfig};
 use crate::{
     default_criteria, CboRoaringBitmapCodec, Criterion, DocumentId, ExternalDocumentsIds,
     FacetDistribution, FieldDistribution, FieldId, FieldIdMapMissingEntry, FieldIdWordCountCodec,
@@ -1730,6 +1730,18 @@ impl Index {
     pub fn prefix_settings(&self, rtxn: &RoTxn<'_>) -> Result<PrefixSettings> {
         let compute_prefixes = self.prefix_search(rtxn)?.unwrap_or_default();
         Ok(PrefixSettings { compute_prefixes, max_prefix_length: 4, prefix_count_threshold: 100 })
+    }
+
+    pub fn arroy_stats(&self, rtxn: &RoTxn<'_>) -> Result<ArroyStats> {
+        let mut stats = ArroyStats::default();
+        let embedding_configs = self.embedding_configs(rtxn)?;
+        for config in embedding_configs {
+            let embedder_id = self.embedder_category_id.get(rtxn, &config.name)?.unwrap();
+            let reader =
+                ArroyWrapper::new(self.vector_arroy, embedder_id, config.config.quantized());
+            reader.aggregate_stats(rtxn, &mut stats)?;
+        }
+        Ok(stats)
     }
 }
 
