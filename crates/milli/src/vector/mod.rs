@@ -424,7 +424,7 @@ impl ArroyWrapper {
                     break;
                 }
                 stats.documents |= documents;
-                stats.number_of_embeddings += documents.len() as u64;
+                stats.number_of_embeddings += documents.len();
             }
         } else {
             for reader in self.readers(rtxn, self.angular_db()) {
@@ -434,7 +434,7 @@ impl ArroyWrapper {
                     break;
                 }
                 stats.documents |= documents;
-                stats.number_of_embeddings += documents.len() as u64;
+                stats.number_of_embeddings += documents.len();
             }
         }
 
