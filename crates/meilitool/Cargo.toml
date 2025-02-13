@@ -17,6 +17,7 @@ file-store = { path = "../file-store" }
 indexmap = { version = "2.7.0", features = ["serde"] }
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
+rand = { version = "0.8", default-features = false }
 serde = { version = "1.0.217", features = ["derive"] }
 serde_json = { version = "1.0.135", features = ["preserve_order"] }
 tempfile = "3.15.0"
