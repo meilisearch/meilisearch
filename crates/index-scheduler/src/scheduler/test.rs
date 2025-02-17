@@ -913,11 +913,7 @@ fn create_and_list_index() {
             "documents_database_stats": {
               "numberOfEntries": 0,
               "totalKeySize": 0,
-              "totalValueSize": 0,
-              "maxKeySize": 0,
-              "maxValueSize": 0,
-              "minKeySize": 0,
-              "minValueSize": 0
+              "totalValueSize": 0
             },
             "database_size": "[bytes]",
             "number_of_embeddings": 0,

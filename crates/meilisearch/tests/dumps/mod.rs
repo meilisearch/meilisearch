@@ -32,6 +32,8 @@ async fn import_dump_v1_movie_raw() {
       @r###"
     {
       "numberOfDocuments": 53,
+      "rawDocumentDbSize": 21965,
+      "avgDocumentSize": 414,
       "isIndexing": false,
       "numberOfEmbeddings": 0,
       "numberOfEmbeddedDocuments": 0,
@@ -188,7 +190,6 @@ async fn import_dump_v1_movie_with_settings() {
     {
       "numberOfDocuments": 53,
       "rawDocumentDbSize": 21965,
-      "maxDocumentSize": 743,
       "avgDocumentSize": 414,
       "isIndexing": false,
       "numberOfEmbeddings": 0,
@@ -358,6 +359,8 @@ async fn import_dump_v1_rubygems_with_settings() {
       @r###"
     {
       "numberOfDocuments": 53,
+      "rawDocumentDbSize": 8606,
+      "avgDocumentSize": 162,
       "isIndexing": false,
       "numberOfEmbeddings": 0,
       "numberOfEmbeddedDocuments": 0,
@@ -523,6 +526,8 @@ async fn import_dump_v2_movie_raw() {
       @r###"
     {
       "numberOfDocuments": 53,
+      "rawDocumentDbSize": 21965,
+      "avgDocumentSize": 414,
       "isIndexing": false,
       "numberOfEmbeddings": 0,
       "numberOfEmbeddedDocuments": 0,
@@ -678,6 +683,8 @@ async fn import_dump_v2_movie_with_settings() {
       @r###"
     {
       "numberOfDocuments": 53,
+      "rawDocumentDbSize": 21965,
+      "avgDocumentSize": 414,
       "isIndexing": false,
       "numberOfEmbeddings": 0,
       "numberOfEmbeddedDocuments": 0,
@@ -843,6 +850,8 @@ async fn import_dump_v2_rubygems_with_settings() {
       @r###"
     {
       "numberOfDocuments": 53,
+      "rawDocumentDbSize": 8606,
+      "avgDocumentSize": 162,
       "isIndexing": false,
       "numberOfEmbeddings": 0,
       "numberOfEmbeddedDocuments": 0,
@@ -1005,6 +1014,8 @@ async fn import_dump_v3_movie_raw() {
       @r###"
     {
       "numberOfDocuments": 53,
+      "rawDocumentDbSize": 21965,
+      "avgDocumentSize": 414,
       "isIndexing": false,
       "numberOfEmbeddings": 0,
       "numberOfEmbeddedDocuments": 0,
@@ -1160,6 +1171,8 @@ async fn import_dump_v3_movie_with_settings() {
       @r###"
     {
       "numberOfDocuments": 53,
+      "rawDocumentDbSize": 21965,
+      "avgDocumentSize": 414,
       "isIndexing": false,
       "numberOfEmbeddings": 0,
       "numberOfEmbeddedDocuments": 0,
@@ -1325,6 +1338,8 @@ async fn import_dump_v3_rubygems_with_settings() {
       @r###"
     {
       "numberOfDocuments": 53,
+      "rawDocumentDbSize": 8606,
+      "avgDocumentSize": 162,
       "isIndexing": false,
       "numberOfEmbeddings": 0,
       "numberOfEmbeddedDocuments": 0,
@@ -1487,6 +1502,8 @@ async fn import_dump_v4_movie_raw() {
       @r###"
     {
       "numberOfDocuments": 53,
+      "rawDocumentDbSize": 21965,
+      "avgDocumentSize": 414,
       "isIndexing": false,
       "numberOfEmbeddings": 0,
       "numberOfEmbeddedDocuments": 0,
@@ -1642,6 +1659,8 @@ async fn import_dump_v4_movie_with_settings() {
       @r###"
     {
       "numberOfDocuments": 53,
+      "rawDocumentDbSize": 21965,
+      "avgDocumentSize": 414,
       "isIndexing": false,
       "numberOfEmbeddings": 0,
       "numberOfEmbeddedDocuments": 0,
@@ -1807,6 +1826,8 @@ async fn import_dump_v4_rubygems_with_settings() {
       @r###"
     {
       "numberOfDocuments": 53,
+      "rawDocumentDbSize": 8606,
+      "avgDocumentSize": 162,
       "isIndexing": false,
       "numberOfEmbeddings": 0,
       "numberOfEmbeddedDocuments": 0,
@@ -1976,6 +1997,8 @@ async fn import_dump_v5() {
     snapshot!(json_string!(stats), @r###"
     {
       "numberOfDocuments": 10,
+      "rawDocumentDbSize": 6782,
+      "avgDocumentSize": 678,
       "isIndexing": false,
       "numberOfEmbeddings": 0,
       "numberOfEmbeddedDocuments": 0,
@@ -2012,6 +2035,8 @@ async fn import_dump_v5() {
       @r###"
     {
       "numberOfDocuments": 10,
+      "rawDocumentDbSize": 6782,
+      "avgDocumentSize": 678,
       "isIndexing": false,
       "numberOfEmbeddings": 0,
       "numberOfEmbeddedDocuments": 0,
