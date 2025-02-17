@@ -113,6 +113,7 @@ where
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn update_index(
     index: &Index,
     wtxn: &mut RwTxn<'_>,

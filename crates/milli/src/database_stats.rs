@@ -41,7 +41,7 @@ impl DatabaseStats {
     ///
     /// This function is used to update the stats of the database when some keys are modified.
     /// It is more efficient than the `new` function because it does not iterate over the whole database but only the modified keys comparing the before and after states.
-    pub(crate) fn recompute<'a, I, K>(
+    pub(crate) fn recompute<I, K>(
         mut stats: Self,
         database: Database<Bytes, Bytes>,
         before_rtxn: &RoTxn<'_>,
