@@ -130,6 +130,7 @@ where
     let index_embeddings = index.embedding_configs(wtxn)?;
     let mut field_distribution = index.field_distribution(wtxn)?;
     let mut document_ids = index.documents_ids(wtxn)?;
+    let mut modified_docids = roaring::RoaringBitmap::new();
 
     let congestion = thread::scope(|s| -> Result<ChannelCongestion> {
         let indexer_span = tracing::Span::current();
@@ -138,6 +139,7 @@ where
         // prevent moving the field_distribution and document_ids in the inner closure...
         let field_distribution = &mut field_distribution;
         let document_ids = &mut document_ids;
+        let modified_docids = &mut modified_docids;
         let extractor_handle =
             Builder::new().name(S("indexer-extractors")).spawn_scoped(s, move || {
                 pool.install(move || {
@@ -152,6 +154,7 @@ where
                         field_distribution,
                         index_embeddings,
                         document_ids,
+                        modified_docids,
                     )
                 })
                 .unwrap()
@@ -227,6 +230,7 @@ where
         embedders,
         field_distribution,
         document_ids,
+        modified_docids,
     )?;
 
     Ok(congestion)

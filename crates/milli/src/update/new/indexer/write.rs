@@ -129,6 +129,7 @@ pub fn update_index(
     embedders: EmbeddingConfigs,
     field_distribution: std::collections::BTreeMap<String, u64>,
     document_ids: roaring::RoaringBitmap,
+    modified_docids: roaring::RoaringBitmap,
 ) -> Result<()> {
     index.put_fields_ids_map(wtxn, new_fields_ids_map.as_fields_ids_map())?;
     if let Some(new_primary_key) = new_primary_key {
@@ -140,6 +141,7 @@ pub fn update_index(
     index.put_field_distribution(wtxn, &field_distribution)?;
     index.put_documents_ids(wtxn, &document_ids)?;
     index.set_updated_at(wtxn, &OffsetDateTime::now_utc())?;
+    index.update_documents_stats(wtxn, modified_docids)?;
     Ok(())
 }
 

@@ -142,7 +142,7 @@ impl IndexStats {
         Ok(IndexStats {
             number_of_embeddings: Some(arroy_stats.number_of_embeddings),
             number_of_embedded_documents: Some(arroy_stats.documents.len()),
-            documents_database_stats: index.documents_database_stats(rtxn)?,
+            documents_database_stats: index.documents_stats(rtxn)?.unwrap_or_default(),
             database_size: index.on_disk_size()?,
             used_database_size: index.used_size()?,
             primary_key: index.primary_key(rtxn)?.map(|s| s.to_string()),
