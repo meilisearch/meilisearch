@@ -121,7 +121,8 @@ where
     Ok(())
 }
 
-pub fn update_index(
+#[allow(clippy::too_many_arguments)]
+pub(super) fn update_index(
     index: &Index,
     wtxn: &mut RwTxn<'_>,
     new_fields_ids_map: FieldIdMapWithMetadata,
