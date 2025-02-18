@@ -1676,6 +1676,7 @@ fn validate_prompt(
             source,
             model,
             revision,
+            pooling,
             api_key,
             dimensions,
             document_template: Setting::Set(template),
@@ -1709,6 +1710,7 @@ fn validate_prompt(
                 source,
                 model,
                 revision,
+                pooling,
                 api_key,
                 dimensions,
                 document_template: Setting::Set(template),
@@ -1735,6 +1737,7 @@ pub fn validate_embedding_settings(
         source,
         model,
         revision,
+        pooling,
         api_key,
         dimensions,
         document_template,
@@ -1776,6 +1779,7 @@ pub fn validate_embedding_settings(
             source,
             model,
             revision,
+            pooling,
             api_key,
             dimensions,
             document_template,
@@ -1791,6 +1795,7 @@ pub fn validate_embedding_settings(
     match inferred_source {
         EmbedderSource::OpenAi => {
             check_unset(&revision, EmbeddingSettings::REVISION, inferred_source, name)?;
+            check_unset(&pooling, EmbeddingSettings::POOLING, inferred_source, name)?;
 
             check_unset(&request, EmbeddingSettings::REQUEST, inferred_source, name)?;
             check_unset(&response, EmbeddingSettings::RESPONSE, inferred_source, name)?;
@@ -1829,6 +1834,7 @@ pub fn validate_embedding_settings(
         EmbedderSource::Ollama => {
             check_set(&model, EmbeddingSettings::MODEL, inferred_source, name)?;
             check_unset(&revision, EmbeddingSettings::REVISION, inferred_source, name)?;
+            check_unset(&pooling, EmbeddingSettings::POOLING, inferred_source, name)?;
 
             check_unset(&request, EmbeddingSettings::REQUEST, inferred_source, name)?;
             check_unset(&response, EmbeddingSettings::RESPONSE, inferred_source, name)?;
@@ -1846,6 +1852,7 @@ pub fn validate_embedding_settings(
         EmbedderSource::UserProvided => {
             check_unset(&model, EmbeddingSettings::MODEL, inferred_source, name)?;
             check_unset(&revision, EmbeddingSettings::REVISION, inferred_source, name)?;
+            check_unset(&pooling, EmbeddingSettings::POOLING, inferred_source, name)?;
             check_unset(&api_key, EmbeddingSettings::API_KEY, inferred_source, name)?;
             check_unset(
                 &document_template,
@@ -1869,6 +1876,7 @@ pub fn validate_embedding_settings(
         EmbedderSource::Rest => {
             check_unset(&model, EmbeddingSettings::MODEL, inferred_source, name)?;
             check_unset(&revision, EmbeddingSettings::REVISION, inferred_source, name)?;
+            check_unset(&pooling, EmbeddingSettings::POOLING, inferred_source, name)?;
             check_set(&url, EmbeddingSettings::URL, inferred_source, name)?;
             check_set(&request, EmbeddingSettings::REQUEST, inferred_source, name)?;
             check_set(&response, EmbeddingSettings::RESPONSE, inferred_source, name)?;
@@ -1878,6 +1886,7 @@ pub fn validate_embedding_settings(
         source,
         model,
         revision,
+        pooling,
         api_key,
         dimensions,
         document_template,
