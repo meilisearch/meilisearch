@@ -339,6 +339,7 @@ impl IndexScheduler {
 
         // We must re-add the canceled task so they're part of the same batch.
         ids |= canceled;
+        eprintln!("{:#?}", progress.accumulated_durations());
         self.queue.write_batch(&mut wtxn, processing_batch, &ids)?;
 
         #[cfg(test)]
