@@ -85,7 +85,7 @@ fn push_steps_durations(
     now: Instant,
     idx: usize,
 ) {
-    for (i, (_, _, started_at)) in steps.iter().skip(idx).enumerate() {
+    for (i, (_, _, started_at)) in steps.iter().skip(idx).enumerate().rev() {
         let full_name = steps.iter().take(idx + i + 1).map(|(_, s, _)| s.name()).join(" > ");
         durations.push((full_name, now.duration_since(*started_at)));
     }
