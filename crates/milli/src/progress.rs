@@ -6,6 +6,7 @@ use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
 use indexmap::IndexMap;
+use itertools::Itertools;
 use serde::Serialize;
 use utoipa::ToSchema;
 
@@ -22,25 +23,10 @@ pub struct Progress {
 
 #[derive(Default)]
 struct InnerProgress {
-    /// The hierarchy of progress steps.
+    /// The hierarchy of steps.
     steps: Vec<(TypeId, Box<dyn Step>, Instant)>,
-    /// The durations associated to the top level steps (*first*).
+    /// The durations associated to each steps.
     durations: Vec<(String, Duration)>,
-}
-
-fn name_from_steps<'a, I>(steps: I) -> String
-where
-    I: Iterator<Item = &'a Box<dyn Step>> + ExactSizeIterator,
-{
-    let len = steps.len();
-    let mut name = String::new();
-    for (i, step) in steps.into_iter().enumerate() {
-        name.push_str(&step.name());
-        if i + 1 < len {
-            name.push_str(" > ");
-        }
-    }
-    name
 }
 
 impl Progress {
@@ -51,10 +37,7 @@ impl Progress {
         let now = Instant::now();
         let step_type = TypeId::of::<P>();
         if let Some(idx) = steps.iter().position(|(id, _, _)| *id == step_type) {
-            for (i, (_, _, started_at)) in steps[idx..].iter().enumerate() {
-                let full_name = name_from_steps(steps.iter().take(idx + i + 1).map(|(_, s, _)| s));
-                durations.push((full_name, now.duration_since(*started_at)));
-            }
+            push_steps_durations(steps, durations, now, idx);
             steps.truncate(idx);
         }
 
@@ -89,12 +72,22 @@ impl Progress {
         let InnerProgress { steps, durations, .. } = &mut *inner;
 
         let now = Instant::now();
-        for (i, (_, _, started_at)) in steps.iter().enumerate() {
-            let full_name = name_from_steps(steps.iter().take(i + 1).map(|(_, s, _)| s));
-            durations.push((full_name, now.duration_since(*started_at)));
-        }
+        push_steps_durations(steps, durations, now, 0);
 
         durations.drain(..).map(|(name, duration)| (name, format!("{duration:.2?}"))).collect()
+    }
+}
+
+/// Generate the names associated with the durations and push them.
+fn push_steps_durations(
+    steps: &[(TypeId, Box<dyn Step>, Instant)],
+    durations: &mut Vec<(String, Duration)>,
+    now: Instant,
+    idx: usize,
+) {
+    for (i, (_, _, started_at)) in steps.iter().skip(idx).enumerate() {
+        let full_name = steps.iter().take(idx + i + 1).map(|(_, s, _)| s.name()).join(" > ");
+        durations.push((full_name, now.duration_since(*started_at)));
     }
 }
 
