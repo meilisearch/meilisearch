@@ -32,7 +32,7 @@ async fn field_unavailable_for_source() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "`.embedders.default`: Field `revision` unavailable for source `openAi` (only available for sources: `huggingFace`). Available fields: `source`, `model`, `apiKey`, `documentTemplate`, `dimensions`, `distribution`, `url`, `binaryQuantized`",
+      "message": "`.embedders.default`: Field `revision` unavailable for source `openAi` (only available for sources: `huggingFace`). Available fields: `source`, `model`, `apiKey`, `documentTemplate`, `documentTemplateMaxBytes`, `dimensions`, `distribution`, `url`, `binaryQuantized`",
       "code": "invalid_settings_embedders",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_settings_embedders"

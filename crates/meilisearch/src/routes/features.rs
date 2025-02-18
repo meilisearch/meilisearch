@@ -50,6 +50,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             logs_route: Some(false),
             edit_documents_by_function: Some(false),
             contains_filter: Some(false),
+            network: Some(false),
+            get_task_documents_route: Some(false),
         })),
         (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
             {
@@ -88,6 +90,10 @@ pub struct RuntimeTogglableFeatures {
     pub edit_documents_by_function: Option<bool>,
     #[deserr(default)]
     pub contains_filter: Option<bool>,
+    #[deserr(default)]
+    pub network: Option<bool>,
+    #[deserr(default)]
+    pub get_task_documents_route: Option<bool>,
 }
 
 impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogglableFeatures {
@@ -97,6 +103,8 @@ impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogg
             logs_route,
             edit_documents_by_function,
             contains_filter,
+            network,
+            get_task_documents_route,
         } = value;
 
         Self {
@@ -104,6 +112,8 @@ impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogg
             logs_route: Some(logs_route),
             edit_documents_by_function: Some(edit_documents_by_function),
             contains_filter: Some(contains_filter),
+            network: Some(network),
+            get_task_documents_route: Some(get_task_documents_route),
         }
     }
 }
@@ -114,6 +124,8 @@ pub struct PatchExperimentalFeatureAnalytics {
     logs_route: bool,
     edit_documents_by_function: bool,
     contains_filter: bool,
+    network: bool,
+    get_task_documents_route: bool,
 }
 
 impl Aggregate for PatchExperimentalFeatureAnalytics {
@@ -127,6 +139,8 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
             logs_route: new.logs_route,
             edit_documents_by_function: new.edit_documents_by_function,
             contains_filter: new.contains_filter,
+            network: new.network,
+            get_task_documents_route: new.get_task_documents_route,
         })
     }
 
@@ -149,6 +163,8 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
             logs_route: Some(false),
             edit_documents_by_function: Some(false),
             contains_filter: Some(false),
+            network: Some(false),
+            get_task_documents_route: Some(false),
          })),
         (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
             {
@@ -181,16 +197,23 @@ async fn patch_features(
             .edit_documents_by_function
             .unwrap_or(old_features.edit_documents_by_function),
         contains_filter: new_features.0.contains_filter.unwrap_or(old_features.contains_filter),
+        network: new_features.0.network.unwrap_or(old_features.network),
+        get_task_documents_route: new_features
+            .0
+            .get_task_documents_route
+            .unwrap_or(old_features.get_task_documents_route),
     };
 
     // explicitly destructure for analytics rather than using the `Serialize` implementation, because
-    // the it renames to camelCase, which we don't want for analytics.
+    // it renames to camelCase, which we don't want for analytics.
     // **Do not** ignore fields with `..` or `_` here, because we want to add them in the future.
     let meilisearch_types::features::RuntimeTogglableFeatures {
         metrics,
         logs_route,
         edit_documents_by_function,
         contains_filter,
+        network,
+        get_task_documents_route,
     } = new_features;
 
     analytics.publish(
@@ -199,6 +222,8 @@ async fn patch_features(
             logs_route,
             edit_documents_by_function,
             contains_filter,
+            network,
+            get_task_documents_route,
         },
         &req,
     );

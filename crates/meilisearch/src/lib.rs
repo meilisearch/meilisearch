@@ -32,6 +32,7 @@ use analytics::Analytics;
 use anyhow::bail;
 use error::PayloadError;
 use extractors::payload::PayloadConfig;
+use index_scheduler::versioning::Versioning;
 use index_scheduler::{IndexScheduler, IndexSchedulerOptions};
 use meilisearch_auth::AuthController;
 use meilisearch_types::milli::constants::VERSION_MAJOR;
@@ -40,10 +41,9 @@ use meilisearch_types::milli::update::{IndexDocumentsConfig, IndexDocumentsMetho
 use meilisearch_types::settings::apply_settings_to_builder;
 use meilisearch_types::tasks::KindWithContent;
 use meilisearch_types::versioning::{
-    create_current_version_file, get_version, update_version_file_for_dumpless_upgrade,
-    VersionFileError, VERSION_MINOR, VERSION_PATCH,
+    create_current_version_file, get_version, VersionFileError, VERSION_MINOR, VERSION_PATCH,
 };
-use meilisearch_types::{compression, milli, VERSION_FILE_NAME};
+use meilisearch_types::{compression, heed, milli, VERSION_FILE_NAME};
 pub use option::Opt;
 use option::ScheduleSnapshot;
 use search_queue::SearchQueue;
@@ -356,14 +356,19 @@ fn open_or_create_database_unchecked(
 
 /// Ensures Meilisearch version is compatible with the database, returns an error in case of version mismatch.
 /// Returns the version that was contained in the version file
-fn check_version(opt: &Opt, binary_version: (u32, u32, u32)) -> anyhow::Result<(u32, u32, u32)> {
+fn check_version(
+    opt: &Opt,
+    index_scheduler_opt: &IndexSchedulerOptions,
+    binary_version: (u32, u32, u32),
+) -> anyhow::Result<(u32, u32, u32)> {
     let (bin_major, bin_minor, bin_patch) = binary_version;
     let (db_major, db_minor, db_patch) = get_version(&opt.db_path)?;
 
     if db_major != bin_major || db_minor != bin_minor || db_patch > bin_patch {
         if opt.experimental_dumpless_upgrade {
             update_version_file_for_dumpless_upgrade(
-                &opt.db_path,
+                opt,
+                index_scheduler_opt,
                 (db_major, db_minor, db_patch),
                 (bin_major, bin_minor, bin_patch),
             )?;
@@ -380,6 +385,57 @@ fn check_version(opt: &Opt, binary_version: (u32, u32, u32)) -> anyhow::Result<(
     Ok((db_major, db_minor, db_patch))
 }
 
+/// Persists the version of the current Meilisearch binary to a VERSION file
+pub fn update_version_file_for_dumpless_upgrade(
+    opt: &Opt,
+    index_scheduler_opt: &IndexSchedulerOptions,
+    from: (u32, u32, u32),
+    to: (u32, u32, u32),
+) -> Result<(), VersionFileError> {
+    let (from_major, from_minor, from_patch) = from;
+    let (to_major, to_minor, to_patch) = to;
+
+    // Early exit in case of error
+    if from_major > to_major
+        || (from_major == to_major && from_minor > to_minor)
+        || (from_major == to_major && from_minor == to_minor && from_patch > to_patch)
+    {
+        return Err(VersionFileError::DowngradeNotSupported {
+            major: from_major,
+            minor: from_minor,
+            patch: from_patch,
+        });
+    } else if from_major < 1 || (from_major == to_major && from_minor < 12) {
+        return Err(VersionFileError::TooOldForAutomaticUpgrade {
+            major: from_major,
+            minor: from_minor,
+            patch: from_patch,
+        });
+    }
+
+    // In the case of v1.12, the index-scheduler didn't store its internal version at the time.
+    // => We must write it immediately **in the index-scheduler** otherwise we'll update the version file
+    //    there is a risk of DB corruption if a restart happens after writing the version file but before
+    //    writing the version in the index-scheduler. See <https://github.com/meilisearch/meilisearch/issues/5280>
+    if from_major == 1 && from_minor == 12 {
+        let env = unsafe {
+            heed::EnvOpenOptions::new()
+                .max_dbs(Versioning::nb_db())
+                .map_size(index_scheduler_opt.task_db_size)
+                .open(&index_scheduler_opt.tasks_path)
+        }?;
+        let mut wtxn = env.write_txn()?;
+        let versioning = Versioning::raw_new(&env, &mut wtxn)?;
+        versioning.set_version(&mut wtxn, (from_major, from_minor, from_patch))?;
+        wtxn.commit()?;
+        // Should be instant since we're the only one using the env
+        env.prepare_for_closing().wait();
+    }
+
+    create_current_version_file(&opt.db_path)?;
+    Ok(())
+}
+
 /// Ensure you're in a valid state and open the IndexScheduler + AuthController for you.
 fn open_or_create_database(
     opt: &Opt,
@@ -387,7 +443,11 @@ fn open_or_create_database(
     empty_db: bool,
     binary_version: (u32, u32, u32),
 ) -> anyhow::Result<(IndexScheduler, AuthController)> {
-    let version = if !empty_db { check_version(opt, binary_version)? } else { binary_version };
+    let version = if !empty_db {
+        check_version(opt, &index_scheduler_opt, binary_version)?
+    } else {
+        binary_version
+    };
 
     open_or_create_database_unchecked(opt, index_scheduler_opt, OnFailure::KeepDb, version)
 }
@@ -431,9 +491,12 @@ fn import_dump(
         keys.push(key);
     }
 
-    // 3. Import the runtime features.
+    // 3. Import the runtime features and network
     let features = dump_reader.features()?.unwrap_or_default();
     index_scheduler.put_runtime_features(features)?;
+
+    let network = dump_reader.network()?.cloned().unwrap_or_default();
+    index_scheduler.put_network(network)?;
 
     let indexer_config = index_scheduler.indexer_config();
 
@@ -508,9 +571,15 @@ fn import_dump(
         index_scheduler.refresh_index_stats(&uid)?;
     }
 
+    // 5. Import the queue
     let mut index_scheduler_dump = index_scheduler.register_dumped_task()?;
+    // 5.1. Import the batches
+    for ret in dump_reader.batches()? {
+        let batch = ret?;
+        index_scheduler_dump.register_dumped_batch(batch)?;
+    }
 
-    // 5. Import the tasks.
+    // 5.2. Import the tasks
     for ret in dump_reader.tasks()? {
         let (task, file) = ret?;
         index_scheduler_dump.register_dumped_task(task, file)?;

@@ -109,6 +109,8 @@ pub enum Error {
     InvalidIndexUid { index_uid: String },
     #[error("Task `{0}` not found.")]
     TaskNotFound(TaskId),
+    #[error("Task `{0}` does not contain any documents. Only `documentAdditionOrUpdate` tasks with the statuses `enqueued` or `processing` contain documents")]
+    TaskFileNotFound(TaskId),
     #[error("Batch `{0}` not found.")]
     BatchNotFound(BatchId),
     #[error("Query parameters to filter the tasks to delete are missing. Available query parameters are: `uids`, `indexUids`, `statuses`, `types`, `canceledBy`, `beforeEnqueuedAt`, `afterEnqueuedAt`, `beforeStartedAt`, `afterStartedAt`, `beforeFinishedAt`, `afterFinishedAt`.")]
@@ -127,8 +129,8 @@ pub enum Error {
         _ => format!("{error}")
     })]
     Milli { error: milli::Error, index_uid: Option<String> },
-    #[error("An unexpected crash occurred when processing the task.")]
-    ProcessBatchPanicked,
+    #[error("An unexpected crash occurred when processing the task: {0}")]
+    ProcessBatchPanicked(String),
     #[error(transparent)]
     FileStore(#[from] file_store::Error),
     #[error(transparent)]
@@ -189,6 +191,7 @@ impl Error {
             | Error::InvalidTaskCanceledBy { .. }
             | Error::InvalidIndexUid { .. }
             | Error::TaskNotFound(_)
+            | Error::TaskFileNotFound(_)
             | Error::BatchNotFound(_)
             | Error::TaskDeletionWithEmptyQuery
             | Error::TaskCancelationWithEmptyQuery
@@ -196,7 +199,7 @@ impl Error {
             | Error::Dump(_)
             | Error::Heed(_)
             | Error::Milli { .. }
-            | Error::ProcessBatchPanicked
+            | Error::ProcessBatchPanicked(_)
             | Error::FileStore(_)
             | Error::IoError(_)
             | Error::Persist(_)
@@ -250,6 +253,7 @@ impl ErrorCode for Error {
             Error::InvalidTaskCanceledBy { .. } => Code::InvalidTaskCanceledBy,
             Error::InvalidIndexUid { .. } => Code::InvalidIndexUid,
             Error::TaskNotFound(_) => Code::TaskNotFound,
+            Error::TaskFileNotFound(_) => Code::TaskFileNotFound,
             Error::BatchNotFound(_) => Code::BatchNotFound,
             Error::TaskDeletionWithEmptyQuery => Code::MissingTaskFilters,
             Error::TaskCancelationWithEmptyQuery => Code::MissingTaskFilters,
@@ -257,7 +261,7 @@ impl ErrorCode for Error {
             Error::NoSpaceLeftInTaskQueue => Code::NoSpaceLeftOnDevice,
             Error::Dump(e) => e.error_code(),
             Error::Milli { error, .. } => error.error_code(),
-            Error::ProcessBatchPanicked => Code::Internal,
+            Error::ProcessBatchPanicked(_) => Code::Internal,
             Error::Heed(e) => e.error_code(),
             Error::HeedTransaction(e) => e.error_code(),
             Error::FileStore(e) => e.error_code(),

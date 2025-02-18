@@ -18,8 +18,10 @@ pub type Checked = meilisearch_types::settings::Checked;
 pub type Unchecked = meilisearch_types::settings::Unchecked;
 
 pub type Task = crate::TaskDump;
+pub type Batch = meilisearch_types::batches::Batch;
 pub type Key = meilisearch_types::keys::Key;
 pub type RuntimeTogglableFeatures = meilisearch_types::features::RuntimeTogglableFeatures;
+pub type Network = meilisearch_types::features::Network;
 
 // ===== Other types to clarify the code of the compat module
 // everything related to the tasks
@@ -48,8 +50,10 @@ pub struct V6Reader {
     instance_uid: Option<Uuid>,
     metadata: Metadata,
     tasks: BufReader<File>,
+    batches: Option<BufReader<File>>,
     keys: BufReader<File>,
     features: Option<RuntimeTogglableFeatures>,
+    network: Option<Network>,
 }
 
 impl V6Reader {
@@ -77,13 +81,38 @@ impl V6Reader {
         } else {
             None
         };
+        let batches = match File::open(dump.path().join("batches").join("queue.jsonl")) {
+            Ok(file) => Some(BufReader::new(file)),
+            // The batch file was only introduced during the v1.13, anything prior to that won't have batches
+            Err(err) if err.kind() == ErrorKind::NotFound => None,
+            Err(e) => return Err(e.into()),
+        };
+
+        let network_file = match fs::read(dump.path().join("network.json")) {
+            Ok(network_file) => Some(network_file),
+            Err(error) => match error.kind() {
+                // Allows the file to be missing, this will only result in all experimental features disabled.
+                ErrorKind::NotFound => {
+                    debug!("`network.json` not found in dump");
+                    None
+                }
+                _ => return Err(error.into()),
+            },
+        };
+        let network = if let Some(network_file) = network_file {
+            Some(serde_json::from_reader(&*network_file)?)
+        } else {
+            None
+        };
 
         Ok(V6Reader {
             metadata: serde_json::from_reader(&*meta_file)?,
             instance_uid,
             tasks: BufReader::new(File::open(dump.path().join("tasks").join("queue.jsonl"))?),
+            batches,
             keys: BufReader::new(File::open(dump.path().join("keys.jsonl"))?),
             features,
+            network,
             dump,
         })
     }
@@ -124,7 +153,7 @@ impl V6Reader {
         &mut self,
     ) -> Box<dyn Iterator<Item = Result<(Task, Option<Box<super::UpdateFile>>)>> + '_> {
         Box::new((&mut self.tasks).lines().map(|line| -> Result<_> {
-            let task: Task = serde_json::from_str(&line?).unwrap();
+            let task: Task = serde_json::from_str(&line?)?;
 
             let update_file_path = self
                 .dump
@@ -136,13 +165,22 @@ impl V6Reader {
             if update_file_path.exists() {
                 Ok((
                     task,
-                    Some(Box::new(UpdateFile::new(&update_file_path).unwrap())
-                        as Box<super::UpdateFile>),
+                    Some(Box::new(UpdateFile::new(&update_file_path)?) as Box<super::UpdateFile>),
                 ))
             } else {
                 Ok((task, None))
             }
         }))
+    }
+
+    pub fn batches(&mut self) -> Box<dyn Iterator<Item = Result<Batch>> + '_> {
+        match self.batches.as_mut() {
+            Some(batches) => Box::new((batches).lines().map(|line| -> Result<_> {
+                let batch = serde_json::from_str(&line?)?;
+                Ok(batch)
+            })),
+            None => Box::new(std::iter::empty()) as Box<dyn Iterator<Item = Result<Batch>> + '_>,
+        }
     }
 
     pub fn keys(&mut self) -> Box<dyn Iterator<Item = Result<Key>> + '_> {
@@ -153,6 +191,10 @@ impl V6Reader {
 
     pub fn features(&self) -> Option<RuntimeTogglableFeatures> {
         self.features
+    }
+
+    pub fn network(&self) -> Option<&Network> {
+        self.network.as_ref()
     }
 }
 

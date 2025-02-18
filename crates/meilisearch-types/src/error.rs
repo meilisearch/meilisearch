@@ -260,7 +260,13 @@ InvalidMultiSearchMergeFacets         , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchQueryFacets         , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchQueryPagination     , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchQueryRankingRules   , InvalidRequest       , BAD_REQUEST ;
+InvalidMultiSearchQueryPosition       , InvalidRequest       , BAD_REQUEST ;
+InvalidMultiSearchRemote              , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchWeight              , InvalidRequest       , BAD_REQUEST ;
+InvalidNetworkRemotes                 , InvalidRequest       , BAD_REQUEST ;
+InvalidNetworkSelf                    , InvalidRequest       , BAD_REQUEST ;
+InvalidNetworkSearchApiKey            , InvalidRequest       , BAD_REQUEST ;
+InvalidNetworkUrl                     , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchAttributesToSearchOn     , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchAttributesToCrop         , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchAttributesToHighlight    , InvalidRequest       , BAD_REQUEST ;
@@ -351,14 +357,22 @@ MissingDocumentId                     , InvalidRequest       , BAD_REQUEST ;
 MissingFacetSearchFacetName           , InvalidRequest       , BAD_REQUEST ;
 MissingIndexUid                       , InvalidRequest       , BAD_REQUEST ;
 MissingMasterKey                      , Auth                 , UNAUTHORIZED ;
+MissingNetworkUrl                     , InvalidRequest       , BAD_REQUEST ;
 MissingPayload                        , InvalidRequest       , BAD_REQUEST ;
 MissingSearchHybrid                   , InvalidRequest       , BAD_REQUEST ;
 MissingSwapIndexes                    , InvalidRequest       , BAD_REQUEST ;
 MissingTaskFilters                    , InvalidRequest       , BAD_REQUEST ;
 NoSpaceLeftOnDevice                   , System               , UNPROCESSABLE_ENTITY;
 PayloadTooLarge                       , InvalidRequest       , PAYLOAD_TOO_LARGE ;
+RemoteBadResponse                     , System               , BAD_GATEWAY ;
+RemoteBadRequest                      , InvalidRequest       , BAD_REQUEST ;
+RemoteCouldNotSendRequest             , System               , BAD_GATEWAY ;
+RemoteInvalidApiKey                   , Auth                 , FORBIDDEN ;
+RemoteRemoteError                     , System               , BAD_GATEWAY ;
+RemoteTimeout                         , System               , BAD_GATEWAY ;
 TooManySearchRequests                 , System               , SERVICE_UNAVAILABLE ;
 TaskNotFound                          , InvalidRequest       , NOT_FOUND ;
+TaskFileNotFound                      , InvalidRequest       , NOT_FOUND ;
 BatchNotFound                         , InvalidRequest       , NOT_FOUND ;
 TooManyOpenFiles                      , System               , UNPROCESSABLE_ENTITY ;
 TooManyVectors                        , InvalidRequest       , BAD_REQUEST ;
@@ -580,6 +594,18 @@ impl fmt::Display for deserr_codes::InvalidSearchRankingScoreThreshold {
 impl fmt::Display for deserr_codes::InvalidSimilarRankingScoreThreshold {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         deserr_codes::InvalidSearchRankingScoreThreshold.fmt(f)
+    }
+}
+
+impl fmt::Display for deserr_codes::InvalidNetworkUrl {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "the value of `url` is invalid, expected a string.")
+    }
+}
+
+impl fmt::Display for deserr_codes::InvalidNetworkSearchApiKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "the value of `searchApiKey` is invalid, expected a string.")
     }
 }
 

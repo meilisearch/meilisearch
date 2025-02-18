@@ -24,9 +24,35 @@ pub struct Batch {
     pub started_at: OffsetDateTime,
     #[serde(with = "time::serde::rfc3339::option")]
     pub finished_at: Option<OffsetDateTime>,
+
+    // Enqueued at is never displayed and is only required when removing a batch.
+    // It's always some except when upgrading from a database pre v1.12
+    pub enqueued_at: Option<BatchEnqueuedAt>,
 }
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize, ToSchema)]
+impl PartialEq for Batch {
+    fn eq(&self, other: &Self) -> bool {
+        let Self { uid, progress, details, stats, started_at, finished_at, enqueued_at } = self;
+
+        *uid == other.uid
+            && progress.is_none() == other.progress.is_none()
+            && details == &other.details
+            && stats == &other.stats
+            && started_at == &other.started_at
+            && finished_at == &other.finished_at
+            && enqueued_at == &other.enqueued_at
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BatchEnqueuedAt {
+    #[serde(with = "time::serde::rfc3339")]
+    pub earliest: OffsetDateTime,
+    #[serde(with = "time::serde::rfc3339")]
+    pub oldest: OffsetDateTime,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct BatchStats {

@@ -496,6 +496,12 @@ pub struct IndexStats {
     pub number_of_documents: u64,
     /// Whether or not the index is currently ingesting document
     pub is_indexing: bool,
+    /// Number of embeddings in the index
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub number_of_embeddings: Option<u64>,
+    /// Number of embedded documents in the index
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub number_of_embedded_documents: Option<u64>,
     /// Association of every field name with the number of times it occurs in the documents.
     #[schema(value_type = HashMap<String, u64>)]
     pub field_distribution: FieldDistribution,
@@ -506,6 +512,8 @@ impl From<index_scheduler::IndexStats> for IndexStats {
         IndexStats {
             number_of_documents: stats.inner_stats.number_of_documents,
             is_indexing: stats.is_indexing,
+            number_of_embeddings: stats.inner_stats.number_of_embeddings,
+            number_of_embedded_documents: stats.inner_stats.number_of_embedded_documents,
             field_distribution: stats.inner_stats.field_distribution,
         }
     }
@@ -524,6 +532,8 @@ impl From<index_scheduler::IndexStats> for IndexStats {
         (status = OK, description = "The stats of the index", body = IndexStats, content_type = "application/json", example = json!(
             {
                 "numberOfDocuments": 10,
+                "numberOfEmbeddings": 10,
+                "numberOfEmbeddedDocuments": 10,
                 "isIndexing": true,
                 "fieldDistribution": {
                     "genre": 10,

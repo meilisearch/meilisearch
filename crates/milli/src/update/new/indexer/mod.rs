@@ -1,5 +1,5 @@
 use std::sync::atomic::AtomicBool;
-use std::sync::RwLock;
+use std::sync::{Once, RwLock};
 use std::thread::{self, Builder};
 
 use big_s::S;
@@ -32,6 +32,8 @@ mod partial_dump;
 mod post_processing;
 mod update_by_function;
 mod write;
+
+static LOG_MEMORY_METRICS_ONCE: Once = Once::new();
 
 /// This is the main function of this crate.
 ///
@@ -92,6 +94,15 @@ where
             (new_grenad_parameters, total_bbbuffer_capacity)
         },
     );
+
+    LOG_MEMORY_METRICS_ONCE.call_once(|| {
+        tracing::debug!(
+            "Indexation allocated memory metrics - \
+            Total BBQueue size: {total_bbbuffer_capacity}, \
+            Total extractor memory: {:?}",
+            grenad_parameters.max_memory,
+        );
+    });
 
     let (extractor_sender, writer_receiver) = pool
         .install(|| extractor_writer_bbqueue(&mut bbbuffers, total_bbbuffer_capacity, 1000))
@@ -179,13 +190,16 @@ where
 
         indexing_context.progress.update_progress(IndexingStep::WritingEmbeddingsToDatabase);
 
-        build_vectors(
-            index,
-            wtxn,
-            index_embeddings,
-            &mut arroy_writers,
-            &indexing_context.must_stop_processing,
-        )?;
+        pool.install(|| {
+            build_vectors(
+                index,
+                wtxn,
+                index_embeddings,
+                &mut arroy_writers,
+                &indexing_context.must_stop_processing,
+            )
+        })
+        .unwrap()?;
 
         post_processing::post_process(
             indexing_context,

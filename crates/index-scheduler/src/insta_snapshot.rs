@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 use std::fmt::Write;
 
-use meilisearch_types::batches::Batch;
+use meilisearch_types::batches::{Batch, BatchEnqueuedAt};
 use meilisearch_types::heed::types::{SerdeBincode, SerdeJson, Str};
 use meilisearch_types::heed::{Database, RoTxn};
 use meilisearch_types::milli::{CboRoaringBitmapCodec, RoaringBitmapCodec, BEU32};
@@ -341,10 +341,14 @@ pub fn snapshot_canceled_by(rtxn: &RoTxn, db: Database<BEU32, RoaringBitmapCodec
 
 pub fn snapshot_batch(batch: &Batch) -> String {
     let mut snap = String::new();
-    let Batch { uid, details, stats, started_at, finished_at, progress: _ } = batch;
+    let Batch { uid, details, stats, started_at, finished_at, progress: _, enqueued_at } = batch;
     if let Some(finished_at) = finished_at {
         assert!(finished_at > started_at);
     }
+    let BatchEnqueuedAt { earliest, oldest } = enqueued_at.unwrap();
+    assert!(*started_at > earliest);
+    assert!(earliest >= oldest);
+
     snap.push('{');
     snap.push_str(&format!("uid: {uid}, "));
     snap.push_str(&format!("details: {}, ", serde_json::to_string(details).unwrap()));

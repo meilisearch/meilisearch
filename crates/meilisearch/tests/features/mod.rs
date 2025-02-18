@@ -21,7 +21,9 @@ async fn experimental_features() {
       "metrics": false,
       "logsRoute": false,
       "editDocumentsByFunction": false,
-      "containsFilter": false
+      "containsFilter": false,
+      "network": false,
+      "getTaskDocumentsRoute": false
     }
     "###);
 
@@ -33,7 +35,9 @@ async fn experimental_features() {
       "metrics": true,
       "logsRoute": false,
       "editDocumentsByFunction": false,
-      "containsFilter": false
+      "containsFilter": false,
+      "network": false,
+      "getTaskDocumentsRoute": false
     }
     "###);
 
@@ -45,7 +49,9 @@ async fn experimental_features() {
       "metrics": true,
       "logsRoute": false,
       "editDocumentsByFunction": false,
-      "containsFilter": false
+      "containsFilter": false,
+      "network": false,
+      "getTaskDocumentsRoute": false
     }
     "###);
 
@@ -58,7 +64,9 @@ async fn experimental_features() {
       "metrics": true,
       "logsRoute": false,
       "editDocumentsByFunction": false,
-      "containsFilter": false
+      "containsFilter": false,
+      "network": false,
+      "getTaskDocumentsRoute": false
     }
     "###);
 
@@ -71,7 +79,9 @@ async fn experimental_features() {
       "metrics": true,
       "logsRoute": false,
       "editDocumentsByFunction": false,
-      "containsFilter": false
+      "containsFilter": false,
+      "network": false,
+      "getTaskDocumentsRoute": false
     }
     "###);
 }
@@ -91,7 +101,9 @@ async fn experimental_feature_metrics() {
       "metrics": true,
       "logsRoute": false,
       "editDocumentsByFunction": false,
-      "containsFilter": false
+      "containsFilter": false,
+      "network": false,
+      "getTaskDocumentsRoute": false
     }
     "###);
 
@@ -146,7 +158,7 @@ async fn errors() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "Unknown field `NotAFeature`: expected one of `metrics`, `logsRoute`, `editDocumentsByFunction`, `containsFilter`",
+      "message": "Unknown field `NotAFeature`: expected one of `metrics`, `logsRoute`, `editDocumentsByFunction`, `containsFilter`, `network`, `getTaskDocumentsRoute`",
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad_request"

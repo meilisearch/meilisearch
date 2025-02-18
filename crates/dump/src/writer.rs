@@ -4,7 +4,8 @@ use std::path::PathBuf;
 
 use flate2::write::GzEncoder;
 use flate2::Compression;
-use meilisearch_types::features::RuntimeTogglableFeatures;
+use meilisearch_types::batches::Batch;
+use meilisearch_types::features::{Network, RuntimeTogglableFeatures};
 use meilisearch_types::keys::Key;
 use meilisearch_types::settings::{Checked, Settings};
 use serde_json::{Map, Value};
@@ -54,11 +55,19 @@ impl DumpWriter {
         TaskWriter::new(self.dir.path().join("tasks"))
     }
 
+    pub fn create_batches_queue(&self) -> Result<BatchWriter> {
+        BatchWriter::new(self.dir.path().join("batches"))
+    }
+
     pub fn create_experimental_features(&self, features: RuntimeTogglableFeatures) -> Result<()> {
         Ok(std::fs::write(
             self.dir.path().join("experimental-features.json"),
             serde_json::to_string(&features)?,
         )?)
+    }
+
+    pub fn create_network(&self, network: Network) -> Result<()> {
+        Ok(std::fs::write(self.dir.path().join("network.json"), serde_json::to_string(&network)?)?)
     }
 
     pub fn persist_to(self, mut writer: impl Write) -> Result<()> {
@@ -84,7 +93,7 @@ impl KeyWriter {
     }
 
     pub fn push_key(&mut self, key: &Key) -> Result<()> {
-        self.keys.write_all(&serde_json::to_vec(key)?)?;
+        serde_json::to_writer(&mut self.keys, &key)?;
         self.keys.write_all(b"\n")?;
         Ok(())
     }
@@ -114,10 +123,34 @@ impl TaskWriter {
     /// Pushes tasks in the dump.
     /// If the tasks has an associated `update_file` it'll use the `task_id` as its name.
     pub fn push_task(&mut self, task: &TaskDump) -> Result<UpdateFile> {
-        self.queue.write_all(&serde_json::to_vec(task)?)?;
+        serde_json::to_writer(&mut self.queue, &task)?;
         self.queue.write_all(b"\n")?;
 
         Ok(UpdateFile::new(self.update_files.join(format!("{}.jsonl", task.uid))))
+    }
+
+    pub fn flush(mut self) -> Result<()> {
+        self.queue.flush()?;
+        Ok(())
+    }
+}
+
+pub struct BatchWriter {
+    queue: BufWriter<File>,
+}
+
+impl BatchWriter {
+    pub(crate) fn new(path: PathBuf) -> Result<Self> {
+        std::fs::create_dir(&path)?;
+        let queue = File::create(path.join("queue.jsonl"))?;
+        Ok(BatchWriter { queue: BufWriter::new(queue) })
+    }
+
+    /// Pushes batches in the dump.
+    pub fn push_batch(&mut self, batch: &Batch) -> Result<()> {
+        serde_json::to_writer(&mut self.queue, &batch)?;
+        self.queue.write_all(b"\n")?;
+        Ok(())
     }
 
     pub fn flush(mut self) -> Result<()> {
@@ -137,8 +170,8 @@ impl UpdateFile {
     }
 
     pub fn push_document(&mut self, document: &Document) -> Result<()> {
-        if let Some(writer) = self.writer.as_mut() {
-            writer.write_all(&serde_json::to_vec(document)?)?;
+        if let Some(mut writer) = self.writer.as_mut() {
+            serde_json::to_writer(&mut writer, &document)?;
             writer.write_all(b"\n")?;
         } else {
             let file = File::create(&self.path).unwrap();
@@ -205,8 +238,8 @@ pub(crate) mod test {
     use super::*;
     use crate::reader::Document;
     use crate::test::{
-        create_test_api_keys, create_test_documents, create_test_dump, create_test_instance_uid,
-        create_test_settings, create_test_tasks,
+        create_test_api_keys, create_test_batches, create_test_documents, create_test_dump,
+        create_test_instance_uid, create_test_settings, create_test_tasks,
     };
 
     fn create_directory_hierarchy(dir: &Path) -> String {
@@ -281,8 +314,10 @@ pub(crate) mod test {
         let dump_path = dump.path();
 
         // ==== checking global file hierarchy (we want to be sure there isn't too many files or too few)
-        insta::assert_snapshot!(create_directory_hierarchy(dump_path), @r###"
+        insta::assert_snapshot!(create_directory_hierarchy(dump_path), @r"
         .
+        ├---- batches/
+        │    └---- queue.jsonl
         ├---- indexes/
         │    └---- doggos/
         │    │    ├---- documents.jsonl
@@ -295,8 +330,9 @@ pub(crate) mod test {
         ├---- experimental-features.json
         ├---- instance_uid.uuid
         ├---- keys.jsonl
-        └---- metadata.json
-        "###);
+        ├---- metadata.json
+        └---- network.json
+        ");
 
         // ==== checking the top level infos
         let metadata = fs::read_to_string(dump_path.join("metadata.json")).unwrap();
@@ -347,6 +383,16 @@ pub(crate) mod test {
                     update.lines().map(|line| serde_json::from_str(line).unwrap()).collect();
                 assert_eq!(documents, expected_update);
             }
+        }
+
+        // ==== checking the batch queue
+        let batches_queue = fs::read_to_string(dump_path.join("batches/queue.jsonl")).unwrap();
+        for (batch, expected) in batches_queue.lines().zip(create_test_batches()) {
+            let mut batch = serde_json::from_str::<Batch>(batch).unwrap();
+            if batch.details.settings == Some(Box::new(Settings::<Unchecked>::default())) {
+                batch.details.settings = None;
+            }
+            assert_eq!(batch, expected, "{batch:#?}{expected:#?}");
         }
 
         // ==== checking the keys

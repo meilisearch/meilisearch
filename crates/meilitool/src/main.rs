@@ -1,19 +1,26 @@
 use std::fs::{read_dir, read_to_string, remove_file, File};
-use std::io::BufWriter;
+use std::io::{BufWriter, Write as _};
 use std::path::PathBuf;
+use std::time::Instant;
 
-use anyhow::Context;
-use clap::{Parser, Subcommand};
+use anyhow::{bail, Context};
+use clap::{Parser, Subcommand, ValueEnum};
 use dump::{DumpWriter, IndexMetadata};
 use file_store::FileStore;
 use meilisearch_auth::AuthController;
-use meilisearch_types::heed::types::{SerdeJson, Str};
-use meilisearch_types::heed::{Database, Env, EnvOpenOptions, RoTxn, RwTxn, Unspecified};
+use meilisearch_types::batches::Batch;
+use meilisearch_types::heed::types::{Bytes, SerdeJson, Str};
+use meilisearch_types::heed::{
+    CompactionOption, Database, Env, EnvOpenOptions, RoTxn, RwTxn, Unspecified,
+};
+use meilisearch_types::milli::constants::RESERVED_VECTORS_FIELD_NAME;
 use meilisearch_types::milli::documents::{obkv_to_object, DocumentsBatchReader};
+use meilisearch_types::milli::vector::parsed_vectors::{ExplicitVectors, VectorOrArrayOfVectors};
 use meilisearch_types::milli::{obkv_to_json, BEU32};
 use meilisearch_types::tasks::{Status, Task};
 use meilisearch_types::versioning::{get_version, parse_version};
 use meilisearch_types::Index;
+use serde_json::Value::Object;
 use time::macros::format_description;
 use time::OffsetDateTime;
 use upgrade::OfflineUpgrade;
@@ -65,6 +72,24 @@ enum Command {
         skip_enqueued_tasks: bool,
     },
 
+    /// Exports the documents of an index in NDJSON format from a Meilisearch index to stdout.
+    ///
+    /// This command can be executed on a running Meilisearch database. However, please note that
+    /// it will maintain a read-only transaction for the duration of the extraction process.
+    ExportDocuments {
+        /// The index name to export the documents from.
+        #[arg(long)]
+        index_name: String,
+
+        /// Do not export vectors with the documents.
+        #[arg(long)]
+        ignore_vectors: bool,
+
+        /// The number of documents to skip.
+        #[arg(long)]
+        offset: Option<usize>,
+    },
+
     /// Attempts to upgrade from one major version to the next without a dump.
     ///
     /// Make sure to run this commmand when Meilisearch is not running!
@@ -78,6 +103,46 @@ enum Command {
         #[arg(long)]
         target_version: String,
     },
+
+    /// Compact the index by using LMDB.
+    ///
+    /// You must run this command while Meilisearch is off. The reason is that Meilisearch keep the
+    /// indexes opened and this compaction operation writes into another file. Meilisearch will not
+    /// switch to the new file.
+    ///
+    /// **Another possibility** is to keep Meilisearch running to serve search requests, run the
+    /// compaction and once done, close and immediately reopen Meilisearch. This way Meilisearch
+    /// will reopened the data.mdb file when rebooting and see the newly compacted file, ignoring
+    /// the previous non-compacted data.
+    ///
+    /// Note that the compaction will open the index, copy and compact the index into another file
+    /// **on the same disk as the index** and replace the previous index with the newly compacted
+    /// one. This means that the disk must have enough room for at most two times the index size.
+    ///
+    /// To make sure not to lose any data, this tool takes a mutable transaction on the index
+    /// before running the copy and compaction. This way the current indexation must finish before
+    /// the compaction operation can start. Once the compaction is done, the big index is replaced
+    /// by the compacted one and the mutable transaction is released.
+    CompactIndex { index_name: String },
+
+    /// Uses the hair dryer the dedicate pages hot in cache
+    ///
+    /// To make the index faster we must make sure it is hot in the DB cache that's the cure of
+    /// memory-mapping but also it's strengh. This command is designed to make a spcific part of
+    /// the index hot in cache.
+    HairDryer {
+        #[arg(long, value_delimiter = ',')]
+        index_name: Vec<String>,
+
+        #[arg(long, value_delimiter = ',')]
+        index_part: Vec<IndexPart>,
+    },
+}
+
+#[derive(Clone, ValueEnum)]
+enum IndexPart {
+    /// Will make the arroy index hot.
+    Arroy,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -90,9 +155,16 @@ fn main() -> anyhow::Result<()> {
         Command::ExportADump { dump_dir, skip_enqueued_tasks } => {
             export_a_dump(db_path, dump_dir, skip_enqueued_tasks, detected_version)
         }
+        Command::ExportDocuments { index_name, ignore_vectors, offset } => {
+            export_documents(db_path, index_name, ignore_vectors, offset)
+        }
         Command::OfflineUpgrade { target_version } => {
             let target_version = parse_version(&target_version).context("While parsing `--target-version`. Make sure `--target-version` is in the format MAJOR.MINOR.PATCH")?;
             OfflineUpgrade { db_path, current_version: detected_version, target_version }.upgrade()
+        }
+        Command::CompactIndex { index_name } => compact_index(db_path, &index_name),
+        Command::HairDryer { index_name, index_part } => {
+            hair_dryer(db_path, &index_name, &index_part)
         }
     }
 }
@@ -230,70 +302,86 @@ fn export_a_dump(
 
     eprintln!("Successfully dumped {count} keys!");
 
+    eprintln!("Dumping the queue");
     let rtxn = env.read_txn()?;
     let all_tasks: Database<BEU32, SerdeJson<Task>> =
         try_opening_database(&env, &rtxn, "all-tasks")?;
+    let all_batches: Database<BEU32, SerdeJson<Batch>> =
+        try_opening_database(&env, &rtxn, "all-batches")?;
     let index_mapping: Database<Str, UuidCodec> =
         try_opening_database(&env, &rtxn, "index-mapping")?;
 
-    if skip_enqueued_tasks {
-        eprintln!("Skip dumping the enqueued tasks...");
-    } else {
-        let mut dump_tasks = dump.create_tasks_queue()?;
-        let mut count = 0;
-        for ret in all_tasks.iter(&rtxn)? {
-            let (_, t) = ret?;
-            let status = t.status;
-            let content_file = t.content_uuid();
+    eprintln!("Dumping the tasks");
+    let mut dump_tasks = dump.create_tasks_queue()?;
+    let mut count_tasks = 0;
+    let mut count_enqueued_tasks = 0;
+    for ret in all_tasks.iter(&rtxn)? {
+        let (_, t) = ret?;
+        let status = t.status;
+        let content_file = t.content_uuid();
 
-            let mut dump_content_file = dump_tasks.push_task(&t.into())?;
+        if status == Status::Enqueued && skip_enqueued_tasks {
+            continue;
+        }
 
-            // 3.1. Dump the `content_file` associated with the task if there is one and the task is not finished yet.
-            if let Some(content_file_uuid) = content_file {
-                if status == Status::Enqueued {
-                    let content_file = file_store.get_update(content_file_uuid)?;
+        let mut dump_content_file = dump_tasks.push_task(&t.into())?;
 
-                    if (detected_version.0, detected_version.1, detected_version.2) < (1, 12, 0) {
-                        eprintln!("Dumping the enqueued tasks reading them in obkv format...");
-                        let reader =
-                            DocumentsBatchReader::from_reader(content_file).with_context(|| {
-                                format!("While reading content file {:?}", content_file_uuid)
-                            })?;
-                        let (mut cursor, documents_batch_index) =
-                            reader.into_cursor_and_fields_index();
-                        while let Some(doc) = cursor.next_document().with_context(|| {
-                            format!("While iterating on content file {:?}", content_file_uuid)
-                        })? {
-                            dump_content_file
-                                .push_document(&obkv_to_object(doc, &documents_batch_index)?)?;
-                        }
-                    } else {
-                        eprintln!(
-                            "Dumping the enqueued tasks reading them in JSON stream format..."
-                        );
-                        for document in
-                            serde_json::de::Deserializer::from_reader(content_file).into_iter()
-                        {
-                            let document = document.with_context(|| {
-                                format!("While reading content file {:?}", content_file_uuid)
-                            })?;
-                            dump_content_file.push_document(&document)?;
-                        }
+        // 3.1. Dump the `content_file` associated with the task if there is one and the task is not finished yet.
+        if let Some(content_file_uuid) = content_file {
+            if status == Status::Enqueued {
+                let content_file = file_store.get_update(content_file_uuid)?;
+
+                if (detected_version.0, detected_version.1, detected_version.2) < (1, 12, 0) {
+                    eprintln!("Dumping the enqueued tasks reading them in obkv format...");
+                    let reader =
+                        DocumentsBatchReader::from_reader(content_file).with_context(|| {
+                            format!("While reading content file {:?}", content_file_uuid)
+                        })?;
+                    let (mut cursor, documents_batch_index) = reader.into_cursor_and_fields_index();
+                    while let Some(doc) = cursor.next_document().with_context(|| {
+                        format!("While iterating on content file {:?}", content_file_uuid)
+                    })? {
+                        dump_content_file
+                            .push_document(&obkv_to_object(doc, &documents_batch_index)?)?;
                     }
-
-                    dump_content_file.flush()?;
-                    count += 1;
+                } else {
+                    eprintln!("Dumping the enqueued tasks reading them in JSON stream format...");
+                    for document in
+                        serde_json::de::Deserializer::from_reader(content_file).into_iter()
+                    {
+                        let document = document.with_context(|| {
+                            format!("While reading content file {:?}", content_file_uuid)
+                        })?;
+                        dump_content_file.push_document(&document)?;
+                    }
                 }
+
+                dump_content_file.flush()?;
+                count_enqueued_tasks += 1;
             }
         }
-        dump_tasks.flush()?;
-
-        eprintln!("Successfully dumped {count} enqueued tasks!");
+        count_tasks += 1;
     }
+    dump_tasks.flush()?;
+    eprintln!(
+        "Successfully dumped {count_tasks} tasks including {count_enqueued_tasks} enqueued tasks!"
+    );
 
+    // 4. dump the batches
+    eprintln!("Dumping the batches");
+    let mut dump_batches = dump.create_batches_queue()?;
+    let mut count = 0;
+
+    for ret in all_batches.iter(&rtxn)? {
+        let (_, b) = ret?;
+        dump_batches.push_batch(&b)?;
+        count += 1;
+    }
+    dump_batches.flush()?;
+    eprintln!("Successfully dumped {count} batches!");
+
+    // 5. Dump the indexes
     eprintln!("Dumping the indexes...");
-
-    // 4. Dump the indexes
     let mut count = 0;
     for result in index_mapping.iter(&rtxn)? {
         let (uid, uuid) = result?;
@@ -314,14 +402,14 @@ fn export_a_dump(
         let fields_ids_map = index.fields_ids_map(&rtxn)?;
         let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
 
-        // 4.1. Dump the documents
+        // 5.1. Dump the documents
         for ret in index.all_documents(&rtxn)? {
             let (_id, doc) = ret?;
             let document = obkv_to_json(&all_fields, &fields_ids_map, doc)?;
             index_dumper.push_document(&document)?;
         }
 
-        // 4.2. Dump the settings
+        // 5.2. Dump the settings
         let settings = meilisearch_types::settings::settings(
             &index,
             &rtxn,
@@ -344,6 +432,244 @@ fn export_a_dump(
     dump.persist_to(BufWriter::new(file))?;
 
     eprintln!("Dump exported at path {:?}", path.display());
+
+    Ok(())
+}
+
+fn compact_index(db_path: PathBuf, index_name: &str) -> anyhow::Result<()> {
+    let index_scheduler_path = db_path.join("tasks");
+    let env = unsafe { EnvOpenOptions::new().max_dbs(100).open(&index_scheduler_path) }
+        .with_context(|| format!("While trying to open {:?}", index_scheduler_path.display()))?;
+
+    let rtxn = env.read_txn()?;
+    let index_mapping: Database<Str, UuidCodec> =
+        try_opening_database(&env, &rtxn, "index-mapping")?;
+
+    for result in index_mapping.iter(&rtxn)? {
+        let (uid, uuid) = result?;
+
+        if uid != index_name {
+            eprintln!("Found index {uid} and skipping it");
+            continue;
+        } else {
+            eprintln!("Found index {uid} 🎉");
+        }
+
+        let index_path = db_path.join("indexes").join(uuid.to_string());
+        let index = Index::new(EnvOpenOptions::new(), &index_path, false).with_context(|| {
+            format!("While trying to open the index at path {:?}", index_path.display())
+        })?;
+
+        eprintln!("Awaiting for a mutable transaction...");
+        let _wtxn = index.write_txn().context("While awaiting for a write transaction")?;
+
+        // We create and immediately drop the file because the
+        let non_compacted_index_file_path = index_path.join("data.mdb");
+        let compacted_index_file_path = index_path.join("data.mdb.cpy");
+
+        eprintln!("Compacting the index...");
+        let before_compaction = Instant::now();
+        let new_file = index
+            .copy_to_file(&compacted_index_file_path, CompactionOption::Enabled)
+            .with_context(|| format!("While compacting {}", compacted_index_file_path.display()))?;
+
+        let after_size = new_file.metadata()?.len();
+        let before_size = std::fs::metadata(&non_compacted_index_file_path)
+            .with_context(|| {
+                format!(
+                    "While retrieving the metadata of {}",
+                    non_compacted_index_file_path.display(),
+                )
+            })?
+            .len();
+
+        let reduction = before_size as f64 / after_size as f64;
+        println!("Compaction successful. Took around {:.2?}", before_compaction.elapsed());
+        eprintln!("The index went from {before_size} bytes to {after_size} bytes ({reduction:.2}x reduction)");
+
+        eprintln!("Replacing the non-compacted index by the compacted one...");
+        std::fs::rename(&compacted_index_file_path, &non_compacted_index_file_path).with_context(
+            || {
+                format!(
+                    "While renaming {} into {}",
+                    compacted_index_file_path.display(),
+                    non_compacted_index_file_path.display(),
+                )
+            },
+        )?;
+
+        drop(new_file);
+
+        println!("Everything's done 🎉");
+        return Ok(());
+    }
+
+    bail!("Target index {index_name} not found!")
+}
+
+fn export_documents(
+    db_path: PathBuf,
+    index_name: String,
+    ignore_vectors: bool,
+    offset: Option<usize>,
+) -> anyhow::Result<()> {
+    let index_scheduler_path = db_path.join("tasks");
+    let env = unsafe { EnvOpenOptions::new().max_dbs(100).open(&index_scheduler_path) }
+        .with_context(|| format!("While trying to open {:?}", index_scheduler_path.display()))?;
+
+    let rtxn = env.read_txn()?;
+    let index_mapping: Database<Str, UuidCodec> =
+        try_opening_database(&env, &rtxn, "index-mapping")?;
+
+    for result in index_mapping.iter(&rtxn)? {
+        let (uid, uuid) = result?;
+        if uid == index_name {
+            let index_path = db_path.join("indexes").join(uuid.to_string());
+            let index =
+                Index::new(EnvOpenOptions::new(), &index_path, false).with_context(|| {
+                    format!("While trying to open the index at path {:?}", index_path.display())
+                })?;
+
+            let rtxn = index.read_txn()?;
+            let fields_ids_map = index.fields_ids_map(&rtxn)?;
+            let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
+            let embedding_configs = index.embedding_configs(&rtxn)?;
+
+            if let Some(offset) = offset {
+                eprintln!("Skipping {offset} documents");
+            }
+
+            let mut stdout = BufWriter::new(std::io::stdout());
+            let all_documents = index.documents_ids(&rtxn)?.into_iter().skip(offset.unwrap_or(0));
+            for (i, ret) in index.iter_documents(&rtxn, all_documents)?.enumerate() {
+                let (id, doc) = ret?;
+                let mut document = obkv_to_json(&all_fields, &fields_ids_map, doc)?;
+
+                if i % 10_000 == 0 {
+                    eprintln!("Starting the {}th document", i + offset.unwrap_or(0));
+                }
+
+                if !ignore_vectors {
+                    'inject_vectors: {
+                        let embeddings = index.embeddings(&rtxn, id)?;
+
+                        if embeddings.is_empty() {
+                            break 'inject_vectors;
+                        }
+
+                        let vectors = document
+                            .entry(RESERVED_VECTORS_FIELD_NAME)
+                            .or_insert(Object(Default::default()));
+
+                        let Object(vectors) = vectors else {
+                            return Err(meilisearch_types::milli::Error::UserError(
+                                meilisearch_types::milli::UserError::InvalidVectorsMapType {
+                                    document_id: {
+                                        if let Ok(Some(Ok(index))) = index
+                                            .external_id_of(&rtxn, std::iter::once(id))
+                                            .map(|it| it.into_iter().next())
+                                        {
+                                            index
+                                        } else {
+                                            format!("internal docid={id}")
+                                        }
+                                    },
+                                    value: vectors.clone(),
+                                },
+                            )
+                            .into());
+                        };
+
+                        for (embedder_name, embeddings) in embeddings {
+                            let user_provided = embedding_configs
+                                .iter()
+                                .find(|conf| conf.name == embedder_name)
+                                .is_some_and(|conf| conf.user_provided.contains(id));
+
+                            let embeddings = ExplicitVectors {
+                                embeddings: Some(VectorOrArrayOfVectors::from_array_of_vectors(
+                                    embeddings,
+                                )),
+                                regenerate: !user_provided,
+                            };
+                            vectors
+                                .insert(embedder_name, serde_json::to_value(embeddings).unwrap());
+                        }
+                    }
+                }
+
+                serde_json::to_writer(&mut stdout, &document)?;
+            }
+
+            stdout.flush()?;
+        } else {
+            eprintln!("Found index {uid} but it's not the right index...");
+        }
+    }
+
+    Ok(())
+}
+
+fn hair_dryer(
+    db_path: PathBuf,
+    index_names: &[String],
+    index_parts: &[IndexPart],
+) -> anyhow::Result<()> {
+    let index_scheduler_path = db_path.join("tasks");
+    let env = unsafe { EnvOpenOptions::new().max_dbs(100).open(&index_scheduler_path) }
+        .with_context(|| format!("While trying to open {:?}", index_scheduler_path.display()))?;
+
+    eprintln!("Trying to get a read transaction on the index scheduler...");
+
+    let rtxn = env.read_txn()?;
+    let index_mapping: Database<Str, UuidCodec> =
+        try_opening_database(&env, &rtxn, "index-mapping")?;
+
+    for result in index_mapping.iter(&rtxn)? {
+        let (uid, uuid) = result?;
+        if index_names.iter().any(|i| i == uid) {
+            let index_path = db_path.join("indexes").join(uuid.to_string());
+            let index =
+                Index::new(EnvOpenOptions::new(), &index_path, false).with_context(|| {
+                    format!("While trying to open the index at path {:?}", index_path.display())
+                })?;
+
+            eprintln!("Trying to get a read transaction on the {uid} index...");
+
+            let rtxn = index.read_txn()?;
+            for part in index_parts {
+                match part {
+                    IndexPart::Arroy => {
+                        let mut count = 0;
+                        let total = index.vector_arroy.len(&rtxn)?;
+                        eprintln!("Hair drying arroy for {uid}...");
+                        for (i, result) in index
+                            .vector_arroy
+                            .remap_types::<Bytes, Bytes>()
+                            .iter(&rtxn)?
+                            .enumerate()
+                        {
+                            let (key, value) = result?;
+
+                            // All of this just to avoid compiler optimizations 🤞
+                            // We must read all the bytes to make the pages hot in cache.
+                            // <https://doc.rust-lang.org/std/hint/fn.black_box.html>
+                            count += std::hint::black_box(key.iter().fold(0, |acc, _| acc + 1));
+                            count += std::hint::black_box(value.iter().fold(0, |acc, _| acc + 1));
+
+                            if i % 10_000 == 0 {
+                                let perc = (i as f64) / (total as f64) * 100.0;
+                                eprintln!("Visited {i}/{total} ({perc:.2}%) keys")
+                            }
+                        }
+                        eprintln!("Done hair drying a total of at least {count} bytes.");
+                    }
+                }
+            }
+        } else {
+            eprintln!("Found index {uid} but it's not the right index...");
+        }
+    }
 
     Ok(())
 }
