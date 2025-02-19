@@ -14,6 +14,7 @@ license.workspace = true
 actix-web = { version = "4.9.0", default-features = false }
 anyhow = "1.0.95"
 bumpalo = "3.16.0"
+bumparaw-collections = "0.1.4"
 convert_case = "0.6.0"
 csv = "1.3.1"
 deserr = { version = "0.6.3", features = ["actix-web"] }
@@ -24,12 +25,11 @@ flate2 = "1.0.35"
 fst = "0.4.7"
 memmap2 = "0.9.5"
 milli = { path = "../milli" }
-bumparaw-collections = "0.1.4"
 roaring = { version = "0.10.10", features = ["serde"] }
 rustc-hash = "2.1.0"
 serde = { version = "1.0.217", features = ["derive"] }
 serde-cs = "0.2.4"
-serde_json = "1.0.135"
+serde_json = { version = "1.0.135", features = ["preserve_order"] }
 tar = "0.4.43"
 tempfile = "3.15.0"
 thiserror = "2.0.9"

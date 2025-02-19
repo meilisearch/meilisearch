@@ -60,4 +60,5 @@ pub struct BatchStats {
     pub status: BTreeMap<Status, u32>,
     pub types: BTreeMap<Kind, u32>,
     pub index_uids: BTreeMap<String, u32>,
+    pub call_trace: serde_json::Map<String, serde_json::Value>,
 }
