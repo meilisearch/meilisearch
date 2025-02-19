@@ -261,7 +261,7 @@ impl V6IndexReader {
 
 fn patch_embedders(settings: &mut Settings<Unchecked>) {
     if let Setting::Set(embedders) = &mut settings.embedders {
-        for (_, settings) in embedders {
+        for settings in embedders.values_mut() {
             let Setting::Set(settings) = &mut settings.inner else {
                 continue;
             };
