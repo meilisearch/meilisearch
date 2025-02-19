@@ -32,6 +32,18 @@ Related product discussion:
   - [ ] Once everything is done, start Meilisearch with the swagger flag: `cargo run --features swagger`, open `http://localhost:7700/scalar` on your browser, and ensure everything works as expected.
   - For more info, refer to [this presentation](https://pitch.com/v/generating-the-openapi-file-jrn3nh).
 
+### Reminders when modifying a database
+
+- [ ] If modifying the API keys => Reach out to the team we've not planned anything for that yet
+- [ ] If modifying a milli index =>
+  - [ ] You can add the upgrade code to go from the previous to the latest version [here](https://github.com/meilisearch/meilisearch/blob/main/crates/milli/src/update/upgrade/mod.rs)
+  - [ ] Don't forget to return `true` to update the stats if needed
+  - [ ] Did the read read part requires a change? (gettings documents, search, facet search etc)
+        The index must **always** be able to read the old version of the database. Make everything with that in mind
+        and if the old and new database are not compatible you may need to match on the version of the database and keep both the old and new code. (The version of the index is stored in the main database under the `VERSION_KEY` key)
+- [ ] If modifying the task queue or the index-mapper =>
+  - [ ] Update 
+
 ### Reminders when modifying the Setting API
 
 <!--- Special steps to remind when adding a new index setting -->
