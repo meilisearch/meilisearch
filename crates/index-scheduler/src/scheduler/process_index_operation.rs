@@ -5,7 +5,7 @@ use meilisearch_types::milli::documents::PrimaryKey;
 use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::update::new::indexer::{self, UpdateByFunction};
 use meilisearch_types::milli::update::DocumentAdditionResult;
-use meilisearch_types::milli::{self, Filter, ThreadPoolNoAbortBuilder};
+use meilisearch_types::milli::{self, ChannelCongestion, Filter, ThreadPoolNoAbortBuilder};
 use meilisearch_types::settings::apply_settings_to_builder;
 use meilisearch_types::tasks::{Details, KindWithContent, Status, Task};
 use meilisearch_types::Index;
@@ -33,9 +33,8 @@ impl IndexScheduler {
         index: &'i Index,
         operation: IndexOperation,
         progress: Progress,
-    ) -> Result<Vec<Task>> {
+    ) -> Result<(Vec<Task>, Option<ChannelCongestion>)> {
         let indexer_alloc = Bump::new();
-
         let started_processing_at = std::time::Instant::now();
         let must_stop_processing = self.scheduler.must_stop_processing.clone();
 
@@ -60,7 +59,7 @@ impl IndexScheduler {
                     };
                 }
 
-                Ok(tasks)
+                Ok((tasks, None))
             }
             IndexOperation::DocumentOperation { index_uid, primary_key, operations, mut tasks } => {
                 progress.update_progress(DocumentOperationProgress::RetrievingConfig);
@@ -173,21 +172,24 @@ impl IndexScheduler {
                 }
 
                 progress.update_progress(DocumentOperationProgress::Indexing);
+                let mut congestion = None;
                 if tasks.iter().any(|res| res.error.is_none()) {
-                    indexer::index(
-                        index_wtxn,
-                        index,
-                        pool,
-                        indexer_config.grenad_parameters(),
-                        &db_fields_ids_map,
-                        new_fields_ids_map,
-                        primary_key,
-                        &document_changes,
-                        embedders,
-                        &|| must_stop_processing.get(),
-                        &progress,
-                    )
-                    .map_err(|e| Error::from_milli(e, Some(index_uid.clone())))?;
+                    congestion = Some(
+                        indexer::index(
+                            index_wtxn,
+                            index,
+                            pool,
+                            indexer_config.grenad_parameters(),
+                            &db_fields_ids_map,
+                            new_fields_ids_map,
+                            primary_key,
+                            &document_changes,
+                            embedders,
+                            &|| must_stop_processing.get(),
+                            &progress,
+                        )
+                        .map_err(|e| Error::from_milli(e, Some(index_uid.clone())))?,
+                    );
 
                     let addition = DocumentAdditionResult {
                         indexed_documents: candidates_count,
@@ -199,7 +201,7 @@ impl IndexScheduler {
                     tracing::info!(indexing_result = ?addition, processed_in = ?started_processing_at.elapsed(), "document indexing done");
                 }
 
-                Ok(tasks)
+                Ok((tasks, congestion))
             }
             IndexOperation::DocumentEdition { index_uid, mut task } => {
                 progress.update_progress(DocumentEditionProgress::RetrievingConfig);
@@ -247,7 +249,7 @@ impl IndexScheduler {
                         edited_documents: Some(0),
                     });
 
-                    return Ok(vec![task]);
+                    return Ok((vec![task], None));
                 }
 
                 let rtxn = index.read_txn()?;
@@ -262,6 +264,7 @@ impl IndexScheduler {
 
                 let result_count = Ok((candidates.len(), candidates.len())) as Result<_>;
 
+                let mut congestion = None;
                 if task.error.is_none() {
                     let local_pool;
                     let indexer_config = self.index_mapper.indexer_config();
@@ -292,20 +295,22 @@ impl IndexScheduler {
                     let embedders = self.embedders(index_uid.clone(), embedders)?;
 
                     progress.update_progress(DocumentEditionProgress::Indexing);
-                    indexer::index(
-                        index_wtxn,
-                        index,
-                        pool,
-                        indexer_config.grenad_parameters(),
-                        &db_fields_ids_map,
-                        new_fields_ids_map,
-                        None, // cannot change primary key in DocumentEdition
-                        &document_changes,
-                        embedders,
-                        &|| must_stop_processing.get(),
-                        &progress,
-                    )
-                    .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?;
+                    congestion = Some(
+                        indexer::index(
+                            index_wtxn,
+                            index,
+                            pool,
+                            indexer_config.grenad_parameters(),
+                            &db_fields_ids_map,
+                            new_fields_ids_map,
+                            None, // cannot change primary key in DocumentEdition
+                            &document_changes,
+                            embedders,
+                            &|| must_stop_processing.get(),
+                            &progress,
+                        )
+                        .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?,
+                    );
 
                     let addition = DocumentAdditionResult {
                         indexed_documents: candidates_count,
@@ -341,7 +346,7 @@ impl IndexScheduler {
                     }
                 }
 
-                Ok(vec![task])
+                Ok((vec![task], congestion))
             }
             IndexOperation::DocumentDeletion { mut tasks, index_uid } => {
                 progress.update_progress(DocumentDeletionProgress::RetrievingConfig);
@@ -408,7 +413,7 @@ impl IndexScheduler {
                 }
 
                 if to_delete.is_empty() {
-                    return Ok(tasks);
+                    return Ok((tasks, None));
                 }
 
                 let rtxn = index.read_txn()?;
@@ -422,6 +427,7 @@ impl IndexScheduler {
                     PrimaryKey::new_or_insert(primary_key, &mut new_fields_ids_map)
                         .map_err(|err| Error::from_milli(err.into(), Some(index_uid.clone())))?;
 
+                let mut congestion = None;
                 if !tasks.iter().all(|res| res.error.is_some()) {
                     let local_pool;
                     let indexer_config = self.index_mapper.indexer_config();
@@ -447,20 +453,22 @@ impl IndexScheduler {
                     let embedders = self.embedders(index_uid.clone(), embedders)?;
 
                     progress.update_progress(DocumentDeletionProgress::Indexing);
-                    indexer::index(
-                        index_wtxn,
-                        index,
-                        pool,
-                        indexer_config.grenad_parameters(),
-                        &db_fields_ids_map,
-                        new_fields_ids_map,
-                        None, // document deletion never changes primary key
-                        &document_changes,
-                        embedders,
-                        &|| must_stop_processing.get(),
-                        &progress,
-                    )
-                    .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?;
+                    congestion = Some(
+                        indexer::index(
+                            index_wtxn,
+                            index,
+                            pool,
+                            indexer_config.grenad_parameters(),
+                            &db_fields_ids_map,
+                            new_fields_ids_map,
+                            None, // document deletion never changes primary key
+                            &document_changes,
+                            embedders,
+                            &|| must_stop_processing.get(),
+                            &progress,
+                        )
+                        .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?,
+                    );
 
                     let addition = DocumentAdditionResult {
                         indexed_documents: candidates_count,
@@ -472,7 +480,7 @@ impl IndexScheduler {
                     tracing::info!(indexing_result = ?addition, processed_in = ?started_processing_at.elapsed(), "document indexing done");
                 }
 
-                Ok(tasks)
+                Ok((tasks, congestion))
             }
             IndexOperation::Settings { index_uid, settings, mut tasks } => {
                 progress.update_progress(SettingsProgress::RetrievingAndMergingTheSettings);
@@ -497,7 +505,7 @@ impl IndexScheduler {
                     )
                     .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?;
 
-                Ok(tasks)
+                Ok((tasks, None))
             }
             IndexOperation::DocumentClearAndSetting {
                 index_uid,
@@ -505,7 +513,7 @@ impl IndexScheduler {
                 settings,
                 settings_tasks,
             } => {
-                let mut import_tasks = self.apply_index_operation(
+                let (mut import_tasks, _congestion) = self.apply_index_operation(
                     index_wtxn,
                     index,
                     IndexOperation::DocumentClear {
@@ -515,7 +523,7 @@ impl IndexScheduler {
                     progress.clone(),
                 )?;
 
-                let settings_tasks = self.apply_index_operation(
+                let (settings_tasks, _congestion) = self.apply_index_operation(
                     index_wtxn,
                     index,
                     IndexOperation::Settings { index_uid, settings, tasks: settings_tasks },
@@ -524,7 +532,7 @@ impl IndexScheduler {
 
                 let mut tasks = settings_tasks;
                 tasks.append(&mut import_tasks);
-                Ok(tasks)
+                Ok((tasks, None))
             }
         }
     }

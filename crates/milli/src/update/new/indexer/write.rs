@@ -14,13 +14,13 @@ use crate::update::settings::InnerIndexSettings;
 use crate::vector::{ArroyWrapper, Embedder, EmbeddingConfigs, Embeddings};
 use crate::{Error, Index, InternalError, Result};
 
-pub(super) fn write_to_db(
+pub fn write_to_db(
     mut writer_receiver: WriterBbqueueReceiver<'_>,
     finished_extraction: &AtomicBool,
     index: &Index,
     wtxn: &mut RwTxn<'_>,
     arroy_writers: &HashMap<u8, (&str, &Embedder, ArroyWrapper, usize)>,
-) -> Result<()> {
+) -> Result<ChannelCongestion> {
     // Used by by the ArroySetVector to copy the embedding into an
     // aligned memory area, required by arroy to accept a new vector.
     let mut aligned_embedding = Vec::new();
@@ -75,21 +75,36 @@ pub(super) fn write_to_db(
 
     write_from_bbqueue(&mut writer_receiver, index, wtxn, arroy_writers, &mut aligned_embedding)?;
 
-    let direct_attempts = writer_receiver.sent_messages_attempts();
-    let blocking_attempts = writer_receiver.blocking_sent_messages_attempts();
-    let congestion_pct = (blocking_attempts as f64 / direct_attempts as f64) * 100.0;
-    tracing::debug!(
-        "Channel congestion metrics - \
-        Attempts: {direct_attempts}, \
-        Blocked attempts: {blocking_attempts} \
-        ({congestion_pct:.1}% congestion)"
-    );
+    Ok(ChannelCongestion {
+        attempts: writer_receiver.sent_messages_attempts(),
+        blocking_attempts: writer_receiver.blocking_sent_messages_attempts(),
+    })
+}
 
-    Ok(())
+/// Stats exposing the congestion of a channel.
+#[derive(Debug, Copy, Clone)]
+pub struct ChannelCongestion {
+    /// Number of attempts to send a message into the bbqueue buffer.
+    pub attempts: usize,
+    /// Number of blocking attempts which require a retry.
+    pub blocking_attempts: usize,
+}
+
+impl ChannelCongestion {
+    pub fn congestion_ratio(&self) -> f32 {
+        // tracing::debug!(
+        //     "Channel congestion metrics - \
+        //     Attempts: {direct_attempts}, \
+        //     Blocked attempts: {blocking_attempts} \
+        //     ({congestion_pct:.1}% congestion)"
+        // );
+
+        self.blocking_attempts as f32 / self.attempts as f32
+    }
 }
 
 #[tracing::instrument(level = "debug", skip_all, target = "indexing::vectors")]
-pub(super) fn build_vectors<MSP>(
+pub fn build_vectors<MSP>(
     index: &Index,
     wtxn: &mut RwTxn<'_>,
     index_embeddings: Vec<IndexEmbeddingConfig>,
@@ -113,7 +128,7 @@ where
     Ok(())
 }
 
-pub(super) fn update_index(
+pub fn update_index(
     index: &Index,
     wtxn: &mut RwTxn<'_>,
     new_fields_ids_map: FieldIdMapWithMetadata,

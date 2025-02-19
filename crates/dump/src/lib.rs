@@ -322,6 +322,7 @@ pub(crate) mod test {
                 types: maplit::btreemap! { Kind::DocumentAdditionOrUpdate => 1 },
                 index_uids: maplit::btreemap! { "doggo".to_string() => 1 },
                 call_trace: Default::default(),
+                write_channel_congestion: None,
             },
             enqueued_at: Some(BatchEnqueuedAt {
                 earliest: datetime!(2022-11-11 0:00 UTC),

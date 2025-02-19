@@ -215,14 +215,16 @@ impl IndexScheduler {
         let mut stop_scheduler_forever = false;
         let mut wtxn = self.env.write_txn().map_err(Error::HeedTransaction)?;
         let mut canceled = RoaringBitmap::new();
+        let mut congestion = None;
 
         match res {
-            Ok(tasks) => {
+            Ok((tasks, cong)) => {
                 #[cfg(test)]
                 self.breakpoint(crate::test_utils::Breakpoint::ProcessBatchSucceeded);
 
                 let (task_progress, task_progress_obj) = AtomicTaskStep::new(tasks.len() as u32);
                 progress.update_progress(task_progress_obj);
+                congestion = cong;
                 let mut success = 0;
                 let mut failure = 0;
                 let mut canceled_by = None;
@@ -339,9 +341,17 @@ impl IndexScheduler {
 
         // We must re-add the canceled task so they're part of the same batch.
         ids |= canceled;
-        let durations = progress.accumulated_durations();
+
         processing_batch.stats.call_trace =
-            durations.into_iter().map(|(k, v)| (k, v.into())).collect();
+            progress.accumulated_durations().into_iter().map(|(k, v)| (k, v.into())).collect();
+        processing_batch.stats.write_channel_congestion = congestion.map(|congestion| {
+            let mut congestion_info = serde_json::Map::new();
+            congestion_info.insert("attempts".into(), congestion.attempts.into());
+            congestion_info.insert("blocking_attempts".into(), congestion.blocking_attempts.into());
+            congestion_info.insert("blocking_ratio".into(), congestion.congestion_ratio().into());
+            congestion_info
+        });
+
         self.queue.write_batch(&mut wtxn, processing_batch, &ids)?;
 
         #[cfg(test)]

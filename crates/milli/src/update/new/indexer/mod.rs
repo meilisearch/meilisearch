@@ -10,6 +10,7 @@ use hashbrown::HashMap;
 use heed::RwTxn;
 pub use partial_dump::PartialDump;
 pub use update_by_function::UpdateByFunction;
+pub use write::ChannelCongestion;
 use write::{build_vectors, update_index, write_to_db};
 
 use super::channel::*;
@@ -53,7 +54,7 @@ pub fn index<'pl, 'indexer, 'index, DC, MSP>(
     embedders: EmbeddingConfigs,
     must_stop_processing: &'indexer MSP,
     progress: &'indexer Progress,
-) -> Result<()>
+) -> Result<ChannelCongestion>
 where
     DC: DocumentChanges<'pl>,
     MSP: Fn() -> bool + Sync,
@@ -130,7 +131,7 @@ where
     let mut field_distribution = index.field_distribution(wtxn)?;
     let mut document_ids = index.documents_ids(wtxn)?;
 
-    thread::scope(|s| -> Result<()> {
+    let congestion = thread::scope(|s| -> Result<ChannelCongestion> {
         let indexer_span = tracing::Span::current();
         let embedders = &embedders;
         let finished_extraction = &finished_extraction;
@@ -182,7 +183,8 @@ where
 
         let mut arroy_writers = arroy_writers?;
 
-        write_to_db(writer_receiver, finished_extraction, index, wtxn, &arroy_writers)?;
+        let congestion =
+            write_to_db(writer_receiver, finished_extraction, index, wtxn, &arroy_writers)?;
 
         indexing_context.progress.update_progress(IndexingStep::WaitingForExtractors);
 
@@ -210,7 +212,7 @@ where
 
         indexing_context.progress.update_progress(IndexingStep::Finalizing);
 
-        Ok(()) as Result<_>
+        Ok(congestion) as Result<_>
     })?;
 
     // required to into_inner the new_fields_ids_map
@@ -227,5 +229,5 @@ where
         document_ids,
     )?;
 
-    Ok(())
+    Ok(congestion)
 }

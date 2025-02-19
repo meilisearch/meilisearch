@@ -291,7 +291,7 @@ where
             &indexing_context.must_stop_processing,
         )?;
     }
-    indexing_context.progress.update_progress(IndexingStep::WritingToDatabase);
+    indexing_context.progress.update_progress(IndexingStep::TailWritingToDatabase);
     finished_extraction.store(true, std::sync::atomic::Ordering::Relaxed);
 
     Result::Ok((facet_field_ids_delta, index_embeddings))
