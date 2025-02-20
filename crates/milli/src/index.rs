@@ -896,7 +896,7 @@ impl Index {
         let mut fields_ids = HashSet::new();
         for (field_id, field_name) in fields_ids_map.iter() {
             if match_pattern_by_features(field_name, &filterable_fields, &|features| {
-                features.is_filterable_order()
+                features.is_filterable_comparison()
             }) == PatternMatch::Match
             {
                 fields_ids.insert(field_id);

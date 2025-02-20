@@ -4,12 +4,21 @@ use utoipa::ToSchema;
 
 use crate::is_faceted_by;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Deserr, ToSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[repr(transparent)]
 #[serde(transparent)]
 pub struct AttributePatterns {
     #[schema(value_type = Vec<String>)]
     pub patterns: Vec<String>,
+}
+
+impl<E: deserr::DeserializeError> Deserr<E> for AttributePatterns {
+    fn deserialize_from_value<V: deserr::IntoValue>(
+        value: deserr::Value<V>,
+        location: deserr::ValuePointerRef,
+    ) -> Result<Self, E> {
+        Vec::<String>::deserialize_from_value(value, location).map(|patterns| Self { patterns })
+    }
 }
 
 impl From<Vec<String>> for AttributePatterns {

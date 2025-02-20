@@ -5,7 +5,6 @@ use std::ops::DerefMut as _;
 
 use bumpalo::collections::vec::Vec as BumpVec;
 use bumpalo::Bump;
-use heed::RoTxn;
 
 use super::match_searchable_field;
 use super::tokenize_document::{tokenizer_builder, DocumentTokenizer};
@@ -18,7 +17,7 @@ use crate::update::new::ref_cell_ext::RefCellExt as _;
 use crate::update::new::steps::IndexingStep;
 use crate::update::new::thread_local::{FullySend, MostlySend, ThreadLocal};
 use crate::update::new::DocumentChange;
-use crate::{bucketed_position, DocumentId, FieldId, Index, Result, MAX_POSITION_PER_ATTRIBUTE};
+use crate::{bucketed_position, DocumentId, FieldId, Result, MAX_POSITION_PER_ATTRIBUTE};
 
 const MAX_COUNTED_WORDS: usize = 30;
 
@@ -406,16 +405,5 @@ impl WordDocidsExtractors {
         let buffer_size = size_of::<FieldId>();
         let mut buffer = BumpVec::with_capacity_in(buffer_size, &context.doc_alloc);
         cached_sorter.flush_fid_word_count(&mut buffer)
-    }
-
-    fn attributes_to_extract<'a>(
-        rtxn: &'a RoTxn,
-        index: &'a Index,
-    ) -> Result<Option<Vec<&'a str>>> {
-        index.user_defined_searchable_fields(rtxn).map_err(Into::into)
-    }
-
-    fn attributes_to_skip<'a>(_rtxn: &'a RoTxn, _index: &'a Index) -> Result<Vec<&'a str>> {
-        Ok(Vec::new())
     }
 }

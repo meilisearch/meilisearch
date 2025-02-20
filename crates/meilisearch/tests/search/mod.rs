@@ -4,6 +4,7 @@
 mod distinct;
 mod errors;
 mod facet_search;
+mod filters;
 mod formatted;
 mod geo;
 mod hybrid;
@@ -16,12 +17,10 @@ mod restrict_searchable;
 mod search_queue;
 
 use meili_snap::{json_string, snapshot};
-use meilisearch::Opt;
-use tempfile::TempDir;
 
 use crate::common::{
-    default_settings, shared_index_with_documents, shared_index_with_nested_documents, Server,
-    DOCUMENTS, FRUITS_DOCUMENTS, NESTED_DOCUMENTS, SCORE_DOCUMENTS, VECTOR_DOCUMENTS,
+    shared_index_with_documents, shared_index_with_nested_documents, Server, DOCUMENTS,
+    FRUITS_DOCUMENTS, NESTED_DOCUMENTS, SCORE_DOCUMENTS, VECTOR_DOCUMENTS,
 };
 use crate::json;
 
@@ -319,118 +318,6 @@ async fn search_multiple_params() {
             },
         )
         .await;
-}
-
-#[actix_rt::test]
-async fn search_with_filter_string_notation() {
-    let server = Server::new().await;
-    let index = server.index("test");
-
-    let (_, code) = index.update_settings(json!({"filterableAttributes": ["title"]})).await;
-    meili_snap::snapshot!(code, @"202 Accepted");
-
-    let documents = DOCUMENTS.clone();
-    let (task, code) = index.add_documents(documents, None).await;
-    meili_snap::snapshot!(code, @"202 Accepted");
-    let res = index.wait_task(task.uid()).await;
-    meili_snap::snapshot!(res["status"], @r###""succeeded""###);
-
-    index
-        .search(
-            json!({
-                "filter": "title = Gläss"
-            }),
-            |response, code| {
-                assert_eq!(code, 200, "{}", response);
-                assert_eq!(response["hits"].as_array().unwrap().len(), 1);
-            },
-        )
-        .await;
-
-    let index = server.index("nested");
-
-    let (_, code) =
-        index.update_settings(json!({"filterableAttributes": ["cattos", "doggos.age"]})).await;
-    meili_snap::snapshot!(code, @"202 Accepted");
-
-    let documents = NESTED_DOCUMENTS.clone();
-    let (task, code) = index.add_documents(documents, None).await;
-    meili_snap::snapshot!(code, @"202 Accepted");
-    let res = index.wait_task(task.uid()).await;
-    meili_snap::snapshot!(res["status"], @r###""succeeded""###);
-
-    index
-        .search(
-            json!({
-                "filter": "cattos = pésti"
-            }),
-            |response, code| {
-                assert_eq!(code, 200, "{}", response);
-                assert_eq!(response["hits"].as_array().unwrap().len(), 1);
-                assert_eq!(response["hits"][0]["id"], json!(852));
-            },
-        )
-        .await;
-
-    index
-        .search(
-            json!({
-                "filter": "doggos.age > 5"
-            }),
-            |response, code| {
-                assert_eq!(code, 200, "{}", response);
-                assert_eq!(response["hits"].as_array().unwrap().len(), 2);
-                assert_eq!(response["hits"][0]["id"], json!(654));
-                assert_eq!(response["hits"][1]["id"], json!(951));
-            },
-        )
-        .await;
-}
-
-#[actix_rt::test]
-async fn search_with_filter_array_notation() {
-    let index = shared_index_with_documents().await;
-    let (response, code) = index
-        .search_post(json!({
-            "filter": ["title = Gläss"]
-        }))
-        .await;
-    assert_eq!(code, 200, "{}", response);
-    assert_eq!(response["hits"].as_array().unwrap().len(), 1);
-
-    let (response, code) = index
-        .search_post(json!({
-            "filter": [["title = Gläss", "title = \"Shazam!\"", "title = \"Escape Room\""]]
-        }))
-        .await;
-    assert_eq!(code, 200, "{}", response);
-    assert_eq!(response["hits"].as_array().unwrap().len(), 3);
-}
-
-#[actix_rt::test]
-async fn search_with_contains_filter() {
-    let temp = TempDir::new().unwrap();
-    let server = Server::new_with_options(Opt {
-        experimental_contains_filter: true,
-        ..default_settings(temp.path())
-    })
-    .await
-    .unwrap();
-    let index = server.index("movies");
-
-    index.update_settings(json!({"filterableAttributes": ["title"]})).await;
-
-    let documents = DOCUMENTS.clone();
-    let (request, _code) = index.add_documents(documents, None).await;
-    index.wait_task(request.uid()).await.succeeded();
-
-    let (response, code) = index
-        .search_post(json!({
-            "filter": "title CONTAINS cap"
-        }))
-        .await;
-    assert_eq!(code, 200, "{}", response);
-    assert_eq!(response["hits"].as_array().unwrap().len(), 2);
 }
 
 #[actix_rt::test]

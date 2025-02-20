@@ -33,10 +33,8 @@ where
 {
     let index = indexing_context.index;
     indexing_context.progress.update_progress(IndexingStep::PostProcessingFacets);
-    if index.facet_search(wtxn)? {
-        compute_facet_search_database(index, wtxn, global_fields_ids_map)?;
-    }
-    compute_facet_level_database(index, wtxn, facet_field_ids_delta)?;
+    compute_facet_level_database(index, wtxn, facet_field_ids_delta, &global_fields_ids_map)?;
+    compute_facet_search_database(index, wtxn, global_fields_ids_map)?;
     indexing_context.progress.update_progress(IndexingStep::PostProcessingWords);
     if let Some(prefix_delta) = compute_word_fst(index, wtxn)? {
         compute_prefix_database(index, wtxn, prefix_delta, indexing_context.grenad_parameters)?;
@@ -116,6 +114,12 @@ fn compute_facet_search_database(
     global_fields_ids_map: GlobalFieldsIdsMap,
 ) -> Result<()> {
     let rtxn = index.read_txn()?;
+
+    // if the facet search is not enabled, we can skip the rest of the function
+    if !index.facet_search(wtxn)? {
+        return Ok(());
+    }
+
     let localized_attributes_rules = index.localized_attributes_rules(&rtxn)?;
     let filterable_attributes_rules = index.filterable_attributes_rules(&rtxn)?;
     let mut facet_search_builder = FacetSearchBuilder::new(
@@ -166,11 +170,16 @@ fn compute_facet_level_database(
     index: &Index,
     wtxn: &mut RwTxn,
     mut facet_field_ids_delta: FacetFieldIdsDelta,
+    global_fields_ids_map: &GlobalFieldsIdsMap,
 ) -> Result<()> {
-    let facet_leveled_field_ids = index.facet_leveled_field_ids(&*wtxn)?;
+    let rtxn = index.read_txn()?;
+    let filterable_attributes_rules = index.filterable_attributes_rules(&rtxn)?;
     for (fid, delta) in facet_field_ids_delta.consume_facet_string_delta() {
         // skip field ids that should not be facet leveled
-        if !facet_leveled_field_ids.contains(&fid) {
+        let Some(metadata) = global_fields_ids_map.metadata(fid) else {
+            continue;
+        };
+        if !metadata.require_facet_level_database(&filterable_attributes_rules) {
             continue;
         }
 

@@ -172,6 +172,12 @@ impl Metadata {
 
         false
     }
+
+    pub fn require_facet_level_database(&self, rules: &[FilterableAttributesRule]) -> bool {
+        let features = self.filterable_attributes_features(&rules);
+
+        self.is_sortable() || self.is_asc_desc() || features.is_filterable_comparison()
+    }
 }
 
 #[derive(Debug, Clone)]

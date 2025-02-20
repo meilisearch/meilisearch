@@ -365,8 +365,6 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
 mod tests {
     use std::iter::once;
 
-    use big_s::S;
-    use maplit::hashset;
     use roaring::RoaringBitmap;
 
     use crate::documents::mmap_from_objects;
@@ -474,9 +472,8 @@ mod tests {
         index
             .update_settings(|settings| {
                 settings.set_primary_key("id".to_owned());
-                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
-                    "id".to_string(),
-                )]);
+                settings
+                    .set_filterable_fields(vec![FilterableAttributesRule::Field("id".to_string())]);
             })
             .unwrap();
 

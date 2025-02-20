@@ -54,6 +54,7 @@ pub use {charabia as tokenizer, heed, rhai};
 
 pub use self::asc_desc::{AscDesc, AscDescError, Member, SortError};
 pub use self::attribute_patterns::AttributePatterns;
+pub use self::attribute_patterns::PatternMatch;
 pub use self::criterion::{default_criteria, Criterion, CriterionError};
 pub use self::error::{
     Error, FieldIdMapMissingEntry, InternalError, SerializationError, UserError,
@@ -72,7 +73,6 @@ pub use self::heed_codec::{
 };
 pub use self::index::Index;
 pub use self::localized_attributes_rules::LocalizedAttributesRule;
-use self::localized_attributes_rules::LocalizedFieldIds;
 pub use self::search::facet::{FacetValueHit, SearchForFacetValues};
 pub use self::search::similar::Similar;
 pub use self::search::{

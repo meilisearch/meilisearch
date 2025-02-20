@@ -6,7 +6,7 @@ use milli::progress::Progress;
 use milli::update::new::indexer;
 use milli::update::{IndexDocumentsMethod, IndexerConfig, Settings};
 use milli::vector::EmbeddingConfigs;
-use milli::{FacetDistribution, FilterableAttributesSettings, Index, Object, OrderBy};
+use milli::{FacetDistribution, FilterableAttributesRule, Index, Object, OrderBy};
 use serde_json::{from_value, json};
 
 #[test]
@@ -21,8 +21,8 @@ fn test_facet_distribution_with_no_facet_values() {
     let mut builder = Settings::new(&mut wtxn, &index, &config);
 
     builder.set_filterable_fields(vec![
-        FilterableAttributesSettings::Field(S("genres")),
-        FilterableAttributesSettings::Field(S("tags")),
+        FilterableAttributesRule::Field(S("genres")),
+        FilterableAttributesRule::Field(S("tags")),
     ]);
     builder.execute(|_| (), || false).unwrap();
     wtxn.commit().unwrap();

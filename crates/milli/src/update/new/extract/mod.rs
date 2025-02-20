@@ -5,7 +5,6 @@ mod geo;
 mod searchable;
 mod vectors;
 
-use bumpalo::Bump;
 pub use cache::{
     merge_caches_sorted, transpose_and_freeze_caches, BalancedCaches, DelAddRoaringBitmap,
 };
@@ -14,22 +13,6 @@ pub use faceted::*;
 pub use geo::*;
 pub use searchable::*;
 pub use vectors::EmbeddingExtractor;
-
-use super::indexer::document_changes::{DocumentChanges, IndexingContext};
-use super::steps::IndexingStep;
-use super::thread_local::{FullySend, ThreadLocal};
-use crate::Result;
-
-pub trait DocidsExtractor {
-    fn run_extraction<'pl, 'fid, 'indexer, 'index, 'extractor, DC: DocumentChanges<'pl>, MSP>(
-        document_changes: &DC,
-        indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP>,
-        extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
-        step: IndexingStep,
-    ) -> Result<Vec<BalancedCaches<'extractor>>>
-    where
-        MSP: Fn() -> bool + Sync;
-}
 
 /// TODO move in permissive json pointer
 pub mod perm_json_p {

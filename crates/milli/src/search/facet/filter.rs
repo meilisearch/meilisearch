@@ -273,22 +273,21 @@ impl<'a> Filter<'a> {
             | Condition::LowerThan(_)
             | Condition::LowerThanOrEqual(_)
             | Condition::Between { .. }
-                if !features.is_filterable_order() =>
+                if !features.is_filterable_comparison() =>
             {
-                /// TODO produce an dedicated error for this
-                todo!("filtering on non-ordered fields is not supported, return an error")
+                return Err(generate_filter_error(rtxn, index, field_id, operator, features));
             }
             Condition::Empty if !features.is_filterable_empty() => {
-                /// TODO produce an dedicated error for this
-                todo!("filtering on non-empty fields is not supported, return an error")
+                return Err(generate_filter_error(rtxn, index, field_id, operator, features));
             }
             Condition::Null if !features.is_filterable_null() => {
-                /// TODO produce an dedicated error for this
-                todo!("filtering on non-null fields is not supported, return an error")
+                return Err(generate_filter_error(rtxn, index, field_id, operator, features));
             }
             Condition::Exists if !features.is_filterable_exists() => {
-                /// TODO produce an dedicated error for this
-                todo!("filtering on non-exists fields is not supported, return an error")
+                return Err(generate_filter_error(rtxn, index, field_id, operator, features));
+            }
+            Condition::Equal(_) | Condition::NotEqual(_) if !features.is_filterable_equality() => {
+                return Err(generate_filter_error(rtxn, index, field_id, operator, features));
             }
             Condition::GreaterThan(val) => {
                 (Excluded(val.parse_finite_float()?), Included(f64::MAX))
@@ -734,6 +733,26 @@ impl<'a> Filter<'a> {
                 }
             }
         }
+    }
+}
+
+fn generate_filter_error(
+    rtxn: &heed::RoTxn<'_>,
+    index: &Index,
+    field_id: FieldId,
+    operator: &Condition<'_>,
+    features: &FilterableAttributesFeatures,
+) -> Error {
+    match index.fields_ids_map(rtxn) {
+        Ok(fields_ids_map) => {
+            let field = fields_ids_map.name(field_id).unwrap_or_default();
+            Error::UserError(UserError::FilterOperatorNotAllowed {
+                field: field.to_string(),
+                allowed_operators: features.allowed_filter_operators(),
+                operator: operator.operator().to_string(),
+            })
+        }
+        Err(e) => e.into(),
     }
 }
 

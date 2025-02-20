@@ -1,11 +1,11 @@
 use std::time::Instant;
 
 use big_s::S;
-use maplit::btreeset;
 use meili_snap::snapshot;
 use meilisearch_types::milli::obkv_to_json;
 use meilisearch_types::milli::update::IndexDocumentsMethod::*;
 use meilisearch_types::milli::update::Setting;
+use meilisearch_types::milli::FilterableAttributesRule;
 use meilisearch_types::tasks::KindWithContent;
 
 use crate::insta_snapshot::snapshot_index_scheduler;
@@ -127,7 +127,8 @@ fn fail_in_process_batch_for_document_deletion() {
 
     use meilisearch_types::settings::{Settings, Unchecked};
     let mut new_settings: Box<Settings<Unchecked>> = Box::default();
-    new_settings.filterable_attributes = Setting::Set(btreeset!(S("catto")));
+    new_settings.filterable_attributes =
+        Setting::Set(vec![FilterableAttributesRule::Field(S("catto"))]);
 
     index_scheduler
         .register(
