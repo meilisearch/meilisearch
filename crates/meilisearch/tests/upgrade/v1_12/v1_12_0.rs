@@ -159,7 +159,7 @@ async fn check_the_index_scheduler(server: &Server) {
     let (tasks, _) = server.tasks_filter("limit=1000").await;
     snapshot!(json_string!(tasks, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]" }), name: "the_whole_task_queue_once_everything_has_been_processed");
     let (batches, _) = server.batches_filter("limit=1000").await;
-    snapshot!(json_string!(batches, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]" }), name: "the_whole_batch_queue_once_everything_has_been_processed");
+    snapshot!(json_string!(batches, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]", ".results[0].stats.callTrace" => "[callTrace]", ".results[0].stats.writeChannelCongestion" => "[writeChannelCongestion]" }), name: "the_whole_batch_queue_once_everything_has_been_processed");
 
     // Tests all the tasks query parameters
     let (tasks, _) = server.tasks_filter("uids=10").await;
@@ -186,32 +186,32 @@ async fn check_the_index_scheduler(server: &Server) {
 
     // Tests all the batches query parameters
     let (batches, _) = server.batches_filter("uids=10").await;
-    snapshot!(json_string!(batches, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]" }), name: "batches_filter_uids_equal_10");
+    snapshot!(json_string!(batches, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]", ".results[0].stats.callTrace" => "[callTrace]", ".results[0].stats.writeChannelCongestion" => "[writeChannelCongestion]" }), name: "batches_filter_uids_equal_10");
     let (batches, _) = server.batches_filter("batchUids=10").await;
-    snapshot!(json_string!(batches, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]" }), name: "batches_filter_batchUids_equal_10");
+    snapshot!(json_string!(batches, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]", ".results[0].stats.callTrace" => "[callTrace]", ".results[0].stats.writeChannelCongestion" => "[writeChannelCongestion]" }), name: "batches_filter_batchUids_equal_10");
     let (batches, _) = server.batches_filter("statuses=canceled").await;
-    snapshot!(json_string!(batches, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]" }), name: "batches_filter_statuses_equal_canceled");
+    snapshot!(json_string!(batches, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]", ".results[0].stats.callTrace" => "[callTrace]", ".results[0].stats.writeChannelCongestion" => "[writeChannelCongestion]" }), name: "batches_filter_statuses_equal_canceled");
     // types has already been tested above to retrieve the upgrade database
     let (batches, _) = server.batches_filter("canceledBy=19").await;
-    snapshot!(json_string!(batches, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]" }), name: "batches_filter_canceledBy_equal_19");
+    snapshot!(json_string!(batches, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]", ".results[0].stats.callTrace" => "[callTrace]", ".results[0].stats.writeChannelCongestion" => "[writeChannelCongestion]" }), name: "batches_filter_canceledBy_equal_19");
     let (batches, _) = server.batches_filter("beforeEnqueuedAt=2025-01-16T16:47:41Z").await;
-    snapshot!(json_string!(batches, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]" }), name: "batches_filter_beforeEnqueuedAt_equal_2025-01-16T16_47_41");
+    snapshot!(json_string!(batches, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]", ".results[0].stats.callTrace" => "[callTrace]", ".results[0].stats.writeChannelCongestion" => "[writeChannelCongestion]" }), name: "batches_filter_beforeEnqueuedAt_equal_2025-01-16T16_47_41");
     let (batches, _) = server.batches_filter("afterEnqueuedAt=2025-01-16T16:47:41Z").await;
-    snapshot!(json_string!(batches, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]" }), name: "batches_filter_afterEnqueuedAt_equal_2025-01-16T16_47_41");
+    snapshot!(json_string!(batches, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]", ".results[0].stats.callTrace" => "[callTrace]", ".results[0].stats.writeChannelCongestion" => "[writeChannelCongestion]" }), name: "batches_filter_afterEnqueuedAt_equal_2025-01-16T16_47_41");
     let (batches, _) = server.batches_filter("beforeStartedAt=2025-01-16T16:47:41Z").await;
-    snapshot!(json_string!(batches, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]" }), name: "batches_filter_beforeStartedAt_equal_2025-01-16T16_47_41");
+    snapshot!(json_string!(batches, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]", ".results[0].stats.callTrace" => "[callTrace]", ".results[0].stats.writeChannelCongestion" => "[writeChannelCongestion]" }), name: "batches_filter_beforeStartedAt_equal_2025-01-16T16_47_41");
     let (batches, _) = server.batches_filter("afterStartedAt=2025-01-16T16:47:41Z").await;
-    snapshot!(json_string!(batches, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]" }), name: "batches_filter_afterStartedAt_equal_2025-01-16T16_47_41");
+    snapshot!(json_string!(batches, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]", ".results[0].stats.callTrace" => "[callTrace]", ".results[0].stats.writeChannelCongestion" => "[writeChannelCongestion]" }), name: "batches_filter_afterStartedAt_equal_2025-01-16T16_47_41");
     let (batches, _) = server.batches_filter("beforeFinishedAt=2025-01-16T16:47:41Z").await;
-    snapshot!(json_string!(batches, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]" }), name: "batches_filter_beforeFinishedAt_equal_2025-01-16T16_47_41");
+    snapshot!(json_string!(batches, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]", ".results[0].stats.callTrace" => "[callTrace]", ".results[0].stats.writeChannelCongestion" => "[writeChannelCongestion]" }), name: "batches_filter_beforeFinishedAt_equal_2025-01-16T16_47_41");
     let (batches, _) = server.batches_filter("afterFinishedAt=2025-01-16T16:47:41Z").await;
-    snapshot!(json_string!(batches, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]" }), name: "batches_filter_afterFinishedAt_equal_2025-01-16T16_47_41");
+    snapshot!(json_string!(batches, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]", ".results[0].stats.callTrace" => "[callTrace]", ".results[0].stats.writeChannelCongestion" => "[writeChannelCongestion]" }), name: "batches_filter_afterFinishedAt_equal_2025-01-16T16_47_41");
 
     let (stats, _) = server.stats().await;
     snapshot!(stats, @r###"
     {
       "databaseSize": 438272,
-      "usedDatabaseSize": 196608,
+      "usedDatabaseSize": 200704,
       "lastUpdate": "2025-01-23T11:36:22.634859166Z",
       "indexes": {
         "kefir": {

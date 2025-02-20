@@ -283,7 +283,7 @@ async fn test_summarized_document_addition_or_update() {
             ".stats.callTrace" => "[callTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
-        @r#"
+        @r###"
     {
       "uid": 0,
       "progress": null,
@@ -301,13 +301,15 @@ async fn test_summarized_document_addition_or_update() {
         },
         "indexUids": {
           "test": 1
-        }
+        },
+        "callTrace": "[callTrace]",
+        "writeChannelCongestion": "[writeChannelCongestion]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "#);
+    "###);
 
     let (task, _status_code) =
         index.add_documents(json!({ "id": 42, "content": "doggos & fluff" }), Some("id")).await;
@@ -322,7 +324,7 @@ async fn test_summarized_document_addition_or_update() {
             ".stats.callTrace" => "[callTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
-        @r#"
+        @r###"
     {
       "uid": 1,
       "progress": null,
@@ -340,13 +342,15 @@ async fn test_summarized_document_addition_or_update() {
         },
         "indexUids": {
           "test": 1
-        }
+        },
+        "callTrace": "[callTrace]",
+        "writeChannelCongestion": "[writeChannelCongestion]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "#);
+    "###);
 }
 
 #[actix_web::test]
@@ -365,7 +369,7 @@ async fn test_summarized_delete_documents_by_batch() {
             ".stats.callTrace" => "[callTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
-        @r#"
+        @r###"
     {
       "uid": 0,
       "progress": null,
@@ -383,13 +387,14 @@ async fn test_summarized_delete_documents_by_batch() {
         },
         "indexUids": {
           "test": 1
-        }
+        },
+        "callTrace": "[callTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "#);
+    "###);
 
     index.create(None).await;
     let (task, _status_code) = index.delete_batch(vec![42]).await;
@@ -404,7 +409,7 @@ async fn test_summarized_delete_documents_by_batch() {
             ".stats.callTrace" => "[callTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
-        @r#"
+        @r###"
     {
       "uid": 2,
       "progress": null,
@@ -422,13 +427,14 @@ async fn test_summarized_delete_documents_by_batch() {
         },
         "indexUids": {
           "test": 1
-        }
+        },
+        "callTrace": "[callTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "#);
+    "###);
 }
 
 #[actix_web::test]
@@ -449,7 +455,7 @@ async fn test_summarized_delete_documents_by_filter() {
             ".stats.callTrace" => "[callTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
-        @r#"
+        @r###"
     {
       "uid": 0,
       "progress": null,
@@ -468,13 +474,14 @@ async fn test_summarized_delete_documents_by_filter() {
         },
         "indexUids": {
           "test": 1
-        }
+        },
+        "callTrace": "[callTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "#);
+    "###);
 
     index.create(None).await;
     let (task, _status_code) =
@@ -490,7 +497,7 @@ async fn test_summarized_delete_documents_by_filter() {
             ".stats.callTrace" => "[callTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
-        @r#"
+        @r###"
     {
       "uid": 2,
       "progress": null,
@@ -509,13 +516,14 @@ async fn test_summarized_delete_documents_by_filter() {
         },
         "indexUids": {
           "test": 1
-        }
+        },
+        "callTrace": "[callTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "#);
+    "###);
 
     index.update_settings(json!({ "filterableAttributes": ["doggo"] })).await;
     let (task, _status_code) =
@@ -550,7 +558,8 @@ async fn test_summarized_delete_documents_by_filter() {
         },
         "indexUids": {
           "test": 1
-        }
+        },
+        "callTrace": "[callTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -566,7 +575,16 @@ async fn test_summarized_delete_document_by_id() {
     let (task, _status_code) = index.delete_document(1).await;
     index.wait_task(task.uid()).await.failed();
     let (batch, _) = index.get_batch(0).await;
-    snapshot!(batch,
+    assert_json_snapshot!(batch,
+        {
+            ".uid" => "[uid]",
+            ".duration" => "[duration]",
+            ".enqueuedAt" => "[date]",
+            ".startedAt" => "[date]",
+            ".finishedAt" => "[date]",
+            ".stats.callTrace" => "[callTrace]",
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+        },
         @r#"
     {
       "uid": "[uid]",
@@ -585,7 +603,8 @@ async fn test_summarized_delete_document_by_id() {
         },
         "indexUids": {
           "test": 1
-        }
+        },
+        "callTrace": "[callTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -624,7 +643,8 @@ async fn test_summarized_delete_document_by_id() {
         },
         "indexUids": {
           "test": 1
-        }
+        },
+        "callTrace": "[callTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -661,7 +681,7 @@ async fn test_summarized_settings_update() {
             ".stats.callTrace" => "[callTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
-        @r#"
+        @r###"
     {
       "uid": 0,
       "progress": null,
@@ -688,13 +708,14 @@ async fn test_summarized_settings_update() {
         },
         "indexUids": {
           "test": 1
-        }
+        },
+        "callTrace": "[callTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "#);
+    "###);
 }
 
 #[actix_web::test]
@@ -713,7 +734,7 @@ async fn test_summarized_index_creation() {
             ".stats.callTrace" => "[callTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
-        @r#"
+        @r###"
     {
       "uid": 0,
       "progress": null,
@@ -728,13 +749,14 @@ async fn test_summarized_index_creation() {
         },
         "indexUids": {
           "test": 1
-        }
+        },
+        "callTrace": "[callTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "#);
+    "###);
 
     let (task, _status_code) = index.create(Some("doggos")).await;
     index.wait_task(task.uid()).await.failed();
@@ -748,7 +770,7 @@ async fn test_summarized_index_creation() {
             ".stats.callTrace" => "[callTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
-        @r#"
+        @r###"
     {
       "uid": 1,
       "progress": null,
@@ -765,13 +787,14 @@ async fn test_summarized_index_creation() {
         },
         "indexUids": {
           "test": 1
-        }
+        },
+        "callTrace": "[callTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "#);
+    "###);
 }
 
 #[actix_web::test]
@@ -900,7 +923,7 @@ async fn test_summarized_index_update() {
             ".stats.callTrace" => "[callTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
-        @r#"
+        @r###"
     {
       "uid": 0,
       "progress": null,
@@ -915,13 +938,14 @@ async fn test_summarized_index_update() {
         },
         "indexUids": {
           "test": 1
-        }
+        },
+        "callTrace": "[callTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "#);
+    "###);
 
     let (task, _status_code) = index.update(Some("bones")).await;
     index.wait_task(task.uid()).await.failed();
@@ -935,7 +959,7 @@ async fn test_summarized_index_update() {
             ".stats.callTrace" => "[callTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
-        @r#"
+        @r###"
     {
       "uid": 1,
       "progress": null,
@@ -952,13 +976,14 @@ async fn test_summarized_index_update() {
         },
         "indexUids": {
           "test": 1
-        }
+        },
+        "callTrace": "[callTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "#);
+    "###);
 
     // And run the same two tests once the index do exists.
     index.create(None).await;
@@ -990,7 +1015,8 @@ async fn test_summarized_index_update() {
         },
         "indexUids": {
           "test": 1
-        }
+        },
+        "callTrace": "[callTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -1010,7 +1036,7 @@ async fn test_summarized_index_update() {
             ".stats.callTrace" => "[callTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
-        @r#"
+        @r###"
     {
       "uid": 4,
       "progress": null,
@@ -1027,13 +1053,14 @@ async fn test_summarized_index_update() {
         },
         "indexUids": {
           "test": 1
-        }
+        },
+        "callTrace": "[callTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "#);
+    "###);
 }
 
 #[actix_web::test]
@@ -1055,7 +1082,7 @@ async fn test_summarized_index_swap() {
             ".stats.callTrace" => "[callTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
-        @r#"
+        @r###"
     {
       "uid": 0,
       "progress": null,
@@ -1077,13 +1104,14 @@ async fn test_summarized_index_swap() {
         "types": {
           "indexSwap": 1
         },
-        "indexUids": {}
+        "indexUids": {},
+        "callTrace": "[callTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "#);
+    "###);
 
     server.index("doggos").create(None).await;
     let (task, _status_code) = server.index("cattos").create(None).await;
@@ -1103,7 +1131,7 @@ async fn test_summarized_index_swap() {
             ".stats.callTrace" => "[callTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
-        @r#"
+        @r###"
     {
       "uid": 1,
       "progress": null,
@@ -1118,13 +1146,14 @@ async fn test_summarized_index_swap() {
         },
         "indexUids": {
           "doggos": 1
-        }
+        },
+        "callTrace": "[callTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "#);
+    "###);
 }
 
 #[actix_web::test]
@@ -1146,7 +1175,7 @@ async fn test_summarized_batch_cancelation() {
             ".stats.callTrace" => "[callTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
-        @r#"
+        @r###"
     {
       "uid": 1,
       "progress": null,
@@ -1163,13 +1192,14 @@ async fn test_summarized_batch_cancelation() {
         "types": {
           "taskCancelation": 1
         },
-        "indexUids": {}
+        "indexUids": {},
+        "callTrace": "[callTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "#);
+    "###);
 }
 
 #[actix_web::test]
@@ -1191,7 +1221,7 @@ async fn test_summarized_batch_deletion() {
             ".stats.callTrace" => "[callTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
-        @r#"
+        @r###"
     {
       "uid": 1,
       "progress": null,
@@ -1208,13 +1238,14 @@ async fn test_summarized_batch_deletion() {
         "types": {
           "taskDeletion": 1
         },
-        "indexUids": {}
+        "indexUids": {},
+        "callTrace": "[callTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "#);
+    "###);
 }
 
 #[actix_web::test]
@@ -1233,7 +1264,7 @@ async fn test_summarized_dump_creation() {
             ".stats.callTrace" => "[callTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
-        @r#"
+        @r###"
     {
       "uid": 0,
       "progress": null,
@@ -1248,11 +1279,12 @@ async fn test_summarized_dump_creation() {
         "types": {
           "dumpCreation": 1
         },
-        "indexUids": {}
+        "indexUids": {},
+        "callTrace": "[callTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "#);
+    "###);
 }
