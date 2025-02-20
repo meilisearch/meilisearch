@@ -307,6 +307,7 @@ where
         let current_span = tracing::Span::current();
 
         // Run extraction pipeline in parallel.
+        let mut modified_docids = RoaringBitmap::new();
         pool.install(|| {
                 let settings_diff_cloned = settings_diff.clone();
                 rayon::spawn(move || {
@@ -367,7 +368,7 @@ where
                         Err(status) => {
                             if let Some(typed_chunks) = chunk_accumulator.pop_longest() {
                                 let (docids, is_merged_database) =
-                                    write_typed_chunk_into_index(self.wtxn, self.index, &settings_diff, typed_chunks)?;
+                                    write_typed_chunk_into_index(self.wtxn, self.index, &settings_diff, typed_chunks, &mut modified_docids)?;
                                 if !docids.is_empty() {
                                     final_documents_ids |= docids;
                                     let documents_seen_count = final_documents_ids.len();
@@ -467,6 +468,10 @@ where
                 Ok(())
             }).map_err(InternalError::from)??;
 
+        if !settings_diff.settings_update_only {
+            // Update the stats of the documents database when there is a document update.
+            self.index.update_documents_stats(self.wtxn, modified_docids)?;
+        }
         // We write the field distribution into the main database
         self.index.put_field_distribution(self.wtxn, &field_distribution)?;
 

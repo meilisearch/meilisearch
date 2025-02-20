@@ -32,6 +32,7 @@ pub(super) fn extract_all<'pl, 'extractor, DC, MSP>(
     field_distribution: &mut BTreeMap<String, u64>,
     mut index_embeddings: Vec<IndexEmbeddingConfig>,
     document_ids: &mut RoaringBitmap,
+    modified_docids: &mut RoaringBitmap,
 ) -> Result<(FacetFieldIdsDelta, Vec<IndexEmbeddingConfig>)>
 where
     DC: DocumentChanges<'pl>,
@@ -70,7 +71,7 @@ where
                 // adding the delta should never cause a negative result, as we are removing fields that previously existed.
                 *current = current.saturating_add_signed(delta);
             }
-            document_extractor_data.docids_delta.apply_to(document_ids);
+            document_extractor_data.docids_delta.apply_to(document_ids, modified_docids);
         }
 
         field_distribution.retain(|_, v| *v != 0);
@@ -256,7 +257,7 @@ where
                     let Some(deladd) = data.remove(&config.name) else {
                         continue 'data;
                     };
-                    deladd.apply_to(&mut config.user_provided);
+                    deladd.apply_to(&mut config.user_provided, modified_docids);
                 }
             }
         }

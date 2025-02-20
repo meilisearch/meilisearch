@@ -129,6 +129,7 @@ pub(crate) fn write_typed_chunk_into_index(
     index: &Index,
     settings_diff: &InnerIndexSettingsDiff,
     typed_chunks: Vec<TypedChunk>,
+    modified_docids: &mut RoaringBitmap,
 ) -> Result<(RoaringBitmap, bool)> {
     let mut is_merged_database = false;
     match typed_chunks[0] {
@@ -214,6 +215,7 @@ pub(crate) fn write_typed_chunk_into_index(
                         kind: DocumentOperationKind::Create,
                     });
                     docids.insert(docid);
+                    modified_docids.insert(docid);
                 } else {
                     db.delete(wtxn, &docid)?;
                     operations.push(DocumentOperation {
@@ -222,6 +224,7 @@ pub(crate) fn write_typed_chunk_into_index(
                         kind: DocumentOperationKind::Delete,
                     });
                     docids.remove(docid);
+                    modified_docids.insert(docid);
                 }
             }
             let external_documents_docids = index.external_documents_ids();

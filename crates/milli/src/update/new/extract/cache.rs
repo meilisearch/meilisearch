@@ -711,15 +711,17 @@ impl DelAddRoaringBitmap {
         DelAddRoaringBitmap { del, add }
     }
 
-    pub fn apply_to(&self, documents_ids: &mut RoaringBitmap) {
+    pub fn apply_to(&self, documents_ids: &mut RoaringBitmap, modified_docids: &mut RoaringBitmap) {
         let DelAddRoaringBitmap { del, add } = self;
 
         if let Some(del) = del {
             *documents_ids -= del;
+            *modified_docids |= del;
         }
 
         if let Some(add) = add {
             *documents_ids |= add;
+            *modified_docids |= add;
         }
     }
 }
