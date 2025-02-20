@@ -15,6 +15,7 @@ use self::error::{EmbedError, NewEmbedderError};
 use crate::prompt::{Prompt, PromptData};
 use crate::ThreadPoolNoAbort;
 
+pub mod composite;
 pub mod error;
 pub mod hf;
 pub mod json_template;
@@ -31,6 +32,7 @@ pub use self::error::Error;
 pub type Embedding = Vec<f32>;
 
 pub const REQUEST_PARALLELISM: usize = 40;
+pub const MAX_COMPOSITE_DISTANCE: f32 = 0.01;
 
 pub struct ArroyWrapper {
     quantized: bool,
