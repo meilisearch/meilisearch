@@ -352,6 +352,17 @@ impl IndexScheduler {
             congestion_info
         });
 
+        if let Some(congestion) = congestion {
+            tracing::debug!(
+                "Channel congestion metrics - Attempts: {}, Blocked attempts: {}  ({:.1}% congestion)",
+                congestion.attempts,
+                congestion.blocking_attempts,
+                congestion.congestion_ratio(),
+            );
+        }
+
+        tracing::debug!("call trace: {:?}", progress.accumulated_durations());
+
         self.queue.write_batch(&mut wtxn, processing_batch, &ids)?;
 
         #[cfg(test)]
