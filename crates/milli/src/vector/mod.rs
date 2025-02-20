@@ -628,13 +628,16 @@ impl Embedder {
             EmbedderOptions::Rest(options) => {
                 Self::Rest(rest::Embedder::new(options, rest::ConfigurationSource::User)?)
             }
+            EmbedderOptions::Composite(options) => {
+                Self::Composite(composite::Embedder::new(options)?)
+            }
         })
     }
 
     /// Embed one or multiple texts.
     ///
     /// Each text can be embedded as one or multiple embeddings.
-    pub fn embed(
+    fn embed(
         &self,
         texts: Vec<String>,
         deadline: Option<Instant>,
@@ -649,7 +652,7 @@ impl Embedder {
     }
 
     #[tracing::instrument(level = "debug", skip_all, target = "search")]
-    pub fn embed_one(
+    pub fn embed_search(
         &self,
         text: String,
         deadline: Option<Instant>,
@@ -662,31 +665,32 @@ impl Embedder {
     /// Embed multiple chunks of texts.
     ///
     /// Each chunk is composed of one or multiple texts.
-    pub fn embed_chunks(
+    pub fn embed_index(
         &self,
         text_chunks: Vec<Vec<String>>,
         threads: &ThreadPoolNoAbort,
     ) -> std::result::Result<Vec<Vec<Embedding>>, EmbedError> {
         match self {
-            Embedder::HuggingFace(embedder) => embedder.embed_chunks(text_chunks),
-            Embedder::OpenAi(embedder) => embedder.embed_chunks(text_chunks, threads),
-            Embedder::Ollama(embedder) => embedder.embed_chunks(text_chunks, threads),
-            Embedder::UserProvided(embedder) => embedder.embed_chunks(text_chunks),
-            Embedder::Rest(embedder) => embedder.embed_chunks(text_chunks, threads),
+            Embedder::HuggingFace(embedder) => embedder.embed_index(text_chunks),
+            Embedder::OpenAi(embedder) => embedder.embed_index(text_chunks, threads),
+            Embedder::Ollama(embedder) => embedder.embed_index(text_chunks, threads),
+            Embedder::UserProvided(embedder) => embedder.embed_index(text_chunks),
+            Embedder::Rest(embedder) => embedder.embed_index(text_chunks, threads),
         }
     }
 
-    pub fn embed_chunks_ref(
+    /// Non-owning variant of [`Self::embed_index`].
+    pub fn embed_index_ref(
         &self,
         texts: &[&str],
         threads: &ThreadPoolNoAbort,
     ) -> std::result::Result<Vec<Embedding>, EmbedError> {
         match self {
-            Embedder::HuggingFace(embedder) => embedder.embed_chunks_ref(texts),
-            Embedder::OpenAi(embedder) => embedder.embed_chunks_ref(texts, threads),
-            Embedder::Ollama(embedder) => embedder.embed_chunks_ref(texts, threads),
-            Embedder::UserProvided(embedder) => embedder.embed_chunks_ref(texts),
-            Embedder::Rest(embedder) => embedder.embed_chunks_ref(texts, threads),
+            Embedder::HuggingFace(embedder) => embedder.embed_index_ref(texts),
+            Embedder::OpenAi(embedder) => embedder.embed_index_ref(texts, threads),
+            Embedder::Ollama(embedder) => embedder.embed_index_ref(texts, threads),
+            Embedder::UserProvided(embedder) => embedder.embed_index_ref(texts),
+            Embedder::Rest(embedder) => embedder.embed_index_ref(texts, threads),
         }
     }
 

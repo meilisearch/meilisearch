@@ -113,7 +113,7 @@ impl Embedder {
         }
     }
 
-    pub fn embed_chunks(
+    pub fn embed_index(
         &self,
         text_chunks: Vec<Vec<String>>,
         threads: &ThreadPoolNoAbort,
@@ -134,7 +134,7 @@ impl Embedder {
         }
     }
 
-    pub(crate) fn embed_chunks_ref(
+    pub(crate) fn embed_index_ref(
         &self,
         texts: &[&str],
         threads: &ThreadPoolNoAbort,

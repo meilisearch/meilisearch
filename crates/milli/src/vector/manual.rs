@@ -30,7 +30,7 @@ impl Embedder {
         self.dimensions
     }
 
-    pub fn embed_chunks(
+    pub fn embed_index(
         &self,
         text_chunks: Vec<Vec<String>>,
     ) -> Result<Vec<Vec<Embedding>>, EmbedError> {
@@ -41,7 +41,7 @@ impl Embedder {
         self.distribution
     }
 
-    pub(crate) fn embed_chunks_ref(&self, texts: &[&str]) -> Result<Vec<Embedding>, EmbedError> {
+    pub(crate) fn embed_index_ref(&self, texts: &[&str]) -> Result<Vec<Embedding>, EmbedError> {
         texts.iter().map(|text| self.embed_one(text)).collect()
     }
 }

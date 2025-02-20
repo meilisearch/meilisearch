@@ -795,7 +795,7 @@ fn embed_chunks(
     unused_vectors_distribution: &UnusedVectorsDistribution,
     request_threads: &ThreadPoolNoAbort,
 ) -> Result<Vec<Vec<Embedding>>> {
-    match embedder.embed_chunks(text_chunks, request_threads) {
+    match embedder.embed_index(text_chunks, request_threads) {
         Ok(chunks) => Ok(chunks),
         Err(error) => {
             if let FaultSource::Bug = error.fault {
