@@ -133,8 +133,8 @@ async fn check_the_index_scheduler(server: &Server) {
     },
     @r###"
     {
-      "databaseSize": [bytes],
-      "usedDatabaseSize": [bytes],
+      "databaseSize": "[bytes]",
+      "usedDatabaseSize": "[bytes]",
       "lastUpdate": "2025-01-23T11:36:22.634859166Z",
       "indexes": {
         "kefir": {
@@ -213,14 +213,14 @@ async fn check_the_index_scheduler(server: &Server) {
     snapshot!(json_string!(batches, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]", ".results[0].stats.callTrace" => "[callTrace]", ".results[0].stats.writeChannelCongestion" => "[writeChannelCongestion]" }), name: "batches_filter_afterFinishedAt_equal_2025-01-16T16_47_41");
 
     let (stats, _) = server.stats().await;
-    snapshot!(stats, {
+    assert_json_snapshot!(stats, {
         ".databaseSize" => "[bytes]",
         ".usedDatabaseSize" => "[bytes]"
     },
     @r###"
     {
-      "databaseSize": [bytes],
-      "usedDatabaseSize": [bytes],
+      "databaseSize": "[bytes]",
+      "usedDatabaseSize": "[bytes]",
       "lastUpdate": "2025-01-23T11:36:22.634859166Z",
       "indexes": {
         "kefir": {
