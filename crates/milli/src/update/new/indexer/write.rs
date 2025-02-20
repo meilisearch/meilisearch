@@ -92,13 +92,6 @@ pub struct ChannelCongestion {
 
 impl ChannelCongestion {
     pub fn congestion_ratio(&self) -> f32 {
-        // tracing::debug!(
-        //     "Channel congestion metrics - \
-        //     Attempts: {direct_attempts}, \
-        //     Blocked attempts: {blocking_attempts} \
-        //     ({congestion_pct:.1}% congestion)"
-        // );
-
         self.blocking_attempts as f32 / self.attempts as f32
     }
 }
