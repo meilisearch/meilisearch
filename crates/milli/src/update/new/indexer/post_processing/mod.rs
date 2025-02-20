@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
 
+use facet_bulk::generate_facet_levels;
 use heed::types::{Bytes, DecodeIgnore, Str};
 use heed::RwTxn;
 use itertools::{merge_join_by, EitherOrBoth};
@@ -21,6 +22,8 @@ use crate::update::new::words_prefix_docids::{
 use crate::update::new::FacetFieldIdsDelta;
 use crate::update::{FacetsUpdateBulk, GrenadParameters};
 use crate::{GlobalFieldsIdsMap, Index, Result};
+
+mod facet_bulk;
 
 pub(super) fn post_process<MSP>(
     indexing_context: IndexingContext<MSP>,
@@ -170,9 +173,8 @@ fn compute_facet_level_database(
         let _entered = span.enter();
         match delta {
             FacetFieldIdDelta::Bulk => {
-                tracing::debug!(%fid, "bulk string facet processing");
-                FacetsUpdateBulk::new_not_updating_level_0(index, vec![fid], FacetType::String)
-                    .execute(wtxn)?
+                tracing::debug!(%fid, "bulk string facet processing in parallel");
+                generate_facet_levels(index, wtxn, fid, FacetType::String)?
             }
             FacetFieldIdDelta::Incremental(delta_data) => {
                 tracing::debug!(%fid, len=%delta_data.len(), "incremental string facet processing");
