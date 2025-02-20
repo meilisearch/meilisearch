@@ -129,7 +129,7 @@ async fn check_the_index_scheduler(server: &Server) {
     snapshot!(stats, @r###"
     {
       "databaseSize": 438272,
-      "usedDatabaseSize": 196608,
+      "usedDatabaseSize": 200704,
       "lastUpdate": "2025-01-23T11:36:22.634859166Z",
       "indexes": {
         "kefir": {

@@ -2202,7 +2202,13 @@ async fn import_dump_v6_containing_batches_and_enqueued_tasks() {
     let (tasks, _) = server.tasks().await;
     snapshot!(json_string!(tasks, { ".results[1].startedAt" => "[date]", ".results[1].finishedAt" => "[date]", ".results[1].duration" => "[date]" }), name: "tasks");
     let (batches, _) = server.batches().await;
-    snapshot!(json_string!(batches, { ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]", ".results[0].duration" => "[date]" }), name: "batches");
+    snapshot!(json_string!(batches, {
+        ".results[0].startedAt" => "[date]",
+        ".results[0].finishedAt" => "[date]",
+        ".results[0].duration" => "[date]",
+        ".results[0].stats.callTrace" => "[callTrace]",
+        ".results[0].stats.writeChannelCongestion" => "[writeChannelCongestion]",
+    }), name: "batches");
 
     let (indexes, code) = server.list_indexes(None, None).await;
     assert_eq!(code, 200, "{indexes}");

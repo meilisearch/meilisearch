@@ -275,7 +275,14 @@ async fn test_summarized_document_addition_or_update() {
     index.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(0).await;
     assert_json_snapshot!(batch,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+        {
+            ".duration" => "[duration]",
+            ".enqueuedAt" => "[date]",
+            ".startedAt" => "[date]",
+            ".finishedAt" => "[date]",
+            ".stats.callTrace" => "[callTrace]",
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+        },
         @r#"
     {
       "uid": 0,
@@ -307,7 +314,14 @@ async fn test_summarized_document_addition_or_update() {
     index.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(1).await;
     assert_json_snapshot!(batch,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+        {
+            ".duration" => "[duration]",
+            ".enqueuedAt" => "[date]",
+            ".startedAt" => "[date]",
+            ".finishedAt" => "[date]",
+            ".stats.callTrace" => "[callTrace]",
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+        },
         @r#"
     {
       "uid": 1,
@@ -343,7 +357,14 @@ async fn test_summarized_delete_documents_by_batch() {
     index.wait_task(task.uid()).await.failed();
     let (batch, _) = index.get_batch(0).await;
     assert_json_snapshot!(batch,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+        {
+            ".duration" => "[duration]",
+            ".enqueuedAt" => "[date]",
+            ".startedAt" => "[date]",
+            ".finishedAt" => "[date]",
+            ".stats.callTrace" => "[callTrace]",
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+        },
         @r#"
     {
       "uid": 0,
@@ -375,7 +396,14 @@ async fn test_summarized_delete_documents_by_batch() {
     index.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(2).await;
     assert_json_snapshot!(batch,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+        {
+            ".duration" => "[duration]",
+            ".enqueuedAt" => "[date]",
+            ".startedAt" => "[date]",
+            ".finishedAt" => "[date]",
+            ".stats.callTrace" => "[callTrace]",
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+        },
         @r#"
     {
       "uid": 2,
@@ -413,7 +441,14 @@ async fn test_summarized_delete_documents_by_filter() {
     index.wait_task(task.uid()).await.failed();
     let (batch, _) = index.get_batch(0).await;
     assert_json_snapshot!(batch,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+        {
+            ".duration" => "[duration]",
+            ".enqueuedAt" => "[date]",
+            ".startedAt" => "[date]",
+            ".finishedAt" => "[date]",
+            ".stats.callTrace" => "[callTrace]",
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+        },
         @r#"
     {
       "uid": 0,
@@ -447,7 +482,14 @@ async fn test_summarized_delete_documents_by_filter() {
     index.wait_task(task.uid()).await.failed();
     let (batch, _) = index.get_batch(2).await;
     assert_json_snapshot!(batch,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+        {
+            ".duration" => "[duration]",
+            ".enqueuedAt" => "[date]",
+            ".startedAt" => "[date]",
+            ".finishedAt" => "[date]",
+            ".stats.callTrace" => "[callTrace]",
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+        },
         @r#"
     {
       "uid": 2,
@@ -481,7 +523,14 @@ async fn test_summarized_delete_documents_by_filter() {
     index.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(4).await;
     assert_json_snapshot!(batch,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+        {
+            ".duration" => "[duration]",
+            ".enqueuedAt" => "[date]",
+            ".startedAt" => "[date]",
+            ".finishedAt" => "[date]",
+            ".stats.callTrace" => "[callTrace]",
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+        },
         @r#"
     {
       "uid": 4,
@@ -549,7 +598,14 @@ async fn test_summarized_delete_document_by_id() {
     index.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(2).await;
     assert_json_snapshot!(batch,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+        {
+            ".duration" => "[duration]",
+            ".enqueuedAt" => "[date]",
+            ".startedAt" => "[date]",
+            ".finishedAt" => "[date]",
+            ".stats.callTrace" => "[callTrace]",
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+        },
         @r#"
     {
       "uid": 2,
@@ -597,7 +653,14 @@ async fn test_summarized_settings_update() {
     index.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(0).await;
     assert_json_snapshot!(batch,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+        {
+            ".duration" => "[duration]",
+            ".enqueuedAt" => "[date]",
+            ".startedAt" => "[date]",
+            ".finishedAt" => "[date]",
+            ".stats.callTrace" => "[callTrace]",
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+        },
         @r#"
     {
       "uid": 0,
@@ -642,7 +705,14 @@ async fn test_summarized_index_creation() {
     index.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(0).await;
     assert_json_snapshot!(batch,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+        {
+            ".duration" => "[duration]",
+            ".enqueuedAt" => "[date]",
+            ".startedAt" => "[date]",
+            ".finishedAt" => "[date]",
+            ".stats.callTrace" => "[callTrace]",
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+        },
         @r#"
     {
       "uid": 0,
@@ -670,7 +740,14 @@ async fn test_summarized_index_creation() {
     index.wait_task(task.uid()).await.failed();
     let (batch, _) = index.get_batch(1).await;
     assert_json_snapshot!(batch,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+        {
+            ".duration" => "[duration]",
+            ".enqueuedAt" => "[date]",
+            ".startedAt" => "[date]",
+            ".finishedAt" => "[date]",
+            ".stats.callTrace" => "[callTrace]",
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+        },
         @r#"
     {
       "uid": 1,
@@ -815,7 +892,14 @@ async fn test_summarized_index_update() {
     index.wait_task(task.uid()).await.failed();
     let (batch, _) = index.get_batch(0).await;
     assert_json_snapshot!(batch,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+        {
+            ".duration" => "[duration]",
+            ".enqueuedAt" => "[date]",
+            ".startedAt" => "[date]",
+            ".finishedAt" => "[date]",
+            ".stats.callTrace" => "[callTrace]",
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+        },
         @r#"
     {
       "uid": 0,
@@ -843,7 +927,14 @@ async fn test_summarized_index_update() {
     index.wait_task(task.uid()).await.failed();
     let (batch, _) = index.get_batch(1).await;
     assert_json_snapshot!(batch,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+        {
+            ".duration" => "[duration]",
+            ".enqueuedAt" => "[date]",
+            ".startedAt" => "[date]",
+            ".finishedAt" => "[date]",
+            ".stats.callTrace" => "[callTrace]",
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+        },
         @r#"
     {
       "uid": 1,
@@ -876,7 +967,14 @@ async fn test_summarized_index_update() {
     index.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(3).await;
     assert_json_snapshot!(batch,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+        {
+            ".duration" => "[duration]",
+            ".enqueuedAt" => "[date]",
+            ".startedAt" => "[date]",
+            ".finishedAt" => "[date]",
+            ".stats.callTrace" => "[callTrace]",
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+        },
         @r#"
     {
       "uid": 3,
@@ -904,7 +1002,14 @@ async fn test_summarized_index_update() {
     index.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(4).await;
     assert_json_snapshot!(batch,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+        {
+            ".duration" => "[duration]",
+            ".enqueuedAt" => "[date]",
+            ".startedAt" => "[date]",
+            ".finishedAt" => "[date]",
+            ".stats.callTrace" => "[callTrace]",
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+        },
         @r#"
     {
       "uid": 4,
@@ -942,7 +1047,14 @@ async fn test_summarized_index_swap() {
     server.wait_task(task.uid()).await.failed();
     let (batch, _) = server.get_batch(0).await;
     assert_json_snapshot!(batch,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+        {
+            ".duration" => "[duration]",
+            ".enqueuedAt" => "[date]",
+            ".startedAt" => "[date]",
+            ".finishedAt" => "[date]",
+            ".stats.callTrace" => "[callTrace]",
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+        },
         @r#"
     {
       "uid": 0,
@@ -983,7 +1095,14 @@ async fn test_summarized_index_swap() {
     server.wait_task(task.uid()).await.succeeded();
     let (batch, _) = server.get_batch(1).await;
     assert_json_snapshot!(batch,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+        {
+            ".duration" => "[duration]",
+            ".enqueuedAt" => "[date]",
+            ".startedAt" => "[date]",
+            ".finishedAt" => "[date]",
+            ".stats.callTrace" => "[callTrace]",
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+        },
         @r#"
     {
       "uid": 1,
@@ -1019,7 +1138,14 @@ async fn test_summarized_batch_cancelation() {
     index.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(1).await;
     assert_json_snapshot!(batch,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+        {
+            ".duration" => "[duration]",
+            ".enqueuedAt" => "[date]",
+            ".startedAt" => "[date]",
+            ".finishedAt" => "[date]",
+            ".stats.callTrace" => "[callTrace]",
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+        },
         @r#"
     {
       "uid": 1,
@@ -1057,7 +1183,14 @@ async fn test_summarized_batch_deletion() {
     index.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(1).await;
     assert_json_snapshot!(batch,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+        {
+            ".duration" => "[duration]",
+            ".enqueuedAt" => "[date]",
+            ".startedAt" => "[date]",
+            ".finishedAt" => "[date]",
+            ".stats.callTrace" => "[callTrace]",
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+        },
         @r#"
     {
       "uid": 1,
@@ -1091,7 +1224,15 @@ async fn test_summarized_dump_creation() {
     server.wait_task(task.uid()).await;
     let (batch, _) = server.get_batch(0).await;
     assert_json_snapshot!(batch,
-        { ".details.dumpUid" => "[dumpUid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+        {
+            ".details.dumpUid" => "[dumpUid]",
+            ".duration" => "[duration]",
+            ".enqueuedAt" => "[date]",
+            ".startedAt" => "[date]",
+            ".finishedAt" => "[date]",
+            ".stats.callTrace" => "[callTrace]",
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+        },
         @r#"
     {
       "uid": 0,
