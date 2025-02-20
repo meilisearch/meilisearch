@@ -9,22 +9,22 @@ jobs:
   flaky:
     runs-on: ubuntu-latest
     container:
-      # Use ubuntu-20.04 to compile with glibc 2.28
-      image: ubuntu:20.04
+      # Use ubuntu-22.04 to compile with glibc 2.35
+      image: ubuntu:22.04
     steps:
-    - uses: actions/checkout@v3
-    - name: Install needed dependencies
-      run: |
-        apt-get update && apt-get install -y curl
-        apt-get install build-essential -y
-    - uses: dtolnay/rust-toolchain@1.81
-    - name: Install cargo-flaky
-      run: cargo install cargo-flaky
-    - name: Run cargo flaky in the dumps
-      run: cd crates/dump; cargo flaky -i 100 --release
-    - name: Run cargo flaky in the index-scheduler
-      run: cd crates/index-scheduler; cargo flaky -i 100 --release
-    - name: Run cargo flaky in the auth
-      run: cd crates/meilisearch-auth; cargo flaky -i 100 --release
-    - name: Run cargo flaky in meilisearch
-      run: cd crates/meilisearch; cargo flaky -i 100 --release
+      - uses: actions/checkout@v3
+      - name: Install needed dependencies
+        run: |
+          apt-get update && apt-get install -y curl
+          apt-get install build-essential -y
+      - uses: dtolnay/rust-toolchain@1.81
+      - name: Install cargo-flaky
+        run: cargo install cargo-flaky
+      - name: Run cargo flaky in the dumps
+        run: cd crates/dump; cargo flaky -i 100 --release
+      - name: Run cargo flaky in the index-scheduler
+        run: cd crates/index-scheduler; cargo flaky -i 100 --release
+      - name: Run cargo flaky in the auth
+        run: cd crates/meilisearch-auth; cargo flaky -i 100 --release
+      - name: Run cargo flaky in meilisearch
+        run: cd crates/meilisearch; cargo flaky -i 100 --release

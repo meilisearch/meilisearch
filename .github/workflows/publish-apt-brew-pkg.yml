@@ -18,28 +18,28 @@ jobs:
     runs-on: ubuntu-latest
     needs: check-version
     container:
-      # Use ubuntu-20.04 to compile with glibc 2.28
-      image: ubuntu:20.04
+      # Use ubuntu-22.04 to compile with glibc 2.35
+      image: ubuntu:22.04
     steps:
-    - name: Install needed dependencies
-      run: |
-        apt-get update && apt-get install -y curl
-        apt-get install build-essential -y
-    - uses: dtolnay/rust-toolchain@1.81
-    - name: Install cargo-deb
-      run: cargo install cargo-deb
-    - uses: actions/checkout@v3
-    - name: Build deb package
-      run: cargo deb -p meilisearch -o target/debian/meilisearch.deb
-    - name: Upload debian pkg to release
-      uses: svenstaro/upload-release-action@2.7.0
-      with:
-        repo_token: ${{ secrets.MEILI_BOT_GH_PAT }}
-        file: target/debian/meilisearch.deb
-        asset_name: meilisearch.deb
-        tag: ${{ github.ref }}
-    - name: Upload debian pkg to apt repository
-      run: curl -F package=@target/debian/meilisearch.deb https://${{ secrets.GEMFURY_PUSH_TOKEN }}@push.fury.io/meilisearch/
+      - name: Install needed dependencies
+        run: |
+          apt-get update && apt-get install -y curl
+          apt-get install build-essential -y
+      - uses: dtolnay/rust-toolchain@1.81
+      - name: Install cargo-deb
+        run: cargo install cargo-deb
+      - uses: actions/checkout@v3
+      - name: Build deb package
+        run: cargo deb -p meilisearch -o target/debian/meilisearch.deb
+      - name: Upload debian pkg to release
+        uses: svenstaro/upload-release-action@2.7.0
+        with:
+          repo_token: ${{ secrets.MEILI_BOT_GH_PAT }}
+          file: target/debian/meilisearch.deb
+          asset_name: meilisearch.deb
+          tag: ${{ github.ref }}
+      - name: Upload debian pkg to apt repository
+        run: curl -F package=@target/debian/meilisearch.deb https://${{ secrets.GEMFURY_PUSH_TOKEN }}@push.fury.io/meilisearch/
 
   homebrew:
     name: Bump Homebrew formula
