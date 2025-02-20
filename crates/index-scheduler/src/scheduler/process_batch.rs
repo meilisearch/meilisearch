@@ -5,7 +5,7 @@ use std::sync::atomic::Ordering;
 use meilisearch_types::batches::{BatchEnqueuedAt, BatchId};
 use meilisearch_types::heed::{RoTxn, RwTxn};
 use meilisearch_types::milli::progress::{Progress, VariableNameStep};
-use meilisearch_types::milli::{self};
+use meilisearch_types::milli::{self, ChannelCongestion};
 use meilisearch_types::tasks::{Details, IndexSwap, KindWithContent, Status, Task};
 use milli::update::Settings as MilliSettings;
 use roaring::RoaringBitmap;
@@ -35,7 +35,7 @@ impl IndexScheduler {
         batch: Batch,
         current_batch: &mut ProcessingBatch,
         progress: Progress,
-    ) -> Result<Vec<Task>> {
+    ) -> Result<(Vec<Task>, Option<ChannelCongestion>)> {
         #[cfg(test)]
         {
             self.maybe_fail(crate::test_utils::FailureLocation::InsideProcessBatch)?;
@@ -76,7 +76,7 @@ impl IndexScheduler {
 
                 canceled_tasks.push(task);
 
-                Ok(canceled_tasks)
+                Ok((canceled_tasks, None))
             }
             Batch::TaskDeletions(mut tasks) => {
                 // 1. Retrieve the tasks that matched the query at enqueue-time.
@@ -115,10 +115,14 @@ impl IndexScheduler {
                         _ => unreachable!(),
                     }
                 }
-                Ok(tasks)
+                Ok((tasks, None))
             }
-            Batch::SnapshotCreation(tasks) => self.process_snapshot(progress, tasks),
-            Batch::Dump(task) => self.process_dump_creation(progress, task),
+            Batch::SnapshotCreation(tasks) => {
+                self.process_snapshot(progress, tasks).map(|tasks| (tasks, None))
+            }
+            Batch::Dump(task) => {
+                self.process_dump_creation(progress, task).map(|tasks| (tasks, None))
+            }
             Batch::IndexOperation { op, must_create_index } => {
                 let index_uid = op.index_uid().to_string();
                 let index = if must_create_index {
@@ -135,7 +139,8 @@ impl IndexScheduler {
                     .set_currently_updating_index(Some((index_uid.clone(), index.clone())));
 
                 let mut index_wtxn = index.write_txn()?;
-                let tasks = self.apply_index_operation(&mut index_wtxn, &index, op, progress)?;
+                let (tasks, congestion) =
+                    self.apply_index_operation(&mut index_wtxn, &index, op, progress)?;
 
                 {
                     let span = tracing::trace_span!(target: "indexing::scheduler", "commit");
@@ -166,7 +171,7 @@ impl IndexScheduler {
                     ),
                 }
 
-                Ok(tasks)
+                Ok((tasks, congestion))
             }
             Batch::IndexCreation { index_uid, primary_key, task } => {
                 progress.update_progress(CreateIndexProgress::CreatingTheIndex);
@@ -234,7 +239,7 @@ impl IndexScheduler {
                     ),
                 }
 
-                Ok(vec![task])
+                Ok((vec![task], None))
             }
             Batch::IndexDeletion { index_uid, index_has_been_created, mut tasks } => {
                 progress.update_progress(DeleteIndexProgress::DeletingTheIndex);
@@ -268,7 +273,7 @@ impl IndexScheduler {
                     };
                 }
 
-                Ok(tasks)
+                Ok((tasks, None))
             }
             Batch::IndexSwap { mut task } => {
                 progress.update_progress(SwappingTheIndexes::EnsuringCorrectnessOfTheSwap);
@@ -316,7 +321,7 @@ impl IndexScheduler {
                 }
                 wtxn.commit()?;
                 task.status = Status::Succeeded;
-                Ok(vec![task])
+                Ok((vec![task], None))
             }
             Batch::UpgradeDatabase { mut tasks } => {
                 let KindWithContent::UpgradeDatabase { from } = tasks.last().unwrap().kind else {
@@ -346,7 +351,7 @@ impl IndexScheduler {
                     task.error = None;
                 }
 
-                Ok(tasks)
+                Ok((tasks, None))
             }
         }
     }

@@ -73,6 +73,7 @@ pub use self::search::{
     FacetDistribution, Filter, FormatOptions, MatchBounds, MatcherBuilder, MatchingWords, OrderBy,
     Search, SearchResult, SemanticSearch, TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
 };
+pub use self::update::ChannelCongestion;
 
 pub type Result<T> = std::result::Result<T, error::Error>;
 

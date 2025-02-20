@@ -3,7 +3,10 @@ use std::borrow::Cow;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, RwLock};
+use std::time::{Duration, Instant};
 
+use indexmap::IndexMap;
+use itertools::Itertools;
 use serde::Serialize;
 use utoipa::ToSchema;
 
@@ -15,28 +18,42 @@ pub trait Step: 'static + Send + Sync {
 
 #[derive(Clone, Default)]
 pub struct Progress {
-    steps: Arc<RwLock<Vec<(TypeId, Box<dyn Step>)>>>,
+    steps: Arc<RwLock<InnerProgress>>,
+}
+
+#[derive(Default)]
+struct InnerProgress {
+    /// The hierarchy of steps.
+    steps: Vec<(TypeId, Box<dyn Step>, Instant)>,
+    /// The durations associated to each steps.
+    durations: Vec<(String, Duration)>,
 }
 
 impl Progress {
     pub fn update_progress<P: Step>(&self, sub_progress: P) {
-        let mut steps = self.steps.write().unwrap();
+        let mut inner = self.steps.write().unwrap();
+        let InnerProgress { steps, durations } = &mut *inner;
+
+        let now = Instant::now();
         let step_type = TypeId::of::<P>();
-        if let Some(idx) = steps.iter().position(|(id, _)| *id == step_type) {
+        if let Some(idx) = steps.iter().position(|(id, _, _)| *id == step_type) {
+            push_steps_durations(steps, durations, now, idx);
             steps.truncate(idx);
         }
-        steps.push((step_type, Box::new(sub_progress)));
+
+        steps.push((step_type, Box::new(sub_progress), now));
     }
 
     // TODO: This code should be in meilisearch_types but cannot because milli can't depend on meilisearch_types
     pub fn as_progress_view(&self) -> ProgressView {
-        let steps = self.steps.read().unwrap();
+        let inner = self.steps.read().unwrap();
+        let InnerProgress { steps, .. } = &*inner;
 
         let mut percentage = 0.0;
         let mut prev_factors = 1.0;
 
         let mut step_view = Vec::with_capacity(steps.len());
-        for (_, step) in steps.iter() {
+        for (_, step, _) in steps.iter() {
             prev_factors *= step.total() as f32;
             percentage += step.current() as f32 / prev_factors;
 
@@ -48,6 +65,29 @@ impl Progress {
         }
 
         ProgressView { steps: step_view, percentage: percentage * 100.0 }
+    }
+
+    pub fn accumulated_durations(&self) -> IndexMap<String, String> {
+        let mut inner = self.steps.write().unwrap();
+        let InnerProgress { steps, durations, .. } = &mut *inner;
+
+        let now = Instant::now();
+        push_steps_durations(steps, durations, now, 0);
+
+        durations.drain(..).map(|(name, duration)| (name, format!("{duration:.2?}"))).collect()
+    }
+}
+
+/// Generate the names associated with the durations and push them.
+fn push_steps_durations(
+    steps: &[(TypeId, Box<dyn Step>, Instant)],
+    durations: &mut Vec<(String, Duration)>,
+    now: Instant,
+    idx: usize,
+) {
+    for (i, (_, _, started_at)) in steps.iter().skip(idx).enumerate().rev() {
+        let full_name = steps.iter().take(idx + i + 1).map(|(_, s, _)| s.name()).join(" > ");
+        durations.push((full_name, now.duration_since(*started_at)));
     }
 }
 
@@ -164,7 +204,7 @@ pub struct ProgressStepView {
 /// Used when the name can change but it's still the same step.
 /// To avoid conflicts on the `TypeId`, create a unique type every time you use this step:
 /// ```text
-/// enum UpgradeVersion {}    
+/// enum UpgradeVersion {}
 ///
 /// progress.update_progress(VariableNameStep::<UpgradeVersion>::new(
 ///     "v1 to v2",

@@ -1,6 +1,5 @@
 ---
 source: crates/meilisearch/tests/dumps/mod.rs
-snapshot_kind: text
 ---
 {
   "results": [
@@ -21,7 +20,9 @@ snapshot_kind: text
         },
         "indexUids": {
           "kefir": 1
-        }
+        },
+        "callTrace": "[callTrace]",
+        "writeChannelCongestion": "[writeChannelCongestion]"
       },
       "duration": "[date]",
       "startedAt": "[date]",

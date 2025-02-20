@@ -29,7 +29,7 @@ page_size = "0.6.0"
 rayon = "1.10.0"
 roaring = { version = "0.10.10", features = ["serde"] }
 serde = { version = "1.0.217", features = ["derive"] }
-serde_json = { version = "1.0.135", features = ["preserve_order"] }
+serde_json = { version = "1.0.138", features = ["preserve_order"] }
 synchronoise = "1.0.1"
 tempfile = "3.15.0"
 thiserror = "2.0.9"
