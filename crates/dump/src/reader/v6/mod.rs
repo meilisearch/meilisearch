@@ -3,6 +3,7 @@ use std::io::{BufRead, BufReader, ErrorKind};
 use std::path::Path;
 
 pub use meilisearch_types::milli;
+use meilisearch_types::milli::vector::hf::OverridePooling;
 use tempfile::TempDir;
 use time::OffsetDateTime;
 use tracing::debug;
@@ -252,7 +253,29 @@ impl V6IndexReader {
     }
 
     pub fn settings(&mut self) -> Result<Settings<Checked>> {
-        let settings: Settings<Unchecked> = serde_json::from_reader(&mut self.settings)?;
+        let mut settings: Settings<Unchecked> = serde_json::from_reader(&mut self.settings)?;
+        patch_embedders(&mut settings);
         Ok(settings.check())
+    }
+}
+
+fn patch_embedders(settings: &mut Settings<Unchecked>) {
+    if let Setting::Set(embedders) = &mut settings.embedders {
+        for settings in embedders.values_mut() {
+            let Setting::Set(settings) = &mut settings.inner else {
+                continue;
+            };
+            if settings.source != Setting::Set(milli::vector::settings::EmbedderSource::HuggingFace)
+            {
+                continue;
+            }
+            settings.pooling = match settings.pooling {
+                Setting::Set(pooling) => Setting::Set(pooling),
+                // if the pooling for a hugging face embedder is not set, force it to `forceMean`
+                // for backward compatibility with v1.13
+                // dumps created in v1.14 and up will have the setting set for hugging face embedders
+                Setting::Reset | Setting::NotSet => Setting::Set(OverridePooling::ForceMean),
+            };
+        }
     }
 }

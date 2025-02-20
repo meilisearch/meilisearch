@@ -262,6 +262,31 @@ impl NewEmbedderError {
         }
     }
 
+    pub fn open_pooling_config(
+        pooling_config_filename: PathBuf,
+        inner: std::io::Error,
+    ) -> NewEmbedderError {
+        let open_config = OpenPoolingConfig { filename: pooling_config_filename, inner };
+
+        Self {
+            kind: NewEmbedderErrorKind::OpenPoolingConfig(open_config),
+            fault: FaultSource::Runtime,
+        }
+    }
+
+    pub fn deserialize_pooling_config(
+        model_name: String,
+        pooling_config_filename: PathBuf,
+        inner: serde_json::Error,
+    ) -> NewEmbedderError {
+        let deserialize_pooling_config =
+            DeserializePoolingConfig { model_name, filename: pooling_config_filename, inner };
+        Self {
+            kind: NewEmbedderErrorKind::DeserializePoolingConfig(deserialize_pooling_config),
+            fault: FaultSource::Runtime,
+        }
+    }
+
     pub fn open_tokenizer(
         tokenizer_filename: PathBuf,
         inner: Box<dyn std::error::Error + Send + Sync>,
@@ -320,8 +345,23 @@ pub struct OpenConfig {
 }
 
 #[derive(Debug, thiserror::Error)]
+#[error("could not open pooling config at {filename}: {inner}")]
+pub struct OpenPoolingConfig {
+    pub filename: PathBuf,
+    pub inner: std::io::Error,
+}
+
+#[derive(Debug, thiserror::Error)]
 #[error("for model '{model_name}', could not deserialize config at {filename} as JSON: {inner}")]
 pub struct DeserializeConfig {
+    pub model_name: String,
+    pub filename: PathBuf,
+    pub inner: serde_json::Error,
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("for model '{model_name}', could not deserialize file at `{filename}` as a pooling config: {inner}")]
+pub struct DeserializePoolingConfig {
     pub model_name: String,
     pub filename: PathBuf,
     pub inner: serde_json::Error,
@@ -354,7 +394,11 @@ pub enum NewEmbedderErrorKind {
     #[error(transparent)]
     OpenConfig(OpenConfig),
     #[error(transparent)]
+    OpenPoolingConfig(OpenPoolingConfig),
+    #[error(transparent)]
     DeserializeConfig(DeserializeConfig),
+    #[error(transparent)]
+    DeserializePoolingConfig(DeserializePoolingConfig),
     #[error(transparent)]
     UnsupportedModel(UnsupportedModel),
     #[error(transparent)]

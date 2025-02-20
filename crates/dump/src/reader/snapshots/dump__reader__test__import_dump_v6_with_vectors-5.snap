@@ -1,5 +1,5 @@
 ---
-source: dump/src/reader/mod.rs
+source: crates/dump/src/reader/mod.rs
 expression: vector_index.settings().unwrap()
 ---
 {
@@ -49,6 +49,7 @@ expression: vector_index.settings().unwrap()
       "source": "huggingFace",
       "model": "BAAI/bge-base-en-v1.5",
       "revision": "617ca489d9e86b49b8167676d8220688b99db36e",
+      "pooling": "forceMean",
       "documentTemplate": "{% for field in fields %} {{ field.name }}: {{ field.value }}\n{% endfor %}"
     }
   },
