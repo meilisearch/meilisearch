@@ -129,6 +129,40 @@ async fn search_with_stop_word() {
 }
 
 #[actix_rt::test]
+async fn search_with_typo_settings() {
+    // related to https://github.com/meilisearch/meilisearch/issues/5240
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (_, code) = index
+        .update_settings(json!({"typoTolerance": { "disableOnAttributes": ["title", "id"]}}))
+        .await;
+    meili_snap::snapshot!(code, @"202 Accepted");
+
+    let documents = DOCUMENTS.clone();
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
+
+    index
+        .search(json!({"q": "287947" }), |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            snapshot!(json_string!(response["hits"]), @r###"
+            [
+              {
+                "title": "Shazam!",
+                "id": "287947",
+                "color": [
+                  "green",
+                  "blue"
+                ]
+              }
+            ]
+            "###);
+        })
+        .await;
+}
+
+#[actix_rt::test]
 async fn phrase_search_with_stop_word() {
     // related to https://github.com/meilisearch/meilisearch/issues/3521
     let server = Server::new().await;
