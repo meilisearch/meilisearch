@@ -46,20 +46,19 @@ pub fn upgrade_index_scheduler(
         }
     };
 
-    let mut current_version = from;
-
     info!("Upgrading the task queue");
+    let mut local_from = from;
     for upgrade in upgrade_functions[start..].iter() {
         let target = upgrade.target_version();
         info!(
             "Upgrading from v{}.{}.{} to v{}.{}.{}",
-            from.0, from.1, from.2, current_version.0, current_version.1, current_version.2
+            local_from.0, local_from.1, local_from.2, target.0, target.1, target.2
         );
         let mut wtxn = env.write_txn()?;
-        upgrade.upgrade(env, &mut wtxn, from)?;
+        upgrade.upgrade(env, &mut wtxn, local_from)?;
         versioning.set_version(&mut wtxn, target)?;
         wtxn.commit()?;
-        current_version = target;
+        local_from = target;
     }
 
     let mut wtxn = env.write_txn()?;
