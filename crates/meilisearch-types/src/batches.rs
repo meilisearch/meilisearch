@@ -60,7 +60,8 @@ pub struct BatchStats {
     pub status: BTreeMap<Status, u32>,
     pub types: BTreeMap<Kind, u32>,
     pub index_uids: BTreeMap<String, u32>,
+    #[serde(default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub call_trace: serde_json::Map<String, serde_json::Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub write_channel_congestion: Option<serde_json::Map<String, serde_json::Value>>,
 }

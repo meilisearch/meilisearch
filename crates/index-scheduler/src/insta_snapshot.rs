@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 use std::fmt::Write;
 
-use meilisearch_types::batches::{Batch, BatchEnqueuedAt};
+use meilisearch_types::batches::{Batch, BatchEnqueuedAt, BatchStats};
 use meilisearch_types::heed::types::{SerdeBincode, SerdeJson, Str};
 use meilisearch_types::heed::{Database, RoTxn};
 use meilisearch_types::milli::{CboRoaringBitmapCodec, RoaringBitmapCodec, BEU32};
@@ -342,6 +342,11 @@ pub fn snapshot_canceled_by(rtxn: &RoTxn, db: Database<BEU32, RoaringBitmapCodec
 pub fn snapshot_batch(batch: &Batch) -> String {
     let mut snap = String::new();
     let Batch { uid, details, stats, started_at, finished_at, progress: _, enqueued_at } = batch;
+    let stats = BatchStats {
+        call_trace: Default::default(),
+        write_channel_congestion: None,
+        ..stats.clone()
+    };
     if let Some(finished_at) = finished_at {
         assert!(finished_at > started_at);
     }
@@ -352,7 +357,7 @@ pub fn snapshot_batch(batch: &Batch) -> String {
     snap.push('{');
     snap.push_str(&format!("uid: {uid}, "));
     snap.push_str(&format!("details: {}, ", serde_json::to_string(details).unwrap()));
-    snap.push_str(&format!("stats: {}, ", serde_json::to_string(stats).unwrap()));
+    snap.push_str(&format!("stats: {}, ", serde_json::to_string(&stats).unwrap()));
     snap.push('}');
     snap
 }
