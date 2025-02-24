@@ -428,9 +428,10 @@ impl ErrorCode for milli::Error {
                     | UserError::InvalidUrl { .. }
                     | UserError::InvalidSettingsDocumentTemplateMaxBytes { .. }
                     | UserError::InvalidPrompt(_)
-                    | UserError::InvalidDisableBinaryQuantization { .. } => {
-                        Code::InvalidSettingsEmbedders
-                    }
+                    | UserError::InvalidDisableBinaryQuantization { .. }
+                    | UserError::InvalidSourceForNested { .. }
+                    | UserError::MissingSourceForNested { .. }
+                    | UserError::InvalidSettingsEmbedder { .. } => Code::InvalidSettingsEmbedders,
                     UserError::TooManyEmbedders(_) => Code::InvalidSettingsEmbedders,
                     UserError::InvalidPromptForEmbeddings(..) => Code::InvalidSettingsEmbedders,
                     UserError::NoPrimaryKeyCandidateFound => Code::IndexPrimaryKeyNoCandidateFound,
