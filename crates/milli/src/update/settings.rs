@@ -27,8 +27,8 @@ use crate::proximity::ProximityPrecision;
 use crate::update::index_documents::IndexDocumentsMethod;
 use crate::update::{IndexDocuments, UpdateIndexingStep};
 use crate::vector::settings::{
-    check_set, check_unset, EmbedderAction, EmbedderSource, EmbeddingSettings, ReindexAction,
-    WriteBackToDocuments,
+    EmbedderAction, EmbedderSource, EmbeddingSettings, NestingContext, ReindexAction,
+    SubEmbeddingSettings, WriteBackToDocuments,
 };
 use crate::vector::{Embedder, EmbeddingConfig, EmbeddingConfigs};
 use crate::{FieldId, FieldsIdsMap, Index, LocalizedAttributesRule, LocalizedFieldIds, Result};
@@ -1669,26 +1669,12 @@ fn embedders(embedding_configs: Vec<IndexEmbeddingConfig>) -> Result<EmbeddingCo
 
 fn validate_prompt(
     name: &str,
-    new: Setting<EmbeddingSettings>,
-) -> Result<Setting<EmbeddingSettings>> {
-    match new {
-        Setting::Set(EmbeddingSettings {
-            source,
-            model,
-            revision,
-            pooling,
-            api_key,
-            dimensions,
-            document_template: Setting::Set(template),
-            document_template_max_bytes,
-            url,
-            request,
-            response,
-            distribution,
-            headers,
-            binary_quantized: binary_quantize,
-        }) => {
-            let max_bytes = match document_template_max_bytes.set() {
+    new_prompt: Setting<String>,
+    max_bytes: Setting<usize>,
+) -> Result<Setting<String>> {
+    match new_prompt {
+        Setting::Set(template) => {
+            let max_bytes = match max_bytes.set() {
                 Some(max_bytes) => NonZeroUsize::new(max_bytes).ok_or_else(|| {
                     crate::error::UserError::InvalidSettingsDocumentTemplateMaxBytes {
                         embedder_name: name.to_owned(),
@@ -1706,22 +1692,7 @@ fn validate_prompt(
             .map(|prompt| crate::prompt::PromptData::from(prompt).template)
             .map_err(|inner| UserError::InvalidPromptForEmbeddings(name.to_owned(), inner))?;
 
-            Ok(Setting::Set(EmbeddingSettings {
-                source,
-                model,
-                revision,
-                pooling,
-                api_key,
-                dimensions,
-                document_template: Setting::Set(template),
-                document_template_max_bytes,
-                url,
-                request,
-                response,
-                distribution,
-                headers,
-                binary_quantized: binary_quantize,
-            }))
+            Ok(Setting::Set(template))
         }
         new => Ok(new),
     }
@@ -1731,7 +1702,6 @@ pub fn validate_embedding_settings(
     settings: Setting<EmbeddingSettings>,
     name: &str,
 ) -> Result<Setting<EmbeddingSettings>> {
-    let settings = validate_prompt(name, settings)?;
     let Setting::Set(settings) = settings else { return Ok(settings) };
     let EmbeddingSettings {
         source,
@@ -1745,10 +1715,14 @@ pub fn validate_embedding_settings(
         url,
         request,
         response,
+        search_embedder,
+        mut indexing_embedder,
         distribution,
         headers,
         binary_quantized: binary_quantize,
     } = settings;
+
+    let document_template = validate_prompt(name, document_template, document_template_max_bytes)?;
 
     if let Some(0) = dimensions.set() {
         return Err(crate::error::UserError::InvalidSettingsDimensions {
@@ -1775,6 +1749,7 @@ pub fn validate_embedding_settings(
     }
 
     let Some(inferred_source) = source.set() else {
+        // we are validating the fused settings, so we always have a source
         return Ok(Setting::Set(EmbeddingSettings {
             source,
             model,
@@ -1787,20 +1762,35 @@ pub fn validate_embedding_settings(
             url,
             request,
             response,
+            search_embedder,
+            indexing_embedder,
             distribution,
             headers,
             binary_quantized: binary_quantize,
         }));
     };
+    EmbeddingSettings::check_settings(
+        name,
+        inferred_source,
+        NestingContext::NotNested,
+        &model,
+        &revision,
+        &pooling,
+        &dimensions,
+        &api_key,
+        &url,
+        &request,
+        &response,
+        &document_template,
+        &document_template_max_bytes,
+        &headers,
+        &search_embedder,
+        &indexing_embedder,
+        &binary_quantize,
+        &distribution,
+    )?;
     match inferred_source {
         EmbedderSource::OpenAi => {
-            check_unset(&revision, EmbeddingSettings::REVISION, inferred_source, name)?;
-            check_unset(&pooling, EmbeddingSettings::POOLING, inferred_source, name)?;
-
-            check_unset(&request, EmbeddingSettings::REQUEST, inferred_source, name)?;
-            check_unset(&response, EmbeddingSettings::RESPONSE, inferred_source, name)?;
-            check_unset(&headers, EmbeddingSettings::HEADERS, inferred_source, name)?;
-
             if let Setting::Set(model) = &model {
                 let model = crate::vector::openai::EmbeddingModel::from_name(model.as_str())
                     .ok_or(crate::error::UserError::InvalidOpenAiModel {
@@ -1831,55 +1821,117 @@ pub fn validate_embedding_settings(
                 }
             }
         }
-        EmbedderSource::Ollama => {
-            check_set(&model, EmbeddingSettings::MODEL, inferred_source, name)?;
-            check_unset(&revision, EmbeddingSettings::REVISION, inferred_source, name)?;
-            check_unset(&pooling, EmbeddingSettings::POOLING, inferred_source, name)?;
+        EmbedderSource::Ollama
+        | EmbedderSource::HuggingFace
+        | EmbedderSource::UserProvided
+        | EmbedderSource::Rest => {}
+        EmbedderSource::Composite => {
+            if let Setting::Set(embedder) = &search_embedder {
+                if let Some(source) = embedder.source.set() {
+                    let search_embedder = match embedder.search_embedder.clone() {
+                        Setting::Set(search_embedder) => Setting::Set(deserialize_sub_embedder(
+                            search_embedder,
+                            name,
+                            NestingContext::Search,
+                        )?),
+                        Setting::Reset => Setting::Reset,
+                        Setting::NotSet => Setting::NotSet,
+                    };
+                    let indexing_embedder = match embedder.indexing_embedder.clone() {
+                        Setting::Set(indexing_embedder) => Setting::Set(deserialize_sub_embedder(
+                            indexing_embedder,
+                            name,
+                            NestingContext::Search,
+                        )?),
+                        Setting::Reset => Setting::Reset,
+                        Setting::NotSet => Setting::NotSet,
+                    };
+                    EmbeddingSettings::check_nested_source(name, source, NestingContext::Search)?;
+                    EmbeddingSettings::check_settings(
+                        name,
+                        source,
+                        NestingContext::Search,
+                        &embedder.model,
+                        &embedder.revision,
+                        &embedder.pooling,
+                        &embedder.dimensions,
+                        &embedder.api_key,
+                        &embedder.url,
+                        &embedder.request,
+                        &embedder.response,
+                        &embedder.document_template,
+                        &embedder.document_template_max_bytes,
+                        &embedder.headers,
+                        &search_embedder,
+                        &indexing_embedder,
+                        &embedder.binary_quantized,
+                        &embedder.distribution,
+                    )?;
+                } else {
+                    return Err(UserError::MissingSourceForNested {
+                        embedder_name: NestingContext::Search.embedder_name_with_context(name),
+                    }
+                    .into());
+                }
+            }
 
-            check_unset(&request, EmbeddingSettings::REQUEST, inferred_source, name)?;
-            check_unset(&response, EmbeddingSettings::RESPONSE, inferred_source, name)?;
-            check_unset(&headers, EmbeddingSettings::HEADERS, inferred_source, name)?;
-        }
-        EmbedderSource::HuggingFace => {
-            check_unset(&api_key, EmbeddingSettings::API_KEY, inferred_source, name)?;
-            check_unset(&dimensions, EmbeddingSettings::DIMENSIONS, inferred_source, name)?;
+            indexing_embedder = if let Setting::Set(mut embedder) = indexing_embedder {
+                embedder.document_template = validate_prompt(
+                    name,
+                    embedder.document_template,
+                    embedder.document_template_max_bytes,
+                )?;
 
-            check_unset(&url, EmbeddingSettings::URL, inferred_source, name)?;
-            check_unset(&request, EmbeddingSettings::REQUEST, inferred_source, name)?;
-            check_unset(&response, EmbeddingSettings::RESPONSE, inferred_source, name)?;
-            check_unset(&headers, EmbeddingSettings::HEADERS, inferred_source, name)?;
-        }
-        EmbedderSource::UserProvided => {
-            check_unset(&model, EmbeddingSettings::MODEL, inferred_source, name)?;
-            check_unset(&revision, EmbeddingSettings::REVISION, inferred_source, name)?;
-            check_unset(&pooling, EmbeddingSettings::POOLING, inferred_source, name)?;
-            check_unset(&api_key, EmbeddingSettings::API_KEY, inferred_source, name)?;
-            check_unset(
-                &document_template,
-                EmbeddingSettings::DOCUMENT_TEMPLATE,
-                inferred_source,
-                name,
-            )?;
-            check_unset(
-                &document_template_max_bytes,
-                EmbeddingSettings::DOCUMENT_TEMPLATE_MAX_BYTES,
-                inferred_source,
-                name,
-            )?;
-            check_set(&dimensions, EmbeddingSettings::DIMENSIONS, inferred_source, name)?;
-
-            check_unset(&url, EmbeddingSettings::URL, inferred_source, name)?;
-            check_unset(&request, EmbeddingSettings::REQUEST, inferred_source, name)?;
-            check_unset(&response, EmbeddingSettings::RESPONSE, inferred_source, name)?;
-            check_unset(&headers, EmbeddingSettings::HEADERS, inferred_source, name)?;
-        }
-        EmbedderSource::Rest => {
-            check_unset(&model, EmbeddingSettings::MODEL, inferred_source, name)?;
-            check_unset(&revision, EmbeddingSettings::REVISION, inferred_source, name)?;
-            check_unset(&pooling, EmbeddingSettings::POOLING, inferred_source, name)?;
-            check_set(&url, EmbeddingSettings::URL, inferred_source, name)?;
-            check_set(&request, EmbeddingSettings::REQUEST, inferred_source, name)?;
-            check_set(&response, EmbeddingSettings::RESPONSE, inferred_source, name)?;
+                if let Some(source) = embedder.source.set() {
+                    let search_embedder = match embedder.search_embedder.clone() {
+                        Setting::Set(search_embedder) => Setting::Set(deserialize_sub_embedder(
+                            search_embedder,
+                            name,
+                            NestingContext::Indexing,
+                        )?),
+                        Setting::Reset => Setting::Reset,
+                        Setting::NotSet => Setting::NotSet,
+                    };
+                    let indexing_embedder = match embedder.indexing_embedder.clone() {
+                        Setting::Set(indexing_embedder) => Setting::Set(deserialize_sub_embedder(
+                            indexing_embedder,
+                            name,
+                            NestingContext::Indexing,
+                        )?),
+                        Setting::Reset => Setting::Reset,
+                        Setting::NotSet => Setting::NotSet,
+                    };
+                    EmbeddingSettings::check_nested_source(name, source, NestingContext::Indexing)?;
+                    EmbeddingSettings::check_settings(
+                        name,
+                        source,
+                        NestingContext::Indexing,
+                        &embedder.model,
+                        &embedder.revision,
+                        &embedder.pooling,
+                        &embedder.dimensions,
+                        &embedder.api_key,
+                        &embedder.url,
+                        &embedder.request,
+                        &embedder.response,
+                        &embedder.document_template,
+                        &embedder.document_template_max_bytes,
+                        &embedder.headers,
+                        &search_embedder,
+                        &indexing_embedder,
+                        &embedder.binary_quantized,
+                        &embedder.distribution,
+                    )?;
+                } else {
+                    return Err(UserError::MissingSourceForNested {
+                        embedder_name: NestingContext::Indexing.embedder_name_with_context(name),
+                    }
+                    .into());
+                }
+                Setting::Set(embedder)
+            } else {
+                indexing_embedder
+            };
         }
     }
     Ok(Setting::Set(EmbeddingSettings {
