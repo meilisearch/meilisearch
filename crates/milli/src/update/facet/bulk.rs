@@ -6,7 +6,7 @@ use heed::types::Bytes;
 use heed::{BytesDecode, BytesEncode, Error, PutFlags, RoTxn, RwTxn};
 use roaring::RoaringBitmap;
 
-use super::{FACET_GROUP_SIZE, FACET_MIN_LEVEL_SIZE};
+use super::{clear_facet_levels, FACET_GROUP_SIZE, FACET_MIN_LEVEL_SIZE};
 use crate::facet::FacetType;
 use crate::heed_codec::facet::{
     FacetGroupKey, FacetGroupKeyCodec, FacetGroupValue, FacetGroupValueCodec,
@@ -97,9 +97,7 @@ pub(crate) struct FacetsUpdateBulkInner<R: std::io::Read + std::io::Seek> {
 impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
     pub fn update(mut self, wtxn: &mut RwTxn<'_>, field_ids: &[u16]) -> Result<()> {
         self.update_level0(wtxn)?;
-        for &field_id in field_ids.iter() {
-            self.clear_levels(wtxn, field_id)?;
-        }
+        clear_facet_levels(wtxn, &self.db.remap_data_type(), field_ids)?;
 
         for &field_id in field_ids.iter() {
             let level_readers = self.compute_levels_for_field_id(field_id, wtxn)?;
@@ -111,14 +109,6 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
                 }
             }
         }
-        Ok(())
-    }
-
-    fn clear_levels(&self, wtxn: &mut heed::RwTxn<'_>, field_id: FieldId) -> Result<()> {
-        let left = FacetGroupKey::<&[u8]> { field_id, level: 1, left_bound: &[] };
-        let right = FacetGroupKey::<&[u8]> { field_id, level: u8::MAX, left_bound: &[] };
-        let range = left..=right;
-        self.db.delete_range(wtxn, &range).map(drop)?;
         Ok(())
     }
 

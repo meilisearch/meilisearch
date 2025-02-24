@@ -362,7 +362,7 @@ pub(crate) fn write_typed_chunk_into_index(
             let merger = builder.build();
 
             let indexer = FacetsUpdate::new(index, FacetType::Number, merger, None, data_size);
-            indexer.execute(wtxn)?;
+            indexer.execute(wtxn, &settings_diff.new)?;
             is_merged_database = true;
         }
         TypedChunk::FieldIdFacetStringDocids(_) => {
@@ -398,7 +398,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 Some(normalized_facet_id_string_merger),
                 data_size,
             );
-            indexer.execute(wtxn)?;
+            indexer.execute(wtxn, &settings_diff.new)?;
             is_merged_database = true;
         }
         TypedChunk::FieldIdFacetExistsDocids(_) => {

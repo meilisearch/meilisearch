@@ -6,7 +6,7 @@ use utoipa::ToSchema;
 use crate::{
     attribute_patterns::{match_distinct_field, match_field_legacy, PatternMatch},
     constants::RESERVED_GEO_FIELD_NAME,
-    AttributePatterns, FieldId, FieldsIdsMap,
+    AttributePatterns, FieldsIdsMap,
 };
 
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug, ToSchema)]
@@ -206,21 +206,6 @@ impl Default for FilterFeatures {
     fn default() -> Self {
         Self { equality: true, comparison: false }
     }
-}
-
-pub fn matching_field_ids(
-    filterable_attributes: &[FilterableAttributesRule],
-    fields_ids_map: &FieldsIdsMap,
-) -> HashSet<FieldId> {
-    let mut result = HashSet::new();
-    for (field_id, field_name) in fields_ids_map.iter() {
-        for filterable_attribute in filterable_attributes {
-            if filterable_attribute.match_str(field_name) == PatternMatch::Match {
-                result.insert(field_id);
-            }
-        }
-    }
-    result
 }
 
 pub fn matching_field_names<'fim>(

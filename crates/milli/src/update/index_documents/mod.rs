@@ -26,6 +26,7 @@ use typed_chunk::{write_typed_chunk_into_index, ChunkAccumulator, TypedChunk};
 pub use self::enrich::{extract_finite_float_from_value, DocumentId};
 pub use self::helpers::*;
 pub use self::transform::{Transform, TransformOutput};
+use super::facet::clear_facet_levels_based_on_settings_diff;
 use super::new::StdResult;
 use crate::documents::{obkv_to_object, DocumentsBatchReader};
 use crate::error::{Error, InternalError};
@@ -462,6 +463,11 @@ where
                             chunk_accumulator.insert(typed_chunk);
                         }
                     }
+                }
+
+                // If the settings are only being updated, we may have to clear some of the facet levels.
+                if settings_diff.settings_update_only() {
+                    clear_facet_levels_based_on_settings_diff(self.wtxn, &self.index, &settings_diff)?;
                 }
 
                 Ok(())

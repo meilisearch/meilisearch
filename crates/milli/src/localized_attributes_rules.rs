@@ -76,10 +76,6 @@ impl LocalizedFieldIds {
         Self { field_id_to_locales }
     }
 
-    pub fn locales(&self, fields_id: FieldId) -> Option<&[Language]> {
-        self.field_id_to_locales.get(&fields_id).map(Vec::as_slice)
-    }
-
     pub fn all_locales(&self) -> Vec<Language> {
         let mut locales = Vec::new();
         for field_locales in self.field_id_to_locales.values() {

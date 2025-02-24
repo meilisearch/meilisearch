@@ -9,13 +9,11 @@ use roaring::RoaringBitmap;
 use rstar::RTree;
 use serde::{Deserialize, Serialize};
 
-use crate::attribute_patterns::PatternMatch;
 use crate::constants::{RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME};
 use crate::documents::PrimaryKey;
 use crate::error::{InternalError, UserError};
 use crate::fields_ids_map::metadata::FieldIdMapWithMetadata;
 use crate::fields_ids_map::FieldsIdsMap;
-use crate::filterable_attributes_rules::match_pattern_by_features;
 use crate::heed_codec::facet::{
     FacetGroupKeyCodec, FacetGroupValueCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec,
     FieldIdCodec, OrderedF64Codec,
@@ -806,16 +804,6 @@ impl Index {
             .unwrap_or_default())
     }
 
-    /// Returns the filterable fields ids.
-    // pub fn filterable_fields_ids(&self, rtxn: &RoTxn<'_>) -> Result<HashSet<FieldId>> {
-    //     let fields = self.filterable_attributes_rules(rtxn)?;
-    //     let fields_ids_map = self.fields_ids_map(rtxn)?;
-
-    //     let matching_field_ids = matching_field_ids(&fields, &fields_ids_map);
-
-    //     Ok(matching_field_ids)
-    // }
-
     /* sortable fields */
 
     /// Writes the sortable fields names in the database.
@@ -852,21 +840,6 @@ impl Index {
         Ok(fields.into_iter().filter_map(|name| fields_ids_map.id(&name)).collect())
     }
 
-    /* faceted fields */
-
-    /// Writes the faceted fields in the database.
-    // pub(crate) fn put_faceted_fields(
-    //     &self,
-    //     wtxn: &mut RwTxn<'_>,
-    //     fields: &HashSet<String>,
-    // ) -> heed::Result<()> {
-    //     self.main.remap_types::<Str, SerdeJson<_>>().put(
-    //         wtxn,
-    //         main_key::HIDDEN_FACETED_FIELDS_KEY,
-    //         fields,
-    //     )
-    // }
-
     /// Returns true if the geo feature is activated.
     pub fn is_geo_activated(&self, rtxn: &RoTxn<'_>) -> Result<bool> {
         let geo_filter = self.is_geo_filtering_activated(rtxn)?;
@@ -886,84 +859,6 @@ impl Index {
             self.filterable_attributes_rules(rtxn)?.iter().any(|field| field.has_geo());
         Ok(geo_filter)
     }
-
-    /// Returns the field ids of the fields that are filterable using the ordering operators or are sortable.
-    pub fn facet_leveled_field_ids(&self, rtxn: &RoTxn<'_>) -> Result<HashSet<FieldId>> {
-        let filterable_fields = self.filterable_attributes_rules(rtxn)?;
-        let sortable_fields = self.sortable_fields(rtxn)?;
-        let fields_ids_map = self.fields_ids_map(rtxn)?;
-
-        let mut fields_ids = HashSet::new();
-        for (field_id, field_name) in fields_ids_map.iter() {
-            if match_pattern_by_features(field_name, &filterable_fields, &|features| {
-                features.is_filterable_comparison()
-            }) == PatternMatch::Match
-            {
-                fields_ids.insert(field_id);
-            } else if sortable_fields.contains(field_name) {
-                fields_ids.insert(field_id);
-            }
-        }
-
-        Ok(fields_ids)
-    }
-
-    // /// Returns the faceted fields names.
-    // pub fn faceted_fields(&self, rtxn: &RoTxn<'_>) -> heed::Result<HashSet<String>> {
-    //     Ok(self
-    //         .main
-    //         .remap_types::<Str, SerdeJson<_>>()
-    //         .get(rtxn, main_key::HIDDEN_FACETED_FIELDS_KEY)?
-    //         .unwrap_or_default())
-    // }
-
-    // /// Identical to `faceted_fields`, but returns ids instead.
-    // pub fn faceted_fields_ids(&self, rtxn: &RoTxn<'_>) -> Result<HashSet<FieldId>> {
-    //     let fields = self.faceted_fields(rtxn)?;
-    //     let fields_ids_map = self.fields_ids_map(rtxn)?;
-
-    //     let mut fields_ids = HashSet::new();
-    //     for name in fields {
-    //         if let Some(field_id) = fields_ids_map.id(&name) {
-    //             fields_ids.insert(field_id);
-    //         }
-    //     }
-
-    //     Ok(fields_ids)
-    // }
-
-    /* faceted documents ids */
-
-    /// Returns the user defined faceted fields names.
-    ///
-    /// The user faceted fields are the union of all the filterable, sortable, distinct, and Asc/Desc fields.
-    // pub fn user_defined_faceted_fields(&self, rtxn: &RoTxn<'_>) -> Result<HashSet<String>> {
-    //     let fields_ids_map = self.fields_ids_map(rtxn)?;
-    //     let filterable_fields = self.filterable_fields_ids(rtxn)?;
-    //     let sortable_fields = self.sortable_fields(rtxn)?;
-    //     let distinct_field = self.distinct_field(rtxn)?;
-    //     let asc_desc_fields =
-    //         self.criteria(rtxn)?.into_iter().filter_map(|criterion| match criterion {
-    //             Criterion::Asc(field) | Criterion::Desc(field) => Some(field),
-    //             _otherwise => None,
-    //         });
-
-    //     let mut faceted_fields: HashSet<_> = filterable_fields
-    //         .into_iter()
-    //         .filter_map(|field_id| {
-    //             let field_name = fields_ids_map.name(field_id);
-    //             debug_assert!(field_name.is_some(), "field name not found for {field_id}");
-    //             field_name.map(|field| field.to_string())
-    //         })
-    //         .collect();
-    //     faceted_fields.extend(sortable_fields);
-    //     faceted_fields.extend(asc_desc_fields);
-    //     if let Some(field) = distinct_field {
-    //         faceted_fields.insert(field.to_owned());
-    //     }
-
-    //     Ok(faceted_fields)
-    // }
 
     pub fn asc_desc_fields(&self, rtxn: &RoTxn<'_>) -> Result<HashSet<String>> {
         let asc_desc_fields = self

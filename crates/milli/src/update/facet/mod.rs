@@ -89,6 +89,7 @@ use time::OffsetDateTime;
 use tracing::debug;
 
 use self::incremental::FacetsUpdateIncremental;
+use super::settings::{InnerIndexSettings, InnerIndexSettingsDiff};
 use super::{FacetsUpdateBulk, MergeDeladdBtreesetString, MergeDeladdCboRoaringBitmaps};
 use crate::facet::FacetType;
 use crate::heed_codec::facet::{
@@ -147,7 +148,11 @@ impl<'i> FacetsUpdate<'i> {
         }
     }
 
-    pub fn execute(self, wtxn: &mut heed::RwTxn<'_>) -> Result<()> {
+    pub fn execute(
+        self,
+        wtxn: &mut heed::RwTxn<'_>,
+        new_settings: &InnerIndexSettings,
+    ) -> Result<()> {
         if self.data_size == 0 {
             return Ok(());
         }
@@ -156,10 +161,10 @@ impl<'i> FacetsUpdate<'i> {
 
         // See self::comparison_bench::benchmark_facet_indexing
         if self.data_size >= (self.database.len(wtxn)? / 500) {
-            let field_ids = self.index.facet_leveled_field_ids(wtxn)?;
+            let field_ids = facet_levels_field_ids(new_settings);
             let bulk_update = FacetsUpdateBulk::new(
                 self.index,
-                field_ids.into_iter().collect(),
+                field_ids,
                 self.facet_type,
                 self.delta_data,
                 self.group_size,
@@ -288,6 +293,53 @@ fn index_facet_search(
     }
 
     Ok(())
+}
+
+/// Clear all the levels greater than 0 for given field ids.
+pub fn clear_facet_levels<'a, I>(
+    wtxn: &mut heed::RwTxn<'_>,
+    db: &heed::Database<FacetGroupKeyCodec<BytesRefCodec>, DecodeIgnore>,
+    field_ids: I,
+) -> Result<()>
+where
+    I: IntoIterator<Item = &'a FieldId>,
+{
+    for field_id in field_ids {
+        let field_id = *field_id;
+        let left = FacetGroupKey::<&[u8]> { field_id, level: 1, left_bound: &[] };
+        let right = FacetGroupKey::<&[u8]> { field_id, level: u8::MAX, left_bound: &[] };
+        let range = left..=right;
+        db.delete_range(wtxn, &range).map(drop)?;
+    }
+    Ok(())
+}
+
+pub fn clear_facet_levels_based_on_settings_diff(
+    wtxn: &mut heed::RwTxn<'_>,
+    index: &Index,
+    settings_diff: &InnerIndexSettingsDiff,
+) -> Result<()> {
+    let new_field_ids: BTreeSet<_> = facet_levels_field_ids(&settings_diff.new);
+    let old_field_ids: BTreeSet<_> = facet_levels_field_ids(&settings_diff.old);
+
+    let field_ids_to_clear: Vec<_> = old_field_ids.difference(&new_field_ids).copied().collect();
+    clear_facet_levels(wtxn, &index.facet_id_string_docids.remap_types(), &field_ids_to_clear)?;
+    clear_facet_levels(wtxn, &index.facet_id_f64_docids.remap_types(), &field_ids_to_clear)?;
+    Ok(())
+}
+
+fn facet_levels_field_ids<B>(settings: &InnerIndexSettings) -> B
+where
+    B: FromIterator<FieldId>,
+{
+    settings
+        .fields_ids_map
+        .iter_id_metadata()
+        .filter(|(_, metadata)| {
+            metadata.require_facet_level_database(&settings.filterable_attributes_rules)
+        })
+        .map(|(id, _)| id)
+        .collect()
 }
 
 #[cfg(test)]
