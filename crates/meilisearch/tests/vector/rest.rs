@@ -916,7 +916,7 @@ async fn bad_settings() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "`.embedders.rest`: Missing field `request` (note: this field is mandatory for source rest)",
+      "message": "`.embedders.rest`: Missing field `request` (note: this field is mandatory for source `rest`)",
       "code": "invalid_settings_embedders",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_settings_embedders"
@@ -933,7 +933,7 @@ async fn bad_settings() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "`.embedders.rest`: Missing field `response` (note: this field is mandatory for source rest)",
+      "message": "`.embedders.rest`: Missing field `response` (note: this field is mandatory for source `rest`)",
       "code": "invalid_settings_embedders",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_settings_embedders"

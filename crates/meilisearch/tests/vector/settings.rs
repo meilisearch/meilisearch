@@ -11,13 +11,13 @@ async fn field_unavailable_for_source() {
 
     let (response, code) = index
         .update_settings(json!({
-          "embedders": { "manual": {"source": "userProvided", "documentTemplate": "{{doc.documentTemplate}}"}},
+          "embedders": { "manual": {"source": "userProvided", "dimensions": 128, "documentTemplate": "{{doc.documentTemplate}}"}},
         }))
         .await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "`.embedders.manual`: Field `documentTemplate` unavailable for source `userProvided` (only available for sources: `huggingFace`, `openAi`, `ollama`, `rest`). Available fields: `source`, `dimensions`, `distribution`, `binaryQuantized`",
+      "message": "`.embedders.manual`: Field `documentTemplate` unavailable for source `userProvided`.\n  - note: `documentTemplate` is available for sources: `openAi`, `huggingFace`, `ollama`, `rest`\n  - note: available fields for source `userProvided`: `source`, `dimensions`, `distribution`, `binaryQuantized`",
       "code": "invalid_settings_embedders",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_settings_embedders"
@@ -32,7 +32,7 @@ async fn field_unavailable_for_source() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "`.embedders.default`: Field `revision` unavailable for source `openAi` (only available for sources: `huggingFace`). Available fields: `source`, `model`, `apiKey`, `documentTemplate`, `documentTemplateMaxBytes`, `dimensions`, `distribution`, `url`, `binaryQuantized`",
+      "message": "`.embedders.default`: Field `revision` unavailable for source `openAi`.\n  - note: `revision` is available for sources: `huggingFace`\n  - note: available fields for source `openAi`: `source`, `model`, `apiKey`, `dimensions`, `documentTemplate`, `documentTemplateMaxBytes`, `url`, `distribution`, `binaryQuantized`",
       "code": "invalid_settings_embedders",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_settings_embedders"
