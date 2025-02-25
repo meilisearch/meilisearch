@@ -1,0 +1,9 @@
+---
+source: crates/meilisearch/tests/settings/vectors.rs
+---
+{
+  "message": "`.embedders.test`: Field `model` unavailable for source `userProvided`.\n  - note: `model` is available for sources: `openAi`, `huggingFace`, `ollama`\n  - note: available fields for source `userProvided`: `source`, `dimensions`, `distribution`, `binaryQuantized`",
+  "code": "invalid_settings_embedders",
+  "type": "invalid_request",
+  "link": "https://docs.meilisearch.com/errors#invalid_settings_embedders"
+}
