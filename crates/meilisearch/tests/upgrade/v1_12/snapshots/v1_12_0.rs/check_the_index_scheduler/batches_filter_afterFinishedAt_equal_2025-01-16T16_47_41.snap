@@ -19,7 +19,7 @@ source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
           "upgradeDatabase": 1
         },
         "indexUids": {},
-        "callTrace": "[callTrace]"
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
