@@ -342,7 +342,7 @@ impl IndexScheduler {
         // We must re-add the canceled task so they're part of the same batch.
         ids |= canceled;
 
-        processing_batch.stats.call_trace =
+        processing_batch.stats.progress_trace =
             progress.accumulated_durations().into_iter().map(|(k, v)| (k, v.into())).collect();
         processing_batch.stats.write_channel_congestion = congestion.map(|congestion| {
             let mut congestion_info = serde_json::Map::new();

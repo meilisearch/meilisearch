@@ -343,7 +343,7 @@ pub fn snapshot_batch(batch: &Batch) -> String {
     let mut snap = String::new();
     let Batch { uid, details, stats, started_at, finished_at, progress: _, enqueued_at } = batch;
     let stats = BatchStats {
-        call_trace: Default::default(),
+        progress_trace: Default::default(),
         write_channel_congestion: None,
         ..stats.clone()
     };

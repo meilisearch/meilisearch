@@ -321,7 +321,7 @@ pub(crate) mod test {
                 status: maplit::btreemap! { Status::Succeeded => 1 },
                 types: maplit::btreemap! { Kind::DocumentAdditionOrUpdate => 1 },
                 index_uids: maplit::btreemap! { "doggo".to_string() => 1 },
-                call_trace: Default::default(),
+                progress_trace: Default::default(),
                 write_channel_congestion: None,
             },
             enqueued_at: Some(BatchEnqueuedAt {

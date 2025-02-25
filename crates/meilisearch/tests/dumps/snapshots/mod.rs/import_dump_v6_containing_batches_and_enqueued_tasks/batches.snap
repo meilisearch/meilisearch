@@ -21,7 +21,7 @@ source: crates/meilisearch/tests/dumps/mod.rs
         "indexUids": {
           "kefir": 1
         },
-        "callTrace": "[callTrace]",
+        "progressTrace": "[progressTrace]",
         "writeChannelCongestion": "[writeChannelCongestion]"
       },
       "duration": "[date]",

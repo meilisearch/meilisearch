@@ -2206,7 +2206,7 @@ async fn import_dump_v6_containing_batches_and_enqueued_tasks() {
         ".results[0].startedAt" => "[date]",
         ".results[0].finishedAt" => "[date]",
         ".results[0].duration" => "[date]",
-        ".results[0].stats.callTrace" => "[callTrace]",
+        ".results[0].stats.progressTrace" => "[progressTrace]",
         ".results[0].stats.writeChannelCongestion" => "[writeChannelCongestion]",
     }), name: "batches");
 

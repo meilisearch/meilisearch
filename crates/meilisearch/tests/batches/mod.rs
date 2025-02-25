@@ -280,7 +280,7 @@ async fn test_summarized_document_addition_or_update() {
             ".enqueuedAt" => "[date]",
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
-            ".stats.callTrace" => "[callTrace]",
+            ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
         @r###"
@@ -302,7 +302,7 @@ async fn test_summarized_document_addition_or_update() {
         "indexUids": {
           "test": 1
         },
-        "callTrace": "[callTrace]",
+        "progressTrace": "[progressTrace]",
         "writeChannelCongestion": "[writeChannelCongestion]"
       },
       "duration": "[duration]",
@@ -321,7 +321,7 @@ async fn test_summarized_document_addition_or_update() {
             ".enqueuedAt" => "[date]",
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
-            ".stats.callTrace" => "[callTrace]",
+            ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
         @r###"
@@ -343,7 +343,7 @@ async fn test_summarized_document_addition_or_update() {
         "indexUids": {
           "test": 1
         },
-        "callTrace": "[callTrace]",
+        "progressTrace": "[progressTrace]",
         "writeChannelCongestion": "[writeChannelCongestion]"
       },
       "duration": "[duration]",
@@ -366,7 +366,7 @@ async fn test_summarized_delete_documents_by_batch() {
             ".enqueuedAt" => "[date]",
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
-            ".stats.callTrace" => "[callTrace]",
+            ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
         @r###"
@@ -388,7 +388,7 @@ async fn test_summarized_delete_documents_by_batch() {
         "indexUids": {
           "test": 1
         },
-        "callTrace": "[callTrace]"
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -406,7 +406,7 @@ async fn test_summarized_delete_documents_by_batch() {
             ".enqueuedAt" => "[date]",
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
-            ".stats.callTrace" => "[callTrace]",
+            ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
         @r###"
@@ -428,7 +428,7 @@ async fn test_summarized_delete_documents_by_batch() {
         "indexUids": {
           "test": 1
         },
-        "callTrace": "[callTrace]"
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -452,7 +452,7 @@ async fn test_summarized_delete_documents_by_filter() {
             ".enqueuedAt" => "[date]",
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
-            ".stats.callTrace" => "[callTrace]",
+            ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
         @r###"
@@ -475,7 +475,7 @@ async fn test_summarized_delete_documents_by_filter() {
         "indexUids": {
           "test": 1
         },
-        "callTrace": "[callTrace]"
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -494,7 +494,7 @@ async fn test_summarized_delete_documents_by_filter() {
             ".enqueuedAt" => "[date]",
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
-            ".stats.callTrace" => "[callTrace]",
+            ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
         @r###"
@@ -517,7 +517,7 @@ async fn test_summarized_delete_documents_by_filter() {
         "indexUids": {
           "test": 1
         },
-        "callTrace": "[callTrace]"
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -536,7 +536,7 @@ async fn test_summarized_delete_documents_by_filter() {
             ".enqueuedAt" => "[date]",
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
-            ".stats.callTrace" => "[callTrace]",
+            ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
         @r#"
@@ -559,7 +559,7 @@ async fn test_summarized_delete_documents_by_filter() {
         "indexUids": {
           "test": 1
         },
-        "callTrace": "[callTrace]"
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -582,7 +582,7 @@ async fn test_summarized_delete_document_by_id() {
             ".enqueuedAt" => "[date]",
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
-            ".stats.callTrace" => "[callTrace]",
+            ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
         @r#"
@@ -604,7 +604,7 @@ async fn test_summarized_delete_document_by_id() {
         "indexUids": {
           "test": 1
         },
-        "callTrace": "[callTrace]"
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -622,7 +622,7 @@ async fn test_summarized_delete_document_by_id() {
             ".enqueuedAt" => "[date]",
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
-            ".stats.callTrace" => "[callTrace]",
+            ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
         @r#"
@@ -644,7 +644,7 @@ async fn test_summarized_delete_document_by_id() {
         "indexUids": {
           "test": 1
         },
-        "callTrace": "[callTrace]"
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -678,7 +678,7 @@ async fn test_summarized_settings_update() {
             ".enqueuedAt" => "[date]",
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
-            ".stats.callTrace" => "[callTrace]",
+            ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
         @r###"
@@ -709,7 +709,7 @@ async fn test_summarized_settings_update() {
         "indexUids": {
           "test": 1
         },
-        "callTrace": "[callTrace]"
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -731,7 +731,7 @@ async fn test_summarized_index_creation() {
             ".enqueuedAt" => "[date]",
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
-            ".stats.callTrace" => "[callTrace]",
+            ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
         @r###"
@@ -750,7 +750,7 @@ async fn test_summarized_index_creation() {
         "indexUids": {
           "test": 1
         },
-        "callTrace": "[callTrace]"
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -767,7 +767,7 @@ async fn test_summarized_index_creation() {
             ".enqueuedAt" => "[date]",
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
-            ".stats.callTrace" => "[callTrace]",
+            ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
         @r###"
@@ -788,7 +788,7 @@ async fn test_summarized_index_creation() {
         "indexUids": {
           "test": 1
         },
-        "callTrace": "[callTrace]"
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -920,7 +920,7 @@ async fn test_summarized_index_update() {
             ".enqueuedAt" => "[date]",
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
-            ".stats.callTrace" => "[callTrace]",
+            ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
         @r###"
@@ -939,7 +939,7 @@ async fn test_summarized_index_update() {
         "indexUids": {
           "test": 1
         },
-        "callTrace": "[callTrace]"
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -956,7 +956,7 @@ async fn test_summarized_index_update() {
             ".enqueuedAt" => "[date]",
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
-            ".stats.callTrace" => "[callTrace]",
+            ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
         @r###"
@@ -977,7 +977,7 @@ async fn test_summarized_index_update() {
         "indexUids": {
           "test": 1
         },
-        "callTrace": "[callTrace]"
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -997,7 +997,7 @@ async fn test_summarized_index_update() {
             ".enqueuedAt" => "[date]",
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
-            ".stats.callTrace" => "[callTrace]",
+            ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
         @r#"
@@ -1016,7 +1016,7 @@ async fn test_summarized_index_update() {
         "indexUids": {
           "test": 1
         },
-        "callTrace": "[callTrace]"
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -1033,7 +1033,7 @@ async fn test_summarized_index_update() {
             ".enqueuedAt" => "[date]",
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
-            ".stats.callTrace" => "[callTrace]",
+            ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
         @r###"
@@ -1054,7 +1054,7 @@ async fn test_summarized_index_update() {
         "indexUids": {
           "test": 1
         },
-        "callTrace": "[callTrace]"
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -1079,7 +1079,7 @@ async fn test_summarized_index_swap() {
             ".enqueuedAt" => "[date]",
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
-            ".stats.callTrace" => "[callTrace]",
+            ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
         @r###"
@@ -1105,7 +1105,7 @@ async fn test_summarized_index_swap() {
           "indexSwap": 1
         },
         "indexUids": {},
-        "callTrace": "[callTrace]"
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -1128,7 +1128,7 @@ async fn test_summarized_index_swap() {
             ".enqueuedAt" => "[date]",
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
-            ".stats.callTrace" => "[callTrace]",
+            ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
         @r###"
@@ -1147,7 +1147,7 @@ async fn test_summarized_index_swap() {
         "indexUids": {
           "doggos": 1
         },
-        "callTrace": "[callTrace]"
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -1172,7 +1172,7 @@ async fn test_summarized_batch_cancelation() {
             ".enqueuedAt" => "[date]",
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
-            ".stats.callTrace" => "[callTrace]",
+            ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
         @r###"
@@ -1193,7 +1193,7 @@ async fn test_summarized_batch_cancelation() {
           "taskCancelation": 1
         },
         "indexUids": {},
-        "callTrace": "[callTrace]"
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -1218,7 +1218,7 @@ async fn test_summarized_batch_deletion() {
             ".enqueuedAt" => "[date]",
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
-            ".stats.callTrace" => "[callTrace]",
+            ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
         @r###"
@@ -1239,7 +1239,7 @@ async fn test_summarized_batch_deletion() {
           "taskDeletion": 1
         },
         "indexUids": {},
-        "callTrace": "[callTrace]"
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -1261,7 +1261,7 @@ async fn test_summarized_dump_creation() {
             ".enqueuedAt" => "[date]",
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
-            ".stats.callTrace" => "[callTrace]",
+            ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
         @r###"
@@ -1280,7 +1280,7 @@ async fn test_summarized_dump_creation() {
           "dumpCreation": 1
         },
         "indexUids": {},
-        "callTrace": "[callTrace]"
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
