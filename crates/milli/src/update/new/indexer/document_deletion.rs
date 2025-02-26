@@ -1,8 +1,7 @@
 use bumpalo::collections::CollectIn;
 use bumpalo::Bump;
-use rayon::iter::IndexedParallelIterator;
-use rayon::slice::ParallelSlice as _;
 use roaring::RoaringBitmap;
+use scoped_thread_pool::PartitionChunks;
 
 use super::document_changes::{DocumentChangeContext, DocumentChanges};
 use crate::documents::PrimaryKey;
@@ -28,30 +27,27 @@ impl DocumentDeletion {
         self,
         indexer_alloc: &'indexer Bump,
         primary_key: PrimaryKey<'indexer>,
+        thread_pool: &scoped_thread_pool::ThreadPool<crate::Error>,
+        chunk_size: usize,
     ) -> DocumentDeletionChanges<'indexer> {
         let to_delete: bumpalo::collections::Vec<_> =
             self.to_delete.into_iter().collect_in(indexer_alloc);
 
         let to_delete = to_delete.into_bump_slice();
 
+        let to_delete = PartitionChunks::new(to_delete, chunk_size, thread_pool.thread_count());
+
         DocumentDeletionChanges { to_delete, primary_key }
     }
 }
 
 pub struct DocumentDeletionChanges<'indexer> {
-    to_delete: &'indexer [DocumentId],
+    to_delete: scoped_thread_pool::PartitionChunks<'indexer, DocumentId>,
     primary_key: PrimaryKey<'indexer>,
 }
 
 impl<'pl> DocumentChanges<'pl> for DocumentDeletionChanges<'pl> {
     type Item = DocumentId;
-
-    fn iter(
-        &self,
-        chunk_size: usize,
-    ) -> impl IndexedParallelIterator<Item = impl AsRef<[Self::Item]>> {
-        self.to_delete.par_chunks(chunk_size)
-    }
 
     fn item_to_document_change<
         'doc, // lifetime of a single `process` call
@@ -78,7 +74,11 @@ impl<'pl> DocumentChanges<'pl> for DocumentDeletionChanges<'pl> {
     }
 
     fn len(&self) -> usize {
-        self.to_delete.len()
+        self.to_delete.slice().len()
+    }
+
+    fn items(&self, thread_index: usize, task_index: usize) -> Option<&[Self::Item]> {
+        self.to_delete.partition(thread_index, task_index)
     }
 }
 
@@ -86,6 +86,7 @@ impl<'pl> DocumentChanges<'pl> for DocumentDeletionChanges<'pl> {
 mod test {
     use std::cell::RefCell;
     use std::marker::PhantomData;
+    use std::num::NonZeroUsize;
     use std::sync::RwLock;
 
     use bumpalo::Bump;
@@ -135,6 +136,9 @@ mod test {
             }
         }
 
+        let mut thread_pool =
+            scoped_thread_pool::ThreadPool::new(NonZeroUsize::new(1).unwrap(), "test".into());
+
         let mut deletions = DocumentDeletion::new();
         deletions.delete_documents_by_docids(Vec::<u32>::new().into_iter().collect());
         let indexer = Bump::new();
@@ -173,6 +177,7 @@ mod test {
             let datastore = ThreadLocal::new();
 
             extract(
+                &mut thread_pool,
                 &changes,
                 &deletion_tracker,
                 context,

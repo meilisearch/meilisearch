@@ -3,6 +3,7 @@ use std::ops::DerefMut;
 use bumparaw_collections::RawMap;
 use rayon::iter::IndexedParallelIterator;
 use rustc_hash::FxBuildHasher;
+use scoped_thread_pool::ThreadPool;
 use serde_json::value::RawValue;
 
 use super::document_changes::{DocumentChangeContext, DocumentChanges};
@@ -14,44 +15,33 @@ use crate::update::new::thread_local::MostlySend;
 use crate::update::new::{DocumentChange, Insertion};
 use crate::{Error, InternalError, Result, UserError};
 
-pub struct PartialDump<I> {
-    iter: I,
-}
+pub struct PartialDump;
 
-impl<I> PartialDump<I> {
-    pub fn new_from_jsonlines(iter: I) -> Self {
-        PartialDump { iter }
+impl PartialDump {
+    pub fn new_from_jsonlines() -> Self {
+        PartialDump
     }
 
     pub fn into_changes<'index>(
         self,
         concurrent_available_ids: &'index ConcurrentAvailableIds,
         primary_key: &'index PrimaryKey,
-    ) -> PartialDumpChanges<'index, I> {
+        thread_pool: &ThreadPool<crate::Error>,
+        chunk_size: usize,
+    ) -> PartialDumpChanges<'index> {
         // Note for future self:
         //   - We recommend sending chunks of documents in this `PartialDumpIndexer` we therefore need to create a custom take_while_size method (that doesn't drop items).
-        PartialDumpChanges { iter: self.iter, concurrent_available_ids, primary_key }
+        PartialDumpChanges { concurrent_available_ids, primary_key }
     }
 }
 
-pub struct PartialDumpChanges<'doc, I> {
-    iter: I,
+pub struct PartialDumpChanges<'doc> {
     concurrent_available_ids: &'doc ConcurrentAvailableIds,
     primary_key: &'doc PrimaryKey<'doc>,
 }
 
-impl<'index, Iter> DocumentChanges<'index> for PartialDumpChanges<'index, Iter>
-where
-    Iter: IndexedParallelIterator<Item = Box<RawValue>> + Clone + Sync + 'index,
-{
+impl<'index> DocumentChanges<'index> for PartialDumpChanges<'index> {
     type Item = Box<RawValue>;
-
-    fn iter(
-        &self,
-        chunk_size: usize,
-    ) -> impl IndexedParallelIterator<Item = impl AsRef<[Self::Item]>> {
-        self.iter.clone().chunks(chunk_size)
-    }
 
     fn item_to_document_change<'doc, T: MostlySend + 'doc>(
         &'doc self,
@@ -85,6 +75,10 @@ where
     }
 
     fn len(&self) -> usize {
-        self.iter.len()
+        unimplemented!()
+    }
+
+    fn items(&self, thread_index: usize, task_index: usize) -> Option<&[Self::Item]> {
+        unimplemented!()
     }
 }

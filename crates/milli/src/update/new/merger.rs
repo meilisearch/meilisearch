@@ -1,10 +1,10 @@
 use std::cell::RefCell;
+use std::sync::Mutex;
 
 use hashbrown::HashMap;
 use heed::types::Bytes;
 use heed::{Database, RoTxn};
 use memmap2::Mmap;
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use roaring::RoaringBitmap;
 
 use super::channel::*;
@@ -64,6 +64,7 @@ where
 
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::merge")]
 pub fn merge_and_send_docids<'extractor, MSP, D>(
+    thread_pool: &mut scoped_thread_pool::ThreadPool<crate::Error>,
     mut caches: Vec<BalancedCaches<'extractor>>,
     database: Database<Bytes, Bytes>,
     index: &Index,
@@ -74,7 +75,10 @@ where
     MSP: Fn() -> bool + Sync,
     D: DatabaseType + Sync,
 {
-    transpose_and_freeze_caches(&mut caches)?.into_par_iter().try_for_each(|frozen| {
+    let frozen_caches = Mutex::new(transpose_and_freeze_caches(&mut caches)?);
+
+    match thread_pool.broadcast(|thread_index| {
+        let frozen = std::mem::take(frozen_caches.lock().unwrap().get_mut(thread_index).unwrap());
         let rtxn = index.read_txn()?;
         if must_stop_processing() {
             return Err(InternalError::AbortedIndexation.into());
@@ -92,12 +96,17 @@ where
                 }
                 Operation::Ignore => Ok(()),
             }
-        })
-    })
+        });
+        Ok(())
+    }) {
+        Ok(()) => Ok(()),
+        Err(errors) => Err(crate::Error::from_scoped_thread_pool_errors(thread_pool, errors)),
+    }
 }
 
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::merge")]
 pub fn merge_and_send_facet_docids<'extractor>(
+    thread_pool: &mut scoped_thread_pool::ThreadPool<crate::Error>,
     mut caches: Vec<BalancedCaches<'extractor>>,
     database: FacetDatabases,
     index: &Index,
@@ -108,35 +117,42 @@ pub fn merge_and_send_facet_docids<'extractor>(
     let max_number_count = (index.facet_id_f64_docids.len(rtxn)? / 500) as usize;
     let max_string_count = max_string_count.clamp(1000, 100_000);
     let max_number_count = max_number_count.clamp(1000, 100_000);
-    transpose_and_freeze_caches(&mut caches)?
-        .into_par_iter()
-        .map(|frozen| {
-            let mut facet_field_ids_delta =
-                FacetFieldIdsDelta::new(max_string_count, max_number_count);
-            let rtxn = index.read_txn()?;
-            merge_caches_sorted(frozen, |key, DelAddRoaringBitmap { del, add }| {
-                let current = database.get_cbo_roaring_bytes_value(&rtxn, key)?;
-                match merge_cbo_bitmaps(current, del, add)? {
-                    Operation::Write(bitmap) => {
-                        facet_field_ids_delta.register_from_key(key);
-                        docids_sender.write(key, &bitmap)?;
-                        Ok(())
-                    }
-                    Operation::Delete => {
-                        facet_field_ids_delta.register_from_key(key);
-                        docids_sender.delete(key)?;
-                        Ok(())
-                    }
-                    Operation::Ignore => Ok(()),
-                }
-            })?;
+    let transposed_frozen_caches = Mutex::new(transpose_and_freeze_caches(&mut caches)?);
+    let output = Mutex::new(FacetFieldIdsDelta::new(max_string_count, max_number_count));
+    thread_pool.broadcast(|thread_index| {
+        // TODO: we can probably spare the mutex here since it is guaranteed that each thread will access its own cell of the vec
+        let frozen =
+            std::mem::take(transposed_frozen_caches.lock().unwrap().get_mut(thread_index).unwrap());
 
-            Ok(facet_field_ids_delta)
-        })
-        .reduce(
-            || Ok(FacetFieldIdsDelta::new(max_string_count, max_number_count)),
-            |lhs, rhs| Ok(lhs?.merge(rhs?)),
-        )
+        let mut facet_field_ids_delta = FacetFieldIdsDelta::new(max_string_count, max_number_count);
+        let rtxn = index.read_txn()?;
+        merge_caches_sorted(frozen, |key, DelAddRoaringBitmap { del, add }| {
+            let current = database.get_cbo_roaring_bytes_value(&rtxn, key)?;
+            match merge_cbo_bitmaps(current, del, add)? {
+                Operation::Write(bitmap) => {
+                    facet_field_ids_delta.register_from_key(key);
+                    docids_sender.write(key, &bitmap)?;
+                    Ok(())
+                }
+                Operation::Delete => {
+                    facet_field_ids_delta.register_from_key(key);
+                    docids_sender.delete(key)?;
+                    Ok(())
+                }
+                Operation::Ignore => Ok(()),
+            }
+        })?;
+        {
+            let mut common = output.lock().unwrap();
+            *common = std::mem::replace(
+                &mut *common,
+                FacetFieldIdsDelta::new(max_string_count, max_number_count),
+            )
+            .merge(facet_field_ids_delta);
+        }
+        Ok(())
+    });
+    Ok(output.into_inner().unwrap())
 }
 
 pub struct FacetDatabases<'a> {

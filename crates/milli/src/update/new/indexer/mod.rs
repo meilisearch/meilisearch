@@ -104,9 +104,8 @@ where
         );
     });
 
-    let (extractor_sender, writer_receiver) = pool
-        .install(|| extractor_writer_bbqueue(&mut bbbuffers, total_bbbuffer_capacity, 1000))
-        .unwrap();
+    let (extractor_sender, writer_receiver) =
+        extractor_writer_bbqueue(thread_pool, &mut bbbuffers, total_bbbuffer_capacity, 1000);
 
     let metadata_builder = MetadataBuilder::from_index(index, wtxn)?;
     let new_fields_ids_map = FieldIdMapWithMetadata::new(new_fields_ids_map, metadata_builder);
@@ -139,21 +138,19 @@ where
         let document_ids = &mut document_ids;
         let extractor_handle =
             Builder::new().name(S("indexer-extractors")).spawn_scoped(s, move || {
-                pool.install(move || {
-                    extract::extract_all(
-                        document_changes,
-                        indexing_context,
-                        indexer_span,
-                        extractor_sender,
-                        embedders,
-                        &mut extractor_allocs,
-                        finished_extraction,
-                        field_distribution,
-                        index_embeddings,
-                        document_ids,
-                    )
-                })
-                .unwrap()
+                extract::extract_all(
+                    thread_pool,
+                    document_changes,
+                    indexing_context,
+                    indexer_span,
+                    extractor_sender,
+                    embedders,
+                    &mut extractor_allocs,
+                    finished_extraction,
+                    field_distribution,
+                    index_embeddings,
+                    document_ids,
+                )
             })?;
 
         let global_fields_ids_map = GlobalFieldsIdsMap::new(&new_fields_ids_map);

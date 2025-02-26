@@ -1,9 +1,10 @@
+use bumpalo::collections::CollectIn;
+use bumpalo::Bump;
 use bumparaw_collections::RawMap;
-use rayon::iter::IndexedParallelIterator;
-use rayon::slice::ParallelSlice as _;
 use rhai::{Dynamic, Engine, OptimizationLevel, Scope, AST};
 use roaring::RoaringBitmap;
 use rustc_hash::FxBuildHasher;
+use scoped_thread_pool::{PartitionChunks, ThreadPool};
 
 use super::document_changes::DocumentChangeContext;
 use super::DocumentChanges;
@@ -22,14 +23,12 @@ pub struct UpdateByFunction {
     code: String,
 }
 
-pub struct UpdateByFunctionChanges<'doc> {
-    primary_key: &'doc PrimaryKey<'doc>,
+pub struct UpdateByFunctionChanges<'index> {
+    primary_key: &'index PrimaryKey<'index>,
     engine: Engine,
     ast: AST,
     context: Option<Dynamic>,
-    // It is sad that the RoaringBitmap doesn't
-    // implement IndexedParallelIterator
-    documents: Vec<u32>,
+    documents: PartitionChunks<'index, u32>,
 }
 
 impl UpdateByFunction {
@@ -40,6 +39,9 @@ impl UpdateByFunction {
     pub fn into_changes<'index>(
         self,
         primary_key: &'index PrimaryKey,
+        allocator: &'index Bump,
+        thread_pool: &ThreadPool<crate::Error>,
+        chunk_size: usize,
     ) -> Result<UpdateByFunctionChanges<'index>> {
         let Self { documents, context, code } = self;
 
@@ -64,25 +66,18 @@ impl UpdateByFunction {
             None => None,
         };
 
-        Ok(UpdateByFunctionChanges {
-            primary_key,
-            engine,
-            ast,
-            context,
-            documents: documents.into_iter().collect(),
-        })
+        let documents: bumpalo::collections::Vec<'_, _> =
+            documents.into_iter().collect_in(allocator);
+        let documents = documents.into_bump_slice();
+
+        let documents = PartitionChunks::new(documents, chunk_size, thread_pool.thread_count());
+
+        Ok(UpdateByFunctionChanges { primary_key, engine, ast, context, documents })
     }
 }
 
 impl<'index> DocumentChanges<'index> for UpdateByFunctionChanges<'index> {
     type Item = u32;
-
-    fn iter(
-        &self,
-        chunk_size: usize,
-    ) -> impl IndexedParallelIterator<Item = impl AsRef<[Self::Item]>> {
-        self.documents.as_slice().par_chunks(chunk_size)
-    }
 
     fn item_to_document_change<'doc, T: MostlySend + 'doc>(
         &self,
@@ -185,7 +180,11 @@ impl<'index> DocumentChanges<'index> for UpdateByFunctionChanges<'index> {
     }
 
     fn len(&self) -> usize {
-        self.documents.len()
+        self.documents.slice().len()
+    }
+
+    fn items(&self, thread_index: usize, task_index: usize) -> Option<&[Self::Item]> {
+        self.documents.partition(thread_index, task_index)
     }
 }
 

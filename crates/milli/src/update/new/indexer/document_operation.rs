@@ -6,8 +6,8 @@ use bumparaw_collections::RawMap;
 use hashbrown::hash_map::Entry;
 use heed::RoTxn;
 use memmap2::Mmap;
-use rayon::slice::ParallelSlice;
 use rustc_hash::FxBuildHasher;
+use scoped_thread_pool::PartitionChunks;
 use serde_json::value::RawValue;
 use serde_json::Deserializer;
 
@@ -57,6 +57,8 @@ impl<'pl> DocumentOperation<'pl> {
         new_fields_ids_map: &mut FieldsIdsMap,
         must_stop_processing: &MSP,
         progress: Progress,
+        thread_pool: &scoped_thread_pool::ThreadPool<crate::Error>,
+        chunk_size: usize,
     ) -> Result<(DocumentOperationChanges<'pl>, Vec<PayloadStats>, Option<PrimaryKey<'pl>>)>
     where
         MSP: Fn() -> bool,
@@ -130,6 +132,8 @@ impl<'pl> DocumentOperation<'pl> {
         docids_version_offsets.sort_unstable_by_key(|(_, po)| method.sort_key(&po.operations));
 
         let docids_version_offsets = docids_version_offsets.into_bump_slice();
+        let docids_version_offsets =
+            PartitionChunks::new(docids_version_offsets, chunk_size, thread_pool.thread_count());
         Ok((DocumentOperationChanges { docids_version_offsets }, operations_stats, primary_key))
     }
 }
@@ -353,13 +357,6 @@ fn merge_version_offsets<'s, 'pl>(
 impl<'pl> DocumentChanges<'pl> for DocumentOperationChanges<'pl> {
     type Item = (&'pl str, PayloadOperations<'pl>);
 
-    fn iter(
-        &self,
-        chunk_size: usize,
-    ) -> impl rayon::prelude::IndexedParallelIterator<Item = impl AsRef<[Self::Item]>> {
-        self.docids_version_offsets.par_chunks(chunk_size)
-    }
-
     fn item_to_document_change<'doc, T: MostlySend + 'doc>(
         &'doc self,
         context: &'doc DocumentChangeContext<T>,
@@ -379,12 +376,16 @@ impl<'pl> DocumentChanges<'pl> for DocumentOperationChanges<'pl> {
     }
 
     fn len(&self) -> usize {
-        self.docids_version_offsets.len()
+        self.docids_version_offsets.slice().len()
+    }
+
+    fn items(&self, thread_index: usize, task_index: usize) -> Option<&[Self::Item]> {
+        self.docids_version_offsets.partition(thread_index, task_index)
     }
 }
 
 pub struct DocumentOperationChanges<'pl> {
-    docids_version_offsets: &'pl [(&'pl str, PayloadOperations<'pl>)],
+    docids_version_offsets: PartitionChunks<'pl, (&'pl str, PayloadOperations<'pl>)>,
 }
 
 pub enum Payload<'pl> {
