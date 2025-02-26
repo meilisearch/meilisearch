@@ -68,6 +68,8 @@ pub struct FacetSearchQuery {
     pub ranking_score_threshold: Option<RankingScoreThreshold>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchLocales>, default)]
     pub locales: Option<Vec<Locale>>,
+    #[deserr(default, error = DeserrJsonError<InvalidFacetSearchExhaustiveFacetCount>, default)]
+    pub exhaustive_facet_count: Option<bool>,
 }
 
 #[derive(Default)]
@@ -98,6 +100,7 @@ impl FacetSearchAggregator {
             hybrid,
             ranking_score_threshold,
             locales,
+            exhaustive_facet_count,
         } = query;
 
         Self {
@@ -110,7 +113,8 @@ impl FacetSearchAggregator {
                 || attributes_to_search_on.is_some()
                 || hybrid.is_some()
                 || ranking_score_threshold.is_some()
-                || locales.is_some(),
+                || locales.is_some()
+                || exhaustive_facet_count.is_some(),
             ..Default::default()
         }
     }
@@ -293,13 +297,24 @@ impl From<FacetSearchQuery> for SearchQuery {
             hybrid,
             ranking_score_threshold,
             locales,
+            exhaustive_facet_count,
         } = value;
+
+        // If exhaustive_facet_count is true, we need to set the page to 0
+        // because the facet search is not exhaustive by default.
+        let page = if exhaustive_facet_count.map_or(false, |exhaustive| exhaustive) {
+            // setting the page to 0 will force the search to be exhaustive when computing the number of hits,
+            // but it will skip the bucket sort saving time.
+            Some(0)
+        } else {
+            None
+        };
 
         SearchQuery {
             q,
             offset: DEFAULT_SEARCH_OFFSET(),
             limit: DEFAULT_SEARCH_LIMIT(),
-            page: None,
+            page,
             hits_per_page: None,
             attributes_to_retrieve: None,
             retrieve_vectors: false,
