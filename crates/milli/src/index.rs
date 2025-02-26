@@ -443,7 +443,6 @@ impl Index {
         wtxn: &mut RwTxn<'_>,
         stats: DatabaseStats,
     ) -> heed::Result<()> {
-        eprintln!("putting documents stats: {:?}", stats);
         self.main.remap_types::<Str, SerdeJson<DatabaseStats>>().put(
             wtxn,
             main_key::DOCUMENTS_STATS,
