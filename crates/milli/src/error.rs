@@ -515,3 +515,68 @@ fn conditionally_lookup_for_error_message() {
         assert_eq!(err.to_string(), format!("{} {}", prefix, suffix));
     }
 }
+
+impl Error {
+    pub fn from_scoped_thread_pool_error(
+        thread_pool: &scoped_thread_pool::ThreadPool<Self>,
+        thread_id: usize,
+        error: scoped_thread_pool::Error<Self>,
+    ) -> Self {
+        match error {
+            scoped_thread_pool::Error::Err(error) => error,
+            scoped_thread_pool::Error::Panic(payload)
+            | scoped_thread_pool::Error::ThreadExited(Some(payload)) => {
+                let msg = match payload.downcast_ref::<&'static str>() {
+                    Some(s) => *s,
+                    None => match payload.downcast_ref::<String>() {
+                        Some(s) => &s[..],
+                        None => "Box<dyn Any>",
+                    },
+                };
+                tracing::error!(
+                    thread_name = thread_pool.thread_name(thread_id),
+                    "Thread panicked with {msg}"
+                );
+                Error::InternalError(InternalError::PanicInThreadPool(PanicCatched))
+            }
+            scoped_thread_pool::Error::ThreadExited(None) => {
+                Error::InternalError(InternalError::PanicInThreadPool(PanicCatched))
+            }
+        }
+    }
+
+    pub fn from_scoped_thread_pool_errors(
+        thread_pool: &scoped_thread_pool::ThreadPool<Self>,
+        value: scoped_thread_pool::Errors<Error>,
+    ) -> Self {
+        // iterate all errors, keeping the "max" one
+        // such that AbortedIndexing < regular error < panic
+        let mut max = None;
+        for (thread_id, error) in value.0 {
+            max = match (max, error) {
+                (None, error) => Some((thread_id, error)),
+                (max @ Some((_, scoped_thread_pool::Error::Panic(_))), _) => max,
+                (_, new @ scoped_thread_pool::Error::Panic(_)) => Some((thread_id, new)),
+                (max @ Some((_, scoped_thread_pool::Error::ThreadExited(Some(_)))), _) => max,
+                (_, new @ scoped_thread_pool::Error::ThreadExited(Some(_))) => {
+                    Some((thread_id, new))
+                }
+                (max @ Some((_, scoped_thread_pool::Error::ThreadExited(None))), _) => max,
+                (_, new @ scoped_thread_pool::Error::ThreadExited(None)) => Some((thread_id, new)),
+                (
+                    Some((
+                        _,
+                        scoped_thread_pool::Error::Err(Error::InternalError(
+                            InternalError::AbortedIndexation,
+                        )),
+                    )),
+                    new,
+                ) => Some((thread_id, new)),
+                (max @ Some((_, scoped_thread_pool::Error::Err(_))), _) => max,
+            };
+        }
+        // Errors never have an empty list
+        let (thread_id, error) = max.unwrap();
+        Self::from_scoped_thread_pool_error(thread_pool, thread_id, error)
+    }
+}
