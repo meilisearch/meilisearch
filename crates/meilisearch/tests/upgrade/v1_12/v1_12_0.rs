@@ -139,6 +139,8 @@ async fn check_the_index_scheduler(server: &Server) {
       "indexes": {
         "kefir": {
           "numberOfDocuments": 1,
+          "rawDocumentDbSize": 109,
+          "avgDocumentSize": 109,
           "isIndexing": false,
           "numberOfEmbeddings": 0,
           "numberOfEmbeddedDocuments": 0,
@@ -225,6 +227,8 @@ async fn check_the_index_scheduler(server: &Server) {
       "indexes": {
         "kefir": {
           "numberOfDocuments": 1,
+          "rawDocumentDbSize": 109,
+          "avgDocumentSize": 109,
           "isIndexing": false,
           "numberOfEmbeddings": 0,
           "numberOfEmbeddedDocuments": 0,
@@ -244,6 +248,8 @@ async fn check_the_index_scheduler(server: &Server) {
     snapshot!(stats, @r###"
     {
       "numberOfDocuments": 1,
+      "rawDocumentDbSize": 109,
+      "avgDocumentSize": 109,
       "isIndexing": false,
       "numberOfEmbeddings": 0,
       "numberOfEmbeddedDocuments": 0,

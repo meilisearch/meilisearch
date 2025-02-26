@@ -160,6 +160,8 @@ async fn delete_document_by_filter() {
     snapshot!(json_string!(stats), @r###"
     {
       "numberOfDocuments": 4,
+      "rawDocumentDbSize": 42,
+      "avgDocumentSize": 10,
       "isIndexing": false,
       "numberOfEmbeddings": 0,
       "numberOfEmbeddedDocuments": 0,
@@ -209,6 +211,8 @@ async fn delete_document_by_filter() {
     snapshot!(json_string!(stats), @r###"
     {
       "numberOfDocuments": 2,
+      "rawDocumentDbSize": 16,
+      "avgDocumentSize": 8,
       "isIndexing": false,
       "numberOfEmbeddings": 0,
       "numberOfEmbeddedDocuments": 0,
@@ -277,6 +281,8 @@ async fn delete_document_by_filter() {
     snapshot!(json_string!(stats), @r###"
     {
       "numberOfDocuments": 1,
+      "rawDocumentDbSize": 12,
+      "avgDocumentSize": 12,
       "isIndexing": false,
       "numberOfEmbeddings": 0,
       "numberOfEmbeddedDocuments": 0,

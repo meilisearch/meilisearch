@@ -910,7 +910,11 @@ fn create_and_list_index() {
         [
           "kefir",
           {
-            "number_of_documents": 0,
+            "documents_database_stats": {
+              "numberOfEntries": 0,
+              "totalKeySize": 0,
+              "totalValueSize": 0
+            },
             "database_size": "[bytes]",
             "number_of_embeddings": 0,
             "number_of_embedded_documents": 0,
