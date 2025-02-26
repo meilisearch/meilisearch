@@ -113,6 +113,8 @@ async fn add_remove_embeddings() {
     snapshot!(json_string!(stats), @r###"
     {
       "numberOfDocuments": 2,
+      "rawDocumentDbSize": 27,
+      "avgDocumentSize": 13,
       "isIndexing": false,
       "numberOfEmbeddings": 5,
       "numberOfEmbeddedDocuments": 2,
@@ -136,6 +138,8 @@ async fn add_remove_embeddings() {
     snapshot!(json_string!(stats), @r###"
     {
       "numberOfDocuments": 2,
+      "rawDocumentDbSize": 27,
+      "avgDocumentSize": 13,
       "isIndexing": false,
       "numberOfEmbeddings": 3,
       "numberOfEmbeddedDocuments": 2,
@@ -159,6 +163,8 @@ async fn add_remove_embeddings() {
     snapshot!(json_string!(stats), @r###"
     {
       "numberOfDocuments": 2,
+      "rawDocumentDbSize": 27,
+      "avgDocumentSize": 13,
       "isIndexing": false,
       "numberOfEmbeddings": 2,
       "numberOfEmbeddedDocuments": 2,
@@ -183,6 +189,8 @@ async fn add_remove_embeddings() {
     snapshot!(json_string!(stats), @r###"
     {
       "numberOfDocuments": 2,
+      "rawDocumentDbSize": 27,
+      "avgDocumentSize": 13,
       "isIndexing": false,
       "numberOfEmbeddings": 2,
       "numberOfEmbeddedDocuments": 1,
@@ -231,6 +239,8 @@ async fn add_remove_embedded_documents() {
     snapshot!(json_string!(stats), @r###"
     {
       "numberOfDocuments": 2,
+      "rawDocumentDbSize": 27,
+      "avgDocumentSize": 13,
       "isIndexing": false,
       "numberOfEmbeddings": 5,
       "numberOfEmbeddedDocuments": 2,
@@ -250,6 +260,8 @@ async fn add_remove_embedded_documents() {
     snapshot!(json_string!(stats), @r###"
     {
       "numberOfDocuments": 1,
+      "rawDocumentDbSize": 13,
+      "avgDocumentSize": 13,
       "isIndexing": false,
       "numberOfEmbeddings": 3,
       "numberOfEmbeddedDocuments": 1,
@@ -281,6 +293,8 @@ async fn update_embedder_settings() {
     snapshot!(json_string!(stats), @r###"
     {
       "numberOfDocuments": 2,
+      "rawDocumentDbSize": 108,
+      "avgDocumentSize": 54,
       "isIndexing": false,
       "numberOfEmbeddings": 0,
       "numberOfEmbeddedDocuments": 0,
@@ -315,6 +329,8 @@ async fn update_embedder_settings() {
     snapshot!(json_string!(stats), @r###"
     {
       "numberOfDocuments": 2,
+      "rawDocumentDbSize": 108,
+      "avgDocumentSize": 54,
       "isIndexing": false,
       "numberOfEmbeddings": 3,
       "numberOfEmbeddedDocuments": 2,

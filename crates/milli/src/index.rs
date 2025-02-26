@@ -11,6 +11,7 @@ use rstar::RTree;
 use serde::{Deserialize, Serialize};
 
 use crate::constants::{self, RESERVED_VECTORS_FIELD_NAME};
+use crate::database_stats::DatabaseStats;
 use crate::documents::PrimaryKey;
 use crate::error::{InternalError, UserError};
 use crate::fields_ids_map::FieldsIdsMap;
@@ -74,6 +75,7 @@ pub mod main_key {
     pub const LOCALIZED_ATTRIBUTES_RULES: &str = "localized_attributes_rules";
     pub const FACET_SEARCH: &str = "facet_search";
     pub const PREFIX_SEARCH: &str = "prefix_search";
+    pub const DOCUMENTS_STATS: &str = "documents_stats";
 }
 
 pub mod db_name {
@@ -401,6 +403,58 @@ impl Index {
             .remap_types::<Str, RoaringBitmapLenCodec>()
             .get(rtxn, main_key::DOCUMENTS_IDS_KEY)?;
         Ok(count.unwrap_or_default())
+    }
+
+    /// Updates the stats of the documents database based on the previous stats and the modified docids.
+    pub fn update_documents_stats(
+        &self,
+        wtxn: &mut RwTxn<'_>,
+        modified_docids: roaring::RoaringBitmap,
+    ) -> Result<()> {
+        let before_rtxn = self.read_txn()?;
+        let document_stats = match self.documents_stats(&before_rtxn)? {
+            Some(before_stats) => DatabaseStats::recompute(
+                before_stats,
+                self.documents.remap_types(),
+                &before_rtxn,
+                wtxn,
+                modified_docids.iter().map(|docid| docid.to_be_bytes()),
+            )?,
+            None => {
+                // This should never happen when there are already documents in the index, the documents stats should be present.
+                // If it happens, it means that the index was not properly initialized/upgraded.
+                debug_assert_eq!(
+                    self.documents.len(&before_rtxn)?,
+                    0,
+                    "The documents stats should be present when there are documents in the index"
+                );
+                tracing::warn!("No documents stats found, creating new ones");
+                DatabaseStats::new(self.documents.remap_types(), &*wtxn)?
+            }
+        };
+
+        self.put_documents_stats(wtxn, document_stats)?;
+        Ok(())
+    }
+
+    /// Writes the stats of the documents database.
+    pub fn put_documents_stats(
+        &self,
+        wtxn: &mut RwTxn<'_>,
+        stats: DatabaseStats,
+    ) -> heed::Result<()> {
+        self.main.remap_types::<Str, SerdeJson<DatabaseStats>>().put(
+            wtxn,
+            main_key::DOCUMENTS_STATS,
+            &stats,
+        )
+    }
+
+    /// Returns the stats of the documents database.
+    pub fn documents_stats(&self, rtxn: &RoTxn<'_>) -> heed::Result<Option<DatabaseStats>> {
+        self.main
+            .remap_types::<Str, SerdeJson<DatabaseStats>>()
+            .get(rtxn, main_key::DOCUMENTS_STATS)
     }
 
     /* primary key */
