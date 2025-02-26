@@ -76,8 +76,9 @@ fn compute_level(
     field_id: FieldId,
     base_level: u8,
 ) -> Result<Vec<grenad::Reader<BufReader<File>>>, crate::Error> {
+    let thread_count = rayon::current_num_threads();
     let rtxns = iter::repeat_with(|| index.env.nested_read_txn(wtxn))
-        .take(rayon::current_num_threads())
+        .take(thread_count)
         .collect::<heed::Result<Vec<_>>>()?;
 
     let range = {
@@ -106,13 +107,9 @@ fn compute_level(
 
                 let start_of_group = i % FACET_GROUP_SIZE as usize == 0;
                 let group_index = i / FACET_GROUP_SIZE as usize;
-                let group_for_thread = group_index % FACET_GROUP_SIZE as usize == thread_id;
+                let group_for_thread = group_index % thread_count == thread_id;
 
                 if group_for_thread {
-                    // Lazily decode the bitmaps we are interested in.
-                    let value = lazy_value.decode().map_err(heed::Error::Decoding)?;
-                    group_docids.push(value.bitmap);
-
                     if start_of_group {
                         if let Some(left_bound) = left_bound.take() {
                             // We store the bitmaps in a Vec this way we can use
@@ -122,7 +119,8 @@ fn compute_level(
                             // We also don't forget to store the group size corresponding
                             // to the number of entries merged in this group.
                             ser_buffer.clear();
-                            ser_buffer.push(group_docids.len().try_into().unwrap());
+                            let group_len: u8 = group_docids.len().try_into().unwrap();
+                            ser_buffer.push(group_len);
                             let group_docids = mem::take(&mut group_docids);
                             let docids = group_docids.into_iter().union();
                             CboRoaringBitmapCodec::serialize_into_vec(&docids, &mut ser_buffer);
@@ -130,6 +128,10 @@ fn compute_level(
                         }
                         left_bound = Some(key.left_bound);
                     }
+
+                    // Lazily decode the bitmaps we are interested in.
+                    let value = lazy_value.decode().map_err(heed::Error::Decoding)?;
+                    group_docids.push(value.bitmap);
                 }
             }
 
@@ -137,7 +139,8 @@ fn compute_level(
                 ser_buffer.clear();
                 // We don't forget to store the group size corresponding
                 // to the number of entries merged in this group.
-                ser_buffer.push(group_docids.len().try_into().unwrap());
+                let group_len: u8 = group_docids.len().try_into().unwrap();
+                ser_buffer.push(group_len);
                 let group_docids = group_docids.into_iter().union();
                 CboRoaringBitmapCodec::serialize_into_vec(&group_docids, &mut ser_buffer);
                 writer.insert(left_bound, &ser_buffer)?;
