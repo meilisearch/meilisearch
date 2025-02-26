@@ -497,7 +497,7 @@ pub enum NewEmbedderErrorKind {
     CompositeTestEmbeddingFailed { inner: EmbedError, failing_embedder: &'static str },
     #[error("error while generating test embeddings.\n  - the number of generated embeddings differs.\n  - {search_count} embeddings for the search time embedder.\n  - {index_count} embeddings for the indexing time embedder.")]
     CompositeEmbeddingCountMismatch { search_count: usize, index_count: usize },
-    #[error("error while generating test embeddings.\n  - the embeddings produced at search time and indexing time are not similar enough.\n  - angular distance {distance}\n  - Meilisearch requires a maximum distance of {MAX_COMPOSITE_DISTANCE}.\n  - Note: check that both embedders produce similar embeddings.{hint}")]
+    #[error("error while generating test embeddings.\n  - the embeddings produced at search time and indexing time are not similar enough.\n  - angular distance {distance:.2}\n  - Meilisearch requires a maximum distance of {MAX_COMPOSITE_DISTANCE}.\n  - Note: check that both embedders produce similar embeddings.{hint}")]
     CompositeEmbeddingValueMismatch { distance: f32, hint: CompositeEmbedderContainsHuggingFace },
 }
 
