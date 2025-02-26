@@ -453,10 +453,10 @@ impl Index {
 
     /// Returns the stats of the documents database.
     pub fn documents_stats(&self, rtxn: &RoTxn<'_>) -> heed::Result<Option<DatabaseStats>> {
-        dbg!(self
+        self
             .main
             .remap_types::<Str, SerdeJson<DatabaseStats>>()
-            .get(rtxn, main_key::DOCUMENTS_STATS))
+            .get(rtxn, main_key::DOCUMENTS_STATS)
     }
 
     /* primary key */
