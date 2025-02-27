@@ -364,7 +364,7 @@ fn check_version(
     let (bin_major, bin_minor, bin_patch) = binary_version;
     let (db_major, db_minor, db_patch) = get_version(&opt.db_path)?;
 
-    if db_major != bin_major || db_minor != bin_minor || db_patch > bin_patch {
+    if db_major != bin_major || db_minor != bin_minor || db_patch != bin_patch {
         if opt.experimental_dumpless_upgrade {
             update_version_file_for_dumpless_upgrade(
                 opt,
