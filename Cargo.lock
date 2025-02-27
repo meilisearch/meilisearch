@@ -394,8 +394,7 @@ checksum = "96d30a06541fbafbc7f82ed10c06164cfbd2c401138f6addd8404629c4b16711"
 [[package]]
 name = "arroy"
 version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dfc5f272f38fa063bbff0a7ab5219404e221493de005e2b4078c62d626ef567e"
+source = "git+https://github.com/meilisearch/arroy/?tag=DO-NOT-DELETE-upgrade-v04-to-v05#053807bf38dc079f25b003f19fc30fbf3613f6e7"
 dependencies = [
  "bytemuck",
  "byteorder",
@@ -414,7 +413,7 @@ dependencies = [
 [[package]]
 name = "arroy"
 version = "0.5.0"
-source = "git+https://github.com/meilisearch/arroy/?tag=DO-NOT-DELETE-upgrade-v04-to-v05#053807bf38dc079f25b003f19fc30fbf3613f6e7"
+source = "git+https://github.com/meilisearch/arroy?rev=55fb0e8006f4f00ad3197b06bda348133f6ffffa#55fb0e8006f4f00ad3197b06bda348133f6ffffa"
 dependencies = [
  "bytemuck",
  "byteorder",
@@ -427,7 +426,7 @@ dependencies = [
  "rayon",
  "roaring",
  "tempfile",
- "thiserror 1.0.69",
+ "thiserror 2.0.9",
 ]
 
 [[package]]
@@ -2746,7 +2745,7 @@ name = "index-scheduler"
 version = "1.13.2"
 dependencies = [
  "anyhow",
- "arroy 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "arroy 0.5.0 (git+https://github.com/meilisearch/arroy?rev=55fb0e8006f4f00ad3197b06bda348133f6ffffa)",
  "big_s",
  "bincode",
  "bumpalo",
@@ -3513,9 +3512,9 @@ checksum = "9374ef4228402d4b7e403e5838cb880d9ee663314b0a900d5a6aabf0c213552e"
 
 [[package]]
 name = "log"
-version = "0.4.21"
+version = "0.4.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "90ed8c1e510134f979dbc4f070f87d4313098b704861a105fe34231c70a3901c"
+checksum = "30bde2b3dc3671ae49d8e2e9f044c7c005836e7a023ee57cffa25ab82764bb9e"
 
 [[package]]
 name = "lzma-rs"
@@ -3761,7 +3760,7 @@ name = "milli"
 version = "1.13.2"
 dependencies = [
  "allocator-api2",
- "arroy 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "arroy 0.5.0 (git+https://github.com/meilisearch/arroy?rev=55fb0e8006f4f00ad3197b06bda348133f6ffffa)",
  "bbqueue",
  "big_s",
  "bimap",

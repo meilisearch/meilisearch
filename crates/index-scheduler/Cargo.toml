@@ -44,7 +44,7 @@ ureq = "2.12.1"
 uuid = { version = "1.11.0", features = ["serde", "v4"] }
 
 [dev-dependencies]
-arroy = "0.5.0"
+arroy = { git = "https://github.com/meilisearch/arroy", rev = "55fb0e8006f4f00ad3197b06bda348133f6ffffa" }
 big_s = "1.0.2"
 crossbeam-channel = "0.5.14"
 # fixed version due to format breakages in v1.40
