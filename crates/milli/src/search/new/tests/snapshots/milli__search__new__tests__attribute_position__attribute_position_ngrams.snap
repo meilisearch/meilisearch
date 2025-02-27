@@ -1,5 +1,5 @@
 ---
-source: milli/src/search/new/tests/attribute_position.rs
+source: crates/milli/src/search/new/tests/attribute_position.rs
 expression: "format!(\"{document_ids_scores:#?}\")"
 ---
 [
@@ -8,8 +8,8 @@ expression: "format!(\"{document_ids_scores:#?}\")"
         [
             Fid(
                 Rank {
-                    rank: 5,
-                    max_rank: 5,
+                    rank: 3,
+                    max_rank: 3,
                 },
             ),
             Position(
@@ -25,8 +25,8 @@ expression: "format!(\"{document_ids_scores:#?}\")"
         [
             Fid(
                 Rank {
-                    rank: 5,
-                    max_rank: 5,
+                    rank: 3,
+                    max_rank: 3,
                 },
             ),
             Position(
@@ -42,8 +42,8 @@ expression: "format!(\"{document_ids_scores:#?}\")"
         [
             Fid(
                 Rank {
-                    rank: 5,
-                    max_rank: 5,
+                    rank: 3,
+                    max_rank: 3,
                 },
             ),
             Position(
@@ -59,8 +59,8 @@ expression: "format!(\"{document_ids_scores:#?}\")"
         [
             Fid(
                 Rank {
-                    rank: 5,
-                    max_rank: 5,
+                    rank: 3,
+                    max_rank: 3,
                 },
             ),
             Position(
@@ -76,8 +76,8 @@ expression: "format!(\"{document_ids_scores:#?}\")"
         [
             Fid(
                 Rank {
-                    rank: 5,
-                    max_rank: 5,
+                    rank: 3,
+                    max_rank: 3,
                 },
             ),
             Position(
@@ -93,8 +93,8 @@ expression: "format!(\"{document_ids_scores:#?}\")"
         [
             Fid(
                 Rank {
-                    rank: 5,
-                    max_rank: 5,
+                    rank: 3,
+                    max_rank: 3,
                 },
             ),
             Position(
@@ -110,8 +110,8 @@ expression: "format!(\"{document_ids_scores:#?}\")"
         [
             Fid(
                 Rank {
-                    rank: 5,
-                    max_rank: 5,
+                    rank: 3,
+                    max_rank: 3,
                 },
             ),
             Position(
@@ -127,8 +127,8 @@ expression: "format!(\"{document_ids_scores:#?}\")"
         [
             Fid(
                 Rank {
-                    rank: 5,
-                    max_rank: 5,
+                    rank: 3,
+                    max_rank: 3,
                 },
             ),
             Position(
@@ -144,8 +144,8 @@ expression: "format!(\"{document_ids_scores:#?}\")"
         [
             Fid(
                 Rank {
-                    rank: 5,
-                    max_rank: 5,
+                    rank: 3,
+                    max_rank: 3,
                 },
             ),
             Position(
@@ -161,8 +161,8 @@ expression: "format!(\"{document_ids_scores:#?}\")"
         [
             Fid(
                 Rank {
-                    rank: 5,
-                    max_rank: 5,
+                    rank: 3,
+                    max_rank: 3,
                 },
             ),
             Position(
@@ -178,8 +178,8 @@ expression: "format!(\"{document_ids_scores:#?}\")"
         [
             Fid(
                 Rank {
-                    rank: 5,
-                    max_rank: 5,
+                    rank: 3,
+                    max_rank: 3,
                 },
             ),
             Position(
@@ -195,8 +195,8 @@ expression: "format!(\"{document_ids_scores:#?}\")"
         [
             Fid(
                 Rank {
-                    rank: 5,
-                    max_rank: 5,
+                    rank: 3,
+                    max_rank: 3,
                 },
             ),
             Position(
@@ -212,8 +212,8 @@ expression: "format!(\"{document_ids_scores:#?}\")"
         [
             Fid(
                 Rank {
-                    rank: 5,
-                    max_rank: 5,
+                    rank: 3,
+                    max_rank: 3,
                 },
             ),
             Position(
@@ -229,8 +229,8 @@ expression: "format!(\"{document_ids_scores:#?}\")"
         [
             Fid(
                 Rank {
-                    rank: 5,
-                    max_rank: 5,
+                    rank: 3,
+                    max_rank: 3,
                 },
             ),
             Position(
