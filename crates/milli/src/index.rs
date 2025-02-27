@@ -2978,7 +2978,9 @@ pub(crate) mod tests {
         index
             .update_settings(|settings| {
                 settings.set_searchable_fields(vec![S("name")]);
-                settings.set_filterable_fields(HashSet::from([S("age")]));
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
+                    "age".to_string(),
+                )]);
             })
             .unwrap();
 
@@ -2986,35 +2988,37 @@ pub(crate) mod tests {
             .add_documents(documents!({ "id": 1, "name": "Many", "age": 28, "realName": "Maxime" }))
             .unwrap();
         db_snap!(index, fields_ids_map, @r###"
-        0   name             |
-        1   id               |
+        0   id               |
+        1   name             |
         2   age              |
         3   realName         |
         "###);
         db_snap!(index, searchable_fields, @r###"["name"]"###);
         db_snap!(index, fieldids_weights_map, @r###"
         fid weight
-        0   0   |
+        1   0   |
         "###);
 
         index
             .update_settings(|settings| {
                 settings.set_searchable_fields(vec![S("name"), S("realName")]);
-                settings.set_filterable_fields(HashSet::from([S("age")]));
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
+                    "age".to_string(),
+                )]);
             })
             .unwrap();
 
         // The order of the field id map shouldn't change
         db_snap!(index, fields_ids_map, @r###"
-        0   name             |
-        1   id               |
+        0   id               |
+        1   name             |
         2   age              |
         3   realName         |
         "###);
         db_snap!(index, searchable_fields, @r###"["name", "realName"]"###);
         db_snap!(index, fieldids_weights_map, @r###"
         fid weight
-        0   0   |
+        1   0   |
         3   1   |
         "###);
     }
@@ -3099,14 +3103,16 @@ pub(crate) mod tests {
         index
             .update_settings(|settings| {
                 settings.set_searchable_fields(vec![S("_vectors"), S("_vectors.doggo")]);
-                settings.set_filterable_fields(hashset![S("_vectors"), S("_vectors.doggo")]);
+                settings.set_filterable_fields(vec![
+                    FilterableAttributesRule::Field("_vectors".to_string()),
+                    FilterableAttributesRule::Field("_vectors.doggo".to_string()),
+                ]);
             })
             .unwrap();
 
         db_snap!(index, fields_ids_map, @r###"
         0   id               |
         1   _vectors         |
-        2   _vectors.doggo   |
         "###);
         db_snap!(index, searchable_fields, @"[]");
         db_snap!(index, fieldids_weights_map, @r###"
@@ -3139,7 +3145,6 @@ pub(crate) mod tests {
         db_snap!(index, fields_ids_map, @r###"
         0   id               |
         1   _vectors         |
-        2   _vectors.doggo   |
         "###);
         db_snap!(index, searchable_fields, @"[]");
         db_snap!(index, fieldids_weights_map, @r###"
