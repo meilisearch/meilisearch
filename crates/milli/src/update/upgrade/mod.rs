@@ -39,9 +39,8 @@ pub fn upgrade(
         (1, 12, 0..=2) => 0,
         (1, 12, 3..) => 1,
         (1, 13, 0) => 2,
-        (1, 13, 1) => 3,
         // We must handle the current version in the match because in case of a failure some index may have been upgraded but not other.
-        (1, 13, _) => return Ok(false),
+        (1, 13, _) => 3,
         (major, minor, patch) => {
             return Err(InternalError::CannotUpgradeToVersion(major, minor, patch).into())
         }

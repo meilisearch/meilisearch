@@ -24,10 +24,11 @@ pub fn upgrade_index_scheduler(
     let current_minor = to.1;
     let current_patch = to.2;
 
-    let upgrade_functions: &[&dyn UpgradeIndexScheduler] = &[&V1_12_ToCurrent {}];
+    let upgrade_functions: &[&dyn UpgradeIndexScheduler] = &[&ToCurrentNoOp {}];
 
     let start = match from {
         (1, 12, _) => 0,
+        (1, 13, _) => 0,
         (major, minor, patch) => {
             if major > current_major
                 || (major == current_major && minor > current_minor)
@@ -85,9 +86,9 @@ pub fn upgrade_index_scheduler(
 }
 
 #[allow(non_camel_case_types)]
-struct V1_12_ToCurrent {}
+struct ToCurrentNoOp {}
 
-impl UpgradeIndexScheduler for V1_12_ToCurrent {
+impl UpgradeIndexScheduler for ToCurrentNoOp {
     fn upgrade(
         &self,
         _env: &Env,
