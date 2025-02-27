@@ -404,31 +404,32 @@ fn import_vectors_first_and_embedder_later() {
     // even though we specified the vector for the ID 3, it shouldn't be marked
     // as user provided since we explicitely marked it as NOT user provided.
     snapshot!(format!("{conf:#?}"), @r###"
-        [
-            IndexEmbeddingConfig {
-                name: "my_doggo_embedder",
-                config: EmbeddingConfig {
-                    embedder_options: HuggingFace(
-                        EmbedderOptions {
-                            model: "sentence-transformers/all-MiniLM-L6-v2",
-                            revision: Some(
-                                "e4ce9877abf3edfe10b0d82785e83bdcb973e22e",
-                            ),
-                            distribution: None,
-                        },
-                    ),
-                    prompt: PromptData {
-                        template: "{{doc.doggo}}",
-                        max_bytes: Some(
-                            400,
+    [
+        IndexEmbeddingConfig {
+            name: "my_doggo_embedder",
+            config: EmbeddingConfig {
+                embedder_options: HuggingFace(
+                    EmbedderOptions {
+                        model: "sentence-transformers/all-MiniLM-L6-v2",
+                        revision: Some(
+                            "e4ce9877abf3edfe10b0d82785e83bdcb973e22e",
                         ),
+                        distribution: None,
+                        pooling: UseModel,
                     },
-                    quantized: None,
+                ),
+                prompt: PromptData {
+                    template: "{{doc.doggo}}",
+                    max_bytes: Some(
+                        400,
+                    ),
                 },
-                user_provided: RoaringBitmap<[1, 2]>,
+                quantized: None,
             },
-        ]
-        "###);
+            user_provided: RoaringBitmap<[1, 2]>,
+        },
+    ]
+    "###);
     let docid = index.external_documents_ids.get(&rtxn, "0").unwrap().unwrap();
     let embeddings = index.embeddings(&rtxn, docid).unwrap();
     let embedding = &embeddings["my_doggo_embedder"];
