@@ -2,6 +2,7 @@
 
 use std::fs::{create_dir_all, remove_dir_all, File};
 use std::io::{self, BufReader, BufWriter, Read};
+use std::num::NonZeroUsize;
 use std::path::Path;
 use std::str::FromStr as _;
 
@@ -9,9 +10,11 @@ use anyhow::Context;
 use bumpalo::Bump;
 use criterion::BenchmarkId;
 use memmap2::Mmap;
-use milli::heed::EnvOpenOptions;
+use milli::documents::PrimaryKey;
+use milli::heed::{EnvOpenOptions, RwTxn};
 use milli::progress::Progress;
 use milli::update::new::indexer;
+use milli::update::new::indexer::document_changes::CHUNK_SIZE;
 use milli::update::{IndexDocumentsMethod, IndexerConfig, Settings};
 use milli::vector::EmbeddingConfigs;
 use milli::{Criterion, Filter, Index, Object, TermsMatchingStrategy};
@@ -96,28 +99,59 @@ pub fn base_setup(conf: &Conf) -> Index {
     let mut wtxn = index.write_txn().unwrap();
     let rtxn = index.read_txn().unwrap();
     let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
-    let mut new_fields_ids_map = db_fields_ids_map.clone();
+    let new_fields_ids_map = db_fields_ids_map.clone();
 
     let documents = documents_from(conf.dataset, conf.dataset_format);
     let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
     indexer.add_documents(&documents).unwrap();
 
+    index_documents(
+        indexer,
+        &index,
+        &rtxn,
+        new_fields_ids_map,
+        &mut wtxn,
+        config,
+        db_fields_ids_map,
+    );
+
+    wtxn.commit().unwrap();
+    drop(rtxn);
+
+    index
+}
+
+pub fn index_documents(
+    indexer: indexer::DocumentOperation,
+    index: &Index,
+    rtxn: &milli::heed::RoTxn,
+    mut new_fields_ids_map: milli::FieldsIdsMap,
+    wtxn: &mut RwTxn,
+    config: IndexerConfig,
+    db_fields_ids_map: milli::FieldsIdsMap,
+) {
     let indexer_alloc = Bump::new();
+    let thread_count =
+        std::thread::available_parallelism().unwrap_or(NonZeroUsize::new(1).unwrap());
+    let thread_pool = scoped_thread_pool::ThreadPool::new(thread_count, "index".into());
     let (document_changes, _operation_stats, primary_key) = indexer
         .into_changes(
             &indexer_alloc,
-            &index,
-            &rtxn,
+            index,
+            rtxn,
             None,
             &mut new_fields_ids_map,
             &|| false,
             Progress::default(),
+            &thread_pool,
+            CHUNK_SIZE,
         )
         .unwrap();
 
     indexer::index(
-        &mut wtxn,
-        &index,
+        wtxn,
+        index,
+        &thread_pool,
         &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
         config.grenad_parameters(),
         &db_fields_ids_map,
@@ -129,11 +163,38 @@ pub fn base_setup(conf: &Conf) -> Index {
         &Progress::default(),
     )
     .unwrap();
+}
 
-    wtxn.commit().unwrap();
-    drop(rtxn);
-
-    index
+pub fn index_delete_documents(
+    indexer: indexer::DocumentDeletion,
+    primary_key: PrimaryKey,
+    wtxn: &mut RwTxn,
+    index: &Index,
+    config: &IndexerConfig,
+    db_fields_ids_map: milli::FieldsIdsMap,
+    new_fields_ids_map: milli::FieldsIdsMap,
+) {
+    let indexer_alloc = Bump::new();
+    let thread_count =
+        std::thread::available_parallelism().unwrap_or(NonZeroUsize::new(1).unwrap());
+    let thread_pool = scoped_thread_pool::ThreadPool::new(thread_count, "index".into());
+    let document_changes =
+        indexer.into_changes(&indexer_alloc, primary_key, &thread_pool, CHUNK_SIZE);
+    indexer::index(
+        wtxn,
+        index,
+        &thread_pool,
+        &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
+        config.grenad_parameters(),
+        &db_fields_ids_map,
+        new_fields_ids_map,
+        Some(primary_key),
+        &document_changes,
+        EmbeddingConfigs::default(),
+        &|| false,
+        &Progress::default(),
+    )
+    .unwrap();
 }
 
 pub fn run_benches(c: &mut criterion::Criterion, confs: &[Conf]) {

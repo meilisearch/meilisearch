@@ -12,6 +12,7 @@ use milli::documents::mmap_from_objects;
 use milli::heed::EnvOpenOptions;
 use milli::progress::Progress;
 use milli::update::new::indexer;
+use milli::update::new::indexer::document_changes::CHUNK_SIZE;
 use milli::update::{IndexDocumentsMethod, IndexerConfig};
 use milli::vector::EmbeddingConfigs;
 use milli::Index;
@@ -121,6 +122,11 @@ fn main() {
                                 }
                             }
 
+                            let thread_pool =
+                                scoped_thread_pool::ThreadPool::with_available_parallelism(
+                                    "index".into(),
+                                );
+
                             let (document_changes, _operation_stats, primary_key) = indexer
                                 .into_changes(
                                     &indexer_alloc,
@@ -130,12 +136,15 @@ fn main() {
                                     &mut new_fields_ids_map,
                                     &|| false,
                                     Progress::default(),
+                                    &thread_pool,
+                                    CHUNK_SIZE,
                                 )
                                 .unwrap();
 
                             indexer::index(
                                 &mut wtxn,
                                 &index,
+                                &thread_pool,
                                 &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                                 indexer_config.grenad_parameters(),
                                 &db_fields_ids_map,
