@@ -27,6 +27,7 @@ pub(super) fn post_process<MSP>(
     wtxn: &mut RwTxn<'_>,
     global_fields_ids_map: GlobalFieldsIdsMap<'_>,
     facet_field_ids_delta: FacetFieldIdsDelta,
+    thread_pool: &scoped_thread_pool::ThreadPool<crate::Error>,
 ) -> Result<()>
 where
     MSP: Fn() -> bool + Sync,
@@ -39,7 +40,13 @@ where
     compute_facet_level_database(index, wtxn, facet_field_ids_delta)?;
     indexing_context.progress.update_progress(IndexingStep::PostProcessingWords);
     if let Some(prefix_delta) = compute_word_fst(index, wtxn)? {
-        compute_prefix_database(index, wtxn, prefix_delta, indexing_context.grenad_parameters)?;
+        compute_prefix_database(
+            index,
+            wtxn,
+            prefix_delta,
+            indexing_context.grenad_parameters,
+            thread_pool,
+        )?;
     };
     Ok(())
 }
@@ -50,16 +57,38 @@ fn compute_prefix_database(
     wtxn: &mut RwTxn,
     prefix_delta: PrefixDelta,
     grenad_parameters: &GrenadParameters,
+    thread_pool: &scoped_thread_pool::ThreadPool<crate::Error>,
 ) -> Result<()> {
     let PrefixDelta { modified, deleted } = prefix_delta;
     // Compute word prefix docids
-    compute_word_prefix_docids(wtxn, index, &modified, &deleted, grenad_parameters)?;
+    compute_word_prefix_docids(wtxn, index, &modified, &deleted, grenad_parameters, thread_pool)?;
     // Compute exact word prefix docids
-    compute_exact_word_prefix_docids(wtxn, index, &modified, &deleted, grenad_parameters)?;
+    compute_exact_word_prefix_docids(
+        wtxn,
+        index,
+        &modified,
+        &deleted,
+        grenad_parameters,
+        thread_pool,
+    )?;
     // Compute word prefix fid docids
-    compute_word_prefix_fid_docids(wtxn, index, &modified, &deleted, grenad_parameters)?;
+    compute_word_prefix_fid_docids(
+        wtxn,
+        index,
+        &modified,
+        &deleted,
+        grenad_parameters,
+        thread_pool,
+    )?;
     // Compute word prefix position docids
-    compute_word_prefix_position_docids(wtxn, index, &modified, &deleted, grenad_parameters)
+    compute_word_prefix_position_docids(
+        wtxn,
+        index,
+        &modified,
+        &deleted,
+        grenad_parameters,
+        thread_pool,
+    )
 }
 
 #[tracing::instrument(level = "trace", skip_all, target = "indexing")]

@@ -119,7 +119,11 @@ impl GrenadParameters {
     ///
     /// This should be called inside of a rayon thread pool,
     /// otherwise, it will take the global number of threads.
-    pub fn max_memory_by_thread(&self) -> Option<usize> {
+    pub fn max_memory_by_thread(&self, thread_count: usize) -> Option<usize> {
+        self.max_memory.map(|max_memory| (max_memory / thread_count))
+    }
+
+    pub fn max_memory_by_rayon_thread(&self) -> Option<usize> {
         self.max_memory.map(|max_memory| (max_memory / rayon::current_num_threads()))
     }
 }

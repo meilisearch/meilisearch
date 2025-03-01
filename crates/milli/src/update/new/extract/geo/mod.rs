@@ -21,6 +21,7 @@ use crate::{lat_lng_to_xyz, DocumentId, GeoPoint, Index, InternalError, Result};
 
 pub struct GeoExtractor {
     grenad_parameters: GrenadParameters,
+    thread_count: usize,
 }
 
 impl GeoExtractor {
@@ -28,11 +29,12 @@ impl GeoExtractor {
         rtxn: &RoTxn,
         index: &Index,
         grenad_parameters: GrenadParameters,
+        thread_count: usize,
     ) -> Result<Option<Self>> {
         let is_sortable = index.sortable_fields(rtxn)?.contains(RESERVED_GEO_FIELD_NAME);
         let is_filterable = index.filterable_fields(rtxn)?.contains(RESERVED_GEO_FIELD_NAME);
         if is_sortable || is_filterable {
-            Ok(Some(GeoExtractor { grenad_parameters }))
+            Ok(Some(GeoExtractor { grenad_parameters, thread_count }))
         } else {
             Ok(None)
         }
@@ -157,7 +159,7 @@ impl<'extractor> Extractor<'extractor> for GeoExtractor {
     ) -> Result<()> {
         let rtxn = &context.rtxn;
         let index = context.index;
-        let max_memory = self.grenad_parameters.max_memory_by_thread();
+        let max_memory = self.grenad_parameters.max_memory_by_thread(self.thread_count);
         let db_fields_ids_map = context.db_fields_ids_map;
         let mut data_ref = context.data.borrow_mut_or_yield();
 

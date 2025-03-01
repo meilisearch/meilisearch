@@ -28,7 +28,7 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
 ) -> Result<grenad::Reader<BufReader<File>>> {
     let max_positions_per_attributes = max_positions_per_attributes
         .map_or(MAX_POSITION_PER_ATTRIBUTE, |max| max.min(MAX_POSITION_PER_ATTRIBUTE));
-    let max_memory = indexer.max_memory_by_thread();
+    let max_memory = indexer.max_memory_by_rayon_thread();
     let force_reindexing = settings_diff.reindex_searchable();
 
     // initialize destination values.

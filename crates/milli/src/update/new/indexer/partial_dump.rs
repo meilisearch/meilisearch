@@ -1,7 +1,6 @@
 use std::ops::DerefMut;
 
 use bumparaw_collections::RawMap;
-use rayon::iter::IndexedParallelIterator;
 use rustc_hash::FxBuildHasher;
 use scoped_thread_pool::ThreadPool;
 use serde_json::value::RawValue;
@@ -26,8 +25,8 @@ impl PartialDump {
         self,
         concurrent_available_ids: &'index ConcurrentAvailableIds,
         primary_key: &'index PrimaryKey,
-        thread_pool: &ThreadPool<crate::Error>,
-        chunk_size: usize,
+        _thread_pool: &ThreadPool<crate::Error>,
+        _chunk_size: usize,
     ) -> PartialDumpChanges<'index> {
         // Note for future self:
         //   - We recommend sending chunks of documents in this `PartialDumpIndexer` we therefore need to create a custom take_while_size method (that doesn't drop items).

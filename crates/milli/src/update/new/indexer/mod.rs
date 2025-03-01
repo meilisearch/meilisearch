@@ -44,6 +44,7 @@ static LOG_MEMORY_METRICS_ONCE: Once = Once::new();
 pub fn index<'pl, 'indexer, 'index, DC, MSP>(
     wtxn: &mut RwTxn,
     index: &'index Index,
+    thread_pool: &scoped_thread_pool::ThreadPool<crate::Error>,
     pool: &ThreadPoolNoAbort,
     grenad_parameters: GrenadParameters,
     db_fields_ids_map: &'indexer FieldsIdsMap,
@@ -110,9 +111,9 @@ where
     let metadata_builder = MetadataBuilder::from_index(index, wtxn)?;
     let new_fields_ids_map = FieldIdMapWithMetadata::new(new_fields_ids_map, metadata_builder);
     let new_fields_ids_map = RwLock::new(new_fields_ids_map);
-    let fields_ids_map_store = ThreadLocal::with_capacity(rayon::current_num_threads());
-    let mut extractor_allocs = ThreadLocal::with_capacity(rayon::current_num_threads());
-    let doc_allocs = ThreadLocal::with_capacity(rayon::current_num_threads());
+    let fields_ids_map_store = ThreadLocal::with_capacity(thread_pool.thread_count());
+    let mut extractor_allocs = ThreadLocal::with_capacity(thread_pool.thread_count());
+    let doc_allocs = ThreadLocal::with_capacity(thread_pool.thread_count());
 
     let indexing_context = IndexingContext {
         index,
@@ -203,6 +204,7 @@ where
             wtxn,
             global_fields_ids_map,
             facet_field_ids_delta,
+            thread_pool,
         )?;
 
         indexing_context.progress.update_progress(IndexingStep::Finalizing);

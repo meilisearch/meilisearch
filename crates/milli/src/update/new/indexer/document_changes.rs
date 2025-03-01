@@ -1,15 +1,14 @@
 use std::cell::{Cell, RefCell};
-use std::sync::atomic::Ordering;
+use std::marker::PhantomData;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, RwLock};
 
 use bumpalo::Bump;
 use heed::RoTxn;
-use rayon::iter::IndexedParallelIterator;
 
 use super::super::document_change::DocumentChange;
 use crate::fields_ids_map::metadata::FieldIdMapWithMetadata;
 use crate::progress::{AtomicDocumentStep, Progress};
-use crate::update::new::parallel_iterator_ext::ParallelIteratorExt as _;
 use crate::update::new::steps::IndexingStep;
 use crate::update::new::thread_local::{FullySend, MostlySend, ThreadLocal};
 use crate::update::GrenadParameters;
@@ -114,7 +113,7 @@ pub trait DocumentChanges<'pl // lifetime of the underlying payload
 >: Sync {
     type Item: Send;
 
-    fn iter(&self, chunk_size: usize) -> impl IndexedParallelIterator<Item = impl AsRef<[Self::Item]>>;
+    fn items(&self, thread_index: usize, task_index: usize) -> Option<&[Self::Item]>;
 
     fn len(&self) -> usize;
 
@@ -186,9 +185,10 @@ where
     }
 }
 
-const CHUNK_SIZE: usize = 100;
+pub const CHUNK_SIZE: usize = 100;
 
-pub fn extract<
+struct Extract<
+    'shared,    // covariant lifetime for shared borrows
     'pl,        // covariant lifetime of the underlying payload
     'extractor, // invariant lifetime of extractor_alloc
     'fid,       // invariant lifetime of fields ids map
@@ -196,31 +196,121 @@ pub fn extract<
     'data,      // invariant on EX::Data lifetime of datastore
     'index,     // covariant lifetime of the index
     EX,
+    DC,
+    MSP,
+> where
     DC: DocumentChanges<'pl>,
+    EX: Extractor<'extractor>,
+    MSP: Fn() -> bool + Sync,
+{
+    document_changes: &'shared DC,
+    extractor: &'shared EX,
+    indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP>,
+    extractor_allocs: &'extractor ThreadLocal<FullySend<Bump>>,
+    datastore: &'data ThreadLocal<EX::Data>,
+    step: Arc<AtomicU32>,
+    _marker: PhantomData<&'pl ()>,
+}
+
+impl<
+        'doc,
+        'extractor: 'doc, // invariant lifetime of extractor_alloc
+        'shared,
+        'pl,                     // covariant lifetime of the underlying payload
+        'fid: 'doc,              // invariant lifetime of fields ids map
+        'indexer: 'doc, // covariant lifetime of objects that are borrowed during the entire indexing
+        'data: 'doc,    // invariant on EX::Data lifetime of datastore
+        'index: 'doc + 'indexer, // covariant lifetime of the index
+        EX,
+        DC: DocumentChanges<'pl>,
+        MSP,
+    > scoped_thread_pool::Workload<'doc>
+    for Extract<'shared, 'pl, 'extractor, 'fid, 'indexer, 'data, 'index, EX, DC, MSP>
+where
+    EX: Extractor<'extractor>,
+    MSP: Fn() -> bool + Sync,
+{
+    type Context = DocumentChangeContext<'doc, 'extractor, 'fid, 'indexer, EX::Data>;
+
+    type Error = crate::Error;
+
+    fn context(
+        &self,
+        _thread_count: usize,
+        _thread_index: usize,
+    ) -> std::result::Result<
+        DocumentChangeContext<'doc, 'extractor, 'fid, 'indexer, EX::Data>,
+        Self::Error,
+    > {
+        let extractor = self.extractor;
+        DocumentChangeContext::new(
+            self.indexing_context.index,
+            self.indexing_context.db_fields_ids_map,
+            self.indexing_context.new_fields_ids_map,
+            self.extractor_allocs,
+            self.indexing_context.doc_allocs,
+            self.datastore,
+            self.indexing_context.fields_ids_map_store,
+            move |index_alloc| extractor.init_data(index_alloc),
+        )
+    }
+
+    fn run_task(
+        &self,
+        _thread_count: usize,
+        thread_index: usize,
+        task_index: usize,
+        context: &mut Self::Context,
+    ) -> Option<std::result::Result<(), Self::Error>> {
+        let items = self.document_changes.items(thread_index, task_index)?;
+        if (self.indexing_context.must_stop_processing)() {
+            return Some(Err(InternalError::AbortedIndexation.into()));
+        }
+
+        // Clean up and reuse the document-specific allocator
+        context.doc_alloc.reset();
+
+        let changes = items.iter().filter_map(|item| {
+            self.document_changes.item_to_document_change(context, item).transpose()
+        });
+
+        let res = self.extractor.process(changes, context);
+        self.step.fetch_add(items.as_ref().len() as u32, Ordering::Relaxed);
+
+        // send back the doc_alloc in the pool
+        context.doc_allocs.get_or_default().0.set(std::mem::take(&mut context.doc_alloc));
+
+        Some(res)
+    }
+}
+
+pub fn extract<
+    'pool,      // invariant lifetime of the thread pool
+    'pl,        // covariant lifetime of the underlying payload
+    'extractor, // invariant lifetime of extractor_alloc
+    'fid,       // invariant lifetime of fields ids map
+    'indexer,   // covariant lifetime of objects that are borrowed during the entire indexing
+    'data,      // invariant on EX::Data lifetime of datastore
+    'index,     // covariant lifetime of the index
+    EX,
+    DC,
     MSP,
 >(
+    thread_pool: &'pool scoped_thread_pool::ThreadPool<crate::Error>,
     document_changes: &DC,
     extractor: &EX,
-    IndexingContext {
-        index,
-        db_fields_ids_map,
-        new_fields_ids_map,
-        doc_allocs,
-        fields_ids_map_store,
-        must_stop_processing,
-        progress,
-        grenad_parameters: _,
-    }: IndexingContext<'fid, 'indexer, 'index, MSP>,
+    indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP>,
     extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
     datastore: &'data ThreadLocal<EX::Data>,
     step: IndexingStep,
 ) -> Result<()>
 where
+    DC: DocumentChanges<'pl>,
     EX: Extractor<'extractor>,
     MSP: Fn() -> bool + Sync,
 {
     tracing::trace!("We are resetting the extractor allocators");
-    progress.update_progress(step);
+    indexing_context.progress.update_progress(step);
     // Clean up and reuse the extractor allocs
     for extractor_alloc in extractor_allocs.iter_mut() {
         tracing::trace!("\tWith {} bytes reset", extractor_alloc.0.allocated_bytes());
@@ -229,45 +319,22 @@ where
 
     let total_documents = document_changes.len() as u32;
     let (step, progress_step) = AtomicDocumentStep::new(total_documents);
-    progress.update_progress(progress_step);
+    indexing_context.progress.update_progress(progress_step);
 
-    let pi = document_changes.iter(CHUNK_SIZE);
-    pi.try_arc_for_each_try_init(
-        || {
-            DocumentChangeContext::new(
-                index,
-                db_fields_ids_map,
-                new_fields_ids_map,
-                extractor_allocs,
-                doc_allocs,
-                datastore,
-                fields_ids_map_store,
-                move |index_alloc| extractor.init_data(index_alloc),
-            )
-        },
-        |context, items| {
-            if (must_stop_processing)() {
-                return Err(Arc::new(InternalError::AbortedIndexation.into()));
-            }
+    let extract = Extract {
+        document_changes,
+        extractor,
+        indexing_context,
+        extractor_allocs,
+        datastore,
+        step,
+        _marker: PhantomData,
+    };
+    thread_pool
+        .execute(&extract)
+        .map_err(|errors| crate::Error::from_scoped_thread_pool_errors(thread_pool, errors))?;
 
-            // Clean up and reuse the document-specific allocator
-            context.doc_alloc.reset();
-
-            let items = items.as_ref();
-            let changes = items.iter().filter_map(|item| {
-                document_changes.item_to_document_change(context, item).transpose()
-            });
-
-            let res = extractor.process(changes, context).map_err(Arc::new);
-            step.fetch_add(items.as_ref().len() as u32, Ordering::Relaxed);
-
-            // send back the doc_alloc in the pool
-            context.doc_allocs.get_or_default().0.set(std::mem::take(&mut context.doc_alloc));
-
-            res
-        },
-    )?;
-    step.store(total_documents, Ordering::Relaxed);
+    extract.step.store(total_documents, Ordering::Relaxed);
 
     Ok(())
 }

@@ -22,6 +22,7 @@ use crate::{Result, ThreadPoolNoAbort, ThreadPoolNoAbortBuilder};
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn extract_all<'pl, 'extractor, DC, MSP>(
+    thread_pool: &scoped_thread_pool::ThreadPool<crate::Error>,
     document_changes: &DC,
     indexing_context: IndexingContext<MSP>,
     indexer_span: Span,
@@ -47,11 +48,12 @@ where
     // document but we need to create a function that collects and compresses documents.
     let document_sender = extractor_sender.documents();
     let document_extractor = DocumentsExtractor::new(document_sender, embedders);
-    let datastore = ThreadLocal::with_capacity(rayon::current_num_threads());
+    let datastore = ThreadLocal::with_capacity(thread_pool.thread_count());
     {
         let span = tracing::trace_span!(target: "indexing::documents::extract", parent: &indexer_span, "documents");
         let _entered = span.enter();
         extract(
+            thread_pool,
             document_changes,
             &document_extractor,
             indexing_context,
@@ -84,6 +86,7 @@ where
             let _entered = span.enter();
 
             FacetedDocidsExtractor::run_extraction(
+                thread_pool,
                 document_changes,
                 indexing_context,
                 extractor_allocs,
@@ -97,6 +100,7 @@ where
             let _entered = span.enter();
 
             facet_field_ids_delta = merge_and_send_facet_docids(
+                thread_pool,
                 caches,
                 FacetDatabases::new(index),
                 index,
@@ -118,6 +122,7 @@ where
             let _entered = span.enter();
 
             WordDocidsExtractors::run_extraction(
+                thread_pool,
                 document_changes,
                 indexing_context,
                 extractor_allocs,
@@ -129,6 +134,7 @@ where
             let span = tracing::trace_span!(target: "indexing::documents::merge", "word_docids");
             let _entered = span.enter();
             merge_and_send_docids(
+                thread_pool,
                 word_docids,
                 index.word_docids.remap_types(),
                 index,
@@ -142,6 +148,7 @@ where
                 tracing::trace_span!(target: "indexing::documents::merge", "word_fid_docids");
             let _entered = span.enter();
             merge_and_send_docids(
+                thread_pool,
                 word_fid_docids,
                 index.word_fid_docids.remap_types(),
                 index,
@@ -155,6 +162,7 @@ where
                 tracing::trace_span!(target: "indexing::documents::merge", "exact_word_docids");
             let _entered = span.enter();
             merge_and_send_docids(
+                thread_pool,
                 exact_word_docids,
                 index.exact_word_docids.remap_types(),
                 index,
@@ -168,6 +176,7 @@ where
                 tracing::trace_span!(target: "indexing::documents::merge", "word_position_docids");
             let _entered = span.enter();
             merge_and_send_docids(
+                thread_pool,
                 word_position_docids,
                 index.word_position_docids.remap_types(),
                 index,
@@ -181,6 +190,7 @@ where
                 tracing::trace_span!(target: "indexing::documents::merge", "fid_word_count_docids");
             let _entered = span.enter();
             merge_and_send_docids(
+                thread_pool,
                 fid_word_count_docids,
                 index.field_id_word_count_docids.remap_types(),
                 index,
@@ -198,7 +208,8 @@ where
             let span = tracing::trace_span!(target: "indexing::documents::extract", "word_pair_proximity_docids");
             let _entered = span.enter();
 
-            <WordPairProximityDocidsExtractor as DocidsExtractor>::run_extraction(
+            WordPairProximityDocidsExtractor::run_extraction(
+                thread_pool,
                 document_changes,
                 indexing_context,
                 extractor_allocs,
@@ -211,6 +222,7 @@ where
             let _entered = span.enter();
 
             merge_and_send_docids(
+                thread_pool,
                 caches,
                 index.word_pair_proximity_docids.remap_types(),
                 index,
@@ -232,12 +244,13 @@ where
             field_distribution,
             request_threads(),
         );
-        let mut datastore = ThreadLocal::with_capacity(rayon::current_num_threads());
+        let mut datastore = ThreadLocal::with_capacity(thread_pool.thread_count());
         {
             let span = tracing::debug_span!(target: "indexing::documents::extract", "vectors");
             let _entered = span.enter();
 
             extract(
+                thread_pool,
                 document_changes,
                 &extractor,
                 indexing_context,
@@ -263,17 +276,23 @@ where
     }
 
     'geo: {
-        let Some(extractor) = GeoExtractor::new(&rtxn, index, *indexing_context.grenad_parameters)?
+        let Some(extractor) = GeoExtractor::new(
+            &rtxn,
+            index,
+            *indexing_context.grenad_parameters,
+            thread_pool.thread_count(),
+        )?
         else {
             break 'geo;
         };
-        let datastore = ThreadLocal::with_capacity(rayon::current_num_threads());
+        let datastore = ThreadLocal::with_capacity(thread_pool.thread_count());
 
         {
             let span = tracing::trace_span!(target: "indexing::documents::extract", "geo");
             let _entered = span.enter();
 
             extract(
+                thread_pool,
                 document_changes,
                 &extractor,
                 indexing_context,
@@ -289,6 +308,7 @@ where
             index,
             extractor_sender.geo(),
             &indexing_context.must_stop_processing,
+            thread_pool,
         )?;
     }
     indexing_context.progress.update_progress(IndexingStep::WritingToDatabase);

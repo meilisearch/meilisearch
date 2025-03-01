@@ -24,7 +24,7 @@ pub fn extract_word_position_docids<R: io::Read + io::Seek>(
     indexer: GrenadParameters,
     _settings_diff: &InnerIndexSettingsDiff,
 ) -> Result<grenad::Reader<BufReader<File>>> {
-    let max_memory = indexer.max_memory_by_thread();
+    let max_memory = indexer.max_memory_by_rayon_thread();
 
     let mut word_position_docids_sorter = create_sorter(
         grenad::SortAlgorithm::Unstable,

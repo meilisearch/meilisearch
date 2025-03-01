@@ -227,7 +227,7 @@ where
             crate::vector::error::PossibleEmbeddingMistakes::new(&field_distribution);
 
         let backup_pool;
-        let pool = match self.indexer_config.thread_pool {
+        let pool = match self.indexer_config.rayon_thread_pool {
             Some(ref pool) => pool,
             None => {
                 // We initialize a backup pool with the default
@@ -770,6 +770,7 @@ mod tests {
     use crate::progress::Progress;
     use crate::search::TermsMatchingStrategy;
     use crate::update::new::indexer;
+    use crate::update::new::indexer::document_changes::CHUNK_SIZE;
     use crate::update::Setting;
     use crate::{db_snap, Filter, Search, UserError};
 
@@ -1967,6 +1968,8 @@ mod tests {
                 &mut new_fields_ids_map,
                 &|| false,
                 Progress::default(),
+                &scoped_thread_pool::ThreadPool::with_available_parallelism("index".to_string()),
+                CHUNK_SIZE,
             )
             .unwrap();
 
@@ -2115,6 +2118,9 @@ mod tests {
         let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
         indexer.add_documents(&documents).unwrap();
         indexer.delete_documents(&["2"]);
+
+        let thread_pool =
+            scoped_thread_pool::ThreadPool::with_available_parallelism("index".to_string());
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(
                 &indexer_alloc,
@@ -2124,12 +2130,15 @@ mod tests {
                 &mut new_fields_ids_map,
                 &|| false,
                 Progress::default(),
+                &thread_pool,
+                CHUNK_SIZE,
             )
             .unwrap();
 
         indexer::index(
             &mut wtxn,
             &index.inner,
+            &thread_pool,
             &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
             indexer_config.grenad_parameters(),
             &db_fields_ids_map,
@@ -2177,6 +2186,9 @@ mod tests {
 
         let indexer_alloc = Bump::new();
         let embedders = EmbeddingConfigs::default();
+        let thread_pool =
+            scoped_thread_pool::ThreadPool::with_available_parallelism("index".to_string());
+
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(
                 &indexer_alloc,
@@ -2186,12 +2198,15 @@ mod tests {
                 &mut new_fields_ids_map,
                 &|| false,
                 Progress::default(),
+                &thread_pool,
+                CHUNK_SIZE,
             )
             .unwrap();
 
         indexer::index(
             &mut wtxn,
             &index.inner,
+            &thread_pool,
             &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
             indexer_config.grenad_parameters(),
             &db_fields_ids_map,
@@ -2229,6 +2244,8 @@ mod tests {
         let embedders = EmbeddingConfigs::default();
         let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::UpdateDocuments);
         indexer.add_documents(&documents).unwrap();
+        let thread_pool =
+            scoped_thread_pool::ThreadPool::with_available_parallelism("index".to_string());
 
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(
@@ -2239,12 +2256,15 @@ mod tests {
                 &mut new_fields_ids_map,
                 &|| false,
                 Progress::default(),
+                &thread_pool,
+                CHUNK_SIZE,
             )
             .unwrap();
 
         indexer::index(
             &mut wtxn,
             &index.inner,
+            &thread_pool,
             &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
             indexer_config.grenad_parameters(),
             &db_fields_ids_map,
@@ -2291,12 +2311,15 @@ mod tests {
                 &mut new_fields_ids_map,
                 &|| false,
                 Progress::default(),
+                &thread_pool,
+                CHUNK_SIZE,
             )
             .unwrap();
 
         indexer::index(
             &mut wtxn,
             &index.inner,
+            &thread_pool,
             &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
             indexer_config.grenad_parameters(),
             &db_fields_ids_map,
@@ -2327,6 +2350,8 @@ mod tests {
 
         let indexer_alloc = Bump::new();
         let embedders = EmbeddingConfigs::default();
+        let thread_pool =
+            scoped_thread_pool::ThreadPool::with_available_parallelism("index".to_string());
         let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::UpdateDocuments);
         indexer.delete_documents(&["1", "2"]);
 
@@ -2345,12 +2370,15 @@ mod tests {
                 &mut new_fields_ids_map,
                 &|| false,
                 Progress::default(),
+                &thread_pool,
+                CHUNK_SIZE,
             )
             .unwrap();
 
         indexer::index(
             &mut wtxn,
             &index.inner,
+            &thread_pool,
             &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
             indexer_config.grenad_parameters(),
             &db_fields_ids_map,
@@ -2382,6 +2410,8 @@ mod tests {
 
         let indexer_alloc = Bump::new();
         let embedders = EmbeddingConfigs::default();
+        let thread_pool =
+            scoped_thread_pool::ThreadPool::with_available_parallelism("index".to_string());
         let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::UpdateDocuments);
 
         indexer.delete_documents(&["1", "2", "1", "2"]);
@@ -2404,12 +2434,15 @@ mod tests {
                 &mut new_fields_ids_map,
                 &|| false,
                 Progress::default(),
+                &thread_pool,
+                CHUNK_SIZE,
             )
             .unwrap();
 
         indexer::index(
             &mut wtxn,
             &index.inner,
+            &thread_pool,
             &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
             indexer_config.grenad_parameters(),
             &db_fields_ids_map,
@@ -2440,6 +2473,8 @@ mod tests {
 
         let indexer_alloc = Bump::new();
         let embedders = EmbeddingConfigs::default();
+        let thread_pool =
+            scoped_thread_pool::ThreadPool::with_available_parallelism("index".to_string());
         let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::UpdateDocuments);
 
         let documents = documents!([
@@ -2456,12 +2491,15 @@ mod tests {
                 &mut new_fields_ids_map,
                 &|| false,
                 Progress::default(),
+                &thread_pool,
+                CHUNK_SIZE,
             )
             .unwrap();
 
         indexer::index(
             &mut wtxn,
             &index.inner,
+            &thread_pool,
             &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
             indexer_config.grenad_parameters(),
             &db_fields_ids_map,
@@ -2508,12 +2546,15 @@ mod tests {
                 &mut new_fields_ids_map,
                 &|| false,
                 Progress::default(),
+                &thread_pool,
+                CHUNK_SIZE,
             )
             .unwrap();
 
         indexer::index(
             &mut wtxn,
             &index.inner,
+            &thread_pool,
             &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
             indexer_config.grenad_parameters(),
             &db_fields_ids_map,
@@ -2683,6 +2724,8 @@ mod tests {
 
         let indexer_alloc = Bump::new();
         let embedders = EmbeddingConfigs::default();
+        let thread_pool =
+            scoped_thread_pool::ThreadPool::with_available_parallelism("index".to_string());
         let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
 
         // OP
@@ -2702,12 +2745,15 @@ mod tests {
                 &mut new_fields_ids_map,
                 &|| false,
                 Progress::default(),
+                &thread_pool,
+                CHUNK_SIZE,
             )
             .unwrap();
 
         indexer::index(
             &mut wtxn,
             &index.inner,
+            &thread_pool,
             &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
             indexer_config.grenad_parameters(),
             &db_fields_ids_map,
@@ -2761,12 +2807,15 @@ mod tests {
                 &mut new_fields_ids_map,
                 &|| false,
                 Progress::default(),
+                &thread_pool,
+                CHUNK_SIZE,
             )
             .unwrap();
 
         indexer::index(
             &mut wtxn,
             &index.inner,
+            &thread_pool,
             &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
             indexer_config.grenad_parameters(),
             &db_fields_ids_map,
@@ -2817,12 +2866,15 @@ mod tests {
                 &mut new_fields_ids_map,
                 &|| false,
                 Progress::default(),
+                &thread_pool,
+                CHUNK_SIZE,
             )
             .unwrap();
 
         indexer::index(
             &mut wtxn,
             &index.inner,
+            &thread_pool,
             &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
             indexer_config.grenad_parameters(),
             &db_fields_ids_map,

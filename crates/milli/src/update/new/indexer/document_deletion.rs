@@ -95,7 +95,7 @@ mod test {
     use crate::index::tests::TempIndex;
     use crate::progress::Progress;
     use crate::update::new::indexer::document_changes::{
-        extract, DocumentChangeContext, Extractor, IndexingContext,
+        extract, DocumentChangeContext, Extractor, IndexingContext, CHUNK_SIZE,
     };
     use crate::update::new::indexer::DocumentDeletion;
     use crate::update::new::steps::IndexingStep;
@@ -136,7 +136,7 @@ mod test {
             }
         }
 
-        let mut thread_pool =
+        let thread_pool =
             scoped_thread_pool::ThreadPool::new(NonZeroUsize::new(1).unwrap(), "test".into());
 
         let mut deletions = DocumentDeletion::new();
@@ -159,8 +159,12 @@ mod test {
 
         let deletion_tracker = TrackDeletion(PhantomData);
 
-        let changes = deletions
-            .into_changes(&indexer, crate::documents::PrimaryKey::Flat { name: "id", field_id: 0 });
+        let changes = deletions.into_changes(
+            &indexer,
+            crate::documents::PrimaryKey::Flat { name: "id", field_id: 0 },
+            &thread_pool,
+            CHUNK_SIZE,
+        );
 
         let context = IndexingContext {
             index: &index,
@@ -177,7 +181,7 @@ mod test {
             let datastore = ThreadLocal::new();
 
             extract(
-                &mut thread_pool,
+                &thread_pool,
                 &changes,
                 &deletion_tracker,
                 context,

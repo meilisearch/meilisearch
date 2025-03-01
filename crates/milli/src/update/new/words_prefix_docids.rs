@@ -26,11 +26,13 @@ impl WordPrefixDocids {
         database: Database<Bytes, CboRoaringBitmapCodec>,
         prefix_database: Database<Bytes, CboRoaringBitmapCodec>,
         grenad_parameters: &GrenadParameters,
+        thread_pool: &scoped_thread_pool::ThreadPool<crate::Error>,
     ) -> WordPrefixDocids {
         WordPrefixDocids {
             database,
             prefix_database,
-            max_memory_by_thread: grenad_parameters.max_memory_by_thread(),
+            max_memory_by_thread: grenad_parameters
+                .max_memory_by_thread(thread_pool.thread_count()),
         }
     }
 
@@ -39,9 +41,10 @@ impl WordPrefixDocids {
         wtxn: &mut heed::RwTxn,
         prefix_to_compute: &BTreeSet<Prefix>,
         prefix_to_delete: &BTreeSet<Prefix>,
+        thread_pool: &scoped_thread_pool::ThreadPool<crate::Error>,
     ) -> Result<()> {
         delete_prefixes(wtxn, &self.prefix_database, prefix_to_delete)?;
-        self.recompute_modified_prefixes(wtxn, prefix_to_compute)
+        self.recompute_modified_prefixes(wtxn, prefix_to_compute, thread_pool)
     }
 
     #[tracing::instrument(level = "trace", skip_all, target = "indexing::prefix")]
@@ -49,6 +52,7 @@ impl WordPrefixDocids {
         &self,
         wtxn: &mut RwTxn,
         prefixes: &BTreeSet<Prefix>,
+        thread_pool: &scoped_thread_pool::ThreadPool<crate::Error>,
     ) -> Result<()> {
         // We fetch the docids associated to the newly added word prefix fst only.
         // And collect the CboRoaringBitmaps pointers in an HashMap.
@@ -56,7 +60,7 @@ impl WordPrefixDocids {
 
         // We access this HashMap in parallel to compute the *union* of all
         // of them and *serialize* them into files. There is one file by CPU.
-        let local_entries = ThreadLocal::with_capacity(rayon::current_num_threads());
+        let local_entries = ThreadLocal::with_capacity(thread_pool.thread_count());
         prefixes.into_par_iter().map(AsRef::as_ref).try_for_each(|prefix| {
             let refcell = local_entries.get_or(|| {
                 let file = BufWriter::new(spooled_tempfile(
@@ -162,11 +166,13 @@ impl WordPrefixIntegerDocids {
         database: Database<Bytes, CboRoaringBitmapCodec>,
         prefix_database: Database<Bytes, CboRoaringBitmapCodec>,
         grenad_parameters: &GrenadParameters,
+        thread_pool: &scoped_thread_pool::ThreadPool<crate::Error>,
     ) -> WordPrefixIntegerDocids {
         WordPrefixIntegerDocids {
             database,
             prefix_database,
-            max_memory_by_thread: grenad_parameters.max_memory_by_thread(),
+            max_memory_by_thread: grenad_parameters
+                .max_memory_by_thread(thread_pool.thread_count()),
         }
     }
 
@@ -175,9 +181,10 @@ impl WordPrefixIntegerDocids {
         wtxn: &mut heed::RwTxn,
         prefix_to_compute: &BTreeSet<Prefix>,
         prefix_to_delete: &BTreeSet<Prefix>,
+        thread_pool: &scoped_thread_pool::ThreadPool<crate::Error>,
     ) -> Result<()> {
         delete_prefixes(wtxn, &self.prefix_database, prefix_to_delete)?;
-        self.recompute_modified_prefixes(wtxn, prefix_to_compute)
+        self.recompute_modified_prefixes(wtxn, prefix_to_compute, thread_pool)
     }
 
     #[tracing::instrument(level = "trace", skip_all, target = "indexing::prefix")]
@@ -185,6 +192,7 @@ impl WordPrefixIntegerDocids {
         &self,
         wtxn: &mut RwTxn,
         prefixes: &BTreeSet<Prefix>,
+        thread_pool: &scoped_thread_pool::ThreadPool<crate::Error>,
     ) -> Result<()> {
         // We fetch the docids associated to the newly added word prefix fst only.
         // And collect the CboRoaringBitmaps pointers in an HashMap.
@@ -192,7 +200,7 @@ impl WordPrefixIntegerDocids {
 
         // We access this HashMap in parallel to compute the *union* of all
         // of them and *serialize* them into files. There is one file by CPU.
-        let local_entries = ThreadLocal::with_capacity(rayon::current_num_threads());
+        let local_entries = ThreadLocal::with_capacity(thread_pool.thread_count());
         prefixes.into_par_iter().map(AsRef::as_ref).try_for_each(|prefix| {
             let refcell = local_entries.get_or(|| {
                 let file = BufWriter::new(spooled_tempfile(
@@ -312,13 +320,15 @@ pub fn compute_word_prefix_docids(
     prefix_to_compute: &BTreeSet<Prefix>,
     prefix_to_delete: &BTreeSet<Prefix>,
     grenad_parameters: &GrenadParameters,
+    thread_pool: &scoped_thread_pool::ThreadPool<crate::Error>,
 ) -> Result<()> {
     WordPrefixDocids::new(
         index.word_docids.remap_key_type(),
         index.word_prefix_docids.remap_key_type(),
         grenad_parameters,
+        thread_pool,
     )
-    .execute(wtxn, prefix_to_compute, prefix_to_delete)
+    .execute(wtxn, prefix_to_compute, prefix_to_delete, thread_pool)
 }
 
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::prefix")]
@@ -328,13 +338,15 @@ pub fn compute_exact_word_prefix_docids(
     prefix_to_compute: &BTreeSet<Prefix>,
     prefix_to_delete: &BTreeSet<Prefix>,
     grenad_parameters: &GrenadParameters,
+    thread_pool: &scoped_thread_pool::ThreadPool<crate::Error>,
 ) -> Result<()> {
     WordPrefixDocids::new(
         index.exact_word_docids.remap_key_type(),
         index.exact_word_prefix_docids.remap_key_type(),
         grenad_parameters,
+        thread_pool,
     )
-    .execute(wtxn, prefix_to_compute, prefix_to_delete)
+    .execute(wtxn, prefix_to_compute, prefix_to_delete, thread_pool)
 }
 
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::prefix")]
@@ -344,13 +356,15 @@ pub fn compute_word_prefix_fid_docids(
     prefix_to_compute: &BTreeSet<Prefix>,
     prefix_to_delete: &BTreeSet<Prefix>,
     grenad_parameters: &GrenadParameters,
+    thread_pool: &scoped_thread_pool::ThreadPool<crate::Error>,
 ) -> Result<()> {
     WordPrefixIntegerDocids::new(
         index.word_fid_docids.remap_key_type(),
         index.word_prefix_fid_docids.remap_key_type(),
         grenad_parameters,
+        thread_pool,
     )
-    .execute(wtxn, prefix_to_compute, prefix_to_delete)
+    .execute(wtxn, prefix_to_compute, prefix_to_delete, thread_pool)
 }
 
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::prefix")]
@@ -360,11 +374,13 @@ pub fn compute_word_prefix_position_docids(
     prefix_to_compute: &BTreeSet<Prefix>,
     prefix_to_delete: &BTreeSet<Prefix>,
     grenad_parameters: &GrenadParameters,
+    thread_pool: &scoped_thread_pool::ThreadPool<crate::Error>,
 ) -> Result<()> {
     WordPrefixIntegerDocids::new(
         index.word_position_docids.remap_key_type(),
         index.word_prefix_position_docids.remap_key_type(),
         grenad_parameters,
+        thread_pool,
     )
-    .execute(wtxn, prefix_to_compute, prefix_to_delete)
+    .execute(wtxn, prefix_to_compute, prefix_to_delete, thread_pool)
 }

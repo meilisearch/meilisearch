@@ -2,29 +2,62 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
 
+use bumpalo::Bump;
 use heed::RoTxn;
 
-use super::tokenize_document::DocumentTokenizer;
-use super::SearchableExtractor;
+use super::tokenize_document::{tokenizer_builder, DocumentTokenizer};
 use crate::proximity::{index_proximity, MAX_DISTANCE};
 use crate::update::new::document::Document;
 use crate::update::new::extract::cache::BalancedCaches;
-use crate::update::new::indexer::document_changes::DocumentChangeContext;
+use crate::update::new::indexer::document_changes::{
+    extract, DocumentChangeContext, DocumentChanges, Extractor, IndexingContext,
+};
 use crate::update::new::ref_cell_ext::RefCellExt as _;
+use crate::update::new::steps::IndexingStep;
+use crate::update::new::thread_local::{FullySend, ThreadLocal};
 use crate::update::new::DocumentChange;
-use crate::{FieldId, GlobalFieldsIdsMap, Index, Result};
+use crate::update::GrenadParameters;
+use crate::{FieldId, GlobalFieldsIdsMap, Index, Result, MAX_POSITION_PER_ATTRIBUTE};
 
-pub struct WordPairProximityDocidsExtractor;
+impl<'a, 'extractor> Extractor<'extractor> for WordPairProximityDocidsExtractor<'a> {
+    type Data = RefCell<BalancedCaches<'extractor>>;
 
-impl SearchableExtractor for WordPairProximityDocidsExtractor {
-    fn attributes_to_extract<'a>(
-        rtxn: &'a RoTxn,
-        index: &'a Index,
-    ) -> Result<Option<Vec<&'a str>>> {
+    fn init_data(&self, extractor_alloc: &'extractor Bump) -> Result<Self::Data> {
+        Ok(RefCell::new(BalancedCaches::new_in(
+            self.buckets,
+            self.grenad_parameters.max_memory_by_thread(self.buckets),
+            extractor_alloc,
+        )))
+    }
+
+    fn process<'doc>(
+        &self,
+        changes: impl Iterator<Item = Result<DocumentChange<'doc>>>,
+        context: &DocumentChangeContext<Self::Data>,
+    ) -> Result<()> {
+        for change in changes {
+            let change = change?;
+            self.extract_document_change(context, change)?;
+        }
+        Ok(())
+    }
+}
+
+pub struct WordPairProximityDocidsExtractor<'a> {
+    tokenizer: &'a DocumentTokenizer<'a>,
+    grenad_parameters: &'a GrenadParameters,
+    buckets: usize,
+}
+
+impl<'a> WordPairProximityDocidsExtractor<'a> {
+    fn attributes_to_extract<'b>(
+        rtxn: &'b RoTxn,
+        index: &'b Index,
+    ) -> Result<Option<Vec<&'b str>>> {
         index.user_defined_searchable_fields(rtxn).map_err(Into::into)
     }
 
-    fn attributes_to_skip<'a>(_rtxn: &'a RoTxn, _index: &'a Index) -> Result<Vec<&'a str>> {
+    fn attributes_to_skip<'b>(_rtxn: &'b RoTxn, _index: &'b Index) -> Result<Vec<&'b str>> {
         Ok(Vec::new())
     }
 
@@ -32,10 +65,11 @@ impl SearchableExtractor for WordPairProximityDocidsExtractor {
     // and to store the docids of the documents that have a number of words in a given field
     // equal to or under than MAX_COUNTED_WORDS.
     fn extract_document_change(
+        &self,
         context: &DocumentChangeContext<RefCell<BalancedCaches>>,
-        document_tokenizer: &DocumentTokenizer,
         document_change: DocumentChange,
     ) -> Result<()> {
+        let document_tokenizer = self.tokenizer;
         let doc_alloc = &context.doc_alloc;
 
         let index = context.index;
@@ -128,6 +162,70 @@ impl SearchableExtractor for WordPairProximityDocidsExtractor {
             cached_sorter.insert_add_u32(key, docid)?;
         }
         Ok(())
+    }
+
+    pub fn run_extraction<'pl, 'fid, 'indexer, 'index, 'extractor, DC: DocumentChanges<'pl>, MSP>(
+        thread_pool: &scoped_thread_pool::ThreadPool<crate::Error>,
+        document_changes: &DC,
+        indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP>,
+        extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
+        step: IndexingStep,
+    ) -> Result<Vec<BalancedCaches<'extractor>>>
+    where
+        MSP: Fn() -> bool + Sync,
+    {
+        let rtxn = indexing_context.index.read_txn()?;
+        let stop_words = indexing_context.index.stop_words(&rtxn)?;
+        let allowed_separators = indexing_context.index.allowed_separators(&rtxn)?;
+        let allowed_separators: Option<Vec<_>> =
+            allowed_separators.as_ref().map(|s| s.iter().map(String::as_str).collect());
+        let dictionary = indexing_context.index.dictionary(&rtxn)?;
+        let dictionary: Option<Vec<_>> =
+            dictionary.as_ref().map(|s| s.iter().map(String::as_str).collect());
+        let mut builder = tokenizer_builder(
+            stop_words.as_ref(),
+            allowed_separators.as_deref(),
+            dictionary.as_deref(),
+        );
+        let tokenizer = builder.build();
+
+        let attributes_to_extract = Self::attributes_to_extract(&rtxn, indexing_context.index)?;
+        let attributes_to_skip = Self::attributes_to_skip(&rtxn, indexing_context.index)?;
+        let localized_attributes_rules =
+            indexing_context.index.localized_attributes_rules(&rtxn)?.unwrap_or_default();
+
+        let document_tokenizer = DocumentTokenizer {
+            tokenizer: &tokenizer,
+            attribute_to_extract: attributes_to_extract.as_deref(),
+            attribute_to_skip: attributes_to_skip.as_slice(),
+            localized_attributes_rules: &localized_attributes_rules,
+            max_positions_per_attributes: MAX_POSITION_PER_ATTRIBUTE,
+        };
+
+        let extractor_data: WordPairProximityDocidsExtractor = WordPairProximityDocidsExtractor {
+            tokenizer: &document_tokenizer,
+            grenad_parameters: indexing_context.grenad_parameters,
+            buckets: thread_pool.thread_count(),
+        };
+
+        let datastore = ThreadLocal::new();
+
+        {
+            let span =
+                tracing::trace_span!(target: "indexing::documents::extract", "docids_extraction");
+            let _entered = span.enter();
+            extract(
+                thread_pool,
+                document_changes,
+                &extractor_data,
+                indexing_context,
+                extractor_allocs,
+                &datastore,
+                step,
+            )?;
+        }
+
+        Ok(datastore.into_iter().map(RefCell::into_inner).collect())
     }
 }
 

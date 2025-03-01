@@ -218,7 +218,7 @@ impl<'a, 'extractor> Extractor<'extractor> for WordDocidsExtractorData<'a> {
     fn init_data(&self, extractor_alloc: &'extractor Bump) -> Result<Self::Data> {
         Ok(RefCell::new(Some(WordDocidsBalancedCaches::new_in(
             self.buckets,
-            self.grenad_parameters.max_memory_by_thread(),
+            self.grenad_parameters.max_memory_by_thread(self.buckets),
             extractor_alloc,
         ))))
     }
@@ -240,6 +240,7 @@ pub struct WordDocidsExtractors;
 
 impl WordDocidsExtractors {
     pub fn run_extraction<'pl, 'fid, 'indexer, 'index, 'extractor, DC: DocumentChanges<'pl>, MSP>(
+        thread_pool: &scoped_thread_pool::ThreadPool<crate::Error>,
         document_changes: &DC,
         indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP>,
         extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
@@ -288,10 +289,11 @@ impl WordDocidsExtractors {
             let extractor = WordDocidsExtractorData {
                 tokenizer: &document_tokenizer,
                 grenad_parameters: indexing_context.grenad_parameters,
-                buckets: rayon::current_num_threads(),
+                buckets: thread_pool.thread_count(),
             };
 
             extract(
+                thread_pool,
                 document_changes,
                 &extractor,
                 indexing_context,

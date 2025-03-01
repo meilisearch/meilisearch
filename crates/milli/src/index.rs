@@ -1788,6 +1788,7 @@ pub(crate) mod tests {
     use crate::index::{DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS};
     use crate::progress::Progress;
     use crate::update::new::indexer;
+    use crate::update::new::indexer::document_changes::CHUNK_SIZE;
     use crate::update::settings::InnerIndexSettings;
     use crate::update::{
         self, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig, Setting, Settings,
@@ -1837,12 +1838,17 @@ pub(crate) mod tests {
         ) -> Result<(), crate::error::Error> {
             let local_pool;
             let indexer_config = &self.indexer_config;
-            let pool = match &indexer_config.thread_pool {
+            let pool = match &indexer_config.rayon_thread_pool {
                 Some(pool) => pool,
                 None => {
                     local_pool = ThreadPoolNoAbortBuilder::new().build().unwrap();
                     &local_pool
                 }
+            };
+
+            let thread_pool = match &indexer_config.thread_pool {
+                Some(thread_pool) => thread_pool,
+                None => &scoped_thread_pool::ThreadPool::with_available_parallelism("index".into()),
             };
 
             let rtxn = self.inner.read_txn()?;
@@ -1864,29 +1870,28 @@ pub(crate) mod tests {
                 &mut new_fields_ids_map,
                 &|| false,
                 Progress::default(),
+                thread_pool,
+                CHUNK_SIZE,
             )?;
 
             if let Some(error) = operation_stats.into_iter().find_map(|stat| stat.error) {
                 return Err(error.into());
             }
 
-            pool.install(|| {
-                indexer::index(
-                    wtxn,
-                    &self.inner,
-                    &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
-                    indexer_config.grenad_parameters(),
-                    &db_fields_ids_map,
-                    new_fields_ids_map,
-                    primary_key,
-                    &document_changes,
-                    embedders,
-                    &|| false,
-                    &Progress::default(),
-                )
-            })
-            .unwrap()?;
-
+            indexer::index(
+                wtxn,
+                &self.inner,
+                thread_pool,
+                &pool,
+                indexer_config.grenad_parameters(),
+                &db_fields_ids_map,
+                new_fields_ids_map,
+                primary_key,
+                &document_changes,
+                embedders,
+                &|| false,
+                &Progress::default(),
+            )?;
             Ok(())
         }
 
@@ -1925,12 +1930,17 @@ pub(crate) mod tests {
         ) -> Result<(), crate::error::Error> {
             let local_pool;
             let indexer_config = &self.indexer_config;
-            let pool = match &indexer_config.thread_pool {
+            let pool = match &indexer_config.rayon_thread_pool {
                 Some(pool) => pool,
                 None => {
                     local_pool = ThreadPoolNoAbortBuilder::new().build().unwrap();
                     &local_pool
                 }
+            };
+
+            let thread_pool = match &indexer_config.thread_pool {
+                Some(thread_pool) => thread_pool,
+                None => &scoped_thread_pool::ThreadPool::with_available_parallelism("index".into()),
             };
 
             let rtxn = self.inner.read_txn()?;
@@ -1955,28 +1965,28 @@ pub(crate) mod tests {
                 &mut new_fields_ids_map,
                 &|| false,
                 Progress::default(),
+                thread_pool,
+                CHUNK_SIZE,
             )?;
 
             if let Some(error) = operation_stats.into_iter().find_map(|stat| stat.error) {
                 return Err(error.into());
             }
 
-            pool.install(|| {
-                indexer::index(
-                    wtxn,
-                    &self.inner,
-                    &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
-                    indexer_config.grenad_parameters(),
-                    &db_fields_ids_map,
-                    new_fields_ids_map,
-                    primary_key,
-                    &document_changes,
-                    embedders,
-                    &|| false,
-                    &Progress::default(),
-                )
-            })
-            .unwrap()?;
+            indexer::index(
+                wtxn,
+                &self.inner,
+                thread_pool,
+                &pool,
+                indexer_config.grenad_parameters(),
+                &db_fields_ids_map,
+                new_fields_ids_map,
+                primary_key,
+                &document_changes,
+                embedders,
+                &|| false,
+                &Progress::default(),
+            )?;
 
             Ok(())
         }
@@ -2005,12 +2015,17 @@ pub(crate) mod tests {
 
         let local_pool;
         let indexer_config = &index.indexer_config;
-        let pool = match &indexer_config.thread_pool {
+        let pool = match &indexer_config.rayon_thread_pool {
             Some(pool) => pool,
             None => {
                 local_pool = ThreadPoolNoAbortBuilder::new().build().unwrap();
                 &local_pool
             }
+        };
+
+        let thread_pool = match &indexer_config.thread_pool {
+            Some(thread_pool) => thread_pool,
+            None => &scoped_thread_pool::ThreadPool::with_available_parallelism("index".into()),
         };
 
         let rtxn = index.inner.read_txn().unwrap();
@@ -2036,6 +2051,8 @@ pub(crate) mod tests {
                 &mut new_fields_ids_map,
                 &|| false,
                 Progress::default(),
+                thread_pool,
+                CHUNK_SIZE,
             )
             .unwrap();
 
@@ -2046,7 +2063,8 @@ pub(crate) mod tests {
                 indexer::index(
                     &mut wtxn,
                     &index.inner,
-                    &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
+                    thread_pool,
+                    &pool,
                     indexer_config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,

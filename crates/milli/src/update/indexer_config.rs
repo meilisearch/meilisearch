@@ -11,7 +11,8 @@ pub struct IndexerConfig {
     pub max_memory: Option<usize>,
     pub chunk_compression_type: CompressionType,
     pub chunk_compression_level: Option<u32>,
-    pub thread_pool: Option<ThreadPoolNoAbort>,
+    pub rayon_thread_pool: Option<ThreadPoolNoAbort>,
+    pub thread_pool: Option<scoped_thread_pool::ThreadPool<crate::Error>>,
     pub max_positions_per_attributes: Option<u32>,
     pub skip_index_budget: bool,
 }
@@ -36,6 +37,7 @@ impl Default for IndexerConfig {
             max_memory: None,
             chunk_compression_type: CompressionType::None,
             chunk_compression_level: None,
+            rayon_thread_pool: None,
             thread_pool: None,
             max_positions_per_attributes: None,
             skip_index_budget: false,

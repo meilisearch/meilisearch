@@ -38,7 +38,7 @@ impl<'a, 'b, 'extractor> Extractor<'extractor> for FacetedExtractorData<'a, 'b> 
     fn init_data(&self, extractor_alloc: &'extractor Bump) -> Result<Self::Data> {
         Ok(RefCell::new(BalancedCaches::new_in(
             self.buckets,
-            self.grenad_parameters.max_memory_by_thread(),
+            self.grenad_parameters.max_memory_by_thread(self.buckets),
             extractor_alloc,
         )))
     }
@@ -388,6 +388,7 @@ fn truncate_str(s: &str) -> &str {
 impl FacetedDocidsExtractor {
     #[tracing::instrument(level = "trace", skip_all, target = "indexing::extract::faceted")]
     pub fn run_extraction<'pl, 'fid, 'indexer, 'index, 'extractor, DC: DocumentChanges<'pl>, MSP>(
+        thread_pool: &scoped_thread_pool::ThreadPool<crate::Error>,
         document_changes: &DC,
         indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP>,
         extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
@@ -412,10 +413,11 @@ impl FacetedDocidsExtractor {
             let extractor = FacetedExtractorData {
                 attributes_to_extract: &attributes_to_extract,
                 grenad_parameters: indexing_context.grenad_parameters,
-                buckets: rayon::current_num_threads(),
+                buckets: thread_pool.thread_count(),
                 sender,
             };
             extract(
+                thread_pool,
                 document_changes,
                 &extractor,
                 indexing_context,

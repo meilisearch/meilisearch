@@ -52,12 +52,12 @@ const MAX_FRAME_HEADER_SIZE: usize = 9;
 /// a message in this queue only if it is empty to avoid filling
 /// the channel *and* the BBQueue.
 pub fn extractor_writer_bbqueue<'a>(
-    thread_pool: &mut scoped_thread_pool::ThreadPool<crate::Error>,
+    thread_pool: &scoped_thread_pool::ThreadPool<crate::Error>,
     bbbuffers: &'a mut Vec<BBBuffer>,
     total_bbbuffer_capacity: usize,
     channel_capacity: usize,
 ) -> (ExtractorBbqueueSender<'a>, WriterBbqueueReceiver<'a>) {
-    let current_num_threads = rayon::current_num_threads();
+    let current_num_threads = thread_pool.thread_count();
     let bbbuffer_capacity = total_bbbuffer_capacity.checked_div(current_num_threads).unwrap();
     bbbuffers.resize_with(current_num_threads, || BBBuffer::new(bbbuffer_capacity));
 
@@ -67,12 +67,18 @@ pub fn extractor_writer_bbqueue<'a>(
     let max_grant = capacity.saturating_div(2).checked_sub(MAX_FRAME_HEADER_SIZE).unwrap();
 
     let producers = ThreadLocal::with_capacity(bbbuffers.len());
-    let consumers = thread_pool.broadcast(|thread_index| {
-        let bbqueue: &BBBuffer = &bbbuffers[thread_index];
-        let (producer, consumer) = bbqueue.try_split_framed().unwrap();
-        producers.get_or(|| FullySend(RefCell::new(producer)));
-        consumer
-    });
+    let consumers = ThreadLocal::with_capacity(bbbuffers.len());
+    thread_pool
+        .broadcast(|thread_index| {
+            let bbqueue: &BBBuffer = &bbbuffers[thread_index];
+            let (producer, consumer) = bbqueue.try_split_framed().unwrap();
+            producers.get_or(|| FullySend(RefCell::new(producer)));
+            consumers.get_or(|| FullySend(consumer));
+            Ok(())
+        })
+        .map_err(|errors| crate::Error::from_scoped_thread_pool_errors(thread_pool, errors))
+        .unwrap();
+    let consumers: Vec<_> = consumers.into_iter().map(|consumer| consumer.0).collect();
 
     let sent_messages_attempts = Arc::new(AtomicUsize::new(0));
     let blocking_sent_messages_attempts = Arc::new(AtomicUsize::new(0));
@@ -964,28 +970,70 @@ impl GeoSender<'_, '_> {
             .map_err(|_| SendError(()))
     }
 
-    pub fn set_geo_faceted(&self, bitmap: &RoaringBitmap) -> crate::Result<()> {
-        let database = Database::Main;
-        let value_length = bitmap.serialized_size();
-        let key = GEO_FACETED_DOCUMENTS_IDS_KEY.as_bytes();
-        let key_length = key.len().try_into().ok().and_then(NonZeroU16::new).ok_or_else(|| {
-            InternalError::StorePut {
-                database_name: database.database_name(),
-                key: key.into(),
-                value_length,
-                error: MdbError::BadValSize.into(),
-            }
-        })?;
+    pub fn set_geo_faceted(
+        &self,
+        bitmap: &RoaringBitmap,
+        thread_pool: &scoped_thread_pool::ThreadPool<crate::Error>,
+    ) -> crate::Result<()> {
+        let writer = GeoWriter { bitmap, channel: *self };
+        thread_pool
+            .execute(&writer)
+            .map_err(|errors| crate::Error::from_scoped_thread_pool_errors(thread_pool, errors))
+    }
+}
 
-        self.0.write_key_value_with(
+struct GeoWriter<'a, 'b> {
+    bitmap: &'a RoaringBitmap,
+    channel: GeoSender<'a, 'b>,
+}
+impl<'a, 'b> scoped_thread_pool::Workload<'static> for GeoWriter<'a, 'b> {
+    type Context = ();
+
+    type Error = crate::Error;
+
+    fn context(
+        &self,
+        _thread_count: usize,
+        _thread_index: usize,
+    ) -> Result<Self::Context, Self::Error> {
+        Ok(())
+    }
+
+    fn run_task(
+        &self,
+        _thread_count: usize,
+        thread_index: usize,
+        task_index: usize,
+        _context: &mut Self::Context,
+    ) -> Option<Result<(), Self::Error>> {
+        if thread_index != 0 || task_index != 0 {
+            return None;
+        }
+        let database = Database::Main;
+        let value_length = self.bitmap.serialized_size();
+        let key = GEO_FACETED_DOCUMENTS_IDS_KEY.as_bytes();
+        let key_length = match key.len().try_into().ok().and_then(NonZeroU16::new) {
+            Some(key_length) => key_length,
+            None => {
+                return Some(Err(InternalError::StorePut {
+                    database_name: database.database_name(),
+                    key: key.into(),
+                    value_length,
+                    error: MdbError::BadValSize.into(),
+                }
+                .into()))
+            }
+        };
+
+        Some(self.channel.0.write_key_value_with(
             database,
             key_length,
             value_length,
             |key_buffer, value_buffer| {
                 key_buffer.copy_from_slice(key);
-                bitmap.serialize_into(value_buffer)?;
+                self.bitmap.serialize_into(value_buffer)?;
                 Ok(())
             },
-        )
+        ))
     }
 }

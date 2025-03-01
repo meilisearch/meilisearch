@@ -55,7 +55,7 @@ fn extract_facet_string_docids_document_update<R: io::Read + io::Seek>(
     localized_field_ids: &LocalizedFieldIds,
     facet_search: bool,
 ) -> Result<(grenad::Reader<BufReader<File>>, grenad::Reader<BufReader<File>>)> {
-    let max_memory = indexer.max_memory_by_thread();
+    let max_memory = indexer.max_memory_by_rayon_thread();
 
     let mut facet_string_docids_sorter = create_sorter(
         grenad::SortAlgorithm::Stable,
@@ -145,7 +145,7 @@ fn extract_facet_string_docids_settings<R: io::Read + io::Seek>(
     indexer: GrenadParameters,
     settings_diff: &InnerIndexSettingsDiff,
 ) -> Result<(grenad::Reader<BufReader<File>>, grenad::Reader<BufReader<File>>)> {
-    let max_memory = indexer.max_memory_by_thread();
+    let max_memory = indexer.max_memory_by_rayon_thread();
 
     let mut facet_string_docids_sorter = create_sorter(
         grenad::SortAlgorithm::Stable,

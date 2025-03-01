@@ -9,6 +9,7 @@ use heed::EnvOpenOptions;
 use maplit::{btreemap, hashset};
 use milli::progress::Progress;
 use milli::update::new::indexer;
+use milli::update::new::indexer::document_changes::CHUNK_SIZE;
 use milli::update::{IndexDocumentsMethod, IndexerConfig, Settings};
 use milli::vector::EmbeddingConfigs;
 use milli::{AscDesc, Criterion, DocumentId, Index, Member, TermsMatchingStrategy};
@@ -72,6 +73,8 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     let mut new_fields_ids_map = db_fields_ids_map.clone();
 
     let embedders = EmbeddingConfigs::default();
+    let thread_pool =
+        scoped_thread_pool::ThreadPool::with_available_parallelism("index".to_string());
     let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
 
     let mut file = tempfile::tempfile().unwrap();
@@ -92,6 +95,8 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
             &mut new_fields_ids_map,
             &|| false,
             Progress::default(),
+            &thread_pool,
+            CHUNK_SIZE,
         )
         .unwrap();
 
@@ -102,6 +107,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     indexer::index(
         &mut wtxn,
         &index,
+        &thread_pool,
         &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
         config.grenad_parameters(),
         &db_fields_ids_map,

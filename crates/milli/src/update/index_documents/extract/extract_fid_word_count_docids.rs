@@ -26,7 +26,7 @@ pub fn extract_fid_word_count_docids<R: io::Read + io::Seek>(
     indexer: GrenadParameters,
     _settings_diff: &InnerIndexSettingsDiff,
 ) -> Result<grenad::Reader<BufReader<File>>> {
-    let max_memory = indexer.max_memory_by_thread();
+    let max_memory = indexer.max_memory_by_rayon_thread();
 
     let mut fid_word_count_docids_sorter = create_sorter(
         grenad::SortAlgorithm::Unstable,

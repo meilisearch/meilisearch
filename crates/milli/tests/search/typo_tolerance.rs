@@ -5,6 +5,7 @@ use heed::EnvOpenOptions;
 use milli::documents::mmap_from_objects;
 use milli::progress::Progress;
 use milli::update::new::indexer;
+use milli::update::new::indexer::document_changes::CHUNK_SIZE;
 use milli::update::{IndexDocumentsMethod, IndexerConfig, Settings};
 use milli::vector::EmbeddingConfigs;
 use milli::{Criterion, Index, Object, Search, TermsMatchingStrategy};
@@ -123,6 +124,8 @@ fn test_typo_disabled_on_word() {
     let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let mut new_fields_ids_map = db_fields_ids_map.clone();
     let embedders = EmbeddingConfigs::default();
+    let thread_pool =
+        scoped_thread_pool::ThreadPool::with_available_parallelism("index".to_string());
     let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
 
     indexer.add_documents(&documents).unwrap();
@@ -137,12 +140,15 @@ fn test_typo_disabled_on_word() {
             &mut new_fields_ids_map,
             &|| false,
             Progress::default(),
+            &thread_pool,
+            CHUNK_SIZE,
         )
         .unwrap();
 
     indexer::index(
         &mut wtxn,
         &index,
+        &thread_pool,
         &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
         config.grenad_parameters(),
         &db_fields_ids_map,

@@ -7,6 +7,7 @@ use maplit::{btreemap, hashset};
 
 use crate::progress::Progress;
 use crate::update::new::indexer;
+use crate::update::new::indexer::document_changes::CHUNK_SIZE;
 use crate::update::{IndexDocumentsMethod, IndexerConfig, Settings};
 use crate::vector::EmbeddingConfigs;
 use crate::{db_snap, Criterion, Index};
@@ -65,6 +66,9 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     // index documents
     indexer.add_documents(&payload).unwrap();
 
+    let thread_pool =
+        scoped_thread_pool::ThreadPool::with_available_parallelism("index".to_string());
+
     let indexer_alloc = Bump::new();
     let (document_changes, operation_stats, primary_key) = indexer
         .into_changes(
@@ -75,6 +79,8 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
             &mut new_fields_ids_map,
             &|| false,
             Progress::default(),
+            &thread_pool,
+            CHUNK_SIZE,
         )
         .unwrap();
 
@@ -85,6 +91,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     indexer::index(
         &mut wtxn,
         &index,
+        &thread_pool,
         &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
         config.grenad_parameters(),
         &db_fields_ids_map,

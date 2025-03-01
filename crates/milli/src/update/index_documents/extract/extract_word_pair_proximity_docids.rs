@@ -39,7 +39,7 @@ pub fn extract_word_pair_proximity_docids<R: io::Read + io::Seek>(
     let any_deletion = settings_diff.old.proximity_precision == ProximityPrecision::ByWord;
     let any_addition = settings_diff.new.proximity_precision == ProximityPrecision::ByWord;
 
-    let max_memory = indexer.max_memory_by_thread();
+    let max_memory = indexer.max_memory_by_rayon_thread();
     let mut word_pair_proximity_docids_sorters: Vec<_> = (1..MAX_DISTANCE)
         .map(|_| {
             create_sorter(

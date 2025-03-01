@@ -35,7 +35,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
     grenad::Reader<BufReader<File>>,
     grenad::Reader<BufReader<File>>,
 )> {
-    let max_memory = indexer.max_memory_by_thread();
+    let max_memory = indexer.max_memory_by_rayon_thread();
 
     let mut word_fid_docids_sorter = create_sorter(
         grenad::SortAlgorithm::Unstable,

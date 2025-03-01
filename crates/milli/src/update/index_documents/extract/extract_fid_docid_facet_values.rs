@@ -44,7 +44,7 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
     indexer: GrenadParameters,
     settings_diff: &InnerIndexSettingsDiff,
 ) -> Result<ExtractedFacetValues> {
-    let max_memory = indexer.max_memory_by_thread();
+    let max_memory = indexer.max_memory_by_rayon_thread();
 
     let mut fid_docid_facet_numbers_sorter = create_sorter(
         grenad::SortAlgorithm::Stable,
