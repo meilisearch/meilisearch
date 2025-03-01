@@ -28,6 +28,7 @@ memmap2 = "0.9.5"
 page_size = "0.6.0"
 rayon = "1.10.0"
 roaring = { version = "0.10.10", features = ["serde"] }
+scoped_thread_pool = { version = "0.1.0", path = "../../../../../../../dev/scoped_thread_pool" }
 serde = { version = "1.0.217", features = ["derive"] }
 serde_json = { version = "1.0.135", features = ["preserve_order"] }
 synchronoise = "1.0.1"

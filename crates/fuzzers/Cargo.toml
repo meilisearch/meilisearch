@@ -17,6 +17,7 @@ clap = { version = "4.5.24", features = ["derive"] }
 either = "1.13.0"
 fastrand = "2.3.0"
 milli = { path = "../milli" }
+scoped_thread_pool = { version = "0.1.0", path = "../../../../../../../dev/scoped_thread_pool" }
 serde = { version = "1.0.217", features = ["derive"] }
 serde_json = { version = "1.0.135", features = ["preserve_order"] }
 tempfile = "3.15.0"
