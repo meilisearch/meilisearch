@@ -743,15 +743,21 @@ impl TryFrom<&IndexerOpts> for IndexerConfig {
     type Error = anyhow::Error;
 
     fn try_from(other: &IndexerOpts) -> Result<Self, Self::Error> {
-        let thread_pool = ThreadPoolNoAbortBuilder::new()
-            .thread_name(|index| format!("indexing-thread:{index}"))
+        let rayon_thread_pool = ThreadPoolNoAbortBuilder::new()
+            .thread_name(|index| format!("rayon-{index}"))
             .num_threads(*other.max_indexing_threads)
             .build()?;
+
+        let thread_pool = Some(scoped_thread_pool::ThreadPool::new(
+            NonZeroUsize::new(*other.max_indexing_threads).unwrap_or(NonZeroUsize::new(1).unwrap()),
+            "index".to_string(),
+        ));
 
         Ok(Self {
             log_every_n: Some(DEFAULT_LOG_EVERY_N),
             max_memory: other.max_indexing_memory.map(|b| b.as_u64() as usize),
-            thread_pool: Some(thread_pool),
+            rayon_thread_pool: Some(rayon_thread_pool),
+            thread_pool,
             max_positions_per_attributes: None,
             skip_index_budget: other.skip_index_budget,
             ..Default::default()
