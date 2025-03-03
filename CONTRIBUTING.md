@@ -95,6 +95,11 @@ Meilisearch follows the [cargo xtask](https://github.com/matklad/cargo-xtask) wo
 
 Run `cargo xtask --help` from the root of the repository to find out what is available.
 
+#### Update the openAPI file if the API changed
+
+To update the openAPI file in the code, see [sprint_issue.md](https://github.com/meilisearch/meilisearch/blob/main/.github/ISSUE_TEMPLATE/sprint_issue.md#reminders-when-modifying-the-api).
+If you want to update the openAPI file on the [open-api repository](https://github.com/meilisearch/open-api), see [update-openapi-issue.md](https://github.com/meilisearch/engine-team/blob/main/issue-templates/update-openapi-issue.md).
+
 ### Logging
 
 Meilisearch uses [`tracing`](https://lib.rs/crates/tracing) for logging purposes. Tracing logs are structured and can be displayed as JSON to the end user, so prefer passing arguments as fields rather than interpolating them in the message.
