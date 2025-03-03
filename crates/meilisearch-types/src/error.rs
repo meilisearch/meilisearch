@@ -414,6 +414,7 @@ impl ErrorCode for milli::Error {
                     UserError::AttributeLimitReached => Code::MaxFieldsLimitExceeded,
                     UserError::InvalidFilter(_) => Code::InvalidSearchFilter,
                     UserError::InvalidFilterExpression(..) => Code::InvalidSearchFilter,
+                    UserError::FilterOperatorNotAllowed { .. } => Code::InvalidSearchFilter,
                     UserError::MissingDocumentId { .. } => Code::MissingDocumentId,
                     UserError::InvalidDocumentId { .. } | UserError::TooManyDocumentIds { .. } => {
                         Code::InvalidDocumentId

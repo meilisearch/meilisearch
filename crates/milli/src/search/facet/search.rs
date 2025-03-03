@@ -10,6 +10,9 @@ use roaring::RoaringBitmap;
 use tracing::error;
 
 use crate::error::UserError;
+use crate::filterable_attributes_rules::{
+    filtered_matching_field_names, is_field_facet_searchable,
+};
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupValue};
 use crate::search::build_dfa;
 use crate::{DocumentId, FieldId, OrderBy, Result, Search};
@@ -73,10 +76,16 @@ impl<'a> SearchForFacetValues<'a> {
         let index = self.search_query.index;
         let rtxn = self.search_query.rtxn;
 
-        let filterable_fields = index.filterable_fields(rtxn)?;
-        if !filterable_fields.contains(&self.facet) {
+        let filterable_attributes_rules = index.filterable_attributes_rules(rtxn)?;
+        if !is_field_facet_searchable(&self.facet, &filterable_attributes_rules) {
+            let fields_ids_map = index.fields_ids_map(rtxn)?;
+            let matching_field_names = filtered_matching_field_names(
+                &filterable_attributes_rules,
+                &fields_ids_map,
+                &|features| features.is_facet_searchable(),
+            );
             let (valid_fields, hidden_fields) =
-                index.remove_hidden_fields(rtxn, filterable_fields)?;
+                index.remove_hidden_fields(rtxn, matching_field_names)?;
 
             return Err(UserError::InvalidFacetSearchFacetName {
                 field: self.facet.clone(),

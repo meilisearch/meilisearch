@@ -202,3 +202,107 @@ impl Default for FilterFeatures {
         Self { equality: true, comparison: false }
     }
 }
+
+pub fn filtered_matching_field_names<'fim>(
+    filterable_attributes: &[FilterableAttributesRule],
+    fields_ids_map: &'fim FieldsIdsMap,
+    filter: &impl Fn(&FilterableAttributesFeatures) -> bool,
+) -> BTreeSet<&'fim str> {
+    let mut result = BTreeSet::new();
+    for (_, field_name) in fields_ids_map.iter() {
+        for filterable_attribute in filterable_attributes {
+            if filterable_attribute.match_str(field_name) == PatternMatch::Match {
+                let features = filterable_attribute.features();
+                if filter(&features) {
+                    result.insert(field_name);
+                }
+            }
+        }
+    }
+    result
+}
+
+pub fn matching_features(
+    field_name: &str,
+    filterable_attributes: &[FilterableAttributesRule],
+) -> Option<FilterableAttributesFeatures> {
+    for filterable_attribute in filterable_attributes {
+        if filterable_attribute.match_str(field_name) == PatternMatch::Match {
+            return Some(filterable_attribute.features());
+        }
+    }
+    None
+}
+
+pub fn is_field_filterable(
+    field_name: &str,
+    filterable_attributes: &[FilterableAttributesRule],
+) -> bool {
+    matching_features(field_name, filterable_attributes)
+        .map_or(false, |features| features.is_filterable())
+}
+
+pub fn is_field_facet_searchable(
+    field_name: &str,
+    filterable_attributes: &[FilterableAttributesRule],
+) -> bool {
+    matching_features(field_name, filterable_attributes)
+        .map_or(false, |features| features.is_facet_searchable())
+}
+
+/// Match a field against a set of filterable, facet searchable fields, distinct field, sortable fields, and asc_desc fields.
+pub fn match_faceted_field(
+    field_name: &str,
+    filterable_fields: &[FilterableAttributesRule],
+    sortable_fields: &HashSet<String>,
+    asc_desc_fields: &HashSet<String>,
+    distinct_field: &Option<String>,
+) -> PatternMatch {
+    // Check if the field matches any filterable or facet searchable field
+    let mut selection = match_pattern_by_features(field_name, filterable_fields, &|features| {
+        features.is_facet_searchable() || features.is_filterable()
+    });
+
+    // If the field matches the pattern, return Match
+    if selection == PatternMatch::Match {
+        return selection;
+    }
+
+    match match_distinct_field(distinct_field.as_deref(), field_name) {
+        PatternMatch::Match => return PatternMatch::Match,
+        PatternMatch::Parent => selection = PatternMatch::Parent,
+        PatternMatch::NoMatch => (),
+    }
+
+    // Otherwise, check if the field matches any sortable/asc_desc field
+    for pattern in sortable_fields.iter().chain(asc_desc_fields.iter()) {
+        match match_field_legacy(pattern, field_name) {
+            PatternMatch::Match => return PatternMatch::Match,
+            PatternMatch::Parent => selection = PatternMatch::Parent,
+            PatternMatch::NoMatch => (),
+        }
+    }
+
+    selection
+}
+
+fn match_pattern_by_features(
+    field_name: &str,
+    filterable_attributes: &[FilterableAttributesRule],
+    filter: &impl Fn(&FilterableAttributesFeatures) -> bool,
+) -> PatternMatch {
+    let mut selection = PatternMatch::NoMatch;
+    // Check if the field name matches any pattern that is facet searchable or filterable
+    for pattern in filterable_attributes {
+        let features = pattern.features();
+        if filter(&features) {
+            match pattern.match_str(field_name) {
+                PatternMatch::Match => return PatternMatch::Match,
+                PatternMatch::Parent => selection = PatternMatch::Parent,
+                PatternMatch::NoMatch => (),
+            }
+        }
+    }
+
+    selection
+}

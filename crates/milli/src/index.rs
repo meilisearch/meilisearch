@@ -945,83 +945,37 @@ impl Index {
         Ok(fields.into_iter().filter_map(|name| fields_ids_map.id(&name)).collect())
     }
 
-    /* faceted fields */
-
-    /// Writes the faceted fields in the database.
-    pub(crate) fn put_faceted_fields(
-        &self,
-        wtxn: &mut RwTxn<'_>,
-        fields: &HashSet<String>,
-    ) -> heed::Result<()> {
-        self.main.remap_types::<Str, SerdeJson<_>>().put(
-            wtxn,
-            main_key::HIDDEN_FACETED_FIELDS_KEY,
-            fields,
-        )
+    /// Returns true if the geo feature is enabled.
+    pub fn is_geo_enabled(&self, rtxn: &RoTxn<'_>) -> Result<bool> {
+        let geo_filter = self.is_geo_filtering_enabled(rtxn)?;
+        let geo_sortable = self.is_geo_sorting_enabled(rtxn)?;
+        Ok(geo_filter || geo_sortable)
     }
 
-    /// Returns the faceted fields names.
-    pub fn faceted_fields(&self, rtxn: &RoTxn<'_>) -> heed::Result<HashSet<String>> {
-        Ok(self
-            .main
-            .remap_types::<Str, SerdeJson<_>>()
-            .get(rtxn, main_key::HIDDEN_FACETED_FIELDS_KEY)?
-            .unwrap_or_default())
+    /// Returns true if the geo sorting feature is enabled.
+    pub fn is_geo_sorting_enabled(&self, rtxn: &RoTxn<'_>) -> Result<bool> {
+        let geo_sortable = self.sortable_fields(rtxn)?.contains(RESERVED_GEO_FIELD_NAME);
+        Ok(geo_sortable)
     }
 
-    /// Identical to `faceted_fields`, but returns ids instead.
-    pub fn faceted_fields_ids(&self, rtxn: &RoTxn<'_>) -> Result<HashSet<FieldId>> {
-        let fields = self.faceted_fields(rtxn)?;
-        let fields_ids_map = self.fields_ids_map(rtxn)?;
-
-        let mut fields_ids = HashSet::new();
-        for name in fields {
-            if let Some(field_id) = fields_ids_map.id(&name) {
-                fields_ids.insert(field_id);
-            }
-        }
-
-        Ok(fields_ids)
+    /// Returns true if the geo filtering feature is enabled.
+    pub fn is_geo_filtering_enabled(&self, rtxn: &RoTxn<'_>) -> Result<bool> {
+        let geo_filter =
+            self.filterable_attributes_rules(rtxn)?.iter().any(|field| field.has_geo());
+        Ok(geo_filter)
     }
 
-    /* faceted documents ids */
-
-    /// Returns the user defined faceted fields names.
-    ///
-    /// The user faceted fields are the union of all the filterable, sortable, distinct, and Asc/Desc fields.
-    pub fn user_defined_faceted_fields(&self, rtxn: &RoTxn<'_>) -> Result<HashSet<String>> {
-        let filterable_fields = self.filterable_fields(rtxn)?;
-        let sortable_fields = self.sortable_fields(rtxn)?;
-        let distinct_field = self.distinct_field(rtxn)?;
-        let asc_desc_fields =
-            self.criteria(rtxn)?.into_iter().filter_map(|criterion| match criterion {
+    pub fn asc_desc_fields(&self, rtxn: &RoTxn<'_>) -> Result<HashSet<String>> {
+        let asc_desc_fields = self
+            .criteria(rtxn)?
+            .into_iter()
+            .filter_map(|criterion| match criterion {
                 Criterion::Asc(field) | Criterion::Desc(field) => Some(field),
                 _otherwise => None,
-            });
+            })
+            .collect();
 
-        let mut faceted_fields = filterable_fields;
-        faceted_fields.extend(sortable_fields);
-        faceted_fields.extend(asc_desc_fields);
-        if let Some(field) = distinct_field {
-            faceted_fields.insert(field.to_owned());
-        }
-
-        Ok(faceted_fields)
-    }
-
-    /// Identical to `user_defined_faceted_fields`, but returns ids instead.
-    pub fn user_defined_faceted_fields_ids(&self, rtxn: &RoTxn<'_>) -> Result<HashSet<FieldId>> {
-        let fields = self.user_defined_faceted_fields(rtxn)?;
-        let fields_ids_map = self.fields_ids_map(rtxn)?;
-
-        let mut fields_ids = HashSet::new();
-        for name in fields {
-            if let Some(field_id) = fields_ids_map.id(&name) {
-                fields_ids.insert(field_id);
-            }
-        }
-
-        Ok(fields_ids)
+        Ok(asc_desc_fields)
     }
 
     /* faceted documents ids */
