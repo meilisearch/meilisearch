@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::convert::TryInto;
 use std::fs::File;
 use std::path::Path;
 
@@ -10,10 +9,11 @@ use roaring::RoaringBitmap;
 use rstar::RTree;
 use serde::{Deserialize, Serialize};
 
-use crate::constants::{self, RESERVED_VECTORS_FIELD_NAME};
+use crate::constants::{self, RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME};
 use crate::database_stats::DatabaseStats;
 use crate::documents::PrimaryKey;
 use crate::error::{InternalError, UserError};
+use crate::fields_ids_map::metadata::FieldIdMapWithMetadata;
 use crate::fields_ids_map::FieldsIdsMap;
 use crate::heed_codec::facet::{
     FacetGroupKeyCodec, FacetGroupValueCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec,
@@ -27,8 +27,9 @@ use crate::vector::{ArroyStats, ArroyWrapper, Embedding, EmbeddingConfig};
 use crate::{
     default_criteria, CboRoaringBitmapCodec, Criterion, DocumentId, ExternalDocumentsIds,
     FacetDistribution, FieldDistribution, FieldId, FieldIdMapMissingEntry, FieldIdWordCountCodec,
-    FieldidsWeightsMap, GeoPoint, LocalizedAttributesRule, ObkvCodec, Result, RoaringBitmapCodec,
-    RoaringBitmapLenCodec, Search, U8StrStrCodec, Weight, BEU16, BEU32, BEU64,
+    FieldidsWeightsMap, FilterableAttributesRule, GeoPoint, LocalizedAttributesRule, ObkvCodec,
+    Result, RoaringBitmapCodec, RoaringBitmapLenCodec, Search, U8StrStrCodec, Weight, BEU16, BEU32,
+    BEU64,
 };
 
 pub const DEFAULT_MIN_WORD_LEN_ONE_TYPO: u8 = 5;
@@ -738,8 +739,7 @@ impl Index {
         &self,
         wtxn: &mut RwTxn<'_>,
         user_fields: &[&str],
-        non_searchable_fields_ids: &[FieldId],
-        fields_ids_map: &FieldsIdsMap,
+        fields_ids_map: &FieldIdMapWithMetadata,
     ) -> Result<()> {
         // We can write the user defined searchable fields as-is.
         self.put_user_defined_searchable_fields(wtxn, user_fields)?;
@@ -747,29 +747,17 @@ impl Index {
         let mut weights = FieldidsWeightsMap::default();
 
         // Now we generate the real searchable fields:
-        // 1. Take the user defined searchable fields as-is to keep the priority defined by the attributes criterion.
-        // 2. Iterate over the user defined searchable fields.
-        // 3. If a user defined field is a subset of a field defined in the fields_ids_map
-        // (ie doggo.name is a subset of doggo) right after doggo and with the same weight.
         let mut real_fields = Vec::new();
-
-        for (id, field_from_map) in fields_ids_map.iter() {
-            for (weight, user_field) in user_fields.iter().enumerate() {
-                if crate::is_faceted_by(field_from_map, user_field)
-                    && !real_fields.contains(&field_from_map)
-                    && !non_searchable_fields_ids.contains(&id)
-                {
-                    real_fields.push(field_from_map);
-
-                    let weight: u16 =
-                        weight.try_into().map_err(|_| UserError::AttributeLimitReached)?;
-                    weights.insert(id, weight);
-                }
+        for (id, field_from_map, metadata) in fields_ids_map.iter() {
+            if let Some(weight) = metadata.searchable_weight() {
+                real_fields.push(field_from_map);
+                weights.insert(id, weight);
             }
         }
 
         self.put_searchable_fields(wtxn, &real_fields)?;
         self.put_fieldids_weights_map(wtxn, &weights)?;
+
         Ok(())
     }
 
