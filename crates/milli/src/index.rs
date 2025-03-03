@@ -1766,7 +1766,7 @@ pub(crate) mod tests {
     use big_s::S;
     use bumpalo::Bump;
     use heed::{EnvOpenOptions, RwTxn};
-    use maplit::{btreemap, hashset};
+    use maplit::btreemap;
     use memmap2::Mmap;
     use tempfile::TempDir;
 
@@ -1782,7 +1782,8 @@ pub(crate) mod tests {
     use crate::vector::settings::{EmbedderSource, EmbeddingSettings};
     use crate::vector::EmbeddingConfigs;
     use crate::{
-        db_snap, obkv_to_json, Filter, Index, Search, SearchResult, ThreadPoolNoAbortBuilder,
+        db_snap, obkv_to_json, Filter, FilterableAttributesRule, Index, Search, SearchResult,
+        ThreadPoolNoAbortBuilder,
     };
 
     pub(crate) struct TempIndex {
@@ -2189,7 +2190,7 @@ pub(crate) mod tests {
         let rtxn = index.read_txn().unwrap();
 
         let real = index.searchable_fields(&rtxn).unwrap();
-        assert_eq!(real, &["doggo", "name"]);
+        assert!(real.is_empty());
         let user_defined = index.user_defined_searchable_fields(&rtxn).unwrap().unwrap();
         assert_eq!(user_defined, &["doggo", "name"]);
 
@@ -2217,7 +2218,9 @@ pub(crate) mod tests {
 
         index
             .update_settings(|settings| {
-                settings.set_filterable_fields(hashset! { S(RESERVED_GEO_FIELD_NAME) });
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
+                    RESERVED_GEO_FIELD_NAME.to_string(),
+                )]);
             })
             .unwrap();
         index
@@ -2325,7 +2328,9 @@ pub(crate) mod tests {
 
         index
             .update_settings(|settings| {
-                settings.set_filterable_fields(hashset! { S("doggo") });
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
+                    "doggo".to_string(),
+                )]);
             })
             .unwrap();
         index
@@ -2362,15 +2367,14 @@ pub(crate) mod tests {
 
     #[test]
     fn replace_documents_external_ids_and_soft_deletion_check() {
-        use big_s::S;
-        use maplit::hashset;
-
         let index = TempIndex::new();
 
         index
             .update_settings(|settings| {
                 settings.set_primary_key("id".to_owned());
-                settings.set_filterable_fields(hashset! { S("doggo") });
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
+                    "doggo".to_string(),
+                )]);
             })
             .unwrap();
 
@@ -2903,8 +2907,9 @@ pub(crate) mod tests {
         index
             .update_settings(|settings| {
                 settings.set_primary_key("id".to_string());
-                settings
-                    .set_filterable_fields(HashSet::from([RESERVED_GEO_FIELD_NAME.to_string()]));
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
+                    RESERVED_GEO_FIELD_NAME.to_string(),
+                )]);
             })
             .unwrap();
 
@@ -2938,8 +2943,9 @@ pub(crate) mod tests {
         index
             .update_settings(|settings| {
                 settings.set_primary_key("id".to_string());
-                settings
-                    .set_filterable_fields(HashSet::from([RESERVED_GEO_FIELD_NAME.to_string()]));
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
+                    RESERVED_GEO_FIELD_NAME.to_string(),
+                )]);
             })
             .unwrap();
 

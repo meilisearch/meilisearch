@@ -1876,7 +1876,7 @@ pub fn validate_embedding_settings(
 mod tests {
     use big_s::S;
     use heed::types::Bytes;
-    use maplit::{btreemap, btreeset, hashset};
+    use maplit::{btreemap, btreeset};
     use meili_snap::snapshot;
 
     use super::*;
@@ -2086,7 +2086,9 @@ mod tests {
         // Set the filterable fields to be the age.
         index
             .update_settings(|settings| {
-                settings.set_filterable_fields(hashset! { S("age") });
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
+                    "age".to_string(),
+                )]);
             })
             .unwrap();
 
@@ -2101,8 +2103,8 @@ mod tests {
 
         // Check that the displayed fields are correctly set.
         let rtxn = index.read_txn().unwrap();
-        let fields_ids = index.filterable_fields(&rtxn).unwrap();
-        assert_eq!(fields_ids, hashset! { S("age") });
+        let fields_ids = index.filterable_attributes_rules(&rtxn).unwrap();
+        assert_eq!(fields_ids, vec![FilterableAttributesRule::Field("age".to_string(),)]);
         // Only count the field_id 0 and level 0 facet values.
         // TODO we must support typed CSVs for numbers to be understood.
         let fidmap = index.fields_ids_map(&rtxn).unwrap();
@@ -2144,14 +2146,23 @@ mod tests {
         // Set the filterable fields to be the age and the name.
         index
             .update_settings(|settings| {
-                settings.set_filterable_fields(hashset! { S("age"),  S("name") });
+                settings.set_filterable_fields(vec![
+                    FilterableAttributesRule::Field("age".to_string()),
+                    FilterableAttributesRule::Field("name".to_string()),
+                ]);
             })
             .unwrap();
 
         // Check that the displayed fields are correctly set.
         let rtxn = index.read_txn().unwrap();
-        let fields_ids = index.filterable_fields(&rtxn).unwrap();
-        assert_eq!(fields_ids, hashset! { S("age"),  S("name") });
+        let fields_ids = index.filterable_attributes_rules(&rtxn).unwrap();
+        assert_eq!(
+            fields_ids,
+            vec![
+                FilterableAttributesRule::Field("age".to_string()),
+                FilterableAttributesRule::Field("name".to_string()),
+            ]
+        );
 
         let rtxn = index.read_txn().unwrap();
         // Only count the field_id 2 and level 0 facet values.
@@ -2176,14 +2187,16 @@ mod tests {
         // Remove the age from the filterable fields.
         index
             .update_settings(|settings| {
-                settings.set_filterable_fields(hashset! { S("name") });
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
+                    "name".to_string(),
+                )]);
             })
             .unwrap();
 
         // Check that the displayed fields are correctly set.
         let rtxn = index.read_txn().unwrap();
-        let fields_ids = index.filterable_fields(&rtxn).unwrap();
-        assert_eq!(fields_ids, hashset! { S("name") });
+        let fields_ids = index.filterable_attributes_rules(&rtxn).unwrap();
+        assert_eq!(fields_ids, vec![FilterableAttributesRule::Field("name".to_string())]);
 
         let rtxn = index.read_txn().unwrap();
         // Only count the field_id 2 and level 0 facet values.
@@ -2513,7 +2526,10 @@ mod tests {
         index
             .update_settings(|settings| {
                 settings.set_displayed_fields(vec!["hello".to_string()]);
-                settings.set_filterable_fields(hashset! { S("age"), S("toto") });
+                settings.set_filterable_fields(vec![
+                    FilterableAttributesRule::Field("age".to_string()),
+                    FilterableAttributesRule::Field("toto".to_string()),
+                ]);
                 settings.set_criteria(vec![Criterion::Asc(S("toto"))]);
             })
             .unwrap();
@@ -2630,7 +2646,9 @@ mod tests {
         // Set the genres setting
         index
             .update_settings(|settings| {
-                settings.set_filterable_fields(hashset! { S("genres") });
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
+                    "genres".to_string(),
+                )]);
             })
             .unwrap();
 

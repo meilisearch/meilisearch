@@ -382,7 +382,7 @@ impl<'a> FacetDistribution<'a> {
     ) -> Result<()> {
         let mut invalid_facets = BTreeSet::new();
         if let Some(facets) = &self.facets {
-            for (field, _) in facets {
+            for field in facets.keys() {
                 let is_valid_faceted_field =
                     fields_ids_map.id_with_metadata(field).map_or(false, |(_, metadata)| {
                         metadata.is_faceted(filterable_attributes_rules)
@@ -439,11 +439,10 @@ mod tests {
     use std::iter;
 
     use big_s::S;
-    use maplit::hashset;
 
     use crate::documents::mmap_from_objects;
     use crate::index::tests::TempIndex;
-    use crate::{milli_snap, FacetDistribution, OrderBy};
+    use crate::{milli_snap, FacetDistribution, FilterableAttributesRule, OrderBy};
 
     #[test]
     fn few_candidates_few_facet_values() {
@@ -453,7 +452,9 @@ mod tests {
         let index = TempIndex::new();
 
         index
-            .update_settings(|settings| settings.set_filterable_fields(hashset! { S("colour") }))
+            .update_settings(|settings| {
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(S("colour"))])
+            })
             .unwrap();
 
         let documents = documents!([
@@ -524,7 +525,9 @@ mod tests {
         let index = TempIndex::new_with_map_size(4096 * 10_000);
 
         index
-            .update_settings(|settings| settings.set_filterable_fields(hashset! { S("colour") }))
+            .update_settings(|settings| {
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(S("colour"))])
+            })
             .unwrap();
 
         let facet_values = ["Red", "RED", " red ", "Blue", "BLUE"];
@@ -609,7 +612,9 @@ mod tests {
         let index = TempIndex::new_with_map_size(4096 * 10_000);
 
         index
-            .update_settings(|settings| settings.set_filterable_fields(hashset! { S("colour") }))
+            .update_settings(|settings| {
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(S("colour"))])
+            })
             .unwrap();
 
         let facet_values = (0..1000).map(|x| format!("{x:x}")).collect::<Vec<_>>();
@@ -668,7 +673,9 @@ mod tests {
         let index = TempIndex::new_with_map_size(4096 * 10_000);
 
         index
-            .update_settings(|settings| settings.set_filterable_fields(hashset! { S("colour") }))
+            .update_settings(|settings| {
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(S("colour"))])
+            })
             .unwrap();
 
         let facet_values = (0..1000).collect::<Vec<_>>();
@@ -719,7 +726,9 @@ mod tests {
         let index = TempIndex::new_with_map_size(4096 * 10_000);
 
         index
-            .update_settings(|settings| settings.set_filterable_fields(hashset! { S("colour") }))
+            .update_settings(|settings| {
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(S("colour"))])
+            })
             .unwrap();
 
         let facet_values = (0..1000).collect::<Vec<_>>();
@@ -770,7 +779,9 @@ mod tests {
         let index = TempIndex::new_with_map_size(4096 * 10_000);
 
         index
-            .update_settings(|settings| settings.set_filterable_fields(hashset! { S("colour") }))
+            .update_settings(|settings| {
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(S("colour"))])
+            })
             .unwrap();
 
         let facet_values = (0..1000).collect::<Vec<_>>();
@@ -821,7 +832,9 @@ mod tests {
         let index = TempIndex::new_with_map_size(4096 * 10_000);
 
         index
-            .update_settings(|settings| settings.set_filterable_fields(hashset! { S("colour") }))
+            .update_settings(|settings| {
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(S("colour"))])
+            })
             .unwrap();
 
         let facet_values = (0..1000).collect::<Vec<_>>();
