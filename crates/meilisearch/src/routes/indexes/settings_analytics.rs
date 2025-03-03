@@ -8,6 +8,7 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use meilisearch_types::facet_values_sort::FacetValuesSort;
 use meilisearch_types::locales::{Locale, LocalizedAttributesRuleView};
 use meilisearch_types::milli::update::Setting;
+use meilisearch_types::milli::FilterableAttributesRule;
 use meilisearch_types::settings::{
     FacetingSettings, PaginationSettings, PrefixSearchSettings, ProximityPrecisionView,
     RankingRuleView, SettingEmbeddingSettings, TypoSettings,
@@ -89,6 +90,10 @@ impl Aggregate for SettingsAnalytics {
             filterable_attributes: FilterableAttributesAnalytics {
                 total: new.filterable_attributes.total.or(self.filterable_attributes.total),
                 has_geo: new.filterable_attributes.has_geo.or(self.filterable_attributes.has_geo),
+                has_patterns: new
+                    .filterable_attributes
+                    .has_patterns
+                    .or(self.filterable_attributes.has_patterns),
             },
             distinct_attribute: DistinctAttributeAnalytics {
                 set: self.distinct_attribute.set | new.distinct_attribute.set,
@@ -328,13 +333,19 @@ impl SortableAttributesAnalytics {
 pub struct FilterableAttributesAnalytics {
     pub total: Option<usize>,
     pub has_geo: Option<bool>,
+    pub has_patterns: Option<bool>,
 }
 
 impl FilterableAttributesAnalytics {
-    pub fn new(setting: Option<&BTreeSet<String>>) -> Self {
+    pub fn new(setting: Option<&Vec<FilterableAttributesRule>>) -> Self {
         Self {
             total: setting.as_ref().map(|filter| filter.len()),
-            has_geo: setting.as_ref().map(|filter| filter.contains("_geo")),
+            has_geo: setting
+                .as_ref()
+                .map(|filter| filter.iter().any(FilterableAttributesRule::has_geo)),
+            has_patterns: setting.as_ref().map(|filter| {
+                filter.iter().any(|rule| matches!(rule, FilterableAttributesRule::Pattern(_)))
+            }),
         }
     }
 

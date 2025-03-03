@@ -876,11 +876,11 @@ impl Index {
 
     /* filterable fields */
 
-    /// Writes the filterable fields names in the database.
-    pub(crate) fn put_filterable_fields(
+    /// Writes the filterable attributes rules in the database.
+    pub(crate) fn put_filterable_attributes_rules(
         &self,
         wtxn: &mut RwTxn<'_>,
-        fields: &HashSet<String>,
+        #[allow(clippy::ptr_arg)] fields: &Vec<FilterableAttributesRule>,
     ) -> heed::Result<()> {
         self.main.remap_types::<Str, SerdeJson<_>>().put(
             wtxn,
@@ -889,33 +889,24 @@ impl Index {
         )
     }
 
-    /// Deletes the filterable fields ids in the database.
-    pub(crate) fn delete_filterable_fields(&self, wtxn: &mut RwTxn<'_>) -> heed::Result<bool> {
+    /// Deletes the filterable attributes rules in the database.
+    pub(crate) fn delete_filterable_attributes_rules(
+        &self,
+        wtxn: &mut RwTxn<'_>,
+    ) -> heed::Result<bool> {
         self.main.remap_key_type::<Str>().delete(wtxn, main_key::FILTERABLE_FIELDS_KEY)
     }
 
-    /// Returns the filterable fields names.
-    pub fn filterable_fields(&self, rtxn: &RoTxn<'_>) -> heed::Result<HashSet<String>> {
+    /// Returns the filterable attributes rules.
+    pub fn filterable_attributes_rules(
+        &self,
+        rtxn: &RoTxn<'_>,
+    ) -> heed::Result<Vec<FilterableAttributesRule>> {
         Ok(self
             .main
             .remap_types::<Str, SerdeJson<_>>()
             .get(rtxn, main_key::FILTERABLE_FIELDS_KEY)?
             .unwrap_or_default())
-    }
-
-    /// Identical to `filterable_fields`, but returns ids instead.
-    pub fn filterable_fields_ids(&self, rtxn: &RoTxn<'_>) -> Result<HashSet<FieldId>> {
-        let fields = self.filterable_fields(rtxn)?;
-        let fields_ids_map = self.fields_ids_map(rtxn)?;
-
-        let mut fields_ids = HashSet::new();
-        for name in fields {
-            if let Some(field_id) = fields_ids_map.id(&name) {
-                fields_ids.insert(field_id);
-            }
-        }
-
-        Ok(fields_ids)
     }
 
     /* sortable fields */
