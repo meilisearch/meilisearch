@@ -667,7 +667,7 @@ async fn fetch_document_by_filter() {
         .await;
     index.wait_task(task.uid()).await.succeeded();
 
-    let (response, code) = index.get_document_by_filter(json!(null)).await;
+    let (response, code) = index.fetch_documents(json!(null)).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
@@ -678,7 +678,7 @@ async fn fetch_document_by_filter() {
     }
     "###);
 
-    let (response, code) = index.get_document_by_filter(json!({ "offset": "doggo" })).await;
+    let (response, code) = index.fetch_documents(json!({ "offset": "doggo" })).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
@@ -689,7 +689,7 @@ async fn fetch_document_by_filter() {
     }
     "###);
 
-    let (response, code) = index.get_document_by_filter(json!({ "limit": "doggo" })).await;
+    let (response, code) = index.fetch_documents(json!({ "limit": "doggo" })).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
@@ -700,7 +700,7 @@ async fn fetch_document_by_filter() {
     }
     "###);
 
-    let (response, code) = index.get_document_by_filter(json!({ "fields": "doggo" })).await;
+    let (response, code) = index.fetch_documents(json!({ "fields": "doggo" })).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
@@ -711,7 +711,7 @@ async fn fetch_document_by_filter() {
     }
     "###);
 
-    let (response, code) = index.get_document_by_filter(json!({ "filter": true })).await;
+    let (response, code) = index.fetch_documents(json!({ "filter": true })).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
@@ -722,7 +722,7 @@ async fn fetch_document_by_filter() {
     }
     "###);
 
-    let (response, code) = index.get_document_by_filter(json!({ "filter": "cool doggo" })).await;
+    let (response, code) = index.fetch_documents(json!({ "filter": "cool doggo" })).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
@@ -733,8 +733,7 @@ async fn fetch_document_by_filter() {
     }
     "###);
 
-    let (response, code) =
-        index.get_document_by_filter(json!({ "filter": "doggo = bernese" })).await;
+    let (response, code) = index.fetch_documents(json!({ "filter": "doggo = bernese" })).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
@@ -762,8 +761,7 @@ async fn retrieve_vectors() {
     "###);
 
     // FETCH ALL DOCUMENTS BY POST
-    let (response, _code) =
-        index.get_document_by_filter(json!({ "retrieveVectors": "tamo" })).await;
+    let (response, _code) = index.fetch_documents(json!({ "retrieveVectors": "tamo" })).await;
     snapshot!(response, @r###"
     {
       "message": "Invalid value type at `.retrieveVectors`: expected a boolean, but found a string: `\"tamo\"`",

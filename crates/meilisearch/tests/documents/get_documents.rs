@@ -371,7 +371,7 @@ async fn get_document_by_filter() {
         .await;
     index.wait_task(task.uid()).await.succeeded();
 
-    let (response, code) = index.get_document_by_filter(json!({})).await;
+    let (response, code) = index.fetch_documents(json!({})).await;
     let (response2, code2) = index.get_all_documents_raw("").await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".enqueuedAt" => "[date]" }), @r###"
@@ -401,7 +401,7 @@ async fn get_document_by_filter() {
     assert_eq!(code, code2);
     assert_eq!(response, response2);
 
-    let (response, code) = index.get_document_by_filter(json!({ "filter": "color = blue" })).await;
+    let (response, code) = index.fetch_documents(json!({ "filter": "color = blue" })).await;
     let (response2, code2) = index.get_all_documents_raw("?filter=color=blue").await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".enqueuedAt" => "[date]" }), @r###"
@@ -424,9 +424,8 @@ async fn get_document_by_filter() {
     assert_eq!(code, code2);
     assert_eq!(response, response2);
 
-    let (response, code) = index
-        .get_document_by_filter(json!({ "offset": 1, "limit": 1, "filter": "color != blue" }))
-        .await;
+    let (response, code) =
+        index.fetch_documents(json!({ "offset": 1, "limit": 1, "filter": "color != blue" })).await;
     let (response2, code2) =
         index.get_all_documents_raw("?filter=color!=blue&offset=1&limit=1").await;
     snapshot!(code, @"200 OK");
@@ -446,9 +445,7 @@ async fn get_document_by_filter() {
     assert_eq!(response, response2);
 
     let (response, code) = index
-        .get_document_by_filter(
-            json!({ "limit": 1, "filter": "color != blue", "fields": ["color"] }),
-        )
+        .fetch_documents(json!({ "limit": 1, "filter": "color != blue", "fields": ["color"] }))
         .await;
     let (response2, code2) =
         index.get_all_documents_raw("?limit=1&filter=color!=blue&fields=color").await;
@@ -471,7 +468,7 @@ async fn get_document_by_filter() {
     // Now testing more complex filter that the get route can't represent
 
     let (response, code) =
-        index.get_document_by_filter(json!({ "filter": [["color = blue", "color = red"]] })).await;
+        index.fetch_documents(json!({ "filter": [["color = blue", "color = red"]] })).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".enqueuedAt" => "[date]" }), @r###"
     {
