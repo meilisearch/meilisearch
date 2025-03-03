@@ -6,6 +6,5 @@ status = [
     'Run Rustfmt',
     'Run tests in debug',
 ]
-pr_status = ['Milestone Check']
 # 3 hours timeout
 timeout-sec = 10800
