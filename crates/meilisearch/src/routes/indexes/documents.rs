@@ -20,11 +20,13 @@ use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::update::IndexDocumentsMethod;
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::DocumentId;
+use meilisearch_types::serde_cs::vec::CS;
 use meilisearch_types::star_or::OptionStarOrList;
 use meilisearch_types::tasks::KindWithContent;
 use meilisearch_types::{milli, Document, Index};
 use mime::Mime;
 use once_cell::sync::Lazy;
+use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tempfile::tempfile;
@@ -43,7 +45,7 @@ use crate::extractors::sequential_extractor::SeqHandler;
 use crate::routes::{
     get_task_id, is_dry_run, PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT,
 };
-use crate::search::{parse_filter, RetrieveVectors};
+use crate::search::{parse_filter, ExternalDocumentId, RetrieveVectors};
 use crate::{aggregate_methods, Opt};
 
 static ACCEPTED_CONTENT_TYPE: Lazy<Vec<String>> = Lazy::new(|| {
@@ -387,6 +389,9 @@ pub struct BrowseQueryGet {
     #[param(default, value_type = Option<bool>)]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentRetrieveVectors>)]
     retrieve_vectors: Param<bool>,
+    #[param(default, value_type = Option<Vec<String>>)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidDocumentIds>)]
+    ids: Option<CS<String>>,
     #[param(default, value_type = Option<String>, example = "popularity > 1000")]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentFilter>)]
     filter: Option<String>,
@@ -408,6 +413,9 @@ pub struct BrowseQuery {
     #[schema(default, example = true)]
     #[deserr(default, error = DeserrJsonError<InvalidDocumentRetrieveVectors>)]
     retrieve_vectors: bool,
+    #[schema(value_type = Option<Vec<String>>, example = json!(["cody", "finn", "brandy", "gambit"]))]
+    #[deserr(default, error = DeserrJsonError<InvalidDocumentIds>)]
+    ids: Option<Vec<serde_json::Value>>,
     #[schema(default, value_type = Option<Value>, example = "popularity > 1000")]
     #[deserr(default, error = DeserrJsonError<InvalidDocumentFilter>)]
     filter: Option<Value>,
@@ -551,7 +559,8 @@ pub async fn get_documents(
 ) -> Result<HttpResponse, ResponseError> {
     debug!(parameters = ?params, "Get documents GET");
 
-    let BrowseQueryGet { limit, offset, fields, retrieve_vectors, filter } = params.into_inner();
+    let BrowseQueryGet { limit, offset, fields, retrieve_vectors, filter, ids } =
+        params.into_inner();
 
     let filter = match filter {
         Some(f) => match serde_json::from_str(&f) {
@@ -561,12 +570,15 @@ pub async fn get_documents(
         None => None,
     };
 
+    let ids = ids.map(|ids| ids.into_iter().map(Into::into).collect());
+
     let query = BrowseQuery {
         offset: offset.0,
         limit: limit.0,
         fields: fields.merge_star_and_none(),
         retrieve_vectors: retrieve_vectors.0,
         filter,
+        ids,
     };
 
     analytics.publish(
@@ -590,15 +602,30 @@ fn documents_by_query(
     query: BrowseQuery,
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
-    let BrowseQuery { offset, limit, fields, retrieve_vectors, filter } = query;
+    let BrowseQuery { offset, limit, fields, retrieve_vectors, filter, ids } = query;
 
     let retrieve_vectors = RetrieveVectors::new(retrieve_vectors);
+
+    let ids = if let Some(ids) = ids {
+        let mut parsed_ids = Vec::with_capacity(ids.len());
+        for (index, id) in ids.into_iter().enumerate() {
+            let id = id.try_into().map_err(|error| {
+                let msg = format!("In `.ids[{index}]`:{error}");
+                ResponseError::from_msg(msg, Code::InvalidDocumentIds)
+            })?;
+            parsed_ids.push(id)
+        }
+        Some(parsed_ids)
+    } else {
+        None
+    };
 
     let index = index_scheduler.index(&index_uid)?;
     let (total, documents) = retrieve_documents(
         &index,
         offset,
         limit,
+        ids,
         filter,
         fields,
         retrieve_vectors,
@@ -1451,10 +1478,12 @@ fn some_documents<'a, 't: 'a>(
     }))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn retrieve_documents<S: AsRef<str>>(
     index: &Index,
     offset: usize,
     limit: usize,
+    ids: Option<Vec<ExternalDocumentId>>,
     filter: Option<Value>,
     attributes_to_retrieve: Option<Vec<S>>,
     retrieve_vectors: RetrieveVectors,
@@ -1468,16 +1497,30 @@ fn retrieve_documents<S: AsRef<str>>(
         None
     };
 
-    let candidates = if let Some(filter) = filter {
-        filter.evaluate(&rtxn, index).map_err(|err| match err {
+    let mut candidates = if let Some(ids) = ids {
+        let external_document_ids = index.external_documents_ids();
+        let mut candidates = RoaringBitmap::new();
+        for (index, id) in ids.iter().enumerate() {
+            let Some(docid) = external_document_ids.get(&rtxn, id)? else {
+                let error = MeilisearchHttpError::DocumentNotFound(id.clone().into_inner());
+                let msg = format!("In `.ids[{index}]`: {error}");
+                return Err(ResponseError::from_msg(msg, Code::NotFoundDocumentId));
+            };
+            candidates.insert(docid);
+        }
+        candidates
+    } else {
+        index.documents_ids(&rtxn)?
+    };
+
+    if let Some(filter) = filter {
+        candidates &= filter.evaluate(&rtxn, index).map_err(|err| match err {
             milli::Error::UserError(milli::UserError::InvalidFilter(_)) => {
                 ResponseError::from_msg(err.to_string(), Code::InvalidDocumentFilter)
             }
             e => e.into(),
         })?
-    } else {
-        index.documents_ids(&rtxn)?
-    };
+    }
 
     let (it, number_of_documents) = {
         let number_of_documents = candidates.len();
