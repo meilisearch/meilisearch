@@ -1,3 +1,5 @@
+use meili_snap::{json_string, snapshot};
+
 use crate::common::Server;
 use crate::json;
 
@@ -509,4 +511,63 @@ async fn set_and_reset_distinct_attribute_with_dedicated_route() {
     let (response, _) = index.get_distinct_attribute().await;
 
     assert_eq!(response, json!(null));
+}
+
+#[actix_rt::test]
+async fn granular_filterable_attributes() {
+    let server = Server::new().await;
+    let index = server.index("test");
+    index.create(None).await;
+
+    let (response, code) =
+        index.update_settings(json!({ "filterableAttributes": [
+            { "patterns": ["name"], "features": { "facetSearch": true, "filter": {"equality": true, "comparison": false} } },
+            { "patterns": ["age"], "features": { "facetSearch": false, "filter": {"equality": true, "comparison": true} } },
+            { "patterns": ["id"] }
+        ] })).await;
+    assert_eq!(code, 202);
+    index.wait_task(response.uid()).await.succeeded();
+
+    let (response, code) = index.settings().await;
+    assert_eq!(code, 200, "{}", response);
+    snapshot!(json_string!(response["filterableAttributes"]), @r###"
+    [
+      {
+        "patterns": [
+          "name"
+        ],
+        "features": {
+          "facetSearch": true,
+          "filter": {
+            "equality": true,
+            "comparison": false
+          }
+        }
+      },
+      {
+        "patterns": [
+          "age"
+        ],
+        "features": {
+          "facetSearch": false,
+          "filter": {
+            "equality": true,
+            "comparison": true
+          }
+        }
+      },
+      {
+        "patterns": [
+          "id"
+        ],
+        "features": {
+          "facetSearch": false,
+          "filter": {
+            "equality": true,
+            "comparison": false
+          }
+        }
+      }
+    ]
+    "###);
 }
