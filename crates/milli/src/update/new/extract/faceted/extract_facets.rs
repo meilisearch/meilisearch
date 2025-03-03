@@ -97,12 +97,15 @@ impl FacetedDocidsExtractor {
                 },
             ),
             DocumentChange::Update(inner) => {
-                if !inner.has_changed_for_fields(
+                let has_changed = inner.has_changed_for_fields(
                     Some(attributes_to_extract),
                     rtxn,
                     index,
                     context.db_fields_ids_map,
-                )? {
+                )?;
+                let has_changed_for_geo_fields =
+                    inner.has_changed_for_geo_fields(rtxn, index, context.db_fields_ids_map)?;
+                if !has_changed && !has_changed_for_geo_fields {
                     return Ok(());
                 }
 
