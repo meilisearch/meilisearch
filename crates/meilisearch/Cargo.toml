@@ -171,4 +171,4 @@ turkish = ["meilisearch-types/turkish"]
 
 [package.metadata.mini-dashboard]
 assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.2.18/build.zip"
-sha1 = "replace this with the real shasum of the build.zip file"
+sha1 = "b408a30dcb6e20cddb0c153c23385bcac4c8e912"
