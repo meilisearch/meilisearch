@@ -58,7 +58,7 @@ async fn version_requires_downgrade() {
     std::fs::write(db_path.join("VERSION"), format!("{major}.{minor}.{patch}")).unwrap();
     let options = Opt { experimental_dumpless_upgrade: true, ..default_settings };
     let err = Server::new_with_options(options).await.map(|_| ()).unwrap_err();
-    snapshot!(err, @"Database version 1.13.3 is higher than the Meilisearch version 1.13.2. Downgrade is not supported");
+    snapshot!(err, @"Database version 1.13.4 is higher than the Meilisearch version 1.13.3. Downgrade is not supported");
 }
 
 #[actix_rt::test]
