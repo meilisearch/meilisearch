@@ -514,7 +514,10 @@ pub struct IndexStats {
 impl From<index_scheduler::IndexStats> for IndexStats {
     fn from(stats: index_scheduler::IndexStats) -> Self {
         IndexStats {
-            number_of_documents: stats.inner_stats.documents_database_stats.number_of_entries(),
+            number_of_documents: stats
+                .inner_stats
+                .number_of_documents
+                .unwrap_or(stats.inner_stats.documents_database_stats.number_of_entries()),
             raw_document_db_size: stats.inner_stats.documents_database_stats.total_value_size(),
             avg_document_size: stats.inner_stats.documents_database_stats.average_value_size(),
             is_indexing: stats.is_indexing,

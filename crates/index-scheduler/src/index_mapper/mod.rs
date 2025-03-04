@@ -102,6 +102,10 @@ pub struct IndexStats {
     /// Stats of the documents database.
     #[serde(default)]
     pub documents_database_stats: DatabaseStats,
+
+    #[serde(default, skip_serializing)]
+    pub number_of_documents: Option<u64>,
+
     /// Size taken up by the index' DB, in bytes.
     ///
     /// This includes the size taken by both the used and free pages of the DB, and as the free pages
@@ -143,6 +147,7 @@ impl IndexStats {
             number_of_embeddings: Some(arroy_stats.number_of_embeddings),
             number_of_embedded_documents: Some(arroy_stats.documents.len()),
             documents_database_stats: index.documents_stats(rtxn)?.unwrap_or_default(),
+            number_of_documents: None,
             database_size: index.on_disk_size()?,
             used_database_size: index.used_size()?,
             primary_key: index.primary_key(rtxn)?.map(|s| s.to_string()),
