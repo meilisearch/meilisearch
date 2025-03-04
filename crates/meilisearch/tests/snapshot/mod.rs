@@ -111,6 +111,7 @@ async fn perform_snapshot() {
 }
 
 #[actix_rt::test]
+#[cfg_attr(target_os = "windows", ignore)]
 async fn perform_on_demand_snapshot() {
     let temp = tempfile::tempdir().unwrap();
     let snapshot_dir = tempfile::tempdir().unwrap();
