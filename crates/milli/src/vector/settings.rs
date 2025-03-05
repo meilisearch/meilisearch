@@ -661,7 +661,7 @@ impl SettingsDiff {
 
                 let mut reindex_action = None;
 
-                Self::diff(
+                Self::apply_and_diff(
                     &mut reindex_action,
                     &mut source,
                     &mut model,
@@ -791,7 +791,7 @@ impl SettingsDiff {
                     indexing_embedder: new_indexing_embedder,
                 } = new_sub_embedder;
 
-                Self::diff(
+                Self::apply_and_diff(
                     reindex_action,
                     &mut source,
                     &mut model,
@@ -852,7 +852,7 @@ impl SettingsDiff {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn diff(
+    fn apply_and_diff(
         reindex_action: &mut Option<ReindexAction>,
         source: &mut Setting<EmbedderSource>,
         model: &mut Setting<String>,
