@@ -637,23 +637,7 @@ impl Embedder {
         })
     }
 
-    /// Embed one or multiple texts.
-    ///
-    /// Each text can be embedded as one or multiple embeddings.
-    fn embed(
-        &self,
-        texts: Vec<String>,
-        deadline: Option<Instant>,
-    ) -> std::result::Result<Vec<Embedding>, EmbedError> {
-        match self {
-            Embedder::HuggingFace(embedder) => embedder.embed(texts),
-            Embedder::OpenAi(embedder) => embedder.embed(&texts, deadline),
-            Embedder::Ollama(embedder) => embedder.embed(&texts, deadline),
-            Embedder::UserProvided(embedder) => embedder.embed(&texts),
-            Embedder::Rest(embedder) => embedder.embed(texts, deadline),
-            Embedder::Composite(embedder) => embedder.search.embed(texts, deadline),
-        }
-    }
+    /// Embed in search context
 
     #[tracing::instrument(level = "debug", skip_all, target = "search")]
     pub fn embed_search(
@@ -661,7 +645,15 @@ impl Embedder {
         text: String,
         deadline: Option<Instant>,
     ) -> std::result::Result<Embedding, EmbedError> {
-        let mut embedding = self.embed(vec![text], deadline)?;
+        let texts = vec![text];
+        let mut embedding = match self {
+            Embedder::HuggingFace(embedder) => embedder.embed(texts),
+            Embedder::OpenAi(embedder) => embedder.embed(&texts, deadline),
+            Embedder::Ollama(embedder) => embedder.embed(&texts, deadline),
+            Embedder::UserProvided(embedder) => embedder.embed(&texts),
+            Embedder::Rest(embedder) => embedder.embed(texts, deadline),
+            Embedder::Composite(embedder) => embedder.search.embed(texts, deadline),
+        }?;
         let embedding = embedding.pop().ok_or_else(EmbedError::missing_embedding)?;
         Ok(embedding)
     }
