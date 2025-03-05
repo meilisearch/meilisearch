@@ -17,20 +17,30 @@ pub enum FilterableAttributesRule {
 }
 
 impl FilterableAttributesRule {
+    /// Match a field against the filterable attributes rule.
     pub fn match_str(&self, field: &str) -> PatternMatch {
         match self {
+            // If the rule is a field, match the field against the pattern using the legacy behavior
             FilterableAttributesRule::Field(pattern) => match_field_legacy(pattern, field),
+            // If the rule is a pattern, match the field against the pattern using the new behavior
             FilterableAttributesRule::Pattern(patterns) => patterns.match_str(field),
         }
     }
 
+    /// Check if the rule is a geo field.
+    ///
+    /// prefer using `index.is_geo_enabled`, `index.is_geo_filtering_enabled` or `index.is_geo_sorting_enabled`
+    /// to check if the geo feature is enabled.
     pub fn has_geo(&self) -> bool {
         matches!(self, FilterableAttributesRule::Field(field_name) if field_name == RESERVED_GEO_FIELD_NAME)
     }
 
+    /// Get the features of the rule.
     pub fn features(&self) -> FilterableAttributesFeatures {
         match self {
+            // If the rule is a field, return the legacy default features
             FilterableAttributesRule::Field(_) => FilterableAttributesFeatures::legacy_default(),
+            // If the rule is a pattern, return the features of the pattern
             FilterableAttributesRule::Pattern(patterns) => patterns.features(),
         }
     }
@@ -66,10 +76,15 @@ pub struct FilterableAttributesFeatures {
 }
 
 impl FilterableAttributesFeatures {
+    /// Create a new `FilterableAttributesFeatures` with the legacy default features.
+    ///
+    /// This is the default behavior for `FilterableAttributesRule::Field`.
+    /// This will set the facet search to true and activate all the filter operators.
     pub fn legacy_default() -> Self {
         Self { facet_search: true, filter: FilterFeatures::legacy_default() }
     }
 
+    /// Create a new `FilterableAttributesFeatures` with no features.
     pub fn no_features() -> Self {
         Self { facet_search: false, filter: FilterFeatures::no_features() }
     }
@@ -135,6 +150,7 @@ pub struct FilterFeatures {
 }
 
 impl FilterFeatures {
+    /// Get the allowed operators for the filter.
     pub fn allowed_operators(&self) -> Vec<String> {
         if !self.is_filterable() {
             return vec![];
@@ -188,10 +204,15 @@ impl FilterFeatures {
         self.is_filterable()
     }
 
+    /// Create a new `FilterFeatures` with the legacy default features.
+    ///
+    /// This is the default behavior for `FilterableAttributesRule::Field`.
+    /// This will set the equality and comparison to true.
     pub fn legacy_default() -> Self {
         Self { equality: true, comparison: true }
     }
 
+    /// Create a new `FilterFeatures` with no features.
     pub fn no_features() -> Self {
         Self { equality: false, comparison: false }
     }
@@ -203,6 +224,15 @@ impl Default for FilterFeatures {
     }
 }
 
+/// Match a field against a set of filterable attributes rules.
+///
+/// This function will return the set of field names that match the given filter.
+///
+/// # Arguments
+///
+/// * `filterable_attributes` - The set of filterable attributes rules to match against.
+/// * `fields_ids_map` - The map of field names to field ids.
+/// * `filter` - The filter function to apply to the filterable attributes rules.
 pub fn filtered_matching_field_names<'fim>(
     filterable_attributes: &[FilterableAttributesRule],
     fields_ids_map: &'fim FieldsIdsMap,
@@ -222,6 +252,14 @@ pub fn filtered_matching_field_names<'fim>(
     result
 }
 
+/// Match a field against a set of filterable attributes rules.
+///
+/// This function will return the features that match the given field name.
+///
+/// # Arguments
+///
+/// * `field_name` - The field name to match against.
+/// * `filterable_attributes` - The set of filterable attributes rules to match against.
 pub fn matching_features(
     field_name: &str,
     filterable_attributes: &[FilterableAttributesRule],
@@ -234,6 +272,12 @@ pub fn matching_features(
     None
 }
 
+/// Check if a field is filterable calling the method `FilterableAttributesFeatures::is_filterable()`.
+///
+/// # Arguments
+///
+/// * `field_name` - The field name to check.
+/// * `filterable_attributes` - The set of filterable attributes rules to match against.
 pub fn is_field_filterable(
     field_name: &str,
     filterable_attributes: &[FilterableAttributesRule],
@@ -242,6 +286,12 @@ pub fn is_field_filterable(
         .map_or(false, |features| features.is_filterable())
 }
 
+/// Check if a field is facet searchable calling the method `FilterableAttributesFeatures::is_facet_searchable()`.
+///
+/// # Arguments
+///
+/// * `field_name` - The field name to check.
+/// * `filterable_attributes` - The set of filterable attributes rules to match against.
 pub fn is_field_facet_searchable(
     field_name: &str,
     filterable_attributes: &[FilterableAttributesRule],

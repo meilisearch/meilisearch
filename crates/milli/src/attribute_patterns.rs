@@ -28,6 +28,7 @@ impl From<Vec<String>> for AttributePatterns {
 }
 
 impl AttributePatterns {
+    /// Match a string against the attribute patterns using the match_pattern function.
     pub fn match_str(&self, str: &str) -> PatternMatch {
         let mut pattern_match = PatternMatch::NoMatch;
         for pattern in &self.patterns {
@@ -41,22 +42,35 @@ impl AttributePatterns {
     }
 }
 
+/// Match a string against a pattern.
+///
+/// The pattern can be a wildcard, a prefix, a suffix or an exact match.
+///
+/// # Arguments
+///
+/// * `pattern` - The pattern to match against.
+/// * `str` - The string to match against the pattern.
 fn match_pattern(pattern: &str, str: &str) -> PatternMatch {
+    // If the pattern is a wildcard, return Match
     if pattern == "*" {
         return PatternMatch::Match;
     } else if pattern.starts_with('*') && pattern.ends_with('*') {
+        // If the starts and ends with a wildcard, return Match if the string contains the pattern without the wildcards
         if str.contains(&pattern[1..pattern.len() - 1]) {
             return PatternMatch::Match;
         }
     } else if let Some(pattern) = pattern.strip_prefix('*') {
+        // If the pattern starts with a wildcard, return Match if the string ends with the pattern without the wildcard
         if str.ends_with(pattern) {
             return PatternMatch::Match;
         }
     } else if let Some(pattern) = pattern.strip_suffix('*') {
+        // If the pattern ends with a wildcard, return Match if the string starts with the pattern without the wildcard
         if str.starts_with(pattern) {
             return PatternMatch::Match;
         }
     } else if pattern == str {
+        // If the pattern is exactly the string, return Match
         return PatternMatch::Match;
     }
 
@@ -68,6 +82,15 @@ fn match_pattern(pattern: &str, str: &str) -> PatternMatch {
     }
 }
 
+/// Match a field against a pattern using the legacy behavior.
+///
+/// A field matches a pattern if it is a parent of the pattern or if it is the pattern itself.
+/// This behavior is used to match the sortable attributes, the searchable attributes and the filterable attributes rules `Field`.
+///
+/// # Arguments
+///
+/// * `pattern` - The pattern to match against.
+/// * `field` - The field to match against the pattern.
 pub fn match_field_legacy(pattern: &str, field: &str) -> PatternMatch {
     if is_faceted_by(field, pattern) {
         // If the field matches the pattern or is a nested field of the pattern, return Match (legacy behavior)
