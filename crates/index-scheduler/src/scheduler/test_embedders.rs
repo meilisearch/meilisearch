@@ -104,9 +104,10 @@ fn import_vectors() {
 
         let configs = index_scheduler.embedders("doggos".to_string(), configs).unwrap();
         let (hf_embedder, _, _) = configs.get(&simple_hf_name).unwrap();
-        let beagle_embed = hf_embedder.embed_one(S("Intel the beagle best doggo"), None).unwrap();
-        let lab_embed = hf_embedder.embed_one(S("Max the lab best doggo"), None).unwrap();
-        let patou_embed = hf_embedder.embed_one(S("kefir the patou best doggo"), None).unwrap();
+        let beagle_embed =
+            hf_embedder.embed_search(S("Intel the beagle best doggo"), None).unwrap();
+        let lab_embed = hf_embedder.embed_search(S("Max the lab best doggo"), None).unwrap();
+        let patou_embed = hf_embedder.embed_search(S("kefir the patou best doggo"), None).unwrap();
         (fakerest_name, simple_hf_name, beagle_embed, lab_embed, patou_embed)
     };
 

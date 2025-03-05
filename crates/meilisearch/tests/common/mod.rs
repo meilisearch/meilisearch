@@ -34,6 +34,10 @@ impl Value {
         }
     }
 
+    pub fn has_uid(&self) -> bool {
+        self["uid"].as_u64().is_some() || self["taskUid"].as_u64().is_some()
+    }
+
     /// Return `true` if the `status` field is set to `succeeded`.
     /// Panic if the `status` field doesn't exists.
     #[track_caller]

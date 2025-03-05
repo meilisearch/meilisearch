@@ -15,6 +15,7 @@ use self::error::{EmbedError, NewEmbedderError};
 use crate::prompt::{Prompt, PromptData};
 use crate::ThreadPoolNoAbort;
 
+pub mod composite;
 pub mod error;
 pub mod hf;
 pub mod json_template;
@@ -31,6 +32,7 @@ pub use self::error::Error;
 pub type Embedding = Vec<f32>;
 
 pub const REQUEST_PARALLELISM: usize = 40;
+pub const MAX_COMPOSITE_DISTANCE: f32 = 0.01;
 
 pub struct ArroyWrapper {
     quantized: bool,
@@ -536,6 +538,8 @@ pub enum Embedder {
     Ollama(ollama::Embedder),
     /// An embedder based on making embedding queries against a generic JSON/REST embedding server.
     Rest(rest::Embedder),
+    /// An embedder composed of an embedder at search time and an embedder at indexing time.
+    Composite(composite::Embedder),
 }
 
 /// Configuration for an embedder.
@@ -605,6 +609,7 @@ pub enum EmbedderOptions {
     Ollama(ollama::EmbedderOptions),
     UserProvided(manual::EmbedderOptions),
     Rest(rest::EmbedderOptions),
+    Composite(composite::EmbedderOptions),
 }
 
 impl Default for EmbedderOptions {
@@ -626,33 +631,29 @@ impl Embedder {
             EmbedderOptions::Rest(options) => {
                 Self::Rest(rest::Embedder::new(options, rest::ConfigurationSource::User)?)
             }
+            EmbedderOptions::Composite(options) => {
+                Self::Composite(composite::Embedder::new(options)?)
+            }
         })
     }
 
-    /// Embed one or multiple texts.
-    ///
-    /// Each text can be embedded as one or multiple embeddings.
-    pub fn embed(
+    /// Embed in search context
+
+    #[tracing::instrument(level = "debug", skip_all, target = "search")]
+    pub fn embed_search(
         &self,
-        texts: Vec<String>,
+        text: String,
         deadline: Option<Instant>,
-    ) -> std::result::Result<Vec<Embedding>, EmbedError> {
-        match self {
+    ) -> std::result::Result<Embedding, EmbedError> {
+        let texts = vec![text];
+        let mut embedding = match self {
             Embedder::HuggingFace(embedder) => embedder.embed(texts),
             Embedder::OpenAi(embedder) => embedder.embed(&texts, deadline),
             Embedder::Ollama(embedder) => embedder.embed(&texts, deadline),
             Embedder::UserProvided(embedder) => embedder.embed(&texts),
             Embedder::Rest(embedder) => embedder.embed(texts, deadline),
-        }
-    }
-
-    #[tracing::instrument(level = "debug", skip_all, target = "search")]
-    pub fn embed_one(
-        &self,
-        text: String,
-        deadline: Option<Instant>,
-    ) -> std::result::Result<Embedding, EmbedError> {
-        let mut embedding = self.embed(vec![text], deadline)?;
+            Embedder::Composite(embedder) => embedder.search.embed(texts, deadline),
+        }?;
         let embedding = embedding.pop().ok_or_else(EmbedError::missing_embedding)?;
         Ok(embedding)
     }
@@ -660,31 +661,34 @@ impl Embedder {
     /// Embed multiple chunks of texts.
     ///
     /// Each chunk is composed of one or multiple texts.
-    pub fn embed_chunks(
+    pub fn embed_index(
         &self,
         text_chunks: Vec<Vec<String>>,
         threads: &ThreadPoolNoAbort,
     ) -> std::result::Result<Vec<Vec<Embedding>>, EmbedError> {
         match self {
-            Embedder::HuggingFace(embedder) => embedder.embed_chunks(text_chunks),
-            Embedder::OpenAi(embedder) => embedder.embed_chunks(text_chunks, threads),
-            Embedder::Ollama(embedder) => embedder.embed_chunks(text_chunks, threads),
-            Embedder::UserProvided(embedder) => embedder.embed_chunks(text_chunks),
-            Embedder::Rest(embedder) => embedder.embed_chunks(text_chunks, threads),
+            Embedder::HuggingFace(embedder) => embedder.embed_index(text_chunks),
+            Embedder::OpenAi(embedder) => embedder.embed_index(text_chunks, threads),
+            Embedder::Ollama(embedder) => embedder.embed_index(text_chunks, threads),
+            Embedder::UserProvided(embedder) => embedder.embed_index(text_chunks),
+            Embedder::Rest(embedder) => embedder.embed_index(text_chunks, threads),
+            Embedder::Composite(embedder) => embedder.index.embed_index(text_chunks, threads),
         }
     }
 
-    pub fn embed_chunks_ref(
+    /// Non-owning variant of [`Self::embed_index`].
+    pub fn embed_index_ref(
         &self,
         texts: &[&str],
         threads: &ThreadPoolNoAbort,
     ) -> std::result::Result<Vec<Embedding>, EmbedError> {
         match self {
-            Embedder::HuggingFace(embedder) => embedder.embed_chunks_ref(texts),
-            Embedder::OpenAi(embedder) => embedder.embed_chunks_ref(texts, threads),
-            Embedder::Ollama(embedder) => embedder.embed_chunks_ref(texts, threads),
-            Embedder::UserProvided(embedder) => embedder.embed_chunks_ref(texts),
-            Embedder::Rest(embedder) => embedder.embed_chunks_ref(texts, threads),
+            Embedder::HuggingFace(embedder) => embedder.embed_index_ref(texts),
+            Embedder::OpenAi(embedder) => embedder.embed_index_ref(texts, threads),
+            Embedder::Ollama(embedder) => embedder.embed_index_ref(texts, threads),
+            Embedder::UserProvided(embedder) => embedder.embed_index_ref(texts),
+            Embedder::Rest(embedder) => embedder.embed_index_ref(texts, threads),
+            Embedder::Composite(embedder) => embedder.index.embed_index_ref(texts, threads),
         }
     }
 
@@ -696,6 +700,7 @@ impl Embedder {
             Embedder::Ollama(embedder) => embedder.chunk_count_hint(),
             Embedder::UserProvided(_) => 100,
             Embedder::Rest(embedder) => embedder.chunk_count_hint(),
+            Embedder::Composite(embedder) => embedder.index.chunk_count_hint(),
         }
     }
 
@@ -707,6 +712,7 @@ impl Embedder {
             Embedder::Ollama(embedder) => embedder.prompt_count_in_chunk_hint(),
             Embedder::UserProvided(_) => 1,
             Embedder::Rest(embedder) => embedder.prompt_count_in_chunk_hint(),
+            Embedder::Composite(embedder) => embedder.index.prompt_count_in_chunk_hint(),
         }
     }
 
@@ -718,6 +724,7 @@ impl Embedder {
             Embedder::Ollama(embedder) => embedder.dimensions(),
             Embedder::UserProvided(embedder) => embedder.dimensions(),
             Embedder::Rest(embedder) => embedder.dimensions(),
+            Embedder::Composite(embedder) => embedder.dimensions(),
         }
     }
 
@@ -729,6 +736,7 @@ impl Embedder {
             Embedder::Ollama(embedder) => embedder.distribution(),
             Embedder::UserProvided(embedder) => embedder.distribution(),
             Embedder::Rest(embedder) => embedder.distribution(),
+            Embedder::Composite(embedder) => embedder.distribution(),
         }
     }
 
@@ -739,6 +747,7 @@ impl Embedder {
             | Embedder::Ollama(_)
             | Embedder::Rest(_) => true,
             Embedder::UserProvided(_) => false,
+            Embedder::Composite(embedder) => embedder.index.uses_document_template(),
         }
     }
 }

@@ -1,0 +1,10 @@
+---
+source: crates/meilisearch/tests/settings/vectors.rs
+---
+{
+  "taskUid": "[taskUid]",
+  "indexUid": "test",
+  "status": "enqueued",
+  "type": "settingsUpdate",
+  "enqueuedAt": "[enqueuedAt]"
+}

@@ -6,6 +6,7 @@ use hf_hub::api::sync::ApiError;
 
 use super::parsed_vectors::ParsedVectorsDiff;
 use super::rest::ConfigurationSource;
+use super::MAX_COMPOSITE_DISTANCE;
 use crate::error::FaultSource;
 use crate::update::new::vector_document::VectorDocument;
 use crate::{FieldDistribution, PanicCatched};
@@ -335,6 +336,77 @@ impl NewEmbedderError {
     pub(crate) fn ollama_unsupported_url(url: String) -> NewEmbedderError {
         Self { kind: NewEmbedderErrorKind::OllamaUnsupportedUrl(url), fault: FaultSource::User }
     }
+
+    pub(crate) fn composite_dimensions_mismatch(
+        search_dimensions: usize,
+        index_dimensions: usize,
+    ) -> NewEmbedderError {
+        Self {
+            kind: NewEmbedderErrorKind::CompositeDimensionsMismatch {
+                search_dimensions,
+                index_dimensions,
+            },
+            fault: FaultSource::User,
+        }
+    }
+
+    pub(crate) fn composite_test_embedding_failed(
+        inner: EmbedError,
+        failing_embedder: &'static str,
+    ) -> NewEmbedderError {
+        Self {
+            kind: NewEmbedderErrorKind::CompositeTestEmbeddingFailed { inner, failing_embedder },
+            fault: FaultSource::Runtime,
+        }
+    }
+
+    pub(crate) fn composite_embedding_count_mismatch(
+        search_count: usize,
+        index_count: usize,
+    ) -> NewEmbedderError {
+        Self {
+            kind: NewEmbedderErrorKind::CompositeEmbeddingCountMismatch {
+                search_count,
+                index_count,
+            },
+            fault: FaultSource::Runtime,
+        }
+    }
+
+    pub(crate) fn composite_embedding_value_mismatch(
+        distance: f32,
+        hint: CompositeEmbedderContainsHuggingFace,
+    ) -> NewEmbedderError {
+        Self {
+            kind: NewEmbedderErrorKind::CompositeEmbeddingValueMismatch { distance, hint },
+            fault: FaultSource::User,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum CompositeEmbedderContainsHuggingFace {
+    Both,
+    Search,
+    Indexing,
+    None,
+}
+
+impl std::fmt::Display for CompositeEmbedderContainsHuggingFace {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CompositeEmbedderContainsHuggingFace::Both => f.write_str(
+                "\n  - Make sure the `model`, `revision` and `pooling` of both embedders match.",
+            ),
+            CompositeEmbedderContainsHuggingFace::Search => f.write_str(
+                "\n  - Consider trying a different `pooling` method for the search embedder.",
+            ),
+            CompositeEmbedderContainsHuggingFace::Indexing => f.write_str(
+                "\n  - Consider trying a different `pooling` method for the indexing embedder.",
+            ),
+            CompositeEmbedderContainsHuggingFace::None => Ok(()),
+        }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -419,6 +491,14 @@ pub enum NewEmbedderErrorKind {
     CouldNotParseTemplate(String),
     #[error("unsupported Ollama URL.\n  - For `ollama` sources, the URL must end with `/api/embed` or `/api/embeddings`\n  - Got `{0}`")]
     OllamaUnsupportedUrl(String),
+    #[error("error while generating test embeddings.\n  - the dimensions of embeddings produced at search time and at indexing time don't match.\n  - Search time dimensions: {search_dimensions}\n  - Indexing time dimensions: {index_dimensions}\n  - Note: Dimensions of embeddings produced by both embedders are required to match.")]
+    CompositeDimensionsMismatch { search_dimensions: usize, index_dimensions: usize },
+    #[error("error while generating test embeddings.\n  - could not generate test embedding with embedder at {failing_embedder} time.\n  - Embedding failed with {inner}")]
+    CompositeTestEmbeddingFailed { inner: EmbedError, failing_embedder: &'static str },
+    #[error("error while generating test embeddings.\n  - the number of generated embeddings differs.\n  - {search_count} embeddings for the search time embedder.\n  - {index_count} embeddings for the indexing time embedder.")]
+    CompositeEmbeddingCountMismatch { search_count: usize, index_count: usize },
+    #[error("error while generating test embeddings.\n  - the embeddings produced at search time and indexing time are not similar enough.\n  - angular distance {distance:.2}\n  - Meilisearch requires a maximum distance of {MAX_COMPOSITE_DISTANCE}.\n  - Note: check that both embedders produce similar embeddings.{hint}")]
+    CompositeEmbeddingValueMismatch { distance: f32, hint: CompositeEmbedderContainsHuggingFace },
 }
 
 pub struct PossibleEmbeddingMistakes {

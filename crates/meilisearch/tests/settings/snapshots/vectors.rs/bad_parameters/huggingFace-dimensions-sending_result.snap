@@ -1,0 +1,9 @@
+---
+source: crates/meilisearch/tests/settings/vectors.rs
+---
+{
+  "message": "`.embedders.test`: Field `dimensions` unavailable for source `huggingFace`.\n  - note: `dimensions` is available for sources: `openAi`, `ollama`, `userProvided`, `rest`\n  - note: available fields for source `huggingFace`: `source`, `model`, `revision`, `pooling`, `documentTemplate`, `documentTemplateMaxBytes`, `distribution`, `binaryQuantized`",
+  "code": "invalid_settings_embedders",
+  "type": "invalid_request",
+  "link": "https://docs.meilisearch.com/errors#invalid_settings_embedders"
+}
