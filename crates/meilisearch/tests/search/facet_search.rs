@@ -510,7 +510,7 @@ async fn facet_search_with_filterable_attributes_rules() {
 
     test_settings_documents_indexing_swapping_and_facet_search(
         &DOCUMENTS,
-        &json!({"filterableAttributes": [{"patterns": ["genres"], "features": {"facetSearch": true, "filter": {"equality": false, "comparison": false}}}]}),
+        &json!({"filterableAttributes": [{"attributePatterns": ["genres"], "features": {"facetSearch": true, "filter": {"equality": false, "comparison": false}}}]}),
         &json!({"facetName": "genres", "facetQuery": "a"}),
         |response, code| {
             snapshot!(code, @"200 OK");
@@ -531,7 +531,7 @@ async fn facet_search_with_filterable_attributes_rules() {
 
     test_settings_documents_indexing_swapping_and_facet_search(
         &NESTED_DOCUMENTS,
-        &json!({"filterableAttributes": [{"patterns": ["doggos.name"], "features": {"facetSearch": true, "filter": {"equality": false, "comparison": false}}}]}),
+        &json!({"filterableAttributes": [{"attributePatterns": ["doggos.name"], "features": {"facetSearch": true, "filter": {"equality": false, "comparison": false}}}]}),
         &json!({"facetName": "doggos.name", "facetQuery": "b"}),
         |response, code| {
             snapshot!(code, @"200 OK");
@@ -555,7 +555,7 @@ async fn facet_search_with_filterable_attributes_rules_errors() {
 
     test_settings_documents_indexing_swapping_and_facet_search(
       &DOCUMENTS,
-      &json!({"filterableAttributes": [{"patterns": ["genres"]}]}),
+      &json!({"filterableAttributes": [{"attributePatterns": ["genres"]}]}),
       &json!({"facetName": "genres", "facetQuery": "a"}),
       |response, code| {
           snapshot!(code, @"400 Bad Request");
@@ -566,7 +566,7 @@ async fn facet_search_with_filterable_attributes_rules_errors() {
 
     test_settings_documents_indexing_swapping_and_facet_search(
         &DOCUMENTS,
-        &json!({"filterableAttributes": [{"patterns": ["genres"], "features": {"facetSearch": false, "filter": {"equality": true, "comparison": true}}}]}),
+        &json!({"filterableAttributes": [{"attributePatterns": ["genres"], "features": {"facetSearch": false, "filter": {"equality": true, "comparison": true}}}]}),
         &json!({"facetName": "genres", "facetQuery": "a"}),
         |response, code| {
             snapshot!(code, @"400 Bad Request");
@@ -576,7 +576,7 @@ async fn facet_search_with_filterable_attributes_rules_errors() {
 
     test_settings_documents_indexing_swapping_and_facet_search(
         &DOCUMENTS,
-        &json!({"filterableAttributes": [{"patterns": ["genres"], "features": {"facetSearch": false, "filter": {"equality": false, "comparison": false}}}]}),
+        &json!({"filterableAttributes": [{"attributePatterns": ["genres"], "features": {"facetSearch": false, "filter": {"equality": false, "comparison": false}}}]}),
         &json!({"facetName": "genres", "facetQuery": "a"}),
         |response, code| {
             snapshot!(code, @"400 Bad Request");
@@ -586,7 +586,7 @@ async fn facet_search_with_filterable_attributes_rules_errors() {
 
     test_settings_documents_indexing_swapping_and_facet_search(
         &NESTED_DOCUMENTS,
-        &json!({"filterableAttributes": [{"patterns": ["doggos.name"]}]}),
+        &json!({"filterableAttributes": [{"attributePatterns": ["doggos.name"]}]}),
         &json!({"facetName": "invalid.name", "facetQuery": "b"}),
         |response, code| {
             snapshot!(code, @"400 Bad Request");
@@ -597,7 +597,7 @@ async fn facet_search_with_filterable_attributes_rules_errors() {
 
     test_settings_documents_indexing_swapping_and_facet_search(
         &NESTED_DOCUMENTS,
-        &json!({"filterableAttributes": [{"patterns": ["doggos.name"], "features": {"facetSearch": false, "filter": {"equality": true, "comparison": true}}}]}),
+        &json!({"filterableAttributes": [{"attributePatterns": ["doggos.name"], "features": {"facetSearch": false, "filter": {"equality": true, "comparison": true}}}]}),
         &json!({"facetName": "doggos.name", "facetQuery": "b"}),
         |response, code| {
             snapshot!(code, @"400 Bad Request");
@@ -607,7 +607,7 @@ async fn facet_search_with_filterable_attributes_rules_errors() {
 
     test_settings_documents_indexing_swapping_and_facet_search(
         &NESTED_DOCUMENTS,
-        &json!({"filterableAttributes": [{"patterns": ["doggos.name"], "features": {"facetSearch": false, "filter": {"equality": false, "comparison": false}}}]}),
+        &json!({"filterableAttributes": [{"attributePatterns": ["doggos.name"], "features": {"facetSearch": false, "filter": {"equality": false, "comparison": false}}}]}),
         &json!({"facetName": "doggos.name", "facetQuery": "b"}),
         |response, code| {
             snapshot!(code, @"400 Bad Request");

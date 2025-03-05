@@ -521,9 +521,9 @@ async fn granular_filterable_attributes() {
 
     let (response, code) =
         index.update_settings(json!({ "filterableAttributes": [
-            { "patterns": ["name"], "features": { "facetSearch": true, "filter": {"equality": true, "comparison": false} } },
-            { "patterns": ["age"], "features": { "facetSearch": false, "filter": {"equality": true, "comparison": true} } },
-            { "patterns": ["id"] }
+            { "attributePatterns": ["name"], "features": { "facetSearch": true, "filter": {"equality": true, "comparison": false} } },
+            { "attributePatterns": ["age"], "features": { "facetSearch": false, "filter": {"equality": true, "comparison": true} } },
+            { "attributePatterns": ["id"] }
         ] })).await;
     assert_eq!(code, 202);
     index.wait_task(response.uid()).await.succeeded();
@@ -533,7 +533,7 @@ async fn granular_filterable_attributes() {
     snapshot!(json_string!(response["filterableAttributes"]), @r###"
     [
       {
-        "patterns": [
+        "attributePatterns": [
           "name"
         ],
         "features": {
@@ -545,7 +545,7 @@ async fn granular_filterable_attributes() {
         }
       },
       {
-        "patterns": [
+        "attributePatterns": [
           "age"
         ],
         "features": {
@@ -557,7 +557,7 @@ async fn granular_filterable_attributes() {
         }
       },
       {
-        "patterns": [
+        "attributePatterns": [
           "id"
         ],
         "features": {

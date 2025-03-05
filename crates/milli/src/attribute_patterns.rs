@@ -8,7 +8,7 @@ use crate::is_faceted_by;
 #[repr(transparent)]
 #[serde(transparent)]
 pub struct AttributePatterns {
-    #[schema(value_type = Vec<String>)]
+    #[schema(example = json!(["title", "overview_*", "release_date"]))]
     pub patterns: Vec<String>,
 }
 
@@ -121,7 +121,8 @@ pub fn match_distinct_field(distinct_field: Option<&str>, field: &str) -> Patter
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PatternMatch {
-    /// The field is a parent of the of a nested field that matches the pattern
+    /// The field is a parent of a nested field that matches the pattern
+    /// For example, the field is `toto`, and the pattern is `toto.titi`
     Parent,
     /// The field matches the pattern
     Match,

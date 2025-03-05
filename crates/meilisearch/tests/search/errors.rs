@@ -881,7 +881,7 @@ async fn search_with_pattern_filter_settings_errors() {
     test_settings_documents_indexing_swapping_and_search(
         &NESTED_DOCUMENTS,
         &json!({"filterableAttributes": [{
-            "patterns": ["cattos","doggos.age"],
+            "attributePatterns": ["cattos","doggos.age"],
             "features": {
                 "facetSearch": false,
                 "filter": {"equality": false, "comparison": true}
@@ -907,7 +907,7 @@ async fn search_with_pattern_filter_settings_errors() {
     test_settings_documents_indexing_swapping_and_search(
     &NESTED_DOCUMENTS,
     &json!({"filterableAttributes": [{
-        "patterns": ["cattos","doggos.age"],
+        "attributePatterns": ["cattos","doggos.age"],
         "features": {
             "facetSearch": false,
             "filter": {"equality": false, "comparison": true}
@@ -933,7 +933,7 @@ async fn search_with_pattern_filter_settings_errors() {
     // Check if the Comparison filter works with patterns
     test_settings_documents_indexing_swapping_and_search(
         &NESTED_DOCUMENTS,
-        &json!({"filterableAttributes": [{"patterns": ["cattos","doggos.age"]}]}),
+        &json!({"filterableAttributes": [{"attributePatterns": ["cattos","doggos.age"]}]}),
         &json!({
             "filter": "doggos.age > 2"
         }),
@@ -954,7 +954,7 @@ async fn search_with_pattern_filter_settings_errors() {
     test_settings_documents_indexing_swapping_and_search(
         &NESTED_DOCUMENTS,
         &json!({"filterableAttributes": [{
-            "patterns": ["cattos","doggos.age"],
+            "attributePatterns": ["cattos","doggos.age"],
             "features": {
                 "facetSearch": false,
                 "filter": {"equality": true, "comparison": false}
@@ -980,7 +980,7 @@ async fn search_with_pattern_filter_settings_errors() {
     test_settings_documents_indexing_swapping_and_search(
         &NESTED_DOCUMENTS,
         &json!({"filterableAttributes": [{
-            "patterns": ["cattos","doggos.age"],
+            "attributePatterns": ["cattos","doggos.age"],
             "features": {
                 "facetSearch": false,
                 "filter": {"equality": true, "comparison": false}

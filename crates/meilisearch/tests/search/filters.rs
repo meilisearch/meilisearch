@@ -125,7 +125,7 @@ async fn search_with_pattern_filter_settings() {
     // Check if the Equality filter works with patterns
     test_settings_documents_indexing_swapping_and_search(
         &NESTED_DOCUMENTS,
-        &json!({"filterableAttributes": [{"patterns": ["cattos","doggos.age"]}]}),
+        &json!({"filterableAttributes": [{"attributePatterns": ["cattos","doggos.age"]}]}),
         &json!({
             "filter": "cattos = pésti"
         }),
@@ -158,7 +158,7 @@ async fn search_with_pattern_filter_settings() {
     test_settings_documents_indexing_swapping_and_search(
         &NESTED_DOCUMENTS,
         &json!({"filterableAttributes": [{
-            "patterns": ["cattos","doggos.age"],
+            "attributePatterns": ["cattos","doggos.age"],
             "features": {
                 "facetSearch": false,
                 "filter": {"equality": true, "comparison": false}
@@ -197,7 +197,7 @@ async fn search_with_pattern_filter_settings() {
     test_settings_documents_indexing_swapping_and_search(
         &NESTED_DOCUMENTS,
         &json!({"filterableAttributes": [{
-            "patterns": ["cattos","doggos.age"],
+            "attributePatterns": ["cattos","doggos.age"],
             "features": {
                 "facetSearch": false,
                 "filter": {"equality": false, "comparison": true}
@@ -282,7 +282,7 @@ async fn search_with_pattern_filter_settings_scenario_1() {
 
     let (task, code) = index
         .update_settings(json!({"filterableAttributes": [{
-            "patterns": ["cattos","doggos.age"],
+            "attributePatterns": ["cattos","doggos.age"],
             "features": {
                 "facetSearch": false,
                 "filter": {"equality": true, "comparison": false}
@@ -348,7 +348,7 @@ async fn search_with_pattern_filter_settings_scenario_1() {
     // Update the settings activate comparison filter
     let (task, code) = index
         .update_settings(json!({"filterableAttributes": [{
-            "patterns": ["cattos","doggos.age"],
+            "attributePatterns": ["cattos","doggos.age"],
             "features": {
                 "facetSearch": false,
                 "filter": {"equality": true, "comparison": true}
@@ -460,7 +460,7 @@ async fn search_with_pattern_filter_settings_scenario_1() {
     // Update the settings deactivate equality filter
     let (task, code) = index
         .update_settings(json!({"filterableAttributes": [{
-            "patterns": ["cattos","doggos.age"],
+            "attributePatterns": ["cattos","doggos.age"],
             "features": {
                 "facetSearch": false,
                 "filter": {"equality": false, "comparison": true}
@@ -560,7 +560,7 @@ async fn search_with_pattern_filter_settings_scenario_1() {
     // rollback the settings
     let (task, code) = index
         .update_settings(json!({"filterableAttributes": [{
-            "patterns": ["cattos","doggos.age"],
+            "attributePatterns": ["cattos","doggos.age"],
             "features": {
                 "facetSearch": false,
                 "filter": {"equality": true, "comparison": false}
@@ -633,9 +633,9 @@ async fn test_filterable_attributes_priority() {
         &NESTED_DOCUMENTS,
         &json!({"filterableAttributes": [
             // deactivated filter
-            {"patterns": ["doggos.a*"], "features": {"facetSearch": false, "filter": {"equality": false, "comparison": false}}},
+            {"attributePatterns": ["doggos.a*"], "features": {"facetSearch": false, "filter": {"equality": false, "comparison": false}}},
             // activated filter
-            {"patterns": ["doggos.*"]},
+            {"attributePatterns": ["doggos.*"]},
         ]}),
         &json!({
             "filter": "doggos.name = bobby"
@@ -671,9 +671,9 @@ async fn test_filterable_attributes_priority() {
         &NESTED_DOCUMENTS,
         &json!({"filterableAttributes": [
             // deactivated filter
-            {"patterns": ["doggos"], "features": {"facetSearch": false, "filter": {"equality": false, "comparison": false}}},
+            {"attributePatterns": ["doggos"], "features": {"facetSearch": false, "filter": {"equality": false, "comparison": false}}},
             // activated filter
-            {"patterns": ["doggos.*"]},
+            {"attributePatterns": ["doggos.*"]},
         ]}),
         &json!({
             "filter": "doggos.name = bobby"
@@ -709,9 +709,9 @@ async fn test_filterable_attributes_priority() {
         &NESTED_DOCUMENTS,
         &json!({"filterableAttributes": [
             // deactivated filter
-            {"patterns": ["doggos.a*"], "features": {"facetSearch": false, "filter": {"equality": false, "comparison": false}}},
+            {"attributePatterns": ["doggos.a*"], "features": {"facetSearch": false, "filter": {"equality": false, "comparison": false}}},
             // activated filter
-            {"patterns": ["doggos.*"]},
+            {"attributePatterns": ["doggos.*"]},
         ]}),
         &json!({
             "filter": "doggos.age > 2"
@@ -735,9 +735,9 @@ async fn test_filterable_attributes_priority() {
         &NESTED_DOCUMENTS,
         &json!({"filterableAttributes": [
             // deactivated filter
-            {"patterns": ["doggos"], "features": {"facetSearch": false, "filter": {"equality": false, "comparison": false}}},
+            {"attributePatterns": ["doggos"], "features": {"facetSearch": false, "filter": {"equality": false, "comparison": false}}},
             // activated filter
-            {"patterns": ["doggos.*"]},
+            {"attributePatterns": ["doggos.*"]},
         ]}),
         &json!({
             "filter": "doggos EXISTS"

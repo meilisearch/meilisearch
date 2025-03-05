@@ -50,7 +50,7 @@ impl FilterableAttributesRule {
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 #[deserr(rename_all = camelCase, deny_unknown_fields)]
 pub struct FilterableAttributesPatterns {
-    pub patterns: AttributePatterns,
+    pub attribute_patterns: AttributePatterns,
     #[serde(default)]
     #[deserr(default)]
     pub features: FilterableAttributesFeatures,
@@ -58,15 +58,15 @@ pub struct FilterableAttributesPatterns {
 
 impl FilterableAttributesPatterns {
     pub fn match_str(&self, field: &str) -> PatternMatch {
-        self.patterns.match_str(field)
+        self.attribute_patterns.match_str(field)
     }
 
     pub fn features(&self) -> FilterableAttributesFeatures {
-        self.features.clone()
+        self.features
     }
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug, Deserr, ToSchema)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Debug, Deserr, ToSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 #[deserr(rename_all = camelCase, deny_unknown_fields)]
 #[derive(Default)]
@@ -143,7 +143,7 @@ impl<E: DeserializeError> Deserr<E> for FilterableAttributesRule {
     }
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug, Deserr, ToSchema)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Debug, Deserr, ToSchema)]
 pub struct FilterFeatures {
     equality: bool,
     comparison: bool,

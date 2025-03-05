@@ -868,12 +868,12 @@ impl Index {
     pub(crate) fn put_filterable_attributes_rules(
         &self,
         wtxn: &mut RwTxn<'_>,
-        #[allow(clippy::ptr_arg)] fields: &Vec<FilterableAttributesRule>,
+        fields: &[FilterableAttributesRule],
     ) -> heed::Result<()> {
         self.main.remap_types::<Str, SerdeJson<_>>().put(
             wtxn,
             main_key::FILTERABLE_FIELDS_KEY,
-            fields,
+            &fields,
         )
     }
 
