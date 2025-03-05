@@ -88,10 +88,10 @@ impl RankingRuleGraphTrait for FidGraph {
         }
 
         // always lookup the max_fid if we don't already and add an artificial condition for max scoring
-        let max_weight: Option<u16> = weights_map.max_weight();
+        let max_weight_fid = weights_map.max_weight_fid();
 
-        if let Some(max_weight) = max_weight {
-            if !all_fields.contains(&max_weight) {
+        if let Some((max_fid, max_weight)) = max_weight_fid {
+            if !all_fields.contains(&max_fid) {
                 edges.push((
                     max_weight as u32 * term.term_ids.len() as u32, // TODO improve the fid score i.e. fid^10.
                     conditions_interner.insert(FidCondition {

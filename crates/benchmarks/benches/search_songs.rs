@@ -2,7 +2,7 @@ mod datasets_paths;
 mod utils;
 
 use criterion::{criterion_group, criterion_main};
-use milli::update::Settings;
+use milli::{update::Settings, FilterableAttributesRule};
 use utils::Conf;
 
 #[cfg(not(windows))]
@@ -22,7 +22,7 @@ fn base_conf(builder: &mut Settings) {
 
     let faceted_fields = ["released-timestamp", "duration-float", "genre", "country", "artist"]
         .iter()
-        .map(|s| s.to_string())
+        .map(|s| FilterableAttributesRule::Field(s.to_string()))
         .collect();
     builder.set_filterable_fields(faceted_fields);
 }

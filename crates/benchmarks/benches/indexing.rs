@@ -12,7 +12,7 @@ use milli::progress::Progress;
 use milli::update::new::indexer;
 use milli::update::{IndexerConfig, Settings};
 use milli::vector::EmbeddingConfigs;
-use milli::Index;
+use milli::{FilterableAttributesRule, Index};
 use rand::seq::SliceRandom;
 use rand_chacha::rand_core::SeedableRng;
 use roaring::RoaringBitmap;
@@ -57,7 +57,8 @@ fn setup_settings<'t>(
     let searchable_fields = searchable_fields.iter().map(|s| s.to_string()).collect();
     builder.set_searchable_fields(searchable_fields);
 
-    let filterable_fields = filterable_fields.iter().map(|s| s.to_string()).collect();
+    let filterable_fields =
+        filterable_fields.iter().map(|s| FilterableAttributesRule::Field(s.to_string())).collect();
     builder.set_filterable_fields(filterable_fields);
 
     let sortable_fields = sortable_fields.iter().map(|s| s.to_string()).collect();

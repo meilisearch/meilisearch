@@ -30,6 +30,25 @@ pub enum Condition<'a> {
     StartsWith { keyword: Token<'a>, word: Token<'a> },
 }
 
+impl Condition<'_> {
+    pub fn operator(&self) -> &str {
+        match self {
+            Condition::GreaterThan(_) => ">",
+            Condition::GreaterThanOrEqual(_) => ">=",
+            Condition::Equal(_) => "=",
+            Condition::NotEqual(_) => "!=",
+            Condition::Null => "IS NULL",
+            Condition::Empty => "IS EMPTY",
+            Condition::Exists => "EXISTS",
+            Condition::LowerThan(_) => "<",
+            Condition::LowerThanOrEqual(_) => "<=",
+            Condition::Between { .. } => "TO",
+            Condition::Contains { .. } => "CONTAINS",
+            Condition::StartsWith { .. } => "STARTS WITH",
+        }
+    }
+}
+
 /// condition      = value ("==" | ">" ...) value
 pub fn parse_condition(input: Span) -> IResult<FilterCondition> {
     let operator = alt((tag("<="), tag(">="), tag("!="), tag("<"), tag(">"), tag("=")));

@@ -9,12 +9,14 @@ pub static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 pub mod documents;
 
 mod asc_desc;
+mod attribute_patterns;
 mod criterion;
 pub mod database_stats;
 mod error;
 mod external_documents_ids;
 pub mod facet;
 mod fields_ids_map;
+mod filterable_attributes_rules;
 pub mod heed_codec;
 pub mod index;
 mod localized_attributes_rules;
@@ -52,6 +54,8 @@ pub use thread_pool_no_abort::{PanicCatched, ThreadPoolNoAbort, ThreadPoolNoAbor
 pub use {charabia as tokenizer, heed, rhai};
 
 pub use self::asc_desc::{AscDesc, AscDescError, Member, SortError};
+pub use self::attribute_patterns::AttributePatterns;
+pub use self::attribute_patterns::PatternMatch;
 pub use self::criterion::{default_criteria, Criterion, CriterionError};
 pub use self::error::{
     Error, FieldIdMapMissingEntry, InternalError, SerializationError, UserError,
@@ -59,6 +63,10 @@ pub use self::error::{
 pub use self::external_documents_ids::ExternalDocumentsIds;
 pub use self::fieldids_weights_map::FieldidsWeightsMap;
 pub use self::fields_ids_map::{FieldsIdsMap, GlobalFieldsIdsMap};
+pub use self::filterable_attributes_rules::{
+    FilterFeatures, FilterableAttributesFeatures, FilterableAttributesPatterns,
+    FilterableAttributesRule,
+};
 pub use self::heed_codec::{
     BEU16StrCodec, BEU32StrCodec, BoRoaringBitmapCodec, BoRoaringBitmapLenCodec,
     CboRoaringBitmapCodec, CboRoaringBitmapLenCodec, FieldIdWordCountCodec, ObkvCodec,
@@ -67,7 +75,6 @@ pub use self::heed_codec::{
 };
 pub use self::index::Index;
 pub use self::localized_attributes_rules::LocalizedAttributesRule;
-use self::localized_attributes_rules::LocalizedFieldIds;
 pub use self::search::facet::{FacetValueHit, SearchForFacetValues};
 pub use self::search::similar::Similar;
 pub use self::search::{

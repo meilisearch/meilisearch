@@ -12,12 +12,11 @@ use heed::BytesEncode;
 use super::helpers::{create_sorter, sorter_into_reader, try_split_array_at, GrenadParameters};
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec};
 use crate::heed_codec::{BEU16StrCodec, StrRefCodec};
-use crate::localized_attributes_rules::LocalizedFieldIds;
 use crate::update::del_add::{DelAdd, KvReaderDelAdd, KvWriterDelAdd};
 use crate::update::index_documents::helpers::{
     MergeDeladdBtreesetString, MergeDeladdCboRoaringBitmaps,
 };
-use crate::update::settings::InnerIndexSettingsDiff;
+use crate::update::settings::{InnerIndexSettings, InnerIndexSettingsDiff};
 use crate::{FieldId, Result, MAX_FACET_VALUE_LENGTH};
 
 /// Extracts the facet string and the documents ids where this facet string appear.
@@ -33,13 +32,10 @@ pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
     if settings_diff.settings_update_only() {
         extract_facet_string_docids_settings(docid_fid_facet_string, indexer, settings_diff)
     } else {
-        let localized_field_ids = &settings_diff.new.localized_faceted_fields_ids;
-        let facet_search = settings_diff.new.facet_search;
         extract_facet_string_docids_document_update(
             docid_fid_facet_string,
             indexer,
-            localized_field_ids,
-            facet_search,
+            &settings_diff.new,
         )
     }
 }
@@ -52,8 +48,7 @@ pub fn extract_facet_string_docids<R: io::Read + io::Seek>(
 fn extract_facet_string_docids_document_update<R: io::Read + io::Seek>(
     docid_fid_facet_string: grenad::Reader<R>,
     indexer: GrenadParameters,
-    localized_field_ids: &LocalizedFieldIds,
-    facet_search: bool,
+    settings: &InnerIndexSettings,
 ) -> Result<(grenad::Reader<BufReader<File>>, grenad::Reader<BufReader<File>>)> {
     let max_memory = indexer.max_memory_by_thread();
 
@@ -92,6 +87,14 @@ fn extract_facet_string_docids_document_update<R: io::Read + io::Seek>(
         let (field_id_bytes, bytes) = try_split_array_at(key).unwrap();
         let field_id = FieldId::from_be_bytes(field_id_bytes);
 
+        let Some(metadata) = settings.fields_ids_map.metadata(field_id) else {
+            unreachable!("metadata not found for field_id: {}", field_id)
+        };
+
+        if !metadata.is_faceted(&settings.filterable_attributes_rules) {
+            continue;
+        }
+
         let (document_id_bytes, normalized_value_bytes) =
             try_split_array_at::<_, 4>(bytes).unwrap();
         let document_id = u32::from_be_bytes(document_id_bytes);
@@ -99,8 +102,10 @@ fn extract_facet_string_docids_document_update<R: io::Read + io::Seek>(
         let normalized_value = str::from_utf8(normalized_value_bytes)?;
 
         // Facet search normalization
-        if facet_search {
-            let locales = localized_field_ids.locales(field_id);
+        let features =
+            metadata.filterable_attributes_features(&settings.filterable_attributes_rules);
+        if features.is_facet_searchable() {
+            let locales = metadata.locales(&settings.localized_attributes_rules);
             let hyper_normalized_value = normalize_facet_string(normalized_value, locales);
 
             let set = BTreeSet::from_iter(std::iter::once(normalized_value));
@@ -178,8 +183,15 @@ fn extract_facet_string_docids_settings<R: io::Read + io::Seek>(
         let (field_id_bytes, bytes) = try_split_array_at(key).unwrap();
         let field_id = FieldId::from_be_bytes(field_id_bytes);
 
-        let old_locales = settings_diff.old.localized_faceted_fields_ids.locales(field_id);
-        let new_locales = settings_diff.new.localized_faceted_fields_ids.locales(field_id);
+        let Some(old_metadata) = settings_diff.old.fields_ids_map.metadata(field_id) else {
+            unreachable!("old metadata not found for field_id: {}", field_id)
+        };
+        let Some(new_metadata) = settings_diff.new.fields_ids_map.metadata(field_id) else {
+            unreachable!("new metadata not found for field_id: {}", field_id)
+        };
+
+        let old_locales = old_metadata.locales(&settings_diff.old.localized_attributes_rules);
+        let new_locales = new_metadata.locales(&settings_diff.new.localized_attributes_rules);
 
         let are_same_locales = old_locales == new_locales;
         let reindex_facet_search =
@@ -197,10 +209,15 @@ fn extract_facet_string_docids_settings<R: io::Read + io::Seek>(
 
         // Facet search normalization
         if settings_diff.new.facet_search {
+            let new_filterable_features = new_metadata
+                .filterable_attributes_features(&settings_diff.new.filterable_attributes_rules);
             let new_hyper_normalized_value = normalize_facet_string(normalized_value, new_locales);
             let old_hyper_normalized_value;
+            let old_filterable_features = old_metadata
+                .filterable_attributes_features(&settings_diff.old.filterable_attributes_rules);
             let old_hyper_normalized_value = if !settings_diff.old.facet_search
                 || deladd_reader.get(DelAdd::Deletion).is_none()
+                || !old_filterable_features.is_facet_searchable()
             {
                 // if the facet search is disabled in the old settings or if no facet string is deleted,
                 // we don't need to normalize the facet string.
@@ -215,7 +232,9 @@ fn extract_facet_string_docids_settings<R: io::Read + io::Seek>(
             let set = BTreeSet::from_iter(std::iter::once(normalized_value));
 
             // if the facet string is the same, we can put the deletion and addition in the same obkv.
-            if old_hyper_normalized_value == Some(&new_hyper_normalized_value) {
+            if old_hyper_normalized_value == Some(&new_hyper_normalized_value)
+                && new_filterable_features.is_facet_searchable()
+            {
                 // nothing to do if we delete and re-add the value.
                 if is_same_value {
                     continue;
@@ -249,7 +268,9 @@ fn extract_facet_string_docids_settings<R: io::Read + io::Seek>(
                 }
 
                 // addition
-                if deladd_reader.get(DelAdd::Addition).is_some() {
+                if new_filterable_features.is_facet_searchable()
+                    && deladd_reader.get(DelAdd::Addition).is_some()
+                {
                     // insert new value
                     let val = SerdeJson::bytes_encode(&set).map_err(heed::Error::Encoding)?;
                     buffer.clear();

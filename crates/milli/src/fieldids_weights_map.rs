@@ -48,6 +48,11 @@ impl FieldidsWeightsMap {
         self.map.values().copied().max()
     }
 
+    /// Returns the field id with the highest weight.
+    pub fn max_weight_fid(&self) -> Option<(FieldId, Weight)> {
+        self.map.iter().max_by_key(|(_, weight)| *weight).map(|(fid, weight)| (*fid, *weight))
+    }
+
     /// Return an iterator visiting all field ids in arbitrary order.
     pub fn ids(&self) -> impl Iterator<Item = FieldId> + '_ {
         self.map.keys().copied()

@@ -5,12 +5,13 @@ use std::ops::DerefMut as _;
 use bumpalo::collections::Vec as BVec;
 use bumpalo::Bump;
 use hashbrown::HashMap;
-use heed::RoTxn;
 use serde_json::Value;
 
 use super::super::cache::BalancedCaches;
 use super::facet_document::extract_document_facets;
 use super::FacetKind;
+use crate::fields_ids_map::metadata::Metadata;
+use crate::filterable_attributes_rules::match_faceted_field;
 use crate::heed_codec::facet::OrderedF64Codec;
 use crate::update::del_add::DelAdd;
 use crate::update::new::channel::FieldIdDocidFacetSender;
@@ -23,13 +24,17 @@ use crate::update::new::steps::IndexingStep;
 use crate::update::new::thread_local::{FullySend, ThreadLocal};
 use crate::update::new::DocumentChange;
 use crate::update::GrenadParameters;
-use crate::{DocumentId, FieldId, Index, Result, MAX_FACET_VALUE_LENGTH};
+use crate::{DocumentId, FieldId, FilterableAttributesRule, Result, MAX_FACET_VALUE_LENGTH};
 
 pub struct FacetedExtractorData<'a, 'b> {
-    attributes_to_extract: &'a [&'a str],
     sender: &'a FieldIdDocidFacetSender<'a, 'b>,
     grenad_parameters: &'a GrenadParameters,
     buckets: usize,
+    filterable_attributes: Vec<FilterableAttributesRule>,
+    sortable_fields: HashSet<String>,
+    asc_desc_fields: HashSet<String>,
+    distinct_field: Option<String>,
+    is_geo_enabled: bool,
 }
 
 impl<'a, 'b, 'extractor> Extractor<'extractor> for FacetedExtractorData<'a, 'b> {
@@ -52,7 +57,11 @@ impl<'a, 'b, 'extractor> Extractor<'extractor> for FacetedExtractorData<'a, 'b> 
             let change = change?;
             FacetedDocidsExtractor::extract_document_change(
                 context,
-                self.attributes_to_extract,
+                &self.filterable_attributes,
+                &self.sortable_fields,
+                &self.asc_desc_fields,
+                &self.distinct_field,
+                self.is_geo_enabled,
                 change,
                 self.sender,
             )?
@@ -64,13 +73,18 @@ impl<'a, 'b, 'extractor> Extractor<'extractor> for FacetedExtractorData<'a, 'b> 
 pub struct FacetedDocidsExtractor;
 
 impl FacetedDocidsExtractor {
+    #[allow(clippy::too_many_arguments)]
     fn extract_document_change(
         context: &DocumentChangeContext<RefCell<BalancedCaches>>,
-        attributes_to_extract: &[&str],
+        filterable_attributes: &[FilterableAttributesRule],
+        sortable_fields: &HashSet<String>,
+        asc_desc_fields: &HashSet<String>,
+        distinct_field: &Option<String>,
+        is_geo_enabled: bool,
         document_change: DocumentChange,
         sender: &FieldIdDocidFacetSender,
     ) -> Result<()> {
-        let index = &context.index;
+        let index = context.index;
         let rtxn = &context.rtxn;
         let mut new_fields_ids_map = context.new_fields_ids_map.borrow_mut_or_yield();
         let mut cached_sorter = context.data.borrow_mut_or_yield();
@@ -78,11 +92,15 @@ impl FacetedDocidsExtractor {
         let docid = document_change.docid();
         let res = match document_change {
             DocumentChange::Deletion(inner) => extract_document_facets(
-                attributes_to_extract,
                 inner.current(rtxn, index, context.db_fields_ids_map)?,
                 inner.external_document_id(),
                 new_fields_ids_map.deref_mut(),
-                &mut |fid, depth, value| {
+                filterable_attributes,
+                sortable_fields,
+                asc_desc_fields,
+                distinct_field,
+                is_geo_enabled,
+                &mut |fid, meta, depth, value| {
                     Self::facet_fn_with_options(
                         &context.doc_alloc,
                         cached_sorter.deref_mut(),
@@ -91,6 +109,8 @@ impl FacetedDocidsExtractor {
                         DelAddFacetValue::insert_del,
                         docid,
                         fid,
+                        meta,
+                        filterable_attributes,
                         depth,
                         value,
                     )
@@ -98,7 +118,15 @@ impl FacetedDocidsExtractor {
             ),
             DocumentChange::Update(inner) => {
                 if !inner.has_changed_for_fields(
-                    Some(attributes_to_extract),
+                    &mut |field_name| {
+                        match_faceted_field(
+                            field_name,
+                            filterable_attributes,
+                            sortable_fields,
+                            asc_desc_fields,
+                            distinct_field,
+                        )
+                    },
                     rtxn,
                     index,
                     context.db_fields_ids_map,
@@ -107,11 +135,15 @@ impl FacetedDocidsExtractor {
                 }
 
                 extract_document_facets(
-                    attributes_to_extract,
                     inner.current(rtxn, index, context.db_fields_ids_map)?,
                     inner.external_document_id(),
                     new_fields_ids_map.deref_mut(),
-                    &mut |fid, depth, value| {
+                    filterable_attributes,
+                    sortable_fields,
+                    asc_desc_fields,
+                    distinct_field,
+                    is_geo_enabled,
+                    &mut |fid, meta, depth, value| {
                         Self::facet_fn_with_options(
                             &context.doc_alloc,
                             cached_sorter.deref_mut(),
@@ -120,6 +152,8 @@ impl FacetedDocidsExtractor {
                             DelAddFacetValue::insert_del,
                             docid,
                             fid,
+                            meta,
+                            filterable_attributes,
                             depth,
                             value,
                         )
@@ -127,11 +161,15 @@ impl FacetedDocidsExtractor {
                 )?;
 
                 extract_document_facets(
-                    attributes_to_extract,
                     inner.merged(rtxn, index, context.db_fields_ids_map)?,
                     inner.external_document_id(),
                     new_fields_ids_map.deref_mut(),
-                    &mut |fid, depth, value| {
+                    filterable_attributes,
+                    sortable_fields,
+                    asc_desc_fields,
+                    distinct_field,
+                    is_geo_enabled,
+                    &mut |fid, meta, depth, value| {
                         Self::facet_fn_with_options(
                             &context.doc_alloc,
                             cached_sorter.deref_mut(),
@@ -140,6 +178,8 @@ impl FacetedDocidsExtractor {
                             DelAddFacetValue::insert_add,
                             docid,
                             fid,
+                            meta,
+                            filterable_attributes,
                             depth,
                             value,
                         )
@@ -147,11 +187,15 @@ impl FacetedDocidsExtractor {
                 )
             }
             DocumentChange::Insertion(inner) => extract_document_facets(
-                attributes_to_extract,
                 inner.inserted(),
                 inner.external_document_id(),
                 new_fields_ids_map.deref_mut(),
-                &mut |fid, depth, value| {
+                filterable_attributes,
+                sortable_fields,
+                asc_desc_fields,
+                distinct_field,
+                is_geo_enabled,
+                &mut |fid, meta, depth, value| {
                     Self::facet_fn_with_options(
                         &context.doc_alloc,
                         cached_sorter.deref_mut(),
@@ -160,6 +204,8 @@ impl FacetedDocidsExtractor {
                         DelAddFacetValue::insert_add,
                         docid,
                         fid,
+                        meta,
+                        filterable_attributes,
                         depth,
                         value,
                     )
@@ -180,9 +226,18 @@ impl FacetedDocidsExtractor {
         facet_fn: impl Fn(&mut DelAddFacetValue<'doc>, FieldId, BVec<'doc, u8>, FacetKind),
         docid: DocumentId,
         fid: FieldId,
+        meta: Metadata,
+        filterable_attributes: &[FilterableAttributesRule],
         depth: perm_json_p::Depth,
         value: &Value,
     ) -> Result<()> {
+        // if the field is not faceted, do nothing
+        if !meta.is_faceted(filterable_attributes) {
+            return Ok(());
+        }
+
+        let features = meta.filterable_attributes_features(filterable_attributes);
+
         let mut buffer = BVec::new_in(doc_alloc);
         // Exists
         // key: fid
@@ -246,7 +301,9 @@ impl FacetedDocidsExtractor {
             }
             // Null
             // key: fid
-            Value::Null if depth == perm_json_p::Depth::OnBaseKey => {
+            Value::Null
+                if depth == perm_json_p::Depth::OnBaseKey && features.is_filterable_null() =>
+            {
                 buffer.clear();
                 buffer.push(FacetKind::Null as u8);
                 buffer.extend_from_slice(&fid.to_be_bytes());
@@ -254,19 +311,29 @@ impl FacetedDocidsExtractor {
             }
             // Empty
             // key: fid
-            Value::Array(a) if a.is_empty() && depth == perm_json_p::Depth::OnBaseKey => {
+            Value::Array(a)
+                if a.is_empty()
+                    && depth == perm_json_p::Depth::OnBaseKey
+                    && features.is_filterable_empty() =>
+            {
                 buffer.clear();
                 buffer.push(FacetKind::Empty as u8);
                 buffer.extend_from_slice(&fid.to_be_bytes());
                 cache_fn(cached_sorter, &buffer, docid)
             }
-            Value::String(_) if depth == perm_json_p::Depth::OnBaseKey => {
+            Value::String(_)
+                if depth == perm_json_p::Depth::OnBaseKey && features.is_filterable_empty() =>
+            {
                 buffer.clear();
                 buffer.push(FacetKind::Empty as u8);
                 buffer.extend_from_slice(&fid.to_be_bytes());
                 cache_fn(cached_sorter, &buffer, docid)
             }
-            Value::Object(o) if o.is_empty() && depth == perm_json_p::Depth::OnBaseKey => {
+            Value::Object(o)
+                if o.is_empty()
+                    && depth == perm_json_p::Depth::OnBaseKey
+                    && features.is_filterable_empty() =>
+            {
                 buffer.clear();
                 buffer.push(FacetKind::Empty as u8);
                 buffer.extend_from_slice(&fid.to_be_bytes());
@@ -275,10 +342,6 @@ impl FacetedDocidsExtractor {
             // Otherwise, do nothing
             _ => Ok(()),
         }
-    }
-
-    fn attributes_to_extract<'a>(rtxn: &'a RoTxn, index: &'a Index) -> Result<HashSet<String>> {
-        index.user_defined_faceted_fields(rtxn)
     }
 }
 
@@ -399,9 +462,11 @@ impl FacetedDocidsExtractor {
     {
         let index = indexing_context.index;
         let rtxn = index.read_txn()?;
-        let attributes_to_extract = Self::attributes_to_extract(&rtxn, index)?;
-        let attributes_to_extract: Vec<_> =
-            attributes_to_extract.iter().map(|s| s.as_ref()).collect();
+        let filterable_attributes = index.filterable_attributes_rules(&rtxn)?;
+        let sortable_fields = index.sortable_fields(&rtxn)?;
+        let asc_desc_fields = index.asc_desc_fields(&rtxn)?;
+        let distinct_field = index.distinct_field(&rtxn)?.map(|s| s.to_string());
+        let is_geo_enabled = index.is_geo_enabled(&rtxn)?;
         let datastore = ThreadLocal::new();
 
         {
@@ -410,10 +475,14 @@ impl FacetedDocidsExtractor {
             let _entered = span.enter();
 
             let extractor = FacetedExtractorData {
-                attributes_to_extract: &attributes_to_extract,
                 grenad_parameters: indexing_context.grenad_parameters,
                 buckets: rayon::current_num_threads(),
                 sender,
+                filterable_attributes,
+                sortable_fields,
+                asc_desc_fields,
+                distinct_field,
+                is_geo_enabled,
             };
             extract(
                 document_changes,

@@ -3604,22 +3604,28 @@ async fn federation_non_faceted_for_an_index() {
 
     let index = server.index("fruits");
 
+    let documents = FRUITS_DOCUMENTS.clone();
+    let (value, _) = index.add_documents(documents, None).await;
+    index.wait_task(value.uid()).await.succeeded();
+
     let (value, _) = index
         .update_settings(
             json!({"searchableAttributes": ["name"], "filterableAttributes": ["BOOST", "id", "name"]}),
         )
         .await;
-
     index.wait_task(value.uid()).await.succeeded();
 
     let index = server.index("fruits-no-name");
+
+    let documents = FRUITS_DOCUMENTS.clone();
+    let (value, _) = index.add_documents(documents, None).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let (value, _) = index
         .update_settings(
             json!({"searchableAttributes": ["name"], "filterableAttributes": ["BOOST", "id"]}),
         )
         .await;
-
     index.wait_task(value.uid()).await.succeeded();
 
     let index = server.index("fruits-no-facets");

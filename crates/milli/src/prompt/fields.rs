@@ -7,14 +7,14 @@ use liquid::model::{
 };
 use liquid::{ObjectView, ValueView};
 
-use super::{FieldMetadata, FieldsIdsMapWithMetadata};
+use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, Metadata};
 use crate::GlobalFieldsIdsMap;
 
 #[derive(Debug, Clone, Copy)]
 pub struct FieldValue<'a, D: ObjectView> {
     name: &'a str,
     document: &'a D,
-    metadata: FieldMetadata,
+    metadata: Metadata,
 }
 
 impl<'a, D: ObjectView> ValueView for FieldValue<'a, D> {
@@ -67,7 +67,10 @@ impl<'a, D: ObjectView> FieldValue<'a, D> {
     }
 
     pub fn is_searchable(&self) -> &bool {
-        &self.metadata.searchable
+        match self.metadata.is_searchable() {
+            true => &true,
+            false => &false,
+        }
     }
 
     pub fn is_empty(&self) -> bool {
@@ -125,15 +128,11 @@ pub struct BorrowedFields<'a, 'map, D: ObjectView> {
 }
 
 impl<'a, D: ObjectView> OwnedFields<'a, D> {
-    pub fn new(document: &'a D, field_id_map: &'a FieldsIdsMapWithMetadata<'a>) -> Self {
+    pub fn new(document: &'a D, field_id_map: &'a FieldIdMapWithMetadata) -> Self {
         Self(
             std::iter::repeat(document)
                 .zip(field_id_map.iter())
-                .map(|(document, (fid, name))| FieldValue {
-                    document,
-                    name,
-                    metadata: field_id_map.metadata(fid).unwrap_or_default(),
-                })
+                .map(|(document, (_fid, name, metadata))| FieldValue { document, name, metadata })
                 .collect(),
         )
     }
@@ -187,7 +186,7 @@ impl<'a, 'map, D: ObjectView> ArrayView for BorrowedFields<'a, 'map, D> {
             let fv = self.doc_alloc.alloc(FieldValue {
                 name: self.doc_alloc.alloc_str(&k),
                 document: self.document,
-                metadata: FieldMetadata { searchable: metadata.searchable },
+                metadata,
             });
             fv as _
         }))
@@ -207,7 +206,7 @@ impl<'a, 'map, D: ObjectView> ArrayView for BorrowedFields<'a, 'map, D> {
         let fv = self.doc_alloc.alloc(FieldValue {
             name: self.doc_alloc.alloc_str(&key),
             document: self.document,
-            metadata: FieldMetadata { searchable: metadata.searchable },
+            metadata,
         });
         Some(fv as _)
     }

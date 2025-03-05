@@ -81,6 +81,17 @@ pub enum DelAddOperation {
     DeletionAndAddition,
 }
 
+impl DelAddOperation {
+    /// Merge two DelAddOperation enum variants.
+    pub fn merge(self, other: Self) -> Self {
+        match (self, other) {
+            (Self::Deletion, Self::Deletion) => Self::Deletion,
+            (Self::Addition, Self::Addition) => Self::Addition,
+            _ => Self::DeletionAndAddition,
+        }
+    }
+}
+
 /// Creates a Kv<K, Kv<DelAdd, value>> from two Kv<K, value>
 ///
 /// putting each deletion obkv's keys under an DelAdd::Deletion

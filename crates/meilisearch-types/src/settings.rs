@@ -11,7 +11,7 @@ use fst::IntoStreamer;
 use milli::index::{IndexEmbeddingConfig, PrefixSearch};
 use milli::proximity::ProximityPrecision;
 use milli::update::Setting;
-use milli::{Criterion, CriterionError, Index, DEFAULT_VALUES_PER_FACET};
+use milli::{Criterion, CriterionError, FilterableAttributesRule, Index, DEFAULT_VALUES_PER_FACET};
 use serde::{Deserialize, Serialize, Serializer};
 use utoipa::ToSchema;
 
@@ -202,8 +202,8 @@ pub struct Settings<T> {
     /// Attributes to use for faceting and filtering. See [Filtering and Faceted Search](https://www.meilisearch.com/docs/learn/filtering_and_sorting/search_with_facet_filters).
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsFilterableAttributes>)]
-    #[schema(value_type = Option<Vec<String>>, example = json!(["release_date", "genre"]))]
-    pub filterable_attributes: Setting<BTreeSet<String>>,
+    #[schema(value_type = Option<Vec<FilterableAttributesRule>>, example = json!(["release_date", "genre"]))]
+    pub filterable_attributes: Setting<Vec<FilterableAttributesRule>>,
     /// Attributes to use when sorting search results.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsSortableAttributes>)]
@@ -791,7 +791,7 @@ pub fn settings(
         .user_defined_searchable_fields(rtxn)?
         .map(|fields| fields.into_iter().map(String::from).collect());
 
-    let filterable_attributes = index.filterable_fields(rtxn)?.into_iter().collect();
+    let filterable_attributes = index.filterable_attributes_rules(rtxn)?.into_iter().collect();
 
     let sortable_attributes = index.sortable_fields(rtxn)?.into_iter().collect();
 

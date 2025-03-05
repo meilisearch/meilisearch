@@ -4,8 +4,9 @@ use charabia::Language;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
+use crate::attribute_patterns::PatternMatch;
 use crate::fields_ids_map::FieldsIdsMap;
-use crate::FieldId;
+use crate::{AttributePatterns, FieldId};
 
 /// A rule that defines which locales are supported for a given attribute.
 ///
@@ -17,36 +18,22 @@ use crate::FieldId;
 /// The pattern `*attribute_name*` matches any attribute name that contains `attribute_name`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct LocalizedAttributesRule {
-    pub attribute_patterns: Vec<String>,
+    pub attribute_patterns: AttributePatterns,
     #[schema(value_type = Vec<String>)]
     pub locales: Vec<Language>,
 }
 
 impl LocalizedAttributesRule {
     pub fn new(attribute_patterns: Vec<String>, locales: Vec<Language>) -> Self {
-        Self { attribute_patterns, locales }
+        Self { attribute_patterns: AttributePatterns::from(attribute_patterns), locales }
     }
 
-    pub fn match_str(&self, str: &str) -> bool {
-        self.attribute_patterns.iter().any(|pattern| match_pattern(pattern.as_str(), str))
+    pub fn match_str(&self, str: &str) -> PatternMatch {
+        self.attribute_patterns.match_str(str)
     }
 
     pub fn locales(&self) -> &[Language] {
         &self.locales
-    }
-}
-
-fn match_pattern(pattern: &str, str: &str) -> bool {
-    if pattern == "*" {
-        true
-    } else if pattern.starts_with('*') && pattern.ends_with('*') {
-        str.contains(&pattern[1..pattern.len() - 1])
-    } else if let Some(pattern) = pattern.strip_prefix('*') {
-        str.ends_with(pattern)
-    } else if let Some(pattern) = pattern.strip_suffix('*') {
-        str.starts_with(pattern)
-    } else {
-        pattern == str
     }
 }
 
@@ -65,13 +52,13 @@ impl LocalizedFieldIds {
 
         if let Some(rules) = rules {
             let fields = fields_ids.filter_map(|field_id| {
-                fields_ids_map.name(field_id).map(|field_name| (field_id, field_name))
+                fields_ids_map.name(field_id).map(|field_name: &str| (field_id, field_name))
             });
 
             for (field_id, field_name) in fields {
                 let mut locales = Vec::new();
                 for rule in rules {
-                    if rule.match_str(field_name) {
+                    if rule.match_str(field_name) == PatternMatch::Match {
                         locales.extend(rule.locales.iter());
                         // Take the first rule that matches
                         break;
@@ -89,10 +76,6 @@ impl LocalizedFieldIds {
         Self { field_id_to_locales }
     }
 
-    pub fn locales(&self, fields_id: FieldId) -> Option<&[Language]> {
-        self.field_id_to_locales.get(&fields_id).map(Vec::as_slice)
-    }
-
     pub fn all_locales(&self) -> Vec<Language> {
         let mut locales = Vec::new();
         for field_locales in self.field_id_to_locales.values() {
@@ -106,26 +89,5 @@ impl LocalizedFieldIds {
         locales.sort();
         locales.dedup();
         locales
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_match_pattern() {
-        assert!(match_pattern("*", "test"));
-        assert!(match_pattern("test*", "test"));
-        assert!(match_pattern("test*", "testa"));
-        assert!(match_pattern("*test", "test"));
-        assert!(match_pattern("*test", "atest"));
-        assert!(match_pattern("*test*", "test"));
-        assert!(match_pattern("*test*", "atesta"));
-        assert!(match_pattern("*test*", "atest"));
-        assert!(match_pattern("*test*", "testa"));
-        assert!(!match_pattern("test*test", "test"));
-        assert!(!match_pattern("*test", "testa"));
-        assert!(!match_pattern("test*", "atest"));
     }
 }
