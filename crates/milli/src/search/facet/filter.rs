@@ -20,8 +20,9 @@ use crate::heed_codec::facet::{
 };
 use crate::index::db_name::FACET_ID_STRING_DOCIDS;
 use crate::{
-    distance_between_two_points, lat_lng_to_xyz, FieldId, FilterableAttributesFeatures,
-    FilterableAttributesRule, Index, InternalError, Result, SerializationError,
+    distance_between_two_points, lat_lng_to_xyz, FieldId, FieldsIdsMap,
+    FilterableAttributesFeatures, FilterableAttributesRule, Index, InternalError, Result,
+    SerializationError,
 };
 
 /// The maximum number of filters the filter AST can process.
@@ -233,11 +234,11 @@ impl<'a> Filter<'a> {
 impl<'a> Filter<'a> {
     pub fn evaluate(&self, rtxn: &heed::RoTxn<'_>, index: &Index) -> Result<RoaringBitmap> {
         // to avoid doing this for each recursive call we're going to do it ONCE ahead of time
+        let fields_ids_map = index.fields_ids_map(rtxn)?;
         let filterable_attributes_rules = index.filterable_attributes_rules(rtxn)?;
         for fid in self.condition.fids(MAX_FILTER_DEPTH) {
             let attribute = fid.value();
             if !is_field_filterable(attribute, &filterable_attributes_rules) {
-                let fields_ids_map = index.fields_ids_map(rtxn)?;
                 return Err(fid.as_external_error(FilterError::AttributeNotFilterable {
                     attribute,
                     filterable_fields: filtered_matching_field_names(
@@ -248,7 +249,7 @@ impl<'a> Filter<'a> {
                 }))?;
             }
         }
-        self.inner_evaluate(rtxn, index, &filterable_attributes_rules, None)
+        self.inner_evaluate(rtxn, index, &fields_ids_map, &filterable_attributes_rules, None)
     }
 
     fn evaluate_operator(
@@ -258,6 +259,7 @@ impl<'a> Filter<'a> {
         universe: Option<&RoaringBitmap>,
         operator: &Condition<'a>,
         features: &FilterableAttributesFeatures,
+        rule_index: usize,
     ) -> Result<RoaringBitmap> {
         let numbers_db = index.facet_id_f64_docids;
         let strings_db = index.facet_id_string_docids;
@@ -275,19 +277,29 @@ impl<'a> Filter<'a> {
             | Condition::Between { .. }
                 if !features.is_filterable_comparison() =>
             {
-                return Err(generate_filter_error(rtxn, index, field_id, operator, features));
+                return Err(generate_filter_error(
+                    rtxn, index, field_id, operator, features, rule_index,
+                ));
             }
             Condition::Empty if !features.is_filterable_empty() => {
-                return Err(generate_filter_error(rtxn, index, field_id, operator, features));
+                return Err(generate_filter_error(
+                    rtxn, index, field_id, operator, features, rule_index,
+                ));
             }
             Condition::Null if !features.is_filterable_null() => {
-                return Err(generate_filter_error(rtxn, index, field_id, operator, features));
+                return Err(generate_filter_error(
+                    rtxn, index, field_id, operator, features, rule_index,
+                ));
             }
             Condition::Exists if !features.is_filterable_exists() => {
-                return Err(generate_filter_error(rtxn, index, field_id, operator, features));
+                return Err(generate_filter_error(
+                    rtxn, index, field_id, operator, features, rule_index,
+                ));
             }
             Condition::Equal(_) | Condition::NotEqual(_) if !features.is_filterable_equality() => {
-                return Err(generate_filter_error(rtxn, index, field_id, operator, features));
+                return Err(generate_filter_error(
+                    rtxn, index, field_id, operator, features, rule_index,
+                ));
             }
             Condition::GreaterThan(val) => {
                 (Excluded(val.parse_finite_float()?), Included(f64::MAX))
@@ -338,8 +350,9 @@ impl<'a> Filter<'a> {
             }
             Condition::NotEqual(val) => {
                 let operator = Condition::Equal(val.clone());
-                let docids =
-                    Self::evaluate_operator(rtxn, index, field_id, None, &operator, features)?;
+                let docids = Self::evaluate_operator(
+                    rtxn, index, field_id, None, &operator, features, rule_index,
+                )?;
                 let all_ids = index.documents_ids(rtxn)?;
                 return Ok(all_ids - docids);
             }
@@ -441,7 +454,8 @@ impl<'a> Filter<'a> {
         &self,
         rtxn: &heed::RoTxn<'_>,
         index: &Index,
-        filterable_fields: &[FilterableAttributesRule],
+        field_ids_map: &FieldsIdsMap,
+        filterable_attribute_rules: &[FilterableAttributesRule],
         universe: Option<&RoaringBitmap>,
     ) -> Result<RoaringBitmap> {
         if universe.map_or(false, |u| u.is_empty()) {
@@ -454,7 +468,8 @@ impl<'a> Filter<'a> {
                     &(f.as_ref().clone()).into(),
                     rtxn,
                     index,
-                    filterable_fields,
+                    field_ids_map,
+                    filterable_attribute_rules,
                     universe,
                 )?;
                 match universe {
@@ -466,15 +481,14 @@ impl<'a> Filter<'a> {
                 }
             }
             FilterCondition::In { fid, els } => {
-                match matching_features(fid.value(), filterable_fields) {
-                    Some(features) if features.is_filterable() => {
-                        let field_ids_map = index.fields_ids_map(rtxn)?;
+                match matching_features(fid.value(), filterable_attribute_rules) {
+                    Some((rule_index, features)) if features.is_filterable() => {
                         if let Some(fid) = field_ids_map.id(fid.value()) {
                             els.iter()
                                 .map(|el| Condition::Equal(el.clone()))
                                 .map(|op| {
                                     Self::evaluate_operator(
-                                        rtxn, index, fid, universe, &op, &features,
+                                        rtxn, index, fid, universe, &op, &features, rule_index,
                                     )
                                 })
                                 .union()
@@ -482,46 +496,50 @@ impl<'a> Filter<'a> {
                             Ok(RoaringBitmap::new())
                         }
                     }
-                    _ => {
-                        let field_ids_map = index.fields_ids_map(rtxn)?;
-                        Err(fid.as_external_error(FilterError::AttributeNotFilterable {
-                            attribute: fid.value(),
-                            filterable_fields: filtered_matching_field_names(
-                                filterable_fields,
-                                &field_ids_map,
-                                &|features| features.is_filterable(),
-                            ),
-                        }))?
-                    }
+                    _ => Err(fid.as_external_error(FilterError::AttributeNotFilterable {
+                        attribute: fid.value(),
+                        filterable_fields: filtered_matching_field_names(
+                            filterable_attribute_rules,
+                            &field_ids_map,
+                            &|features| features.is_filterable(),
+                        ),
+                    }))?,
                 }
             }
             FilterCondition::Condition { fid, op } => {
-                match matching_features(fid.value(), filterable_fields) {
-                    Some(features) if features.is_filterable() => {
-                        let field_ids_map = index.fields_ids_map(rtxn)?;
+                match matching_features(fid.value(), filterable_attribute_rules) {
+                    Some((rule_index, features)) if features.is_filterable() => {
                         if let Some(fid) = field_ids_map.id(fid.value()) {
-                            Self::evaluate_operator(rtxn, index, fid, universe, op, &features)
+                            Self::evaluate_operator(
+                                rtxn, index, fid, universe, op, &features, rule_index,
+                            )
                         } else {
                             Ok(RoaringBitmap::new())
                         }
                     }
-                    _ => {
-                        let field_ids_map = index.fields_ids_map(rtxn)?;
-                        Err(fid.as_external_error(FilterError::AttributeNotFilterable {
-                            attribute: fid.value(),
-                            filterable_fields: filtered_matching_field_names(
-                                filterable_fields,
-                                &field_ids_map,
-                                &|features| features.is_filterable(),
-                            ),
-                        }))?
-                    }
+                    _ => Err(fid.as_external_error(FilterError::AttributeNotFilterable {
+                        attribute: fid.value(),
+                        filterable_fields: filtered_matching_field_names(
+                            filterable_attribute_rules,
+                            &field_ids_map,
+                            &|features| features.is_filterable(),
+                        ),
+                    }))?,
                 }
             }
             FilterCondition::Or(subfilters) => subfilters
                 .iter()
                 .cloned()
-                .map(|f| Self::inner_evaluate(&f.into(), rtxn, index, filterable_fields, universe))
+                .map(|f| {
+                    Self::inner_evaluate(
+                        &f.into(),
+                        rtxn,
+                        index,
+                        field_ids_map,
+                        filterable_attribute_rules,
+                        universe,
+                    )
+                })
                 .union(),
             FilterCondition::And(subfilters) => {
                 let mut subfilters_iter = subfilters.iter();
@@ -530,7 +548,8 @@ impl<'a> Filter<'a> {
                         &(first_subfilter.clone()).into(),
                         rtxn,
                         index,
-                        filterable_fields,
+                        field_ids_map,
+                        filterable_attribute_rules,
                         universe,
                     )?;
                     for f in subfilters_iter {
@@ -544,7 +563,8 @@ impl<'a> Filter<'a> {
                             &(f.clone()).into(),
                             rtxn,
                             index,
-                            filterable_fields,
+                            field_ids_map,
+                            filterable_attribute_rules,
                             Some(&bitmap),
                         )?;
                     }
@@ -582,11 +602,10 @@ impl<'a> Filter<'a> {
 
                     Ok(result)
                 } else {
-                    let field_ids_map = index.fields_ids_map(rtxn)?;
                     Err(point[0].as_external_error(FilterError::AttributeNotFilterable {
                         attribute: RESERVED_GEO_FIELD_NAME,
                         filterable_fields: filtered_matching_field_names(
-                            filterable_fields,
+                            filterable_attribute_rules,
                             &field_ids_map,
                             &|features| features.is_filterable(),
                         ),
@@ -649,7 +668,8 @@ impl<'a> Filter<'a> {
                     let selected_lat = Filter { condition: condition_lat }.inner_evaluate(
                         rtxn,
                         index,
-                        filterable_fields,
+                        field_ids_map,
+                        filterable_attribute_rules,
                         universe,
                     )?;
 
@@ -682,7 +702,8 @@ impl<'a> Filter<'a> {
                         let left = Filter { condition: condition_left }.inner_evaluate(
                             rtxn,
                             index,
-                            filterable_fields,
+                            field_ids_map,
+                            filterable_attribute_rules,
                             universe,
                         )?;
 
@@ -696,7 +717,8 @@ impl<'a> Filter<'a> {
                         let right = Filter { condition: condition_right }.inner_evaluate(
                             rtxn,
                             index,
-                            filterable_fields,
+                            field_ids_map,
+                            filterable_attribute_rules,
                             universe,
                         )?;
 
@@ -712,19 +734,19 @@ impl<'a> Filter<'a> {
                         Filter { condition: condition_lng }.inner_evaluate(
                             rtxn,
                             index,
-                            filterable_fields,
+                            field_ids_map,
+                            filterable_attribute_rules,
                             universe,
                         )?
                     };
 
                     Ok(selected_lat & selected_lng)
                 } else {
-                    let field_ids_map = index.fields_ids_map(rtxn)?;
                     Err(top_right_point[0].as_external_error(
                         FilterError::AttributeNotFilterable {
                             attribute: RESERVED_GEO_FIELD_NAME,
                             filterable_fields: filtered_matching_field_names(
-                                filterable_fields,
+                                filterable_attribute_rules,
                                 &field_ids_map,
                                 &|features| features.is_filterable(),
                             ),
@@ -742,6 +764,7 @@ fn generate_filter_error(
     field_id: FieldId,
     operator: &Condition<'_>,
     features: &FilterableAttributesFeatures,
+    rule_index: usize,
 ) -> Error {
     match index.fields_ids_map(rtxn) {
         Ok(fields_ids_map) => {
@@ -750,6 +773,7 @@ fn generate_filter_error(
                 field: field.to_string(),
                 allowed_operators: features.allowed_filter_operators(),
                 operator: operator.operator().to_string(),
+                rule_index,
             })
         }
         Err(e) => e.into(),

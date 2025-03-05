@@ -138,8 +138,13 @@ and can not be more than 511 bytes.", .document_id.to_string()
     InvalidFilter(String),
     #[error("Invalid type for filter subexpression: expected: {}, found: {}.", .0.join(", "), .1)]
     InvalidFilterExpression(&'static [&'static str], Value),
-    #[error("Filter operator `{operator}` is not allowed for the attribute `{field}`, allowed operators: {}.", allowed_operators.join(", "))]
-    FilterOperatorNotAllowed { field: String, allowed_operators: Vec<String>, operator: String },
+    #[error("Filter operator `{operator}` is not allowed for the attribute `{field}`.\n  - Note: allowed operators: {}.\n  - Note: field `{field}` matched rule #{rule_index} in `filterableAttributes`", allowed_operators.join(", "))]
+    FilterOperatorNotAllowed {
+        field: String,
+        allowed_operators: Vec<String>,
+        operator: String,
+        rule_index: usize,
+    },
     #[error("Attribute `{}` is not sortable. {}",
         .field,
         match .valid_fields.is_empty() {

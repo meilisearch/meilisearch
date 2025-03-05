@@ -894,7 +894,7 @@ async fn search_with_pattern_filter_settings_errors() {
             snapshot!(code, @"400 Bad Request");
             snapshot!(json_string!(response), @r###"
             {
-              "message": "Index `test`: Filter operator `=` is not allowed for the attribute `cattos`, allowed operators: OR, AND, NOT, <, >, <=, >=, TO, IS EMPTY, IS NULL, EXISTS.",
+              "message": "Index `test`: Filter operator `=` is not allowed for the attribute `cattos`.\n  - Note: allowed operators: OR, AND, NOT, <, >, <=, >=, TO, IS EMPTY, IS NULL, EXISTS.\n  - Note: field `cattos` matched rule #0 in `filterableAttributes`",
               "code": "invalid_search_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -920,7 +920,7 @@ async fn search_with_pattern_filter_settings_errors() {
         snapshot!(code, @"400 Bad Request");
         snapshot!(json_string!(response), @r###"
         {
-          "message": "Index `test`: Filter operator `=` is not allowed for the attribute `cattos`, allowed operators: OR, AND, NOT, <, >, <=, >=, TO, IS EMPTY, IS NULL, EXISTS.",
+          "message": "Index `test`: Filter operator `=` is not allowed for the attribute `cattos`.\n  - Note: allowed operators: OR, AND, NOT, <, >, <=, >=, TO, IS EMPTY, IS NULL, EXISTS.\n  - Note: field `cattos` matched rule #0 in `filterableAttributes`",
           "code": "invalid_search_filter",
           "type": "invalid_request",
           "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -941,7 +941,7 @@ async fn search_with_pattern_filter_settings_errors() {
             snapshot!(code, @"400 Bad Request");
             snapshot!(json_string!(response), @r###"
             {
-              "message": "Index `test`: Filter operator `>` is not allowed for the attribute `doggos.age`, allowed operators: OR, AND, NOT, =, !=, IN, IS EMPTY, IS NULL, EXISTS.",
+              "message": "Index `test`: Filter operator `>` is not allowed for the attribute `doggos.age`.\n  - Note: allowed operators: OR, AND, NOT, =, !=, IN, IS EMPTY, IS NULL, EXISTS.\n  - Note: field `doggos.age` matched rule #0 in `filterableAttributes`",
               "code": "invalid_search_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -967,7 +967,7 @@ async fn search_with_pattern_filter_settings_errors() {
             snapshot!(code, @"400 Bad Request");
             snapshot!(json_string!(response), @r###"
             {
-              "message": "Index `test`: Filter operator `>` is not allowed for the attribute `doggos.age`, allowed operators: OR, AND, NOT, =, !=, IN, IS EMPTY, IS NULL, EXISTS.",
+              "message": "Index `test`: Filter operator `>` is not allowed for the attribute `doggos.age`.\n  - Note: allowed operators: OR, AND, NOT, =, !=, IN, IS EMPTY, IS NULL, EXISTS.\n  - Note: field `doggos.age` matched rule #0 in `filterableAttributes`",
               "code": "invalid_search_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -993,7 +993,7 @@ async fn search_with_pattern_filter_settings_errors() {
             snapshot!(code, @"400 Bad Request");
             snapshot!(json_string!(response), @r###"
             {
-              "message": "Index `test`: Filter operator `TO` is not allowed for the attribute `doggos.age`, allowed operators: OR, AND, NOT, =, !=, IN, IS EMPTY, IS NULL, EXISTS.",
+              "message": "Index `test`: Filter operator `TO` is not allowed for the attribute `doggos.age`.\n  - Note: allowed operators: OR, AND, NOT, =, !=, IN, IS EMPTY, IS NULL, EXISTS.\n  - Note: field `doggos.age` matched rule #0 in `filterableAttributes`",
               "code": "invalid_search_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_search_filter"

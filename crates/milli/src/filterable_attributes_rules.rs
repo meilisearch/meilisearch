@@ -236,16 +236,13 @@ impl Default for FilterFeatures {
 pub fn filtered_matching_field_names<'fim>(
     filterable_attributes: &[FilterableAttributesRule],
     fields_ids_map: &'fim FieldsIdsMap,
-    filter: &impl Fn(&FilterableAttributesFeatures) -> bool,
+    filter: &impl Fn(FilterableAttributesFeatures) -> bool,
 ) -> BTreeSet<&'fim str> {
     let mut result = BTreeSet::new();
     for (_, field_name) in fields_ids_map.iter() {
-        for filterable_attribute in filterable_attributes {
-            if filterable_attribute.match_str(field_name) == PatternMatch::Match {
-                let features = filterable_attribute.features();
-                if filter(&features) {
-                    result.insert(field_name);
-                }
+        if let Some((_, features)) = matching_features(field_name, filterable_attributes) {
+            if filter(features) {
+                result.insert(field_name);
             }
         }
     }
@@ -260,13 +257,18 @@ pub fn filtered_matching_field_names<'fim>(
 ///
 /// * `field_name` - The field name to match against.
 /// * `filterable_attributes` - The set of filterable attributes rules to match against.
+///
+/// # Returns
+///
+/// * `Some((rule_index, features))` - The features of the matching rule and the index of the rule in the `filterable_attributes` array.
+/// * `None` - No matching rule was found.
 pub fn matching_features(
     field_name: &str,
     filterable_attributes: &[FilterableAttributesRule],
-) -> Option<FilterableAttributesFeatures> {
-    for filterable_attribute in filterable_attributes {
+) -> Option<(usize, FilterableAttributesFeatures)> {
+    for (id, filterable_attribute) in filterable_attributes.iter().enumerate() {
         if filterable_attribute.match_str(field_name) == PatternMatch::Match {
-            return Some(filterable_attribute.features());
+            return Some((id, filterable_attribute.features()));
         }
     }
     None
@@ -283,7 +285,7 @@ pub fn is_field_filterable(
     filterable_attributes: &[FilterableAttributesRule],
 ) -> bool {
     matching_features(field_name, filterable_attributes)
-        .map_or(false, |features| features.is_filterable())
+        .map_or(false, |(_, features)| features.is_filterable())
 }
 
 /// Check if a field is facet searchable calling the method `FilterableAttributesFeatures::is_facet_searchable()`.
@@ -297,7 +299,7 @@ pub fn is_field_facet_searchable(
     filterable_attributes: &[FilterableAttributesRule],
 ) -> bool {
     matching_features(field_name, filterable_attributes)
-        .map_or(false, |features| features.is_facet_searchable())
+        .map_or(false, |(_, features)| features.is_facet_searchable())
 }
 
 /// Match a field against a set of filterable, facet searchable fields, distinct field, sortable fields, and asc_desc fields.
@@ -339,7 +341,7 @@ pub fn match_faceted_field(
 fn match_pattern_by_features(
     field_name: &str,
     filterable_attributes: &[FilterableAttributesRule],
-    filter: &impl Fn(&FilterableAttributesFeatures) -> bool,
+    filter: &impl Fn(FilterableAttributesFeatures) -> bool,
 ) -> PatternMatch {
     let mut selection = PatternMatch::NoMatch;
 
@@ -353,7 +355,7 @@ fn match_pattern_by_features(
         match pattern.match_str(field_name) {
             PatternMatch::Match => {
                 let features = pattern.features();
-                if filter(&features) && can_match {
+                if filter(features) && can_match {
                     return PatternMatch::Match;
                 } else {
                     can_match = false;
@@ -361,7 +363,7 @@ fn match_pattern_by_features(
             }
             PatternMatch::Parent => {
                 let features = pattern.features();
-                if filter(&features) {
+                if filter(features) {
                     selection = PatternMatch::Parent;
                 }
             }
