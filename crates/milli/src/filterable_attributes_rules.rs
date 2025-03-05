@@ -342,15 +342,30 @@ fn match_pattern_by_features(
     filter: &impl Fn(&FilterableAttributesFeatures) -> bool,
 ) -> PatternMatch {
     let mut selection = PatternMatch::NoMatch;
+
+    // `can_match` becomes false if the field name matches (PatternMatch::Match) any pattern that is not facet searchable or filterable,
+    // this ensures that the field doesn't match a pattern with a lower priority, however it can still match a pattern for a nested field as a parent (PatternMatch::Parent).
+    // See the test `search::filters::test_filterable_attributes_priority` for more details.
+    let mut can_match = true;
+
     // Check if the field name matches any pattern that is facet searchable or filterable
     for pattern in filterable_attributes {
-        let features = pattern.features();
-        if filter(&features) {
-            match pattern.match_str(field_name) {
-                PatternMatch::Match => return PatternMatch::Match,
-                PatternMatch::Parent => selection = PatternMatch::Parent,
-                PatternMatch::NoMatch => (),
+        match pattern.match_str(field_name) {
+            PatternMatch::Match => {
+                let features = pattern.features();
+                if filter(&features) && can_match {
+                    return PatternMatch::Match;
+                } else {
+                    can_match = false;
+                }
             }
+            PatternMatch::Parent => {
+                let features = pattern.features();
+                if filter(&features) {
+                    selection = PatternMatch::Parent;
+                }
+            }
+            PatternMatch::NoMatch => (),
         }
     }
 

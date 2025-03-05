@@ -623,3 +623,136 @@ async fn search_with_pattern_filter_settings_scenario_1() {
         )
         .await;
 }
+
+#[actix_rt::test]
+async fn test_filterable_attributes_priority() {
+    // Test that the filterable attributes priority is respected
+
+    // check if doggos.name is filterable
+    test_settings_documents_indexing_swapping_and_search(
+        &NESTED_DOCUMENTS,
+        &json!({"filterableAttributes": [
+            // deactivated filter
+            {"patterns": ["doggos.a*"], "features": {"facetSearch": false, "filter": {"equality": false, "comparison": false}}},
+            // activated filter
+            {"patterns": ["doggos.*"]},
+        ]}),
+        &json!({
+            "filter": "doggos.name = bobby"
+        }),
+        |response, code| {
+            snapshot!(code, @"200 OK");
+            snapshot!(json_string!(response["hits"]), @r###"
+            [
+              {
+                "id": 852,
+                "father": "jean",
+                "mother": "michelle",
+                "doggos": [
+                  {
+                    "name": "bobby",
+                    "age": 2
+                  },
+                  {
+                    "name": "buddy",
+                    "age": 4
+                  }
+                ],
+                "cattos": "pésti"
+              }
+            ]
+            "###);
+        },
+    )
+    .await;
+
+    // check if doggos.name is filterable 2
+    test_settings_documents_indexing_swapping_and_search(
+        &NESTED_DOCUMENTS,
+        &json!({"filterableAttributes": [
+            // deactivated filter
+            {"patterns": ["doggos"], "features": {"facetSearch": false, "filter": {"equality": false, "comparison": false}}},
+            // activated filter
+            {"patterns": ["doggos.*"]},
+        ]}),
+        &json!({
+            "filter": "doggos.name = bobby"
+        }),
+        |response, code| {
+            snapshot!(code, @"200 OK");
+            snapshot!(json_string!(response["hits"]), @r###"
+            [
+              {
+                "id": 852,
+                "father": "jean",
+                "mother": "michelle",
+                "doggos": [
+                  {
+                    "name": "bobby",
+                    "age": 2
+                  },
+                  {
+                    "name": "buddy",
+                    "age": 4
+                  }
+                ],
+                "cattos": "pésti"
+              }
+            ]
+            "###);
+        },
+    )
+    .await;
+
+    // check if doggos.age is not filterable
+    test_settings_documents_indexing_swapping_and_search(
+        &NESTED_DOCUMENTS,
+        &json!({"filterableAttributes": [
+            // deactivated filter
+            {"patterns": ["doggos.a*"], "features": {"facetSearch": false, "filter": {"equality": false, "comparison": false}}},
+            // activated filter
+            {"patterns": ["doggos.*"]},
+        ]}),
+        &json!({
+            "filter": "doggos.age > 2"
+        }),
+        |response, code| {
+            snapshot!(code, @"400 Bad Request");
+            snapshot!(json_string!(response), @r###"
+            {
+              "message": "Index `test`: Attribute `doggos.age` is not filterable. Available filterable attributes are: `doggos.age`, `doggos.name`.\n1:11 doggos.age > 2",
+              "code": "invalid_search_filter",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+            }
+            "###);
+        },
+    )
+    .await;
+
+    // check if doggos is not filterable
+    test_settings_documents_indexing_swapping_and_search(
+        &NESTED_DOCUMENTS,
+        &json!({"filterableAttributes": [
+            // deactivated filter
+            {"patterns": ["doggos"], "features": {"facetSearch": false, "filter": {"equality": false, "comparison": false}}},
+            // activated filter
+            {"patterns": ["doggos.*"]},
+        ]}),
+        &json!({
+            "filter": "doggos EXISTS"
+        }),
+        |response, code| {
+            snapshot!(code, @"400 Bad Request");
+            snapshot!(json_string!(response), @r###"
+            {
+              "message": "Index `test`: Attribute `doggos` is not filterable. Available filterable attributes are: `doggos.age`, `doggos.name`.\n1:7 doggos EXISTS",
+              "code": "invalid_search_filter",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+            }
+            "###);
+        },
+    )
+    .await;
+}
