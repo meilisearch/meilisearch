@@ -126,20 +126,35 @@ impl Metadata {
         &self,
         rules: &'rules [FilterableAttributesRule],
     ) -> Option<&'rules FilterableAttributesRule> {
+        self.filterable_attributes_with_rule_index(rules).map(|(_, rule)| rule)
+    }
+
+    pub fn filterable_attributes_with_rule_index<'rules>(
+        &self,
+        rules: &'rules [FilterableAttributesRule],
+    ) -> Option<(usize, &'rules FilterableAttributesRule)> {
         let filterable_attributes_rule_id = self.filterable_attributes_rule_id?.get();
-        // - 1: `filterable_attributes_rule_id` is NonZero
-        let rule = rules.get((filterable_attributes_rule_id - 1) as usize).unwrap();
-        Some(rule)
+        let rule_id = (filterable_attributes_rule_id - 1) as usize;
+        let rule = rules.get(rule_id).unwrap();
+        Some((rule_id, rule))
     }
 
     pub fn filterable_attributes_features(
         &self,
         rules: &[FilterableAttributesRule],
     ) -> FilterableAttributesFeatures {
-        self.filterable_attributes(rules)
-            .map(|rule| rule.features())
+        let (_, features) = self.filterable_attributes_features_with_rule_index(rules);
+        features
+    }
+
+    pub fn filterable_attributes_features_with_rule_index(
+        &self,
+        rules: &[FilterableAttributesRule],
+    ) -> (Option<usize>, FilterableAttributesFeatures) {
+        self.filterable_attributes_with_rule_index(rules)
+            .map(|(rule_index, rule)| (Some(rule_index), rule.features()))
             // if there is no filterable attributes rule, return no features
-            .unwrap_or_else(FilterableAttributesFeatures::no_features)
+            .unwrap_or_else(|| (None, FilterableAttributesFeatures::no_features()))
     }
 
     pub fn is_sortable(&self) -> bool {

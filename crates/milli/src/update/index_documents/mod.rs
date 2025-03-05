@@ -1256,7 +1256,7 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
 
         let filterable_fields = index.filterable_attributes_rules(&rtxn).unwrap();
-        let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+        let fields_ids_map = index.fields_ids_map_with_metadata(&rtxn).unwrap();
         let facets =
             filtered_matching_field_names(&filterable_fields, &fields_ids_map, &|features| {
                 features.is_filterable()
@@ -1479,7 +1479,7 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
 
         let filterable_fields = index.filterable_attributes_rules(&rtxn).unwrap();
-        let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+        let fields_ids_map = index.fields_ids_map_with_metadata(&rtxn).unwrap();
         let facets =
             filtered_matching_field_names(&filterable_fields, &fields_ids_map, &|features| {
                 features.is_filterable()
@@ -1507,7 +1507,7 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
 
         let filterable_fields = index.filterable_attributes_rules(&rtxn).unwrap();
-        let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+        let fields_ids_map = index.fields_ids_map_with_metadata(&rtxn).unwrap();
         let facets =
             filtered_matching_field_names(&filterable_fields, &fields_ids_map, &|features| {
                 features.is_filterable()
@@ -1745,7 +1745,7 @@ mod tests {
         let check_ok = |index: &Index| {
             let rtxn = index.read_txn().unwrap();
             let filterable_fields = index.filterable_attributes_rules(&rtxn).unwrap();
-            let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+            let fields_ids_map = index.fields_ids_map_with_metadata(&rtxn).unwrap();
             let facets =
                 filtered_matching_field_names(&filterable_fields, &fields_ids_map, &|features| {
                     features.is_filterable()
@@ -1856,7 +1856,7 @@ mod tests {
         let check_ok = |index: &Index| {
             let rtxn = index.read_txn().unwrap();
             let filterable_fields = index.filterable_attributes_rules(&rtxn).unwrap();
-            let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+            let fields_ids_map = index.fields_ids_map_with_metadata(&rtxn).unwrap();
             let facets =
                 filtered_matching_field_names(&filterable_fields, &fields_ids_map, &|features| {
                     features.is_filterable()
@@ -1925,7 +1925,7 @@ mod tests {
         let check_ok = |index: &Index| {
             let rtxn = index.read_txn().unwrap();
             let filterable_fields = index.filterable_attributes_rules(&rtxn).unwrap();
-            let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+            let fields_ids_map = index.fields_ids_map_with_metadata(&rtxn).unwrap();
             let facets =
                 filtered_matching_field_names(&filterable_fields, &fields_ids_map, &|features| {
                     features.is_filterable()

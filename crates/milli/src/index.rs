@@ -13,7 +13,7 @@ use crate::constants::{self, RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAM
 use crate::database_stats::DatabaseStats;
 use crate::documents::PrimaryKey;
 use crate::error::{InternalError, UserError};
-use crate::fields_ids_map::metadata::FieldIdMapWithMetadata;
+use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
 use crate::fields_ids_map::FieldsIdsMap;
 use crate::heed_codec::facet::{
     FacetGroupKeyCodec, FacetGroupValueCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec,
@@ -512,6 +512,16 @@ impl Index {
             .remap_types::<Str, SerdeJson<FieldsIdsMap>>()
             .get(rtxn, main_key::FIELDS_IDS_MAP_KEY)?
             .unwrap_or_default())
+    }
+
+    /// Returns the fields ids map with metadata.
+    ///
+    /// This structure is not yet stored in the index, and is generated on the fly.
+    pub fn fields_ids_map_with_metadata(&self, rtxn: &RoTxn<'_>) -> Result<FieldIdMapWithMetadata> {
+        Ok(FieldIdMapWithMetadata::new(
+            self.fields_ids_map(rtxn)?,
+            MetadataBuilder::from_index(self, rtxn)?,
+        ))
     }
 
     /* fieldids weights map */

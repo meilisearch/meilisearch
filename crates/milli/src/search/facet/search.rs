@@ -77,30 +77,37 @@ impl<'a> SearchForFacetValues<'a> {
         let rtxn = self.search_query.rtxn;
 
         let filterable_attributes_rules = index.filterable_attributes_rules(rtxn)?;
-        if !is_field_facet_searchable(&self.facet, &filterable_attributes_rules) {
-            let fields_ids_map = index.fields_ids_map(rtxn)?;
-            let matching_field_names = filtered_matching_field_names(
-                &filterable_attributes_rules,
-                &fields_ids_map,
-                &|features| features.is_facet_searchable(),
-            );
-            let (valid_fields, hidden_fields) =
-                index.remove_hidden_fields(rtxn, matching_field_names)?;
-
-            return Err(UserError::InvalidFacetSearchFacetName {
-                field: self.facet.clone(),
-                valid_fields,
-                hidden_fields,
+        let fields_ids_map = index.fields_ids_map_with_metadata(rtxn)?;
+        let fid = match fields_ids_map.id_with_metadata(&self.facet) {
+            Some((fid, metadata))
+                if metadata
+                    .filterable_attributes_features(&filterable_attributes_rules)
+                    .is_facet_searchable() =>
+            {
+                fid
             }
-            .into());
-        }
-
-        let fields_ids_map = index.fields_ids_map(rtxn)?;
-        let fid = match fields_ids_map.id(&self.facet) {
-            Some(fid) => fid,
             // we return an empty list of results when the attribute has been
             // set as filterable but no document contains this field (yet).
-            None => return Ok(Vec::new()),
+            None if is_field_facet_searchable(&self.facet, &filterable_attributes_rules) => {
+                return Ok(Vec::new());
+            }
+            // we return an error when the attribute is not facet searchable
+            _otherwise => {
+                let matching_field_names = filtered_matching_field_names(
+                    &filterable_attributes_rules,
+                    &fields_ids_map,
+                    &|features| features.is_facet_searchable(),
+                );
+                let (valid_fields, hidden_fields) =
+                    index.remove_hidden_fields(rtxn, matching_field_names)?;
+
+                return Err(UserError::InvalidFacetSearchFacetName {
+                    field: self.facet.clone(),
+                    valid_fields,
+                    hidden_fields,
+                }
+                .into());
+            }
         };
 
         let fst = match self.search_query.index.facet_id_string_fst.get(rtxn, &fid)? {

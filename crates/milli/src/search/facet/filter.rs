@@ -12,17 +12,15 @@ use serde_json::Value;
 use super::facet_range_search;
 use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::error::{Error, UserError};
-use crate::filterable_attributes_rules::{
-    filtered_matching_field_names, is_field_filterable, matching_features,
-};
+use crate::fields_ids_map::metadata::FieldIdMapWithMetadata;
+use crate::filterable_attributes_rules::{filtered_matching_field_names, is_field_filterable};
 use crate::heed_codec::facet::{
     FacetGroupKey, FacetGroupKeyCodec, FacetGroupValue, FacetGroupValueCodec, OrderedF64Codec,
 };
 use crate::index::db_name::FACET_ID_STRING_DOCIDS;
 use crate::{
-    distance_between_two_points, lat_lng_to_xyz, FieldId, FieldsIdsMap,
-    FilterableAttributesFeatures, FilterableAttributesRule, Index, InternalError, Result,
-    SerializationError,
+    distance_between_two_points, lat_lng_to_xyz, FieldId, FilterableAttributesFeatures,
+    FilterableAttributesRule, Index, InternalError, Result, SerializationError,
 };
 
 /// The maximum number of filters the filter AST can process.
@@ -234,21 +232,32 @@ impl<'a> Filter<'a> {
 impl<'a> Filter<'a> {
     pub fn evaluate(&self, rtxn: &heed::RoTxn<'_>, index: &Index) -> Result<RoaringBitmap> {
         // to avoid doing this for each recursive call we're going to do it ONCE ahead of time
-        let fields_ids_map = index.fields_ids_map(rtxn)?;
+        let fields_ids_map = index.fields_ids_map_with_metadata(rtxn)?;
         let filterable_attributes_rules = index.filterable_attributes_rules(rtxn)?;
         for fid in self.condition.fids(MAX_FILTER_DEPTH) {
             let attribute = fid.value();
-            if !is_field_filterable(attribute, &filterable_attributes_rules) {
-                return Err(fid.as_external_error(FilterError::AttributeNotFilterable {
-                    attribute,
-                    filterable_fields: filtered_matching_field_names(
-                        &filterable_attributes_rules,
-                        &fields_ids_map,
-                        &|features| features.is_filterable(),
-                    ),
-                }))?;
+            if let Some((_, metadata)) = fields_ids_map.id_with_metadata(fid.value()) {
+                if metadata
+                    .filterable_attributes_features(&filterable_attributes_rules)
+                    .is_filterable()
+                {
+                    continue;
+                }
+            } else if is_field_filterable(attribute, &filterable_attributes_rules) {
+                continue;
             }
+
+            // If the field is not filterable, return an error
+            return Err(fid.as_external_error(FilterError::AttributeNotFilterable {
+                attribute,
+                filterable_fields: filtered_matching_field_names(
+                    &filterable_attributes_rules,
+                    &fields_ids_map,
+                    &|features| features.is_filterable(),
+                ),
+            }))?;
         }
+
         self.inner_evaluate(rtxn, index, &fields_ids_map, &filterable_attributes_rules, None)
     }
 
@@ -259,7 +268,7 @@ impl<'a> Filter<'a> {
         universe: Option<&RoaringBitmap>,
         operator: &Condition<'a>,
         features: &FilterableAttributesFeatures,
-        rule_index: usize,
+        rule_index: Option<usize>,
     ) -> Result<RoaringBitmap> {
         let numbers_db = index.facet_id_f64_docids;
         let strings_db = index.facet_id_string_docids;
@@ -454,7 +463,7 @@ impl<'a> Filter<'a> {
         &self,
         rtxn: &heed::RoTxn<'_>,
         index: &Index,
-        field_ids_map: &FieldsIdsMap,
+        field_ids_map: &FieldIdMapWithMetadata,
         filterable_attribute_rules: &[FilterableAttributesRule],
         universe: Option<&RoaringBitmap>,
     ) -> Result<RoaringBitmap> {
@@ -480,51 +489,33 @@ impl<'a> Filter<'a> {
                     }
                 }
             }
-            FilterCondition::In { fid, els } => {
-                match matching_features(fid.value(), filterable_attribute_rules) {
-                    Some((rule_index, features)) if features.is_filterable() => {
-                        if let Some(fid) = field_ids_map.id(fid.value()) {
-                            els.iter()
-                                .map(|el| Condition::Equal(el.clone()))
-                                .map(|op| {
-                                    Self::evaluate_operator(
-                                        rtxn, index, fid, universe, &op, &features, rule_index,
-                                    )
-                                })
-                                .union()
-                        } else {
-                            Ok(RoaringBitmap::new())
-                        }
-                    }
-                    _ => Err(fid.as_external_error(FilterError::AttributeNotFilterable {
-                        attribute: fid.value(),
-                        filterable_fields: filtered_matching_field_names(
-                            filterable_attribute_rules,
-                            &field_ids_map,
-                            &|features| features.is_filterable(),
-                        ),
-                    }))?,
-                }
-            }
-            FilterCondition::Condition { fid, op } => {
-                match matching_features(fid.value(), filterable_attribute_rules) {
-                    Some((rule_index, features)) if features.is_filterable() => {
-                        if let Some(fid) = field_ids_map.id(fid.value()) {
+            FilterCondition::In { fid, els } => match field_ids_map.id_with_metadata(fid.value()) {
+                Some((fid, metadata)) => {
+                    let (rule_index, features) = metadata
+                        .filterable_attributes_features_with_rule_index(filterable_attribute_rules);
+                    els.iter()
+                        .map(|el| Condition::Equal(el.clone()))
+                        .map(|op| {
                             Self::evaluate_operator(
-                                rtxn, index, fid, universe, op, &features, rule_index,
+                                rtxn, index, fid, universe, &op, &features, rule_index,
                             )
-                        } else {
-                            Ok(RoaringBitmap::new())
-                        }
+                        })
+                        .union()
+                }
+                None => Ok(RoaringBitmap::new()),
+            },
+            FilterCondition::Condition { fid, op } => {
+                match field_ids_map.id_with_metadata(fid.value()) {
+                    Some((fid, metadata)) => {
+                        let (rule_index, features) = metadata
+                            .filterable_attributes_features_with_rule_index(
+                                filterable_attribute_rules,
+                            );
+                        Self::evaluate_operator(
+                            rtxn, index, fid, universe, op, &features, rule_index,
+                        )
                     }
-                    _ => Err(fid.as_external_error(FilterError::AttributeNotFilterable {
-                        attribute: fid.value(),
-                        filterable_fields: filtered_matching_field_names(
-                            filterable_attribute_rules,
-                            &field_ids_map,
-                            &|features| features.is_filterable(),
-                        ),
-                    }))?,
+                    None => Ok(RoaringBitmap::new()),
                 }
             }
             FilterCondition::Or(subfilters) => subfilters
@@ -764,7 +755,7 @@ fn generate_filter_error(
     field_id: FieldId,
     operator: &Condition<'_>,
     features: &FilterableAttributesFeatures,
-    rule_index: usize,
+    rule_index: Option<usize>,
 ) -> Error {
     match index.fields_ids_map(rtxn) {
         Ok(fields_ids_map) => {

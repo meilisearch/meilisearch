@@ -6,7 +6,8 @@ use utoipa::ToSchema;
 use crate::{
     attribute_patterns::{match_distinct_field, match_field_legacy, PatternMatch},
     constants::RESERVED_GEO_FIELD_NAME,
-    AttributePatterns, FieldsIdsMap,
+    fields_ids_map::metadata::FieldIdMapWithMetadata,
+    AttributePatterns,
 };
 
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug, ToSchema)]
@@ -235,15 +236,14 @@ impl Default for FilterFeatures {
 /// * `filter` - The filter function to apply to the filterable attributes rules.
 pub fn filtered_matching_field_names<'fim>(
     filterable_attributes: &[FilterableAttributesRule],
-    fields_ids_map: &'fim FieldsIdsMap,
+    fields_ids_map: &'fim FieldIdMapWithMetadata,
     filter: &impl Fn(FilterableAttributesFeatures) -> bool,
 ) -> BTreeSet<&'fim str> {
     let mut result = BTreeSet::new();
-    for (_, field_name) in fields_ids_map.iter() {
-        if let Some((_, features)) = matching_features(field_name, filterable_attributes) {
-            if filter(features) {
-                result.insert(field_name);
-            }
+    for (_, field_name, metadata) in fields_ids_map.iter() {
+        let features = metadata.filterable_attributes_features(filterable_attributes);
+        if filter(features) {
+            result.insert(field_name);
         }
     }
     result

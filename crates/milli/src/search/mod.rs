@@ -192,7 +192,7 @@ impl<'a> Search<'a> {
             // check if the distinct field is in the filterable fields
             if !is_field_filterable(distinct, &filterable_fields) {
                 // if not, remove the hidden fields from the filterable fields to generate the error message
-                let fields_ids_map = ctx.index.fields_ids_map(ctx.txn)?;
+                let fields_ids_map = ctx.index.fields_ids_map_with_metadata(ctx.txn)?;
                 let matching_field_names = filtered_matching_field_names(
                     &filterable_fields,
                     &fields_ids_map,
