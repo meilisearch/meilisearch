@@ -559,6 +559,17 @@ impl Index {
         self.main.remap_key_type::<Str>().delete(wtxn, main_key::FIELDIDS_WEIGHTS_MAP_KEY)
     }
 
+    pub fn max_searchable_attribute_weight(&self, rtxn: &RoTxn<'_>) -> Result<Option<Weight>> {
+        let user_defined_searchable_fields = self.user_defined_searchable_fields(rtxn)?;
+        if let Some(user_defined_searchable_fields) = user_defined_searchable_fields {
+            if !user_defined_searchable_fields.contains(&"*") {
+                return Ok(Some(user_defined_searchable_fields.len().saturating_sub(1) as Weight));
+            }
+        }
+
+        Ok(None)
+    }
+
     pub fn searchable_fields_and_weights<'a>(
         &self,
         rtxn: &'a RoTxn<'a>,
