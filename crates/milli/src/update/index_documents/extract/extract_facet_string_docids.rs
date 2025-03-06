@@ -104,7 +104,7 @@ fn extract_facet_string_docids_document_update<R: io::Read + io::Seek>(
         // Facet search normalization
         let features =
             metadata.filterable_attributes_features(&settings.filterable_attributes_rules);
-        if features.is_facet_searchable() {
+        if features.is_facet_searchable() && settings.facet_search {
             let locales = metadata.locales(&settings.localized_attributes_rules);
             let hyper_normalized_value = normalize_facet_string(normalized_value, locales);
 
