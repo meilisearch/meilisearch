@@ -16,6 +16,9 @@ jobs:
       - name: Check db change labels
         id: check_labels
         run: |
+          URL=/repos/meilisearch/meilisearch/pulls/${{ github.event.pull_request.number }}/labels
+          echo ${{ github.event.pull_request.number }}
+          echo $URL
           LABELS=$(gh api -H "Accept: application/vnd.github.v3+json" /repos/meilisearch/meilisearch/pulls/${{ github.event.pull_request.number }}/labels -q .[].name)
           if [[ ! "$LABELS" =~ "db change" && ! "$LABELS" =~ "no db change" ]]; then
             echo "::error::Pull request must contain either the 'db change' or 'no db change' label."
