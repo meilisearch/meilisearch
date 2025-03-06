@@ -22,6 +22,18 @@ Related product discussion:
 
 <!---If necessary, create a list with technical/product steps-->
 
+### Are you modifying a database?
+- [ ] If not, add the `no db change` label to your PR, and you're good to go.
+- [ ] If yes, add the `db change` label to your PR and you're good to go.
+  - [ ] /!\ Ensure all the read operations still work!
+    - If the change happened in milli, you may need to check the version of the database before doing any read operation
+    - If the change happened in the index-scheduler, make sure the new code can immediately read the old database
+    - If the change happened in the meilisearch-auth database, reach out to the team; we don't know yet how to handle these changes
+  - [ ] Write the code to go from the old database to the new one
+    - If the change happened in milli, the upgrade function should be written and called [here](https://github.com/meilisearch/meilisearch/blob/3fd86e8d76d7d468b0095d679adb09211ca3b6c0/crates/milli/src/update/upgrade/mod.rs#L24-L47)
+    - If the change happened in the index-scheduler, we've never done it yet, but the right place to do it should be [here](https://github.com/meilisearch/meilisearch/blob/3fd86e8d76d7d468b0095d679adb09211ca3b6c0/crates/index-scheduler/src/scheduler/process_upgrade/mod.rs#L13)
+  - [ ] Write an integration test [here](https://github.com/meilisearch/meilisearch/blob/main/crates/meilisearch/tests/upgrade/mod.rs) ensuring you can read the old database, upgrade to the new database, and read the new database as expected
+
 ### Reminders when modifying the API
 
 - [ ] Update the openAPI file with utoipa:
