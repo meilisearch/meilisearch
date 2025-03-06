@@ -4,15 +4,16 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, labeled, unlabeled]
 
-env:
-  GH_TOKEN: ${{ secrets.MEILI_BOT_GH_PAT }}
-
 jobs:
   check-labels:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
+      - name: Set up GitHub CLI
+        uses: cli/gh-action@v2
+        with:
+          token: ${{ secrets.MEILI_BOT_GH_PAT }}
       - name: Check db change labels
         id: check_labels
         run: |
