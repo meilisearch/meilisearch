@@ -25,7 +25,7 @@ use crate::{GlobalFieldsIdsMap, Index, Result};
 pub(super) fn post_process<MSP>(
     indexing_context: IndexingContext<MSP>,
     wtxn: &mut RwTxn<'_>,
-    global_fields_ids_map: GlobalFieldsIdsMap<'_>,
+    mut global_fields_ids_map: GlobalFieldsIdsMap<'_>,
     facet_field_ids_delta: FacetFieldIdsDelta,
 ) -> Result<()>
 where
@@ -33,7 +33,7 @@ where
 {
     let index = indexing_context.index;
     indexing_context.progress.update_progress(IndexingStep::PostProcessingFacets);
-    compute_facet_level_database(index, wtxn, facet_field_ids_delta, &global_fields_ids_map)?;
+    compute_facet_level_database(index, wtxn, facet_field_ids_delta, &mut global_fields_ids_map)?;
     compute_facet_search_database(index, wtxn, global_fields_ids_map)?;
     indexing_context.progress.update_progress(IndexingStep::PostProcessingWords);
     if let Some(prefix_delta) = compute_word_fst(index, wtxn)? {
@@ -170,7 +170,7 @@ fn compute_facet_level_database(
     index: &Index,
     wtxn: &mut RwTxn,
     mut facet_field_ids_delta: FacetFieldIdsDelta,
-    global_fields_ids_map: &GlobalFieldsIdsMap,
+    global_fields_ids_map: &mut GlobalFieldsIdsMap,
 ) -> Result<()> {
     let rtxn = index.read_txn()?;
     let filterable_attributes_rules = index.filterable_attributes_rules(&rtxn)?;

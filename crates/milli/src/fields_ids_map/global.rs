@@ -107,8 +107,15 @@ impl<'indexing> GlobalFieldsIdsMap<'indexing> {
     }
 
     /// Get the metadata of a field based on its id.
-    pub fn metadata(&self, id: FieldId) -> Option<Metadata> {
-        self.local.metadata(id).or_else(|| self.global.read().unwrap().metadata(id))
+    pub fn metadata(&mut self, id: FieldId) -> Option<Metadata> {
+        if self.local.metadata(id).is_none() {
+            let global = self.global.read().unwrap();
+
+            let (name, metadata) = global.name_with_metadata(id)?;
+            self.local.insert(name, id, metadata);
+        }
+
+        self.local.metadata(id)
     }
 }
 

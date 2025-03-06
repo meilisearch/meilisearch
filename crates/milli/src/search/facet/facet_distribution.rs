@@ -294,11 +294,7 @@ impl<'a> FacetDistribution<'a> {
             return Ok(Default::default());
         };
 
-        let fields_ids_map = self.index.fields_ids_map(self.rtxn)?;
-        let fields_ids_map = FieldIdMapWithMetadata::new(
-            fields_ids_map,
-            MetadataBuilder::from_index(self.index, self.rtxn)?,
-        );
+        let fields_ids_map = self.index.fields_ids_map_with_metadata(self.rtxn)?;
         let filterable_attributes_rules = self.index.filterable_attributes_rules(self.rtxn)?;
         self.check_faceted_fields(&fields_ids_map, &filterable_attributes_rules)?;
 
@@ -365,12 +361,17 @@ impl<'a> FacetDistribution<'a> {
         metadata: &Metadata,
         filterable_attributes_rules: &[FilterableAttributesRule],
     ) -> bool {
+        // If the field is not filterable, we don't want to compute the facet distribution.
+        if !metadata.filterable_attributes_features(filterable_attributes_rules).is_filterable() {
+            return false;
+        }
+
         match &self.facets {
             Some(facets) => {
                 // The list of facets provided by the user is a legacy pattern ("dog.age" must be selected with "dog").
                 facets.keys().any(|key| match_field_legacy(key, name) == PatternMatch::Match)
             }
-            None => metadata.is_faceted(filterable_attributes_rules),
+            None => true,
         }
     }
 
@@ -385,7 +386,9 @@ impl<'a> FacetDistribution<'a> {
             for field in facets.keys() {
                 let is_valid_faceted_field =
                     fields_ids_map.id_with_metadata(field).map_or(false, |(_, metadata)| {
-                        metadata.is_faceted(filterable_attributes_rules)
+                        metadata
+                            .filterable_attributes_features(filterable_attributes_rules)
+                            .is_filterable()
                     });
                 if !is_valid_faceted_field {
                     invalid_facets.insert(field.to_string());
@@ -397,7 +400,10 @@ impl<'a> FacetDistribution<'a> {
             let valid_facets_name = fields_ids_map
                 .iter()
                 .filter_map(|(_, name, metadata)| {
-                    if metadata.is_faceted(filterable_attributes_rules) {
+                    if metadata
+                        .filterable_attributes_features(filterable_attributes_rules)
+                        .is_filterable()
+                    {
                         Some(name.to_string())
                     } else {
                         None

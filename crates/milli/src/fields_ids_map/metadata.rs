@@ -22,7 +22,7 @@ pub struct Metadata {
     pub distinct: bool,
     /// The field has been defined as asc/desc in the ranking rules.
     pub asc_desc: bool,
-    /// The field is a geo field.
+    /// The field is a geo field (`_geo`, `_geo.lat`, `_geo.lng`).
     pub geo: bool,
     /// The id of the localized attributes rule if the field is localized.
     pub localized_attributes_rule_id: Option<NonZeroU16>,
@@ -215,9 +215,8 @@ pub struct MetadataBuilder {
 impl MetadataBuilder {
     pub fn from_index(index: &Index, rtxn: &RoTxn) -> Result<Self> {
         let searchable_attributes = match index.user_defined_searchable_fields(rtxn)? {
-            Some(fields) if fields.contains(&"*") => None,
-            None => None,
             Some(fields) => Some(fields.into_iter().map(|s| s.to_string()).collect()),
+            None => None,
         };
         let filterable_attributes = index.filterable_attributes_rules(rtxn)?;
         let sortable_attributes = index.sortable_fields(rtxn)?;
@@ -225,14 +224,14 @@ impl MetadataBuilder {
         let distinct_attribute = index.distinct_field(rtxn)?.map(|s| s.to_string());
         let asc_desc_attributes = index.asc_desc_fields(rtxn)?;
 
-        Ok(Self {
+        Ok(Self::_new(
             searchable_attributes,
             filterable_attributes,
             sortable_attributes,
             localized_attributes,
             distinct_attribute,
             asc_desc_attributes,
-        })
+        ))
     }
 
     #[cfg(test)]
@@ -247,10 +246,28 @@ impl MetadataBuilder {
         distinct_attribute: Option<String>,
         asc_desc_attributes: HashSet<String>,
     ) -> Self {
+        Self::_new(
+            searchable_attributes,
+            filterable_attributes,
+            sortable_attributes,
+            localized_attributes,
+            distinct_attribute,
+            asc_desc_attributes,
+        )
+    }
+
+    fn _new(
+        searchable_attributes: Option<Vec<String>>,
+        filterable_attributes: Vec<FilterableAttributesRule>,
+        sortable_attributes: HashSet<String>,
+        localized_attributes: Option<Vec<LocalizedAttributesRule>>,
+        distinct_attribute: Option<String>,
+        asc_desc_attributes: HashSet<String>,
+    ) -> Self {
         let searchable_attributes = match searchable_attributes {
             Some(fields) if fields.iter().any(|f| f == "*") => None,
-            None => None,
             Some(fields) => Some(fields),
+            None => None,
         };
 
         Self {
