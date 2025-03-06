@@ -5,6 +5,7 @@ status = [
     'Run Clippy',
     'Run Rustfmt',
     'Run tests in debug',
+    'Check db change labels',
 ]
 pr_status = ['Milestone Check']
 # 3 hours timeout
