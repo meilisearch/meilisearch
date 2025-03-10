@@ -139,6 +139,9 @@ pub struct DocumentsFetchAggregator<Method: AggregateMethod> {
     #[serde(rename = "vector.retrieve_vectors")]
     retrieve_vectors: bool,
 
+    // maximum size of `ids` array. 0 if always empty or `null`
+    max_document_ids: usize,
+
     // pagination
     #[serde(rename = "pagination.max_limit")]
     max_limit: usize,
@@ -151,7 +154,7 @@ pub struct DocumentsFetchAggregator<Method: AggregateMethod> {
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum DocumentFetchKind {
     PerDocumentId { retrieve_vectors: bool },
-    Normal { with_filter: bool, limit: usize, offset: usize, retrieve_vectors: bool },
+    Normal { with_filter: bool, limit: usize, offset: usize, retrieve_vectors: bool, ids: usize },
 }
 
 impl<Method: AggregateMethod> DocumentsFetchAggregator<Method> {
@@ -163,12 +166,18 @@ impl<Method: AggregateMethod> DocumentsFetchAggregator<Method> {
             }
         };
 
+        let ids = match query {
+            DocumentFetchKind::Normal { ids, .. } => *ids,
+            DocumentFetchKind::PerDocumentId { .. } => 0,
+        };
+
         Self {
             per_document_id: matches!(query, DocumentFetchKind::PerDocumentId { .. }),
             per_filter: matches!(query, DocumentFetchKind::Normal { with_filter, .. } if *with_filter),
             max_limit: limit,
             max_offset: offset,
             retrieve_vectors,
+            max_document_ids: ids,
 
             marker: PhantomData,
         }
@@ -187,6 +196,7 @@ impl<Method: AggregateMethod> Aggregate for DocumentsFetchAggregator<Method> {
             retrieve_vectors: self.retrieve_vectors | new.retrieve_vectors,
             max_limit: self.max_limit.max(new.max_limit),
             max_offset: self.max_offset.max(new.max_offset),
+            max_document_ids: self.max_document_ids.max(new.max_document_ids),
             marker: PhantomData,
         })
     }
@@ -268,6 +278,7 @@ pub async fn get_document(
             per_filter: false,
             max_limit: 0,
             max_offset: 0,
+            max_document_ids: 0,
             marker: PhantomData,
         },
         &req,
@@ -487,6 +498,7 @@ pub async fn documents_by_query_post(
             retrieve_vectors: body.retrieve_vectors,
             max_limit: body.limit,
             max_offset: body.offset,
+            max_document_ids: body.ids.as_ref().map(Vec::len).unwrap_or_default(),
             per_document_id: false,
             marker: PhantomData,
         },
@@ -587,6 +599,7 @@ pub async fn get_documents(
             retrieve_vectors: query.retrieve_vectors,
             max_limit: query.limit,
             max_offset: query.offset,
+            max_document_ids: query.ids.as_ref().map(Vec::len).unwrap_or_default(),
             per_document_id: false,
             marker: PhantomData,
         },
