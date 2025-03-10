@@ -745,12 +745,14 @@ impl<'a, 'i> Transform<'a, 'i> {
             } else {
                 let facet_operation = necessary_faceted_field(id);
                 let searchable_operation = settings_diff.reindex_searchable_id(id);
-                let operation = facet_operation
-                    // TODO: replace `zip.map` with `zip_with` once stable
-                    .zip(searchable_operation)
-                    .map(|(op1, op2)| op1.merge(op2))
-                    .or(facet_operation)
-                    .or(searchable_operation);
+                let operation = match (facet_operation, searchable_operation) {
+                    (Some(facet_operation), Some(searchable_operation)) => {
+                        Some(facet_operation.merge(searchable_operation))
+                    }
+                    (Some(operation), None) | (None, Some(operation)) => Some(operation),
+                    (None, None) => None,
+                };
+
                 if let Some(operation) = operation {
                     operations.insert(id, operation);
                     obkv_writer.insert(id, val)?;

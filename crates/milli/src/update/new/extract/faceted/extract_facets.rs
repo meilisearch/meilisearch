@@ -30,10 +30,10 @@ pub struct FacetedExtractorData<'a, 'b> {
     sender: &'a FieldIdDocidFacetSender<'a, 'b>,
     grenad_parameters: &'a GrenadParameters,
     buckets: usize,
-    filterable_attributes: Vec<FilterableAttributesRule>,
-    sortable_fields: HashSet<String>,
-    asc_desc_fields: HashSet<String>,
-    distinct_field: Option<String>,
+    filterable_attributes: &'a [FilterableAttributesRule],
+    sortable_fields: &'a HashSet<String>,
+    asc_desc_fields: &'a HashSet<String>,
+    distinct_field: &'a Option<String>,
     is_geo_enabled: bool,
 }
 
@@ -478,10 +478,10 @@ impl FacetedDocidsExtractor {
                 grenad_parameters: indexing_context.grenad_parameters,
                 buckets: rayon::current_num_threads(),
                 sender,
-                filterable_attributes,
-                sortable_fields,
-                asc_desc_fields,
-                distinct_field,
+                filterable_attributes: &filterable_attributes,
+                sortable_fields: &sortable_fields,
+                asc_desc_fields: &asc_desc_fields,
+                distinct_field: &distinct_field,
                 is_geo_enabled,
             };
             extract(

@@ -55,7 +55,7 @@ fn match_pattern(pattern: &str, str: &str) -> PatternMatch {
     if pattern == "*" {
         return PatternMatch::Match;
     } else if pattern.starts_with('*') && pattern.ends_with('*') {
-        // If the starts and ends with a wildcard, return Match if the string contains the pattern without the wildcards
+        // If the pattern starts and ends with a wildcard, return Match if the string contains the pattern without the wildcards
         if str.contains(&pattern[1..pattern.len() - 1]) {
             return PatternMatch::Match;
         }

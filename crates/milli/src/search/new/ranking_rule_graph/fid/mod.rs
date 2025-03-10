@@ -92,10 +92,7 @@ impl RankingRuleGraphTrait for FidGraph {
         }
 
         // always lookup the max_fid if we don't already and add an artificial condition for max scoring
-        let max_weight = ctx
-            .index
-            .max_searchable_attribute_weight(ctx.txn)?
-            .or_else(|| weights_map.max_weight());
+        let max_weight = ctx.index.max_searchable_attribute_weight(ctx.txn)?;
 
         if let Some(max_weight) = max_weight {
             if current_max_weight < max_weight {
