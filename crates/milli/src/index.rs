@@ -1825,7 +1825,8 @@ pub(crate) mod tests {
     impl TempIndex {
         /// Creates a temporary index
         pub fn new_with_map_size(size: usize) -> Self {
-            let mut options = EnvOpenOptions::new();
+            let options = EnvOpenOptions::new();
+            let mut options = options.read_txn_without_tls();
             options.map_size(size);
             let _tempdir = TempDir::new_in(".").unwrap();
             let inner = Index::new(options, _tempdir.path(), true).unwrap();

@@ -262,7 +262,8 @@ fn criteria_mixup() {
 #[test]
 fn criteria_ascdesc() {
     let path = tempfile::tempdir().unwrap();
-    let mut options = EnvOpenOptions::new();
+    let options = EnvOpenOptions::new();
+    let mut options = options.read_txn_without_tls();
     options.map_size(12 * 1024 * 1024); // 10 MB
     let index = Index::new(options, &path, true).unwrap();
 
