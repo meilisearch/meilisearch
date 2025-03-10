@@ -131,6 +131,7 @@ pub struct PatchExperimentalFeatureAnalytics {
     contains_filter: bool,
     network: bool,
     get_task_documents_route: bool,
+    composite_embedders: bool,
 }
 
 impl Aggregate for PatchExperimentalFeatureAnalytics {
@@ -146,6 +147,7 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
             contains_filter: new.contains_filter,
             network: new.network,
             get_task_documents_route: new.get_task_documents_route,
+            composite_embedders: new.composite_embedders,
         })
     }
 
@@ -170,6 +172,7 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
             contains_filter: Some(false),
             network: Some(false),
             get_task_documents_route: Some(false),
+            composite_embedders: Some(false),
          })),
         (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
             {
@@ -234,6 +237,7 @@ async fn patch_features(
             contains_filter,
             network,
             get_task_documents_route,
+            composite_embedders,
         },
         &req,
     );
