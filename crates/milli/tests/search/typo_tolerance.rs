@@ -108,7 +108,8 @@ fn test_typo_tolerance_two_typo() {
 #[test]
 fn test_typo_disabled_on_word() {
     let tmp = tempdir().unwrap();
-    let mut options = EnvOpenOptions::new();
+    let options = EnvOpenOptions::new();
+    let mut options = options.read_txn_without_tls();
     options.map_size(4096 * 100);
     let index = Index::new(options, tmp.path(), true).unwrap();
 
