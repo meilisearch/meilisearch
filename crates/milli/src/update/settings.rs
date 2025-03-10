@@ -1352,8 +1352,8 @@ impl InnerIndexSettingsDiff {
         // Changing the order should not be considered as a change for reindexing.
         let cache_user_defined_searchables = match (old_settings.user_defined_searchable_fields, new_settings.user_defined_searchable_fields) {
             (Some(old), Some(new)) => {
-                let old: BTreeSet<_> = old_settings.user_defined_searchable_fields.iter().collect();
-                let new: BTreeSet<_> = new_settings.user_defined_searchable_fields.iter().collect();
+                let old: BTreeSet<_> = old.iter().collect();
+                let new: BTreeSet<_> = new.iter().collect();
 
                 old != new
             },
