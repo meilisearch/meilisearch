@@ -11,6 +11,7 @@ pub struct RuntimeTogglableFeatures {
     pub contains_filter: bool,
     pub network: bool,
     pub get_task_documents_route: bool,
+    pub composite_embedders: bool,
 }
 
 #[derive(Default, Debug, Clone, Copy)]

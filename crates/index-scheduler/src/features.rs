@@ -118,6 +118,19 @@ impl RoFeatures {
             .into())
         }
     }
+
+    pub fn check_composite_embedders(&self, disabled_action: &'static str) -> Result<()> {
+        if self.runtime.composite_embedders {
+            Ok(())
+        } else {
+            Err(FeatureNotEnabledError {
+                disabled_action,
+                feature: "composite embedders",
+                issue_link: "https://github.com/orgs/meilisearch/discussions/816",
+            }
+            .into())
+        }
+    }
 }
 
 impl FeatureData {
