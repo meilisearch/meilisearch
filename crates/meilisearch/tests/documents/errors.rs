@@ -636,7 +636,7 @@ async fn delete_document_by_filter() {
         "originalFilter": "\"catto = jorts\""
       },
       "error": {
-        "message": "Index `SHARED_DOCUMENTS`: Attribute `catto` is not filterable. Available filterable attributes are: `id`, `title`.\n1:6 catto = jorts",
+        "message": "Index `SHARED_DOCUMENTS`: Attribute `catto` is not filterable. Available filterable attributes patterns are: `id`, `title`.\n1:6 catto = jorts",
         "code": "invalid_document_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
@@ -738,7 +738,7 @@ async fn fetch_document_by_filter() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "Attribute `doggo` is not filterable. Available filterable attributes are: `color`.\n1:6 doggo = bernese",
+      "message": "Attribute `doggo` is not filterable. Available filterable attributes patterns are: `color`.\n1:6 doggo = bernese",
       "code": "invalid_document_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_document_filter"

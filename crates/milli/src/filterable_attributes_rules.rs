@@ -251,6 +251,38 @@ pub fn filtered_matching_field_names<'fim>(
 
 /// Match a field against a set of filterable attributes rules.
 ///
+/// This function will return the set of patterns that match the given filter.
+///
+/// # Arguments
+///
+/// * `filterable_attributes` - The set of filterable attributes rules to match against.
+/// * `filter` - The filter function to apply to the filterable attributes rules.
+pub fn filtered_matching_patterns<'patterns>(
+    filterable_attributes: &'patterns [FilterableAttributesRule],
+    filter: &impl Fn(FilterableAttributesFeatures) -> bool,
+) -> BTreeSet<&'patterns str> {
+    let mut result = BTreeSet::new();
+
+    for rule in filterable_attributes {
+        if filter(rule.features()) {
+            match rule {
+                FilterableAttributesRule::Field(field) => {
+                    result.insert(field.as_str());
+                }
+                FilterableAttributesRule::Pattern(patterns) => {
+                    patterns.attribute_patterns.patterns.iter().for_each(|pattern| {
+                        result.insert(pattern);
+                    });
+                }
+            }
+        }
+    }
+
+    result
+}
+
+/// Match a field against a set of filterable attributes rules.
+///
 /// This function will return the features that match the given field name.
 ///
 /// # Arguments

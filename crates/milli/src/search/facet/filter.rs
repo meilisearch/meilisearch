@@ -12,15 +12,17 @@ use serde_json::Value;
 use super::facet_range_search;
 use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::error::{Error, UserError};
-use crate::fields_ids_map::metadata::FieldIdMapWithMetadata;
-use crate::filterable_attributes_rules::{filtered_matching_field_names, is_field_filterable};
+use crate::filterable_attributes_rules::{
+    filtered_matching_patterns, is_field_filterable, matching_features,
+};
 use crate::heed_codec::facet::{
     FacetGroupKey, FacetGroupKeyCodec, FacetGroupValue, FacetGroupValueCodec, OrderedF64Codec,
 };
 use crate::index::db_name::FACET_ID_STRING_DOCIDS;
 use crate::{
-    distance_between_two_points, lat_lng_to_xyz, FieldId, FilterableAttributesFeatures,
-    FilterableAttributesRule, Index, InternalError, Result, SerializationError,
+    distance_between_two_points, lat_lng_to_xyz, FieldId, FieldsIdsMap,
+    FilterableAttributesFeatures, FilterableAttributesRule, Index, InternalError, Result,
+    SerializationError,
 };
 
 /// The maximum number of filters the filter AST can process.
@@ -62,7 +64,7 @@ impl Display for BadGeoError {
 
 #[derive(Debug)]
 enum FilterError<'a> {
-    AttributeNotFilterable { attribute: &'a str, filterable_fields: BTreeSet<&'a str> },
+    AttributeNotFilterable { attribute: &'a str, filterable_patterns: BTreeSet<&'a str> },
     ParseGeoError(BadGeoError),
     TooDeep,
 }
@@ -77,14 +79,14 @@ impl<'a> From<BadGeoError> for FilterError<'a> {
 impl<'a> Display for FilterError<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::AttributeNotFilterable { attribute, filterable_fields } => {
+            Self::AttributeNotFilterable { attribute, filterable_patterns } => {
                 write!(f, "Attribute `{attribute}` is not filterable.")?;
-                if filterable_fields.is_empty() {
+                if filterable_patterns.is_empty() {
                     write!(f, " This index does not have configured filterable attributes.")
                 } else {
-                    write!(f, " Available filterable attributes are: ")?;
+                    write!(f, " Available filterable attributes patterns are: ")?;
                     let mut filterables_list =
-                        filterable_fields.iter().map(AsRef::as_ref).collect::<Vec<&str>>();
+                        filterable_patterns.iter().map(AsRef::as_ref).collect::<Vec<&str>>();
                     filterables_list.sort_unstable();
                     for (idx, filterable) in filterables_list.iter().enumerate() {
                         write!(f, "`{filterable}`")?;
@@ -232,27 +234,19 @@ impl<'a> Filter<'a> {
 impl<'a> Filter<'a> {
     pub fn evaluate(&self, rtxn: &heed::RoTxn<'_>, index: &Index) -> Result<RoaringBitmap> {
         // to avoid doing this for each recursive call we're going to do it ONCE ahead of time
-        let fields_ids_map = index.fields_ids_map_with_metadata(rtxn)?;
+        let fields_ids_map = index.fields_ids_map(rtxn)?;
         let filterable_attributes_rules = index.filterable_attributes_rules(rtxn)?;
         for fid in self.condition.fids(MAX_FILTER_DEPTH) {
             let attribute = fid.value();
-            if let Some((_, metadata)) = fields_ids_map.id_with_metadata(fid.value()) {
-                if metadata
-                    .filterable_attributes_features(&filterable_attributes_rules)
-                    .is_filterable()
-                {
-                    continue;
-                }
-            } else if is_field_filterable(attribute, &filterable_attributes_rules) {
+            if is_field_filterable(attribute, &filterable_attributes_rules) {
                 continue;
             }
 
             // If the field is not filterable, return an error
             return Err(fid.as_external_error(FilterError::AttributeNotFilterable {
                 attribute,
-                filterable_fields: filtered_matching_field_names(
+                filterable_patterns: filtered_matching_patterns(
                     &filterable_attributes_rules,
-                    &fields_ids_map,
                     &|features| features.is_filterable(),
                 ),
             }))?;
@@ -268,7 +262,7 @@ impl<'a> Filter<'a> {
         universe: Option<&RoaringBitmap>,
         operator: &Condition<'a>,
         features: &FilterableAttributesFeatures,
-        rule_index: Option<usize>,
+        rule_index: usize,
     ) -> Result<RoaringBitmap> {
         let numbers_db = index.facet_id_f64_docids;
         let strings_db = index.facet_id_string_docids;
@@ -463,7 +457,7 @@ impl<'a> Filter<'a> {
         &self,
         rtxn: &heed::RoTxn<'_>,
         index: &Index,
-        field_ids_map: &FieldIdMapWithMetadata,
+        field_ids_map: &FieldsIdsMap,
         filterable_attribute_rules: &[FilterableAttributesRule],
         universe: Option<&RoaringBitmap>,
     ) -> Result<RoaringBitmap> {
@@ -489,34 +483,36 @@ impl<'a> Filter<'a> {
                     }
                 }
             }
-            FilterCondition::In { fid, els } => match field_ids_map.id_with_metadata(fid.value()) {
-                Some((fid, metadata)) => {
-                    let (rule_index, features) = metadata
-                        .filterable_attributes_features_with_rule_index(filterable_attribute_rules);
-                    els.iter()
-                        .map(|el| Condition::Equal(el.clone()))
-                        .map(|op| {
-                            Self::evaluate_operator(
-                                rtxn, index, fid, universe, &op, &features, rule_index,
-                            )
-                        })
-                        .union()
-                }
-                None => Ok(RoaringBitmap::new()),
-            },
-            FilterCondition::Condition { fid, op } => {
-                match field_ids_map.id_with_metadata(fid.value()) {
-                    Some((fid, metadata)) => {
-                        let (rule_index, features) = metadata
-                            .filterable_attributes_features_with_rule_index(
-                                filterable_attribute_rules,
-                            );
+            FilterCondition::In { fid, els } => {
+                let Some(field_id) = field_ids_map.id(fid.value()) else {
+                    return Ok(RoaringBitmap::new());
+                };
+                let Some((rule_index, features)) =
+                    matching_features(fid.value(), filterable_attribute_rules)
+                else {
+                    return Ok(RoaringBitmap::new());
+                };
+
+                els.iter()
+                    .map(|el| Condition::Equal(el.clone()))
+                    .map(|op| {
                         Self::evaluate_operator(
-                            rtxn, index, fid, universe, op, &features, rule_index,
+                            rtxn, index, field_id, universe, &op, &features, rule_index,
                         )
-                    }
-                    None => Ok(RoaringBitmap::new()),
-                }
+                    })
+                    .union()
+            }
+            FilterCondition::Condition { fid, op } => {
+                let Some(field_id) = field_ids_map.id(fid.value()) else {
+                    return Ok(RoaringBitmap::new());
+                };
+                let Some((rule_index, features)) =
+                    matching_features(fid.value(), filterable_attribute_rules)
+                else {
+                    return Ok(RoaringBitmap::new());
+                };
+
+                Self::evaluate_operator(rtxn, index, field_id, universe, op, &features, rule_index)
             }
             FilterCondition::Or(subfilters) => subfilters
                 .iter()
@@ -595,9 +591,8 @@ impl<'a> Filter<'a> {
                 } else {
                     Err(point[0].as_external_error(FilterError::AttributeNotFilterable {
                         attribute: RESERVED_GEO_FIELD_NAME,
-                        filterable_fields: filtered_matching_field_names(
+                        filterable_patterns: filtered_matching_patterns(
                             filterable_attribute_rules,
-                            &field_ids_map,
                             &|features| features.is_filterable(),
                         ),
                     }))?
@@ -736,9 +731,8 @@ impl<'a> Filter<'a> {
                     Err(top_right_point[0].as_external_error(
                         FilterError::AttributeNotFilterable {
                             attribute: RESERVED_GEO_FIELD_NAME,
-                            filterable_fields: filtered_matching_field_names(
+                            filterable_patterns: filtered_matching_patterns(
                                 filterable_attribute_rules,
-                                &field_ids_map,
                                 &|features| features.is_filterable(),
                             ),
                         },
@@ -755,7 +749,7 @@ fn generate_filter_error(
     field_id: FieldId,
     operator: &Condition<'_>,
     features: &FilterableAttributesFeatures,
-    rule_index: Option<usize>,
+    rule_index: usize,
 ) -> Error {
     match index.fields_ids_map(rtxn) {
         Ok(fields_ids_map) => {
@@ -917,42 +911,42 @@ mod tests {
         let filter = Filter::from_str("_geoRadius(-100, 150, 10)").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
         snapshot!(error.to_string(), @r###"
-        Attribute `_geo` is not filterable. This index does not have configured filterable attributes.
+        Attribute `_geo` is not filterable. Available filterable attributes patterns are: `title`.
         12:16 _geoRadius(-100, 150, 10)
         "###);
 
         let filter = Filter::from_str("_geoBoundingBox([42, 150], [30, 10])").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
         snapshot!(error.to_string(), @r###"
-        Attribute `_geo` is not filterable. This index does not have configured filterable attributes.
+        Attribute `_geo` is not filterable. Available filterable attributes patterns are: `title`.
         18:20 _geoBoundingBox([42, 150], [30, 10])
         "###);
 
         let filter = Filter::from_str("name = 12").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
         snapshot!(error.to_string(), @r###"
-        Attribute `name` is not filterable. This index does not have configured filterable attributes.
+        Attribute `name` is not filterable. Available filterable attributes patterns are: `title`.
         1:5 name = 12
         "###);
 
         let filter = Filter::from_str("title = \"test\" AND name = 12").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
         snapshot!(error.to_string(), @r###"
-        Attribute `name` is not filterable. This index does not have configured filterable attributes.
+        Attribute `name` is not filterable. Available filterable attributes patterns are: `title`.
         20:24 title = "test" AND name = 12
         "###);
 
         let filter = Filter::from_str("title = \"test\" AND name IN [12]").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
         snapshot!(error.to_string(), @r###"
-        Attribute `name` is not filterable. This index does not have configured filterable attributes.
+        Attribute `name` is not filterable. Available filterable attributes patterns are: `title`.
         20:24 title = "test" AND name IN [12]
         "###);
 
         let filter = Filter::from_str("title = \"test\" AND name != 12").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
         snapshot!(error.to_string(), @r###"
-        Attribute `name` is not filterable. This index does not have configured filterable attributes.
+        Attribute `name` is not filterable. Available filterable attributes patterns are: `title`.
         20:24 title = "test" AND name != 12
         "###);
     }
