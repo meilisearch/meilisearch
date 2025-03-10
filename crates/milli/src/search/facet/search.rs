@@ -10,9 +10,7 @@ use roaring::RoaringBitmap;
 use tracing::error;
 
 use crate::error::UserError;
-use crate::filterable_attributes_rules::{
-    filtered_matching_field_names, is_field_facet_searchable,
-};
+use crate::filterable_attributes_rules::{filtered_matching_patterns, matching_features};
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupValue};
 use crate::search::build_dfa;
 use crate::{DocumentId, FieldId, OrderBy, Result, Search};
@@ -77,37 +75,27 @@ impl<'a> SearchForFacetValues<'a> {
         let rtxn = self.search_query.rtxn;
 
         let filterable_attributes_rules = index.filterable_attributes_rules(rtxn)?;
-        let fields_ids_map = index.fields_ids_map_with_metadata(rtxn)?;
-        let fid = match fields_ids_map.id_with_metadata(&self.facet) {
-            Some((fid, metadata))
-                if metadata
-                    .filterable_attributes_features(&filterable_attributes_rules)
-                    .is_facet_searchable() =>
-            {
-                fid
-            }
-            // we return an empty list of results when the attribute has been
-            // set as filterable but no document contains this field (yet).
-            None if is_field_facet_searchable(&self.facet, &filterable_attributes_rules) => {
-                return Ok(Vec::new());
-            }
-            // we return an error when the attribute is not facet searchable
-            _otherwise => {
-                let matching_field_names = filtered_matching_field_names(
-                    &filterable_attributes_rules,
-                    &fields_ids_map,
-                    &|features| features.is_facet_searchable(),
-                );
-                let (valid_fields, hidden_fields) =
-                    index.remove_hidden_fields(rtxn, matching_field_names)?;
+        if !matching_features(&self.facet, &filterable_attributes_rules)
+            .map_or(false, |(_, features)| features.is_facet_searchable())
+        {
+            let matching_field_names =
+                filtered_matching_patterns(&filterable_attributes_rules, &|features| {
+                    features.is_facet_searchable()
+                });
+            let (valid_patterns, hidden_fields) =
+                index.remove_hidden_fields(rtxn, matching_field_names)?;
 
-                return Err(UserError::InvalidFacetSearchFacetName {
-                    field: self.facet.clone(),
-                    valid_fields,
-                    hidden_fields,
-                }
-                .into());
+            return Err(UserError::InvalidFacetSearchFacetName {
+                field: self.facet.clone(),
+                valid_patterns,
+                hidden_fields,
             }
+            .into());
+        };
+
+        let fields_ids_map = index.fields_ids_map(rtxn)?;
+        let Some(fid) = fields_ids_map.id(&self.facet) else {
+            return Ok(Vec::new());
         };
 
         let fst = match self.search_query.index.facet_id_string_fst.get(rtxn, &fid)? {

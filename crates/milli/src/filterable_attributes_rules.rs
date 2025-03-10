@@ -6,7 +6,6 @@ use utoipa::ToSchema;
 use crate::{
     attribute_patterns::{match_distinct_field, match_field_legacy, PatternMatch},
     constants::RESERVED_GEO_FIELD_NAME,
-    fields_ids_map::metadata::FieldIdMapWithMetadata,
     AttributePatterns,
 };
 
@@ -227,30 +226,6 @@ impl Default for FilterFeatures {
 
 /// Match a field against a set of filterable attributes rules.
 ///
-/// This function will return the set of field names that match the given filter.
-///
-/// # Arguments
-///
-/// * `filterable_attributes` - The set of filterable attributes rules to match against.
-/// * `fields_ids_map` - The map of field names to field ids.
-/// * `filter` - The filter function to apply to the filterable attributes rules.
-pub fn filtered_matching_field_names<'fim>(
-    filterable_attributes: &[FilterableAttributesRule],
-    fields_ids_map: &'fim FieldIdMapWithMetadata,
-    filter: &impl Fn(FilterableAttributesFeatures) -> bool,
-) -> BTreeSet<&'fim str> {
-    let mut result = BTreeSet::new();
-    for (_, field_name, metadata) in fields_ids_map.iter() {
-        let features = metadata.filterable_attributes_features(filterable_attributes);
-        if filter(features) {
-            result.insert(field_name);
-        }
-    }
-    result
-}
-
-/// Match a field against a set of filterable attributes rules.
-///
 /// This function will return the set of patterns that match the given filter.
 ///
 /// # Arguments
@@ -304,34 +279,6 @@ pub fn matching_features(
         }
     }
     None
-}
-
-/// Check if a field is filterable calling the method `FilterableAttributesFeatures::is_filterable()`.
-///
-/// # Arguments
-///
-/// * `field_name` - The field name to check.
-/// * `filterable_attributes` - The set of filterable attributes rules to match against.
-pub fn is_field_filterable(
-    field_name: &str,
-    filterable_attributes: &[FilterableAttributesRule],
-) -> bool {
-    matching_features(field_name, filterable_attributes)
-        .map_or(false, |(_, features)| features.is_filterable())
-}
-
-/// Check if a field is facet searchable calling the method `FilterableAttributesFeatures::is_facet_searchable()`.
-///
-/// # Arguments
-///
-/// * `field_name` - The field name to check.
-/// * `filterable_attributes` - The set of filterable attributes rules to match against.
-pub fn is_field_facet_searchable(
-    field_name: &str,
-    filterable_attributes: &[FilterableAttributesRule],
-) -> bool {
-    matching_features(field_name, filterable_attributes)
-        .map_or(false, |(_, features)| features.is_facet_searchable())
 }
 
 /// Match a field against a set of filterable, facet searchable fields, distinct field, sortable fields, and asc_desc fields.

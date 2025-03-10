@@ -158,28 +158,32 @@ and can not be more than 511 bytes.", .document_id.to_string()
     InvalidSortableAttribute { field: String, valid_fields: BTreeSet<String>, hidden_fields: bool },
     #[error("Attribute `{}` is not filterable and thus, cannot be used as distinct attribute. {}",
         .field,
-        match .valid_fields.is_empty() {
+        match .valid_patterns.is_empty() {
             true => "This index does not have configured filterable attributes.".to_string(),
-            false => format!("Available filterable attributes are: `{}{}`.",
-                    valid_fields.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", "),
+            false => format!("Available filterable attributes patterns are: `{}{}`.",
+                    valid_patterns.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", "),
                     .hidden_fields.then_some(", <..hidden-attributes>").unwrap_or(""),
                 ),
         }
     )]
-    InvalidDistinctAttribute { field: String, valid_fields: BTreeSet<String>, hidden_fields: bool },
+    InvalidDistinctAttribute {
+        field: String,
+        valid_patterns: BTreeSet<String>,
+        hidden_fields: bool,
+    },
     #[error("Attribute `{}` is not facet-searchable. {}",
         .field,
-        match .valid_fields.is_empty() {
+        match .valid_patterns.is_empty() {
             true => "This index does not have configured facet-searchable attributes. To make it facet-searchable add it to the `filterableAttributes` index settings.".to_string(),
-            false => format!("Available facet-searchable attributes are: `{}{}`. To make it facet-searchable add it to the `filterableAttributes` index settings.",
-                    valid_fields.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", "),
+            false => format!("Available facet-searchable attributes patterns are: `{}{}`. To make it facet-searchable add it to the `filterableAttributes` index settings.",
+                    valid_patterns.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", "),
                     .hidden_fields.then_some(", <..hidden-attributes>").unwrap_or(""),
                 ),
         }
     )]
     InvalidFacetSearchFacetName {
         field: String,
-        valid_fields: BTreeSet<String>,
+        valid_patterns: BTreeSet<String>,
         hidden_fields: bool,
     },
     #[error("Attribute `{}` is not searchable. Available searchable attributes are: `{}{}`.",

@@ -548,7 +548,7 @@ async fn facet_search_with_filterable_attributes_rules_errors() {
         &json!({"facetName": "invalid", "facetQuery": "a"}),
         |response, code| {
             snapshot!(code, @"400 Bad Request");
-            snapshot!(response["message"], @r###""Attribute `invalid` is not facet-searchable. Available facet-searchable attributes are: `genres`. To make it facet-searchable add it to the `filterableAttributes` index settings.""###);
+            snapshot!(response["message"], @r###""Attribute `invalid` is not facet-searchable. Available facet-searchable attributes patterns are: `genres`. To make it facet-searchable add it to the `filterableAttributes` index settings.""###);
         },
     )
     .await;

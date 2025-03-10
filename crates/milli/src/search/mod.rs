@@ -9,7 +9,7 @@ use roaring::bitmap::RoaringBitmap;
 pub use self::facet::{FacetDistribution, Filter, OrderBy, DEFAULT_VALUES_PER_FACET};
 pub use self::new::matches::{FormatOptions, MatchBounds, MatcherBuilder, MatchingWords};
 use self::new::{execute_vector_search, PartialSearchResult};
-use crate::filterable_attributes_rules::{filtered_matching_field_names, is_field_filterable};
+use crate::filterable_attributes_rules::{filtered_matching_patterns, matching_features};
 use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::vector::Embedder;
 use crate::{
@@ -190,20 +190,20 @@ impl<'a> Search<'a> {
         if let Some(distinct) = &self.distinct {
             let filterable_fields = ctx.index.filterable_attributes_rules(ctx.txn)?;
             // check if the distinct field is in the filterable fields
-            if !is_field_filterable(distinct, &filterable_fields) {
+            if !matching_features(distinct, &filterable_fields)
+                .map_or(false, |(_, features)| features.is_filterable())
+            {
                 // if not, remove the hidden fields from the filterable fields to generate the error message
-                let fields_ids_map = ctx.index.fields_ids_map_with_metadata(ctx.txn)?;
-                let matching_field_names = filtered_matching_field_names(
-                    &filterable_fields,
-                    &fields_ids_map,
-                    &|features| features.is_filterable(),
-                );
-                let (valid_fields, hidden_fields) =
-                    ctx.index.remove_hidden_fields(ctx.txn, matching_field_names)?;
+                let matching_patterns =
+                    filtered_matching_patterns(&filterable_fields, &|features| {
+                        features.is_filterable()
+                    });
+                let (valid_patterns, hidden_fields) =
+                    ctx.index.remove_hidden_fields(ctx.txn, matching_patterns)?;
                 // and return the error
                 return Err(Error::UserError(UserError::InvalidDistinctAttribute {
                     field: distinct.clone(),
-                    valid_fields,
+                    valid_patterns,
                     hidden_fields,
                 }));
             }

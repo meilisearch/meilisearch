@@ -770,12 +770,11 @@ mod tests {
     use bumpalo::Bump;
     use fst::IntoStreamer;
     use heed::RwTxn;
-    use maplit::{btreeset, hashset};
+    use maplit::hashset;
 
     use super::*;
     use crate::constants::RESERVED_GEO_FIELD_NAME;
     use crate::documents::mmap_from_objects;
-    use crate::filterable_attributes_rules::filtered_matching_field_names;
     use crate::index::tests::TempIndex;
     use crate::index::IndexEmbeddingConfig;
     use crate::progress::Progress;
@@ -1255,14 +1254,6 @@ mod tests {
 
         let rtxn = index.read_txn().unwrap();
 
-        let filterable_fields = index.filterable_attributes_rules(&rtxn).unwrap();
-        let fields_ids_map = index.fields_ids_map_with_metadata(&rtxn).unwrap();
-        let facets =
-            filtered_matching_field_names(&filterable_fields, &fields_ids_map, &|features| {
-                features.is_filterable()
-            });
-        assert_eq!(facets, btreeset!("title", "nested.object", "nested.machin"));
-
         // testing the simple query search
         let mut search = crate::Search::new(&rtxn, &index);
         search.query("document");
@@ -1478,15 +1469,6 @@ mod tests {
 
         let rtxn = index.read_txn().unwrap();
 
-        let filterable_fields = index.filterable_attributes_rules(&rtxn).unwrap();
-        let fields_ids_map = index.fields_ids_map_with_metadata(&rtxn).unwrap();
-        let facets =
-            filtered_matching_field_names(&filterable_fields, &fields_ids_map, &|features| {
-                features.is_filterable()
-            });
-
-        assert_eq!(facets, btreeset!("dog", "dog.race", "dog.race.bernese mountain"));
-
         for (s, i) in [("zeroth", 0), ("first", 1), ("second", 2), ("third", 3)] {
             let mut search = crate::Search::new(&rtxn, &index);
             let filter = format!(r#""dog.race.bernese mountain" = {s}"#);
@@ -1503,17 +1485,6 @@ mod tests {
 
         db_snap!(index, facet_id_string_docids, @"");
         db_snap!(index, field_id_docid_facet_strings, @"");
-
-        let rtxn = index.read_txn().unwrap();
-
-        let filterable_fields = index.filterable_attributes_rules(&rtxn).unwrap();
-        let fields_ids_map = index.fields_ids_map_with_metadata(&rtxn).unwrap();
-        let facets =
-            filtered_matching_field_names(&filterable_fields, &fields_ids_map, &|features| {
-                features.is_filterable()
-            });
-
-        assert_eq!(facets, btreeset!());
 
         // update the settings to test the sortable
         index
@@ -1744,13 +1715,6 @@ mod tests {
 
         let check_ok = |index: &Index| {
             let rtxn = index.read_txn().unwrap();
-            let filterable_fields = index.filterable_attributes_rules(&rtxn).unwrap();
-            let fields_ids_map = index.fields_ids_map_with_metadata(&rtxn).unwrap();
-            let facets =
-                filtered_matching_field_names(&filterable_fields, &fields_ids_map, &|features| {
-                    features.is_filterable()
-                });
-            assert_eq!(facets, btreeset!("colour", "colour.green", "colour.green.blue"));
 
             let colour_id = index.fields_ids_map(&rtxn).unwrap().id("colour").unwrap();
             let colour_green_id = index.fields_ids_map(&rtxn).unwrap().id("colour.green").unwrap();
@@ -1855,13 +1819,6 @@ mod tests {
 
         let check_ok = |index: &Index| {
             let rtxn = index.read_txn().unwrap();
-            let filterable_fields = index.filterable_attributes_rules(&rtxn).unwrap();
-            let fields_ids_map = index.fields_ids_map_with_metadata(&rtxn).unwrap();
-            let facets =
-                filtered_matching_field_names(&filterable_fields, &fields_ids_map, &|features| {
-                    features.is_filterable()
-                });
-            assert_eq!(facets, btreeset!("colour", "colour.green", "colour.green.blue"));
 
             let colour_id = index.fields_ids_map(&rtxn).unwrap().id("colour").unwrap();
             let colour_green_id = index.fields_ids_map(&rtxn).unwrap().id("colour.green").unwrap();
@@ -1924,13 +1881,6 @@ mod tests {
 
         let check_ok = |index: &Index| {
             let rtxn = index.read_txn().unwrap();
-            let filterable_fields = index.filterable_attributes_rules(&rtxn).unwrap();
-            let fields_ids_map = index.fields_ids_map_with_metadata(&rtxn).unwrap();
-            let facets =
-                filtered_matching_field_names(&filterable_fields, &fields_ids_map, &|features| {
-                    features.is_filterable()
-                });
-            assert_eq!(facets, btreeset!("tags", "tags.green", "tags.green.blue"));
 
             let tags_id = index.fields_ids_map(&rtxn).unwrap().id("tags").unwrap();
             let tags_green_id = index.fields_ids_map(&rtxn).unwrap().id("tags.green").unwrap();
