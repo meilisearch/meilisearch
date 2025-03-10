@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::attribute_patterns::match_field_legacy;
 use crate::facet::FacetType;
-use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, Metadata, MetadataBuilder};
+use crate::filterable_attributes_rules::{filtered_matching_patterns, matching_features};
 use crate::heed_codec::facet::{
     FacetGroupKeyCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec, OrderedF64Codec,
 };
@@ -294,13 +294,13 @@ impl<'a> FacetDistribution<'a> {
             return Ok(Default::default());
         };
 
-        let fields_ids_map = self.index.fields_ids_map_with_metadata(self.rtxn)?;
+        let fields_ids_map = self.index.fields_ids_map(self.rtxn)?;
         let filterable_attributes_rules = self.index.filterable_attributes_rules(self.rtxn)?;
-        self.check_faceted_fields(&fields_ids_map, &filterable_attributes_rules)?;
+        self.check_faceted_fields(&filterable_attributes_rules)?;
 
         let mut distribution = BTreeMap::new();
-        for (fid, name, metadata) in fields_ids_map.iter() {
-            if self.select_field(name, &metadata, &filterable_attributes_rules) {
+        for (fid, name) in fields_ids_map.iter() {
+            if self.select_field(name, &filterable_attributes_rules) {
                 let min_value = if let Some(min_value) = crate::search::facet::facet_min_value(
                     self.index,
                     self.rtxn,
@@ -331,16 +331,12 @@ impl<'a> FacetDistribution<'a> {
 
     pub fn execute(&self) -> Result<BTreeMap<String, IndexMap<String, u64>>> {
         let fields_ids_map = self.index.fields_ids_map(self.rtxn)?;
-        let fields_ids_map = FieldIdMapWithMetadata::new(
-            fields_ids_map,
-            MetadataBuilder::from_index(self.index, self.rtxn)?,
-        );
         let filterable_attributes_rules = self.index.filterable_attributes_rules(self.rtxn)?;
-        self.check_faceted_fields(&fields_ids_map, &filterable_attributes_rules)?;
+        self.check_faceted_fields(&filterable_attributes_rules)?;
 
         let mut distribution = BTreeMap::new();
-        for (fid, name, metadata) in fields_ids_map.iter() {
-            if self.select_field(name, &metadata, &filterable_attributes_rules) {
+        for (fid, name) in fields_ids_map.iter() {
+            if self.select_field(name, &filterable_attributes_rules) {
                 let order_by = self
                     .facets
                     .as_ref()
@@ -358,11 +354,12 @@ impl<'a> FacetDistribution<'a> {
     fn select_field(
         &self,
         name: &str,
-        metadata: &Metadata,
         filterable_attributes_rules: &[FilterableAttributesRule],
     ) -> bool {
         // If the field is not filterable, we don't want to compute the facet distribution.
-        if !metadata.filterable_attributes_features(filterable_attributes_rules).is_filterable() {
+        if !matching_features(name, filterable_attributes_rules)
+            .map_or(false, |(_, features)| features.is_filterable())
+        {
             return false;
         }
 
@@ -378,41 +375,31 @@ impl<'a> FacetDistribution<'a> {
     /// Check if the fields in the facets are valid faceted fields.
     fn check_faceted_fields(
         &self,
-        fields_ids_map: &FieldIdMapWithMetadata,
         filterable_attributes_rules: &[FilterableAttributesRule],
     ) -> Result<()> {
         let mut invalid_facets = BTreeSet::new();
         if let Some(facets) = &self.facets {
             for field in facets.keys() {
-                let is_valid_faceted_field =
-                    fields_ids_map.id_with_metadata(field).map_or(false, |(_, metadata)| {
-                        metadata
-                            .filterable_attributes_features(filterable_attributes_rules)
-                            .is_filterable()
-                    });
-                if !is_valid_faceted_field {
+                let is_valid_filterable_field =
+                    matching_features(field, filterable_attributes_rules)
+                        .map_or(false, |(_, features)| features.is_filterable());
+                if !is_valid_filterable_field {
                     invalid_facets.insert(field.to_string());
                 }
             }
         }
 
         if !invalid_facets.is_empty() {
-            let valid_facets_name = fields_ids_map
-                .iter()
-                .filter_map(|(_, name, metadata)| {
-                    if metadata
-                        .filterable_attributes_features(filterable_attributes_rules)
-                        .is_filterable()
-                    {
-                        Some(name.to_string())
-                    } else {
-                        None
-                    }
+            let valid_patterns =
+                filtered_matching_patterns(filterable_attributes_rules, &|features| {
+                    features.is_filterable()
                 })
+                .into_iter()
+                .map(String::from)
                 .collect();
             return Err(Error::UserError(UserError::InvalidFacetsDistribution {
                 invalid_facets_name: invalid_facets,
-                valid_facets_name,
+                valid_patterns,
             }));
         }
 

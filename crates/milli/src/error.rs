@@ -121,10 +121,10 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
 and can not be more than 511 bytes.", .document_id.to_string()
     )]
     InvalidDocumentId { document_id: Value },
-    #[error("Invalid facet distribution, {}", format_invalid_filter_distribution(.invalid_facets_name, .valid_facets_name))]
+    #[error("Invalid facet distribution, {}", format_invalid_filter_distribution(.invalid_facets_name, .valid_patterns))]
     InvalidFacetsDistribution {
         invalid_facets_name: BTreeSet<String>,
-        valid_facets_name: BTreeSet<String>,
+        valid_patterns: BTreeSet<String>,
     },
     #[error(transparent)]
     InvalidGeoField(#[from] GeoError),
@@ -357,9 +357,9 @@ pub enum GeoError {
 
 fn format_invalid_filter_distribution(
     invalid_facets_name: &BTreeSet<String>,
-    valid_facets_name: &BTreeSet<String>,
+    valid_patterns: &BTreeSet<String>,
 ) -> String {
-    if valid_facets_name.is_empty() {
+    if valid_patterns.is_empty() {
         return "this index does not have configured filterable attributes.".into();
     }
 
@@ -381,17 +381,17 @@ fn format_invalid_filter_distribution(
         .unwrap(),
     };
 
-    match valid_facets_name.len() {
+    match valid_patterns.len() {
         1 => write!(
             result,
-            " The available filterable attribute is `{}`.",
-            valid_facets_name.first().unwrap()
+            " The available filterable attribute pattern is `{}`.",
+            valid_patterns.first().unwrap()
         )
         .unwrap(),
         _ => write!(
             result,
-            " The available filterable attributes are `{}`.",
-            valid_facets_name.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", ")
+            " The available filterable attribute patterns are `{}`.",
+            valid_patterns.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", ")
         )
         .unwrap(),
     }

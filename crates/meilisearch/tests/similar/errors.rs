@@ -452,18 +452,19 @@ async fn filter_invalid_attribute_array() {
     snapshot!(code, @"202 Accepted");
     index.wait_task(value.uid()).await.succeeded();
 
-    let expected_response = json!({
-        "message": "Attribute `many` is not filterable. Available filterable attributes are: `title`.\n1:5 many = Glass",
-        "code": "invalid_similar_filter",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
-    });
     index
         .similar(
             json!({"id": 287947, "filter": ["many = Glass"], "embedder": "manual"}),
             |response, code| {
-                assert_eq!(response, expected_response);
-                assert_eq!(code, 400);
+                snapshot!(code, @"400 Bad Request");
+                snapshot!(response, @r###"
+                {
+                  "message": "Attribute `many` is not filterable. Available filterable attributes patterns are: `title`.\n1:5 many = Glass",
+                  "code": "invalid_similar_filter",
+                  "type": "invalid_request",
+                  "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
+                }
+                "###);
             },
         )
         .await;
@@ -492,18 +493,19 @@ async fn filter_invalid_attribute_string() {
     snapshot!(code, @"202 Accepted");
     index.wait_task(value.uid()).await.succeeded();
 
-    let expected_response = json!({
-        "message": "Attribute `many` is not filterable. Available filterable attributes are: `title`.\n1:5 many = Glass",
-        "code": "invalid_similar_filter",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
-    });
     index
         .similar(
             json!({"id": 287947, "filter": "many = Glass", "embedder": "manual"}),
             |response, code| {
-                assert_eq!(response, expected_response);
-                assert_eq!(code, 400);
+                snapshot!(code, @"400 Bad Request");
+                snapshot!(response, @r###"
+                {
+                  "message": "Attribute `many` is not filterable. Available filterable attributes patterns are: `title`.\n1:5 many = Glass",
+                  "code": "invalid_similar_filter",
+                  "type": "invalid_request",
+                  "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
+                }
+                "###);
             },
         )
         .await;

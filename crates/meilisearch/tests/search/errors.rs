@@ -434,7 +434,7 @@ async fn search_non_filterable_facets() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Invalid facet distribution, attribute `doggo` is not filterable. The available filterable attribute is `title`.",
+      "message": "Invalid facet distribution, attribute `doggo` is not filterable. The available filterable attribute pattern is `title`.",
       "code": "invalid_search_facets",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
@@ -445,7 +445,7 @@ async fn search_non_filterable_facets() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Invalid facet distribution, attribute `doggo` is not filterable. The available filterable attribute is `title`.",
+      "message": "Invalid facet distribution, attribute `doggo` is not filterable. The available filterable attribute pattern is `title`.",
       "code": "invalid_search_facets",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
@@ -468,7 +468,7 @@ async fn search_non_filterable_facets_multiple_filterable() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Invalid facet distribution, attribute `doggo` is not filterable. The available filterable attributes are `genres, title`.",
+      "message": "Invalid facet distribution, attribute `doggo` is not filterable. The available filterable attribute patterns are `genres, title`.",
       "code": "invalid_search_facets",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
@@ -479,7 +479,7 @@ async fn search_non_filterable_facets_multiple_filterable() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Invalid facet distribution, attribute `doggo` is not filterable. The available filterable attributes are `genres, title`.",
+      "message": "Invalid facet distribution, attribute `doggo` is not filterable. The available filterable attribute patterns are `genres, title`.",
       "code": "invalid_search_facets",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
@@ -532,7 +532,7 @@ async fn search_non_filterable_facets_multiple_facets() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Invalid facet distribution, attributes `doggo, neko` are not filterable. The available filterable attributes are `genres, title`.",
+      "message": "Invalid facet distribution, attributes `doggo, neko` are not filterable. The available filterable attribute patterns are `genres, title`.",
       "code": "invalid_search_facets",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
@@ -543,7 +543,7 @@ async fn search_non_filterable_facets_multiple_facets() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Invalid facet distribution, attributes `doggo, neko` are not filterable. The available filterable attributes are `genres, title`.",
+      "message": "Invalid facet distribution, attributes `doggo, neko` are not filterable. The available filterable attribute patterns are `genres, title`.",
       "code": "invalid_search_facets",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
@@ -1204,52 +1204,55 @@ async fn search_on_unknown_field_plus_joker() {
 
 #[actix_rt::test]
 async fn distinct_at_search_time() {
-    let server = Server::new_shared();
-    let index = server.unique_index();
+    let server = Server::new().await;
+    let index = server.index("test");
     let (task, _) = index.create(None).await;
     index.wait_task(task.uid()).await.succeeded();
     let (response, _code) =
         index.add_documents(json!([{"id": 1, "color": "Doggo", "machin": "Action"}]), None).await;
     index.wait_task(response.uid()).await.succeeded();
 
-    let expected_response = json!({
-        "message": format!("Index `{}`: Attribute `doggo.truc` is not filterable and thus, cannot be used as distinct attribute. This index does not have configured filterable attributes.", index.uid),
-        "code": "invalid_search_distinct",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_search_distinct"
-    });
     let (response, code) =
         index.search_post(json!({"page": 0, "hitsPerPage": 2, "distinct": "doggo.truc"})).await;
-    assert_eq!(response, expected_response);
-    assert_eq!(code, 400);
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(response, @r###"
+    {
+      "message": "Index `test`: Attribute `doggo.truc` is not filterable and thus, cannot be used as distinct attribute. This index does not have configured filterable attributes.",
+      "code": "invalid_search_distinct",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_distinct"
+    }
+    "###);
 
     let (task, _) = index.update_settings_filterable_attributes(json!(["color", "machin"])).await;
     index.wait_task(task.uid()).await.succeeded();
 
-    let expected_response = json!({
-        "message": format!("Index `{}`: Attribute `doggo.truc` is not filterable and thus, cannot be used as distinct attribute. Available filterable attributes are: `color, machin`.", index.uid),
-        "code": "invalid_search_distinct",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_search_distinct"
-    });
     let (response, code) =
         index.search_post(json!({"page": 0, "hitsPerPage": 2, "distinct": "doggo.truc"})).await;
-    assert_eq!(response, expected_response);
-    assert_eq!(code, 400);
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(response, @r###"
+    {
+      "message": "Index `test`: Attribute `doggo.truc` is not filterable and thus, cannot be used as distinct attribute. Available filterable attributes patterns are: `color, machin`.",
+      "code": "invalid_search_distinct",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_distinct"
+    }
+    "###);
 
     let (task, _) = index.update_settings_displayed_attributes(json!(["color"])).await;
     index.wait_task(task.uid()).await.succeeded();
 
-    let expected_response = json!({
-        "message": format!("Index `{}`: Attribute `doggo.truc` is not filterable and thus, cannot be used as distinct attribute. Available filterable attributes are: `color, <..hidden-attributes>`.", index.uid),
-        "code": "invalid_search_distinct",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_search_distinct"
-    });
     let (response, code) =
         index.search_post(json!({"page": 0, "hitsPerPage": 2, "distinct": "doggo.truc"})).await;
-    assert_eq!(response, expected_response);
-    assert_eq!(code, 400);
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(response, @r###"
+    {
+      "message": "Index `test`: Attribute `doggo.truc` is not filterable and thus, cannot be used as distinct attribute. Available filterable attributes patterns are: `color, <..hidden-attributes>`.",
+      "code": "invalid_search_distinct",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_distinct"
+    }
+    "###);
 
     let (response, code) =
         index.search_post(json!({"page": 0, "hitsPerPage": 2, "distinct": true})).await;
