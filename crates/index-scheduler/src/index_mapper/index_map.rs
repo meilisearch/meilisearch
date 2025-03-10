@@ -304,7 +304,8 @@ fn create_or_open_index(
     map_size: usize,
     creation: bool,
 ) -> Result<Index> {
-    let mut options = EnvOpenOptions::new();
+    let options = EnvOpenOptions::new();
+    let mut options = options.read_txn_without_tls();
     options.map_size(clamp_to_page_size(map_size));
 
     // You can find more details about this experimental
@@ -333,7 +334,7 @@ fn create_or_open_index(
 #[cfg(test)]
 mod tests {
 
-    use meilisearch_types::heed::Env;
+    use meilisearch_types::heed::{Env, WithoutTls};
     use meilisearch_types::Index;
     use uuid::Uuid;
 
@@ -343,7 +344,7 @@ mod tests {
     use crate::IndexScheduler;
 
     impl IndexMapper {
-        fn test() -> (Self, Env, IndexSchedulerHandle) {
+        fn test() -> (Self, Env<WithoutTls>, IndexSchedulerHandle) {
             let (index_scheduler, handle) = IndexScheduler::test(true, vec![]);
             (index_scheduler.index_mapper, index_scheduler.env, handle)
         }

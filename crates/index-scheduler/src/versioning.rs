@@ -1,5 +1,5 @@
 use meilisearch_types::heed::types::Str;
-use meilisearch_types::heed::{self, Database, Env, RoTxn, RwTxn};
+use meilisearch_types::heed::{self, Database, Env, RoTxn, RwTxn, WithoutTls};
 use meilisearch_types::milli::heed_codec::version::VersionCodec;
 use meilisearch_types::versioning;
 
@@ -46,12 +46,12 @@ impl Versioning {
     }
 
     /// Return `Self` without checking anything about the version
-    pub fn raw_new(env: &Env, wtxn: &mut RwTxn) -> Result<Self, heed::Error> {
+    pub fn raw_new(env: &Env<WithoutTls>, wtxn: &mut RwTxn) -> Result<Self, heed::Error> {
         let version = env.create_database(wtxn, Some(db_name::VERSION))?;
         Ok(Self { version })
     }
 
-    pub(crate) fn new(env: &Env, db_version: (u32, u32, u32)) -> Result<Self> {
+    pub(crate) fn new(env: &Env<WithoutTls>, db_version: (u32, u32, u32)) -> Result<Self> {
         let mut wtxn = env.write_txn()?;
         let this = Self::raw_new(env, &mut wtxn)?;
         let from = match this.get_version(&wtxn)? {

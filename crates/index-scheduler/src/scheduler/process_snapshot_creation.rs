@@ -28,7 +28,7 @@ impl IndexScheduler {
 
         // 2. Snapshot the index-scheduler LMDB env
         //
-        // When we call copy_to_file, LMDB opens a read transaction by itself,
+        // When we call copy_to_path, LMDB opens a read transaction by itself,
         // we can't provide our own. It is an issue as we would like to know
         // the update files to copy but new ones can be enqueued between the copy
         // of the env and the new transaction we open to retrieve the enqueued tasks.
@@ -42,7 +42,7 @@ impl IndexScheduler {
         progress.update_progress(SnapshotCreationProgress::SnapshotTheIndexScheduler);
         let dst = temp_snapshot_dir.path().join("tasks");
         fs::create_dir_all(&dst)?;
-        self.env.copy_to_file(dst.join("data.mdb"), CompactionOption::Enabled)?;
+        self.env.copy_to_path(dst.join("data.mdb"), CompactionOption::Enabled)?;
 
         // 2.2 Create a read transaction on the index-scheduler
         let rtxn = self.env.read_txn()?;
@@ -81,7 +81,7 @@ impl IndexScheduler {
             let dst = temp_snapshot_dir.path().join("indexes").join(uuid.to_string());
             fs::create_dir_all(&dst)?;
             index
-                .copy_to_file(dst.join("data.mdb"), CompactionOption::Enabled)
+                .copy_to_path(dst.join("data.mdb"), CompactionOption::Enabled)
                 .map_err(|e| Error::from_milli(e, Some(name.to_string())))?;
         }
 
@@ -98,7 +98,7 @@ impl IndexScheduler {
                 .max_dbs(2)
                 .open(&self.scheduler.auth_path)
         }?;
-        auth.copy_to_file(dst.join("data.mdb"), CompactionOption::Enabled)?;
+        auth.copy_to_path(dst.join("data.mdb"), CompactionOption::Enabled)?;
 
         // 5. Copy and tarball the flat snapshot
         progress.update_progress(SnapshotCreationProgress::CreateTheTarball);

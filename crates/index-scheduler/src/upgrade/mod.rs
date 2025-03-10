@@ -1,5 +1,5 @@
 use anyhow::bail;
-use meilisearch_types::heed::{Env, RwTxn};
+use meilisearch_types::heed::{Env, RwTxn, WithTls, WithoutTls};
 use meilisearch_types::tasks::{Details, KindWithContent, Status, Task};
 use meilisearch_types::versioning::{VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH};
 use time::OffsetDateTime;
@@ -9,13 +9,17 @@ use crate::queue::TaskQueue;
 use crate::versioning::Versioning;
 
 trait UpgradeIndexScheduler {
-    fn upgrade(&self, env: &Env, wtxn: &mut RwTxn, original: (u32, u32, u32))
-        -> anyhow::Result<()>;
+    fn upgrade(
+        &self,
+        env: &Env<WithoutTls>,
+        wtxn: &mut RwTxn,
+        original: (u32, u32, u32),
+    ) -> anyhow::Result<()>;
     fn target_version(&self) -> (u32, u32, u32);
 }
 
 pub fn upgrade_index_scheduler(
-    env: &Env,
+    env: &Env<WithoutTls>,
     versioning: &Versioning,
     from: (u32, u32, u32),
     to: (u32, u32, u32),
@@ -91,7 +95,7 @@ struct ToCurrentNoOp {}
 impl UpgradeIndexScheduler for ToCurrentNoOp {
     fn upgrade(
         &self,
-        _env: &Env,
+        _env: &Env<WithoutTls>,
         _wtxn: &mut RwTxn,
         _original: (u32, u32, u32),
     ) -> anyhow::Result<()> {

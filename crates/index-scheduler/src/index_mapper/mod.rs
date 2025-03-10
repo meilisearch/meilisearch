@@ -4,7 +4,7 @@ use std::time::Duration;
 use std::{fs, thread};
 
 use meilisearch_types::heed::types::{SerdeJson, Str};
-use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn};
+use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn, WithoutTls};
 use meilisearch_types::milli;
 use meilisearch_types::milli::database_stats::DatabaseStats;
 use meilisearch_types::milli::update::IndexerConfig;
@@ -164,7 +164,7 @@ impl IndexMapper {
     }
 
     pub fn new(
-        env: &Env,
+        env: &Env<WithoutTls>,
         wtxn: &mut RwTxn,
         options: &IndexSchedulerOptions,
         budget: IndexBudget,

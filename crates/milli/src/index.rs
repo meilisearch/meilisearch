@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs::File;
+use std::io::Seek;
 use std::path::Path;
 
 use heed::{types::*, WithoutTls};
@@ -340,8 +341,16 @@ impl Index {
         self.env.info().map_size
     }
 
-    pub fn copy_to_file<P: AsRef<Path>>(&self, path: P, option: CompactionOption) -> Result<File> {
-        self.env.copy_to_file(path, option).map_err(Into::into)
+    pub fn copy_to_file(&self, file: &mut File, option: CompactionOption) -> Result<()> {
+        self.env.copy_to_file(file, option).map_err(Into::into)
+    }
+
+    pub fn copy_to_path<P: AsRef<Path>>(&self, path: P, option: CompactionOption) -> Result<File> {
+        let mut file =
+            File::options().create(true).write(true).truncate(true).read(true).open(path)?;
+        self.copy_to_file(&mut file, option)?;
+        file.rewind()?;
+        Ok(file)
     }
 
     /// Returns an `EnvClosingEvent` that can be used to wait for the closing event,
