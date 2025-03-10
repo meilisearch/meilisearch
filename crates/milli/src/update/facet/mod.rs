@@ -352,7 +352,7 @@ pub(crate) mod test_helpers {
 
     use grenad::MergerBuilder;
     use heed::types::Bytes;
-    use heed::{BytesDecode, BytesEncode, Env, RoTxn, RwTxn};
+    use heed::{BytesDecode, BytesEncode, Env, RoTxn, RwTxn, WithoutTls};
     use roaring::RoaringBitmap;
 
     use super::bulk::FacetsUpdateBulkInner;
@@ -390,7 +390,7 @@ pub(crate) mod test_helpers {
         for<'a> BoundCodec:
             BytesEncode<'a> + BytesDecode<'a, DItem = <BoundCodec as BytesEncode<'a>>::EItem>,
     {
-        pub env: Env,
+        pub env: Env<WithoutTls>,
         pub content: heed::Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
         pub group_size: Cell<u8>,
         pub min_level_size: Cell<u8>,
