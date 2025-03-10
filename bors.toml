@@ -5,6 +5,7 @@ status = [
     'Run Clippy',
     'Run Rustfmt',
     'Run tests in debug',
+    'Check db change labels',
 ]
 # 3 hours timeout
 timeout-sec = 10800
