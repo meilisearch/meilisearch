@@ -424,8 +424,6 @@ async fn search_invalid_threshold() {
 async fn search_non_filterable_facets() {
     let server = Server::new_shared();
     let index = server.unique_index();
-    let (response, _code) = index.add_documents(json!([{"id": 1, "title": "Doggo"}]), None).await;
-    index.wait_task(response.uid()).await.succeeded();
     let (response, _code) = index.update_settings(json!({"filterableAttributes": ["title"]})).await;
     // Wait for the settings update to complete
     index.wait_task(response.uid()).await.succeeded();
@@ -457,9 +455,6 @@ async fn search_non_filterable_facets() {
 async fn search_non_filterable_facets_multiple_filterable() {
     let server = Server::new_shared();
     let index = server.unique_index();
-    let (response, _code) =
-        index.add_documents(json!([{"id": 1, "title": "Doggo", "genres": "Action"}]), None).await;
-    index.wait_task(response.uid()).await.succeeded();
     let (response, _code) =
         index.update_settings(json!({"filterableAttributes": ["title", "genres"]})).await;
     index.wait_task(response.uid()).await.succeeded();
@@ -521,9 +516,6 @@ async fn search_non_filterable_facets_no_filterable() {
 async fn search_non_filterable_facets_multiple_facets() {
     let server = Server::new_shared();
     let index = server.unique_index();
-    let (response, _code) =
-        index.add_documents(json!([{"id": 1, "title": "Doggo", "genres": "Action"}]), None).await;
-    index.wait_task(response.uid()).await.succeeded();
     let (response, _uid) =
         index.update_settings(json!({"filterableAttributes": ["title", "genres"]})).await;
     index.wait_task(response.uid()).await.succeeded();
