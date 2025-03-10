@@ -716,7 +716,32 @@ pub async fn delete_all(
 
 fn validate_settings(
     settings: Settings<Unchecked>,
-    _index_scheduler: &IndexScheduler,
+    index_scheduler: &IndexScheduler,
 ) -> Result<Settings<Unchecked>, ResponseError> {
+    use meilisearch_types::milli::update::Setting;
+    use meilisearch_types::milli::vector::settings::EmbedderSource;
+
+    let features = index_scheduler.features();
+    if let Setting::Set(embedders) = &settings.embedders {
+        for SettingEmbeddingSettings { inner: embedder } in embedders.values() {
+            let Setting::Set(embedder) = embedder else {
+                continue;
+            };
+            if let Setting::Set(source) = embedder.source {
+                if source == EmbedderSource::Composite {
+                    features.check_composite_embedders("using `\"composite\"` as source")?;
+                }
+            }
+
+            if let Setting::Set(_) = &embedder.search_embedder {
+                features.check_composite_embedders("setting `searchEmbedder`")?;
+            }
+
+            if let Setting::Set(_) = &embedder.indexing_embedder {
+                features.check_composite_embedders("setting `indexingEmbedder`")?;
+            }
+        }
+    }
+
     Ok(settings.validate()?)
 }
