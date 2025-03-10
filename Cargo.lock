@@ -47,7 +47,7 @@ dependencies = [
  "actix-utils",
  "ahash 0.8.11",
  "base64 0.22.1",
- "bitflags 2.6.0",
+ "bitflags 2.9.0",
  "brotli",
  "bytes",
  "bytestring",
@@ -394,12 +394,11 @@ checksum = "96d30a06541fbafbc7f82ed10c06164cfbd2c401138f6addd8404629c4b16711"
 [[package]]
 name = "arroy"
 version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dfc5f272f38fa063bbff0a7ab5219404e221493de005e2b4078c62d626ef567e"
+source = "git+https://github.com/meilisearch/arroy/?tag=DO-NOT-DELETE-upgrade-v04-to-v05#053807bf38dc079f25b003f19fc30fbf3613f6e7"
 dependencies = [
  "bytemuck",
  "byteorder",
- "heed",
+ "heed 0.20.5",
  "log",
  "memmap2",
  "nohash",
@@ -414,11 +413,11 @@ dependencies = [
 [[package]]
 name = "arroy"
 version = "0.5.0"
-source = "git+https://github.com/meilisearch/arroy/?tag=DO-NOT-DELETE-upgrade-v04-to-v05#053807bf38dc079f25b003f19fc30fbf3613f6e7"
+source = "git+https://github.com/meilisearch/arroy?branch=update-heed-to-0-22#3b307a0e042c7527396ac36e6e88fc14372482da"
 dependencies = [
  "bytemuck",
  "byteorder",
- "heed",
+ "heed 0.22.0 (git+https://github.com/meilisearch/heed?branch=main)",
  "log",
  "memmap2",
  "nohash",
@@ -427,7 +426,7 @@ dependencies = [
  "rayon",
  "roaring",
  "tempfile",
- "thiserror 1.0.69",
+ "thiserror 2.0.9",
 ]
 
 [[package]]
@@ -553,7 +552,7 @@ version = "0.70.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f49d8fed880d473ea71efb9bf597651e77201bdd4893efe54c9e5d65ae04ce6f"
 dependencies = [
- "bitflags 2.6.0",
+ "bitflags 2.9.0",
  "cexpr",
  "clang-sys",
  "itertools 0.13.0",
@@ -599,9 +598,9 @@ checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 
 [[package]]
 name = "bitflags"
-version = "2.6.0"
+version = "2.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b048fb63fd8b5923fc5aa7b340d8e156aec7ec02f0c78fa8a6ddc2613f6f71de"
+checksum = "5c8214115b7bf84099f1309324e63141d4c5d7cc26862f97a0a857dbefe165bd"
 dependencies = [
  "serde",
 ]
@@ -2082,7 +2081,7 @@ version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ce20bbb48248608ba4908b45fe36e17e40f56f8c6bb385ecf5d3c4a1e8b05a22"
 dependencies = [
- "bitflags 2.6.0",
+ "bitflags 2.9.0",
  "debugid",
  "fxhash",
  "serde",
@@ -2249,7 +2248,7 @@ version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b903b73e45dc0c6c596f2d37eccece7c1c8bb6e4407b001096387c63d0d93724"
 dependencies = [
- "bitflags 2.6.0",
+ "bitflags 2.9.0",
  "libc",
  "libgit2-sys",
  "log",
@@ -2401,12 +2400,46 @@ version = "0.20.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d4f449bab7320c56003d37732a917e18798e2f1709d80263face2b4f9436ddb"
 dependencies = [
- "bitflags 2.6.0",
+ "bitflags 2.9.0",
  "byteorder",
- "heed-traits",
- "heed-types",
+ "heed-traits 0.20.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "heed-types 0.20.1",
  "libc",
- "lmdb-master-sys",
+ "lmdb-master-sys 0.2.4",
+ "once_cell",
+ "page_size",
+ "synchronoise",
+ "url",
+]
+
+[[package]]
+name = "heed"
+version = "0.22.0"
+source = "git+https://github.com/meilisearch/heed?branch=bump-versions#a778043eb1768c7885828f6eaa9a668a64c5950a"
+dependencies = [
+ "bitflags 2.9.0",
+ "byteorder",
+ "heed-traits 0.20.0 (git+https://github.com/meilisearch/heed?branch=bump-versions)",
+ "heed-types 0.21.0 (git+https://github.com/meilisearch/heed?branch=bump-versions)",
+ "libc",
+ "lmdb-master-sys 0.2.5 (git+https://github.com/meilisearch/heed?branch=bump-versions)",
+ "once_cell",
+ "page_size",
+ "synchronoise",
+ "url",
+]
+
+[[package]]
+name = "heed"
+version = "0.22.0"
+source = "git+https://github.com/meilisearch/heed?branch=main#2988ff87aaf493c46f81a0f011618a1b336b8d30"
+dependencies = [
+ "bitflags 2.9.0",
+ "byteorder",
+ "heed-traits 0.20.0 (git+https://github.com/meilisearch/heed?branch=main)",
+ "heed-types 0.21.0 (git+https://github.com/meilisearch/heed?branch=main)",
+ "libc",
+ "lmdb-master-sys 0.2.5 (git+https://github.com/meilisearch/heed?branch=main)",
  "once_cell",
  "page_size",
  "synchronoise",
@@ -2420,16 +2453,44 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eb3130048d404c57ce5a1ac61a903696e8fcde7e8c2991e9fcfc1f27c3ef74ff"
 
 [[package]]
+name = "heed-traits"
+version = "0.20.0"
+source = "git+https://github.com/meilisearch/heed?branch=bump-versions#a778043eb1768c7885828f6eaa9a668a64c5950a"
+
+[[package]]
+name = "heed-traits"
+version = "0.20.0"
+source = "git+https://github.com/meilisearch/heed?branch=main#2988ff87aaf493c46f81a0f011618a1b336b8d30"
+
+[[package]]
 name = "heed-types"
 version = "0.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9d3f528b053a6d700b2734eabcd0fd49cb8230647aa72958467527b0b7917114"
 dependencies = [
+ "byteorder",
+ "heed-traits 0.20.0 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "heed-types"
+version = "0.21.0"
+source = "git+https://github.com/meilisearch/heed?branch=bump-versions#a778043eb1768c7885828f6eaa9a668a64c5950a"
+dependencies = [
  "bincode",
  "byteorder",
- "heed-traits",
+ "heed-traits 0.20.0 (git+https://github.com/meilisearch/heed?branch=bump-versions)",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "heed-types"
+version = "0.21.0"
+source = "git+https://github.com/meilisearch/heed?branch=main#2988ff87aaf493c46f81a0f011618a1b336b8d30"
+dependencies = [
+ "byteorder",
+ "heed-traits 0.20.0 (git+https://github.com/meilisearch/heed?branch=main)",
 ]
 
 [[package]]
@@ -2746,7 +2807,7 @@ name = "index-scheduler"
 version = "1.13.3"
 dependencies = [
  "anyhow",
- "arroy 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "arroy 0.5.0 (git+https://github.com/meilisearch/arroy?branch=update-heed-to-0-22)",
  "big_s",
  "bincode",
  "bumpalo",
@@ -3013,9 +3074,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.169"
+version = "0.2.171"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b5aba8db14291edd000dfcc4d620c7ebfb122c613afb886ca8803fa4e128a20a"
+checksum = "c19937216e9d3aa9956d9bb8dfc0b0c8beb6058fc4f7a4dc4d850edf86a237d6"
 
 [[package]]
 name = "libgit2-sys"
@@ -3478,6 +3539,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "lmdb-master-sys"
+version = "0.2.5"
+source = "git+https://github.com/meilisearch/heed?branch=bump-versions#a778043eb1768c7885828f6eaa9a668a64c5950a"
+dependencies = [
+ "cc",
+ "doxygen-rs",
+ "libc",
+]
+
+[[package]]
+name = "lmdb-master-sys"
+version = "0.2.5"
+source = "git+https://github.com/meilisearch/heed?branch=main#2988ff87aaf493c46f81a0f011618a1b336b8d30"
+dependencies = [
+ "cc",
+ "doxygen-rs",
+ "libc",
+]
+
+[[package]]
 name = "local-channel"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3513,9 +3594,9 @@ checksum = "9374ef4228402d4b7e403e5838cb880d9ee663314b0a900d5a6aabf0c213552e"
 
 [[package]]
 name = "log"
-version = "0.4.21"
+version = "0.4.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "90ed8c1e510134f979dbc4f070f87d4313098b704861a105fe34231c70a3901c"
+checksum = "30bde2b3dc3671ae49d8e2e9f044c7c005836e7a023ee57cffa25ab82764bb9e"
 
 [[package]]
 name = "lzma-rs"
@@ -3761,7 +3842,7 @@ name = "milli"
 version = "1.13.3"
 dependencies = [
  "allocator-api2",
- "arroy 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "arroy 0.5.0 (git+https://github.com/meilisearch/arroy?branch=update-heed-to-0-22)",
  "bbqueue",
  "big_s",
  "bimap",
@@ -3790,7 +3871,7 @@ dependencies = [
  "geoutils",
  "grenad",
  "hashbrown 0.15.2",
- "heed",
+ "heed 0.22.0 (git+https://github.com/meilisearch/heed?branch=bump-versions)",
  "hf-hub",
  "indexmap",
  "insta",
@@ -4129,9 +4210,9 @@ checksum = "ae4512a8f418ac322335255a72361b9ac927e106f4d7fe6ab4d8ac59cb01f7a9"
 
 [[package]]
 name = "once_cell"
-version = "1.20.2"
+version = "1.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1261fe7e33c73b354eab43b1273a57c8f967d0391e80353e51f764ac02cf6775"
+checksum = "cde51589ab56b20a6f686b2c68f7a0bd6add753d697abf720d63f8db3ab7b1ad"
 
 [[package]]
 name = "onig"
@@ -4518,7 +4599,7 @@ version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "731e0d9356b0c25f16f33b5be79b1c57b562f141ebfcdb0ad8ac2c13a24293b4"
 dependencies = [
- "bitflags 2.6.0",
+ "bitflags 2.9.0",
  "hex",
  "lazy_static",
  "procfs-core",
@@ -4531,7 +4612,7 @@ version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2d3554923a69f4ce04c4a754260c338f505ce22642d3830e049a399fc2059a29"
 dependencies = [
- "bitflags 2.6.0",
+ "bitflags 2.9.0",
  "hex",
 ]
 
@@ -4872,7 +4953,7 @@ version = "1.20.0"
 source = "git+https://github.com/rhaiscript/rhai?rev=ef3df63121d27aacd838f366f2b83fd65f20a1e4#ef3df63121d27aacd838f366f2b83fd65f20a1e4"
 dependencies = [
  "ahash 0.8.11",
- "bitflags 2.6.0",
+ "bitflags 2.9.0",
  "instant",
  "num-traits",
  "once_cell",
@@ -5008,7 +5089,7 @@ version = "0.38.41"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d7f649912bc1495e167a6edee79151c84b1bad49748cb4f1f1167f459f6224f6"
 dependencies = [
- "bitflags 2.6.0",
+ "bitflags 2.9.0",
  "errno",
  "libc",
  "linux-raw-sys",
@@ -5130,9 +5211,9 @@ checksum = "a3f0bf26fd526d2a95683cd0f87bf103b8539e2ca1ef48ce002d67aad59aa0b4"
 
 [[package]]
 name = "serde"
-version = "1.0.217"
+version = "1.0.219"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02fc4265df13d6fa1d00ecff087228cc0a2b5f3c0e87e258d8b94a156e984c70"
+checksum = "5f0e2c6ed6606019b4e29e69dbaba95b11854410e5347d525002456dbbb786b6"
 dependencies = [
  "serde_derive",
 ]
@@ -5148,9 +5229,9 @@ dependencies = [
 
 [[package]]
 name = "serde_derive"
-version = "1.0.217"
+version = "1.0.219"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a9bf7cf98d04a2b28aead066b7496853d4779c9cc183c440dbac457641e19a0"
+checksum = "5b0276cf7f2c73365f7157c8123c21cd9a50fbbd844757af28ca1f5925fc2a00"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5159,9 +5240,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.138"
+version = "1.0.140"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d434192e7da787e94a6ea7e9670b26a036d0ca41e0b7efb2676dd32bae872949"
+checksum = "20068b6e96dc6c9bd23e01df8827e6c7e1f2fddd43c21810382803c136b99373"
 dependencies = [
  "indexmap",
  "itoa",
@@ -5529,7 +5610,7 @@ version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec7dddc5f0fee506baf8b9fdb989e242f17e4b11c61dfbb0635b705217199eea"
 dependencies = [
- "bitflags 2.6.0",
+ "bitflags 2.9.0",
  "byteorder",
  "enum-as-inner",
  "libc",
