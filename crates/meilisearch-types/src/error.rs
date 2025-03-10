@@ -241,6 +241,7 @@ InvalidDocumentGeoField               , InvalidRequest       , BAD_REQUEST ;
 InvalidVectorDimensions               , InvalidRequest       , BAD_REQUEST ;
 InvalidVectorsType                    , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentId                     , InvalidRequest       , BAD_REQUEST ;
+InvalidDocumentIds                    , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentLimit                  , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentOffset                 , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchEmbedder                 , InvalidRequest       , BAD_REQUEST ;
@@ -383,6 +384,7 @@ UnsupportedMediaType                  , InvalidRequest       , UNSUPPORTED_MEDIA
 // Experimental features
 VectorEmbeddingError                  , InvalidRequest       , BAD_REQUEST ;
 NotFoundSimilarId                     , InvalidRequest       , BAD_REQUEST ;
+NotFoundDocumentId                    , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentEditionContext         , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentEditionFunctionFilter  , InvalidRequest       , BAD_REQUEST ;
 EditDocumentsByFunctionError          , InvalidRequest       , BAD_REQUEST
