@@ -33,8 +33,6 @@ pub enum Error {
 
 #[derive(Error, Debug)]
 pub enum InternalError {
-    #[error("{}", HeedError::DatabaseClosing)]
-    DatabaseClosing,
     #[error("missing {} in the {db_name} database", key.unwrap_or("key"))]
     DatabaseMissingEntry { db_name: &'static str, key: Option<&'static str> },
     #[error("missing {key} in the fieldids weights mapping")]
@@ -197,8 +195,8 @@ and can not be more than 511 bytes.", .document_id.to_string()
         valid_fields: BTreeSet<String>,
         hidden_fields: bool,
     },
-    #[error("an environment is already opened with different options")]
-    InvalidLmdbOpenOptions,
+    #[error("An LMDB environment is already opened")]
+    EnvAlreadyOpened,
     #[error("You must specify where `sort` is listed in the rankingRules setting to use the sort parameter at search time.")]
     SortRankingRuleMissing,
     #[error("The database file is in an invalid state.")]
@@ -516,8 +514,7 @@ impl From<HeedError> for Error {
             // TODO use the encoding
             HeedError::Encoding(_) => InternalError(Serialization(Encoding { db_name: None })),
             HeedError::Decoding(_) => InternalError(Serialization(Decoding { db_name: None })),
-            HeedError::DatabaseClosing => InternalError(DatabaseClosing),
-            HeedError::BadOpenOptions { .. } => UserError(InvalidLmdbOpenOptions),
+            HeedError::EnvAlreadyOpened { .. } => UserError(EnvAlreadyOpened),
         }
     }
 }
