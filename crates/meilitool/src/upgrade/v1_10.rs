@@ -2,7 +2,7 @@ use std::path::Path;
 
 use anyhow::{bail, Context};
 use meilisearch_types::heed::types::{SerdeJson, Str};
-use meilisearch_types::heed::{Database, Env, EnvOpenOptions, RoTxn, RwTxn, Unspecified};
+use meilisearch_types::heed::{Database, Env, EnvOpenOptions, RoTxn, RwTxn, TlsUsage, Unspecified};
 use meilisearch_types::milli::index::{db_name, main_key};
 
 use super::v1_9;
@@ -90,9 +90,9 @@ fn update_index_stats(
     Ok(())
 }
 
-fn update_date_format(
+fn update_date_format<T: TlsUsage>(
     index_uid: &str,
-    index_env: &Env,
+    index_env: &Env<T>,
     index_wtxn: &mut RwTxn,
 ) -> anyhow::Result<()> {
     let main = try_opening_poly_database(index_env, index_wtxn, db_name::MAIN)
@@ -104,9 +104,9 @@ fn update_date_format(
     Ok(())
 }
 
-fn find_rest_embedders(
+fn find_rest_embedders<T: TlsUsage>(
     index_uid: &str,
-    index_env: &Env,
+    index_env: &Env<T>,
     index_txn: &RoTxn,
 ) -> anyhow::Result<Vec<String>> {
     let main = try_opening_poly_database(index_env, index_txn, db_name::MAIN)

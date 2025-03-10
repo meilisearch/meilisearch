@@ -405,7 +405,7 @@ impl ErrorCode for milli::Error {
                 match error {
                     // TODO: wait for spec for new error codes.
                     UserError::SerdeJson(_)
-                    | UserError::InvalidLmdbOpenOptions
+                    | UserError::EnvAlreadyOpened
                     | UserError::DocumentLimitReached
                     | UserError::UnknownInternalDocumentId { .. } => Code::Internal,
                     UserError::InvalidStoreFile => Code::InvalidStoreFile,
@@ -501,8 +501,7 @@ impl ErrorCode for HeedError {
             HeedError::Mdb(_)
             | HeedError::Encoding(_)
             | HeedError::Decoding(_)
-            | HeedError::DatabaseClosing
-            | HeedError::BadOpenOptions { .. } => Code::Internal,
+            | HeedError::EnvAlreadyOpened => Code::Internal,
         }
     }
 }

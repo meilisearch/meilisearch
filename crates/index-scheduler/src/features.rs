@@ -2,7 +2,7 @@ use std::sync::{Arc, RwLock};
 
 use meilisearch_types::features::{InstanceTogglableFeatures, Network, RuntimeTogglableFeatures};
 use meilisearch_types::heed::types::{SerdeJson, Str};
-use meilisearch_types::heed::{Database, Env, RwTxn};
+use meilisearch_types::heed::{Database, Env, RwTxn, WithoutTls};
 
 use crate::error::FeatureNotEnabledError;
 use crate::Result;
@@ -126,7 +126,7 @@ impl FeatureData {
     }
 
     pub fn new(
-        env: &Env,
+        env: &Env<WithoutTls>,
         wtxn: &mut RwTxn,
         instance_features: InstanceTogglableFeatures,
     ) -> Result<Self> {
