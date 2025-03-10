@@ -12,9 +12,7 @@ use serde_json::Value;
 use super::facet_range_search;
 use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::error::{Error, UserError};
-use crate::filterable_attributes_rules::{
-    filtered_matching_patterns, is_field_filterable, matching_features,
-};
+use crate::filterable_attributes_rules::{filtered_matching_patterns, matching_features};
 use crate::heed_codec::facet::{
     FacetGroupKey, FacetGroupKeyCodec, FacetGroupValue, FacetGroupValueCodec, OrderedF64Codec,
 };
@@ -233,24 +231,8 @@ impl<'a> Filter<'a> {
 
 impl<'a> Filter<'a> {
     pub fn evaluate(&self, rtxn: &heed::RoTxn<'_>, index: &Index) -> Result<RoaringBitmap> {
-        // to avoid doing this for each recursive call we're going to do it ONCE ahead of time
         let fields_ids_map = index.fields_ids_map(rtxn)?;
         let filterable_attributes_rules = index.filterable_attributes_rules(rtxn)?;
-        for fid in self.condition.fids(MAX_FILTER_DEPTH) {
-            let attribute = fid.value();
-            if is_field_filterable(attribute, &filterable_attributes_rules) {
-                continue;
-            }
-
-            // If the field is not filterable, return an error
-            return Err(fid.as_external_error(FilterError::AttributeNotFilterable {
-                attribute,
-                filterable_patterns: filtered_matching_patterns(
-                    &filterable_attributes_rules,
-                    &|features| features.is_filterable(),
-                ),
-            }))?;
-        }
 
         self.inner_evaluate(rtxn, index, &fields_ids_map, &filterable_attributes_rules, None)
     }
@@ -484,15 +466,22 @@ impl<'a> Filter<'a> {
                 }
             }
             FilterCondition::In { fid, els } => {
+                let Some((rule_index, features)) =
+                    matching_features(fid.value(), filterable_attribute_rules)
+                        .filter(|(_, features)| features.is_filterable())
+                else {
+                    // If the field is not filterable, return an error
+                    return Err(fid.as_external_error(FilterError::AttributeNotFilterable {
+                        attribute: fid.value(),
+                        filterable_patterns: filtered_matching_patterns(
+                            filterable_attribute_rules,
+                            &|features| features.is_filterable(),
+                        ),
+                    }))?;
+                };
                 let Some(field_id) = field_ids_map.id(fid.value()) else {
                     return Ok(RoaringBitmap::new());
                 };
-                let Some((rule_index, features)) =
-                    matching_features(fid.value(), filterable_attribute_rules)
-                else {
-                    return Ok(RoaringBitmap::new());
-                };
-
                 els.iter()
                     .map(|el| Condition::Equal(el.clone()))
                     .map(|op| {
@@ -503,12 +492,20 @@ impl<'a> Filter<'a> {
                     .union()
             }
             FilterCondition::Condition { fid, op } => {
-                let Some(field_id) = field_ids_map.id(fid.value()) else {
-                    return Ok(RoaringBitmap::new());
-                };
                 let Some((rule_index, features)) =
                     matching_features(fid.value(), filterable_attribute_rules)
+                        .filter(|(_, features)| features.is_filterable())
                 else {
+                    // If the field is not filterable, return an error
+                    return Err(fid.as_external_error(FilterError::AttributeNotFilterable {
+                        attribute: fid.value(),
+                        filterable_patterns: filtered_matching_patterns(
+                            filterable_attribute_rules,
+                            &|features| features.is_filterable(),
+                        ),
+                    }))?;
+                };
+                let Some(field_id) = field_ids_map.id(fid.value()) else {
                     return Ok(RoaringBitmap::new());
                 };
 
