@@ -727,17 +727,15 @@ fn validate_settings(
             let Setting::Set(embedder) = embedder else {
                 continue;
             };
-            if let Setting::Set(source) = embedder.source {
-                if source == EmbedderSource::Composite {
-                    features.check_composite_embedders("using `\"composite\"` as source")?;
-                }
+            if matches!(embedder.source, Setting::Set(EmbedderSource::Composite)) {
+                features.check_composite_embedders("using `\"composite\"` as source")?;
             }
 
-            if let Setting::Set(_) = &embedder.search_embedder {
+            if matches!(embedder.search_embedder, Setting::Set(_)) {
                 features.check_composite_embedders("setting `searchEmbedder`")?;
             }
 
-            if let Setting::Set(_) = &embedder.indexing_embedder {
+            if matches!(embedder.indexing_embedder, Setting::Set(_)) {
                 features.check_composite_embedders("setting `indexingEmbedder`")?;
             }
         }
