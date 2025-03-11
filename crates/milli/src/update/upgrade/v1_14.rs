@@ -1,3 +1,4 @@
+use arroy::distances::Cosine;
 use heed::RwTxn;
 
 use super::UpgradeIndex;
@@ -24,11 +25,11 @@ impl UpgradeIndex for Latest_V1_13_To_Latest_V1_14 {
         progress.update_progress(VectorStore::UpdateInternalVersions);
 
         let rtxn = index.read_txn()?;
-        arroy::upgrade::cosine_from_0_5_to_0_6(
+        arroy::upgrade::from_0_5_to_0_6::<Cosine>(
             &rtxn,
-            index.vector_arroy,
-            &mut wtxn,
-            index.vector_arroy,
+            index.vector_arroy.remap_data_type(),
+            wtxn,
+            index.vector_arroy.remap_data_type(),
         )?;
 
         Ok(true)

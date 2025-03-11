@@ -78,9 +78,9 @@ pub fn v1_10_to_v1_11(
 
         meilisearch_types::milli::arroy::upgrade::cosine_from_0_4_to_0_5(
             &index_rtxn,
-            index_read_database,
+            index_read_database.remap_types(),
             &mut index_wtxn,
-            index_write_database,
+            index_write_database.remap_types(),
         )?;
 
         index_wtxn.commit()?;
