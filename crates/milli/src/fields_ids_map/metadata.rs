@@ -223,7 +223,7 @@ impl MetadataBuilder {
         let distinct_attribute = index.distinct_field(rtxn)?.map(|s| s.to_string());
         let asc_desc_attributes = index.asc_desc_fields(rtxn)?;
 
-        Ok(Self::_new(
+        Ok(Self::new(
             searchable_attributes,
             filterable_attributes,
             sortable_attributes,
@@ -233,29 +233,10 @@ impl MetadataBuilder {
         ))
     }
 
-    #[cfg(test)]
     /// Build a new `MetadataBuilder` from the given parameters.
     ///
     /// This is used for testing, prefer using `MetadataBuilder::from_index` instead.
     pub fn new(
-        searchable_attributes: Option<Vec<String>>,
-        filterable_attributes: Vec<FilterableAttributesRule>,
-        sortable_attributes: HashSet<String>,
-        localized_attributes: Option<Vec<LocalizedAttributesRule>>,
-        distinct_attribute: Option<String>,
-        asc_desc_attributes: HashSet<String>,
-    ) -> Self {
-        Self::_new(
-            searchable_attributes,
-            filterable_attributes,
-            sortable_attributes,
-            localized_attributes,
-            distinct_attribute,
-            asc_desc_attributes,
-        )
-    }
-
-    fn _new(
         searchable_attributes: Option<Vec<String>>,
         filterable_attributes: Vec<FilterableAttributesRule>,
         sortable_attributes: HashSet<String>,
