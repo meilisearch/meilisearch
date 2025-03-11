@@ -393,8 +393,8 @@ checksum = "96d30a06541fbafbc7f82ed10c06164cfbd2c401138f6addd8404629c4b16711"
 
 [[package]]
 name = "arroy"
-version = "0.5.0"
-source = "git+https://github.com/meilisearch/arroy?branch=update-heed-to-0-22#3b307a0e042c7527396ac36e6e88fc14372482da"
+version = "0.6.0"
+source = "git+https://github.com/meilisearch/arroy?branch=main#80a7f1ba60bd7d88d55ce958a7579d664fc769ce"
 dependencies = [
  "bytemuck",
  "byteorder",

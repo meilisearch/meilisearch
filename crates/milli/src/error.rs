@@ -360,7 +360,8 @@ impl From<arroy::Error> for Error {
             | arroy::Error::UnmatchingDistance { .. }
             | arroy::Error::NeedBuild(_)
             | arroy::Error::MissingKey { .. }
-            | arroy::Error::MissingMetadata(_) => {
+            | arroy::Error::MissingMetadata(_)
+            | arroy::Error::CannotDecodeKeyMode { .. } => {
                 Error::InternalError(InternalError::ArroyError(value))
             }
         }
