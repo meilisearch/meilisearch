@@ -459,7 +459,7 @@ async fn filter_invalid_attribute_array() {
                 snapshot!(code, @"400 Bad Request");
                 snapshot!(response, @r###"
                 {
-                  "message": "Attribute `many` is not filterable. Available filterable attributes patterns are: `title`.\n1:5 many = Glass",
+                  "message": "Attribute `many` is not filterable. Available filterable attribute patterns are: `title`.\n1:5 many = Glass",
                   "code": "invalid_similar_filter",
                   "type": "invalid_request",
                   "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
@@ -500,7 +500,7 @@ async fn filter_invalid_attribute_string() {
                 snapshot!(code, @"400 Bad Request");
                 snapshot!(response, @r###"
                 {
-                  "message": "Attribute `many` is not filterable. Available filterable attributes patterns are: `title`.\n1:5 many = Glass",
+                  "message": "Attribute `many` is not filterable. Available filterable attribute patterns are: `title`.\n1:5 many = Glass",
                   "code": "invalid_similar_filter",
                   "type": "invalid_request",
                   "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"

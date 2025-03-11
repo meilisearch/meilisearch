@@ -350,7 +350,7 @@ impl<'a> FacetDistribution<'a> {
         Ok(distribution)
     }
 
-    /// Select a field if it is faceted and in the facets.
+    /// Select a field if it is filterable and in the facets.
     fn select_field(
         &self,
         name: &str,
@@ -372,7 +372,7 @@ impl<'a> FacetDistribution<'a> {
         }
     }
 
-    /// Check if the fields in the facets are valid faceted fields.
+    /// Check if the fields in the facets are valid filterable fields.
     fn check_faceted_fields(
         &self,
         filterable_attributes_rules: &[FilterableAttributesRule],

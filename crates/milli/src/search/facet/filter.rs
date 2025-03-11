@@ -82,7 +82,7 @@ impl<'a> Display for FilterError<'a> {
                 if filterable_patterns.is_empty() {
                     write!(f, " This index does not have configured filterable attributes.")
                 } else {
-                    write!(f, " Available filterable attributes patterns are: ")?;
+                    write!(f, " Available filterable attribute patterns are: ")?;
                     let mut filterables_list =
                         filterable_patterns.iter().map(AsRef::as_ref).collect::<Vec<&str>>();
                     filterables_list.sort_unstable();
@@ -911,42 +911,42 @@ mod tests {
         let filter = Filter::from_str("_geoRadius(-100, 150, 10)").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
         snapshot!(error.to_string(), @r###"
-        Attribute `_geo` is not filterable. Available filterable attributes patterns are: `title`.
+        Attribute `_geo` is not filterable. Available filterable attribute patterns are: `title`.
         12:16 _geoRadius(-100, 150, 10)
         "###);
 
         let filter = Filter::from_str("_geoBoundingBox([42, 150], [30, 10])").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
         snapshot!(error.to_string(), @r###"
-        Attribute `_geo` is not filterable. Available filterable attributes patterns are: `title`.
+        Attribute `_geo` is not filterable. Available filterable attribute patterns are: `title`.
         18:20 _geoBoundingBox([42, 150], [30, 10])
         "###);
 
         let filter = Filter::from_str("name = 12").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
         snapshot!(error.to_string(), @r###"
-        Attribute `name` is not filterable. Available filterable attributes patterns are: `title`.
+        Attribute `name` is not filterable. Available filterable attribute patterns are: `title`.
         1:5 name = 12
         "###);
 
         let filter = Filter::from_str("title = \"test\" AND name = 12").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
         snapshot!(error.to_string(), @r###"
-        Attribute `name` is not filterable. Available filterable attributes patterns are: `title`.
+        Attribute `name` is not filterable. Available filterable attribute patterns are: `title`.
         20:24 title = "test" AND name = 12
         "###);
 
         let filter = Filter::from_str("title = \"test\" AND name IN [12]").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
         snapshot!(error.to_string(), @r###"
-        Attribute `name` is not filterable. Available filterable attributes patterns are: `title`.
+        Attribute `name` is not filterable. Available filterable attribute patterns are: `title`.
         20:24 title = "test" AND name IN [12]
         "###);
 
         let filter = Filter::from_str("title = \"test\" AND name != 12").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
         snapshot!(error.to_string(), @r###"
-        Attribute `name` is not filterable. Available filterable attributes patterns are: `title`.
+        Attribute `name` is not filterable. Available filterable attribute patterns are: `title`.
         20:24 title = "test" AND name != 12
         "###);
     }
