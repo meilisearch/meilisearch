@@ -167,10 +167,12 @@ impl<'doc> Update<'doc> {
         }
     }
 
-    /// Returns whether the updated version of the document is different from the current version for the passed subset of fields.
+    /// Returns whether the updated version of the document is different from the current version for the subset of fields selected by `selector`.
     ///
-    /// `true` if at least one top-level-field that is a exactly a member of field or a parent of a member of field changed.
+    /// `true` if at least one top-level-field that is exactly a selected field or a parent of a selected field changed.
     /// Otherwise `false`.
+    ///
+    /// - Note: `_geo` and `_vectors` are not taken into account by this function.
     pub fn has_changed_for_fields<'t, Mapper: FieldIdMapper>(
         &self,
         selector: &mut impl FnMut(&str) -> PatternMatch,
