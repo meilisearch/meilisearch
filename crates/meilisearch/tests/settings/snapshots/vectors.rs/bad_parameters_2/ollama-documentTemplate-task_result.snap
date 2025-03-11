@@ -1,0 +1,26 @@
+---
+source: crates/meilisearch/tests/settings/vectors.rs
+---
+{
+  "uid": "[uid]",
+  "batchUid": "[batchUid]",
+  "indexUid": "test",
+  "status": "succeeded",
+  "type": "settingsUpdate",
+  "canceledBy": null,
+  "details": {
+    "embedders": {
+      "test": {
+        "source": "ollama",
+        "model": "all-minilm",
+        "dimensions": 768,
+        "documentTemplate": "toto"
+      }
+    }
+  },
+  "error": null,
+  "duration": "[duration]",
+  "enqueuedAt": "[enqueuedAt]",
+  "startedAt": "[startedAt]",
+  "finishedAt": "[finishedAt]"
+}

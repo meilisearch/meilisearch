@@ -13,6 +13,7 @@ use thiserror::Error;
 use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::documents::{self, DocumentsBatchCursorError};
 use crate::thread_pool_no_abort::PanicCatched;
+use crate::vector::settings::EmbeddingSettings;
 use crate::{CriterionError, DocumentId, FieldId, Object, SortError};
 
 pub fn is_reserved_keyword(keyword: &str) -> bool {
@@ -240,28 +241,52 @@ and can not be more than 511 bytes.", .document_id.to_string()
     InvalidSimilarEmbedder(String),
     #[error("Too many vectors for document with id {0}: found {1}, but limited to 256.")]
     TooManyVectors(String, usize),
-    #[error("`.embedders.{embedder_name}`: Field `{field}` unavailable for source `{source_}` (only available for sources: {}). Available fields: {}",
-        allowed_sources_for_field
-         .iter()
-         .map(|accepted| format!("`{}`", accepted))
-         .collect::<Vec<String>>()
-         .join(", "),
-        allowed_fields_for_source
-         .iter()
-         .map(|accepted| format!("`{}`", accepted))
-         .collect::<Vec<String>>()
-         .join(", ")
+    #[error("`.embedders.{embedder_name}`: Field `{field}` unavailable for source `{source_}`{for_context}.{available_sources}{available_fields}{available_contexts}",
+    field=field.name(),
+        for_context={
+            context.in_context()
+        },
+        available_sources={
+            let allowed_sources_for_field = EmbeddingSettings::allowed_sources_for_field(*field, *context);
+            if allowed_sources_for_field.is_empty() {
+                String::new()
+            } else {
+                format!("\n  - note: `{}` is available for sources: {}",
+                field.name(),
+                allowed_sources_for_field
+                .iter()
+                .map(|accepted| format!("`{}`", accepted))
+                .collect::<Vec<String>>()
+                .join(", "),
+            )
+            }
+        },
+        available_fields={
+            let allowed_fields_for_source = EmbeddingSettings::allowed_fields_for_source(*source_, *context);
+            format!("\n  - note: available fields for source `{source_}`{}: {}",context.in_context(), allowed_fields_for_source
+            .iter()
+            .map(|accepted| format!("`{}`", accepted))
+            .collect::<Vec<String>>()
+            .join(", "),)
+        },
+        available_contexts={
+            let available_not_nested = !matches!(EmbeddingSettings::field_status(*source_, *field, crate::vector::settings::NestingContext::NotNested), crate::vector::settings::FieldStatus::Disallowed);
+            if available_not_nested {
+                format!("\n  - note: `{}` is available when source `{source_}` is not{}", field.name(), context.in_context())
+            } else {
+                String::new()
+            }
+        }
     )]
     InvalidFieldForSource {
         embedder_name: String,
         source_: crate::vector::settings::EmbedderSource,
-        field: &'static str,
-        allowed_fields_for_source: &'static [&'static str],
-        allowed_sources_for_field: &'static [crate::vector::settings::EmbedderSource],
+        context: crate::vector::settings::NestingContext,
+        field: crate::vector::settings::MetaEmbeddingSetting,
     },
     #[error("`.embedders.{embedder_name}.model`: Invalid model `{model}` for OpenAI. Supported models: {:?}", crate::vector::openai::EmbeddingModel::supported_models())]
     InvalidOpenAiModel { embedder_name: String, model: String },
-    #[error("`.embedders.{embedder_name}`: Missing field `{field}` (note: this field is mandatory for source {source_})")]
+    #[error("`.embedders.{embedder_name}`: Missing field `{field}` (note: this field is mandatory for source `{source_}`)")]
     MissingFieldForSource {
         field: &'static str,
         source_: crate::vector::settings::EmbedderSource,
@@ -281,6 +306,15 @@ and can not be more than 511 bytes.", .document_id.to_string()
         dimensions: usize,
         max_dimensions: usize,
     },
+    #[error("`.embedders.{embedder_name}.source`: Source `{source_}` is not available in a nested embedder")]
+    InvalidSourceForNested {
+        embedder_name: String,
+        source_: crate::vector::settings::EmbedderSource,
+    },
+    #[error("`.embedders.{embedder_name}`: Missing field `source`.\n  - note: this field is mandatory for nested embedders")]
+    MissingSourceForNested { embedder_name: String },
+    #[error("`.embedders.{embedder_name}`: {message}")]
+    InvalidSettingsEmbedder { embedder_name: String, message: String },
     #[error("`.embedders.{embedder_name}.dimensions`: `dimensions` cannot be zero")]
     InvalidSettingsDimensions { embedder_name: String },
     #[error(
