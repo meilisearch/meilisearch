@@ -420,6 +420,7 @@ pub fn update_version_file_for_dumpless_upgrade(
     if from_major == 1 && from_minor == 12 {
         let env = unsafe {
             heed::EnvOpenOptions::new()
+                .read_txn_without_tls()
                 .max_dbs(Versioning::nb_db())
                 .map_size(index_scheduler_opt.task_db_size)
                 .open(&index_scheduler_opt.tasks_path)
