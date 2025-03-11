@@ -412,6 +412,117 @@ async fn ollama_url_checks() {
 async fn composite_checks() {
     let server = Server::new().await;
     let index = server.index("test");
+    // feature not enabled, using source
+    let (response, _code) = index
+        .update_settings(json!({
+          "embedders": {
+            "test": null
+          }
+        }))
+        .await;
+    server.wait_task(response.uid()).await;
+
+    let (response, code) = index
+        .update_settings(json!({
+          "embedders": {
+            "test": {
+              "source": "composite",
+              "searchEmbedder": {
+                "source": "huggingFace",
+                "model": "sentence-transformers/all-MiniLM-L6-v2",
+                "revision": "e4ce9877abf3edfe10b0d82785e83bdcb973e22e",
+              },
+              "indexingEmbedder": {
+                "source": "huggingFace",
+                "model": "sentence-transformers/all-MiniLM-L6-v2",
+                "revision": "e4ce9877abf3edfe10b0d82785e83bdcb973e22e",
+              },
+           }
+          }
+        }))
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(response, @r###"
+    {
+      "message": "using `\"composite\"` as source requires enabling the `composite embedders` experimental feature. See https://github.com/orgs/meilisearch/discussions/816",
+      "code": "feature_not_enabled",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+    }
+    "###);
+
+    // feature not enabled, using search embedder
+    let (response, _code) = index
+        .update_settings(json!({
+          "embedders": {
+            "test": null
+          }
+        }))
+        .await;
+    server.wait_task(response.uid()).await;
+
+    let (response, code) = index
+        .update_settings(json!({
+          "embedders": {
+            "test": {
+              "source": "userProvided",
+              "searchEmbedder": {
+                "source": "huggingFace",
+                "model": "sentence-transformers/all-MiniLM-L6-v2",
+                "revision": "e4ce9877abf3edfe10b0d82785e83bdcb973e22e",
+              }
+           }
+          }
+        }))
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(response, @r###"
+    {
+      "message": "setting `searchEmbedder` requires enabling the `composite embedders` experimental feature. See https://github.com/orgs/meilisearch/discussions/816",
+      "code": "feature_not_enabled",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+    }
+    "###);
+
+    // feature not enabled, using indexing embedder
+    let (response, _code) = index
+        .update_settings(json!({
+          "embedders": {
+            "test": null
+          }
+        }))
+        .await;
+    server.wait_task(response.uid()).await;
+
+    let (response, code) = index
+        .update_settings(json!({
+          "embedders": {
+            "test": {
+              "source": "userProvided",
+              "indexingEmbedder": {
+                "source": "huggingFace",
+                "model": "sentence-transformers/all-MiniLM-L6-v2",
+                "revision": "e4ce9877abf3edfe10b0d82785e83bdcb973e22e",
+              }
+           }
+          }
+        }))
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(response, @r###"
+    {
+      "message": "setting `indexingEmbedder` requires enabling the `composite embedders` experimental feature. See https://github.com/orgs/meilisearch/discussions/816",
+      "code": "feature_not_enabled",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+    }
+    "###);
+
+    // enable feature
+    let (_, code) = server.set_features(json!({"compositeEmbedders": true})).await;
+    snapshot!(code, @"200 OK");
+
     // inner distribution
     let (response, _code) = index
         .update_settings(json!({

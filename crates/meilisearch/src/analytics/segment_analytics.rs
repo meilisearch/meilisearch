@@ -198,6 +198,7 @@ struct Infos {
     experimental_limit_batched_tasks_total_size: u64,
     experimental_network: bool,
     experimental_get_task_documents_route: bool,
+    experimental_composite_embedders: bool,
     gpu_enabled: bool,
     db_path: bool,
     import_dump: bool,
@@ -290,6 +291,7 @@ impl Infos {
             contains_filter,
             network,
             get_task_documents_route,
+            composite_embedders,
         } = features;
 
         // We're going to override every sensible information.
@@ -309,6 +311,7 @@ impl Infos {
             experimental_reduce_indexing_memory_usage,
             experimental_network: network,
             experimental_get_task_documents_route: get_task_documents_route,
+            experimental_composite_embedders: composite_embedders,
             gpu_enabled: meilisearch_types::milli::vector::is_cuda_enabled(),
             db_path: db_path != PathBuf::from("./data.ms"),
             import_dump: import_dump.is_some(),
