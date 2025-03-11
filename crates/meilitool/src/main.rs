@@ -7,7 +7,7 @@ use anyhow::{bail, Context};
 use clap::{Parser, Subcommand, ValueEnum};
 use dump::{DumpWriter, IndexMetadata};
 use file_store::FileStore;
-use meilisearch_auth::AuthController;
+use meilisearch_auth::{open_auth_store_env, AuthController};
 use meilisearch_types::batches::Batch;
 use meilisearch_types::heed::types::{Bytes, SerdeJson, Str};
 use meilisearch_types::heed::{
@@ -290,7 +290,10 @@ fn export_a_dump(
     eprintln!("Dumping the keys...");
 
     // 2. dump the keys
-    let auth_store = AuthController::new(&db_path, &None)
+    let auth_path = db_path.join("auth");
+    std::fs::create_dir_all(&auth_path).context("While creating the auth directory")?;
+    let auth_env = open_auth_store_env(&auth_path).context("While opening the auth store")?;
+    let auth_store = AuthController::new(auth_env, &None)
         .with_context(|| format!("While opening the auth store at {}", db_path.display()))?;
     let mut dump_keys = dump.create_keys()?;
     let mut count = 0;

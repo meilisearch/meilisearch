@@ -4,7 +4,6 @@ use std::sync::atomic::Ordering;
 
 use meilisearch_types::heed::CompactionOption;
 use meilisearch_types::milli::progress::{Progress, VariableNameStep};
-use meilisearch_types::milli::{self};
 use meilisearch_types::tasks::{Status, Task};
 use meilisearch_types::{compression, VERSION_FILE_NAME};
 
@@ -91,14 +90,7 @@ impl IndexScheduler {
         progress.update_progress(SnapshotCreationProgress::SnapshotTheApiKeys);
         let dst = temp_snapshot_dir.path().join("auth");
         fs::create_dir_all(&dst)?;
-        // TODO We can't use the open_auth_store_env function here but we should
-        let auth = unsafe {
-            milli::heed::EnvOpenOptions::new()
-                .map_size(1024 * 1024 * 1024) // 1 GiB
-                .max_dbs(2)
-                .open(&self.scheduler.auth_path)
-        }?;
-        auth.copy_to_path(dst.join("data.mdb"), CompactionOption::Enabled)?;
+        self.scheduler.auth_env.copy_to_path(dst.join("data.mdb"), CompactionOption::Enabled)?;
 
         // 5. Copy and tarball the flat snapshot
         progress.update_progress(SnapshotCreationProgress::CreateTheTarball);

@@ -1,15 +1,13 @@
 use std::borrow::Cow;
 use std::cmp::Reverse;
 use std::collections::HashSet;
-use std::fs::create_dir_all;
 use std::path::Path;
 use std::result::Result as StdResult;
 use std::str;
 use std::str::FromStr;
-use std::sync::Arc;
 
 use hmac::{Hmac, Mac};
-use meilisearch_types::heed::{BoxedError, WithTls};
+use meilisearch_types::heed::BoxedError;
 use meilisearch_types::index_uid_pattern::IndexUidPattern;
 use meilisearch_types::keys::KeyId;
 use meilisearch_types::milli;
@@ -25,27 +23,17 @@ use super::error::{AuthControllerError, Result};
 use super::{Action, Key};
 
 const AUTH_STORE_SIZE: usize = 1_073_741_824; //1GiB
-const AUTH_DB_PATH: &str = "auth";
 const KEY_DB_NAME: &str = "api-keys";
 const KEY_ID_ACTION_INDEX_EXPIRATION_DB_NAME: &str = "keyid-action-index-expiration";
 
 #[derive(Clone)]
 pub struct HeedAuthStore {
-    env: Arc<Env<WithTls>>,
+    env: Env,
     keys: Database<Bytes, SerdeJson<Key>>,
     action_keyid_index_expiration: Database<KeyIdActionCodec, SerdeJson<Option<OffsetDateTime>>>,
-    should_close_on_drop: bool,
 }
 
-impl Drop for HeedAuthStore {
-    fn drop(&mut self) {
-        if self.should_close_on_drop && Arc::strong_count(&self.env) == 1 {
-            self.env.as_ref().clone().prepare_for_closing();
-        }
-    }
-}
-
-pub fn open_auth_store_env(path: &Path) -> milli::heed::Result<milli::heed::Env<WithTls>> {
+pub fn open_auth_store_env(path: &Path) -> milli::heed::Result<milli::heed::Env> {
     let mut options = EnvOpenOptions::new();
     options.map_size(AUTH_STORE_SIZE); // 1GB
     options.max_dbs(2);
@@ -53,16 +41,13 @@ pub fn open_auth_store_env(path: &Path) -> milli::heed::Result<milli::heed::Env<
 }
 
 impl HeedAuthStore {
-    pub fn new(path: impl AsRef<Path>) -> Result<Self> {
-        let path = path.as_ref().join(AUTH_DB_PATH);
-        create_dir_all(&path)?;
-        let env = Arc::new(open_auth_store_env(path.as_ref())?);
+    pub fn new(env: Env) -> Result<Self> {
         let mut wtxn = env.write_txn()?;
         let keys = env.create_database(&mut wtxn, Some(KEY_DB_NAME))?;
         let action_keyid_index_expiration =
             env.create_database(&mut wtxn, Some(KEY_ID_ACTION_INDEX_EXPIRATION_DB_NAME))?;
         wtxn.commit()?;
-        Ok(Self { env, keys, action_keyid_index_expiration, should_close_on_drop: true })
+        Ok(Self { env, keys, action_keyid_index_expiration })
     }
 
     /// Return `Ok(())` if the auth store is able to access one of its database.
@@ -80,10 +65,6 @@ impl HeedAuthStore {
     /// Return the number of bytes actually used in the database
     pub fn used_size(&self) -> Result<u64> {
         Ok(self.env.non_free_pages_size()?)
-    }
-
-    pub fn set_drop_on_close(&mut self, v: bool) {
-        self.should_close_on_drop = v;
     }
 
     pub fn is_empty(&self) -> Result<bool> {

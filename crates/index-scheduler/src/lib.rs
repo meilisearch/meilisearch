@@ -209,6 +209,7 @@ impl IndexScheduler {
     #[allow(private_interfaces)] // because test_utils is private
     pub fn new(
         options: IndexSchedulerOptions,
+        auth_env: Env,
         from_db_version: (u32, u32, u32),
         #[cfg(test)] test_breakpoint_sdr: crossbeam_channel::Sender<(test_utils::Breakpoint, bool)>,
         #[cfg(test)] planned_failures: Vec<(usize, test_utils::FailureLocation)>,
@@ -262,7 +263,7 @@ impl IndexScheduler {
             processing_tasks: Arc::new(RwLock::new(ProcessingTasks::new())),
             version,
             queue,
-            scheduler: Scheduler::new(&options),
+            scheduler: Scheduler::new(&options, auth_env),
 
             index_mapper,
             env,

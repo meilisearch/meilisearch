@@ -34,7 +34,7 @@ use error::PayloadError;
 use extractors::payload::PayloadConfig;
 use index_scheduler::versioning::Versioning;
 use index_scheduler::{IndexScheduler, IndexSchedulerOptions};
-use meilisearch_auth::AuthController;
+use meilisearch_auth::{open_auth_store_env, AuthController};
 use meilisearch_types::milli::constants::VERSION_MAJOR;
 use meilisearch_types::milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
 use meilisearch_types::milli::update::{IndexDocumentsConfig, IndexDocumentsMethod};
@@ -335,9 +335,12 @@ fn open_or_create_database_unchecked(
 ) -> anyhow::Result<(IndexScheduler, AuthController)> {
     // we don't want to create anything in the data.ms yet, thus we
     // wrap our two builders in a closure that'll be executed later.
-    let auth_controller = AuthController::new(&opt.db_path, &opt.master_key);
-    let index_scheduler_builder =
-        || -> anyhow::Result<_> { Ok(IndexScheduler::new(index_scheduler_opt, version)?) };
+    std::fs::create_dir_all(&index_scheduler_opt.auth_path)?;
+    let auth_env = open_auth_store_env(&index_scheduler_opt.auth_path).unwrap();
+    let auth_controller = AuthController::new(auth_env.clone(), &opt.master_key);
+    let index_scheduler_builder = || -> anyhow::Result<_> {
+        Ok(IndexScheduler::new(index_scheduler_opt, auth_env, version)?)
+    };
 
     match (
         index_scheduler_builder(),
