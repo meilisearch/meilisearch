@@ -1,5 +1,5 @@
 use anyhow::bail;
-use meilisearch_types::heed::{Env, RwTxn, WithTls, WithoutTls};
+use meilisearch_types::heed::{Env, RwTxn, WithoutTls};
 use meilisearch_types::tasks::{Details, KindWithContent, Status, Task};
 use meilisearch_types::versioning::{VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH};
 use time::OffsetDateTime;

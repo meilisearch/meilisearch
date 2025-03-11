@@ -83,6 +83,8 @@ pub use self::search::{
 };
 pub use self::update::ChannelCongestion;
 
+pub use arroy;
+
 pub type Result<T> = std::result::Result<T, error::Error>;
 
 pub type Attribute = u32;

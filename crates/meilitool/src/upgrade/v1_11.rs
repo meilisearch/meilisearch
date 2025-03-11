@@ -76,7 +76,7 @@ pub fn v1_10_to_v1_11(
             try_opening_poly_database(&index_env, &index_wtxn, db_name::VECTOR_ARROY)
                 .with_context(|| format!("while updating date format for index `{uid}`"))?;
 
-        arroy_v04_to_v05::ugrade_from_prev_version(
+        meilisearch_types::milli::arroy::upgrade::cosine_from_0_4_to_0_5(
             &index_rtxn,
             index_read_database,
             &mut index_wtxn,

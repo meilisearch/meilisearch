@@ -10,7 +10,6 @@ license.workspace = true
 
 [dependencies]
 anyhow = "1.0.95"
-arroy_v04_to_v05 = { package = "arroy", git = "https://github.com/meilisearch/arroy/", tag = "DO-NOT-DELETE-upgrade-v04-to-v05" }
 clap = { version = "4.5.24", features = ["derive"] }
 dump = { path = "../dump" }
 file-store = { path = "../file-store" }

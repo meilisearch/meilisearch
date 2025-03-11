@@ -240,9 +240,12 @@ impl IndexScheduler {
         };
 
         let env = unsafe {
-            let options = heed::EnvOpenOptions::new();
-            let mut options = options.read_txn_without_tls();
-            options.max_dbs(Self::nb_db()).map_size(budget.task_db_size).open(&options.tasks_path)
+            let env_options = heed::EnvOpenOptions::new();
+            let mut env_options = env_options.read_txn_without_tls();
+            env_options
+                .max_dbs(Self::nb_db())
+                .map_size(budget.task_db_size)
+                .open(&options.tasks_path)
         }?;
 
         // We **must** starts by upgrading the version because it'll also upgrade the required database before we can open them
