@@ -394,30 +394,11 @@ checksum = "96d30a06541fbafbc7f82ed10c06164cfbd2c401138f6addd8404629c4b16711"
 [[package]]
 name = "arroy"
 version = "0.5.0"
-source = "git+https://github.com/meilisearch/arroy/?tag=DO-NOT-DELETE-upgrade-v04-to-v05#053807bf38dc079f25b003f19fc30fbf3613f6e7"
-dependencies = [
- "bytemuck",
- "byteorder",
- "heed 0.20.5",
- "log",
- "memmap2",
- "nohash",
- "ordered-float",
- "rand",
- "rayon",
- "roaring",
- "tempfile",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "arroy"
-version = "0.5.0"
 source = "git+https://github.com/meilisearch/arroy?branch=update-heed-to-0-22#3b307a0e042c7527396ac36e6e88fc14372482da"
 dependencies = [
  "bytemuck",
  "byteorder",
- "heed 0.22.0 (git+https://github.com/meilisearch/heed?branch=main)",
+ "heed",
  "log",
  "memmap2",
  "nohash",
@@ -2396,50 +2377,15 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "heed"
-version = "0.20.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d4f449bab7320c56003d37732a917e18798e2f1709d80263face2b4f9436ddb"
-dependencies = [
- "bitflags 2.9.0",
- "byteorder",
- "heed-traits 0.20.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "heed-types 0.20.1",
- "libc",
- "lmdb-master-sys 0.2.4",
- "once_cell",
- "page_size",
- "synchronoise",
- "url",
-]
-
-[[package]]
-name = "heed"
-version = "0.22.0"
-source = "git+https://github.com/meilisearch/heed?branch=bump-versions#a778043eb1768c7885828f6eaa9a668a64c5950a"
-dependencies = [
- "bitflags 2.9.0",
- "byteorder",
- "heed-traits 0.20.0 (git+https://github.com/meilisearch/heed?branch=bump-versions)",
- "heed-types 0.21.0 (git+https://github.com/meilisearch/heed?branch=bump-versions)",
- "libc",
- "lmdb-master-sys 0.2.5 (git+https://github.com/meilisearch/heed?branch=bump-versions)",
- "once_cell",
- "page_size",
- "synchronoise",
- "url",
-]
-
-[[package]]
-name = "heed"
 version = "0.22.0"
 source = "git+https://github.com/meilisearch/heed?branch=main#2988ff87aaf493c46f81a0f011618a1b336b8d30"
 dependencies = [
  "bitflags 2.9.0",
  "byteorder",
- "heed-traits 0.20.0 (git+https://github.com/meilisearch/heed?branch=main)",
- "heed-types 0.21.0 (git+https://github.com/meilisearch/heed?branch=main)",
+ "heed-traits",
+ "heed-types",
  "libc",
- "lmdb-master-sys 0.2.5 (git+https://github.com/meilisearch/heed?branch=main)",
+ "lmdb-master-sys",
  "once_cell",
  "page_size",
  "synchronoise",
@@ -2449,48 +2395,18 @@ dependencies = [
 [[package]]
 name = "heed-traits"
 version = "0.20.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb3130048d404c57ce5a1ac61a903696e8fcde7e8c2991e9fcfc1f27c3ef74ff"
-
-[[package]]
-name = "heed-traits"
-version = "0.20.0"
-source = "git+https://github.com/meilisearch/heed?branch=bump-versions#a778043eb1768c7885828f6eaa9a668a64c5950a"
-
-[[package]]
-name = "heed-traits"
-version = "0.20.0"
 source = "git+https://github.com/meilisearch/heed?branch=main#2988ff87aaf493c46f81a0f011618a1b336b8d30"
-
-[[package]]
-name = "heed-types"
-version = "0.20.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9d3f528b053a6d700b2734eabcd0fd49cb8230647aa72958467527b0b7917114"
-dependencies = [
- "byteorder",
- "heed-traits 0.20.0 (registry+https://github.com/rust-lang/crates.io-index)",
-]
 
 [[package]]
 name = "heed-types"
 version = "0.21.0"
-source = "git+https://github.com/meilisearch/heed?branch=bump-versions#a778043eb1768c7885828f6eaa9a668a64c5950a"
+source = "git+https://github.com/meilisearch/heed?branch=main#2988ff87aaf493c46f81a0f011618a1b336b8d30"
 dependencies = [
  "bincode",
  "byteorder",
- "heed-traits 0.20.0 (git+https://github.com/meilisearch/heed?branch=bump-versions)",
+ "heed-traits",
  "serde",
  "serde_json",
-]
-
-[[package]]
-name = "heed-types"
-version = "0.21.0"
-source = "git+https://github.com/meilisearch/heed?branch=main#2988ff87aaf493c46f81a0f011618a1b336b8d30"
-dependencies = [
- "byteorder",
- "heed-traits 0.20.0 (git+https://github.com/meilisearch/heed?branch=main)",
 ]
 
 [[package]]
@@ -2807,7 +2723,7 @@ name = "index-scheduler"
 version = "1.13.3"
 dependencies = [
  "anyhow",
- "arroy 0.5.0 (git+https://github.com/meilisearch/arroy?branch=update-heed-to-0-22)",
+ "arroy",
  "big_s",
  "bincode",
  "bumpalo",
@@ -3529,27 +3445,6 @@ checksum = "4ee93343901ab17bd981295f2cf0026d4ad018c7c31ba84549a4ddbb47a45104"
 
 [[package]]
 name = "lmdb-master-sys"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "472c3760e2a8d0f61f322fb36788021bb36d573c502b50fa3e2bcaac3ec326c9"
-dependencies = [
- "cc",
- "doxygen-rs",
- "libc",
-]
-
-[[package]]
-name = "lmdb-master-sys"
-version = "0.2.5"
-source = "git+https://github.com/meilisearch/heed?branch=bump-versions#a778043eb1768c7885828f6eaa9a668a64c5950a"
-dependencies = [
- "cc",
- "doxygen-rs",
- "libc",
-]
-
-[[package]]
-name = "lmdb-master-sys"
 version = "0.2.5"
 source = "git+https://github.com/meilisearch/heed?branch=main#2988ff87aaf493c46f81a0f011618a1b336b8d30"
 dependencies = [
@@ -3807,7 +3702,6 @@ name = "meilitool"
 version = "1.13.3"
 dependencies = [
  "anyhow",
- "arroy 0.5.0 (git+https://github.com/meilisearch/arroy/?tag=DO-NOT-DELETE-upgrade-v04-to-v05)",
  "clap",
  "dump",
  "file-store",
@@ -3842,7 +3736,7 @@ name = "milli"
 version = "1.13.3"
 dependencies = [
  "allocator-api2",
- "arroy 0.5.0 (git+https://github.com/meilisearch/arroy?branch=update-heed-to-0-22)",
+ "arroy",
  "bbqueue",
  "big_s",
  "bimap",
@@ -3871,7 +3765,7 @@ dependencies = [
  "geoutils",
  "grenad",
  "hashbrown 0.15.2",
- "heed 0.22.0 (git+https://github.com/meilisearch/heed?branch=bump-versions)",
+ "heed",
  "hf-hub",
  "indexmap",
  "insta",
