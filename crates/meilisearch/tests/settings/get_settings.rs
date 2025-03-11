@@ -523,7 +523,12 @@ async fn granular_filterable_attributes() {
         index.update_settings(json!({ "filterableAttributes": [
             { "attributePatterns": ["name"], "features": { "facetSearch": true, "filter": {"equality": true, "comparison": false} } },
             { "attributePatterns": ["age"], "features": { "facetSearch": false, "filter": {"equality": true, "comparison": true} } },
-            { "attributePatterns": ["id"] }
+            { "attributePatterns": ["id"] },
+            { "attributePatterns": ["default-filterable-features-null"], "features": { "facetSearch": true } },
+            { "attributePatterns": ["default-filterable-features-equality"], "features": { "facetSearch": true, "filter": {"comparison": true} } },
+            { "attributePatterns": ["default-filterable-features-comparison"], "features": { "facetSearch": true, "filter": {"equality": true} } },
+            { "attributePatterns": ["default-filterable-features-empty"], "features": { "facetSearch": true, "filter": {} } },
+            { "attributePatterns": ["default-facet-search"], "features": { "filter": {"equality": true, "comparison": true} } },
         ] })).await;
     assert_eq!(code, 202);
     index.wait_task(response.uid()).await.succeeded();
@@ -565,6 +570,66 @@ async fn granular_filterable_attributes() {
           "filter": {
             "equality": true,
             "comparison": false
+          }
+        }
+      },
+      {
+        "attributePatterns": [
+          "default-filterable-features-null"
+        ],
+        "features": {
+          "facetSearch": true,
+          "filter": {
+            "equality": true,
+            "comparison": false
+          }
+        }
+      },
+      {
+        "attributePatterns": [
+          "default-filterable-features-equality"
+        ],
+        "features": {
+          "facetSearch": true,
+          "filter": {
+            "equality": true,
+            "comparison": true
+          }
+        }
+      },
+      {
+        "attributePatterns": [
+          "default-filterable-features-comparison"
+        ],
+        "features": {
+          "facetSearch": true,
+          "filter": {
+            "equality": true,
+            "comparison": false
+          }
+        }
+      },
+      {
+        "attributePatterns": [
+          "default-filterable-features-empty"
+        ],
+        "features": {
+          "facetSearch": true,
+          "filter": {
+            "equality": true,
+            "comparison": false
+          }
+        }
+      },
+      {
+        "attributePatterns": [
+          "default-facet-search"
+        ],
+        "features": {
+          "facetSearch": false,
+          "filter": {
+            "equality": true,
+            "comparison": true
           }
         }
       }

@@ -71,7 +71,11 @@ impl FilterableAttributesPatterns {
 #[deserr(rename_all = camelCase, deny_unknown_fields)]
 #[derive(Default)]
 pub struct FilterableAttributesFeatures {
+    #[serde(default)]
+    #[deserr(default)]
     facet_search: bool,
+    #[serde(default)]
+    #[deserr(default)]
     filter: FilterFeatures,
 }
 
@@ -144,9 +148,19 @@ impl<E: DeserializeError> Deserr<E> for FilterableAttributesRule {
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Debug, Deserr, ToSchema)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+#[deserr(rename_all = camelCase, deny_unknown_fields)]
 pub struct FilterFeatures {
+    #[serde(default = "default_true")]
+    #[deserr(default = true)]
     equality: bool,
+    #[serde(default)]
+    #[deserr(default)]
     comparison: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl FilterFeatures {
