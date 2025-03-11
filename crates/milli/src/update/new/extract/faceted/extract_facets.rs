@@ -57,10 +57,10 @@ impl<'a, 'b, 'extractor> Extractor<'extractor> for FacetedExtractorData<'a, 'b> 
             let change = change?;
             FacetedDocidsExtractor::extract_document_change(
                 context,
-                &self.filterable_attributes,
-                &self.sortable_fields,
-                &self.asc_desc_fields,
-                &self.distinct_field,
+                self.filterable_attributes,
+                self.sortable_fields,
+                self.asc_desc_fields,
+                self.distinct_field,
                 self.is_geo_enabled,
                 change,
                 self.sender,

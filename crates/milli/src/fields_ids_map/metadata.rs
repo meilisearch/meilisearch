@@ -214,10 +214,9 @@ pub struct MetadataBuilder {
 
 impl MetadataBuilder {
     pub fn from_index(index: &Index, rtxn: &RoTxn) -> Result<Self> {
-        let searchable_attributes = match index.user_defined_searchable_fields(rtxn)? {
-            Some(fields) => Some(fields.into_iter().map(|s| s.to_string()).collect()),
-            None => None,
-        };
+        let searchable_attributes = index
+            .user_defined_searchable_fields(rtxn)?
+            .map(|fields| fields.into_iter().map(|s| s.to_string()).collect());
         let filterable_attributes = index.filterable_attributes_rules(rtxn)?;
         let sortable_attributes = index.sortable_fields(rtxn)?;
         let localized_attributes = index.localized_attributes_rules(rtxn)?;
