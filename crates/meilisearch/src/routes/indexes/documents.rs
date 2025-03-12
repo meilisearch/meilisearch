@@ -1513,11 +1513,9 @@ fn retrieve_documents<S: AsRef<str>>(
     let mut candidates = if let Some(ids) = ids {
         let external_document_ids = index.external_documents_ids();
         let mut candidates = RoaringBitmap::new();
-        for (index, id) in ids.iter().enumerate() {
+        for id in ids.iter() {
             let Some(docid) = external_document_ids.get(&rtxn, id)? else {
-                let error = MeilisearchHttpError::DocumentNotFound(id.clone().into_inner());
-                let msg = format!("In `.ids[{index}]`: {error}");
-                return Err(ResponseError::from_msg(msg, Code::NotFoundDocumentId));
+                continue;
             };
             candidates.insert(docid);
         }

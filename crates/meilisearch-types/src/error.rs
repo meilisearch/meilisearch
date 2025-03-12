@@ -384,7 +384,6 @@ UnsupportedMediaType                  , InvalidRequest       , UNSUPPORTED_MEDIA
 // Experimental features
 VectorEmbeddingError                  , InvalidRequest       , BAD_REQUEST ;
 NotFoundSimilarId                     , InvalidRequest       , BAD_REQUEST ;
-NotFoundDocumentId                    , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentEditionContext         , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentEditionFunctionFilter  , InvalidRequest       , BAD_REQUEST ;
 EditDocumentsByFunctionError          , InvalidRequest       , BAD_REQUEST

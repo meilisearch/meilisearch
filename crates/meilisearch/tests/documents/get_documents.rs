@@ -687,13 +687,23 @@ async fn get_document_not_found_ids() {
 
     let (response, code) = index.fetch_documents(json!({"ids": ["0", 3, 42] })).await;
     let (response2, code2) = index.get_all_documents_raw("?ids=0,3,42").await;
-    snapshot!(code, @"400 Bad Request");
+    // the document with id 42 is not in the results since it doesn't exist
+    // however, no error is raised
+    snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".enqueuedAt" => "[date]" }), @r###"
     {
-      "message": "In `.ids[2]`: Document `42` not found.",
-      "code": "not_found_document_id",
-      "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#not_found_document_id"
+      "results": [
+        {
+          "id": 0,
+          "color": "red"
+        },
+        {
+          "id": 3
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 2
     }
     "###);
     assert_eq!(code, code2);
