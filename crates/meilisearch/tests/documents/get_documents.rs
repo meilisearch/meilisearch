@@ -658,7 +658,7 @@ async fn get_document_invalid_ids() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response, { ".enqueuedAt" => "[date]" }), @r###"
     {
-      "message": "In `.ids[1]`:Document identifier `\"illegal/docid\"` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_), and can not be more than 511 bytes.",
+      "message": "In `.ids[1]`: Document identifier `\"illegal/docid\"` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_), and can not be more than 511 bytes.",
       "code": "invalid_document_ids",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_document_ids"

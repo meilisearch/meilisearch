@@ -623,7 +623,7 @@ fn documents_by_query(
         let mut parsed_ids = Vec::with_capacity(ids.len());
         for (index, id) in ids.into_iter().enumerate() {
             let id = id.try_into().map_err(|error| {
-                let msg = format!("In `.ids[{index}]`:{error}");
+                let msg = format!("In `.ids[{index}]`: {error}");
                 ResponseError::from_msg(msg, Code::InvalidDocumentIds)
             })?;
             parsed_ids.push(id)
