@@ -411,7 +411,7 @@ impl<State> Index<'_, State> {
         self.service.get(url).await
     }
 
-    pub async fn get_document_by_filter(&self, payload: Value) -> (Value, StatusCode) {
+    pub async fn fetch_documents(&self, payload: Value) -> (Value, StatusCode) {
         let url = format!("/indexes/{}/documents/fetch", urlencode(self.uid.as_ref()));
         self.service.post(url, payload).await
     }

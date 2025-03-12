@@ -241,6 +241,7 @@ InvalidDocumentGeoField               , InvalidRequest       , BAD_REQUEST ;
 InvalidVectorDimensions               , InvalidRequest       , BAD_REQUEST ;
 InvalidVectorsType                    , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentId                     , InvalidRequest       , BAD_REQUEST ;
+InvalidDocumentIds                    , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentLimit                  , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentOffset                 , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchEmbedder                 , InvalidRequest       , BAD_REQUEST ;

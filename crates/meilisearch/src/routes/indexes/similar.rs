@@ -5,7 +5,7 @@ use index_scheduler::IndexScheduler;
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
 use meilisearch_types::error::deserr_codes::*;
-use meilisearch_types::error::{ErrorCode as _, ResponseError};
+use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::keys::actions;
 use meilisearch_types::serde_cs::vec::CS;
@@ -111,7 +111,7 @@ pub async fn similar_get(
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
-    let query = params.0.try_into()?;
+    let query = params.0.into();
 
     let mut aggregate = SimilarAggregator::<SimilarGET>::from_query(&query);
 
@@ -295,10 +295,8 @@ impl std::convert::TryFrom<String> for RankingScoreThresholdGet {
     }
 }
 
-impl TryFrom<SimilarQueryGet> for SimilarQuery {
-    type Error = ResponseError;
-
-    fn try_from(
+impl From<SimilarQueryGet> for SimilarQuery {
+    fn from(
         SimilarQueryGet {
             id,
             offset,
@@ -311,7 +309,7 @@ impl TryFrom<SimilarQueryGet> for SimilarQuery {
             embedder,
             ranking_score_threshold,
         }: SimilarQueryGet,
-    ) -> Result<Self, Self::Error> {
+    ) -> Self {
         let filter = match filter {
             Some(f) => match serde_json::from_str(&f) {
                 Ok(v) => Some(v),
@@ -320,10 +318,8 @@ impl TryFrom<SimilarQueryGet> for SimilarQuery {
             None => None,
         };
 
-        Ok(SimilarQuery {
-            id: id.0.try_into().map_err(|code: InvalidSimilarId| {
-                ResponseError::from_msg(code.to_string(), code.error_code())
-            })?,
+        SimilarQuery {
+            id: serde_json::Value::String(id.0),
             offset: offset.0,
             limit: limit.0,
             filter,
@@ -333,6 +329,6 @@ impl TryFrom<SimilarQueryGet> for SimilarQuery {
             show_ranking_score: show_ranking_score.0,
             show_ranking_score_details: show_ranking_score_details.0,
             ranking_score_threshold: ranking_score_threshold.map(|x| x.0),
-        })
+        }
     }
 }
