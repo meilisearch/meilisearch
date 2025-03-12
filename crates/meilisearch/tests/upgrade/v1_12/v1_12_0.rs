@@ -108,6 +108,10 @@ async fn check_the_keys(server: &Server) {
 ///    5.2. Enqueue a new task
 ///    5.3. Create an index
 async fn check_the_index_scheduler(server: &Server) {
+    // Wait until the upgrade has been applied to all indexes to avoid flakyness
+    let (tasks, _) = server.tasks_filter("types=upgradeDatabase&limit=1").await;
+    server.wait_task(Value(tasks["results"][0].clone()).uid()).await.succeeded();
+
     // All the indexes are still present
     let (indexes, _) = server.list_indexes(None, None).await;
     snapshot!(indexes, @r#"
@@ -155,10 +159,6 @@ async fn check_the_index_scheduler(server: &Server) {
       }
     }
     "###);
-
-    // Wait until the upgrade has been applied to all indexes to avoid flakyness
-    let (tasks, _) = server.tasks_filter("types=upgradeDatabase&limit=1").await;
-    server.wait_task(Value(tasks["results"][0].clone()).uid()).await.succeeded();
 
     // Tasks and batches should still work
     // We rewrite the first task for all calls because it may be the upgrade database with unknown dates and duration.
