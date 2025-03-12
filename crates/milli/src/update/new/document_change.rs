@@ -4,10 +4,10 @@ use heed::RoTxn;
 use super::document::{
     Document as _, DocumentFromDb, DocumentFromVersions, MergedDocument, Versions,
 };
-use super::extract::perm_json_p;
 use super::vector_document::{
     MergedVectorDocument, VectorDocumentFromDb, VectorDocumentFromVersions,
 };
+use crate::attribute_patterns::PatternMatch;
 use crate::documents::FieldIdMapper;
 use crate::vector::EmbeddingConfigs;
 use crate::{DocumentId, Index, Result};
@@ -167,13 +167,15 @@ impl<'doc> Update<'doc> {
         }
     }
 
-    /// Returns whether the updated version of the document is different from the current version for the passed subset of fields.
+    /// Returns whether the updated version of the document is different from the current version for the subset of fields selected by `selector`.
     ///
-    /// `true` if at least one top-level-field that is a exactly a member of field or a parent of a member of field changed.
+    /// `true` if at least one top-level-field that is exactly a selected field or a parent of a selected field changed.
     /// Otherwise `false`.
+    ///
+    /// - Note: `_geo` and `_vectors` are not taken into account by this function.
     pub fn has_changed_for_fields<'t, Mapper: FieldIdMapper>(
         &self,
-        fields: Option<&[&str]>,
+        selector: &mut impl FnMut(&str) -> PatternMatch,
         rtxn: &'t RoTxn,
         index: &'t Index,
         mapper: &'t Mapper,
@@ -185,7 +187,7 @@ impl<'doc> Update<'doc> {
         for entry in self.only_changed_fields().iter_top_level_fields() {
             let (key, updated_value) = entry?;
 
-            if perm_json_p::select_field(key, fields, &[]) == perm_json_p::Selection::Skip {
+            if selector(key) == PatternMatch::NoMatch {
                 continue;
             }
 
@@ -229,7 +231,7 @@ impl<'doc> Update<'doc> {
             for entry in current.iter_top_level_fields() {
                 let (key, _) = entry?;
 
-                if perm_json_p::select_field(key, fields, &[]) == perm_json_p::Selection::Skip {
+                if selector(key) == PatternMatch::NoMatch {
                     continue;
                 }
                 current_selected_field_count += 1;

@@ -122,10 +122,10 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
 and can not be more than 511 bytes.", .document_id.to_string()
     )]
     InvalidDocumentId { document_id: Value },
-    #[error("Invalid facet distribution, {}", format_invalid_filter_distribution(.invalid_facets_name, .valid_facets_name))]
+    #[error("Invalid facet distribution, {}", format_invalid_filter_distribution(.invalid_facets_name, .valid_patterns))]
     InvalidFacetsDistribution {
         invalid_facets_name: BTreeSet<String>,
-        valid_facets_name: BTreeSet<String>,
+        valid_patterns: BTreeSet<String>,
     },
     #[error(transparent)]
     InvalidGeoField(#[from] GeoError),
@@ -139,6 +139,13 @@ and can not be more than 511 bytes.", .document_id.to_string()
     InvalidFilter(String),
     #[error("Invalid type for filter subexpression: expected: {}, found: {}.", .0.join(", "), .1)]
     InvalidFilterExpression(&'static [&'static str], Value),
+    #[error("Filter operator `{operator}` is not allowed for the attribute `{field}`.\n  - Note: allowed operators: {}.\n  - Note: field `{field}` {} in `filterableAttributes`", allowed_operators.join(", "), format!("matched rule #{rule_index}"))]
+    FilterOperatorNotAllowed {
+        field: String,
+        allowed_operators: Vec<String>,
+        operator: String,
+        rule_index: usize,
+    },
     #[error("Attribute `{}` is not sortable. {}",
         .field,
         match .valid_fields.is_empty() {
@@ -152,28 +159,32 @@ and can not be more than 511 bytes.", .document_id.to_string()
     InvalidSortableAttribute { field: String, valid_fields: BTreeSet<String>, hidden_fields: bool },
     #[error("Attribute `{}` is not filterable and thus, cannot be used as distinct attribute. {}",
         .field,
-        match .valid_fields.is_empty() {
+        match .valid_patterns.is_empty() {
             true => "This index does not have configured filterable attributes.".to_string(),
-            false => format!("Available filterable attributes are: `{}{}`.",
-                    valid_fields.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", "),
+            false => format!("Available filterable attributes patterns are: `{}{}`.",
+                    valid_patterns.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", "),
                     .hidden_fields.then_some(", <..hidden-attributes>").unwrap_or(""),
                 ),
         }
     )]
-    InvalidDistinctAttribute { field: String, valid_fields: BTreeSet<String>, hidden_fields: bool },
+    InvalidDistinctAttribute {
+        field: String,
+        valid_patterns: BTreeSet<String>,
+        hidden_fields: bool,
+    },
     #[error("Attribute `{}` is not facet-searchable. {}",
         .field,
-        match .valid_fields.is_empty() {
+        match .valid_patterns.is_empty() {
             true => "This index does not have configured facet-searchable attributes. To make it facet-searchable add it to the `filterableAttributes` index settings.".to_string(),
-            false => format!("Available facet-searchable attributes are: `{}{}`. To make it facet-searchable add it to the `filterableAttributes` index settings.",
-                    valid_fields.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", "),
+            false => format!("Available facet-searchable attributes patterns are: `{}{}`. To make it facet-searchable add it to the `filterableAttributes` index settings.",
+                    valid_patterns.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", "),
                     .hidden_fields.then_some(", <..hidden-attributes>").unwrap_or(""),
                 ),
         }
     )]
     InvalidFacetSearchFacetName {
         field: String,
-        valid_fields: BTreeSet<String>,
+        valid_patterns: BTreeSet<String>,
         hidden_fields: bool,
     },
     #[error("Attribute `{}` is not searchable. Available searchable attributes are: `{}{}`.",
@@ -380,9 +391,9 @@ pub enum GeoError {
 
 fn format_invalid_filter_distribution(
     invalid_facets_name: &BTreeSet<String>,
-    valid_facets_name: &BTreeSet<String>,
+    valid_patterns: &BTreeSet<String>,
 ) -> String {
-    if valid_facets_name.is_empty() {
+    if valid_patterns.is_empty() {
         return "this index does not have configured filterable attributes.".into();
     }
 
@@ -404,17 +415,17 @@ fn format_invalid_filter_distribution(
         .unwrap(),
     };
 
-    match valid_facets_name.len() {
+    match valid_patterns.len() {
         1 => write!(
             result,
-            " The available filterable attribute is `{}`.",
-            valid_facets_name.first().unwrap()
+            " The available filterable attribute pattern is `{}`.",
+            valid_patterns.first().unwrap()
         )
         .unwrap(),
         _ => write!(
             result,
-            " The available filterable attributes are `{}`.",
-            valid_facets_name.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", ")
+            " The available filterable attribute patterns are `{}`.",
+            valid_patterns.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", ")
         )
         .unwrap(),
     }

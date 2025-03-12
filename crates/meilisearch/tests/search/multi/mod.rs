@@ -3647,7 +3647,7 @@ async fn federation_non_faceted_for_an_index() {
     snapshot!(code, @"400 Bad Request");
     insta::assert_json_snapshot!(response, { ".processingTimeMs" => "[time]" }, @r###"
     {
-      "message": "Inside `.federation.facetsByIndex.fruits-no-name`: Invalid facet distribution, attribute `name` is not filterable. The available filterable attributes are `BOOST, id`.\n - Note: index `fruits-no-name` used in `.queries[1]`",
+      "message": "Inside `.federation.facetsByIndex.fruits-no-name`: Invalid facet distribution, attribute `name` is not filterable. The available filterable attribute patterns are `BOOST, id`.\n - Note: index `fruits-no-name` used in `.queries[1]`",
       "code": "invalid_multi_search_facets",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_facets"
@@ -3669,7 +3669,7 @@ async fn federation_non_faceted_for_an_index() {
     snapshot!(code, @"400 Bad Request");
     insta::assert_json_snapshot!(response, { ".processingTimeMs" => "[time]" }, @r###"
     {
-      "message": "Inside `.federation.facetsByIndex.fruits-no-name`: Invalid facet distribution, attribute `name` is not filterable. The available filterable attributes are `BOOST, id`.\n - Note: index `fruits-no-name` is not used in queries",
+      "message": "Inside `.federation.facetsByIndex.fruits-no-name`: Invalid facet distribution, attribute `name` is not filterable. The available filterable attribute patterns are `BOOST, id`.\n - Note: index `fruits-no-name` is not used in queries",
       "code": "invalid_multi_search_facets",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_facets"

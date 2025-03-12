@@ -233,8 +233,8 @@ pub(crate) mod test {
     use meilisearch_types::features::{Network, Remote, RuntimeTogglableFeatures};
     use meilisearch_types::index_uid_pattern::IndexUidPattern;
     use meilisearch_types::keys::{Action, Key};
-    use meilisearch_types::milli;
     use meilisearch_types::milli::update::Setting;
+    use meilisearch_types::milli::{self, FilterableAttributesRule};
     use meilisearch_types::settings::{Checked, FacetingSettings, Settings};
     use meilisearch_types::task_view::DetailsView;
     use meilisearch_types::tasks::{Details, Kind, Status};
@@ -279,7 +279,10 @@ pub(crate) mod test {
         let settings = Settings {
             displayed_attributes: Setting::Set(vec![S("race"), S("name")]).into(),
             searchable_attributes: Setting::Set(vec![S("name"), S("race")]).into(),
-            filterable_attributes: Setting::Set(btreeset! { S("race"), S("age") }),
+            filterable_attributes: Setting::Set(vec![
+                FilterableAttributesRule::Field(S("race")),
+                FilterableAttributesRule::Field(S("age")),
+            ]),
             sortable_attributes: Setting::Set(btreeset! { S("age") }),
             ranking_rules: Setting::NotSet,
             stop_words: Setting::NotSet,

@@ -10,6 +10,7 @@ use roaring::RoaringBitmap;
 use tracing::error;
 
 use crate::error::UserError;
+use crate::filterable_attributes_rules::{filtered_matching_patterns, matching_features};
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupValue};
 use crate::search::build_dfa;
 use crate::{DocumentId, FieldId, OrderBy, Result, Search};
@@ -73,25 +74,28 @@ impl<'a> SearchForFacetValues<'a> {
         let index = self.search_query.index;
         let rtxn = self.search_query.rtxn;
 
-        let filterable_fields = index.filterable_fields(rtxn)?;
-        if !filterable_fields.contains(&self.facet) {
-            let (valid_fields, hidden_fields) =
-                index.remove_hidden_fields(rtxn, filterable_fields)?;
+        let filterable_attributes_rules = index.filterable_attributes_rules(rtxn)?;
+        if !matching_features(&self.facet, &filterable_attributes_rules)
+            .map_or(false, |(_, features)| features.is_facet_searchable())
+        {
+            let matching_field_names =
+                filtered_matching_patterns(&filterable_attributes_rules, &|features| {
+                    features.is_facet_searchable()
+                });
+            let (valid_patterns, hidden_fields) =
+                index.remove_hidden_fields(rtxn, matching_field_names)?;
 
             return Err(UserError::InvalidFacetSearchFacetName {
                 field: self.facet.clone(),
-                valid_fields,
+                valid_patterns,
                 hidden_fields,
             }
             .into());
-        }
+        };
 
         let fields_ids_map = index.fields_ids_map(rtxn)?;
-        let fid = match fields_ids_map.id(&self.facet) {
-            Some(fid) => fid,
-            // we return an empty list of results when the attribute has been
-            // set as filterable but no document contains this field (yet).
-            None => return Ok(Vec::new()),
+        let Some(fid) = fields_ids_map.id(&self.facet) else {
+            return Ok(Vec::new());
         };
 
         let fst = match self.search_query.index.facet_id_string_fst.get(rtxn, &fid)? {

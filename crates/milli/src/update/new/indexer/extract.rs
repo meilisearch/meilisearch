@@ -199,7 +199,7 @@ where
             let span = tracing::trace_span!(target: "indexing::documents::extract", "word_pair_proximity_docids");
             let _entered = span.enter();
 
-            <WordPairProximityDocidsExtractor as DocidsExtractor>::run_extraction(
+            WordPairProximityDocidsExtractor::run_extraction(
                 document_changes,
                 indexing_context,
                 extractor_allocs,

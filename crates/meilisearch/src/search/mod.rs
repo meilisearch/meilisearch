@@ -20,7 +20,7 @@ use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::vector::Embedder;
 use meilisearch_types::milli::{
-    FacetValueHit, InternalError, OrderBy, SearchForFacetValues, TimeBudget,
+    FacetValueHit, InternalError, OrderBy, PatternMatch, SearchForFacetValues, TimeBudget,
 };
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
@@ -1538,8 +1538,9 @@ pub fn perform_facet_search(
     // If the facet string is not localized, we **ignore** the locales provided by the user because the facet data has no locale.
     // If the user does not provide locales, we use the locales of the facet string.
     let localized_attributes = index.localized_attributes_rules(&rtxn)?.unwrap_or_default();
-    let localized_attributes_locales =
-        localized_attributes.into_iter().find(|attr| attr.match_str(&facet_name));
+    let localized_attributes_locales = localized_attributes
+        .into_iter()
+        .find(|attr| attr.match_str(&facet_name) == PatternMatch::Match);
     let locales = localized_attributes_locales.map(|attr| {
         attr.locales
             .into_iter()
@@ -1885,7 +1886,7 @@ fn format_fields(
             let locales = locales.or_else(|| {
                 localized_attributes
                     .iter()
-                    .find(|rule| rule.match_str(key))
+                    .find(|rule| rule.match_str(key) == PatternMatch::Match)
                     .map(LocalizedAttributesRule::locales)
             });
 

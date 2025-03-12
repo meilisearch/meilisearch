@@ -291,7 +291,7 @@ make_setting_routes!(
     {
         route: "/filterable-attributes",
         update_verb: put,
-        value_type: std::collections::BTreeSet<String>,
+        value_type: Vec<meilisearch_types::milli::FilterableAttributesRule>,
         err_type: meilisearch_types::deserr::DeserrJsonError<
             meilisearch_types::error::deserr_codes::InvalidSettingsFilterableAttributes,
         >,

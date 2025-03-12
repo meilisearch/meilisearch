@@ -1,7 +1,9 @@
 use meili_snap::snapshot;
+use meilisearch::Opt;
 use once_cell::sync::Lazy;
+use tempfile::TempDir;
 
-use crate::common::{Server, Value};
+use crate::common::{default_settings, Server, Value, NESTED_DOCUMENTS};
 use crate::json;
 
 static DOCUMENTS: Lazy<Value> = Lazy::new(|| {
@@ -33,6 +35,62 @@ static DOCUMENTS: Lazy<Value> = Lazy::new(|| {
         }
     ])
 });
+
+async fn test_settings_documents_indexing_swapping_and_facet_search(
+    documents: &Value,
+    settings: &Value,
+    query: &Value,
+    test: impl Fn(Value, actix_http::StatusCode) + std::panic::UnwindSafe + Clone,
+) {
+    let temp = TempDir::new().unwrap();
+    let server = Server::new_with_options(Opt { ..default_settings(temp.path()) }).await.unwrap();
+
+    eprintln!("Documents -> Settings -> test");
+    let index = server.index("test");
+
+    let (task, code) = index.add_documents(documents.clone(), None).await;
+    assert_eq!(code, 202, "{}", task);
+    let response = index.wait_task(task.uid()).await;
+    assert!(response.is_success(), "{:?}", response);
+
+    let (task, code) = index.update_settings(settings.clone()).await;
+    assert_eq!(code, 202, "{}", task);
+    let response = index.wait_task(task.uid()).await;
+    assert!(response.is_success(), "{:?}", response);
+
+    let (response, code) = index.facet_search(query.clone()).await;
+    insta::allow_duplicates! {
+        test(response, code);
+    }
+
+    let (task, code) = server.delete_index("test").await;
+    assert_eq!(code, 202, "{}", task);
+    let response = server.wait_task(task.uid()).await;
+    assert!(response.is_success(), "{:?}", response);
+
+    eprintln!("Settings -> Documents -> test");
+    let index = server.index("test");
+
+    let (task, code) = index.update_settings(settings.clone()).await;
+    assert_eq!(code, 202, "{}", task);
+    let response = index.wait_task(task.uid()).await;
+    assert!(response.is_success(), "{:?}", response);
+
+    let (task, code) = index.add_documents(documents.clone(), None).await;
+    assert_eq!(code, 202, "{}", task);
+    let response = index.wait_task(task.uid()).await;
+    assert!(response.is_success(), "{:?}", response);
+
+    let (response, code) = index.facet_search(query.clone()).await;
+    insta::allow_duplicates! {
+        test(response, code);
+    }
+
+    let (task, code) = server.delete_index("test").await;
+    assert_eq!(code, 202, "{}", task);
+    let response = server.wait_task(task.uid()).await;
+    assert!(response.is_success(), "{:?}", response);
+}
 
 #[actix_rt::test]
 async fn simple_facet_search() {
@@ -435,4 +493,125 @@ async fn deactivate_facet_search_add_documents_and_reset_facet_search() {
 
     assert_eq!(code, 200, "{}", response);
     assert_eq!(dbg!(response)["facetHits"].as_array().unwrap().len(), 2);
+}
+
+#[actix_rt::test]
+async fn facet_search_with_filterable_attributes_rules() {
+    test_settings_documents_indexing_swapping_and_facet_search(
+        &DOCUMENTS,
+        &json!({"filterableAttributes": ["genres"]}),
+        &json!({"facetName": "genres", "facetQuery": "a"}),
+        |response, code| {
+            snapshot!(code, @"200 OK");
+            snapshot!(response["facetHits"], @r###"[{"value":"Action","count":3},{"value":"Adventure","count":2}]"###);
+        },
+    )
+    .await;
+
+    test_settings_documents_indexing_swapping_and_facet_search(
+        &DOCUMENTS,
+        &json!({"filterableAttributes": [{"attributePatterns": ["genres"], "features": {"facetSearch": true, "filter": {"equality": false, "comparison": false}}}]}),
+        &json!({"facetName": "genres", "facetQuery": "a"}),
+        |response, code| {
+            snapshot!(code, @"200 OK");
+            snapshot!(response["facetHits"], @r###"[{"value":"Action","count":3},{"value":"Adventure","count":2}]"###);
+        },
+    ).await;
+
+    test_settings_documents_indexing_swapping_and_facet_search(
+        &NESTED_DOCUMENTS,
+        &json!({"filterableAttributes": ["doggos.name"]}),
+        &json!({"facetName": "doggos.name", "facetQuery": "b"}),
+        |response, code| {
+            snapshot!(code, @"200 OK");
+            snapshot!(response["facetHits"], @r###"[{"value":"bobby","count":1},{"value":"buddy","count":1}]"###);
+        },
+    )
+    .await;
+
+    test_settings_documents_indexing_swapping_and_facet_search(
+        &NESTED_DOCUMENTS,
+        &json!({"filterableAttributes": [{"attributePatterns": ["doggos.name"], "features": {"facetSearch": true, "filter": {"equality": false, "comparison": false}}}]}),
+        &json!({"facetName": "doggos.name", "facetQuery": "b"}),
+        |response, code| {
+            snapshot!(code, @"200 OK");
+            snapshot!(response["facetHits"], @r###"[{"value":"bobby","count":1},{"value":"buddy","count":1}]"###);
+        },
+    ).await;
+}
+
+#[actix_rt::test]
+async fn facet_search_with_filterable_attributes_rules_errors() {
+    test_settings_documents_indexing_swapping_and_facet_search(
+        &DOCUMENTS,
+        &json!({"filterableAttributes": ["genres"]}),
+        &json!({"facetName": "invalid", "facetQuery": "a"}),
+        |response, code| {
+            snapshot!(code, @"400 Bad Request");
+            snapshot!(response["message"], @r###""Attribute `invalid` is not facet-searchable. Available facet-searchable attributes patterns are: `genres`. To make it facet-searchable add it to the `filterableAttributes` index settings.""###);
+        },
+    )
+    .await;
+
+    test_settings_documents_indexing_swapping_and_facet_search(
+      &DOCUMENTS,
+      &json!({"filterableAttributes": [{"attributePatterns": ["genres"]}]}),
+      &json!({"facetName": "genres", "facetQuery": "a"}),
+      |response, code| {
+          snapshot!(code, @"400 Bad Request");
+          snapshot!(response["message"], @r###""Attribute `genres` is not facet-searchable. This index does not have configured facet-searchable attributes. To make it facet-searchable add it to the `filterableAttributes` index settings.""###);
+      },
+    )
+    .await;
+
+    test_settings_documents_indexing_swapping_and_facet_search(
+        &DOCUMENTS,
+        &json!({"filterableAttributes": [{"attributePatterns": ["genres"], "features": {"facetSearch": false, "filter": {"equality": true, "comparison": true}}}]}),
+        &json!({"facetName": "genres", "facetQuery": "a"}),
+        |response, code| {
+            snapshot!(code, @"400 Bad Request");
+            snapshot!(response["message"], @r###""Attribute `genres` is not facet-searchable. This index does not have configured facet-searchable attributes. To make it facet-searchable add it to the `filterableAttributes` index settings.""###);
+        },
+    ).await;
+
+    test_settings_documents_indexing_swapping_and_facet_search(
+        &DOCUMENTS,
+        &json!({"filterableAttributes": [{"attributePatterns": ["genres"], "features": {"facetSearch": false, "filter": {"equality": false, "comparison": false}}}]}),
+        &json!({"facetName": "genres", "facetQuery": "a"}),
+        |response, code| {
+            snapshot!(code, @"400 Bad Request");
+            snapshot!(response["message"], @r###""Attribute `genres` is not facet-searchable. This index does not have configured facet-searchable attributes. To make it facet-searchable add it to the `filterableAttributes` index settings.""###);
+        },
+    ).await;
+
+    test_settings_documents_indexing_swapping_and_facet_search(
+        &NESTED_DOCUMENTS,
+        &json!({"filterableAttributes": [{"attributePatterns": ["doggos.name"]}]}),
+        &json!({"facetName": "invalid.name", "facetQuery": "b"}),
+        |response, code| {
+            snapshot!(code, @"400 Bad Request");
+            snapshot!(response["message"], @r###""Attribute `invalid.name` is not facet-searchable. This index does not have configured facet-searchable attributes. To make it facet-searchable add it to the `filterableAttributes` index settings.""###);
+        },
+    )
+    .await;
+
+    test_settings_documents_indexing_swapping_and_facet_search(
+        &NESTED_DOCUMENTS,
+        &json!({"filterableAttributes": [{"attributePatterns": ["doggos.name"], "features": {"facetSearch": false, "filter": {"equality": true, "comparison": true}}}]}),
+        &json!({"facetName": "doggos.name", "facetQuery": "b"}),
+        |response, code| {
+            snapshot!(code, @"400 Bad Request");
+            snapshot!(response["message"], @r###""Attribute `doggos.name` is not facet-searchable. This index does not have configured facet-searchable attributes. To make it facet-searchable add it to the `filterableAttributes` index settings.""###);
+        },
+    ).await;
+
+    test_settings_documents_indexing_swapping_and_facet_search(
+        &NESTED_DOCUMENTS,
+        &json!({"filterableAttributes": [{"attributePatterns": ["doggos.name"], "features": {"facetSearch": false, "filter": {"equality": false, "comparison": false}}}]}),
+        &json!({"facetName": "doggos.name", "facetQuery": "b"}),
+        |response, code| {
+            snapshot!(code, @"400 Bad Request");
+            snapshot!(response["message"], @r###""Attribute `doggos.name` is not facet-searchable. This index does not have configured facet-searchable attributes. To make it facet-searchable add it to the `filterableAttributes` index settings.""###);
+        },
+    ).await;
 }

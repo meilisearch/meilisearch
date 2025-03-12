@@ -4,6 +4,7 @@
 mod distinct;
 mod errors;
 mod facet_search;
+mod filters;
 mod formatted;
 mod geo;
 mod hybrid;
@@ -21,9 +22,57 @@ use tempfile::TempDir;
 
 use crate::common::{
     default_settings, shared_index_with_documents, shared_index_with_nested_documents, Server,
-    DOCUMENTS, FRUITS_DOCUMENTS, NESTED_DOCUMENTS, SCORE_DOCUMENTS, VECTOR_DOCUMENTS,
+    Value, DOCUMENTS, FRUITS_DOCUMENTS, NESTED_DOCUMENTS, SCORE_DOCUMENTS, VECTOR_DOCUMENTS,
 };
 use crate::json;
+
+async fn test_settings_documents_indexing_swapping_and_search(
+    documents: &Value,
+    settings: &Value,
+    query: &Value,
+    test: impl Fn(Value, actix_http::StatusCode) + std::panic::UnwindSafe + Clone,
+) {
+    let temp = TempDir::new().unwrap();
+    let server = Server::new_with_options(Opt { ..default_settings(temp.path()) }).await.unwrap();
+
+    eprintln!("Documents -> Settings -> test");
+    let index = server.index("test");
+
+    let (task, code) = index.add_documents(documents.clone(), None).await;
+    assert_eq!(code, 202, "{}", task);
+    let response = index.wait_task(task.uid()).await;
+    assert!(response.is_success(), "{:?}", response);
+
+    let (task, code) = index.update_settings(settings.clone()).await;
+    assert_eq!(code, 202, "{}", task);
+    let response = index.wait_task(task.uid()).await;
+    assert!(response.is_success(), "{:?}", response);
+
+    index.search(query.clone(), test.clone()).await;
+    let (task, code) = server.delete_index("test").await;
+    assert_eq!(code, 202, "{}", task);
+    let response = server.wait_task(task.uid()).await;
+    assert!(response.is_success(), "{:?}", response);
+
+    eprintln!("Settings -> Documents -> test");
+    let index = server.index("test");
+
+    let (task, code) = index.update_settings(settings.clone()).await;
+    assert_eq!(code, 202, "{}", task);
+    let response = index.wait_task(task.uid()).await;
+    assert!(response.is_success(), "{:?}", response);
+
+    let (task, code) = index.add_documents(documents.clone(), None).await;
+    assert_eq!(code, 202, "{}", task);
+    let response = index.wait_task(task.uid()).await;
+    assert!(response.is_success(), "{:?}", response);
+
+    index.search(query.clone(), test.clone()).await;
+    let (task, code) = server.delete_index("test").await;
+    assert_eq!(code, 202, "{}", task);
+    let response = server.wait_task(task.uid()).await;
+    assert!(response.is_success(), "{:?}", response);
+}
 
 #[actix_rt::test]
 async fn simple_placeholder_search() {
@@ -356,118 +405,6 @@ async fn search_multiple_params() {
 }
 
 #[actix_rt::test]
-async fn search_with_filter_string_notation() {
-    let server = Server::new().await;
-    let index = server.index("test");
-
-    let (_, code) = index.update_settings(json!({"filterableAttributes": ["title"]})).await;
-    meili_snap::snapshot!(code, @"202 Accepted");
-
-    let documents = DOCUMENTS.clone();
-    let (task, code) = index.add_documents(documents, None).await;
-    meili_snap::snapshot!(code, @"202 Accepted");
-    let res = index.wait_task(task.uid()).await;
-    meili_snap::snapshot!(res["status"], @r###""succeeded""###);
-
-    index
-        .search(
-            json!({
-                "filter": "title = Gläss"
-            }),
-            |response, code| {
-                assert_eq!(code, 200, "{}", response);
-                assert_eq!(response["hits"].as_array().unwrap().len(), 1);
-            },
-        )
-        .await;
-
-    let index = server.index("nested");
-
-    let (_, code) =
-        index.update_settings(json!({"filterableAttributes": ["cattos", "doggos.age"]})).await;
-    meili_snap::snapshot!(code, @"202 Accepted");
-
-    let documents = NESTED_DOCUMENTS.clone();
-    let (task, code) = index.add_documents(documents, None).await;
-    meili_snap::snapshot!(code, @"202 Accepted");
-    let res = index.wait_task(task.uid()).await;
-    meili_snap::snapshot!(res["status"], @r###""succeeded""###);
-
-    index
-        .search(
-            json!({
-                "filter": "cattos = pésti"
-            }),
-            |response, code| {
-                assert_eq!(code, 200, "{}", response);
-                assert_eq!(response["hits"].as_array().unwrap().len(), 1);
-                assert_eq!(response["hits"][0]["id"], json!(852));
-            },
-        )
-        .await;
-
-    index
-        .search(
-            json!({
-                "filter": "doggos.age > 5"
-            }),
-            |response, code| {
-                assert_eq!(code, 200, "{}", response);
-                assert_eq!(response["hits"].as_array().unwrap().len(), 2);
-                assert_eq!(response["hits"][0]["id"], json!(654));
-                assert_eq!(response["hits"][1]["id"], json!(951));
-            },
-        )
-        .await;
-}
-
-#[actix_rt::test]
-async fn search_with_filter_array_notation() {
-    let index = shared_index_with_documents().await;
-    let (response, code) = index
-        .search_post(json!({
-            "filter": ["title = Gläss"]
-        }))
-        .await;
-    assert_eq!(code, 200, "{}", response);
-    assert_eq!(response["hits"].as_array().unwrap().len(), 1);
-
-    let (response, code) = index
-        .search_post(json!({
-            "filter": [["title = Gläss", "title = \"Shazam!\"", "title = \"Escape Room\""]]
-        }))
-        .await;
-    assert_eq!(code, 200, "{}", response);
-    assert_eq!(response["hits"].as_array().unwrap().len(), 3);
-}
-
-#[actix_rt::test]
-async fn search_with_contains_filter() {
-    let temp = TempDir::new().unwrap();
-    let server = Server::new_with_options(Opt {
-        experimental_contains_filter: true,
-        ..default_settings(temp.path())
-    })
-    .await
-    .unwrap();
-    let index = server.index("movies");
-
-    index.update_settings(json!({"filterableAttributes": ["title"]})).await;
-
-    let documents = DOCUMENTS.clone();
-    let (request, _code) = index.add_documents(documents, None).await;
-    index.wait_task(request.uid()).await.succeeded();
-
-    let (response, code) = index
-        .search_post(json!({
-            "filter": "title CONTAINS cap"
-        }))
-        .await;
-    assert_eq!(code, 200, "{}", response);
-    assert_eq!(response["hits"].as_array().unwrap().len(), 2);
-}
-
-#[actix_rt::test]
 async fn search_with_sort_on_numbers() {
     let index = shared_index_with_documents().await;
     index
@@ -589,7 +526,7 @@ async fn search_facet_distribution() {
             |response, code| {
                 assert_eq!(code, 200, "{}", response);
                 let dist = response["facetDistribution"].as_object().unwrap();
-                assert_eq!(dist.len(), 1);
+                assert_eq!(dist.len(), 1, "{:?}", dist);
                 assert_eq!(
                     dist["doggos.name"],
                     json!({ "bobby": 1, "buddy": 1, "gros bill": 1, "turbo": 1, "fast": 1})
@@ -606,7 +543,7 @@ async fn search_facet_distribution() {
             |response, code| {
                 assert_eq!(code, 200, "{}", response);
                 let dist = response["facetDistribution"].as_object().unwrap();
-                assert_eq!(dist.len(), 3);
+                assert_eq!(dist.len(), 3, "{:?}", dist);
                 assert_eq!(
                     dist["doggos.name"],
                     json!({ "bobby": 1, "buddy": 1, "gros bill": 1, "turbo": 1, "fast": 1})
@@ -1557,6 +1494,293 @@ async fn change_attributes_settings() {
             },
         )
         .await;
+}
+
+#[actix_rt::test]
+async fn test_nested_fields() {
+    let documents = json!([
+        {
+            "id": 0,
+            "title": "The zeroth document",
+        },
+        {
+            "id": 1,
+            "title": "The first document",
+            "nested": {
+                "object": "field",
+                "machin": "bidule",
+            },
+        },
+        {
+            "id": 2,
+            "title": "The second document",
+            "nested": [
+                "array",
+                {
+                    "object": "field",
+                },
+                {
+                    "prout": "truc",
+                    "machin": "lol",
+                },
+            ],
+        },
+        {
+            "id": 3,
+            "title": "The third document",
+            "nested": "I lied",
+        },
+    ]);
+
+    let settings = json!({
+        "searchableAttributes": ["title", "nested.object", "nested.machin"],
+        "filterableAttributes": ["title", "nested.object", "nested.machin"]
+    });
+
+    // Test empty search returns all documents
+    test_settings_documents_indexing_swapping_and_search(
+        &documents,
+        &settings,
+        &json!({"q": "document"}),
+        |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            snapshot!(json_string!(response["hits"]), @r###"
+        [
+          {
+            "id": 0,
+            "title": "The zeroth document"
+          },
+          {
+            "id": 1,
+            "title": "The first document",
+            "nested": {
+              "object": "field",
+              "machin": "bidule"
+            }
+          },
+          {
+            "id": 2,
+            "title": "The second document",
+            "nested": [
+              "array",
+              {
+                "object": "field"
+              },
+              {
+                "prout": "truc",
+                "machin": "lol"
+              }
+            ]
+          },
+          {
+            "id": 3,
+            "title": "The third document",
+            "nested": "I lied"
+          }
+        ]
+        "###);
+        },
+    )
+    .await;
+
+    // Test searching specific documents
+    test_settings_documents_indexing_swapping_and_search(
+        &documents,
+        &settings,
+        &json!({"q": "zeroth"}),
+        |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            snapshot!(json_string!(response["hits"]), @r###"
+        [
+          {
+            "id": 0,
+            "title": "The zeroth document"
+          }
+        ]
+        "###);
+        },
+    )
+    .await;
+
+    test_settings_documents_indexing_swapping_and_search(
+        &documents,
+        &settings,
+        &json!({"q": "first"}),
+        |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            snapshot!(json_string!(response["hits"]), @r###"
+        [
+          {
+            "id": 1,
+            "title": "The first document",
+            "nested": {
+              "object": "field",
+              "machin": "bidule"
+            }
+          }
+        ]
+        "###);
+        },
+    )
+    .await;
+
+    // Test searching nested fields
+    test_settings_documents_indexing_swapping_and_search(
+        &documents,
+        &settings,
+        &json!({"q": "field"}),
+        |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            snapshot!(json_string!(response["hits"]), @r###"
+      [
+        {
+          "id": 1,
+          "title": "The first document",
+          "nested": {
+            "object": "field",
+            "machin": "bidule"
+          }
+        },
+        {
+          "id": 2,
+          "title": "The second document",
+          "nested": [
+            "array",
+            {
+              "object": "field"
+            },
+            {
+              "prout": "truc",
+              "machin": "lol"
+            }
+          ]
+        }
+      ]
+      "###);
+        },
+    )
+    .await;
+
+    test_settings_documents_indexing_swapping_and_search(
+        &documents,
+        &settings,
+        &json!({"q": "array"}),
+        |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            // nested is not searchable
+            snapshot!(json_string!(response["hits"]), @"[]");
+        },
+    )
+    .await;
+
+    test_settings_documents_indexing_swapping_and_search(
+        &documents,
+        &settings,
+        &json!({"q": "lied"}),
+        |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            // nested is not searchable
+            snapshot!(json_string!(response["hits"]), @"[]");
+        },
+    )
+    .await;
+
+    // Test filtering on nested fields
+    test_settings_documents_indexing_swapping_and_search(
+        &documents,
+        &settings,
+        &json!({"filter": "nested.object = field"}),
+        |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            snapshot!(json_string!(response["hits"]), @r###"
+        [
+          {
+            "id": 1,
+            "title": "The first document",
+            "nested": {
+              "object": "field",
+              "machin": "bidule"
+            }
+          },
+          {
+            "id": 2,
+            "title": "The second document",
+            "nested": [
+              "array",
+              {
+                "object": "field"
+              },
+              {
+                "prout": "truc",
+                "machin": "lol"
+              }
+            ]
+          }
+        ]
+        "###);
+        },
+    )
+    .await;
+
+    test_settings_documents_indexing_swapping_and_search(
+        &documents,
+        &settings,
+        &json!({"filter": "nested.machin = bidule"}),
+        |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            snapshot!(json_string!(response["hits"]), @r###"
+        [
+          {
+            "id": 1,
+            "title": "The first document",
+            "nested": {
+              "object": "field",
+              "machin": "bidule"
+            }
+          }
+        ]
+        "###);
+        },
+    )
+    .await;
+
+    // Test filtering on non-filterable nested field fails
+    test_settings_documents_indexing_swapping_and_search(
+        &documents,
+        &settings,
+        &json!({"filter": "nested = array"}),
+        |response, code| {
+            assert_eq!(code, 400, "{}", response);
+            snapshot!(json_string!(response), @r###"
+            {
+              "message": "Index `test`: Attribute `nested` is not filterable. Available filterable attribute patterns are: `nested.machin`, `nested.object`, `title`.\n1:7 nested = array",
+              "code": "invalid_search_filter",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+            }
+            "###);
+        },
+    )
+    .await;
+
+    // Test filtering on non-filterable nested field fails
+    test_settings_documents_indexing_swapping_and_search(
+        &documents,
+        &settings,
+        &json!({"filter": r#"nested = "I lied""#}),
+        |response, code| {
+            assert_eq!(code, 400, "{}", response);
+            snapshot!(json_string!(response), @r###"
+            {
+              "message": "Index `test`: Attribute `nested` is not filterable. Available filterable attribute patterns are: `nested.machin`, `nested.object`, `title`.\n1:7 nested = \"I lied\"",
+              "code": "invalid_search_filter",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+            }
+            "###);
+        },
+    )
+    .await;
 }
 
 /// Modifying facets with different casing should work correctly

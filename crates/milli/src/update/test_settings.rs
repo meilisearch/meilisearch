@@ -1,6 +1,6 @@
 use big_s::S;
 use heed::types::Bytes;
-use maplit::{btreemap, btreeset, hashset};
+use maplit::{btreemap, btreeset};
 use meili_snap::snapshot;
 
 use super::*;
@@ -210,7 +210,7 @@ fn set_filterable_fields() {
     // Set the filterable fields to be the age.
     index
         .update_settings(|settings| {
-            settings.set_filterable_fields(hashset! { S("age") });
+            settings.set_filterable_fields(vec![FilterableAttributesRule::Field(S("age"))]);
         })
         .unwrap();
 
@@ -225,8 +225,6 @@ fn set_filterable_fields() {
 
     // Check that the displayed fields are correctly set.
     let rtxn = index.read_txn().unwrap();
-    let fields_ids = index.filterable_fields(&rtxn).unwrap();
-    assert_eq!(fields_ids, hashset! { S("age") });
     // Only count the field_id 0 and level 0 facet values.
     // TODO we must support typed CSVs for numbers to be understood.
     let fidmap = index.fields_ids_map(&rtxn).unwrap();
@@ -268,14 +266,12 @@ fn set_filterable_fields() {
     // Set the filterable fields to be the age and the name.
     index
         .update_settings(|settings| {
-            settings.set_filterable_fields(hashset! { S("age"),  S("name") });
+            settings.set_filterable_fields(vec![
+                FilterableAttributesRule::Field(S("age")),
+                FilterableAttributesRule::Field(S("name")),
+            ]);
         })
         .unwrap();
-
-    // Check that the displayed fields are correctly set.
-    let rtxn = index.read_txn().unwrap();
-    let fields_ids = index.filterable_fields(&rtxn).unwrap();
-    assert_eq!(fields_ids, hashset! { S("age"),  S("name") });
 
     let rtxn = index.read_txn().unwrap();
     // Only count the field_id 2 and level 0 facet values.
@@ -300,14 +296,9 @@ fn set_filterable_fields() {
     // Remove the age from the filterable fields.
     index
         .update_settings(|settings| {
-            settings.set_filterable_fields(hashset! { S("name") });
+            settings.set_filterable_fields(vec![FilterableAttributesRule::Field(S("name"))]);
         })
         .unwrap();
-
-    // Check that the displayed fields are correctly set.
-    let rtxn = index.read_txn().unwrap();
-    let fields_ids = index.filterable_fields(&rtxn).unwrap();
-    assert_eq!(fields_ids, hashset! { S("name") });
 
     let rtxn = index.read_txn().unwrap();
     // Only count the field_id 2 and level 0 facet values.
@@ -637,7 +628,10 @@ fn setting_searchable_recomputes_other_settings() {
     index
         .update_settings(|settings| {
             settings.set_displayed_fields(vec!["hello".to_string()]);
-            settings.set_filterable_fields(hashset! { S("age"), S("toto") });
+            settings.set_filterable_fields(vec![
+                FilterableAttributesRule::Field(S("age")),
+                FilterableAttributesRule::Field(S("toto")),
+            ]);
             settings.set_criteria(vec![Criterion::Asc(S("toto"))]);
         })
         .unwrap();
@@ -754,7 +748,7 @@ fn setting_impact_relevancy() {
     // Set the genres setting
     index
         .update_settings(|settings| {
-            settings.set_filterable_fields(hashset! { S("genres") });
+            settings.set_filterable_fields(vec![FilterableAttributesRule::Field(S("genres"))]);
         })
         .unwrap();
 

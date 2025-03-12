@@ -125,6 +125,12 @@ impl Server<Owned> {
         self.service.post("/indexes", body).await
     }
 
+    pub async fn delete_index(&self, uid: impl AsRef<str>) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}", urlencoding::encode(uid.as_ref()));
+        let (value, code) = self.service.delete(url).await;
+        (value, code)
+    }
+
     pub fn index_with_encoder(&self, uid: impl AsRef<str>, encoder: Encoder) -> Index<'_> {
         Index {
             uid: uid.as_ref().to_string(),

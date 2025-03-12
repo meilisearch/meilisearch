@@ -57,6 +57,7 @@ impl RankingRuleGraphTrait for FidGraph {
         let term = to_term;
 
         let mut all_fields = FxHashSet::default();
+        let mut current_max_weight = 0;
         for word in term.term_subset.all_single_words_except_prefix_db(ctx)? {
             let fields = ctx.get_db_word_fids(word.interned())?;
             all_fields.extend(fields);
@@ -81,6 +82,9 @@ impl RankingRuleGraphTrait for FidGraph {
             let weight = weights_map
                 .weight(fid)
                 .ok_or(InternalError::FieldidsWeightsMapMissingEntry { key: fid })?;
+            if weight > current_max_weight {
+                current_max_weight = weight;
+            }
             edges.push((
                 weight as u32 * term.term_ids.len() as u32,
                 conditions_interner.insert(FidCondition { term: term.clone(), fid: Some(fid) }),
@@ -88,10 +92,10 @@ impl RankingRuleGraphTrait for FidGraph {
         }
 
         // always lookup the max_fid if we don't already and add an artificial condition for max scoring
-        let max_weight: Option<u16> = weights_map.max_weight();
+        let max_weight = ctx.index.max_searchable_attribute_weight(ctx.txn)?;
 
         if let Some(max_weight) = max_weight {
-            if !all_fields.contains(&max_weight) {
+            if current_max_weight < max_weight {
                 edges.push((
                     max_weight as u32 * term.term_ids.len() as u32, // TODO improve the fid score i.e. fid^10.
                     conditions_interner.insert(FidCondition {
