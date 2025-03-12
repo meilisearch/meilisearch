@@ -1,10 +1,12 @@
 use std::borrow::Cow;
+use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::ops::ControlFlow;
 
 use fst::automaton::Str;
-use fst::{Automaton, IntoStreamer, Streamer};
+use fst::{IntoStreamer, Streamer};
 use heed::types::DecodeIgnore;
+use itertools::{merge_join_by, EitherOrBoth};
 
 use super::{OneTypoTerm, Phrase, QueryTerm, ZeroTypoTerm};
 use crate::search::fst_utils::{Complement, Intersection, StartsWith, Union};
@@ -16,14 +18,8 @@ use crate::{Result, MAX_WORD_LENGTH};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum NumberOfTypos {
-    Zero,
     One,
     Two,
-}
-
-pub enum ZeroOrOneTypo {
-    Zero,
-    One,
 }
 
 impl Interned<QueryTerm> {
@@ -47,34 +43,45 @@ impl Interned<QueryTerm> {
 }
 
 fn find_zero_typo_prefix_derivations(
+    ctx: &mut SearchContext<'_>,
     word_interned: Interned<String>,
-    fst: fst::Set<Cow<'_, [u8]>>,
-    word_interner: &mut DedupInterner<String>,
     mut visit: impl FnMut(Interned<String>) -> Result<ControlFlow<()>>,
 ) -> Result<()> {
-    let word = word_interner.get(word_interned).to_owned();
+    let word = ctx.word_interner.get(word_interned).to_owned();
     let word = word.as_str();
-    let prefix = Str::new(word).starts_with();
-    let mut stream = fst.search(prefix).into_stream();
 
-    while let Some(derived_word) = stream.next() {
-        let derived_word = std::str::from_utf8(derived_word)?.to_owned();
-        let derived_word_interned = word_interner.insert(derived_word);
-        if derived_word_interned != word_interned {
-            let cf = visit(derived_word_interned)?;
-            if cf.is_break() {
-                break;
+    let words =
+        ctx.index.word_docids.remap_data_type::<DecodeIgnore>().prefix_iter(ctx.txn, word)?;
+    let exact_words =
+        ctx.index.exact_word_docids.remap_data_type::<DecodeIgnore>().prefix_iter(ctx.txn, word)?;
+
+    for eob in merge_join_by(words, exact_words, |lhs, rhs| match (lhs, rhs) {
+        (Ok((word, _)), Ok((exact_word, _))) => word.cmp(exact_word),
+        (Err(_), _) | (_, Err(_)) => Ordering::Equal,
+    }) {
+        match eob {
+            EitherOrBoth::Both(kv, _) | EitherOrBoth::Left(kv) | EitherOrBoth::Right(kv) => {
+                let (derived_word, _) = kv?;
+                let derived_word = derived_word.to_string();
+                let derived_word_interned = ctx.word_interner.insert(derived_word);
+                if derived_word_interned != word_interned {
+                    let cf = visit(derived_word_interned)?;
+                    if cf.is_break() {
+                        break;
+                    }
+                }
             }
         }
     }
+
     Ok(())
 }
 
-fn find_zero_one_typo_derivations(
+fn find_one_typo_derivations(
     ctx: &mut SearchContext<'_>,
     word_interned: Interned<String>,
     is_prefix: bool,
-    mut visit: impl FnMut(Interned<String>, ZeroOrOneTypo) -> Result<ControlFlow<()>>,
+    mut visit: impl FnMut(Interned<String>) -> Result<ControlFlow<()>>,
 ) -> Result<()> {
     let fst = ctx.get_words_fst()?;
     let word = ctx.word_interner.get(word_interned).to_owned();
@@ -89,16 +96,9 @@ fn find_zero_one_typo_derivations(
         let derived_word = ctx.word_interner.insert(derived_word.to_owned());
         let d = dfa.distance(state.1);
         match d.to_u8() {
-            0 => {
-                if derived_word != word_interned {
-                    let cf = visit(derived_word, ZeroOrOneTypo::Zero)?;
-                    if cf.is_break() {
-                        break;
-                    }
-                }
-            }
+            0 => (),
             1 => {
-                let cf = visit(derived_word, ZeroOrOneTypo::One)?;
+                let cf = visit(derived_word)?;
                 if cf.is_break() {
                     break;
                 }
@@ -111,7 +111,7 @@ fn find_zero_one_typo_derivations(
     Ok(())
 }
 
-fn find_zero_one_two_typo_derivations(
+fn find_one_two_typo_derivations(
     word_interned: Interned<String>,
     is_prefix: bool,
     fst: fst::Set<Cow<'_, [u8]>>,
@@ -144,14 +144,7 @@ fn find_zero_one_two_typo_derivations(
             // correct distance
             let d = second_dfa.distance((state.1).0);
             match d.to_u8() {
-                0 => {
-                    if derived_word_interned != word_interned {
-                        let cf = visit(derived_word_interned, NumberOfTypos::Zero)?;
-                        if cf.is_break() {
-                            break;
-                        }
-                    }
-                }
+                0 => (),
                 1 => {
                     let cf = visit(derived_word_interned, NumberOfTypos::One)?;
                     if cf.is_break() {
@@ -194,8 +187,6 @@ pub fn partially_initialized_term_from_word(
         });
     }
 
-    let fst = ctx.index.words_fst(ctx.txn)?;
-
     let use_prefix_db = is_prefix
         && (ctx
             .index
@@ -215,24 +206,19 @@ pub fn partially_initialized_term_from_word(
     let mut zero_typo = None;
     let mut prefix_of = BTreeSet::new();
 
-    if fst.contains(word) || ctx.index.exact_word_docids.get(ctx.txn, word)?.is_some() {
+    if ctx.index.contains_word(ctx.txn, word)? {
         zero_typo = Some(word_interned);
     }
 
     if is_prefix && use_prefix_db.is_none() {
-        find_zero_typo_prefix_derivations(
-            word_interned,
-            fst,
-            &mut ctx.word_interner,
-            |derived_word| {
-                if prefix_of.len() < limits::MAX_PREFIX_COUNT {
-                    prefix_of.insert(derived_word);
-                    Ok(ControlFlow::Continue(()))
-                } else {
-                    Ok(ControlFlow::Break(()))
-                }
-            },
-        )?;
+        find_zero_typo_prefix_derivations(ctx, word_interned, |derived_word| {
+            if prefix_of.len() < limits::MAX_PREFIX_COUNT {
+                prefix_of.insert(derived_word);
+                Ok(ControlFlow::Continue(()))
+            } else {
+                Ok(ControlFlow::Break(()))
+            }
+        })?;
     }
     let synonyms = ctx.index.synonyms(ctx.txn)?;
     let mut synonym_word_count = 0;
@@ -295,18 +281,13 @@ impl Interned<QueryTerm> {
         let mut one_typo_words = BTreeSet::new();
 
         if *max_nbr_typos > 0 {
-            find_zero_one_typo_derivations(ctx, original, is_prefix, |derived_word, nbr_typos| {
-                match nbr_typos {
-                    ZeroOrOneTypo::Zero => {}
-                    ZeroOrOneTypo::One => {
-                        if one_typo_words.len() < limits::MAX_ONE_TYPO_COUNT {
-                            one_typo_words.insert(derived_word);
-                        } else {
-                            return Ok(ControlFlow::Break(()));
-                        }
-                    }
+            find_one_typo_derivations(ctx, original, is_prefix, |derived_word| {
+                if one_typo_words.len() < limits::MAX_ONE_TYPO_COUNT {
+                    one_typo_words.insert(derived_word);
+                    Ok(ControlFlow::Continue(()))
+                } else {
+                    Ok(ControlFlow::Break(()))
                 }
-                Ok(ControlFlow::Continue(()))
             })?;
         }
 
@@ -357,7 +338,7 @@ impl Interned<QueryTerm> {
         let mut two_typo_words = BTreeSet::new();
 
         if *max_nbr_typos > 0 {
-            find_zero_one_two_typo_derivations(
+            find_one_two_typo_derivations(
                 *original,
                 *is_prefix,
                 ctx.index.words_fst(ctx.txn)?,
@@ -370,7 +351,6 @@ impl Interned<QueryTerm> {
                         return Ok(ControlFlow::Break(()));
                     }
                     match nbr_typos {
-                        NumberOfTypos::Zero => {}
                         NumberOfTypos::One => {
                             if one_typo_words.len() < limits::MAX_ONE_TYPO_COUNT {
                                 one_typo_words.insert(derived_word);
