@@ -21,7 +21,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
 
 use meilisearch_types::error::ResponseError;
-use meilisearch_types::heed::Env;
+use meilisearch_types::heed::{Env, WithoutTls};
 use meilisearch_types::milli;
 use meilisearch_types::tasks::Status;
 use rayon::current_num_threads;
@@ -72,7 +72,7 @@ pub struct Scheduler {
     pub(crate) snapshots_path: PathBuf,
 
     /// The path to the folder containing the auth LMDB env.
-    pub(crate) auth_env: Env,
+    pub(crate) auth_env: Env<WithoutTls>,
 
     /// The path to the version file of Meilisearch.
     pub(crate) version_file_path: PathBuf,
@@ -93,7 +93,7 @@ impl Scheduler {
         }
     }
 
-    pub fn new(options: &IndexSchedulerOptions, auth_env: Env) -> Scheduler {
+    pub fn new(options: &IndexSchedulerOptions, auth_env: Env<WithoutTls>) -> Scheduler {
         Scheduler {
             must_stop_processing: MustStopProcessing::default(),
             // we want to start the loop right away in case meilisearch was ctrl+Ced while processing things

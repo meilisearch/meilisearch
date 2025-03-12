@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet};
 
 use error::{AuthControllerError, Result};
 use maplit::hashset;
-use meilisearch_types::heed::Env;
+use meilisearch_types::heed::{Env, WithoutTls};
 use meilisearch_types::index_uid_pattern::IndexUidPattern;
 use meilisearch_types::keys::{Action, CreateApiKey, Key, PatchApiKey};
 use meilisearch_types::milli::update::Setting;
@@ -23,7 +23,7 @@ pub struct AuthController {
 }
 
 impl AuthController {
-    pub fn new(auth_env: Env, master_key: &Option<String>) -> Result<Self> {
+    pub fn new(auth_env: Env<WithoutTls>, master_key: &Option<String>) -> Result<Self> {
         let store = HeedAuthStore::new(auth_env)?;
 
         if store.is_empty()? {

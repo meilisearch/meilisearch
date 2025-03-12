@@ -209,7 +209,7 @@ impl IndexScheduler {
     #[allow(private_interfaces)] // because test_utils is private
     pub fn new(
         options: IndexSchedulerOptions,
-        auth_env: Env,
+        auth_env: Env<WithoutTls>,
         from_db_version: (u32, u32, u32),
         #[cfg(test)] test_breakpoint_sdr: crossbeam_channel::Sender<(test_utils::Breakpoint, bool)>,
         #[cfg(test)] planned_failures: Vec<(usize, test_utils::FailureLocation)>,

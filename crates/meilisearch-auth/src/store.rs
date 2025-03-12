@@ -7,10 +7,10 @@ use std::str;
 use std::str::FromStr;
 
 use hmac::{Hmac, Mac};
-use meilisearch_types::heed::BoxedError;
+use meilisearch_types::heed::{BoxedError, WithoutTls};
 use meilisearch_types::index_uid_pattern::IndexUidPattern;
 use meilisearch_types::keys::KeyId;
-use meilisearch_types::milli;
+use meilisearch_types::milli::heed;
 use meilisearch_types::milli::heed::types::{Bytes, DecodeIgnore, SerdeJson};
 use meilisearch_types::milli::heed::{Database, Env, EnvOpenOptions, RwTxn};
 use sha2::Sha256;
@@ -28,20 +28,21 @@ const KEY_ID_ACTION_INDEX_EXPIRATION_DB_NAME: &str = "keyid-action-index-expirat
 
 #[derive(Clone)]
 pub struct HeedAuthStore {
-    env: Env,
+    env: Env<WithoutTls>,
     keys: Database<Bytes, SerdeJson<Key>>,
     action_keyid_index_expiration: Database<KeyIdActionCodec, SerdeJson<Option<OffsetDateTime>>>,
 }
 
-pub fn open_auth_store_env(path: &Path) -> milli::heed::Result<milli::heed::Env> {
-    let mut options = EnvOpenOptions::new();
+pub fn open_auth_store_env(path: &Path) -> heed::Result<Env<WithoutTls>> {
+    let options = EnvOpenOptions::new();
+    let mut options = options.read_txn_without_tls();
     options.map_size(AUTH_STORE_SIZE); // 1GB
     options.max_dbs(2);
     unsafe { options.open(path) }
 }
 
 impl HeedAuthStore {
-    pub fn new(env: Env) -> Result<Self> {
+    pub fn new(env: Env<WithoutTls>) -> Result<Self> {
         let mut wtxn = env.write_txn()?;
         let keys = env.create_database(&mut wtxn, Some(KEY_DB_NAME))?;
         let action_keyid_index_expiration =
@@ -274,7 +275,7 @@ impl HeedAuthStore {
 /// optionally on a specific index, for a given key.
 pub struct KeyIdActionCodec;
 
-impl<'a> milli::heed::BytesDecode<'a> for KeyIdActionCodec {
+impl<'a> heed::BytesDecode<'a> for KeyIdActionCodec {
     type DItem = (KeyId, Action, Option<&'a [u8]>);
 
     fn bytes_decode(bytes: &'a [u8]) -> StdResult<Self::DItem, BoxedError> {
@@ -291,7 +292,7 @@ impl<'a> milli::heed::BytesDecode<'a> for KeyIdActionCodec {
     }
 }
 
-impl<'a> milli::heed::BytesEncode<'a> for KeyIdActionCodec {
+impl<'a> heed::BytesEncode<'a> for KeyIdActionCodec {
     type EItem = (&'a KeyId, &'a Action, Option<&'a [u8]>);
 
     fn bytes_encode((key_id, action, index): &Self::EItem) -> StdResult<Cow<[u8]>, BoxedError> {
