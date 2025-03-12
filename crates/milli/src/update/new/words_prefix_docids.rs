@@ -205,15 +205,22 @@ impl WordPrefixIntegerDocids {
             let (ref mut index, ref mut file, ref mut buffer) = *refmut;
 
             for (&pos, bitmaps_bytes) in frozen.bitmaps(prefix).unwrap() {
-                let output = bitmaps_bytes
-                    .iter()
-                    .map(|bytes| CboRoaringBitmapCodec::deserialize_from(bytes))
-                    .union()?;
-
-                buffer.clear();
-                CboRoaringBitmapCodec::serialize_into_vec(&output, buffer);
-                index.push(PrefixIntegerEntry { prefix, pos, serialized_length: buffer.len() });
-                file.write_all(buffer)?;
+                if bitmaps_bytes.is_empty() {
+                    index.push(PrefixIntegerEntry { prefix, pos, serialized_length: None });
+                } else {
+                    let output = bitmaps_bytes
+                        .iter()
+                        .map(|bytes| CboRoaringBitmapCodec::deserialize_from(bytes))
+                        .union()?;
+                    buffer.clear();
+                    CboRoaringBitmapCodec::serialize_into_vec(&output, buffer);
+                    index.push(PrefixIntegerEntry {
+                        prefix,
+                        pos,
+                        serialized_length: Some(buffer.len()),
+                    });
+                    file.write_all(buffer)?;
+                }
             }
 
             Result::Ok(())
@@ -230,14 +237,24 @@ impl WordPrefixIntegerDocids {
             file.rewind()?;
             let mut file = BufReader::new(file);
             for PrefixIntegerEntry { prefix, pos, serialized_length } in index {
-                buffer.resize(serialized_length, 0);
-                file.read_exact(&mut buffer)?;
-
                 key_buffer.clear();
                 key_buffer.extend_from_slice(prefix.as_bytes());
                 key_buffer.push(0);
                 key_buffer.extend_from_slice(&pos.to_be_bytes());
-                self.prefix_database.remap_data_type::<Bytes>().put(wtxn, &key_buffer, &buffer)?;
+                match serialized_length {
+                    Some(serialized_length) => {
+                        buffer.resize(serialized_length, 0);
+                        file.read_exact(&mut buffer)?;
+                        self.prefix_database.remap_data_type::<Bytes>().put(
+                            wtxn,
+                            &key_buffer,
+                            &buffer,
+                        )?;
+                    }
+                    None => {
+                        self.prefix_database.delete(wtxn, &key_buffer)?;
+                    }
+                }
             }
         }
 
@@ -249,7 +266,7 @@ impl WordPrefixIntegerDocids {
 struct PrefixIntegerEntry<'a> {
     prefix: &'a str,
     pos: u16,
-    serialized_length: usize,
+    serialized_length: Option<usize>,
 }
 
 /// TODO doc
