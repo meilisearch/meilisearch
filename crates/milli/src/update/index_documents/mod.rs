@@ -525,8 +525,7 @@ where
                     &mut rng,
                     dimension,
                     is_quantizing,
-                    // Arroy should only use 50% of the memory
-                    self.indexer_config.max_memory.map(|mm| mm / 2),
+                    self.indexer_config.max_memory,
                     cancel,
                 )?;
                 Result::Ok(())

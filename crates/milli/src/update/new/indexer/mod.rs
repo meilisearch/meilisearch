@@ -62,6 +62,8 @@ where
     let mut bbbuffers = Vec::new();
     let finished_extraction = AtomicBool::new(false);
 
+    let arroy_memory = grenad_parameters.max_memory;
+
     // We reduce the actual memory used to 5%. The reason we do this here and not in Meilisearch
     // is because we still use the old indexer for the settings and it is highly impacted by the
     // max memory. So we keep the changes here and will remove these changes once we use the new
@@ -70,8 +72,6 @@ where
         max_memory: grenad_parameters.max_memory.map(|mm| mm * 5 / 100),
         ..grenad_parameters
     };
-    // Arroy should use 50% of the grenad memory instead of 5%
-    let arroy_memory = grenad_parameters.max_memory.map(|mm| mm * 10);
 
     // 5% percent of the allocated memory for the extractors, or min 100MiB
     // 5% percent of the allocated memory for the bbqueues, or min 50MiB
