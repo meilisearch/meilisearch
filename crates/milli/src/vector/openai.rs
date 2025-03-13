@@ -7,7 +7,7 @@ use rayon::slice::ParallelSlice as _;
 
 use super::error::{EmbedError, NewEmbedderError};
 use super::rest::{Embedder as RestEmbedder, EmbedderOptions as RestEmbedderOptions};
-use super::{DistributionShift, REQUEST_PARALLELISM};
+use super::{DistributionShift, EmbeddingCache, REQUEST_PARALLELISM};
 use crate::error::FaultSource;
 use crate::vector::error::EmbedErrorKind;
 use crate::vector::Embedding;
@@ -317,6 +317,10 @@ impl Embedder {
 
     pub fn distribution(&self) -> Option<DistributionShift> {
         self.options.distribution()
+    }
+
+    pub(super) fn cache(&self) -> &EmbeddingCache {
+        self.rest_embedder.cache()
     }
 }
 

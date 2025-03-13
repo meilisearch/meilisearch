@@ -4,7 +4,8 @@ use arroy::Distance;
 
 use super::error::CompositeEmbedderContainsHuggingFace;
 use super::{
-    hf, manual, ollama, openai, rest, DistributionShift, EmbedError, Embedding, NewEmbedderError,
+    hf, manual, ollama, openai, rest, DistributionShift, EmbedError, Embedding, EmbeddingCache,
+    NewEmbedderError,
 };
 use crate::ThreadPoolNoAbort;
 
@@ -148,6 +149,27 @@ impl SubEmbedder {
         }
     }
 
+    pub fn embed_one(
+        &self,
+        text: &str,
+        deadline: Option<Instant>,
+    ) -> std::result::Result<Embedding, EmbedError> {
+        match self {
+            SubEmbedder::HuggingFace(embedder) => embedder.embed_one(text),
+            SubEmbedder::OpenAi(embedder) => {
+                embedder.embed(&[text], deadline)?.pop().ok_or_else(EmbedError::missing_embedding)
+            }
+            SubEmbedder::Ollama(embedder) => {
+                embedder.embed(&[text], deadline)?.pop().ok_or_else(EmbedError::missing_embedding)
+            }
+            SubEmbedder::UserProvided(embedder) => embedder.embed_one(text),
+            SubEmbedder::Rest(embedder) => embedder
+                .embed_ref(&[text], deadline)?
+                .pop()
+                .ok_or_else(EmbedError::missing_embedding),
+        }
+    }
+
     /// Embed multiple chunks of texts.
     ///
     /// Each chunk is composed of one or multiple texts.
@@ -231,6 +253,16 @@ impl SubEmbedder {
             SubEmbedder::Ollama(embedder) => embedder.distribution(),
             SubEmbedder::UserProvided(embedder) => embedder.distribution(),
             SubEmbedder::Rest(embedder) => embedder.distribution(),
+        }
+    }
+
+    pub(super) fn cache(&self) -> Option<&EmbeddingCache> {
+        match self {
+            SubEmbedder::HuggingFace(embedder) => Some(embedder.cache()),
+            SubEmbedder::OpenAi(embedder) => Some(embedder.cache()),
+            SubEmbedder::UserProvided(_) => None,
+            SubEmbedder::Ollama(embedder) => Some(embedder.cache()),
+            SubEmbedder::Rest(embedder) => Some(embedder.cache()),
         }
     }
 }

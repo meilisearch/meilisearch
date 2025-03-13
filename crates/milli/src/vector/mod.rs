@@ -1,4 +1,6 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::num::{NonZeroUsize, TryFromIntError};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -551,6 +553,51 @@ pub enum Embedder {
     Composite(composite::Embedder),
 }
 
+#[derive(Debug)]
+struct EmbeddingCache {
+    data: thread_local::ThreadLocal<RefCell<lru::LruCache<String, Embedding>>>,
+    cap_per_thread: u16,
+}
+
+impl EmbeddingCache {
+    pub fn new(cap_per_thread: u16) -> Self {
+        Self { cap_per_thread, data: thread_local::ThreadLocal::new() }
+    }
+
+    /// Get the embedding corresponding to `text`, if any is present in the cache.
+    pub fn get(&self, text: &str) -> Option<Embedding> {
+        let mut cache = self
+            .data
+            .get_or_try(|| -> Result<RefCell<lru::LruCache<String, Vec<f32>>>, TryFromIntError> {
+                Ok(RefCell::new(lru::LruCache::new(NonZeroUsize::try_from(
+                    self.cap_per_thread as usize,
+                )?)))
+            })
+            .ok()?
+            .borrow_mut();
+
+        cache.get(text).cloned()
+    }
+
+    /// Puts a new embedding for the specified `text`
+    pub fn put(&self, text: String, embedding: Embedding) {
+        let Ok(cache) = self.data.get_or_try(
+            || -> Result<RefCell<lru::LruCache<String, Vec<f32>>>, TryFromIntError> {
+                Ok(RefCell::new(lru::LruCache::new(NonZeroUsize::try_from(
+                    self.cap_per_thread as usize,
+                )?)))
+            },
+        ) else {
+            return;
+        };
+        let mut cache = cache.borrow_mut();
+
+        cache.put(text, embedding);
+    }
+}
+
+pub const CAP_PER_THREAD: u16 = 20;
+
 /// Configuration for an embedder.
 #[derive(Debug, Clone, Default, serde::Deserialize, serde::Serialize)]
 pub struct EmbeddingConfig {
@@ -651,19 +698,36 @@ impl Embedder {
     #[tracing::instrument(level = "debug", skip_all, target = "search")]
     pub fn embed_search(
         &self,
-        text: String,
+        text: &str,
         deadline: Option<Instant>,
     ) -> std::result::Result<Embedding, EmbedError> {
-        let texts = vec![text];
-        let mut embedding = match self {
-            Embedder::HuggingFace(embedder) => embedder.embed(texts),
-            Embedder::OpenAi(embedder) => embedder.embed(&texts, deadline),
-            Embedder::Ollama(embedder) => embedder.embed(&texts, deadline),
-            Embedder::UserProvided(embedder) => embedder.embed(&texts),
-            Embedder::Rest(embedder) => embedder.embed(texts, deadline),
-            Embedder::Composite(embedder) => embedder.search.embed(texts, deadline),
+        if let Some(cache) = self.cache() {
+            if let Some(embedding) = cache.get(text) {
+                tracing::trace!(text, "embedding found in cache");
+                return Ok(embedding);
+            }
+        }
+        let embedding = match self {
+            Embedder::HuggingFace(embedder) => embedder.embed_one(text),
+            Embedder::OpenAi(embedder) => {
+                embedder.embed(&[text], deadline)?.pop().ok_or_else(EmbedError::missing_embedding)
+            }
+            Embedder::Ollama(embedder) => {
+                embedder.embed(&[text], deadline)?.pop().ok_or_else(EmbedError::missing_embedding)
+            }
+            Embedder::UserProvided(embedder) => embedder.embed_one(text),
+            Embedder::Rest(embedder) => embedder
+                .embed_ref(&[text], deadline)?
+                .pop()
+                .ok_or_else(EmbedError::missing_embedding),
+            Embedder::Composite(embedder) => embedder.search.embed_one(text, deadline),
         }?;
-        let embedding = embedding.pop().ok_or_else(EmbedError::missing_embedding)?;
+
+        if let Some(cache) = self.cache() {
+            tracing::trace!(text, "embedding added to cache");
+            cache.put(text.to_owned(), embedding.clone());
+        }
+
         Ok(embedding)
     }
 
@@ -757,6 +821,17 @@ impl Embedder {
             | Embedder::Rest(_) => true,
             Embedder::UserProvided(_) => false,
             Embedder::Composite(embedder) => embedder.index.uses_document_template(),
+        }
+    }
+
+    fn cache(&self) -> Option<&EmbeddingCache> {
+        match self {
+            Embedder::HuggingFace(embedder) => Some(embedder.cache()),
+            Embedder::OpenAi(embedder) => Some(embedder.cache()),
+            Embedder::UserProvided(_) => None,
+            Embedder::Ollama(embedder) => Some(embedder.cache()),
+            Embedder::Rest(embedder) => Some(embedder.cache()),
+            Embedder::Composite(embedder) => embedder.search.cache(),
         }
     }
 }

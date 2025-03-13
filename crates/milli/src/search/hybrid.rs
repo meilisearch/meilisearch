@@ -203,7 +203,7 @@ impl<'a> Search<'a> {
 
                 let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
 
-                match embedder.embed_search(query, Some(deadline)) {
+                match embedder.embed_search(&query, Some(deadline)) {
                     Ok(embedding) => embedding,
                     Err(error) => {
                         tracing::error!(error=%error, "Embedding failed");

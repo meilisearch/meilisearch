@@ -916,7 +916,7 @@ fn prepare_search<'t>(
                     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
 
                     embedder
-                        .embed_search(query.q.clone().unwrap(), Some(deadline))
+                        .embed_search(query.q.as_ref().unwrap(), Some(deadline))
                         .map_err(milli::vector::Error::from)
                         .map_err(milli::Error::from)?
                 }
