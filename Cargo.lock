@@ -394,12 +394,11 @@ checksum = "96d30a06541fbafbc7f82ed10c06164cfbd2c401138f6addd8404629c4b16711"
 [[package]]
 name = "arroy"
 version = "0.6.0"
-source = "git+https://github.com/meilisearch/arroy?branch=main#3350696381a4e29a838209663f39c1c58e9bc7b6"
+source = "git+https://github.com/meilisearch/arroy?branch=main#49cb7ea6b7e7613d15f55b751f5c03bfb5ee254c"
 dependencies = [
  "bytemuck",
  "byteorder",
  "heed",
- "log",
  "memmap2",
  "nohash",
  "ordered-float",
@@ -409,6 +408,7 @@ dependencies = [
  "roaring",
  "tempfile",
  "thiserror 2.0.9",
+ "tracing",
 ]
 
 [[package]]
@@ -2379,7 +2379,7 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 [[package]]
 name = "heed"
 version = "0.22.0"
-source = "git+https://github.com/meilisearch/heed?branch=main#2988ff87aaf493c46f81a0f011618a1b336b8d30"
+source = "git+https://github.com/meilisearch/heed?branch=main#62d1115bd7d72da5f02532a200952af7b4e16b3e"
 dependencies = [
  "bitflags 2.9.0",
  "byteorder",
@@ -2396,12 +2396,12 @@ dependencies = [
 [[package]]
 name = "heed-traits"
 version = "0.20.0"
-source = "git+https://github.com/meilisearch/heed?branch=main#2988ff87aaf493c46f81a0f011618a1b336b8d30"
+source = "git+https://github.com/meilisearch/heed?branch=main#62d1115bd7d72da5f02532a200952af7b4e16b3e"
 
 [[package]]
 name = "heed-types"
 version = "0.21.0"
-source = "git+https://github.com/meilisearch/heed?branch=main#2988ff87aaf493c46f81a0f011618a1b336b8d30"
+source = "git+https://github.com/meilisearch/heed?branch=main#62d1115bd7d72da5f02532a200952af7b4e16b3e"
 dependencies = [
  "bincode",
  "byteorder",
@@ -3447,7 +3447,7 @@ checksum = "4ee93343901ab17bd981295f2cf0026d4ad018c7c31ba84549a4ddbb47a45104"
 [[package]]
 name = "lmdb-master-sys"
 version = "0.2.5"
-source = "git+https://github.com/meilisearch/heed?branch=main#2988ff87aaf493c46f81a0f011618a1b336b8d30"
+source = "git+https://github.com/meilisearch/heed?branch=main#62d1115bd7d72da5f02532a200952af7b4e16b3e"
 dependencies = [
  "cc",
  "doxygen-rs",
