@@ -32,7 +32,7 @@ impl UpgradeIndex for Latest_V1_13_To_Latest_V1_14 {
             index.vector_arroy.remap_data_type(),
         )?;
 
-        Ok(true)
+        Ok(false)
     }
 
     fn target_version(&self) -> (u32, u32, u32) {
