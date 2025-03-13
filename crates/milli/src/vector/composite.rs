@@ -59,9 +59,11 @@ pub struct EmbedderOptions {
 impl Embedder {
     pub fn new(
         EmbedderOptions { search, index }: EmbedderOptions,
+        cache_cap: usize,
     ) -> Result<Self, NewEmbedderError> {
-        let search = SubEmbedder::new(search)?;
-        let index = SubEmbedder::new(index)?;
+        let search = SubEmbedder::new(search, cache_cap)?;
+        // cache is only used at search
+        let index = SubEmbedder::new(index, 0)?;
 
         // check dimensions
         if search.dimensions() != index.dimensions() {
@@ -119,19 +121,28 @@ impl Embedder {
 }
 
 impl SubEmbedder {
-    pub fn new(options: SubEmbedderOptions) -> std::result::Result<Self, NewEmbedderError> {
+    pub fn new(
+        options: SubEmbedderOptions,
+        cache_cap: usize,
+    ) -> std::result::Result<Self, NewEmbedderError> {
         Ok(match options {
             SubEmbedderOptions::HuggingFace(options) => {
-                Self::HuggingFace(hf::Embedder::new(options)?)
+                Self::HuggingFace(hf::Embedder::new(options, cache_cap)?)
             }
-            SubEmbedderOptions::OpenAi(options) => Self::OpenAi(openai::Embedder::new(options)?),
-            SubEmbedderOptions::Ollama(options) => Self::Ollama(ollama::Embedder::new(options)?),
+            SubEmbedderOptions::OpenAi(options) => {
+                Self::OpenAi(openai::Embedder::new(options, cache_cap)?)
+            }
+            SubEmbedderOptions::Ollama(options) => {
+                Self::Ollama(ollama::Embedder::new(options, cache_cap)?)
+            }
             SubEmbedderOptions::UserProvided(options) => {
                 Self::UserProvided(manual::Embedder::new(options))
             }
-            SubEmbedderOptions::Rest(options) => {
-                Self::Rest(rest::Embedder::new(options, rest::ConfigurationSource::User)?)
-            }
+            SubEmbedderOptions::Rest(options) => Self::Rest(rest::Embedder::new(
+                options,
+                cache_cap,
+                rest::ConfigurationSource::User,
+            )?),
         })
     }
 

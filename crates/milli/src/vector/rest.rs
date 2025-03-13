@@ -10,8 +10,7 @@ use serde::{Deserialize, Serialize};
 use super::error::EmbedErrorKind;
 use super::json_template::ValueTemplate;
 use super::{
-    DistributionShift, EmbedError, Embedding, EmbeddingCache, NewEmbedderError, CACHE_CAP,
-    REQUEST_PARALLELISM,
+    DistributionShift, EmbedError, Embedding, EmbeddingCache, NewEmbedderError, REQUEST_PARALLELISM,
 };
 use crate::error::FaultSource;
 use crate::ThreadPoolNoAbort;
@@ -127,6 +126,7 @@ enum InputType {
 impl Embedder {
     pub fn new(
         options: EmbedderOptions,
+        cache_cap: usize,
         configuration_source: ConfigurationSource,
     ) -> Result<Self, NewEmbedderError> {
         let bearer = options.api_key.as_deref().map(|api_key| format!("Bearer {api_key}"));
@@ -160,7 +160,7 @@ impl Embedder {
             data,
             dimensions,
             distribution: options.distribution,
-            cache: EmbeddingCache::new(CACHE_CAP),
+            cache: EmbeddingCache::new(cache_cap),
         })
     }
 

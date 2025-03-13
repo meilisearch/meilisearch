@@ -112,6 +112,7 @@ impl IndexScheduler {
             batched_tasks_size_limit: u64::MAX,
             instance_features: Default::default(),
             auto_upgrade: true, // Don't cost much and will ensure the happy path works
+            embedding_cache_cap: 10,
         };
         let version = configuration(&mut options).unwrap_or_else(|| {
             (

@@ -176,7 +176,7 @@ pub struct Embedder {
 }
 
 impl Embedder {
-    pub fn new(options: EmbedderOptions) -> Result<Self, NewEmbedderError> {
+    pub fn new(options: EmbedderOptions, cache_cap: usize) -> Result<Self, NewEmbedderError> {
         let mut inferred_api_key = Default::default();
         let api_key = options.api_key.as_ref().unwrap_or_else(|| {
             inferred_api_key = infer_api_key();
@@ -201,6 +201,7 @@ impl Embedder {
                 }),
                 headers: Default::default(),
             },
+            cache_cap,
             super::rest::ConfigurationSource::OpenAi,
         )?;
 

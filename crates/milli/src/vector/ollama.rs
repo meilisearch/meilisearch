@@ -75,9 +75,10 @@ impl EmbedderOptions {
 }
 
 impl Embedder {
-    pub fn new(options: EmbedderOptions) -> Result<Self, NewEmbedderError> {
+    pub fn new(options: EmbedderOptions, cache_cap: usize) -> Result<Self, NewEmbedderError> {
         let rest_embedder = match RestEmbedder::new(
             options.into_rest_embedder_config()?,
+            cache_cap,
             super::rest::ConfigurationSource::Ollama,
         ) {
             Ok(embedder) => embedder,

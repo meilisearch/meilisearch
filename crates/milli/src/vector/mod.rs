@@ -560,8 +560,8 @@ struct EmbeddingCache {
 impl EmbeddingCache {
     const MAX_TEXT_LEN: usize = 2000;
 
-    pub fn new(cap: u16) -> Self {
-        let data = NonZeroUsize::new(cap.into()).map(lru::LruCache::new).map(Mutex::new);
+    pub fn new(cap: usize) -> Self {
+        let data = NonZeroUsize::new(cap).map(lru::LruCache::new).map(Mutex::new);
         Self { data }
     }
 
@@ -584,13 +584,13 @@ impl EmbeddingCache {
         if text.len() > Self::MAX_TEXT_LEN {
             return;
         }
+        tracing::trace!(text, "embedding added to cache");
+
         let mut cache = data.lock().unwrap();
 
         cache.put(text, embedding);
     }
 }
-
-pub const CACHE_CAP: u16 = 150;
 
 /// Configuration for an embedder.
 #[derive(Debug, Clone, Default, serde::Deserialize, serde::Serialize)]
@@ -670,19 +670,30 @@ impl Default for EmbedderOptions {
 
 impl Embedder {
     /// Spawns a new embedder built from its options.
-    pub fn new(options: EmbedderOptions) -> std::result::Result<Self, NewEmbedderError> {
+    pub fn new(
+        options: EmbedderOptions,
+        cache_cap: usize,
+    ) -> std::result::Result<Self, NewEmbedderError> {
         Ok(match options {
-            EmbedderOptions::HuggingFace(options) => Self::HuggingFace(hf::Embedder::new(options)?),
-            EmbedderOptions::OpenAi(options) => Self::OpenAi(openai::Embedder::new(options)?),
-            EmbedderOptions::Ollama(options) => Self::Ollama(ollama::Embedder::new(options)?),
+            EmbedderOptions::HuggingFace(options) => {
+                Self::HuggingFace(hf::Embedder::new(options, cache_cap)?)
+            }
+            EmbedderOptions::OpenAi(options) => {
+                Self::OpenAi(openai::Embedder::new(options, cache_cap)?)
+            }
+            EmbedderOptions::Ollama(options) => {
+                Self::Ollama(ollama::Embedder::new(options, cache_cap)?)
+            }
             EmbedderOptions::UserProvided(options) => {
                 Self::UserProvided(manual::Embedder::new(options))
             }
-            EmbedderOptions::Rest(options) => {
-                Self::Rest(rest::Embedder::new(options, rest::ConfigurationSource::User)?)
-            }
+            EmbedderOptions::Rest(options) => Self::Rest(rest::Embedder::new(
+                options,
+                cache_cap,
+                rest::ConfigurationSource::User,
+            )?),
             EmbedderOptions::Composite(options) => {
-                Self::Composite(composite::Embedder::new(options)?)
+                Self::Composite(composite::Embedder::new(options, cache_cap)?)
             }
         })
     }
@@ -718,7 +729,6 @@ impl Embedder {
         }?;
 
         if let Some(cache) = self.cache() {
-            tracing::trace!(text, "embedding added to cache");
             cache.put(text.to_owned(), embedding.clone());
         }
 

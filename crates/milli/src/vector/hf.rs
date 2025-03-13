@@ -150,7 +150,10 @@ impl From<PoolingConfig> for Pooling {
 }
 
 impl Embedder {
-    pub fn new(options: EmbedderOptions) -> std::result::Result<Self, NewEmbedderError> {
+    pub fn new(
+        options: EmbedderOptions,
+        cache_cap: usize,
+    ) -> std::result::Result<Self, NewEmbedderError> {
         let device = match candle_core::Device::cuda_if_available(0) {
             Ok(device) => device,
             Err(error) => {
@@ -252,7 +255,7 @@ impl Embedder {
             options,
             dimensions: 0,
             pooling,
-            cache: EmbeddingCache::new(super::CACHE_CAP),
+            cache: EmbeddingCache::new(cache_cap),
         };
 
         let embeddings = this

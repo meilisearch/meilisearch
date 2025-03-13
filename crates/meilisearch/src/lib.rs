@@ -233,6 +233,7 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Arc<
         index_count: DEFAULT_INDEX_COUNT,
         instance_features: opt.to_instance_features(),
         auto_upgrade: opt.experimental_dumpless_upgrade,
+        embedding_cache_cap: opt.experimental_embedding_cache_entries,
     };
     let bin_major: u32 = VERSION_MAJOR.parse().unwrap();
     let bin_minor: u32 = VERSION_MINOR.parse().unwrap();
