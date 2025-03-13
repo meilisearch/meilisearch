@@ -201,6 +201,7 @@ where
             build_vectors(
                 index,
                 wtxn,
+                indexing_context.progress,
                 index_embeddings,
                 arroy_memory,
                 &mut arroy_writers,

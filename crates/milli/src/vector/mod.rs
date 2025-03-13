@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 use self::error::{EmbedError, NewEmbedderError};
+use crate::progress::Progress;
 use crate::prompt::{Prompt, PromptData};
 use crate::ThreadPoolNoAbort;
 
@@ -81,9 +82,11 @@ impl ArroyWrapper {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn build_and_quantize<R: rand::Rng + rand::SeedableRng>(
         &mut self,
         wtxn: &mut RwTxn,
+        progress: &Progress,
         rng: &mut R,
         dimension: usize,
         quantizing: bool,
@@ -110,12 +113,14 @@ impl ArroyWrapper {
                     writer
                         .builder(rng)
                         .available_memory(arroy_memory.unwrap_or(usize::MAX))
+                        .progress(|step| progress.update_progress_from_arroy(step))
                         .cancel(cancel)
                         .build(wtxn)?;
                 } else if writer.need_build(wtxn)? {
                     writer
                         .builder(rng)
                         .available_memory(arroy_memory.unwrap_or(usize::MAX))
+                        .progress(|step| progress.update_progress_from_arroy(step))
                         .cancel(cancel)
                         .build(wtxn)?;
                 } else if writer.is_empty(wtxn)? {
