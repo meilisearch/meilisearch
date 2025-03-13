@@ -36,6 +36,9 @@ license = "MIT"
 [profile.release]
 codegen-units = 1
 
+# We now compile heed without the NDEBUG define for better performance.
+# However, we still enable debug assertions for a better detection of
+# disk corruption on the cloud or in OSS.
 [profile.release.package.heed]
 debug-assertions = true
 
