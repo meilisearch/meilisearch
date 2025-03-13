@@ -110,6 +110,7 @@ utoipa = { version = "5.3.1", features = [
     "time",
     "openapi_extensions",
 ] }
+lru = "0.13.0"
 
 [dev-dependencies]
 mimalloc = { version = "0.1.43", default-features = false }
