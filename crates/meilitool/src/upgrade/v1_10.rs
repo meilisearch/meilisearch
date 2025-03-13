@@ -2,7 +2,9 @@ use std::path::Path;
 
 use anyhow::{bail, Context};
 use meilisearch_types::heed::types::{SerdeJson, Str};
-use meilisearch_types::heed::{Database, Env, EnvOpenOptions, RoTxn, RwTxn, Unspecified};
+use meilisearch_types::heed::{
+    Database, Env, EnvOpenOptions, RoTxn, RwTxn, Unspecified, WithoutTls,
+};
 use meilisearch_types::milli::index::{db_name, main_key};
 
 use super::v1_9;
@@ -92,7 +94,7 @@ fn update_index_stats(
 
 fn update_date_format(
     index_uid: &str,
-    index_env: &Env,
+    index_env: &Env<WithoutTls>,
     index_wtxn: &mut RwTxn,
 ) -> anyhow::Result<()> {
     let main = try_opening_poly_database(index_env, index_wtxn, db_name::MAIN)
@@ -106,7 +108,7 @@ fn update_date_format(
 
 fn find_rest_embedders(
     index_uid: &str,
-    index_env: &Env,
+    index_env: &Env<WithoutTls>,
     index_txn: &RoTxn,
 ) -> anyhow::Result<Vec<String>> {
     let main = try_opening_poly_database(index_env, index_txn, db_name::MAIN)
@@ -164,8 +166,10 @@ pub fn v1_9_to_v1_10(
     // 2. REST embedders. We don't support this case right now, so bail
 
     let index_scheduler_path = db_path.join("tasks");
-    let env = unsafe { EnvOpenOptions::new().max_dbs(100).open(&index_scheduler_path) }
-        .with_context(|| format!("While trying to open {:?}", index_scheduler_path.display()))?;
+    let env = unsafe {
+        EnvOpenOptions::new().read_txn_without_tls().max_dbs(100).open(&index_scheduler_path)
+    }
+    .with_context(|| format!("While trying to open {:?}", index_scheduler_path.display()))?;
 
     let mut sched_wtxn = env.write_txn()?;
 
@@ -205,9 +209,13 @@ pub fn v1_9_to_v1_10(
 
         let index_env = unsafe {
             // FIXME: fetch the 25 magic number from the index file
-            EnvOpenOptions::new().max_dbs(25).open(&index_path).with_context(|| {
-                format!("while opening index {uid} at '{}'", index_path.display())
-            })?
+            EnvOpenOptions::new()
+                .read_txn_without_tls()
+                .max_dbs(25)
+                .open(&index_path)
+                .with_context(|| {
+                    format!("while opening index {uid} at '{}'", index_path.display())
+                })?
         };
 
         let index_txn = index_env.read_txn().with_context(|| {
@@ -252,9 +260,13 @@ pub fn v1_9_to_v1_10(
 
         let index_env = unsafe {
             // FIXME: fetch the 25 magic number from the index file
-            EnvOpenOptions::new().max_dbs(25).open(&index_path).with_context(|| {
-                format!("while opening index {uid} at '{}'", index_path.display())
-            })?
+            EnvOpenOptions::new()
+                .read_txn_without_tls()
+                .max_dbs(25)
+                .open(&index_path)
+                .with_context(|| {
+                    format!("while opening index {uid} at '{}'", index_path.display())
+                })?
         };
 
         let mut index_wtxn = index_env.write_txn().with_context(|| {

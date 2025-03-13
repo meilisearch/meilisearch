@@ -352,7 +352,7 @@ pub(crate) mod test_helpers {
 
     use grenad::MergerBuilder;
     use heed::types::Bytes;
-    use heed::{BytesDecode, BytesEncode, Env, RoTxn, RwTxn};
+    use heed::{BytesDecode, BytesEncode, Env, RoTxn, RwTxn, WithoutTls};
     use roaring::RoaringBitmap;
 
     use super::bulk::FacetsUpdateBulkInner;
@@ -390,7 +390,7 @@ pub(crate) mod test_helpers {
         for<'a> BoundCodec:
             BytesEncode<'a> + BytesDecode<'a, DItem = <BoundCodec as BytesEncode<'a>>::EItem>,
     {
-        pub env: Env,
+        pub env: Env<WithoutTls>,
         pub content: heed::Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
         pub group_size: Cell<u8>,
         pub min_level_size: Cell<u8>,
@@ -412,7 +412,8 @@ pub(crate) mod test_helpers {
             let group_size = group_size.clamp(2, 127);
             let max_group_size = std::cmp::min(127, std::cmp::max(group_size * 2, max_group_size)); // 2*group_size <= x <= 127
             let min_level_size = std::cmp::max(1, min_level_size); // 1 <= x <= inf
-            let mut options = heed::EnvOpenOptions::new();
+            let options = heed::EnvOpenOptions::new();
+            let mut options = options.read_txn_without_tls();
             let options = options.map_size(4096 * 4 * 1000 * 100);
             let tempdir = tempfile::TempDir::new().unwrap();
             let env = unsafe { options.open(tempdir.path()) }.unwrap();

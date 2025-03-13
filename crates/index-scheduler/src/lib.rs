@@ -54,7 +54,7 @@ use meilisearch_types::batches::Batch;
 use meilisearch_types::features::{InstanceTogglableFeatures, Network, RuntimeTogglableFeatures};
 use meilisearch_types::heed::byteorder::BE;
 use meilisearch_types::heed::types::I128;
-use meilisearch_types::heed::{self, Env, RoTxn};
+use meilisearch_types::heed::{self, Env, RoTxn, WithoutTls};
 use meilisearch_types::milli::index::IndexEmbeddingConfig;
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::vector::{Embedder, EmbedderOptions, EmbeddingConfigs};
@@ -131,7 +131,7 @@ pub struct IndexSchedulerOptions {
 /// to be performed on them.
 pub struct IndexScheduler {
     /// The LMDB environment which the DBs are associated with.
-    pub(crate) env: Env,
+    pub(crate) env: Env<WithoutTls>,
 
     /// The list of tasks currently processing
     pub(crate) processing_tasks: Arc<RwLock<ProcessingTasks>>,
@@ -209,6 +209,7 @@ impl IndexScheduler {
     #[allow(private_interfaces)] // because test_utils is private
     pub fn new(
         options: IndexSchedulerOptions,
+        auth_env: Env<WithoutTls>,
         from_db_version: (u32, u32, u32),
         #[cfg(test)] test_breakpoint_sdr: crossbeam_channel::Sender<(test_utils::Breakpoint, bool)>,
         #[cfg(test)] planned_failures: Vec<(usize, test_utils::FailureLocation)>,
@@ -240,7 +241,9 @@ impl IndexScheduler {
         };
 
         let env = unsafe {
-            heed::EnvOpenOptions::new()
+            let env_options = heed::EnvOpenOptions::new();
+            let mut env_options = env_options.read_txn_without_tls();
+            env_options
                 .max_dbs(Self::nb_db())
                 .map_size(budget.task_db_size)
                 .open(&options.tasks_path)
@@ -260,7 +263,7 @@ impl IndexScheduler {
             processing_tasks: Arc::new(RwLock::new(ProcessingTasks::new())),
             version,
             queue,
-            scheduler: Scheduler::new(&options),
+            scheduler: Scheduler::new(&options, auth_env),
 
             index_mapper,
             env,
@@ -358,7 +361,7 @@ impl IndexScheduler {
         }
     }
 
-    pub fn read_txn(&self) -> Result<RoTxn> {
+    pub fn read_txn(&self) -> Result<RoTxn<WithoutTls>> {
         self.env.read_txn().map_err(|e| e.into())
     }
 
@@ -427,12 +430,14 @@ impl IndexScheduler {
     /// If you need to fetch information from or perform an action on all indexes,
     /// see the `try_for_each_index` function.
     pub fn index(&self, name: &str) -> Result<Index> {
-        self.index_mapper.index(&self.env.read_txn()?, name)
+        let rtxn = self.env.read_txn()?;
+        self.index_mapper.index(&rtxn, name)
     }
 
     /// Return the boolean referring if index exists.
     pub fn index_exists(&self, name: &str) -> Result<bool> {
-        self.index_mapper.index_exists(&self.env.read_txn()?, name)
+        let rtxn = self.env.read_txn()?;
+        self.index_mapper.index_exists(&rtxn, name)
     }
 
     /// Return the name of all indexes without opening them.
@@ -507,7 +512,8 @@ impl IndexScheduler {
     /// 2. The name of the specific data related to the property can be `enqueued` for the `statuses`, `settingsUpdate` for the `types`, or the name of the index for the `indexes`, for example.
     /// 3. The number of times the properties appeared.
     pub fn get_stats(&self) -> Result<BTreeMap<String, BTreeMap<String, u64>>> {
-        self.queue.get_stats(&self.read_txn()?, &self.processing_tasks.read().unwrap())
+        let rtxn = self.read_txn()?;
+        self.queue.get_stats(&rtxn, &self.processing_tasks.read().unwrap())
     }
 
     // Return true if there is at least one task that is processing.

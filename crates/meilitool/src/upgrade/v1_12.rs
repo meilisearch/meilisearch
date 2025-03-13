@@ -115,8 +115,10 @@ fn convert_update_files(db_path: &Path) -> anyhow::Result<()> {
 /// Rebuild field distribution as it was wrongly computed in v1.12.x if x < 3
 fn rebuild_field_distribution(db_path: &Path) -> anyhow::Result<()> {
     let index_scheduler_path = db_path.join("tasks");
-    let env = unsafe { EnvOpenOptions::new().max_dbs(100).open(&index_scheduler_path) }
-        .with_context(|| format!("While trying to open {:?}", index_scheduler_path.display()))?;
+    let env = unsafe {
+        EnvOpenOptions::new().read_txn_without_tls().max_dbs(100).open(&index_scheduler_path)
+    }
+    .with_context(|| format!("While trying to open {:?}", index_scheduler_path.display()))?;
 
     let mut sched_wtxn = env.write_txn()?;
 
@@ -173,11 +175,12 @@ fn rebuild_field_distribution(db_path: &Path) -> anyhow::Result<()> {
 
             println!("\t- Rebuilding field distribution");
 
-            let index =
-                meilisearch_types::milli::Index::new(EnvOpenOptions::new(), &index_path, false)
-                    .with_context(|| {
-                        format!("while opening index {uid} at '{}'", index_path.display())
-                    })?;
+            let index = meilisearch_types::milli::Index::new(
+                EnvOpenOptions::new().read_txn_without_tls(),
+                &index_path,
+                false,
+            )
+            .with_context(|| format!("while opening index {uid} at '{}'", index_path.display()))?;
 
             let mut index_txn = index.write_txn()?;
 

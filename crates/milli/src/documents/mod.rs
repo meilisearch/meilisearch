@@ -80,9 +80,13 @@ impl DocumentsBatchIndex {
         let mut map = Object::new();
 
         for (k, v) in document.iter() {
-            // TODO: TAMO: update the error type
-            let key =
-                self.0.get_by_left(&k).ok_or(crate::error::InternalError::DatabaseClosing)?.clone();
+            let key = self
+                .0
+                .get_by_left(&k)
+                .ok_or(crate::error::InternalError::FieldIdMapMissingEntry(
+                    FieldIdMapMissingEntry::FieldId { field_id: k, process: "recreate_json" },
+                ))?
+                .clone();
             let value = serde_json::from_slice::<serde_json::Value>(v)
                 .map_err(crate::error::InternalError::SerdeJson)?;
             map.insert(key, value);

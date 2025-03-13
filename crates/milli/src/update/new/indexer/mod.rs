@@ -62,6 +62,8 @@ where
     let mut bbbuffers = Vec::new();
     let finished_extraction = AtomicBool::new(false);
 
+    let arroy_memory = grenad_parameters.max_memory;
+
     // We reduce the actual memory used to 5%. The reason we do this here and not in Meilisearch
     // is because we still use the old indexer for the settings and it is highly impacted by the
     // max memory. So we keep the changes here and will remove these changes once we use the new
@@ -200,6 +202,7 @@ where
                 index,
                 wtxn,
                 index_embeddings,
+                arroy_memory,
                 &mut arroy_writers,
                 &indexing_context.must_stop_processing,
             )

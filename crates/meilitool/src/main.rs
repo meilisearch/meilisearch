@@ -7,11 +7,11 @@ use anyhow::{bail, Context};
 use clap::{Parser, Subcommand, ValueEnum};
 use dump::{DumpWriter, IndexMetadata};
 use file_store::FileStore;
-use meilisearch_auth::AuthController;
+use meilisearch_auth::{open_auth_store_env, AuthController};
 use meilisearch_types::batches::Batch;
 use meilisearch_types::heed::types::{Bytes, SerdeJson, Str};
 use meilisearch_types::heed::{
-    CompactionOption, Database, Env, EnvOpenOptions, RoTxn, RwTxn, Unspecified,
+    CompactionOption, Database, Env, EnvOpenOptions, RoTxn, RwTxn, Unspecified, WithoutTls,
 };
 use meilisearch_types::milli::constants::RESERVED_VECTORS_FIELD_NAME;
 use meilisearch_types::milli::documents::{obkv_to_object, DocumentsBatchReader};
@@ -172,7 +172,7 @@ fn main() -> anyhow::Result<()> {
 /// Clears the task queue located at `db_path`.
 fn clear_task_queue(db_path: PathBuf) -> anyhow::Result<()> {
     let path = db_path.join("tasks");
-    let env = unsafe { EnvOpenOptions::new().max_dbs(100).open(&path) }
+    let env = unsafe { EnvOpenOptions::new().read_txn_without_tls().max_dbs(100).open(&path) }
         .with_context(|| format!("While trying to open {:?}", path.display()))?;
 
     eprintln!("Deleting tasks from the database...");
@@ -225,7 +225,7 @@ fn clear_task_queue(db_path: PathBuf) -> anyhow::Result<()> {
 }
 
 fn try_opening_database<KC: 'static, DC: 'static>(
-    env: &Env,
+    env: &Env<WithoutTls>,
     rtxn: &RoTxn,
     db_name: &str,
 ) -> anyhow::Result<Database<KC, DC>> {
@@ -235,7 +235,7 @@ fn try_opening_database<KC: 'static, DC: 'static>(
 }
 
 fn try_opening_poly_database(
-    env: &Env,
+    env: &Env<WithoutTls>,
     rtxn: &RoTxn,
     db_name: &str,
 ) -> anyhow::Result<Database<Unspecified, Unspecified>> {
@@ -284,13 +284,18 @@ fn export_a_dump(
         FileStore::new(db_path.join("update_files")).context("While opening the FileStore")?;
 
     let index_scheduler_path = db_path.join("tasks");
-    let env = unsafe { EnvOpenOptions::new().max_dbs(100).open(&index_scheduler_path) }
-        .with_context(|| format!("While trying to open {:?}", index_scheduler_path.display()))?;
+    let env = unsafe {
+        EnvOpenOptions::new().read_txn_without_tls().max_dbs(100).open(&index_scheduler_path)
+    }
+    .with_context(|| format!("While trying to open {:?}", index_scheduler_path.display()))?;
 
     eprintln!("Dumping the keys...");
 
     // 2. dump the keys
-    let auth_store = AuthController::new(&db_path, &None)
+    let auth_path = db_path.join("auth");
+    std::fs::create_dir_all(&auth_path).context("While creating the auth directory")?;
+    let auth_env = open_auth_store_env(&auth_path).context("While opening the auth store")?;
+    let auth_store = AuthController::new(auth_env, &None)
         .with_context(|| format!("While opening the auth store at {}", db_path.display()))?;
     let mut dump_keys = dump.create_keys()?;
     let mut count = 0;
@@ -386,9 +391,10 @@ fn export_a_dump(
     for result in index_mapping.iter(&rtxn)? {
         let (uid, uuid) = result?;
         let index_path = db_path.join("indexes").join(uuid.to_string());
-        let index = Index::new(EnvOpenOptions::new(), &index_path, false).with_context(|| {
-            format!("While trying to open the index at path {:?}", index_path.display())
-        })?;
+        let index = Index::new(EnvOpenOptions::new().read_txn_without_tls(), &index_path, false)
+            .with_context(|| {
+                format!("While trying to open the index at path {:?}", index_path.display())
+            })?;
 
         let rtxn = index.read_txn()?;
         let metadata = IndexMetadata {
@@ -438,8 +444,10 @@ fn export_a_dump(
 
 fn compact_index(db_path: PathBuf, index_name: &str) -> anyhow::Result<()> {
     let index_scheduler_path = db_path.join("tasks");
-    let env = unsafe { EnvOpenOptions::new().max_dbs(100).open(&index_scheduler_path) }
-        .with_context(|| format!("While trying to open {:?}", index_scheduler_path.display()))?;
+    let env = unsafe {
+        EnvOpenOptions::new().read_txn_without_tls().max_dbs(100).open(&index_scheduler_path)
+    }
+    .with_context(|| format!("While trying to open {:?}", index_scheduler_path.display()))?;
 
     let rtxn = env.read_txn()?;
     let index_mapping: Database<Str, UuidCodec> =
@@ -456,9 +464,10 @@ fn compact_index(db_path: PathBuf, index_name: &str) -> anyhow::Result<()> {
         }
 
         let index_path = db_path.join("indexes").join(uuid.to_string());
-        let index = Index::new(EnvOpenOptions::new(), &index_path, false).with_context(|| {
-            format!("While trying to open the index at path {:?}", index_path.display())
-        })?;
+        let index = Index::new(EnvOpenOptions::new().read_txn_without_tls(), &index_path, false)
+            .with_context(|| {
+                format!("While trying to open the index at path {:?}", index_path.display())
+            })?;
 
         eprintln!("Awaiting for a mutable transaction...");
         let _wtxn = index.write_txn().context("While awaiting for a write transaction")?;
@@ -470,7 +479,7 @@ fn compact_index(db_path: PathBuf, index_name: &str) -> anyhow::Result<()> {
         eprintln!("Compacting the index...");
         let before_compaction = Instant::now();
         let new_file = index
-            .copy_to_file(&compacted_index_file_path, CompactionOption::Enabled)
+            .copy_to_path(&compacted_index_file_path, CompactionOption::Enabled)
             .with_context(|| format!("While compacting {}", compacted_index_file_path.display()))?;
 
         let after_size = new_file.metadata()?.len();
@@ -514,8 +523,10 @@ fn export_documents(
     offset: Option<usize>,
 ) -> anyhow::Result<()> {
     let index_scheduler_path = db_path.join("tasks");
-    let env = unsafe { EnvOpenOptions::new().max_dbs(100).open(&index_scheduler_path) }
-        .with_context(|| format!("While trying to open {:?}", index_scheduler_path.display()))?;
+    let env = unsafe {
+        EnvOpenOptions::new().read_txn_without_tls().max_dbs(100).open(&index_scheduler_path)
+    }
+    .with_context(|| format!("While trying to open {:?}", index_scheduler_path.display()))?;
 
     let rtxn = env.read_txn()?;
     let index_mapping: Database<Str, UuidCodec> =
@@ -526,9 +537,10 @@ fn export_documents(
         if uid == index_name {
             let index_path = db_path.join("indexes").join(uuid.to_string());
             let index =
-                Index::new(EnvOpenOptions::new(), &index_path, false).with_context(|| {
-                    format!("While trying to open the index at path {:?}", index_path.display())
-                })?;
+                Index::new(EnvOpenOptions::new().read_txn_without_tls(), &index_path, false)
+                    .with_context(|| {
+                        format!("While trying to open the index at path {:?}", index_path.display())
+                    })?;
 
             let rtxn = index.read_txn()?;
             let fields_ids_map = index.fields_ids_map(&rtxn)?;
@@ -616,8 +628,10 @@ fn hair_dryer(
     index_parts: &[IndexPart],
 ) -> anyhow::Result<()> {
     let index_scheduler_path = db_path.join("tasks");
-    let env = unsafe { EnvOpenOptions::new().max_dbs(100).open(&index_scheduler_path) }
-        .with_context(|| format!("While trying to open {:?}", index_scheduler_path.display()))?;
+    let env = unsafe {
+        EnvOpenOptions::new().read_txn_without_tls().max_dbs(100).open(&index_scheduler_path)
+    }
+    .with_context(|| format!("While trying to open {:?}", index_scheduler_path.display()))?;
 
     eprintln!("Trying to get a read transaction on the index scheduler...");
 
@@ -630,9 +644,10 @@ fn hair_dryer(
         if index_names.iter().any(|i| i == uid) {
             let index_path = db_path.join("indexes").join(uuid.to_string());
             let index =
-                Index::new(EnvOpenOptions::new(), &index_path, false).with_context(|| {
-                    format!("While trying to open the index at path {:?}", index_path.display())
-                })?;
+                Index::new(EnvOpenOptions::new().read_txn_without_tls(), &index_path, false)
+                    .with_context(|| {
+                        format!("While trying to open the index at path {:?}", index_path.display())
+                    })?;
 
             eprintln!("Trying to get a read transaction on the {uid} index...");
 

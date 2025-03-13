@@ -101,6 +101,7 @@ pub fn build_vectors<MSP>(
     index: &Index,
     wtxn: &mut RwTxn<'_>,
     index_embeddings: Vec<IndexEmbeddingConfig>,
+    arroy_memory: Option<usize>,
     arroy_writers: &mut HashMap<u8, (&str, &Embedder, ArroyWrapper, usize)>,
     must_stop_processing: &MSP,
 ) -> Result<()>
@@ -111,10 +112,18 @@ where
         return Ok(());
     }
 
-    let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+    let seed = rand::random();
+    let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
     for (_index, (_embedder_name, _embedder, writer, dimensions)) in arroy_writers {
         let dimensions = *dimensions;
-        writer.build_and_quantize(wtxn, &mut rng, dimensions, false, must_stop_processing)?;
+        writer.build_and_quantize(
+            wtxn,
+            &mut rng,
+            dimensions,
+            false,
+            arroy_memory,
+            must_stop_processing,
+        )?;
     }
 
     index.put_embedding_configs(wtxn, index_embeddings)?;

@@ -64,9 +64,6 @@ async fn version_requires_downgrade() {
 #[actix_rt::test]
 async fn upgrade_to_the_current_version() {
     let temp = tempfile::tempdir().unwrap();
-    let server = Server::new_with_options(default_settings(temp.path())).await.unwrap();
-    drop(server);
-
     let server = Server::new_with_options(Opt {
         experimental_dumpless_upgrade: true,
         ..default_settings(temp.path())

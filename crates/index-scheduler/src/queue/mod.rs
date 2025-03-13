@@ -13,7 +13,7 @@ use std::time::Duration;
 
 use file_store::FileStore;
 use meilisearch_types::batches::BatchId;
-use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn};
+use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn, WithoutTls};
 use meilisearch_types::milli::{CboRoaringBitmapCodec, BEU32};
 use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
 use roaring::RoaringBitmap;
@@ -157,7 +157,7 @@ impl Queue {
 
     /// Create an index scheduler and start its run loop.
     pub(crate) fn new(
-        env: &Env,
+        env: &Env<WithoutTls>,
         wtxn: &mut RwTxn,
         options: &IndexSchedulerOptions,
     ) -> Result<Self> {

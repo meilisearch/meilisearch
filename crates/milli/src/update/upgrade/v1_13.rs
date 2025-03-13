@@ -37,9 +37,9 @@ impl UpgradeIndex for V1_13_0_To_V1_13_1 {
 }
 
 #[allow(non_camel_case_types)]
-pub(super) struct V1_13_1_To_Current();
+pub(super) struct V1_13_1_To_Latest_V1_13();
 
-impl UpgradeIndex for V1_13_1_To_Current {
+impl UpgradeIndex for V1_13_1_To_Latest_V1_13 {
     fn upgrade(
         &self,
         _wtxn: &mut RwTxn,

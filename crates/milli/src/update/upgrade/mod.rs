@@ -1,15 +1,17 @@
 mod v1_12;
 mod v1_13;
+mod v1_14;
 
 use heed::RwTxn;
 use v1_12::{V1_12_3_To_V1_13_0, V1_12_To_V1_12_3};
-use v1_13::{V1_13_0_To_V1_13_1, V1_13_1_To_Current};
+use v1_13::{V1_13_0_To_V1_13_1, V1_13_1_To_Latest_V1_13};
+use v1_14::Latest_V1_13_To_Latest_V1_14;
 
 use crate::progress::{Progress, VariableNameStep};
 use crate::{Index, InternalError, Result};
 
 trait UpgradeIndex {
-    /// Returns true if the index scheduler must regenerate its cached stats
+    /// Returns `true` if the index scheduler must regenerate its cached stats.
     fn upgrade(
         &self,
         wtxn: &mut RwTxn,
@@ -32,15 +34,17 @@ pub fn upgrade(
         &V1_12_To_V1_12_3 {},
         &V1_12_3_To_V1_13_0 {},
         &V1_13_0_To_V1_13_1 {},
-        &V1_13_1_To_Current {},
+        &V1_13_1_To_Latest_V1_13 {},
+        &Latest_V1_13_To_Latest_V1_14 {},
     ];
 
     let start = match from {
         (1, 12, 0..=2) => 0,
         (1, 12, 3..) => 1,
         (1, 13, 0) => 2,
+        (1, 13, _) => 4,
         // We must handle the current version in the match because in case of a failure some index may have been upgraded but not other.
-        (1, 13, _) => 3,
+        (1, 14, _) => 4,
         (major, minor, patch) => {
             return Err(InternalError::CannotUpgradeToVersion(major, minor, patch).into())
         }
@@ -50,7 +54,6 @@ pub fn upgrade(
     let upgrade_path = &upgrade_functions[start..];
 
     let mut current_version = from;
-
     let mut regenerate_stats = false;
     for (i, upgrade) in upgrade_path.iter().enumerate() {
         let target = upgrade.target_version();

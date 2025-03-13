@@ -1,7 +1,7 @@
 use std::ops::{Bound, RangeBounds};
 
 use meilisearch_types::heed::types::{DecodeIgnore, SerdeBincode, SerdeJson, Str};
-use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn};
+use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn, WithoutTls};
 use meilisearch_types::milli::{CboRoaringBitmapCodec, RoaringBitmapCodec, BEU32};
 use meilisearch_types::tasks::{Kind, Status, Task};
 use roaring::{MultiOps, RoaringBitmap};
@@ -68,7 +68,7 @@ impl TaskQueue {
         NUMBER_OF_DATABASES
     }
 
-    pub(crate) fn new(env: &Env, wtxn: &mut RwTxn) -> Result<Self> {
+    pub(crate) fn new(env: &Env<WithoutTls>, wtxn: &mut RwTxn) -> Result<Self> {
         Ok(Self {
             all_tasks: env.create_database(wtxn, Some(db_name::ALL_TASKS))?,
             status: env.create_database(wtxn, Some(db_name::STATUS))?,

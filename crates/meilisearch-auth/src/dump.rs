@@ -2,6 +2,7 @@ use std::fs::File;
 use std::io::{BufReader, Write};
 use std::path::Path;
 
+use meilisearch_types::heed::{Env, WithoutTls};
 use serde_json::Deserializer;
 
 use crate::{AuthController, HeedAuthStore, Result};
@@ -9,11 +10,8 @@ use crate::{AuthController, HeedAuthStore, Result};
 const KEYS_PATH: &str = "keys";
 
 impl AuthController {
-    pub fn dump(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> Result<()> {
-        let mut store = HeedAuthStore::new(&src)?;
-
-        // do not attempt to close the database on drop!
-        store.set_drop_on_close(false);
+    pub fn dump(auth_env: Env<WithoutTls>, dst: impl AsRef<Path>) -> Result<()> {
+        let store = HeedAuthStore::new(auth_env)?;
 
         let keys_file_path = dst.as_ref().join(KEYS_PATH);
 
@@ -27,8 +25,8 @@ impl AuthController {
         Ok(())
     }
 
-    pub fn load_dump(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> Result<()> {
-        let store = HeedAuthStore::new(&dst)?;
+    pub fn load_dump(src: impl AsRef<Path>, auth_env: Env<WithoutTls>) -> Result<()> {
+        let store = HeedAuthStore::new(auth_env)?;
 
         let keys_file_path = src.as_ref().join(KEYS_PATH);
 

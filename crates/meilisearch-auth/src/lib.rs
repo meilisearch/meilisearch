@@ -3,11 +3,10 @@ pub mod error;
 mod store;
 
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
-use std::sync::Arc;
 
 use error::{AuthControllerError, Result};
 use maplit::hashset;
+use meilisearch_types::heed::{Env, WithoutTls};
 use meilisearch_types::index_uid_pattern::IndexUidPattern;
 use meilisearch_types::keys::{Action, CreateApiKey, Key, PatchApiKey};
 use meilisearch_types::milli::update::Setting;
@@ -19,19 +18,19 @@ use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct AuthController {
-    store: Arc<HeedAuthStore>,
+    store: HeedAuthStore,
     master_key: Option<String>,
 }
 
 impl AuthController {
-    pub fn new(db_path: impl AsRef<Path>, master_key: &Option<String>) -> Result<Self> {
-        let store = HeedAuthStore::new(db_path)?;
+    pub fn new(auth_env: Env<WithoutTls>, master_key: &Option<String>) -> Result<Self> {
+        let store = HeedAuthStore::new(auth_env)?;
 
         if store.is_empty()? {
             generate_default_keys(&store)?;
         }
 
-        Ok(Self { store: Arc::new(store), master_key: master_key.clone() })
+        Ok(Self { store, master_key: master_key.clone() })
     }
 
     /// Return `Ok(())` if the auth controller is able to access one of its database.
