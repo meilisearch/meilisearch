@@ -70,6 +70,8 @@ where
         max_memory: grenad_parameters.max_memory.map(|mm| mm * 5 / 100),
         ..grenad_parameters
     };
+    // Arroy should use 50% of the grenad memory instead of 5%
+    let arroy_memory = grenad_parameters.max_memory.map(|mm| mm * 10);
 
     // 5% percent of the allocated memory for the extractors, or min 100MiB
     // 5% percent of the allocated memory for the bbqueues, or min 50MiB
@@ -200,6 +202,7 @@ where
                 index,
                 wtxn,
                 index_embeddings,
+                arroy_memory,
                 &mut arroy_writers,
                 &indexing_context.must_stop_processing,
             )

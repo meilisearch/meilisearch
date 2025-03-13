@@ -520,7 +520,15 @@ where
 
             pool.install(|| {
                 let mut writer = ArroyWrapper::new(vector_arroy, embedder_index, was_quantized);
-                writer.build_and_quantize(wtxn, &mut rng, dimension, is_quantizing, cancel)?;
+                writer.build_and_quantize(
+                    wtxn,
+                    &mut rng,
+                    dimension,
+                    is_quantizing,
+                    // Arroy should only use 50% of the memory
+                    self.indexer_config.max_memory.map(|mm| mm / 2),
+                    cancel,
+                )?;
                 Result::Ok(())
             })
             .map_err(InternalError::from)??;

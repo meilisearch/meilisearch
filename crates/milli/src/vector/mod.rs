@@ -86,6 +86,7 @@ impl ArroyWrapper {
         rng: &mut R,
         dimension: usize,
         quantizing: bool,
+        arroy_memory: Option<usize>,
         cancel: &(impl Fn() -> bool + Sync + Send),
     ) -> Result<(), arroy::Error> {
         for index in arroy_db_range_for_embedder(self.embedder_index) {
@@ -105,9 +106,17 @@ impl ArroyWrapper {
                 // sensitive.
                 if quantizing && !self.quantized {
                     let writer = writer.prepare_changing_distance::<BinaryQuantizedCosine>(wtxn)?;
-                    writer.builder(rng).cancel(cancel).build(wtxn)?;
+                    writer
+                        .builder(rng)
+                        .available_memory(arroy_memory.unwrap_or(usize::MAX))
+                        .cancel(cancel)
+                        .build(wtxn)?;
                 } else if writer.need_build(wtxn)? {
-                    writer.builder(rng).cancel(cancel).build(wtxn)?;
+                    writer
+                        .builder(rng)
+                        .available_memory(arroy_memory.unwrap_or(usize::MAX))
+                        .cancel(cancel)
+                        .build(wtxn)?;
                 } else if writer.is_empty(wtxn)? {
                     break;
                 }

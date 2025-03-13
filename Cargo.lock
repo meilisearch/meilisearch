@@ -394,7 +394,7 @@ checksum = "96d30a06541fbafbc7f82ed10c06164cfbd2c401138f6addd8404629c4b16711"
 [[package]]
 name = "arroy"
 version = "0.6.0"
-source = "git+https://github.com/meilisearch/arroy?branch=main#80a7f1ba60bd7d88d55ce958a7579d664fc769ce"
+source = "git+https://github.com/meilisearch/arroy?branch=main#3350696381a4e29a838209663f39c1c58e9bc7b6"
 dependencies = [
  "bytemuck",
  "byteorder",
@@ -403,6 +403,7 @@ dependencies = [
  "memmap2",
  "nohash",
  "ordered-float",
+ "page_size",
  "rand",
  "rayon",
  "roaring",
