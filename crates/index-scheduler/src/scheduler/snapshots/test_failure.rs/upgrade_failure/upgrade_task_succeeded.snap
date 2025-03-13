@@ -43,7 +43,7 @@ doggo [2,3,]
 [timestamp] [0,]
 ----------------------------------------------------------------------
 ### All Batches:
-0 {uid: 0, details: {"upgradeFrom":"v1.12.0","upgradeTo":"v1.13.3"}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"upgradeDatabase":1},"indexUids":{}}, }
+0 {uid: 0, details: {"upgradeFrom":"v1.12.0","upgradeTo":"v1.14.0"}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"upgradeDatabase":1},"indexUids":{}}, }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:
 0 [0,]
