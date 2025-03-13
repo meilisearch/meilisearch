@@ -1,3 +1,4 @@
+use enum_iterator::Sequence;
 use std::any::TypeId;
 use std::borrow::Cow;
 use std::marker::PhantomData;
@@ -75,6 +76,14 @@ impl Progress {
         push_steps_durations(steps, durations, now, 0);
 
         durations.drain(..).map(|(name, duration)| (name, format!("{duration:.2?}"))).collect()
+    }
+
+    // TODO: ideally we should expose the progress in a way that let arroy use it directly
+    pub(crate) fn update_progress_from_arroy(&self, progress: arroy::WriterProgress) {
+        self.update_progress(progress.main);
+        if let Some(sub) = progress.sub {
+            self.update_progress(sub);
+        }
     }
 }
 
@@ -236,5 +245,46 @@ impl<U: Send + Sync + 'static> Step for VariableNameStep<U> {
 
     fn total(&self) -> u32 {
         self.total
+    }
+}
+
+impl Step for arroy::MainStep {
+    fn name(&self) -> Cow<'static, str> {
+        match self {
+            arroy::MainStep::PreProcessingTheItems => "pre processing the items",
+            arroy::MainStep::WritingTheDescendantsAndMetadata => {
+                "writing the descendants and metadata"
+            }
+            arroy::MainStep::RetrieveTheUpdatedItems => "retrieve the updated items",
+            arroy::MainStep::RetrievingTheTreeAndItemNodes => "retrieving the tree and item nodes",
+            arroy::MainStep::UpdatingTheTrees => "updating the trees",
+            arroy::MainStep::CreateNewTrees => "create new trees",
+            arroy::MainStep::WritingNodesToDatabase => "writing nodes to database",
+            arroy::MainStep::DeleteExtraneousTrees => "delete extraneous trees",
+            arroy::MainStep::WriteTheMetadata => "write the metadata",
+        }
+        .into()
+    }
+
+    fn current(&self) -> u32 {
+        *self as u32
+    }
+
+    fn total(&self) -> u32 {
+        Self::CARDINALITY as u32
+    }
+}
+
+impl Step for arroy::SubStep {
+    fn name(&self) -> Cow<'static, str> {
+        self.unit.into()
+    }
+
+    fn current(&self) -> u32 {
+        self.current.load(Ordering::Relaxed)
+    }
+
+    fn total(&self) -> u32 {
+        self.max
     }
 }

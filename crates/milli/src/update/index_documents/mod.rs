@@ -31,6 +31,7 @@ use super::new::StdResult;
 use crate::documents::{obkv_to_object, DocumentsBatchReader};
 use crate::error::{Error, InternalError};
 use crate::index::{PrefixSearch, PrefixSettings};
+use crate::progress::Progress;
 use crate::thread_pool_no_abort::ThreadPoolNoAbortBuilder;
 pub use crate::update::index_documents::helpers::CursorClonableMmap;
 use crate::update::{
@@ -522,6 +523,8 @@ where
                 let mut writer = ArroyWrapper::new(vector_arroy, embedder_index, was_quantized);
                 writer.build_and_quantize(
                     wtxn,
+                    // In the settings we don't have any progress to share
+                    &Progress::default(),
                     &mut rng,
                     dimension,
                     is_quantizing,
