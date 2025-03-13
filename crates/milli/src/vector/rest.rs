@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use super::error::EmbedErrorKind;
 use super::json_template::ValueTemplate;
 use super::{
-    DistributionShift, EmbedError, Embedding, EmbeddingCache, NewEmbedderError, CAP_PER_THREAD,
+    DistributionShift, EmbedError, Embedding, EmbeddingCache, NewEmbedderError, CACHE_CAP,
     REQUEST_PARALLELISM,
 };
 use crate::error::FaultSource;
@@ -160,7 +160,7 @@ impl Embedder {
             data,
             dimensions,
             distribution: options.distribution,
-            cache: EmbeddingCache::new(CAP_PER_THREAD),
+            cache: EmbeddingCache::new(CACHE_CAP),
         })
     }
 

@@ -252,7 +252,7 @@ impl Embedder {
             options,
             dimensions: 0,
             pooling,
-            cache: EmbeddingCache::new(super::CAP_PER_THREAD),
+            cache: EmbeddingCache::new(super::CACHE_CAP),
         };
 
         let embeddings = this
