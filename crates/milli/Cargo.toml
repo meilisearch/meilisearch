@@ -32,7 +32,7 @@ grenad = { version = "0.5.0", default-features = false, features = [
     "rayon",
     "tempfile",
 ] }
-heed = { version = "0.22.0", branch = "main", git = "https://github.com/meilisearch/heed", default-features = false, features = [
+heed = { version = "0.22.0", default-features = false, features = [
     "serde-json",
     "serde-bincode",
 ] }
@@ -87,7 +87,7 @@ rhai = { git = "https://github.com/rhaiscript/rhai", rev = "ef3df63121d27aacd838
     "no_time",
     "sync",
 ] }
-arroy = { git = "https://github.com/meilisearch/arroy", branch = "main" }
+arroy = "0.6.0"
 rand = "0.8.5"
 tracing = "0.1.41"
 ureq = { version = "2.12.1", features = ["json"] }
