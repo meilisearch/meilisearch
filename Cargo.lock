@@ -2724,7 +2724,6 @@ name = "index-scheduler"
 version = "1.13.3"
 dependencies = [
  "anyhow",
- "arroy",
  "big_s",
  "bincode",
  "bumpalo",
