@@ -23,8 +23,10 @@ pub fn v1_10_to_v1_11(
     println!("Upgrading from v1.10.0 to v1.11.0");
 
     let index_scheduler_path = db_path.join("tasks");
-    let env = unsafe { EnvOpenOptions::new().max_dbs(100).open(&index_scheduler_path) }
-        .with_context(|| format!("While trying to open {:?}", index_scheduler_path.display()))?;
+    let env = unsafe {
+        EnvOpenOptions::new().read_txn_without_tls().max_dbs(100).open(&index_scheduler_path)
+    }
+    .with_context(|| format!("While trying to open {:?}", index_scheduler_path.display()))?;
 
     let sched_rtxn = env.read_txn()?;
 
@@ -50,9 +52,13 @@ pub fn v1_10_to_v1_11(
         );
 
         let index_env = unsafe {
-            EnvOpenOptions::new().max_dbs(25).open(&index_path).with_context(|| {
-                format!("while opening index {uid} at '{}'", index_path.display())
-            })?
+            EnvOpenOptions::new()
+                .read_txn_without_tls()
+                .max_dbs(25)
+                .open(&index_path)
+                .with_context(|| {
+                    format!("while opening index {uid} at '{}'", index_path.display())
+                })?
         };
 
         let index_rtxn = index_env.read_txn().with_context(|| {

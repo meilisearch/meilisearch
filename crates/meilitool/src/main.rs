@@ -11,7 +11,7 @@ use meilisearch_auth::{open_auth_store_env, AuthController};
 use meilisearch_types::batches::Batch;
 use meilisearch_types::heed::types::{Bytes, SerdeJson, Str};
 use meilisearch_types::heed::{
-    CompactionOption, Database, Env, EnvOpenOptions, RoTxn, RwTxn, TlsUsage, Unspecified,
+    CompactionOption, Database, Env, EnvOpenOptions, RoTxn, RwTxn, Unspecified, WithoutTls,
 };
 use meilisearch_types::milli::constants::RESERVED_VECTORS_FIELD_NAME;
 use meilisearch_types::milli::documents::{obkv_to_object, DocumentsBatchReader};
@@ -172,7 +172,7 @@ fn main() -> anyhow::Result<()> {
 /// Clears the task queue located at `db_path`.
 fn clear_task_queue(db_path: PathBuf) -> anyhow::Result<()> {
     let path = db_path.join("tasks");
-    let env = unsafe { EnvOpenOptions::new().max_dbs(100).open(&path) }
+    let env = unsafe { EnvOpenOptions::new().read_txn_without_tls().max_dbs(100).open(&path) }
         .with_context(|| format!("While trying to open {:?}", path.display()))?;
 
     eprintln!("Deleting tasks from the database...");
@@ -224,8 +224,8 @@ fn clear_task_queue(db_path: PathBuf) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn try_opening_database<KC: 'static, DC: 'static, T: TlsUsage>(
-    env: &Env<T>,
+fn try_opening_database<KC: 'static, DC: 'static>(
+    env: &Env<WithoutTls>,
     rtxn: &RoTxn,
     db_name: &str,
 ) -> anyhow::Result<Database<KC, DC>> {
@@ -234,8 +234,8 @@ fn try_opening_database<KC: 'static, DC: 'static, T: TlsUsage>(
         .with_context(|| format!("Missing the {db_name:?} database"))
 }
 
-fn try_opening_poly_database<T: TlsUsage>(
-    env: &Env<T>,
+fn try_opening_poly_database(
+    env: &Env<WithoutTls>,
     rtxn: &RoTxn,
     db_name: &str,
 ) -> anyhow::Result<Database<Unspecified, Unspecified>> {
@@ -284,8 +284,10 @@ fn export_a_dump(
         FileStore::new(db_path.join("update_files")).context("While opening the FileStore")?;
 
     let index_scheduler_path = db_path.join("tasks");
-    let env = unsafe { EnvOpenOptions::new().max_dbs(100).open(&index_scheduler_path) }
-        .with_context(|| format!("While trying to open {:?}", index_scheduler_path.display()))?;
+    let env = unsafe {
+        EnvOpenOptions::new().read_txn_without_tls().max_dbs(100).open(&index_scheduler_path)
+    }
+    .with_context(|| format!("While trying to open {:?}", index_scheduler_path.display()))?;
 
     eprintln!("Dumping the keys...");
 
@@ -442,8 +444,10 @@ fn export_a_dump(
 
 fn compact_index(db_path: PathBuf, index_name: &str) -> anyhow::Result<()> {
     let index_scheduler_path = db_path.join("tasks");
-    let env = unsafe { EnvOpenOptions::new().max_dbs(100).open(&index_scheduler_path) }
-        .with_context(|| format!("While trying to open {:?}", index_scheduler_path.display()))?;
+    let env = unsafe {
+        EnvOpenOptions::new().read_txn_without_tls().max_dbs(100).open(&index_scheduler_path)
+    }
+    .with_context(|| format!("While trying to open {:?}", index_scheduler_path.display()))?;
 
     let rtxn = env.read_txn()?;
     let index_mapping: Database<Str, UuidCodec> =
@@ -519,8 +523,10 @@ fn export_documents(
     offset: Option<usize>,
 ) -> anyhow::Result<()> {
     let index_scheduler_path = db_path.join("tasks");
-    let env = unsafe { EnvOpenOptions::new().max_dbs(100).open(&index_scheduler_path) }
-        .with_context(|| format!("While trying to open {:?}", index_scheduler_path.display()))?;
+    let env = unsafe {
+        EnvOpenOptions::new().read_txn_without_tls().max_dbs(100).open(&index_scheduler_path)
+    }
+    .with_context(|| format!("While trying to open {:?}", index_scheduler_path.display()))?;
 
     let rtxn = env.read_txn()?;
     let index_mapping: Database<Str, UuidCodec> =
@@ -622,8 +628,10 @@ fn hair_dryer(
     index_parts: &[IndexPart],
 ) -> anyhow::Result<()> {
     let index_scheduler_path = db_path.join("tasks");
-    let env = unsafe { EnvOpenOptions::new().max_dbs(100).open(&index_scheduler_path) }
-        .with_context(|| format!("While trying to open {:?}", index_scheduler_path.display()))?;
+    let env = unsafe {
+        EnvOpenOptions::new().read_txn_without_tls().max_dbs(100).open(&index_scheduler_path)
+    }
+    .with_context(|| format!("While trying to open {:?}", index_scheduler_path.display()))?;
 
     eprintln!("Trying to get a read transaction on the index scheduler...");
 
