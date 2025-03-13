@@ -112,7 +112,8 @@ where
         return Ok(());
     }
 
-    let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+    let seed = rand::random();
+    let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
     for (_index, (_embedder_name, _embedder, writer, dimensions)) in arroy_writers {
         let dimensions = *dimensions;
         writer.build_and_quantize(
