@@ -1628,7 +1628,8 @@ fn embedders(embedding_configs: Vec<IndexEmbeddingConfig>) -> Result<EmbeddingCo
                 let prompt = Arc::new(prompt.try_into().map_err(crate::Error::from)?);
 
                 let embedder = Arc::new(
-                    Embedder::new(embedder_options.clone())
+                    // cache_cap: no cache needed for indexing purposes
+                    Embedder::new(embedder_options.clone(), 0)
                         .map_err(crate::vector::Error::from)
                         .map_err(crate::Error::from)?,
                 );

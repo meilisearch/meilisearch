@@ -7,7 +7,7 @@ use rayon::slice::ParallelSlice as _;
 
 use super::error::{EmbedError, NewEmbedderError};
 use super::rest::{Embedder as RestEmbedder, EmbedderOptions as RestEmbedderOptions};
-use super::{DistributionShift, REQUEST_PARALLELISM};
+use super::{DistributionShift, EmbeddingCache, REQUEST_PARALLELISM};
 use crate::error::FaultSource;
 use crate::vector::error::EmbedErrorKind;
 use crate::vector::Embedding;
@@ -176,7 +176,7 @@ pub struct Embedder {
 }
 
 impl Embedder {
-    pub fn new(options: EmbedderOptions) -> Result<Self, NewEmbedderError> {
+    pub fn new(options: EmbedderOptions, cache_cap: usize) -> Result<Self, NewEmbedderError> {
         let mut inferred_api_key = Default::default();
         let api_key = options.api_key.as_ref().unwrap_or_else(|| {
             inferred_api_key = infer_api_key();
@@ -201,6 +201,7 @@ impl Embedder {
                 }),
                 headers: Default::default(),
             },
+            cache_cap,
             super::rest::ConfigurationSource::OpenAi,
         )?;
 
@@ -317,6 +318,10 @@ impl Embedder {
 
     pub fn distribution(&self) -> Option<DistributionShift> {
         self.options.distribution()
+    }
+
+    pub(super) fn cache(&self) -> &EmbeddingCache {
+        self.rest_embedder.cache()
     }
 }
 

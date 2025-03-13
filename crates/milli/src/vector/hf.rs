@@ -7,7 +7,7 @@ use hf_hub::{Repo, RepoType};
 use tokenizers::{PaddingParams, Tokenizer};
 
 pub use super::error::{EmbedError, Error, NewEmbedderError};
-use super::{DistributionShift, Embedding};
+use super::{DistributionShift, Embedding, EmbeddingCache};
 
 #[derive(
     Debug,
@@ -84,6 +84,7 @@ pub struct Embedder {
     options: EmbedderOptions,
     dimensions: usize,
     pooling: Pooling,
+    cache: EmbeddingCache,
 }
 
 impl std::fmt::Debug for Embedder {
@@ -149,7 +150,10 @@ impl From<PoolingConfig> for Pooling {
 }
 
 impl Embedder {
-    pub fn new(options: EmbedderOptions) -> std::result::Result<Self, NewEmbedderError> {
+    pub fn new(
+        options: EmbedderOptions,
+        cache_cap: usize,
+    ) -> std::result::Result<Self, NewEmbedderError> {
         let device = match candle_core::Device::cuda_if_available(0) {
             Ok(device) => device,
             Err(error) => {
@@ -245,7 +249,14 @@ impl Embedder {
             tokenizer.with_padding(Some(pp));
         }
 
-        let mut this = Self { model, tokenizer, options, dimensions: 0, pooling };
+        let mut this = Self {
+            model,
+            tokenizer,
+            options,
+            dimensions: 0,
+            pooling,
+            cache: EmbeddingCache::new(cache_cap),
+        };
 
         let embeddings = this
             .embed(vec!["test".into()])
@@ -354,5 +365,9 @@ impl Embedder {
 
     pub(crate) fn embed_index_ref(&self, texts: &[&str]) -> Result<Vec<Embedding>, EmbedError> {
         texts.iter().map(|text| self.embed_one(text)).collect()
+    }
+
+    pub(super) fn cache(&self) -> &EmbeddingCache {
+        &self.cache
     }
 }

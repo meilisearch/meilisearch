@@ -2806,8 +2806,9 @@ mod tests {
             embedding_configs.pop().unwrap();
         insta::assert_snapshot!(embedder_name, @"manual");
         insta::assert_debug_snapshot!(user_provided, @"RoaringBitmap<[0, 1, 2]>");
-        let embedder =
-            std::sync::Arc::new(crate::vector::Embedder::new(embedder.embedder_options).unwrap());
+        let embedder = std::sync::Arc::new(
+            crate::vector::Embedder::new(embedder.embedder_options, 0).unwrap(),
+        );
         let res = index
             .search(&rtxn)
             .semantic(embedder_name, embedder, false, Some([0.0, 1.0, 2.0].to_vec()))

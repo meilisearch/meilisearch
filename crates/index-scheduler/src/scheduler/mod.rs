@@ -76,6 +76,11 @@ pub struct Scheduler {
 
     /// The path to the version file of Meilisearch.
     pub(crate) version_file_path: PathBuf,
+
+    /// The maximal number of entries in the search query cache of an embedder.
+    ///
+    /// 0 disables the cache.
+    pub(crate) embedding_cache_cap: usize,
 }
 
 impl Scheduler {
@@ -90,6 +95,7 @@ impl Scheduler {
             snapshots_path: self.snapshots_path.clone(),
             auth_env: self.auth_env.clone(),
             version_file_path: self.version_file_path.clone(),
+            embedding_cache_cap: self.embedding_cache_cap,
         }
     }
 
@@ -105,6 +111,7 @@ impl Scheduler {
             snapshots_path: options.snapshots_path.clone(),
             auth_env,
             version_file_path: options.version_file_path.clone(),
+            embedding_cache_cap: options.embedding_cache_cap,
         }
     }
 }

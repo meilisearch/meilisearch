@@ -125,6 +125,10 @@ pub struct IndexSchedulerOptions {
     pub instance_features: InstanceTogglableFeatures,
     /// The experimental features enabled for this instance.
     pub auto_upgrade: bool,
+    /// The maximal number of entries in the search query cache of an embedder.
+    ///
+    /// 0 disables the cache.
+    pub embedding_cache_cap: usize,
 }
 
 /// Structure which holds meilisearch's indexes and schedules the tasks
@@ -156,6 +160,11 @@ pub struct IndexScheduler {
     /// The Authorization header to send to the webhook URL.
     pub(crate) webhook_authorization_header: Option<String>,
 
+    /// A map to retrieve the runtime representation of an embedder depending on its configuration.
+    ///
+    /// This map may return the same embedder object for two different indexes or embedder settings,
+    /// but it will only do this if the embedder configuration options are the same, leading
+    /// to the same embeddings for the same input text.
     embedders: Arc<RwLock<HashMap<EmbedderOptions, Arc<Embedder>>>>,
 
     // ================= test
@@ -818,7 +827,7 @@ impl IndexScheduler {
 
                     // add missing embedder
                     let embedder = Arc::new(
-                        Embedder::new(embedder_options.clone())
+                        Embedder::new(embedder_options.clone(), self.scheduler.embedding_cache_cap)
                             .map_err(meilisearch_types::milli::vector::Error::from)
                             .map_err(|err| {
                                 Error::from_milli(err.into(), Some(index_uid.clone()))

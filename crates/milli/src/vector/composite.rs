@@ -4,7 +4,8 @@ use arroy::Distance;
 
 use super::error::CompositeEmbedderContainsHuggingFace;
 use super::{
-    hf, manual, ollama, openai, rest, DistributionShift, EmbedError, Embedding, NewEmbedderError,
+    hf, manual, ollama, openai, rest, DistributionShift, EmbedError, Embedding, EmbeddingCache,
+    NewEmbedderError,
 };
 use crate::ThreadPoolNoAbort;
 
@@ -58,9 +59,11 @@ pub struct EmbedderOptions {
 impl Embedder {
     pub fn new(
         EmbedderOptions { search, index }: EmbedderOptions,
+        cache_cap: usize,
     ) -> Result<Self, NewEmbedderError> {
-        let search = SubEmbedder::new(search)?;
-        let index = SubEmbedder::new(index)?;
+        let search = SubEmbedder::new(search, cache_cap)?;
+        // cache is only used at search
+        let index = SubEmbedder::new(index, 0)?;
 
         // check dimensions
         if search.dimensions() != index.dimensions() {
@@ -118,19 +121,28 @@ impl Embedder {
 }
 
 impl SubEmbedder {
-    pub fn new(options: SubEmbedderOptions) -> std::result::Result<Self, NewEmbedderError> {
+    pub fn new(
+        options: SubEmbedderOptions,
+        cache_cap: usize,
+    ) -> std::result::Result<Self, NewEmbedderError> {
         Ok(match options {
             SubEmbedderOptions::HuggingFace(options) => {
-                Self::HuggingFace(hf::Embedder::new(options)?)
+                Self::HuggingFace(hf::Embedder::new(options, cache_cap)?)
             }
-            SubEmbedderOptions::OpenAi(options) => Self::OpenAi(openai::Embedder::new(options)?),
-            SubEmbedderOptions::Ollama(options) => Self::Ollama(ollama::Embedder::new(options)?),
+            SubEmbedderOptions::OpenAi(options) => {
+                Self::OpenAi(openai::Embedder::new(options, cache_cap)?)
+            }
+            SubEmbedderOptions::Ollama(options) => {
+                Self::Ollama(ollama::Embedder::new(options, cache_cap)?)
+            }
             SubEmbedderOptions::UserProvided(options) => {
                 Self::UserProvided(manual::Embedder::new(options))
             }
-            SubEmbedderOptions::Rest(options) => {
-                Self::Rest(rest::Embedder::new(options, rest::ConfigurationSource::User)?)
-            }
+            SubEmbedderOptions::Rest(options) => Self::Rest(rest::Embedder::new(
+                options,
+                cache_cap,
+                rest::ConfigurationSource::User,
+            )?),
         })
     }
 
@@ -145,6 +157,27 @@ impl SubEmbedder {
             SubEmbedder::Ollama(embedder) => embedder.embed(&texts, deadline),
             SubEmbedder::UserProvided(embedder) => embedder.embed(&texts),
             SubEmbedder::Rest(embedder) => embedder.embed(texts, deadline),
+        }
+    }
+
+    pub fn embed_one(
+        &self,
+        text: &str,
+        deadline: Option<Instant>,
+    ) -> std::result::Result<Embedding, EmbedError> {
+        match self {
+            SubEmbedder::HuggingFace(embedder) => embedder.embed_one(text),
+            SubEmbedder::OpenAi(embedder) => {
+                embedder.embed(&[text], deadline)?.pop().ok_or_else(EmbedError::missing_embedding)
+            }
+            SubEmbedder::Ollama(embedder) => {
+                embedder.embed(&[text], deadline)?.pop().ok_or_else(EmbedError::missing_embedding)
+            }
+            SubEmbedder::UserProvided(embedder) => embedder.embed_one(text),
+            SubEmbedder::Rest(embedder) => embedder
+                .embed_ref(&[text], deadline)?
+                .pop()
+                .ok_or_else(EmbedError::missing_embedding),
         }
     }
 
@@ -231,6 +264,16 @@ impl SubEmbedder {
             SubEmbedder::Ollama(embedder) => embedder.distribution(),
             SubEmbedder::UserProvided(embedder) => embedder.distribution(),
             SubEmbedder::Rest(embedder) => embedder.distribution(),
+        }
+    }
+
+    pub(super) fn cache(&self) -> Option<&EmbeddingCache> {
+        match self {
+            SubEmbedder::HuggingFace(embedder) => Some(embedder.cache()),
+            SubEmbedder::OpenAi(embedder) => Some(embedder.cache()),
+            SubEmbedder::UserProvided(_) => None,
+            SubEmbedder::Ollama(embedder) => Some(embedder.cache()),
+            SubEmbedder::Rest(embedder) => Some(embedder.cache()),
         }
     }
 }

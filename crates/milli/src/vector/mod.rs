@@ -1,5 +1,6 @@
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::num::NonZeroUsize;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use arroy::distances::{BinaryQuantizedCosine, Cosine};
@@ -551,6 +552,46 @@ pub enum Embedder {
     Composite(composite::Embedder),
 }
 
+#[derive(Debug)]
+struct EmbeddingCache {
+    data: Option<Mutex<lru::LruCache<String, Embedding>>>,
+}
+
+impl EmbeddingCache {
+    const MAX_TEXT_LEN: usize = 2000;
+
+    pub fn new(cap: usize) -> Self {
+        let data = NonZeroUsize::new(cap).map(lru::LruCache::new).map(Mutex::new);
+        Self { data }
+    }
+
+    /// Get the embedding corresponding to `text`, if any is present in the cache.
+    pub fn get(&self, text: &str) -> Option<Embedding> {
+        let data = self.data.as_ref()?;
+        if text.len() > Self::MAX_TEXT_LEN {
+            return None;
+        }
+        let mut cache = data.lock().unwrap();
+
+        cache.get(text).cloned()
+    }
+
+    /// Puts a new embedding for the specified `text`
+    pub fn put(&self, text: String, embedding: Embedding) {
+        let Some(data) = self.data.as_ref() else {
+            return;
+        };
+        if text.len() > Self::MAX_TEXT_LEN {
+            return;
+        }
+        tracing::trace!(text, "embedding added to cache");
+
+        let mut cache = data.lock().unwrap();
+
+        cache.put(text, embedding);
+    }
+}
+
 /// Configuration for an embedder.
 #[derive(Debug, Clone, Default, serde::Deserialize, serde::Serialize)]
 pub struct EmbeddingConfig {
@@ -629,19 +670,30 @@ impl Default for EmbedderOptions {
 
 impl Embedder {
     /// Spawns a new embedder built from its options.
-    pub fn new(options: EmbedderOptions) -> std::result::Result<Self, NewEmbedderError> {
+    pub fn new(
+        options: EmbedderOptions,
+        cache_cap: usize,
+    ) -> std::result::Result<Self, NewEmbedderError> {
         Ok(match options {
-            EmbedderOptions::HuggingFace(options) => Self::HuggingFace(hf::Embedder::new(options)?),
-            EmbedderOptions::OpenAi(options) => Self::OpenAi(openai::Embedder::new(options)?),
-            EmbedderOptions::Ollama(options) => Self::Ollama(ollama::Embedder::new(options)?),
+            EmbedderOptions::HuggingFace(options) => {
+                Self::HuggingFace(hf::Embedder::new(options, cache_cap)?)
+            }
+            EmbedderOptions::OpenAi(options) => {
+                Self::OpenAi(openai::Embedder::new(options, cache_cap)?)
+            }
+            EmbedderOptions::Ollama(options) => {
+                Self::Ollama(ollama::Embedder::new(options, cache_cap)?)
+            }
             EmbedderOptions::UserProvided(options) => {
                 Self::UserProvided(manual::Embedder::new(options))
             }
-            EmbedderOptions::Rest(options) => {
-                Self::Rest(rest::Embedder::new(options, rest::ConfigurationSource::User)?)
-            }
+            EmbedderOptions::Rest(options) => Self::Rest(rest::Embedder::new(
+                options,
+                cache_cap,
+                rest::ConfigurationSource::User,
+            )?),
             EmbedderOptions::Composite(options) => {
-                Self::Composite(composite::Embedder::new(options)?)
+                Self::Composite(composite::Embedder::new(options, cache_cap)?)
             }
         })
     }
@@ -651,19 +703,35 @@ impl Embedder {
     #[tracing::instrument(level = "debug", skip_all, target = "search")]
     pub fn embed_search(
         &self,
-        text: String,
+        text: &str,
         deadline: Option<Instant>,
     ) -> std::result::Result<Embedding, EmbedError> {
-        let texts = vec![text];
-        let mut embedding = match self {
-            Embedder::HuggingFace(embedder) => embedder.embed(texts),
-            Embedder::OpenAi(embedder) => embedder.embed(&texts, deadline),
-            Embedder::Ollama(embedder) => embedder.embed(&texts, deadline),
-            Embedder::UserProvided(embedder) => embedder.embed(&texts),
-            Embedder::Rest(embedder) => embedder.embed(texts, deadline),
-            Embedder::Composite(embedder) => embedder.search.embed(texts, deadline),
+        if let Some(cache) = self.cache() {
+            if let Some(embedding) = cache.get(text) {
+                tracing::trace!(text, "embedding found in cache");
+                return Ok(embedding);
+            }
+        }
+        let embedding = match self {
+            Embedder::HuggingFace(embedder) => embedder.embed_one(text),
+            Embedder::OpenAi(embedder) => {
+                embedder.embed(&[text], deadline)?.pop().ok_or_else(EmbedError::missing_embedding)
+            }
+            Embedder::Ollama(embedder) => {
+                embedder.embed(&[text], deadline)?.pop().ok_or_else(EmbedError::missing_embedding)
+            }
+            Embedder::UserProvided(embedder) => embedder.embed_one(text),
+            Embedder::Rest(embedder) => embedder
+                .embed_ref(&[text], deadline)?
+                .pop()
+                .ok_or_else(EmbedError::missing_embedding),
+            Embedder::Composite(embedder) => embedder.search.embed_one(text, deadline),
         }?;
-        let embedding = embedding.pop().ok_or_else(EmbedError::missing_embedding)?;
+
+        if let Some(cache) = self.cache() {
+            cache.put(text.to_owned(), embedding.clone());
+        }
+
         Ok(embedding)
     }
 
@@ -757,6 +825,17 @@ impl Embedder {
             | Embedder::Rest(_) => true,
             Embedder::UserProvided(_) => false,
             Embedder::Composite(embedder) => embedder.index.uses_document_template(),
+        }
+    }
+
+    fn cache(&self) -> Option<&EmbeddingCache> {
+        match self {
+            Embedder::HuggingFace(embedder) => Some(embedder.cache()),
+            Embedder::OpenAi(embedder) => Some(embedder.cache()),
+            Embedder::UserProvided(_) => None,
+            Embedder::Ollama(embedder) => Some(embedder.cache()),
+            Embedder::Rest(embedder) => Some(embedder.cache()),
+            Embedder::Composite(embedder) => embedder.search.cache(),
         }
     }
 }

@@ -1995,7 +1995,7 @@ async fn timeout() {
 
     let (response, code) = index
         .search_post(json!({
-            "q": "grand chien de berger des montagnes",
+            "q": "grand chien de berger des montagnes foil the cache",
             "hybrid": {"semanticRatio": 0.99, "embedder": "default"}
         }))
         .await;

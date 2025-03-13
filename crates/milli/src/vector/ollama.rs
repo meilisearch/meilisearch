@@ -5,7 +5,7 @@ use rayon::slice::ParallelSlice as _;
 
 use super::error::{EmbedError, EmbedErrorKind, NewEmbedderError, NewEmbedderErrorKind};
 use super::rest::{Embedder as RestEmbedder, EmbedderOptions as RestEmbedderOptions};
-use super::{DistributionShift, REQUEST_PARALLELISM};
+use super::{DistributionShift, EmbeddingCache, REQUEST_PARALLELISM};
 use crate::error::FaultSource;
 use crate::vector::Embedding;
 use crate::ThreadPoolNoAbort;
@@ -75,9 +75,10 @@ impl EmbedderOptions {
 }
 
 impl Embedder {
-    pub fn new(options: EmbedderOptions) -> Result<Self, NewEmbedderError> {
+    pub fn new(options: EmbedderOptions, cache_cap: usize) -> Result<Self, NewEmbedderError> {
         let rest_embedder = match RestEmbedder::new(
             options.into_rest_embedder_config()?,
+            cache_cap,
             super::rest::ConfigurationSource::Ollama,
         ) {
             Ok(embedder) => embedder,
@@ -181,6 +182,10 @@ impl Embedder {
 
     pub fn distribution(&self) -> Option<DistributionShift> {
         self.rest_embedder.distribution()
+    }
+
+    pub(super) fn cache(&self) -> &EmbeddingCache {
+        self.rest_embedder.cache()
     }
 }
 
