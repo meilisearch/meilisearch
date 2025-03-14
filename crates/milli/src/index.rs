@@ -1755,6 +1755,19 @@ impl Index {
         }
         Ok(stats)
     }
+
+    /// Check if the word is indexed in the index.
+    ///
+    /// This function checks if the word is indexed in the index by looking at the word_docids and exact_word_docids.
+    ///
+    /// # Arguments
+    ///
+    /// * `rtxn`: The read transaction.
+    /// * `word`: The word to check.
+    pub fn contains_word(&self, rtxn: &RoTxn<'_>, word: &str) -> Result<bool> {
+        Ok(self.word_docids.remap_data_type::<DecodeIgnore>().get(rtxn, word)?.is_some()
+            || self.exact_word_docids.remap_data_type::<DecodeIgnore>().get(rtxn, word)?.is_some())
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
