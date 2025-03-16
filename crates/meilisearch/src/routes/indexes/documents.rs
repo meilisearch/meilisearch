@@ -21,6 +21,7 @@ use meilisearch_types::milli::update::IndexDocumentsMethod;
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::DocumentId;
 use meilisearch_types::serde_cs::vec::CS;
+use meilisearch_types::settings::{settings, SecretPolicy};
 use meilisearch_types::star_or::OptionStarOrList;
 use meilisearch_types::tasks::KindWithContent;
 use meilisearch_types::{milli, Document, Index};
@@ -929,6 +930,13 @@ async fn document_addition(
     dry_run: bool,
     allow_index_creation: bool,
 ) -> Result<SummarizedTaskView, MeilisearchHttpError> {
+    let index = index_scheduler.index(&index_uid)?;
+    let rtxn = index.read_txn()?;
+    let settings = settings(&index, &rtxn, SecretPolicy::HideSecrets).map_err(|e| {
+        MeilisearchHttpError::Milli { error: e, index_name: Some(index_uid.to_string()) }
+    })?;
+    println!("{:?}", settings);
+
     let format = match (
         mime_type.as_ref().map(|m| (m.type_().as_str(), m.subtype().as_str())),
         csv_delimiter,
