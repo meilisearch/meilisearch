@@ -190,8 +190,18 @@ macro_rules! make_atomic_progress {
     };
 }
 
-make_atomic_progress!(Document alias AtomicDocumentStep => "document" );
-make_atomic_progress!(Payload alias AtomicPayloadStep => "payload" );
+make_atomic_progress!(Document alias AtomicDocumentStep => "document");
+make_atomic_progress!(Payload alias AtomicPayloadStep => "payload");
+
+make_enum_progress! {
+    pub enum MergingWordCache {
+        WordDocids,
+        WordFieldIdDocids,
+        ExactWordDocids,
+        WordPositionDocids,
+        FieldIdWordCountDocids,
+    }
+}
 
 #[derive(Debug, Serialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
