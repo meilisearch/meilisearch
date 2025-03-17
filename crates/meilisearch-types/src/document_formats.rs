@@ -7,7 +7,7 @@ use bumpalo::Bump;
 use bumparaw_collections::RawMap;
 use memmap2::Mmap;
 use milli::documents::Error;
-use milli::Object;
+use milli::{Object, UserError};
 use rustc_hash::FxBuildHasher;
 use serde::de::{SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer};
@@ -16,6 +16,9 @@ use serde_json::value::RawValue;
 use serde_json::{to_writer, Map, Value};
 
 use crate::error::{Code, ErrorCode};
+use crate::settings::{Checked, Settings};
+use milli::constants::{RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME};
+use milli::update::Setting;
 
 type Result<T> = std::result::Result<T, DocumentFormatError>;
 
@@ -211,7 +214,7 @@ pub fn read_csv(input: &File, output: impl io::Write, delimiter: u8) -> Result<u
 }
 
 /// Reads JSON from file and write it in NDJSON in a file checking it along the way.
-pub fn read_json(input: &File, output: impl io::Write) -> Result<u64> {
+pub fn read_json(input: &File, output: impl io::Write, setting: &Settings<Checked>) -> Result<u64> {
     // We memory map to be able to deserialize into a RawMap that
     // does not allocate when possible and only materialize the first/top level.
     let input = unsafe { Mmap::map(input).map_err(DocumentFormatError::Io)? };
@@ -222,6 +225,15 @@ pub fn read_json(input: &File, output: impl io::Write) -> Result<u64> {
     let res = array_each(&mut deserializer, |obj: &RawValue| {
         doc_alloc.reset();
         let map = RawMap::from_raw_value_and_hasher(obj, FxBuildHasher, &doc_alloc)?;
+        match check_object(&map, setting) {
+            Ok(()) => {}
+            Err(e) => {
+                return Err(serde_json::Error::io(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    e.to_string(),
+                )));
+            }
+        }
         to_writer(&mut out, &map)
     });
     let count = match res {
@@ -252,7 +264,7 @@ pub fn read_json(input: &File, output: impl io::Write) -> Result<u64> {
 }
 
 /// Reads NDJSON from file and checks it.
-pub fn read_ndjson(input: &File) -> Result<u64> {
+pub fn read_ndjson(input: &File, setting: &Settings<Checked>) -> Result<u64> {
     // We memory map to be able to deserialize into a RawMap that
     // does not allocate when possible and only materialize the first/top level.
     let input = unsafe { Mmap::map(input).map_err(DocumentFormatError::Io)? };
@@ -264,8 +276,17 @@ pub fn read_ndjson(input: &File) -> Result<u64> {
         match result {
             Ok(raw) => {
                 // try to deserialize as a map
-                RawMap::from_raw_value_and_hasher(raw, FxBuildHasher, &bump)
+                let map = RawMap::from_raw_value_and_hasher(raw, FxBuildHasher, &bump)
                     .map_err(|e| DocumentFormatError::from((PayloadType::Ndjson, e)))?;
+                match check_object(&map, setting) {
+                    Ok(()) => {}
+                    Err(e) => {
+                        return Err(DocumentFormatError::from((
+                            PayloadType::Ndjson,
+                            Error::InvalidDocumentPayload { error: e },
+                        )))
+                    }
+                }
                 count += 1;
             }
             Err(e) => return Err(DocumentFormatError::from((PayloadType::Ndjson, e))),
@@ -273,6 +294,21 @@ pub fn read_ndjson(input: &File) -> Result<u64> {
     }
 
     Ok(count)
+}
+
+// check json object validity
+pub fn check_object(
+    object: &RawMap<'_, FxBuildHasher>,
+    setting: &Settings<Checked>,
+) -> std::result::Result<(), UserError> {
+    println!("{:?}", object.get(RESERVED_VECTORS_FIELD_NAME));
+    println!("{:?}", object.get(RESERVED_GEO_FIELD_NAME));
+    let embedders = setting.embedders.clone();
+    match embedders {
+        Setting::Set(_embedders) => {}
+        _ => {}
+    }
+    Ok(())
 }
 
 /// The actual handling of the deserialization process in serde

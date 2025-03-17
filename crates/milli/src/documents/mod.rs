@@ -20,7 +20,7 @@ pub use reader::{DocumentsBatchCursor, DocumentsBatchCursorError, DocumentsBatch
 use serde::{Deserialize, Serialize};
 
 use crate::error::{FieldIdMapMissingEntry, InternalError};
-use crate::{FieldId, Object, Result};
+use crate::{FieldId, Object, Result, UserError};
 
 /// The key that is used to store the `DocumentsBatchIndex` datastructure,
 /// it is the absolute last key of the list.
@@ -114,6 +114,8 @@ pub enum Error {
     ParseBool { error: std::str::ParseBoolError, line: usize, value: String },
     #[error("Invalid document addition format, missing the documents batch index.")]
     InvalidDocumentFormat,
+    #[error("Invalid documents : {error}")]
+    InvalidDocumentPayload { error: UserError },
     #[error("Invalid enriched data.")]
     InvalidEnrichedData,
     #[error(transparent)]

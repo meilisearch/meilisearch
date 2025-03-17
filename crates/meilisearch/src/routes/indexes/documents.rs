@@ -985,7 +985,8 @@ async fn document_addition(
 
             let documents_count = tokio::task::spawn_blocking(move || {
                 let documents_count = file.as_ref().map_or(Ok(0), |ntf| {
-                    read_ndjson(ntf.as_file()).map_err(MeilisearchHttpError::DocumentFormat)
+                    read_ndjson(ntf.as_file(), &settings)
+                        .map_err(MeilisearchHttpError::DocumentFormat)
                 })?;
 
                 let update_file = file_store::File::from_parts(path, file);
@@ -1006,7 +1007,7 @@ async fn document_addition(
             let read_file = copy_body_to_file(temp_file, body, format).await?;
             tokio::task::spawn_blocking(move || {
                 let documents_count = match format {
-                    PayloadType::Json => read_json(&read_file, &mut update_file)?,
+                    PayloadType::Json => read_json(&read_file, &mut update_file, &settings)?,
                     PayloadType::Csv { delimiter } => {
                         read_csv(&read_file, &mut update_file, delimiter)?
                     }
