@@ -445,7 +445,7 @@ pub struct Opt {
     /// see: <https://github.com/orgs/meilisearch/discussions/801>
     #[clap(long, env = MEILI_EXPERIMENTAL_LIMIT_BATCHED_TASKS_TOTAL_SIZE, default_value_t = default_limit_batched_tasks_total_size())]
     #[serde(default = "default_limit_batched_tasks_total_size")]
-    pub experimental_limit_batched_tasks_total_size: u64,
+    pub experimental_limit_batched_tasks_total_size: Byte,
 
     /// Enables experimental caching of search query embeddings. The value represents the maximal number of entries in the cache of each
     /// distinct embedder.
@@ -958,8 +958,8 @@ fn default_limit_batched_tasks() -> usize {
     usize::MAX
 }
 
-fn default_limit_batched_tasks_total_size() -> u64 {
-    u64::MAX
+fn default_limit_batched_tasks_total_size() -> Byte {
+    Byte::from_u64(u64::MAX)
 }
 
 fn default_embedding_cache_entries() -> usize {
