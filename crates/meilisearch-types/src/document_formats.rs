@@ -333,62 +333,60 @@ pub fn check_object(
     }
 
     for (key, value) in vectors {
-        if let Setting::Set(ref _embedders) = embedders {
-            if let Some(setting_embedding_settings) = _embedders.get(key) {
-                if let Setting::Set(embedding_settings) = &setting_embedding_settings.inner {
-                    match embedding_settings.source {
-                        Setting::Set(EmbedderSource::UserProvided) => {
-                            if let Setting::Set(ref _dimensions) = embedding_settings.dimensions {
-                                let vector = RawVectors::from_raw_value(value)
-                                    .map_err(|e| UserError::DocumentEmbeddingError(e.msg(key)))?;
-                                match vector {
-                                    RawVectors::Explicit(_vector) => {
-                                        println!("explicit vector : {:?}", _vector);
-                                        match _vector.embeddings {
-                                            Some(_embeddings) => {
-                                                let embedding: Embedding =
-                                                    serde_json::from_str(_embeddings.get())
-                                                        .unwrap();
-                                                if embedding.len() != *_dimensions {
-                                                    return Err(
-                                                        UserError::InvalidVectorDimensions {
-                                                            expected: *_dimensions,
-                                                            found: embedding.len(),
-                                                        },
-                                                    );
-                                                }
-                                            }
-                                            None => return Ok(()),
-                                        }
-                                    }
-                                    RawVectors::ImplicitlyUserProvided(_vector) => {
-                                        //TODO:treat the case of implicit vector
-                                        println!("implicit vector : {:?}", _vector);
-                                        return Ok(());
-                                    }
-                                }
-                            } else {
-                                return Err(UserError::DocumentEmbeddingError("".into()));
-                            }
-                        }
-                        _ => return Ok(()),
-                    }
-                } else {
-                    return Err(UserError::DocumentEmbeddingError(format!(
-                        "embedder \"{0}\" not configured yet",
-                        key
-                    )));
-                }
-            } else {
-                return Err(UserError::DocumentEmbeddingError(format!(
-                    "embedder \"{0}\" not found",
-                    key
-                )));
-            }
-        } else {
+        let Setting::Set(ref _embedders) = embedders else {
             return Err(UserError::DocumentEmbeddingError(
                 "concerned index doesn't support vector embedding".into(),
             ));
+        };
+
+        let Some(setting_embedding_settings) = _embedders.get(key) else {
+            return Err(UserError::DocumentEmbeddingError(format!(
+                "embedder \"{0}\" not found",
+                key
+            )));
+        };
+
+        let Setting::Set(embedding_settings) = &setting_embedding_settings.inner else {
+            return Err(UserError::DocumentEmbeddingError(format!(
+                "embedder \"{0}\" not configured yet",
+                key
+            )));
+        };
+
+        match embedding_settings.source {
+            Setting::Set(EmbedderSource::UserProvided) => {
+                let Setting::Set(ref _dimensions) = embedding_settings.dimensions else {
+                    return Err(UserError::DocumentEmbeddingError("".into()));
+                };
+
+                let vector = RawVectors::from_raw_value(value)
+                    .map_err(|e| UserError::DocumentEmbeddingError(e.msg(key)))?;
+
+                match vector {
+                    RawVectors::Explicit(_vector) => {
+                        println!("explicit vector : {:?}", _vector);
+                        match _vector.embeddings {
+                            Some(_embeddings) => {
+                                let embedding: Embedding =
+                                    serde_json::from_str(_embeddings.get()).unwrap();
+                                if embedding.len() != *_dimensions {
+                                    return Err(UserError::InvalidVectorDimensions {
+                                        expected: *_dimensions,
+                                        found: embedding.len(),
+                                    });
+                                }
+                            }
+                            None => return Ok(()),
+                        }
+                    }
+                    RawVectors::ImplicitlyUserProvided(_vector) => {
+                        //TODO:treat the case of implicit vector
+                        println!("implicit vector : {:?}", _vector);
+                        return Ok(());
+                    }
+                }
+            }
+            _ => return Ok(()),
         }
     }
     Ok(())
