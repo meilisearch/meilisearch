@@ -3798,6 +3798,7 @@ dependencies = [
  "obkv",
  "once_cell",
  "ordered-float",
+ "papaya",
  "rand",
  "rayon",
  "rayon-par-bridge",
@@ -4187,6 +4188,16 @@ checksum = "30d5b2194ed13191c1999ae0704b7839fb18384fa22e49b57eeaa97d79ce40da"
 dependencies = [
  "libc",
  "winapi",
+]
+
+[[package]]
+name = "papaya"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6827e3fc394523c21d4464d02c0bb1c19966ea4a58a9844ad6d746214179d2bc"
+dependencies = [
+ "equivalent",
+ "seize",
 ]
 
 [[package]]
@@ -5102,6 +5113,16 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.9",
  "time",
+]
+
+[[package]]
+name = "seize"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e4b8d813387d566f627f3ea1b914c068aac94c40ae27ec43f5f33bde65abefe7"
+dependencies = [
+ "libc",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
