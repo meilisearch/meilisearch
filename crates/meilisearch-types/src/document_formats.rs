@@ -7,6 +7,9 @@ use bumpalo::Bump;
 use bumparaw_collections::RawMap;
 use memmap2::Mmap;
 use milli::documents::Error;
+use milli::vector::parsed_vectors::RawVectors;
+use milli::vector::settings::EmbedderSource;
+use milli::vector::Embedding;
 use milli::{Object, UserError};
 use rustc_hash::FxBuildHasher;
 use serde::de::{SeqAccess, Visitor};
@@ -298,15 +301,95 @@ pub fn read_ndjson(input: &File, setting: &Settings<Checked>) -> Result<u64> {
 
 // check json object validity
 pub fn check_object(
-    object: &RawMap<'_, FxBuildHasher>,
+    document: &RawMap<'_, FxBuildHasher>,
     setting: &Settings<Checked>,
 ) -> std::result::Result<(), UserError> {
-    println!("{:?}", object.get(RESERVED_VECTORS_FIELD_NAME));
-    println!("{:?}", object.get(RESERVED_GEO_FIELD_NAME));
+    println!("{:?}", document.get(RESERVED_GEO_FIELD_NAME));
+    // TODO: check geo fields
+
+    let bump = Bump::with_capacity(1024 * 1024);
+
+    let vectors: RawMap<'_, FxBuildHasher>;
+    println!("getting vectors");
+    match document.get(RESERVED_VECTORS_FIELD_NAME) {
+        Some(_vectors) => {
+            println!("vectors : {:?}", _vectors);
+            vectors = RawMap::from_raw_value_and_hasher(_vectors, FxBuildHasher, &bump)
+                .map_err(|e| UserError::SerdeJson(e))?
+        }
+        None => vectors = RawMap::with_hasher_in(FxBuildHasher, &bump),
+    }
     let embedders = setting.embedders.clone();
-    match embedders {
-        Setting::Set(_embedders) => {}
-        _ => {}
+
+    if let Setting::Set(ref _embedders) = embedders {
+        let expected_embeddings: Vec<String> = _embedders.keys().cloned().collect();
+        let embeddings: Vec<&str> = vectors.keys().collect();
+        if expected_embeddings.iter().map(|s| s.as_str()).collect::<Vec<&str>>() != embeddings {
+            return Err(UserError::DocumentEmbeddingError(format!(
+                "expected : {0:?}, actual : {1:?}",
+                expected_embeddings, embeddings
+            )));
+        }
+    }
+
+    for (key, value) in vectors {
+        if let Setting::Set(ref _embedders) = embedders {
+            if let Some(setting_embedding_settings) = _embedders.get(key) {
+                if let Setting::Set(embedding_settings) = &setting_embedding_settings.inner {
+                    match embedding_settings.source {
+                        Setting::Set(EmbedderSource::UserProvided) => {
+                            if let Setting::Set(ref _dimensions) = embedding_settings.dimensions {
+                                let vector = RawVectors::from_raw_value(value)
+                                    .map_err(|e| UserError::DocumentEmbeddingError(e.msg(key)))?;
+                                match vector {
+                                    RawVectors::Explicit(_vector) => {
+                                        println!("explicit vector : {:?}", _vector);
+                                        match _vector.embeddings {
+                                            Some(_embeddings) => {
+                                                let embedding: Embedding =
+                                                    serde_json::from_str(_embeddings.get())
+                                                        .unwrap();
+                                                if embedding.len() != *_dimensions {
+                                                    return Err(
+                                                        UserError::InvalidVectorDimensions {
+                                                            expected: *_dimensions,
+                                                            found: embedding.len(),
+                                                        },
+                                                    );
+                                                }
+                                            }
+                                            None => return Ok(()),
+                                        }
+                                    }
+                                    RawVectors::ImplicitlyUserProvided(_vector) => {
+                                        //TODO:treat the case of implicit vector
+                                        println!("implicit vector : {:?}", _vector);
+                                        return Ok(());
+                                    }
+                                }
+                            } else {
+                                return Err(UserError::DocumentEmbeddingError("".into()));
+                            }
+                        }
+                        _ => return Ok(()),
+                    }
+                } else {
+                    return Err(UserError::DocumentEmbeddingError(format!(
+                        "embedder \"{0}\" not configured yet",
+                        key
+                    )));
+                }
+            } else {
+                return Err(UserError::DocumentEmbeddingError(format!(
+                    "embedder \"{0}\" not found",
+                    key
+                )));
+            }
+        } else {
+            return Err(UserError::DocumentEmbeddingError(
+                "concerned index doesn't support vector embedding".into(),
+            ));
+        }
     }
     Ok(())
 }

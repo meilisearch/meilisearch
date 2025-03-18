@@ -935,7 +935,6 @@ async fn document_addition(
     let settings = settings(&index, &rtxn, SecretPolicy::HideSecrets).map_err(|e| {
         MeilisearchHttpError::Milli { error: e, index_name: Some(index_uid.to_string()) }
     })?;
-    println!("{:?}", settings);
 
     let format = match (
         mime_type.as_ref().map(|m| (m.type_().as_str(), m.subtype().as_str())),
