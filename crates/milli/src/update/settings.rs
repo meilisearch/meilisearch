@@ -1331,8 +1331,21 @@ impl InnerIndexSettingsDiff {
 
         let cache_exact_attributes = old_settings.exact_attributes != new_settings.exact_attributes;
 
-        let cache_user_defined_searchables = old_settings.user_defined_searchable_attributes
-            != new_settings.user_defined_searchable_attributes;
+        // Check if any searchable field has been added or removed form the list,
+        // Changing the order should not be considered as a change for reindexing.
+        let cache_user_defined_searchables = match (
+            &old_settings.user_defined_searchable_attributes,
+            &new_settings.user_defined_searchable_attributes,
+        ) {
+            (Some(old), Some(new)) => {
+                let old: BTreeSet<_> = old.iter().collect();
+                let new: BTreeSet<_> = new.iter().collect();
+
+                old != new
+            }
+            (None, None) => false,
+            _otherwise => true,
+        };
 
         // if the user-defined searchables changed, then we need to reindex prompts.
         if cache_user_defined_searchables {
