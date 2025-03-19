@@ -1,0 +1,57 @@
+name: Comment when db change labels are added
+
+on:
+  pull_request:
+    types: [labeled]
+
+env:
+  MESSAGE: |
+    ### Hello, I'm a bot 🤖 
+
+    You are receiving this message because you declared that this PR make changes to the Meilisearch database.
+    Depending on the nature of the change, additional actions might be required on your part. The following sections detail the additional actions depending on the nature of the change, please copy the relevant section in the description of your PR, and make sure to perform the required actions.
+
+    Thank you for contributing to Meilisearch :heart:
+
+    ## This PR makes forward-compatible changes
+
+    *Forward-compatible changes are changes to the database such that databases created in an older version of Meilisearch are still valid in the new version of Meilisearch. They usually represent additive changes, like adding a new optional attribute or setting.*
+
+    - [ ] Detail the change to the DB format and why they are forward compatible
+    - [ ] Forward-compatibility: A database created before this PR and using the features touched by this PR was able to be opened by a Meilisearch produced by the code of this PR.
+
+
+    ## This PR makes breaking changes
+
+    *Breaking changes are changes to the database such that databases created in an older version of Meilisearch need changes to remain valid in the new version of Meilisearch. This typically happens when the way to store the data changed (change of database, new required key, etc). This can also happen due to breaking changes in the API of an experimental feature. ⚠️ This kind of changes are more difficult to achieve safely, so proceed with caution and test dumpless upgrade right before merging the PR.*
+
+    - [ ] Detail the changes to the DB format,
+        - [ ] which are compatible, and why
+        - [ ] which are not compatible, why, and how they will be fixed up in the upgrade
+     - [ ] /!\ Ensure all the read operations still work!
+        - If the change happened in milli, you may need to check the version of the database before doing any read operation
+        - If the change happened in the index-scheduler, make sure the new code can immediately read the old database
+        - If the change happened in the meilisearch-auth database, reach out to the team; we don't know yet how to handle these changes
+      - [ ] Write the code to go from the old database to the new one
+        - If the change happened in milli, the upgrade function should be written and called [here](https://github.com/meilisearch/meilisearch/blob/3fd86e8d76d7d468b0095d679adb09211ca3b6c0/crates/milli/src/update/upgrade/mod.rs#L24-L47)
+        - If the change happened in the index-scheduler, we've never done it yet, but the right place to do it should be [here](https://github.com/meilisearch/meilisearch/blob/3fd86e8d76d7d468b0095d679adb09211ca3b6c0/crates/index-scheduler/src/scheduler/process_upgrade/mod.rs#L13)
+      - [ ] Write an integration test [here](https://github.com/meilisearch/meilisearch/blob/main/crates/meilisearch/tests/upgrade/mod.rs) ensuring you can read the old database, upgrade to the new database, and read the new database as expected
+    
+
+jobs:
+  add-comment:
+    runs-on: ubuntu-latest
+    if: github.event.label.name == 'db change'
+    steps:
+      - name: Add comment
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const message = process.env.MESSAGE;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: message
+            })
