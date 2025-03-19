@@ -441,41 +441,48 @@ fn format_invalid_filter_distribution(
     invalid_facets_name: &BTreeSet<String>,
     valid_patterns: &BTreeSet<String>,
 ) -> String {
-    if valid_patterns.is_empty() {
-        return "this index does not have configured filterable attributes.".into();
-    }
-
     let mut result = String::new();
 
-    match invalid_facets_name.len() {
-        0 => (),
-        1 => write!(
-            result,
-            "attribute `{}` is not filterable.",
-            invalid_facets_name.first().unwrap()
-        )
-        .unwrap(),
-        _ => write!(
-            result,
-            "attributes `{}` are not filterable.",
-            invalid_facets_name.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", ")
-        )
-        .unwrap(),
-    };
+    if invalid_facets_name.is_empty() {
+        if valid_patterns.is_empty() {
+            return "this index does not have configured filterable attributes.".into();
+        }
+    } else {
+        match invalid_facets_name.len() {
+            1 => write!(
+                result,
+                "Attribute `{}` is not filterable.",
+                invalid_facets_name.first().unwrap()
+            )
+            .unwrap(),
+            _ => write!(
+                result,
+                "Attributes `{}` are not filterable.",
+                invalid_facets_name.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", ")
+            )
+            .unwrap(),
+        };
+    }
 
-    match valid_patterns.len() {
-        1 => write!(
-            result,
-            " The available filterable attribute pattern is `{}`.",
-            valid_patterns.first().unwrap()
-        )
-        .unwrap(),
-        _ => write!(
-            result,
-            " The available filterable attribute patterns are `{}`.",
-            valid_patterns.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", ")
-        )
-        .unwrap(),
+    if valid_patterns.is_empty() {
+        if !invalid_facets_name.is_empty() {
+            write!(result, " This index does not have configured filterable attributes.").unwrap();
+        }
+    } else {
+        match valid_patterns.len() {
+            1 => write!(
+                result,
+                " Available filterable attributes patterns are: `{}`.",
+                valid_patterns.first().unwrap()
+            )
+            .unwrap(),
+            _ => write!(
+                result,
+                " Available filterable attributes patterns are: `{}`.",
+                valid_patterns.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", ")
+            )
+            .unwrap(),
+        }
     }
 
     result
