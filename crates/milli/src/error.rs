@@ -125,21 +125,21 @@ and can not be more than 511 bytes.", .document_id.to_string()
         if .invalid_facets_name.len() == 1 {
             let field = .invalid_facets_name.iter().next().unwrap();
             match .matching_rule_indices.get(field) {
-                Some(rule_index) => format!("Attribute `{}` matched rule #{} in filterableAttributes, but this rule does not enable filtering.\nHint: enable filtering in rule #{} by modifying the features.filter object\nHint: prepend another rule matching `{}` with appropriate filter features before rule #{}", 
+                Some(rule_index) => format!("Attribute `{}` matched rule #{} in filterableAttributes, but this rule does not enable filtering.\nHint: enable filtering in rule #{} by modifying the features.filter object\nHint: prepend another rule matching `{}` with appropriate filter features before rule #{}",
                     field, rule_index, rule_index, field, rule_index),
                 None => match .valid_patterns.is_empty() {
                     true => format!("Attribute `{}` is not filterable. This index does not have configured filterable attributes.", field),
-                    false => format!("Attribute `{}` is not filterable. Available filterable attributes patterns are: `{}`.", 
-                        field, 
+                    false => format!("Attribute `{}` is not filterable. Available filterable attributes patterns are: `{}`.",
+                        field,
                         .valid_patterns.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", ")),
                 }
             }
         } else {
-            format!("Attributes `{}` are not filterable. {}", 
+            format!("Attributes `{}` are not filterable. {}",
                 .invalid_facets_name.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", "),
                 match .valid_patterns.is_empty() {
                     true => "This index does not have configured filterable attributes.".to_string(),
-                    false => format!("Available filterable attributes patterns are: `{}`.", 
+                    false => format!("Available filterable attributes patterns are: `{}`.",
                         .valid_patterns.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", ")),
                 }
             )
@@ -162,10 +162,10 @@ and can not be more than 511 bytes.", .document_id.to_string()
     InvalidFilter(String),
     #[error("Invalid type for filter subexpression: expected: {}, found: {}.", .0.join(", "), .1)]
     InvalidFilterExpression(&'static [&'static str], Value),
-    #[error("Filter operator `{operator}` is not allowed for the attribute `{field}`.\n  - Note: allowed operators: {}.\n  - Note: field `{field}` matched rule #{rule_index} in `filterableAttributes`\n  - Hint: enable {} in rule #{rule_index} by modifying the features.filter object\n  - Hint: prepend another rule matching `{field}` with appropriate filter features before rule #{rule_index}", 
-        allowed_operators.join(", "), 
-        if operator == "=" || operator == "!=" || operator == "IN" {"equality"} 
-        else if operator == "<" || operator == ">" || operator == "<=" || operator == ">=" || operator == "TO" {"comparison"} 
+    #[error("Filter operator `{operator}` is not allowed for the attribute `{field}`.\n  - Note: allowed operators: {}.\n  - Note: field `{field}` matched rule #{rule_index} in `filterableAttributes`\n  - Hint: enable {} in rule #{rule_index} by modifying the features.filter object\n  - Hint: prepend another rule matching `{field}` with appropriate filter features before rule #{rule_index}",
+        allowed_operators.join(", "),
+        if operator == "=" || operator == "!=" || operator == "IN" {"equality"}
+        else if operator == "<" || operator == ">" || operator == "<=" || operator == ">=" || operator == "TO" {"comparison"}
         else {"the appropriate filter operators"}
     )]
     FilterOperatorNotAllowed {
@@ -190,13 +190,13 @@ and can not be more than 511 bytes.", .document_id.to_string()
         match (.valid_patterns.is_empty(), .matching_rule_index) {
             // No rules match and no filterable attributes
             (true, None) => "This index does not have configured filterable attributes.".to_string(),
-            
+
             // No rules match but there are some filterable attributes
             (false, None) => format!("Available filterable attributes patterns are: `{}{}`.",
                     valid_patterns.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", "),
                     .hidden_fields.then_some(", <..hidden-attributes>").unwrap_or(""),
                 ),
-            
+
             // A rule matched but filtering isn't enabled
             (_, Some(rule_index)) => format!("Note: this attribute matches rule #{} in filterableAttributes, but this rule does not enable filtering.\nHint: enable filtering in rule #{} by adding appropriate filter features.\nHint: prepend another rule matching {} with filter features before rule #{}",
                     rule_index, rule_index, .field, rule_index
@@ -214,13 +214,13 @@ and can not be more than 511 bytes.", .document_id.to_string()
         match (.valid_patterns.is_empty(), .matching_rule_index) {
             // No rules match and no facet searchable attributes
             (true, None) => "This index does not have configured facet-searchable attributes. To make it facet-searchable add it to the `filterableAttributes` index settings.".to_string(),
-            
+
             // No rules match but there are some facet searchable attributes
             (false, None) => format!("Available facet-searchable attributes patterns are: `{}{}`. To make it facet-searchable add it to the `filterableAttributes` index settings.",
                     valid_patterns.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", "),
                     .hidden_fields.then_some(", <..hidden-attributes>").unwrap_or(""),
                 ),
-            
+
             // A rule matched but facet search isn't enabled
             (_, Some(rule_index)) => format!("Note: this attribute matches rule #{} in filterableAttributes, but this rule does not enable facetSearch.\nHint: enable facetSearch in rule #{} by adding `\"facetSearch\": true` to the rule.\nHint: prepend another rule matching {} with facetSearch: true before rule #{}",
                     rule_index, rule_index, .field, rule_index
@@ -436,6 +436,7 @@ pub enum GeoError {
     BadLongitude { document_id: Value, value: Value },
 }
 
+#[allow(dead_code)]
 fn format_invalid_filter_distribution(
     invalid_facets_name: &BTreeSet<String>,
     valid_patterns: &BTreeSet<String>,
