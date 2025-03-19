@@ -173,17 +173,18 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
                 ranking_rule_scores.push(ScoreDetails::Skipped);
 
                 // remove candidates from the universe without adding them to result if their score is below the threshold
-                if let Some(ranking_score_threshold) = ranking_score_threshold {
-                    let current_score = ScoreDetails::global_score(ranking_rule_scores.iter());
-                    if current_score < ranking_score_threshold {
-                        all_candidates -= bucket | &ranking_rule_universes[cur_ranking_rule_index];
-                        back!();
-                        cur_ranking_rule_index += 1;
-                        continue;
-                    }
-                }
+                let is_below_threshold =
+                    ranking_score_threshold.is_some_and(|ranking_score_threshold| {
+                        let current_score = ScoreDetails::global_score(ranking_rule_scores.iter());
+                        current_score < ranking_score_threshold
+                    });
 
-                maybe_add_to_results!(bucket);
+                if is_below_threshold {
+                    all_candidates -= &bucket;
+                    all_candidates -= &ranking_rule_universes[cur_ranking_rule_index];
+                } else {
+                    maybe_add_to_results!(bucket);
+                }
 
                 ranking_rule_scores.pop();
 
@@ -238,24 +239,24 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
         );
 
         // remove candidates from the universe without adding them to result if their score is below the threshold
-        if let Some(ranking_score_threshold) = ranking_score_threshold {
+        let is_below_threshold = ranking_score_threshold.is_some_and(|ranking_score_threshold| {
             let current_score = ScoreDetails::global_score(ranking_rule_scores.iter());
-            if current_score < ranking_score_threshold {
-                all_candidates -=
-                    next_bucket.candidates | &ranking_rule_universes[cur_ranking_rule_index];
-                back!();
-                cur_ranking_rule_index += 1;
-                continue;
-            }
-        }
+            current_score < ranking_score_threshold
+        });
 
         ranking_rule_universes[cur_ranking_rule_index] -= &next_bucket.candidates;
 
         if cur_ranking_rule_index == ranking_rules_len - 1
             || (scoring_strategy == ScoringStrategy::Skip && next_bucket.candidates.len() <= 1)
             || cur_offset + (next_bucket.candidates.len() as usize) < from
+            || is_below_threshold
         {
-            maybe_add_to_results!(next_bucket.candidates);
+            if is_below_threshold {
+                all_candidates -=
+                    next_bucket.candidates | &ranking_rule_universes[cur_ranking_rule_index];
+            } else {
+                maybe_add_to_results!(next_bucket.candidates);
+            }
             ranking_rule_scores.pop();
             continue;
         }
