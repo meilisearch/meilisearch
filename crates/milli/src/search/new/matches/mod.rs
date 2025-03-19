@@ -229,8 +229,12 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
                 .iter()
                 .map(|m| MatchBounds {
                     start: tokens[m.get_first_token_pos()].byte_start,
-                    // TODO: Why is this in chars, while start is in bytes?
-                    length: m.char_count,
+                    length: (m.get_first_token_pos()..m.get_last_token_pos() + 1)
+                        .map(|i| tokens[i].clone())
+                        .flat_map(|token| token.char_map.clone().unwrap_or(vec![(1, 1); token.char_end - token.char_start] /* Some token doesn't have a char map, here we treat them as single byte chars. */))
+                        .map(|(original, _)| original as usize)
+                        .take(m.char_count)
+                        .sum(),
                     indices: if array_indices.is_empty() {
                         None
                     } else {
