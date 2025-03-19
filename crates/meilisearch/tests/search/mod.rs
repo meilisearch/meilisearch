@@ -1783,6 +1783,146 @@ async fn test_nested_fields() {
     .await;
 }
 
+#[actix_rt::test]
+async fn test_typo_settings() {
+    let documents = json!([
+        {
+            "id": 0,
+            "title": "The zeroth document",
+        },
+        {
+            "id": 1,
+            "title": "The first document",
+            "nested": {
+                "object": "field",
+                "machin": "bidule",
+            },
+        },
+        {
+            "id": 2,
+            "title": "The second document",
+            "nested": [
+                "array",
+                {
+                    "object": "field",
+                },
+                {
+                    "prout": "truc",
+                    "machin": "lol",
+                },
+            ],
+        },
+        {
+            "id": 3,
+            "title": "The third document",
+            "nested": "I lied",
+        },
+    ]);
+
+    test_settings_documents_indexing_swapping_and_search(
+        &documents,
+        &json!({
+            "searchableAttributes": ["title", "nested.object", "nested.machin"],
+            "typoTolerance": {
+              "enabled": true,
+              "disableOnAttributes": ["title"]
+            }
+        }),
+        &json!({"q": "document"}),
+        |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            snapshot!(json_string!(response["hits"]), @r###"
+            [
+              {
+                "id": 0,
+                "title": "The zeroth document"
+              },
+              {
+                "id": 1,
+                "title": "The first document",
+                "nested": {
+                  "object": "field",
+                  "machin": "bidule"
+                }
+              },
+              {
+                "id": 2,
+                "title": "The second document",
+                "nested": [
+                  "array",
+                  {
+                    "object": "field"
+                  },
+                  {
+                    "prout": "truc",
+                    "machin": "lol"
+                  }
+                ]
+              },
+              {
+                "id": 3,
+                "title": "The third document",
+                "nested": "I lied"
+              }
+            ]
+            "###);
+        },
+    )
+    .await;
+
+    // Test prefix search
+    test_settings_documents_indexing_swapping_and_search(
+        &documents,
+        &json!({
+            "searchableAttributes": ["title", "nested.object", "nested.machin"],
+            "typoTolerance": {
+              "enabled": true,
+              "disableOnAttributes": ["title"]
+            }
+        }),
+        &json!({"q": "docume"}),
+        |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            snapshot!(json_string!(response["hits"]), @r###"
+          [
+            {
+              "id": 0,
+              "title": "The zeroth document"
+            },
+            {
+              "id": 1,
+              "title": "The first document",
+              "nested": {
+                "object": "field",
+                "machin": "bidule"
+              }
+            },
+            {
+              "id": 2,
+              "title": "The second document",
+              "nested": [
+                "array",
+                {
+                  "object": "field"
+                },
+                {
+                  "prout": "truc",
+                  "machin": "lol"
+                }
+              ]
+            },
+            {
+              "id": 3,
+              "title": "The third document",
+              "nested": "I lied"
+            }
+          ]
+          "###);
+        },
+    )
+    .await;
+}
+
 /// Modifying facets with different casing should work correctly
 #[actix_rt::test]
 async fn change_facet_casing() {
