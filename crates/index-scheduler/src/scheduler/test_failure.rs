@@ -6,7 +6,7 @@ use meilisearch_types::milli::obkv_to_json;
 use meilisearch_types::milli::update::IndexDocumentsMethod::*;
 use meilisearch_types::milli::update::Setting;
 use meilisearch_types::milli::FilterableAttributesRule;
-use meilisearch_types::settings::{Settings, Unchecked};
+use meilisearch_types::settings::Settings;
 use meilisearch_types::tasks::{Kind, KindWithContent};
 
 use crate::insta_snapshot::snapshot_index_scheduler;

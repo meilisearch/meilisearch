@@ -7,7 +7,7 @@ use meilisearch_types::milli::index::IndexEmbeddingConfig;
 use meilisearch_types::milli::update::Setting;
 use meilisearch_types::milli::vector::settings::EmbeddingSettings;
 use meilisearch_types::milli::{self, obkv_to_json};
-use meilisearch_types::settings::{SettingEmbeddingSettings, Settings, Unchecked};
+use meilisearch_types::settings::{Checked, SettingEmbeddingSettings, Settings, Unchecked};
 use meilisearch_types::tasks::KindWithContent;
 use milli::update::IndexDocumentsMethod::*;
 
@@ -18,9 +18,8 @@ use crate::IndexScheduler;
 #[test]
 fn import_vectors() {
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
-    let settings = Settings::default();
 
-    let mut new_settings: Box<Settings<Unchecked>> = Box::default();
+    let settings: Box<Settings<Checked>> = Box::default();
     let mut embedders = BTreeMap::default();
     let embedding_settings = milli::vector::settings::EmbeddingSettings {
         source: Setting::Set(milli::vector::settings::EmbedderSource::Rest),
@@ -48,13 +47,11 @@ fn import_vectors() {
         SettingEmbeddingSettings { inner: Setting::Set(embedding_settings) },
     );
 
-    new_settings.embedders = Setting::Set(embedders);
-
     index_scheduler
         .register(
             KindWithContent::SettingsUpdate {
                 index_uid: S("doggos"),
-                new_settings,
+                new_settings: Box::new(settings.clone().into_unchecked()),
                 is_deletion: false,
                 allow_index_creation: true,
             },
@@ -137,6 +134,7 @@ fn import_vectors() {
 
     let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(0u128).unwrap();
     let documents_count = read_json(doc.to_string().as_bytes(), &mut file, &settings).unwrap();
+    ();
     assert_eq!(documents_count, 1);
     file.persist().unwrap();
 
@@ -363,7 +361,7 @@ fn import_vectors_first_and_embedder_later() {
         .collect::<Vec<_>>();
     snapshot!(serde_json::to_string(&documents).unwrap(), name: "documents after initial push");
 
-    let setting = meilisearch_types::settings::Settings::<Unchecked> {
+    let settings = Settings::<Checked> {
         embedders: Setting::Set(maplit::btreemap! {
             S("my_doggo_embedder") => SettingEmbeddingSettings { inner: Setting::Set(EmbeddingSettings {
                 source: Setting::Set(milli::vector::settings::EmbedderSource::HuggingFace),
@@ -379,7 +377,7 @@ fn import_vectors_first_and_embedder_later() {
         .register(
             KindWithContent::SettingsUpdate {
                 index_uid: S("doggos"),
-                new_settings: Box::new(setting),
+                new_settings: Box::new(settings.clone().into_unchecked()),
                 is_deletion: false,
                 allow_index_creation: false,
             },
@@ -519,9 +517,7 @@ fn delete_document_containing_vector() {
     // 5. Clear the index
     // 6. The user defined roaring bitmap shouldn't contains the id of the second document
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
-    let settings = Settings::default();
-
-    let setting = meilisearch_types::settings::Settings::<Unchecked> {
+    let settings = Settings::<Checked> {
         embedders: Setting::Set(maplit::btreemap! {
             S("manual") => SettingEmbeddingSettings { inner: Setting::Set(EmbeddingSettings {
                 source: Setting::Set(milli::vector::settings::EmbedderSource::UserProvided),
@@ -535,7 +531,7 @@ fn delete_document_containing_vector() {
         .register(
             KindWithContent::SettingsUpdate {
                 index_uid: S("doggos"),
-                new_settings: Box::new(setting),
+                new_settings: Box::new(settings.clone().into_unchecked()),
                 is_deletion: false,
                 allow_index_creation: true,
             },
@@ -689,7 +685,7 @@ fn delete_embedder_with_user_provided_vectors() {
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
     let settings = Settings::default();
 
-    let setting = meilisearch_types::settings::Settings::<Unchecked> {
+    let setting = Settings::<Unchecked> {
         embedders: Setting::Set(maplit::btreemap! {
             S("manual") => SettingEmbeddingSettings { inner: Setting::Set(EmbeddingSettings {
                 source: Setting::Set(milli::vector::settings::EmbedderSource::UserProvided),
@@ -777,7 +773,7 @@ fn delete_embedder_with_user_provided_vectors() {
     }
 
     {
-        let setting = meilisearch_types::settings::Settings::<Unchecked> {
+        let setting = Settings::<Unchecked> {
             embedders: Setting::Set(maplit::btreemap! {
                 S("manual") => SettingEmbeddingSettings { inner: Setting::Reset },
             }),
@@ -812,10 +808,7 @@ fn delete_embedder_with_user_provided_vectors() {
     }
 
     {
-        let setting = meilisearch_types::settings::Settings::<Unchecked> {
-            embedders: Setting::Reset,
-            ..Default::default()
-        };
+        let setting = Settings::<Unchecked> { embedders: Setting::Reset, ..Default::default() };
         index_scheduler
             .register(
                 KindWithContent::SettingsUpdate {
