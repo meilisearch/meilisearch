@@ -1374,7 +1374,7 @@ async fn error_remote_does_not_answer() {
     "###);
     let (response, _status_code) = ms1.multi_search(request.clone()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r#"
     {
       "hits": [
         {
@@ -1413,15 +1413,15 @@ async fn error_remote_does_not_answer() {
       "offset": 0,
       "estimatedTotalHits": 3,
       "remoteErrors": {
-        "ms2": {
-          "message": "remote host did not answer before the deadline",
-          "code": "remote_timeout",
-          "type": "system",
-          "link": "https://docs.meilisearch.com/errors#remote_timeout"
+          "ms2": {
+              "message": "error sending request",
+              "code": "remote_could_not_send_request",
+              "type": "system",
+              "link": "https://docs.meilisearch.com/errors#remote_could_not_send_request"
         }
       }
     }
-    "###);
+    "#);
 }
 
 #[actix_rt::test]
