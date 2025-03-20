@@ -387,7 +387,7 @@ pub fn check_document(
                 let Setting::Set(ref _dimensions) = embedding_settings.dimensions else {
                     return Err(DocumentFormatError::from((
                         payload_type,
-                        DocumentEmbeddingError("embedding setting is not set".into()),
+                        DocumentEmbeddingError("embedding setting dimesnions is not set".into()),
                     )));
                 };
 
