@@ -6,6 +6,7 @@ use meilisearch_types::milli::obkv_to_json;
 use meilisearch_types::milli::update::IndexDocumentsMethod::*;
 use meilisearch_types::milli::update::Setting;
 use meilisearch_types::milli::FilterableAttributesRule;
+use meilisearch_types::settings::{Settings, Unchecked};
 use meilisearch_types::tasks::{Kind, KindWithContent};
 
 use crate::insta_snapshot::snapshot_index_scheduler;
@@ -34,6 +35,7 @@ fn fail_in_process_batch_for_index_creation() {
 fn fail_in_process_batch_for_document_addition() {
     let (index_scheduler, mut handle) =
         IndexScheduler::test(true, vec![(1, FailureLocation::InsideProcessBatch)]);
+    let settings = Settings::default();
 
     let content = r#"
         {
@@ -42,7 +44,7 @@ fn fail_in_process_batch_for_document_addition() {
         }"#;
 
     let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(0).unwrap();
-    let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
+    let documents_count = read_json(content.as_bytes(), &mut file, &settings).unwrap();
     file.persist().unwrap();
     index_scheduler
         .register(
@@ -76,6 +78,7 @@ fn fail_in_update_task_after_process_batch_success_for_document_addition() {
         true,
         vec![(1, FailureLocation::UpdatingTaskAfterProcessBatchSuccess { task_uid: 0 })],
     );
+    let settings = Settings::default();
 
     let content = r#"
         {
@@ -84,7 +87,7 @@ fn fail_in_update_task_after_process_batch_success_for_document_addition() {
         }"#;
 
     let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(0).unwrap();
-    let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
+    let documents_count = read_json(content.as_bytes(), &mut file, &settings).unwrap();
     file.persist().unwrap();
     index_scheduler
         .register(
@@ -124,6 +127,7 @@ fn fail_in_update_task_after_process_batch_success_for_document_addition() {
 #[test]
 fn fail_in_process_batch_for_document_deletion() {
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+    let settings = Settings::default();
 
     use meilisearch_types::settings::{Settings, Unchecked};
     let mut new_settings: Box<Settings<Unchecked>> = Box::default();
@@ -150,7 +154,7 @@ fn fail_in_process_batch_for_document_deletion() {
         ]"#;
 
     let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(0).unwrap();
-    let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
+    let documents_count = read_json(content.as_bytes(), &mut file, &settings).unwrap();
     file.persist().unwrap();
     index_scheduler
         .register(

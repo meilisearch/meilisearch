@@ -2,6 +2,7 @@ use big_s::S;
 use meili_snap::snapshot;
 use meilisearch_types::milli::obkv_to_json;
 use meilisearch_types::milli::update::IndexDocumentsMethod::*;
+use meilisearch_types::settings::{Settings, Unchecked};
 use meilisearch_types::tasks::KindWithContent;
 
 use crate::insta_snapshot::snapshot_index_scheduler;
@@ -12,6 +13,7 @@ use crate::IndexScheduler;
 #[test]
 fn document_addition() {
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+    let settings = Settings::default();
 
     let content = r#"
         {
@@ -20,7 +22,7 @@ fn document_addition() {
         }"#;
 
     let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(0).unwrap();
-    let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
+    let documents_count = read_json(content.as_bytes(), &mut file, &settings).unwrap();
     file.persist().unwrap();
     index_scheduler
         .register(
@@ -48,6 +50,7 @@ fn document_addition() {
 #[test]
 fn document_addition_and_document_deletion() {
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+    let settings = Settings::default();
 
     let content = r#"[
             { "id": 1, "doggo": "jean bob" },
@@ -56,7 +59,7 @@ fn document_addition_and_document_deletion() {
         ]"#;
 
     let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(0).unwrap();
-    let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
+    let documents_count = read_json(content.as_bytes(), &mut file, &settings).unwrap();
     file.persist().unwrap();
     index_scheduler
         .register(
@@ -103,6 +106,8 @@ fn document_addition_and_document_deletion() {
 #[test]
 fn document_deletion_and_document_addition() {
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+    let settings = Settings::default();
+
     index_scheduler
         .register(
             KindWithContent::DocumentDeletion {
@@ -122,7 +127,7 @@ fn document_deletion_and_document_addition() {
         ]"#;
 
     let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(0).unwrap();
-    let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
+    let documents_count = read_json(content.as_bytes(), &mut file, &settings).unwrap();
     file.persist().unwrap();
     index_scheduler
         .register(
@@ -163,6 +168,7 @@ fn document_deletion_and_document_addition() {
 #[test]
 fn test_document_replace() {
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+    let settings = Settings::default();
 
     for i in 0..10 {
         let content = format!(
@@ -174,7 +180,7 @@ fn test_document_replace() {
         );
 
         let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(i).unwrap();
-        let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
+        let documents_count = read_json(content.as_bytes(), &mut file, &settings).unwrap();
         file.persist().unwrap();
         index_scheduler
             .register(
@@ -214,6 +220,7 @@ fn test_document_replace() {
 #[test]
 fn test_document_update() {
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+    let settings = Settings::default();
 
     for i in 0..10 {
         let content = format!(
@@ -225,7 +232,7 @@ fn test_document_update() {
         );
 
         let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(i).unwrap();
-        let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
+        let documents_count = read_json(content.as_bytes(), &mut file, &settings).unwrap();
         file.persist().unwrap();
         index_scheduler
             .register(
@@ -265,6 +272,7 @@ fn test_document_update() {
 #[test]
 fn test_mixed_document_addition() {
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+    let settings = Settings::default();
 
     for i in 0..10 {
         let method = if i % 2 == 0 { UpdateDocuments } else { ReplaceDocuments };
@@ -278,7 +286,7 @@ fn test_mixed_document_addition() {
         );
 
         let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(i).unwrap();
-        let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
+        let documents_count = read_json(content.as_bytes(), &mut file, &settings).unwrap();
         file.persist().unwrap();
         index_scheduler
             .register(
@@ -318,6 +326,7 @@ fn test_mixed_document_addition() {
 #[test]
 fn test_document_replace_without_autobatching() {
     let (index_scheduler, mut handle) = IndexScheduler::test(false, vec![]);
+    let settings = Settings::default();
 
     for i in 0..10 {
         let content = format!(
@@ -329,7 +338,7 @@ fn test_document_replace_without_autobatching() {
         );
 
         let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(i).unwrap();
-        let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
+        let documents_count = read_json(content.as_bytes(), &mut file, &settings).unwrap();
         file.persist().unwrap();
         index_scheduler
             .register(
@@ -373,6 +382,7 @@ fn test_document_replace_without_autobatching() {
 #[test]
 fn test_document_update_without_autobatching() {
     let (index_scheduler, mut handle) = IndexScheduler::test(false, vec![]);
+    let settings = Settings::default();
 
     for i in 0..10 {
         let content = format!(
@@ -384,7 +394,7 @@ fn test_document_update_without_autobatching() {
         );
 
         let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(i).unwrap();
-        let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
+        let documents_count = read_json(content.as_bytes(), &mut file, &settings).unwrap();
         file.persist().unwrap();
         index_scheduler
             .register(
@@ -432,6 +442,7 @@ fn test_document_addition_cant_create_index_without_index() {
     // Thus, everything should be batched together and a IndexDoesNotExists
     // error should be throwed.
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+    let settings = Settings::default();
 
     for i in 0..10 {
         let content = format!(
@@ -443,7 +454,7 @@ fn test_document_addition_cant_create_index_without_index() {
         );
 
         let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(i).unwrap();
-        let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
+        let documents_count = read_json(content.as_bytes(), &mut file, &settings).unwrap();
         file.persist().unwrap();
         index_scheduler
             .register(
@@ -484,6 +495,7 @@ fn test_document_addition_cant_create_index_without_index_without_autobatching()
     // Since the auto-batching is disabled, every task should be processed
     // sequentially and throw an IndexDoesNotExists.
     let (index_scheduler, mut handle) = IndexScheduler::test(false, vec![]);
+    let settings = Settings::default();
 
     for i in 0..10 {
         let content = format!(
@@ -495,7 +507,7 @@ fn test_document_addition_cant_create_index_without_index_without_autobatching()
         );
 
         let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(i).unwrap();
-        let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
+        let documents_count = read_json(content.as_bytes(), &mut file, &settings).unwrap();
         file.persist().unwrap();
         index_scheduler
             .register(
@@ -534,6 +546,7 @@ fn test_document_addition_cant_create_index_with_index() {
     // Thus, everything should be batched together and no error should be
     // throwed.
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+    let settings = Settings::default();
 
     // Create the index.
     index_scheduler
@@ -557,7 +570,7 @@ fn test_document_addition_cant_create_index_with_index() {
         );
 
         let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(i).unwrap();
-        let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
+        let documents_count = read_json(content.as_bytes(), &mut file, &settings).unwrap();
         file.persist().unwrap();
         index_scheduler
             .register(
@@ -601,6 +614,7 @@ fn test_document_addition_cant_create_index_with_index_without_autobatching() {
     // Since the autobatching is disabled, every tasks should be processed
     // sequentially and throw an IndexDoesNotExists.
     let (index_scheduler, mut handle) = IndexScheduler::test(false, vec![]);
+    let settings = Settings::default();
 
     // Create the index.
     index_scheduler
@@ -624,7 +638,7 @@ fn test_document_addition_cant_create_index_with_index_without_autobatching() {
         );
 
         let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(i).unwrap();
-        let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
+        let documents_count = read_json(content.as_bytes(), &mut file, &settings).unwrap();
         file.persist().unwrap();
         index_scheduler
             .register(
@@ -672,6 +686,7 @@ fn test_document_addition_mixed_rights_with_index() {
     // - The first document addition don't have the right to create an index
     //   can it batch with the other one?
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+    let settings = Settings::default();
 
     // Create the index.
     index_scheduler
@@ -696,7 +711,7 @@ fn test_document_addition_mixed_rights_with_index() {
         let allow_index_creation = i % 2 != 0;
 
         let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(i).unwrap();
-        let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
+        let documents_count = read_json(content.as_bytes(), &mut file, &settings).unwrap();
         file.persist().unwrap();
         index_scheduler
             .register(
@@ -741,6 +756,7 @@ fn test_document_addition_mixed_right_without_index_starts_with_cant_create() {
     // - The second do. They should not batch together.
     // - The second should batch with everything else as it's going to create an index.
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+    let settings = Settings::default();
 
     for i in 0..10 {
         let content = format!(
@@ -753,7 +769,7 @@ fn test_document_addition_mixed_right_without_index_starts_with_cant_create() {
         let allow_index_creation = i % 2 != 0;
 
         let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(i).unwrap();
-        let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
+        let documents_count = read_json(content.as_bytes(), &mut file, &settings).unwrap();
         file.persist().unwrap();
         index_scheduler
             .register(
@@ -797,6 +813,7 @@ fn test_document_addition_mixed_right_without_index_starts_with_cant_create() {
 #[test]
 fn test_document_addition_with_multiple_primary_key() {
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+    let settings = Settings::default();
 
     for (id, primary_key) in ["id", "bork", "bloup"].iter().enumerate() {
         let content = format!(
@@ -807,7 +824,7 @@ fn test_document_addition_with_multiple_primary_key() {
         );
         let (uuid, mut file) =
             index_scheduler.queue.create_update_file_with_uuid(id as u128).unwrap();
-        let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
+        let documents_count = read_json(content.as_bytes(), &mut file, &settings).unwrap();
         assert_eq!(documents_count, 1);
         file.persist().unwrap();
 
@@ -860,6 +877,7 @@ fn test_document_addition_with_multiple_primary_key() {
 #[test]
 fn test_document_addition_with_multiple_primary_key_batch_wrong_key() {
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+    let settings = Settings::default();
 
     for (id, primary_key) in ["id", "bork", "bork"].iter().enumerate() {
         let content = format!(
@@ -870,7 +888,7 @@ fn test_document_addition_with_multiple_primary_key_batch_wrong_key() {
         );
         let (uuid, mut file) =
             index_scheduler.queue.create_update_file_with_uuid(id as u128).unwrap();
-        let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
+        let documents_count = read_json(content.as_bytes(), &mut file, &settings).unwrap();
         assert_eq!(documents_count, 1);
         file.persist().unwrap();
 
@@ -920,6 +938,7 @@ fn test_document_addition_with_multiple_primary_key_batch_wrong_key() {
 #[test]
 fn test_document_addition_with_bad_primary_key() {
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+    let settings = Settings::default();
 
     for (id, primary_key) in ["bork", "bork", "id", "bork", "id"].iter().enumerate() {
         let content = format!(
@@ -930,7 +949,7 @@ fn test_document_addition_with_bad_primary_key() {
         );
         let (uuid, mut file) =
             index_scheduler.queue.create_update_file_with_uuid(id as u128).unwrap();
-        let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
+        let documents_count = read_json(content.as_bytes(), &mut file, &settings).unwrap();
         assert_eq!(documents_count, 1);
         file.persist().unwrap();
 
@@ -1004,6 +1023,7 @@ fn test_document_addition_with_bad_primary_key() {
 #[test]
 fn test_document_addition_with_set_and_null_primary_key() {
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+    let settings = Settings::default();
 
     for (id, primary_key) in
         [None, Some("bork"), Some("paw"), None, None, Some("paw")].into_iter().enumerate()
@@ -1016,7 +1036,7 @@ fn test_document_addition_with_set_and_null_primary_key() {
         );
         let (uuid, mut file) =
             index_scheduler.queue.create_update_file_with_uuid(id as u128).unwrap();
-        let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
+        let documents_count = read_json(content.as_bytes(), &mut file, &settings).unwrap();
         assert_eq!(documents_count, 1);
         file.persist().unwrap();
 
@@ -1090,6 +1110,7 @@ fn test_document_addition_with_set_and_null_primary_key() {
 #[test]
 fn test_document_addition_with_set_and_null_primary_key_inference_works() {
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+    let settings = Settings::default();
 
     for (id, primary_key) in
         [None, Some("bork"), Some("doggoid"), None, None, Some("doggoid")].into_iter().enumerate()
@@ -1102,7 +1123,7 @@ fn test_document_addition_with_set_and_null_primary_key_inference_works() {
         );
         let (uuid, mut file) =
             index_scheduler.queue.create_update_file_with_uuid(id as u128).unwrap();
-        let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
+        let documents_count = read_json(content.as_bytes(), &mut file, &settings).unwrap();
         assert_eq!(documents_count, 1);
         file.persist().unwrap();
 

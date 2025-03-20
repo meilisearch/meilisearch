@@ -9,6 +9,7 @@ use meilisearch_auth::open_auth_store_env;
 use meilisearch_types::document_formats::DocumentFormatError;
 use meilisearch_types::milli::update::IndexDocumentsMethod::ReplaceDocuments;
 use meilisearch_types::milli::update::IndexerConfig;
+use meilisearch_types::settings::{Checked, Settings};
 use meilisearch_types::tasks::KindWithContent;
 use meilisearch_types::{versioning, VERSION_FILE_NAME};
 use tempfile::{NamedTempFile, TempDir};
@@ -199,12 +200,13 @@ pub(crate) fn replace_document_import_task(
 pub(crate) fn read_json(
     bytes: &[u8],
     write: impl Write,
+    setting: &Settings<Checked>,
 ) -> std::result::Result<u64, DocumentFormatError> {
     let temp_file = NamedTempFile::new().unwrap();
     let mut buffer = BufWriter::new(temp_file.reopen().unwrap());
     buffer.write_all(bytes).unwrap();
     buffer.flush().unwrap();
-    meilisearch_types::document_formats::read_json(temp_file.as_file(), write)
+    meilisearch_types::document_formats::read_json(temp_file.as_file(), write, setting)
 }
 
 /// Create an update file with the given file uuid.
@@ -216,6 +218,7 @@ pub(crate) fn sample_documents(
     index_scheduler: &IndexScheduler,
     file_uuid: u128,
     document_id: usize,
+    setting: &Settings<Checked>,
 ) -> (File, u64) {
     let content = format!(
         r#"
@@ -225,7 +228,7 @@ pub(crate) fn sample_documents(
     );
 
     let (_uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(file_uuid).unwrap();
-    let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
+    let documents_count = read_json(content.as_bytes(), &mut file, setting).unwrap();
     (file, documents_count)
 }
 

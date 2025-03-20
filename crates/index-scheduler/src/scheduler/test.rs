@@ -6,7 +6,7 @@ use meilisearch_auth::AuthFilter;
 use meilisearch_types::milli::index::IndexEmbeddingConfig;
 use meilisearch_types::milli::update::IndexDocumentsMethod::*;
 use meilisearch_types::milli::{self};
-use meilisearch_types::settings::SettingEmbeddingSettings;
+use meilisearch_types::settings::{SettingEmbeddingSettings, Settings};
 use meilisearch_types::tasks::{IndexSwap, KindWithContent};
 use roaring::RoaringBitmap;
 
@@ -131,9 +131,10 @@ fn process_tasks_without_autobatching() {
 #[test]
 fn task_deletion_undeleteable() {
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+    let settings = Settings::default();
 
-    let (file0, documents_count0) = sample_documents(&index_scheduler, 0, 0);
-    let (file1, documents_count1) = sample_documents(&index_scheduler, 1, 1);
+    let (file0, documents_count0) = sample_documents(&index_scheduler, 0, 0, &settings);
+    let (file1, documents_count1) = sample_documents(&index_scheduler, 1, 1, &settings);
     file0.persist().unwrap();
     file1.persist().unwrap();
 
@@ -182,9 +183,10 @@ fn task_deletion_undeleteable() {
 #[test]
 fn task_deletion_deleteable() {
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+    let settings = Settings::default();
 
-    let (file0, documents_count0) = sample_documents(&index_scheduler, 0, 0);
-    let (file1, documents_count1) = sample_documents(&index_scheduler, 1, 1);
+    let (file0, documents_count0) = sample_documents(&index_scheduler, 0, 0, &settings);
+    let (file1, documents_count1) = sample_documents(&index_scheduler, 1, 1, &settings);
     file0.persist().unwrap();
     file1.persist().unwrap();
 
@@ -223,9 +225,10 @@ fn task_deletion_deleteable() {
 #[test]
 fn task_deletion_delete_same_task_twice() {
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+    let settings = Settings::default();
 
-    let (file0, documents_count0) = sample_documents(&index_scheduler, 0, 0);
-    let (file1, documents_count1) = sample_documents(&index_scheduler, 1, 1);
+    let (file0, documents_count0) = sample_documents(&index_scheduler, 0, 0, &settings);
+    let (file1, documents_count1) = sample_documents(&index_scheduler, 1, 1, &settings);
     file0.persist().unwrap();
     file1.persist().unwrap();
 
@@ -266,6 +269,7 @@ fn task_deletion_delete_same_task_twice() {
 #[test]
 fn document_addition_and_index_deletion() {
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+    let settings = Settings::default();
 
     let content = r#"
         {
@@ -283,7 +287,7 @@ fn document_addition_and_index_deletion() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
 
     let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(0).unwrap();
-    let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
+    let documents_count = read_json(content.as_bytes(), &mut file, &settings).unwrap();
     file.persist().unwrap();
     index_scheduler
         .register(
@@ -463,6 +467,7 @@ fn swap_indexes_errors() {
 #[test]
 fn document_addition_and_index_deletion_on_unexisting_index() {
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+    let settings = Settings::default();
 
     let content = r#"
         {
@@ -471,7 +476,7 @@ fn document_addition_and_index_deletion_on_unexisting_index() {
         }"#;
 
     let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(0).unwrap();
-    let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
+    let documents_count = read_json(content.as_bytes(), &mut file, &settings).unwrap();
     file.persist().unwrap();
     index_scheduler
         .register(
@@ -501,8 +506,9 @@ fn document_addition_and_index_deletion_on_unexisting_index() {
 #[test]
 fn cancel_enqueued_task() {
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+    let settings = Settings::default();
 
-    let (file0, documents_count0) = sample_documents(&index_scheduler, 0, 0);
+    let (file0, documents_count0) = sample_documents(&index_scheduler, 0, 0, &settings);
     file0.persist().unwrap();
 
     let to_enqueue = [
@@ -525,8 +531,9 @@ fn cancel_enqueued_task() {
 #[test]
 fn cancel_succeeded_task() {
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+    let settings = Settings::default();
 
-    let (file0, documents_count0) = sample_documents(&index_scheduler, 0, 0);
+    let (file0, documents_count0) = sample_documents(&index_scheduler, 0, 0, &settings);
     file0.persist().unwrap();
 
     let _ = index_scheduler
@@ -555,8 +562,9 @@ fn cancel_succeeded_task() {
 #[test]
 fn cancel_processing_task() {
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+    let settings = Settings::default();
 
-    let (file0, documents_count0) = sample_documents(&index_scheduler, 0, 0);
+    let (file0, documents_count0) = sample_documents(&index_scheduler, 0, 0, &settings);
     file0.persist().unwrap();
 
     let _ = index_scheduler
@@ -591,12 +599,13 @@ fn cancel_processing_task() {
 #[test]
 fn cancel_mix_of_tasks() {
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+    let settings = Settings::default();
 
-    let (file0, documents_count0) = sample_documents(&index_scheduler, 0, 0);
+    let (file0, documents_count0) = sample_documents(&index_scheduler, 0, 0, &settings);
     file0.persist().unwrap();
-    let (file1, documents_count1) = sample_documents(&index_scheduler, 1, 1);
+    let (file1, documents_count1) = sample_documents(&index_scheduler, 1, 1, &settings);
     file1.persist().unwrap();
-    let (file2, documents_count2) = sample_documents(&index_scheduler, 2, 2);
+    let (file2, documents_count2) = sample_documents(&index_scheduler, 2, 2, &settings);
     file2.persist().unwrap();
 
     let to_enqueue = [

@@ -18,6 +18,7 @@ use crate::IndexScheduler;
 #[test]
 fn import_vectors() {
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+    let settings = Settings::default();
 
     let mut new_settings: Box<Settings<Unchecked>> = Box::default();
     let mut embedders = BTreeMap::default();
@@ -135,7 +136,7 @@ fn import_vectors() {
     );
 
     let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(0u128).unwrap();
-    let documents_count = read_json(doc.to_string().as_bytes(), &mut file).unwrap();
+    let documents_count = read_json(doc.to_string().as_bytes(), &mut file, &settings).unwrap();
     assert_eq!(documents_count, 1);
     file.persist().unwrap();
 
@@ -209,7 +210,7 @@ fn import_vectors() {
     );
 
     let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(1u128).unwrap();
-    let documents_count = read_json(doc.to_string().as_bytes(), &mut file).unwrap();
+    let documents_count = read_json(doc.to_string().as_bytes(), &mut file, &settings).unwrap();
     assert_eq!(documents_count, 1);
     file.persist().unwrap();
 
@@ -279,6 +280,7 @@ fn import_vectors() {
 #[test]
 fn import_vectors_first_and_embedder_later() {
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+    let settings = Settings::default();
 
     let content = serde_json::json!(
         [
@@ -329,7 +331,8 @@ fn import_vectors_first_and_embedder_later() {
 
     let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(0_u128).unwrap();
     let documents_count =
-        read_json(serde_json::to_string_pretty(&content).unwrap().as_bytes(), &mut file).unwrap();
+        read_json(serde_json::to_string_pretty(&content).unwrap().as_bytes(), &mut file, &settings)
+            .unwrap();
     snapshot!(documents_count, @"5");
     file.persist().unwrap();
 
@@ -460,7 +463,8 @@ fn import_vectors_first_and_embedder_later() {
 
     let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(1_u128).unwrap();
     let documents_count =
-        read_json(serde_json::to_string_pretty(&content).unwrap().as_bytes(), &mut file).unwrap();
+        read_json(serde_json::to_string_pretty(&content).unwrap().as_bytes(), &mut file, &settings)
+            .unwrap();
     snapshot!(documents_count, @"2");
     file.persist().unwrap();
 
@@ -515,6 +519,7 @@ fn delete_document_containing_vector() {
     // 5. Clear the index
     // 6. The user defined roaring bitmap shouldn't contains the id of the second document
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+    let settings = Settings::default();
 
     let setting = meilisearch_types::settings::Settings::<Unchecked> {
         embedders: Setting::Set(maplit::btreemap! {
@@ -561,7 +566,8 @@ fn delete_document_containing_vector() {
 
     let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(0_u128).unwrap();
     let documents_count =
-        read_json(serde_json::to_string_pretty(&content).unwrap().as_bytes(), &mut file).unwrap();
+        read_json(serde_json::to_string_pretty(&content).unwrap().as_bytes(), &mut file, &settings)
+            .unwrap();
     snapshot!(documents_count, @"2");
     file.persist().unwrap();
 
@@ -681,6 +687,7 @@ fn delete_embedder_with_user_provided_vectors() {
     // 3. Delete the embedders
     // 4. The documents contain the vectors again
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+    let settings = Settings::default();
 
     let setting = meilisearch_types::settings::Settings::<Unchecked> {
         embedders: Setting::Set(maplit::btreemap! {
@@ -735,7 +742,8 @@ fn delete_embedder_with_user_provided_vectors() {
 
     let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(0_u128).unwrap();
     let documents_count =
-        read_json(serde_json::to_string_pretty(&content).unwrap().as_bytes(), &mut file).unwrap();
+        read_json(serde_json::to_string_pretty(&content).unwrap().as_bytes(), &mut file, &settings)
+            .unwrap();
     snapshot!(documents_count, @"2");
     file.persist().unwrap();
 
