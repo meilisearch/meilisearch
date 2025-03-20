@@ -317,17 +317,12 @@ pub fn check_document(
     if let Some(coordinate) = document.get(RESERVED_GEO_FIELD_NAME) {
         match extract_geo_coordinates("random".into(), coordinate) {
             Ok(_) => {}
-            Err(milli::Error::UserError(e)) => {
-                return Err(DocumentFormatError::from((payload_type, e)))
-            }
+            Err(milli::Error::UserError(e)) => return Err((payload_type, e).into()),
             Err(milli::Error::InternalError(milli::InternalError::SerdeJson(e))) => {
-                return Err(DocumentFormatError::from((payload_type, e)))
+                return Err((payload_type, e).into())
             }
-            Err(e) => {
-                return Err(DocumentFormatError::from(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "Invalid _geo field",
-                )))
+            Err(_) => {
+                return Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid _geo field").into())
             }
         }
     }
@@ -350,45 +345,50 @@ pub fn check_document(
         let expected_embeddings: Vec<String> = _embedders.keys().cloned().collect();
         let embeddings: Vec<&str> = vectors.keys().collect();
         if expected_embeddings.iter().map(|s| s.as_str()).collect::<Vec<&str>>() != embeddings {
-            return Err(DocumentFormatError::from((
+            return Err((
                 payload_type,
                 DocumentEmbeddingError(format!(
                     "expected : {0:?}, actual : {1:?}",
                     expected_embeddings, embeddings
                 )),
-            )));
+            )
+                .into());
         }
     }
 
     for (key, value) in vectors {
         let Setting::Set(ref _embedders) = embedders else {
-            return Err(DocumentFormatError::from((
+            return Err((
                 payload_type,
                 DocumentEmbeddingError("concerned index doesn't support vector embedding".into()),
-            )));
+            )
+                .into());
         };
 
         let Some(setting_embedding_settings) = _embedders.get(key) else {
-            return Err(DocumentFormatError::from((
+            return Err((
                 payload_type,
                 DocumentEmbeddingError(format!("embedder \"{0}\" not found", key)),
-            )));
+            )
+                .into());
         };
 
         let Setting::Set(embedding_settings) = &setting_embedding_settings.inner else {
-            return Err(DocumentFormatError::from((
+            return Err((
                 payload_type,
                 DocumentEmbeddingError(format!("embedder \"{0}\" not configured yet", key)),
-            )));
+            )
+                .into());
         };
 
         match embedding_settings.source {
             Setting::Set(EmbedderSource::UserProvided) => {
                 let Setting::Set(ref _dimensions) = embedding_settings.dimensions else {
-                    return Err(DocumentFormatError::from((
+                    return Err((
                         payload_type,
                         DocumentEmbeddingError("embedding setting dimesnions is not set".into()),
-                    )));
+                    )
+                        .into());
                 };
 
                 let vector = RawVectors::from_raw_value(value).map_err(|e| {
@@ -403,13 +403,14 @@ pub fn check_document(
                                 let embedding: Embedding =
                                     serde_json::from_str(_embeddings.get()).unwrap();
                                 if embedding.len() != *_dimensions {
-                                    return Err(DocumentFormatError::from((
+                                    return Err((
                                         payload_type,
                                         InvalidVectorDimensions {
                                             expected: *_dimensions,
                                             found: embedding.len(),
                                         },
-                                    )));
+                                    )
+                                        .into());
                                 }
                             }
                             None => return Ok(()),
