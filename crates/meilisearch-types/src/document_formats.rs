@@ -10,7 +10,9 @@ use milli::documents::Error;
 use milli::vector::parsed_vectors::RawVectors;
 use milli::vector::settings::EmbedderSource;
 use milli::vector::Embedding;
-use milli::{Object, UserError};
+use milli::{
+    Object, UserError, UserError::DocumentEmbeddingError, UserError::InvalidVectorDimensions,
+};
 use rustc_hash::FxBuildHasher;
 use serde::de::{SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer};
@@ -21,6 +23,7 @@ use serde_json::{to_writer, Map, Value};
 use crate::error::{Code, ErrorCode};
 use crate::settings::{Checked, Settings};
 use milli::constants::{RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME};
+use milli::update::new::extract_geo_coordinates;
 use milli::update::Setting;
 
 type Result<T> = std::result::Result<T, DocumentFormatError>;
@@ -96,6 +99,12 @@ impl From<(PayloadType, Error)> for DocumentFormatError {
             Error::Io(e) => Self::Io(e),
             e => Self::MalformedPayload(e, ty),
         }
+    }
+}
+
+impl From<(PayloadType, UserError)> for DocumentFormatError {
+    fn from((ty, error): (PayloadType, UserError)) -> Self {
+        Self::MalformedPayload(milli::documents::Error::InvalidDocumentPayload { error }, ty)
     }
 }
 
@@ -224,21 +233,25 @@ pub fn read_json(input: &File, output: impl io::Write, setting: &Settings<Checke
     let mut doc_alloc = Bump::with_capacity(1024 * 1024); // 1MiB
 
     let mut out = BufWriter::new(output);
+    let mut check_error = None;
     let mut deserializer = serde_json::Deserializer::from_slice(&input);
     let res = array_each(&mut deserializer, |obj: &RawValue| {
         doc_alloc.reset();
         let map = RawMap::from_raw_value_and_hasher(obj, FxBuildHasher, &doc_alloc)?;
-        match check_object(&map, setting) {
-            Ok(()) => {}
+        match check_document(PayloadType::Json, &map, setting) {
+            Ok(_) => {}
             Err(e) => {
-                return Err(serde_json::Error::io(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    e.to_string(),
-                )));
+                check_error = Some(e);
+                return Ok(());
             }
         }
         to_writer(&mut out, &map)
     });
+
+    if let Some(e) = check_error {
+        return Err(e);
+    }
+
     let count = match res {
         // The json data has been deserialized and does not need to be processed again.
         // The data has been transferred to the writer during the deserialization process.
@@ -281,14 +294,9 @@ pub fn read_ndjson(input: &File, setting: &Settings<Checked>) -> Result<u64> {
                 // try to deserialize as a map
                 let map = RawMap::from_raw_value_and_hasher(raw, FxBuildHasher, &bump)
                     .map_err(|e| DocumentFormatError::from((PayloadType::Ndjson, e)))?;
-                match check_object(&map, setting) {
-                    Ok(()) => {}
-                    Err(e) => {
-                        return Err(DocumentFormatError::from((
-                            PayloadType::Ndjson,
-                            Error::InvalidDocumentPayload { error: e },
-                        )))
-                    }
+                match check_document(PayloadType::Ndjson, &map, setting) {
+                    Ok(_) => {}
+                    Err(e) => return Err(e),
                 }
                 count += 1;
             }
@@ -300,12 +308,29 @@ pub fn read_ndjson(input: &File, setting: &Settings<Checked>) -> Result<u64> {
 }
 
 // check json object validity
-pub fn check_object(
+pub fn check_document(
+    payload_type: PayloadType,
     document: &RawMap<'_, FxBuildHasher>,
     setting: &Settings<Checked>,
-) -> std::result::Result<(), UserError> {
+) -> Result<()> {
     println!("{:?}", document.get(RESERVED_GEO_FIELD_NAME));
-    // TODO: check geo fields
+    if let Some(coordinate) = document.get(RESERVED_GEO_FIELD_NAME) {
+        match extract_geo_coordinates("random".into(), coordinate) {
+            Ok(_) => {}
+            Err(milli::Error::UserError(e)) => {
+                return Err(DocumentFormatError::from((payload_type, e)))
+            }
+            Err(milli::Error::InternalError(milli::InternalError::SerdeJson(e))) => {
+                return Err(DocumentFormatError::from((payload_type, e)))
+            }
+            Err(e) => {
+                return Err(DocumentFormatError::from(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "Invalid _geo field",
+                )))
+            }
+        }
+    }
 
     let bump = Bump::with_capacity(1024 * 1024);
 
@@ -315,7 +340,7 @@ pub fn check_object(
         Some(_vectors) => {
             println!("vectors : {:?}", _vectors);
             vectors = RawMap::from_raw_value_and_hasher(_vectors, FxBuildHasher, &bump)
-                .map_err(|e| UserError::SerdeJson(e))?
+                .map_err(|e| DocumentFormatError::from((payload_type, e)))?
         }
         None => vectors = RawMap::with_hasher_in(FxBuildHasher, &bump),
     }
@@ -325,42 +350,50 @@ pub fn check_object(
         let expected_embeddings: Vec<String> = _embedders.keys().cloned().collect();
         let embeddings: Vec<&str> = vectors.keys().collect();
         if expected_embeddings.iter().map(|s| s.as_str()).collect::<Vec<&str>>() != embeddings {
-            return Err(UserError::DocumentEmbeddingError(format!(
-                "expected : {0:?}, actual : {1:?}",
-                expected_embeddings, embeddings
+            return Err(DocumentFormatError::from((
+                payload_type,
+                DocumentEmbeddingError(format!(
+                    "expected : {0:?}, actual : {1:?}",
+                    expected_embeddings, embeddings
+                )),
             )));
         }
     }
 
     for (key, value) in vectors {
         let Setting::Set(ref _embedders) = embedders else {
-            return Err(UserError::DocumentEmbeddingError(
-                "concerned index doesn't support vector embedding".into(),
-            ));
+            return Err(DocumentFormatError::from((
+                payload_type,
+                DocumentEmbeddingError("concerned index doesn't support vector embedding".into()),
+            )));
         };
 
         let Some(setting_embedding_settings) = _embedders.get(key) else {
-            return Err(UserError::DocumentEmbeddingError(format!(
-                "embedder \"{0}\" not found",
-                key
+            return Err(DocumentFormatError::from((
+                payload_type,
+                DocumentEmbeddingError(format!("embedder \"{0}\" not found", key)),
             )));
         };
 
         let Setting::Set(embedding_settings) = &setting_embedding_settings.inner else {
-            return Err(UserError::DocumentEmbeddingError(format!(
-                "embedder \"{0}\" not configured yet",
-                key
+            return Err(DocumentFormatError::from((
+                payload_type,
+                DocumentEmbeddingError(format!("embedder \"{0}\" not configured yet", key)),
             )));
         };
 
         match embedding_settings.source {
             Setting::Set(EmbedderSource::UserProvided) => {
                 let Setting::Set(ref _dimensions) = embedding_settings.dimensions else {
-                    return Err(UserError::DocumentEmbeddingError("".into()));
+                    return Err(DocumentFormatError::from((
+                        payload_type,
+                        DocumentEmbeddingError("embedding setting is not set".into()),
+                    )));
                 };
 
-                let vector = RawVectors::from_raw_value(value)
-                    .map_err(|e| UserError::DocumentEmbeddingError(e.msg(key)))?;
+                let vector = RawVectors::from_raw_value(value).map_err(|e| {
+                    DocumentFormatError::from((payload_type, DocumentEmbeddingError(e.msg(key))))
+                })?;
 
                 match vector {
                     RawVectors::Explicit(_vector) => {
@@ -370,10 +403,13 @@ pub fn check_object(
                                 let embedding: Embedding =
                                     serde_json::from_str(_embeddings.get()).unwrap();
                                 if embedding.len() != *_dimensions {
-                                    return Err(UserError::InvalidVectorDimensions {
-                                        expected: *_dimensions,
-                                        found: embedding.len(),
-                                    });
+                                    return Err(DocumentFormatError::from((
+                                        payload_type,
+                                        InvalidVectorDimensions {
+                                            expected: *_dimensions,
+                                            found: embedding.len(),
+                                        },
+                                    )));
                                 }
                             }
                             None => return Ok(()),

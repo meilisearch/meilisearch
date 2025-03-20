@@ -11,6 +11,7 @@ mod channel;
 pub mod document;
 mod document_change;
 mod extract;
+pub use extract::extract_geo_coordinates;
 mod facet_search_builder;
 mod fst_merger_builder;
 pub mod indexer;
