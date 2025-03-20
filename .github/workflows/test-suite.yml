@@ -6,6 +6,7 @@ on:
     # Everyday at 5:00am
     - cron: "0 5 * * *"
   pull_request:
+  merge_group:
   push:
     # trying and staging branches are for Bors config
     branches:
