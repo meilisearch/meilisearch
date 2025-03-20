@@ -1414,10 +1414,10 @@ async fn error_remote_does_not_answer() {
       "estimatedTotalHits": 3,
       "remoteErrors": {
         "ms2": {
-          "message": "error sending request",
-          "code": "remote_could_not_send_request",
+          "message": "remote host did not answer before the deadline",
+          "code": "remote_timeout",
           "type": "system",
-          "link": "https://docs.meilisearch.com/errors#remote_could_not_send_request"
+          "link": "https://docs.meilisearch.com/errors#remote_timeout"
         }
       }
     }
