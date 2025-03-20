@@ -398,8 +398,8 @@ pub fn check_document(
                 match vector {
                     RawVectors::Explicit(_vector) => match _vector.embeddings {
                         Some(_embeddings) => {
-                            let embedding: Embedding =
-                                serde_json::from_str(_embeddings.get()).unwrap();
+                            let embedding: Embedding = serde_json::from_str(_embeddings.get())
+                                .map_err(|e| DocumentFormatError::from((payload_type, e)))?;
                             if embedding.len() != *_dimensions {
                                 return Err((
                                     payload_type,
