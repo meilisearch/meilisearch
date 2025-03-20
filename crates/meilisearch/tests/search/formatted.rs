@@ -74,7 +74,7 @@ async fn formatted_contain_wildcard() {
             allow_duplicates! {
               assert_json_snapshot!(response["hits"][0],
                     { "._rankingScore" => "[score]" },
-                    @r###"
+                    @r#"
               {
                 "_formatted": {
                   "id": "852",
@@ -84,12 +84,12 @@ async fn formatted_contain_wildcard() {
                   "cattos": [
                     {
                       "start": 0,
-                      "length": 5
+                      "length": 6
                     }
                   ]
                 }
               }
-              "###);
+              "#);
             }
     }
     )
@@ -119,7 +119,7 @@ async fn formatted_contain_wildcard() {
                 allow_duplicates! {
                   assert_json_snapshot!(response["hits"][0],
                  { "._rankingScore" => "[score]" },
-                 @r###"
+                 @r#"
                   {
                     "id": 852,
                     "cattos": "pésti",
@@ -131,12 +131,12 @@ async fn formatted_contain_wildcard() {
                       "cattos": [
                         {
                           "start": 0,
-                          "length": 5
+                          "length": 6
                         }
                       ]
                     }
                   }
-                  "###)
+                  "#)
              }
         })
         .await;
