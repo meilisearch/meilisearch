@@ -396,29 +396,25 @@ pub fn check_document(
                 })?;
 
                 match vector {
-                    RawVectors::Explicit(_vector) => {
-                        println!("explicit vector : {:?}", _vector);
-                        match _vector.embeddings {
-                            Some(_embeddings) => {
-                                let embedding: Embedding =
-                                    serde_json::from_str(_embeddings.get()).unwrap();
-                                if embedding.len() != *_dimensions {
-                                    return Err((
-                                        payload_type,
-                                        InvalidVectorDimensions {
-                                            expected: *_dimensions,
-                                            found: embedding.len(),
-                                        },
-                                    )
-                                        .into());
-                                }
+                    RawVectors::Explicit(_vector) => match _vector.embeddings {
+                        Some(_embeddings) => {
+                            let embedding: Embedding =
+                                serde_json::from_str(_embeddings.get()).unwrap();
+                            if embedding.len() != *_dimensions {
+                                return Err((
+                                    payload_type,
+                                    InvalidVectorDimensions {
+                                        expected: *_dimensions,
+                                        found: embedding.len(),
+                                    },
+                                )
+                                    .into());
                             }
-                            None => return Ok(()),
                         }
-                    }
+                        None => return Ok(()),
+                    },
                     RawVectors::ImplicitlyUserProvided(_vector) => {
                         //TODO:treat the case of implicit vector
-                        println!("implicit vector : {:?}", _vector);
                         return Ok(());
                     }
                 }
