@@ -314,7 +314,6 @@ pub fn check_document(
     document: &RawMap<'_, FxBuildHasher>,
     setting: &Settings<Checked>,
 ) -> Result<()> {
-    println!("{:?}", document.get(RESERVED_GEO_FIELD_NAME));
     if let Some(coordinate) = document.get(RESERVED_GEO_FIELD_NAME) {
         match extract_geo_coordinates("random".into(), coordinate) {
             Ok(_) => {}
@@ -397,6 +396,7 @@ pub fn check_document(
                 match vector {
                     RawVectors::Explicit(_vector) => match _vector.embeddings {
                         Some(_embeddings) => {
+                            println!("explict vector");
                             let embedding: Embedding = serde_json::from_str(_embeddings.get())
                                 .map_err(|e| DocumentFormatError::from((payload_type, e)))?;
                             if embedding.len() != *_dimensions {
@@ -414,6 +414,7 @@ pub fn check_document(
                     },
                     RawVectors::ImplicitlyUserProvided(_vector) => {
                         //TODO:treat the case of implicit vector
+                        println!("implicit vector");
                         return Ok(());
                     }
                 }

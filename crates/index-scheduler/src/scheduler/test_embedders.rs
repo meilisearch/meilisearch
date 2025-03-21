@@ -19,7 +19,7 @@ use crate::IndexScheduler;
 fn import_vectors() {
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
-    let settings: Box<Settings<Checked>> = Box::default();
+    let mut settings: Box<Settings<Checked>> = Box::default();
     let mut embedders = BTreeMap::default();
     let embedding_settings = milli::vector::settings::EmbeddingSettings {
         source: Setting::Set(milli::vector::settings::EmbedderSource::Rest),
@@ -46,6 +46,8 @@ fn import_vectors() {
         S("B_small_hf"),
         SettingEmbeddingSettings { inner: Setting::Set(embedding_settings) },
     );
+
+    settings.embedders = Setting::Set(embedders);
 
     index_scheduler
         .register(
