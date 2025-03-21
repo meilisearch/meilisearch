@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fmt::{self, Debug, Display};
 use std::fs::File;
 use std::io::{self, BufWriter};
@@ -330,10 +331,8 @@ pub fn check_document(
     let bump = Bump::with_capacity(1024 * 1024);
 
     let vectors: RawMap<'_, FxBuildHasher>;
-    println!("getting vectors");
     match document.get(RESERVED_VECTORS_FIELD_NAME) {
         Some(_vectors) => {
-            println!("vectors : {:?}", _vectors);
             vectors = RawMap::from_raw_value_and_hasher(_vectors, FxBuildHasher, &bump)
                 .map_err(|e| DocumentFormatError::from((payload_type, e)))?
         }
@@ -343,8 +342,8 @@ pub fn check_document(
 
     if let Setting::Set(ref _embedders) = embedders {
         let expected_embeddings: Vec<String> = _embedders.keys().cloned().collect();
-        let embeddings: Vec<&str> = vectors.keys().collect();
-        if expected_embeddings.iter().map(|s| s.as_str()).collect::<Vec<&str>>() != embeddings {
+        let embeddings: HashSet<&str> = vectors.keys().collect();
+        if expected_embeddings.iter().map(|s| s.as_str()).collect::<HashSet<&str>>() != embeddings {
             return Err((
                 payload_type,
                 DocumentEmbeddingError(format!(
