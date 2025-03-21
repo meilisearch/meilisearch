@@ -64,6 +64,8 @@ mod open_api_utils;
 mod snapshot;
 mod swap_indexes;
 pub mod tasks;
+#[cfg(test)]
+mod tasks_test;
 
 #[derive(OpenApi)]
 #[openapi(
