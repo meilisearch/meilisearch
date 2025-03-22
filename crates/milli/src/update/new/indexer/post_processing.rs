@@ -78,7 +78,7 @@ fn compute_word_fst(index: &Index, wtxn: &mut RwTxn) -> Result<Option<PrefixDelt
             EitherOrBoth::Both(lhs, rhs) => {
                 let (word, lhs_bytes) = lhs?;
                 let (_, rhs_bytes) = rhs?;
-                if lhs_bytes != rhs_bytes {
+                if lhs_bytes != rhs_bytes || modified_fid_docids_databases(index, wtxn, word)? {
                     word_fst_builder.register_word(DelAdd::Addition, word.as_ref())?;
                 }
             }
@@ -105,6 +105,43 @@ fn compute_word_fst(index: &Index, wtxn: &mut RwTxn) -> Result<Option<PrefixDelt
     } else {
         Ok(None)
     }
+}
+
+/// Compare the fid docids databases for a given word
+/// and register the changes in the word fst builder if there is any difference
+fn modified_fid_docids_databases(index: &Index, wtxn: &RwTxn, word: &str) -> Result<bool> {
+    let rtxn = index.read_txn()?;
+    let previous_words =
+        index.word_fid_docids.remap_types::<Bytes, Bytes>().prefix_iter(&rtxn, word.as_bytes())?;
+    let current_words =
+        index.word_fid_docids.remap_types::<Bytes, Bytes>().prefix_iter(wtxn, word.as_bytes())?;
+
+    for eob in merge_join_by(previous_words, current_words, |lhs, rhs| match (lhs, rhs) {
+        (Ok((l, _)), Ok((r, _))) => l.cmp(r),
+        (Err(_), _) | (_, Err(_)) => Ordering::Equal,
+    }) {
+        match eob {
+            EitherOrBoth::Both(lhs, rhs) => {
+                let (_key_bytes, lhs_bytes) = lhs?;
+                let (_, rhs_bytes) = rhs?;
+
+                if lhs_bytes != rhs_bytes {
+                    return Ok(true);
+                }
+            }
+            EitherOrBoth::Left(result) => {
+                let (_key_bytes, _) = result?;
+
+                return Ok(true);
+            }
+            EitherOrBoth::Right(result) => {
+                let (_key_bytes, _) = result?;
+
+                return Ok(true);
+            }
+        }
+    }
+    Ok(false)
 }
 
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::facet_search")]
