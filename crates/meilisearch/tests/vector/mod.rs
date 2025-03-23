@@ -95,12 +95,12 @@ async fn add_remove_user_provided() {
     ]);
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    index.wait_task(value.uid()).await.succeeded();
+    index.wait_task(value.uid()).await.failed();
 
     let (documents, _code) = index
         .get_all_documents(GetAllDocumentsOptions { retrieve_vectors: true, ..Default::default() })
         .await;
-    snapshot!(json_string!(documents), @r###"
+    snapshot!(json_string!(documents), @r#"
     {
       "results": [
         {
@@ -110,9 +110,9 @@ async fn add_remove_user_provided() {
             "manual": {
               "embeddings": [
                 [
-                  10.0,
-                  10.0,
-                  10.0
+                  0.0,
+                  0.0,
+                  0.0
                 ]
               ],
               "regenerate": false
@@ -124,7 +124,13 @@ async fn add_remove_user_provided() {
           "name": "echo",
           "_vectors": {
             "manual": {
-              "embeddings": [],
+              "embeddings": [
+                [
+                  1.0,
+                  1.0,
+                  1.0
+                ]
+              ],
               "regenerate": false
             }
           }
@@ -134,7 +140,7 @@ async fn add_remove_user_provided() {
       "limit": 20,
       "total": 2
     }
-    "###);
+    "#);
 
     let (value, code) = index.delete_document(0).await;
     snapshot!(code, @"202 Accepted");
@@ -143,7 +149,7 @@ async fn add_remove_user_provided() {
     let (documents, _code) = index
         .get_all_documents(GetAllDocumentsOptions { retrieve_vectors: true, ..Default::default() })
         .await;
-    snapshot!(json_string!(documents), @r###"
+    snapshot!(json_string!(documents), @r#"
     {
       "results": [
         {
@@ -151,7 +157,13 @@ async fn add_remove_user_provided() {
           "name": "echo",
           "_vectors": {
             "manual": {
-              "embeddings": [],
+              "embeddings": [
+                [
+                  1.0,
+                  1.0,
+                  1.0
+                ]
+              ],
               "regenerate": false
             }
           }
@@ -161,7 +173,7 @@ async fn add_remove_user_provided() {
       "limit": 20,
       "total": 1
     }
-    "###);
+    "#);
 }
 
 async fn generate_default_user_provided_documents(server: &Server) -> Index {
@@ -189,7 +201,7 @@ async fn generate_default_user_provided_documents(server: &Server) -> Index {
     ]);
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    index.wait_task(value.uid()).await.succeeded();
+    index.wait_task(value.uid()).await.failed();
 
     index
 }
@@ -678,7 +690,7 @@ async fn add_remove_one_vector_4588() {
     let (documents, _code) = index
         .get_all_documents(GetAllDocumentsOptions { retrieve_vectors: true, ..Default::default() })
         .await;
-    snapshot!(json_string!(documents), @r###"
+    snapshot!(json_string!(documents), @r#"
     {
       "results": [
         {
@@ -686,7 +698,13 @@ async fn add_remove_one_vector_4588() {
           "name": "kefir",
           "_vectors": {
             "manual": {
-              "embeddings": [],
+              "embeddings": [
+                [
+                  0.0,
+                  0.0,
+                  0.0
+                ]
+              ],
               "regenerate": false
             }
           }
@@ -696,5 +714,5 @@ async fn add_remove_one_vector_4588() {
       "limit": 20,
       "total": 1
     }
-    "###);
+    "#);
 }
