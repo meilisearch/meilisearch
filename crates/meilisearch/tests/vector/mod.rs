@@ -95,7 +95,7 @@ async fn add_remove_user_provided() {
     ]);
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    index.wait_task(value.uid()).await.failed();
+    index.wait_task(value.uid()).await.succeeded();
 
     let (documents, _code) = index
         .get_all_documents(GetAllDocumentsOptions { retrieve_vectors: true, ..Default::default() })
@@ -110,9 +110,9 @@ async fn add_remove_user_provided() {
             "manual": {
               "embeddings": [
                 [
-                  0.0,
-                  0.0,
-                  0.0
+                  10.0,
+                  10.0,
+                  10.0
                 ]
               ],
               "regenerate": false
@@ -124,13 +124,7 @@ async fn add_remove_user_provided() {
           "name": "echo",
           "_vectors": {
             "manual": {
-              "embeddings": [
-                [
-                  1.0,
-                  1.0,
-                  1.0
-                ]
-              ],
+              "embeddings": [],
               "regenerate": false
             }
           }
@@ -157,13 +151,7 @@ async fn add_remove_user_provided() {
           "name": "echo",
           "_vectors": {
             "manual": {
-              "embeddings": [
-                [
-                  1.0,
-                  1.0,
-                  1.0
-                ]
-              ],
+              "embeddings": [],
               "regenerate": false
             }
           }
@@ -748,13 +736,7 @@ async fn add_remove_one_vector_4588() {
           "name": "kefir",
           "_vectors": {
             "manual": {
-              "embeddings": [
-                [
-                  0.0,
-                  0.0,
-                  0.0
-                ]
-              ],
+              "embeddings": [],
               "regenerate": false
             }
           }
