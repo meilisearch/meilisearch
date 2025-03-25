@@ -24,7 +24,7 @@
 </p>
 
 <p align="center" name="ph-banner">
-  <a href="https://www.producthunt.com/products/meilisearch-ai">
+  <a href="https://www.producthunt.com/posts/meilisearch-ai">
     <img src="assets/ph-banner.png" alt="Meilisearch AI-powered search general availability announcement on ProductHunt">
   </a>
 </p>
