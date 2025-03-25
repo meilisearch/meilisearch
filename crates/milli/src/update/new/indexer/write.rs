@@ -218,7 +218,8 @@ pub fn write_from_bbqueue(
                     arroy_writers.get(&embedder_id).expect("requested a missing embedder");
                 let mut embeddings = Embeddings::new(*dimensions);
                 let all_embeddings = asvs.read_all_embeddings_into_vec(frame, aligned_embedding);
-                if all_embeddings.len() != *dimensions {
+                // FIXME: /!\ Case where #embeddings is divisor of `dimensions` would still pass
+                if all_embeddings.len() % *dimensions != 0 {
                     return Err(Error::UserError(UserError::InvalidVectorDimensions {
                         expected: *dimensions,
                         found: all_embeddings.len(),
