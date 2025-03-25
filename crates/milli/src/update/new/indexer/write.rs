@@ -219,7 +219,7 @@ pub fn write_from_bbqueue(
                 let mut embeddings = Embeddings::new(*dimensions);
                 let all_embeddings = asvs.read_all_embeddings_into_vec(frame, aligned_embedding);
                 // FIXME: /!\ Case where #embeddings is divisor of `dimensions` would still pass
-                if all_embeddings.len() % *dimensions != 0 {
+                if *dimensions!= 0 && all_embeddings.len() % *dimensions != 0 {
                     return Err(Error::UserError(UserError::InvalidVectorDimensions {
                         expected: *dimensions,
                         found: all_embeddings.len(),

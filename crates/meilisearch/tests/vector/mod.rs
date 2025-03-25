@@ -201,7 +201,7 @@ async fn generate_default_user_provided_documents(server: &Server) -> Index {
     ]);
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    index.wait_task(value.uid()).await.failed();
+    index.wait_task(value.uid()).await.succeeded();
 
     index
 }
