@@ -230,7 +230,7 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
                 .iter()
                 .map(|m| MatchBounds {
                     start: tokens[m.get_first_token_pos()].byte_start,
-                    length: self.calc_byte_length(&tokens, m),
+                    length: self.calc_byte_length(tokens, m),
                     indices: if array_indices.is_empty() {
                         None
                     } else {
@@ -241,7 +241,7 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
         }
     }
 
-    fn calc_byte_length(&self, tokens: &Vec<Token<'t>>, m: &Match) -> usize {
+    fn calc_byte_length(&self, tokens: &[Token<'t>], m: &Match) -> usize {
         (m.get_first_token_pos()..=m.get_last_token_pos())
             .flat_map(|i| match &tokens[i].char_map {
                 Some(char_map) => {
