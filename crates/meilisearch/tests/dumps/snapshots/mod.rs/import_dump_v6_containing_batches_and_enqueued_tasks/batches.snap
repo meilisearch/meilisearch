@@ -22,6 +22,7 @@ source: crates/meilisearch/tests/dumps/mod.rs
           "kefir": 1
         },
         "progressTrace": "[progressTrace]",
+        "internalDatabaseSizes": "[internalDatabaseSizes]",
         "writeChannelCongestion": "[writeChannelCongestion]"
       },
       "duration": "[date]",

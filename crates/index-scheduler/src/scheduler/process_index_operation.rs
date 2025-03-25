@@ -32,7 +32,7 @@ impl IndexScheduler {
         index_wtxn: &mut RwTxn<'i>,
         index: &'i Index,
         operation: IndexOperation,
-        progress: Progress,
+        progress: &Progress,
     ) -> Result<(Vec<Task>, Option<ChannelCongestion>)> {
         let indexer_alloc = Bump::new();
         let started_processing_at = std::time::Instant::now();
@@ -186,7 +186,7 @@ impl IndexScheduler {
                             &document_changes,
                             embedders,
                             &|| must_stop_processing.get(),
-                            &progress,
+                            progress,
                         )
                         .map_err(|e| Error::from_milli(e, Some(index_uid.clone())))?,
                     );
@@ -307,7 +307,7 @@ impl IndexScheduler {
                             &document_changes,
                             embedders,
                             &|| must_stop_processing.get(),
-                            &progress,
+                            progress,
                         )
                         .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?,
                     );
@@ -465,7 +465,7 @@ impl IndexScheduler {
                             &document_changes,
                             embedders,
                             &|| must_stop_processing.get(),
-                            &progress,
+                            progress,
                         )
                         .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?,
                     );
@@ -520,7 +520,7 @@ impl IndexScheduler {
                         index_uid: index_uid.clone(),
                         tasks: cleared_tasks,
                     },
-                    progress.clone(),
+                    progress,
                 )?;
 
                 let (settings_tasks, _congestion) = self.apply_index_operation(

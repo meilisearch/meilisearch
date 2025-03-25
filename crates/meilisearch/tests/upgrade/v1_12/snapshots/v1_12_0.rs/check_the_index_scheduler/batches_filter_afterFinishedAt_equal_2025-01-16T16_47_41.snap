@@ -19,7 +19,8 @@ source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
           "upgradeDatabase": 1
         },
         "indexUids": {},
-        "progressTrace": "[progressTrace]"
+        "progressTrace": "[progressTrace]",
+        "internalDatabaseSizes": "[internalDatabaseSizes]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",

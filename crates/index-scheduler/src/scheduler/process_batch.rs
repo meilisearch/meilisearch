@@ -12,7 +12,7 @@ use roaring::RoaringBitmap;
 
 use super::create_batch::Batch;
 use crate::processing::{
-    AtomicBatchStep, AtomicTaskStep, CreateIndexProgress, DeleteIndexProgress,
+    AtomicBatchStep, AtomicTaskStep, CreateIndexProgress, DeleteIndexProgress, FinalizingIndexStep,
     InnerSwappingTwoIndexes, SwappingTheIndexes, TaskCancelationProgress, TaskDeletionProgress,
     UpdateIndexProgress,
 };
@@ -151,9 +151,10 @@ impl IndexScheduler {
                 let mut index_wtxn = index.write_txn()?;
                 let pre_commit_dabases_sizes = index.database_sizes(&index_wtxn)?;
                 let (tasks, congestion) =
-                    self.apply_index_operation(&mut index_wtxn, &index, op, progress)?;
+                    self.apply_index_operation(&mut index_wtxn, &index, op, &progress)?;
 
                 {
+                    progress.update_progress(FinalizingIndexStep::Committing);
                     let span = tracing::trace_span!(target: "indexing::scheduler", "commit");
                     let _entered = span.enter();
 
@@ -166,6 +167,7 @@ impl IndexScheduler {
                 // the entire batch.
                 let mut post_commit_dabases_sizes = None;
                 let res = || -> Result<()> {
+                    progress.update_progress(FinalizingIndexStep::ComputingStats);
                     let index_rtxn = index.read_txn()?;
                     let stats = crate::index_mapper::IndexStats::new(&index, &index_rtxn)
                         .map_err(|e| Error::from_milli(e, Some(index_uid.to_string())))?;
