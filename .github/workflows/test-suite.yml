@@ -6,11 +6,7 @@ on:
     # Everyday at 5:00am
     - cron: "0 5 * * *"
   pull_request:
-  push:
-    # trying and staging branches are for Bors config
-    branches:
-      - trying
-      - staging
+  merge_group:
 
 env:
   CARGO_TERM_COLOR: always
