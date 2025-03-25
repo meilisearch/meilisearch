@@ -5,6 +5,7 @@ use std::path::Path;
 
 use heed::{types::*, DatabaseStat, WithoutTls};
 use heed::{CompactionOption, Database, RoTxn, RwTxn, Unspecified};
+use indexmap::IndexMap;
 use roaring::RoaringBitmap;
 use rstar::RTree;
 use serde::{Deserialize, Serialize};
@@ -1770,7 +1771,7 @@ impl Index {
     }
 
     /// Returns the sizes in bytes of each of the index database at the given rtxn.
-    pub fn database_sizes(&self, rtxn: &RoTxn<'_>) -> Result<HashMap<&'static str, usize>> {
+    pub fn database_sizes(&self, rtxn: &RoTxn<'_>) -> heed::Result<IndexMap<&'static str, usize>> {
         let Self {
             env: _,
             main,
@@ -1812,7 +1813,7 @@ impl Index {
             (branch_pages + leaf_pages + overflow_pages) * page_size as usize
         }
 
-        let mut sizes = HashMap::new();
+        let mut sizes = IndexMap::new();
         sizes.insert("main", main.stat(rtxn).map(compute_size)?);
         sizes
             .insert("external_documents_ids", external_documents_ids.stat(rtxn).map(compute_size)?);
