@@ -5,19 +5,14 @@ source: crates/meilisearch/tests/vector/mod.rs
   "uid": "[uid]",
   "batchUid": "[batch_uid]",
   "indexUid": "doggo",
-  "status": "failed",
+  "status": "succeeded",
   "type": "documentAdditionOrUpdate",
   "canceledBy": null,
   "details": {
     "receivedDocuments": 1,
-    "indexedDocuments": 0
+    "indexedDocuments": 1
   },
-  "error": {
-    "message": "Index `doggo`: Invalid vector dimensions: expected: `3`, found: `0`.",
-    "code": "invalid_vector_dimensions",
-    "type": "invalid_request",
-    "link": "https://docs.meilisearch.com/errors#invalid_vector_dimensions"
-  },
+  "error": null,
   "duration": "[duration]",
   "enqueuedAt": "[date]",
   "startedAt": "[date]",
