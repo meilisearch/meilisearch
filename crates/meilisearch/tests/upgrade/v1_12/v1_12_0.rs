@@ -166,7 +166,7 @@ async fn check_the_index_scheduler(server: &Server) {
     let (tasks, _) = server.tasks_filter("limit=1000").await;
     snapshot!(json_string!(tasks, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]" }), name: "the_whole_task_queue_once_everything_has_been_processed");
     let (batches, _) = server.batches_filter("limit=1000").await;
-    snapshot!(json_string!(batches, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]", ".results[0].stats.progressTrace" => "[progressTrace]", ".results[0].stats.internalDatabaseSizes" => "[internalDatabaseSizes]", ".results[0].stats.writeChannelCongestion" => "[writeChannelCongestion]" }), name: "the_whole_batch_queue_once_everything_has_been_processed");
+    snapshot!(json_string!(batches, { ".results[0].duration" => "[duration]", ".results[0].enqueuedAt" => "[date]", ".results[0].startedAt" => "[date]", ".results[0].finishedAt" => "[date]", ".results[0].stats.progressTrace" => "[progressTrace]", ".results[0].stats.writeChannelCongestion" => "[writeChannelCongestion]" }), name: "the_whole_batch_queue_once_everything_has_been_processed");
 
     // Tests all the tasks query parameters
     let (tasks, _) = server.tasks_filter("uids=10").await;

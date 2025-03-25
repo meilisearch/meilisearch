@@ -347,8 +347,7 @@ async fn test_summarized_document_addition_or_update() {
           "test": 1
         },
         "progressTrace": "[progressTrace]",
-        "writeChannelCongestion": "[writeChannelCongestion]",
-        "internalDatabaseSizes": "[internalDatabaseSizes]"
+        "writeChannelCongestion": "[writeChannelCongestion]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -371,8 +370,7 @@ async fn test_summarized_delete_documents_by_batch() {
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
-            ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
-            ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]"
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
         @r###"
     {
@@ -393,8 +391,7 @@ async fn test_summarized_delete_documents_by_batch() {
         "indexUids": {
           "test": 1
         },
-        "progressTrace": "[progressTrace]",
-        "internalDatabaseSizes": "[internalDatabaseSizes]"
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -435,8 +432,7 @@ async fn test_summarized_delete_documents_by_batch() {
         "indexUids": {
           "test": 1
         },
-        "progressTrace": "[progressTrace]",
-        "internalDatabaseSizes": "[internalDatabaseSizes]"
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -461,8 +457,7 @@ async fn test_summarized_delete_documents_by_filter() {
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
-            ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
-            ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]"
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
         @r###"
     {
@@ -484,8 +479,7 @@ async fn test_summarized_delete_documents_by_filter() {
         "indexUids": {
           "test": 1
         },
-        "progressTrace": "[progressTrace]",
-        "internalDatabaseSizes": "[internalDatabaseSizes]"
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -528,8 +522,7 @@ async fn test_summarized_delete_documents_by_filter() {
         "indexUids": {
           "test": 1
         },
-        "progressTrace": "[progressTrace]",
-        "internalDatabaseSizes": "[internalDatabaseSizes]"
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -572,8 +565,7 @@ async fn test_summarized_delete_documents_by_filter() {
         "indexUids": {
           "test": 1
         },
-        "progressTrace": "[progressTrace]",
-        "internalDatabaseSizes": "[internalDatabaseSizes]"
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -597,8 +589,7 @@ async fn test_summarized_delete_document_by_id() {
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
-            ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
-            ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]"
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
         @r#"
     {
@@ -619,8 +610,7 @@ async fn test_summarized_delete_document_by_id() {
         "indexUids": {
           "test": 1
         },
-        "progressTrace": "[progressTrace]",
-        "internalDatabaseSizes": "[internalDatabaseSizes]"
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -661,8 +651,7 @@ async fn test_summarized_delete_document_by_id() {
         "indexUids": {
           "test": 1
         },
-        "progressTrace": "[progressTrace]",
-        "internalDatabaseSizes": "[internalDatabaseSizes]"
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -728,8 +717,7 @@ async fn test_summarized_settings_update() {
         "indexUids": {
           "test": 1
         },
-        "progressTrace": "[progressTrace]",
-        "internalDatabaseSizes": "[internalDatabaseSizes]"
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -752,8 +740,7 @@ async fn test_summarized_index_creation() {
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
-            ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
-            ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]"
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
         @r###"
     {
@@ -771,8 +758,7 @@ async fn test_summarized_index_creation() {
         "indexUids": {
           "test": 1
         },
-        "progressTrace": "[progressTrace]",
-        "internalDatabaseSizes": "[internalDatabaseSizes]"
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -790,8 +776,7 @@ async fn test_summarized_index_creation() {
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
-            ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
-            ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]"
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
         @r###"
     {
@@ -811,8 +796,7 @@ async fn test_summarized_index_creation() {
         "indexUids": {
           "test": 1
         },
-        "progressTrace": "[progressTrace]",
-        "internalDatabaseSizes": "[internalDatabaseSizes]"
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -945,8 +929,7 @@ async fn test_summarized_index_update() {
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
-            ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
-            ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]"
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
         @r###"
     {
@@ -964,8 +947,7 @@ async fn test_summarized_index_update() {
         "indexUids": {
           "test": 1
         },
-        "progressTrace": "[progressTrace]",
-        "internalDatabaseSizes": "[internalDatabaseSizes]"
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -983,8 +965,7 @@ async fn test_summarized_index_update() {
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
-            ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
-            ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]"
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
         @r###"
     {
@@ -1004,8 +985,7 @@ async fn test_summarized_index_update() {
         "indexUids": {
           "test": 1
         },
-        "progressTrace": "[progressTrace]",
-        "internalDatabaseSizes": "[internalDatabaseSizes]"
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -1026,8 +1006,7 @@ async fn test_summarized_index_update() {
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
-            ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
-            ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]"
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
         @r#"
     {
@@ -1045,8 +1024,7 @@ async fn test_summarized_index_update() {
         "indexUids": {
           "test": 1
         },
-        "progressTrace": "[progressTrace]",
-        "internalDatabaseSizes": "[internalDatabaseSizes]"
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -1064,8 +1042,7 @@ async fn test_summarized_index_update() {
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
-            ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
-            ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]"
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
         @r###"
     {
@@ -1085,8 +1062,7 @@ async fn test_summarized_index_update() {
         "indexUids": {
           "test": 1
         },
-        "progressTrace": "[progressTrace]",
-        "internalDatabaseSizes": "[internalDatabaseSizes]"
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -1112,8 +1088,7 @@ async fn test_summarized_index_swap() {
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
-            ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
-            ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]"
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
         @r###"
     {
@@ -1138,8 +1113,7 @@ async fn test_summarized_index_swap() {
           "indexSwap": 1
         },
         "indexUids": {},
-        "progressTrace": "[progressTrace]",
-        "internalDatabaseSizes": "[internalDatabaseSizes]"
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -1163,8 +1137,7 @@ async fn test_summarized_index_swap() {
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
-            ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
-            ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]"
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
         @r###"
     {
@@ -1182,8 +1155,7 @@ async fn test_summarized_index_swap() {
         "indexUids": {
           "doggos": 1
         },
-        "progressTrace": "[progressTrace]",
-        "internalDatabaseSizes": "[internalDatabaseSizes]"
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -1209,8 +1181,7 @@ async fn test_summarized_batch_cancelation() {
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
-            ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
-            ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]"
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
         @r###"
     {
@@ -1230,8 +1201,7 @@ async fn test_summarized_batch_cancelation() {
           "taskCancelation": 1
         },
         "indexUids": {},
-        "progressTrace": "[progressTrace]",
-        "internalDatabaseSizes": "[internalDatabaseSizes]"
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -1257,8 +1227,7 @@ async fn test_summarized_batch_deletion() {
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
-            ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
-            ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]"
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
         @r###"
     {
@@ -1278,8 +1247,7 @@ async fn test_summarized_batch_deletion() {
           "taskDeletion": 1
         },
         "indexUids": {},
-        "progressTrace": "[progressTrace]",
-        "internalDatabaseSizes": "[internalDatabaseSizes]"
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -1302,8 +1270,7 @@ async fn test_summarized_dump_creation() {
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
-            ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
-            ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]"
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
         @r###"
     {
@@ -1321,8 +1288,7 @@ async fn test_summarized_dump_creation() {
           "dumpCreation": 1
         },
         "indexUids": {},
-        "progressTrace": "[progressTrace]",
-        "internalDatabaseSizes": "[internalDatabaseSizes]"
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
