@@ -3692,7 +3692,7 @@ async fn federation_non_faceted_for_an_index() {
     snapshot!(code, @"400 Bad Request");
     insta::assert_json_snapshot!(response, { ".processingTimeMs" => "[time]" }, @r#"
     {
-       "message": "Inside `.federation.facetsByIndex.fruits-no-facets`: Invalid facet distribution: Attributes `BOOST, id` are not filterable. This index does not have configured filterable attributes.\n - Note: index `fruits-no-facets` is not used in queries",
+      "message": "Inside `.federation.facetsByIndex.fruits-no-facets`: Invalid facet distribution: Attributes `BOOST, id` are not filterable. This index does not have configured filterable attributes.\n - Note: index `fruits-no-facets` is not used in queries",
       "code": "invalid_multi_search_facets",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_facets"

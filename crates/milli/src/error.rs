@@ -1,8 +1,8 @@
 use std::collections::BTreeSet;
+use std::collections::HashMap;
 use std::convert::Infallible;
 use std::fmt::Write;
 use std::{io, str};
-use std::collections::HashMap;
 
 use bstr::BString;
 use heed::{Error as HeedError, MdbError};
@@ -79,7 +79,7 @@ pub enum InternalError {
     #[error(transparent)]
     ArroyError(#[from] arroy::Error),
     #[error(transparent)]
-    VectorEmbeddingError(#[from] crate::vector::Error)
+    VectorEmbeddingError(#[from] crate::vector::Error),
 }
 
 #[derive(Error, Debug)]

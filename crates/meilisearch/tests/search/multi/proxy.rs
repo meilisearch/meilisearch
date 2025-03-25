@@ -1413,11 +1413,11 @@ async fn error_remote_does_not_answer() {
       "offset": 0,
       "estimatedTotalHits": 3,
       "remoteErrors": {
-          "ms2": {
-              "message": "error sending request",
-              "code": "remote_could_not_send_request",
-              "type": "system",
-              "link": "https://docs.meilisearch.com/errors#remote_could_not_send_request"
+        "ms2": {
+          "message": "error sending request",
+          "code": "remote_could_not_send_request",
+          "type": "system",
+          "link": "https://docs.meilisearch.com/errors#remote_could_not_send_request"
         }
       }
     }

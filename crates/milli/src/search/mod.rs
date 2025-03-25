@@ -191,8 +191,9 @@ impl<'a> Search<'a> {
             let filterable_fields = ctx.index.filterable_attributes_rules(ctx.txn)?;
             // check if the distinct field is in the filterable fields
             let matched_rule = matching_features(distinct, &filterable_fields);
-            let is_filterable = matched_rule.map_or(false, |(_, features)| features.is_filterable());
-            
+            let is_filterable =
+                matched_rule.map_or(false, |(_, features)| features.is_filterable());
+
             if !is_filterable {
                 // if not, remove the hidden fields from the filterable fields to generate the error message
                 let matching_patterns =
@@ -201,10 +202,10 @@ impl<'a> Search<'a> {
                     });
                 let (valid_patterns, hidden_fields) =
                     ctx.index.remove_hidden_fields(ctx.txn, matching_patterns)?;
-                
+
                 // Get the matching rule index if any rule matched the attribute
                 let matching_rule_index = matched_rule.map(|(rule_index, _)| rule_index);
-                
+
                 // and return the error
                 return Err(Error::UserError(UserError::InvalidDistinctAttribute {
                     field: distinct.clone(),

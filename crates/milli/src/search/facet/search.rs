@@ -76,8 +76,9 @@ impl<'a> SearchForFacetValues<'a> {
 
         let filterable_attributes_rules = index.filterable_attributes_rules(rtxn)?;
         let matched_rule = matching_features(&self.facet, &filterable_attributes_rules);
-        let is_facet_searchable = matched_rule.map_or(false, |(_, features)| features.is_facet_searchable());
-        
+        let is_facet_searchable =
+            matched_rule.map_or(false, |(_, features)| features.is_facet_searchable());
+
         if !is_facet_searchable {
             let matching_field_names =
                 filtered_matching_patterns(&filterable_attributes_rules, &|features| {
@@ -85,7 +86,7 @@ impl<'a> SearchForFacetValues<'a> {
                 });
             let (valid_patterns, hidden_fields) =
                 index.remove_hidden_fields(rtxn, matching_field_names)?;
-                
+
             // Get the matching rule index if any rule matched the attribute
             let matching_rule_index = matched_rule.map(|(rule_index, _)| rule_index);
 
