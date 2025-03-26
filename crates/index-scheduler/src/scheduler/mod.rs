@@ -24,6 +24,7 @@ use meilisearch_types::error::ResponseError;
 use meilisearch_types::heed::{Env, WithoutTls};
 use meilisearch_types::milli;
 use meilisearch_types::tasks::Status;
+use process_batch::ProcessBatchInfo;
 use rayon::current_num_threads;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use roaring::RoaringBitmap;
@@ -223,16 +224,16 @@ impl IndexScheduler {
         let mut stop_scheduler_forever = false;
         let mut wtxn = self.env.write_txn().map_err(Error::HeedTransaction)?;
         let mut canceled = RoaringBitmap::new();
-        let mut congestion = None;
+        let mut process_batch_info = ProcessBatchInfo::default();
 
         match res {
-            Ok((tasks, cong)) => {
+            Ok((tasks, info)) => {
                 #[cfg(test)]
                 self.breakpoint(crate::test_utils::Breakpoint::ProcessBatchSucceeded);
 
                 let (task_progress, task_progress_obj) = AtomicTaskStep::new(tasks.len() as u32);
                 progress.update_progress(task_progress_obj);
-                congestion = cong;
+                process_batch_info = info;
                 let mut success = 0;
                 let mut failure = 0;
                 let mut canceled_by = None;
@@ -350,6 +351,9 @@ impl IndexScheduler {
         // We must re-add the canceled task so they're part of the same batch.
         ids |= canceled;
 
+        let ProcessBatchInfo { congestion, pre_commit_dabases_sizes, post_commit_dabases_sizes } =
+            process_batch_info;
+
         processing_batch.stats.progress_trace =
             progress.accumulated_durations().into_iter().map(|(k, v)| (k, v.into())).collect();
         processing_batch.stats.write_channel_congestion = congestion.map(|congestion| {
@@ -359,6 +363,30 @@ impl IndexScheduler {
             congestion_info.insert("blocking_ratio".into(), congestion.congestion_ratio().into());
             congestion_info
         });
+        processing_batch.stats.internal_database_sizes = pre_commit_dabases_sizes
+            .iter()
+            .flat_map(|(dbname, pre_size)| {
+                post_commit_dabases_sizes
+                    .get(dbname)
+                    .map(|post_size| {
+                        use byte_unit::{Byte, UnitType::Binary};
+                        use std::cmp::Ordering::{Equal, Greater, Less};
+
+                        let post = Byte::from_u64(*post_size as u64).get_appropriate_unit(Binary);
+                        let diff_size = post_size.abs_diff(*pre_size) as u64;
+                        let diff = Byte::from_u64(diff_size).get_appropriate_unit(Binary);
+                        let sign = match post_size.cmp(pre_size) {
+                            Equal => return None,
+                            Greater => "+",
+                            Less => "-",
+                        };
+
+                        Some((dbname.to_string(), format!("{post:#.2} ({sign}{diff:#.2})").into()))
+                    })
+                    .into_iter()
+                    .flatten()
+            })
+            .collect();
 
         if let Some(congestion) = congestion {
             tracing::debug!(

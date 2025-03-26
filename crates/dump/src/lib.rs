@@ -326,6 +326,7 @@ pub(crate) mod test {
                 index_uids: maplit::btreemap! { "doggo".to_string() => 1 },
                 progress_trace: Default::default(),
                 write_channel_congestion: None,
+                internal_database_sizes: Default::default(),
             },
             enqueued_at: Some(BatchEnqueuedAt {
                 earliest: datetime!(2022-11-11 0:00 UTC),
