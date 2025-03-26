@@ -212,6 +212,14 @@ async fn user_provide_mismatched_embedding_dimension() {
       "finishedAt": "[date]"
     }
     "#);
+
+    // FIXME: /!\ Case where number of embeddings is divisor of `dimensions` would still pass
+    let new_document = json!([
+      {"id": 0, "name": "kefir", "_vectors": { "manual": [[0, 0], [1, 1], [2, 2]] }},
+    ]);
+    let (value, code) = index.add_documents(new_document, None).await;
+    snapshot!(code, @"202 Accepted");
+    index.wait_task(response.uid()).await.succeeded();
 }
 
 async fn generate_default_user_provided_documents(server: &Server) -> Index {
