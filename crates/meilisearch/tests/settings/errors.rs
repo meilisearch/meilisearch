@@ -274,7 +274,7 @@ async fn settings_bad_typo_tolerance() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Unknown field `typoTolerance`: expected one of `enabled`, `minWordSizeForTypos`, `disableOnWords`, `disableOnAttributes`",
+      "message": "Unknown field `typoTolerance`: expected one of `enabled`, `minWordSizeForTypos`, `disableOnWords`, `disableOnAttributes`, `disableOnNumbers`",
       "code": "invalid_settings_typo_tolerance",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_settings_typo_tolerance"

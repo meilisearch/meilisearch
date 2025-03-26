@@ -8,6 +8,7 @@ use std::str::FromStr;
 
 use deserr::{DeserializeError, Deserr, ErrorKind, MergeWithError, ValuePointerRef};
 use fst::IntoStreamer;
+use milli::disabled_typos_terms::DisabledTyposTerms;
 use milli::index::{IndexEmbeddingConfig, PrefixSearch};
 use milli::proximity::ProximityPrecision;
 use milli::update::Setting;
@@ -104,6 +105,10 @@ pub struct TypoSettings {
     #[deserr(default)]
     #[schema(value_type = Option<BTreeSet<String>>, example = json!(["uuid", "url"]))]
     pub disable_on_attributes: Setting<BTreeSet<String>>,
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[deserr(default)]
+    #[schema(value_type = Option<bool>, example = json!(true))]
+    pub disable_on_numbers: Setting<bool>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Deserr, ToSchema)]
@@ -826,12 +831,14 @@ pub fn settings(
     };
 
     let disabled_attributes = index.exact_attributes(rtxn)?.into_iter().map(String::from).collect();
+    let DisabledTyposTerms { disable_on_numbers } = index.disabled_typos_terms(rtxn)?;
 
     let typo_tolerance = TypoSettings {
         enabled: Setting::Set(index.authorize_typos(rtxn)?),
         min_word_size_for_typos: Setting::Set(min_typo_word_len),
         disable_on_words: Setting::Set(disabled_words),
         disable_on_attributes: Setting::Set(disabled_attributes),
+        disable_on_numbers: Setting::Set(disable_on_numbers),
     };
 
     let faceting = FacetingSettings {

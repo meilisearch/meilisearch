@@ -276,7 +276,7 @@ async fn secrets_are_hidden_in_settings() {
 
     let (response, code) = index.settings().await;
     meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r#"
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
       "displayedAttributes": [
         "*"
@@ -308,7 +308,8 @@ async fn secrets_are_hidden_in_settings() {
           "twoTypos": 9
         },
         "disableOnWords": [],
-        "disableOnAttributes": []
+        "disableOnAttributes": [],
+        "disableOnNumbers": false
       },
       "faceting": {
         "maxValuesPerFacet": 100,
@@ -337,7 +338,7 @@ async fn secrets_are_hidden_in_settings() {
       "facetSearch": true,
       "prefixSearch": "indexingTime"
     }
-    "#);
+    "###);
 
     let (response, code) = server.get_task(settings_update_uid).await;
     meili_snap::snapshot!(code, @"200 OK");

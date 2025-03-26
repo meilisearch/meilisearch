@@ -896,6 +896,7 @@ fn test_correct_settings_init() {
                 localized_attributes_rules,
                 prefix_search,
                 facet_search,
+                disabled_typos_terms,
             } = settings;
             assert!(matches!(searchable_fields, Setting::NotSet));
             assert!(matches!(displayed_fields, Setting::NotSet));
@@ -923,6 +924,7 @@ fn test_correct_settings_init() {
             assert!(matches!(localized_attributes_rules, Setting::NotSet));
             assert!(matches!(prefix_search, Setting::NotSet));
             assert!(matches!(facet_search, Setting::NotSet));
+            assert!(matches!(disabled_typos_terms, Setting::NotSet));
         })
         .unwrap();
 }
