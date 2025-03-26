@@ -20,6 +20,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
 
+use convert_case::{Case, Casing as _};
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::heed::{Env, WithoutTls};
 use meilisearch_types::milli;
@@ -381,7 +382,10 @@ impl IndexScheduler {
                             Less => "-",
                         };
 
-                        Some((dbname.to_string(), format!("{post:#.2} ({sign}{diff:#.2})").into()))
+                        Some((
+                            dbname.to_case(Case::Camel),
+                            format!("{post:#.2} ({sign}{diff:#.2})").into(),
+                        ))
                     })
                     .into_iter()
                     .flatten()
