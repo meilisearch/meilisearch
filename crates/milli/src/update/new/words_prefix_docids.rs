@@ -291,6 +291,9 @@ impl<'a, 'rtxn> FrozenPrefixIntegerBitmaps<'a, 'rtxn> {
                 let (_word, pos) = StrBEU16Codec::bytes_decode(key).map_err(Error::Decoding)?;
                 positions.entry(pos).or_insert_with(Vec::new).push(bytes);
             }
+
+            // We remove all the positions that have less than 100 bitmaps.
+            positions.retain(|_, bitmaps| bitmaps.len() > 100);
             assert!(prefixes_bitmaps.insert(prefix.as_str(), positions).is_none());
         }
 
