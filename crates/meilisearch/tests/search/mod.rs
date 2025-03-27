@@ -1976,3 +1976,93 @@ async fn change_facet_casing() {
         })
         .await;
 }
+
+#[actix_rt::test]
+async fn test_exact_typos_terms() {
+    let documents = json!([
+        {
+            "id": 0,
+            "title": "The zeroth document 1298484",
+        },
+        {
+            "id": 1,
+            "title": "The first document 234342",
+            "nested": {
+                "object": "field 22231",
+                "machin": "bidule 23443.32111",
+            },
+        },
+        {
+            "id": 2,
+            "title": "The second document 3398499",
+            "nested": [
+                "array",
+                {
+                    "object": "field 23245121,23223",
+                },
+                {
+                    "prout": "truc 123980612321",
+                    "machin": "lol 12345645333447879",
+                },
+            ],
+        },
+        {
+            "id": 3,
+            "title": "The third document 12333",
+            "nested": "I lied 98878",
+        },
+    ]);
+
+    // Test prefix search
+    test_settings_documents_indexing_swapping_and_search(
+        &documents,
+        &json!({
+            "searchableAttributes": ["title", "nested.object", "nested.machin"],
+            "typoTolerance": {
+              "enabled": true,
+              "disableOnNumbers": true
+            }
+        }),
+        &json!({"q": "12345"}),
+        |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            snapshot!(json_string!(response["hits"]), @r###"
+            [
+              {
+                "id": 2,
+                "title": "The second document 3398499",
+                "nested": [
+                  "array",
+                  {
+                    "object": "field 23245121,23223"
+                  },
+                  {
+                    "prout": "truc 123980612321",
+                    "machin": "lol 12345645333447879"
+                  }
+                ]
+              }
+            ]
+            "###);
+        },
+    )
+    .await;
+
+    // Test typo search
+    test_settings_documents_indexing_swapping_and_search(
+        &documents,
+        &json!({
+            "searchableAttributes": ["title", "nested.object", "nested.machin"],
+            "typoTolerance": {
+              "enabled": true,
+              "disableOnNumbers": true
+            }
+        }),
+        &json!({"q": "123457"}),
+        |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            snapshot!(json_string!(response["hits"]), @r###"[]"###);
+        },
+    )
+    .await;
+}
