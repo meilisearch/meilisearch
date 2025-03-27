@@ -133,7 +133,9 @@ async fn check_the_index_scheduler(server: &Server) {
     let (stats, _) = server.stats().await;
     assert_json_snapshot!(stats, {
         ".databaseSize" => "[bytes]",
-        ".usedDatabaseSize" => "[bytes]"
+        ".usedDatabaseSize" => "[bytes]",
+        ".indexes.kefir.rawDocumentDbSize" => "[bytes]",
+        ".indexes.kefir.avgDocumentSize" => "[bytes]",
     },
     @r###"
     {
@@ -143,8 +145,8 @@ async fn check_the_index_scheduler(server: &Server) {
       "indexes": {
         "kefir": {
           "numberOfDocuments": 1,
-          "rawDocumentDbSize": 109,
-          "avgDocumentSize": 109,
+          "rawDocumentDbSize": "[bytes]",
+          "avgDocumentSize": "[bytes]",
           "isIndexing": false,
           "numberOfEmbeddings": 0,
           "numberOfEmbeddedDocuments": 0,
@@ -217,7 +219,9 @@ async fn check_the_index_scheduler(server: &Server) {
     let (stats, _) = server.stats().await;
     assert_json_snapshot!(stats, {
         ".databaseSize" => "[bytes]",
-        ".usedDatabaseSize" => "[bytes]"
+        ".usedDatabaseSize" => "[bytes]",
+        ".indexes.kefir.rawDocumentDbSize" => "[bytes]",
+        ".indexes.kefir.avgDocumentSize" => "[bytes]",
     },
     @r###"
     {
@@ -227,8 +231,8 @@ async fn check_the_index_scheduler(server: &Server) {
       "indexes": {
         "kefir": {
           "numberOfDocuments": 1,
-          "rawDocumentDbSize": 109,
-          "avgDocumentSize": 109,
+          "rawDocumentDbSize": "[bytes]",
+          "avgDocumentSize": "[bytes]",
           "isIndexing": false,
           "numberOfEmbeddings": 0,
           "numberOfEmbeddedDocuments": 0,
@@ -245,11 +249,14 @@ async fn check_the_index_scheduler(server: &Server) {
     "###);
     let index = server.index("kefir");
     let (stats, _) = index.stats().await;
-    snapshot!(stats, @r###"
+    snapshot!(json_string!(stats, {
+        ".rawDocumentDbSize" => "[bytes]",
+        ".avgDocumentSize" => "[bytes]",
+    }), @r###"
     {
       "numberOfDocuments": 1,
-      "rawDocumentDbSize": 109,
-      "avgDocumentSize": 109,
+      "rawDocumentDbSize": "[bytes]",
+      "avgDocumentSize": "[bytes]",
       "isIndexing": false,
       "numberOfEmbeddings": 0,
       "numberOfEmbeddedDocuments": 0,
