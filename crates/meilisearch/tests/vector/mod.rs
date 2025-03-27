@@ -217,9 +217,42 @@ async fn user_provide_mismatched_embedding_dimension() {
     let new_document = json!([
       {"id": 0, "name": "kefir", "_vectors": { "manual": [[0, 0], [1, 1], [2, 2]] }},
     ]);
-    let (value, code) = index.add_documents(new_document, None).await;
+    let (response, code) = index.add_documents(new_document, None).await;
     snapshot!(code, @"202 Accepted");
     index.wait_task(response.uid()).await.succeeded();
+    let (documents, _code) = index
+        .get_all_documents(GetAllDocumentsOptions { retrieve_vectors: true, ..Default::default() })
+        .await;
+    snapshot!(json_string!(documents), @r###"
+    {
+      "results": [
+        {
+          "id": 0,
+          "name": "kefir",
+          "_vectors": {
+            "manual": {
+              "embeddings": [
+                [
+                  0.0,
+                  0.0,
+                  1.0
+                ],
+                [
+                  1.0,
+                  2.0,
+                  2.0
+                ]
+              ],
+              "regenerate": false
+            }
+          }
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 1
+    }
+    "###);
 }
 
 async fn generate_default_user_provided_documents(server: &Server) -> Index {
