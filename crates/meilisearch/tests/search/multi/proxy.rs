@@ -1213,7 +1213,7 @@ async fn error_bad_request_facets_by_index_facet() {
       },
       "remoteErrors": {
         "ms1": {
-          "message": "remote host responded with code 400:\n  - response from remote: {\"message\":\"Inside `.federation.facetsByIndex.test`: Invalid facet distribution, this index does not have configured filterable attributes.\\n - Note: index `test` used in `.queries[1]`\",\"code\":\"invalid_multi_search_facets\",\"type\":\"invalid_request\",\"link\":\"https://docs.meilisearch.com/errors#invalid_multi_search_facets\"}\n  - hint: check that the remote instance has the correct index configuration for that request\n  - hint: check that the `network` experimental feature is enabled on the remote instance",
+          "message": "remote host responded with code 400:\n  - response from remote: {\"message\":\"Inside `.federation.facetsByIndex.test`: Invalid facet distribution: Attribute `id` is not filterable. This index does not have configured filterable attributes.\\n - Note: index `test` used in `.queries[1]`\",\"code\":\"invalid_multi_search_facets\",\"type\":\"invalid_request\",\"link\":\"https://docs.meilisearch.com/errors#invalid_multi_search_facets\"}\n  - hint: check that the remote instance has the correct index configuration for that request\n  - hint: check that the `network` experimental feature is enabled on the remote instance",
           "code": "remote_bad_request",
           "type": "invalid_request",
           "link": "https://docs.meilisearch.com/errors#remote_bad_request"
@@ -1374,7 +1374,7 @@ async fn error_remote_does_not_answer() {
     "###);
     let (response, _status_code) = ms1.multi_search(request.clone()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r#"
     {
       "hits": [
         {
@@ -1421,7 +1421,7 @@ async fn error_remote_does_not_answer() {
         }
       }
     }
-    "###);
+    "#);
 }
 
 #[actix_rt::test]

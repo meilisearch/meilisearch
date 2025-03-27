@@ -1,4 +1,5 @@
 use std::collections::BTreeSet;
+use std::collections::HashMap;
 use std::convert::Infallible;
 use std::fmt::Write;
 use std::{io, str};
@@ -120,10 +121,34 @@ only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and undersco
 and can not be more than 511 bytes.", .document_id.to_string()
     )]
     InvalidDocumentId { document_id: Value },
-    #[error("Invalid facet distribution, {}", format_invalid_filter_distribution(.invalid_facets_name, .valid_patterns))]
+    #[error("Invalid facet distribution: {}",
+        if .invalid_facets_name.len() == 1 {
+            let field = .invalid_facets_name.iter().next().unwrap();
+            match .matching_rule_indices.get(field) {
+                Some(rule_index) => format!("Attribute `{}` matched rule #{} in filterableAttributes, but this rule does not enable filtering.\nHint: enable filtering in rule #{} by modifying the features.filter object\nHint: prepend another rule matching `{}` with appropriate filter features before rule #{}",
+                    field, rule_index, rule_index, field, rule_index),
+                None => match .valid_patterns.is_empty() {
+                    true => format!("Attribute `{}` is not filterable. This index does not have configured filterable attributes.", field),
+                    false => format!("Attribute `{}` is not filterable. Available filterable attributes patterns are: `{}`.",
+                        field,
+                        .valid_patterns.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", ")),
+                }
+            }
+        } else {
+            format!("Attributes `{}` are not filterable. {}",
+                .invalid_facets_name.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", "),
+                match .valid_patterns.is_empty() {
+                    true => "This index does not have configured filterable attributes.".to_string(),
+                    false => format!("Available filterable attributes patterns are: `{}`.",
+                        .valid_patterns.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", ")),
+                }
+            )
+        }
+    )]
     InvalidFacetsDistribution {
         invalid_facets_name: BTreeSet<String>,
         valid_patterns: BTreeSet<String>,
+        matching_rule_indices: HashMap<String, usize>,
     },
     #[error(transparent)]
     InvalidGeoField(#[from] GeoError),
@@ -137,7 +162,12 @@ and can not be more than 511 bytes.", .document_id.to_string()
     InvalidFilter(String),
     #[error("Invalid type for filter subexpression: expected: {}, found: {}.", .0.join(", "), .1)]
     InvalidFilterExpression(&'static [&'static str], Value),
-    #[error("Filter operator `{operator}` is not allowed for the attribute `{field}`.\n  - Note: allowed operators: {}.\n  - Note: field `{field}` {} in `filterableAttributes`", allowed_operators.join(", "), format!("matched rule #{rule_index}"))]
+    #[error("Filter operator `{operator}` is not allowed for the attribute `{field}`.\n  - Note: allowed operators: {}.\n  - Note: field `{field}` matched rule #{rule_index} in `filterableAttributes`\n  - Hint: enable {} in rule #{rule_index} by modifying the features.filter object\n  - Hint: prepend another rule matching `{field}` with appropriate filter features before rule #{rule_index}",
+        allowed_operators.join(", "),
+        if operator == "=" || operator == "!=" || operator == "IN" {"equality"}
+        else if operator == "<" || operator == ">" || operator == "<=" || operator == ">=" || operator == "TO" {"comparison"}
+        else {"the appropriate filter operators"}
+    )]
     FilterOperatorNotAllowed {
         field: String,
         allowed_operators: Vec<String>,
@@ -157,11 +187,19 @@ and can not be more than 511 bytes.", .document_id.to_string()
     InvalidSortableAttribute { field: String, valid_fields: BTreeSet<String>, hidden_fields: bool },
     #[error("Attribute `{}` is not filterable and thus, cannot be used as distinct attribute. {}",
         .field,
-        match .valid_patterns.is_empty() {
-            true => "This index does not have configured filterable attributes.".to_string(),
-            false => format!("Available filterable attributes patterns are: `{}{}`.",
+        match (.valid_patterns.is_empty(), .matching_rule_index) {
+            // No rules match and no filterable attributes
+            (true, None) => "This index does not have configured filterable attributes.".to_string(),
+
+            // No rules match but there are some filterable attributes
+            (false, None) => format!("Available filterable attributes patterns are: `{}{}`.",
                     valid_patterns.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", "),
                     .hidden_fields.then_some(", <..hidden-attributes>").unwrap_or(""),
+                ),
+
+            // A rule matched but filtering isn't enabled
+            (_, Some(rule_index)) => format!("Note: this attribute matches rule #{} in filterableAttributes, but this rule does not enable filtering.\nHint: enable filtering in rule #{} by adding appropriate filter features.\nHint: prepend another rule matching {} with filter features before rule #{}",
+                    rule_index, rule_index, .field, rule_index
                 ),
         }
     )]
@@ -169,14 +207,23 @@ and can not be more than 511 bytes.", .document_id.to_string()
         field: String,
         valid_patterns: BTreeSet<String>,
         hidden_fields: bool,
+        matching_rule_index: Option<usize>,
     },
     #[error("Attribute `{}` is not facet-searchable. {}",
         .field,
-        match .valid_patterns.is_empty() {
-            true => "This index does not have configured facet-searchable attributes. To make it facet-searchable add it to the `filterableAttributes` index settings.".to_string(),
-            false => format!("Available facet-searchable attributes patterns are: `{}{}`. To make it facet-searchable add it to the `filterableAttributes` index settings.",
+        match (.valid_patterns.is_empty(), .matching_rule_index) {
+            // No rules match and no facet searchable attributes
+            (true, None) => "This index does not have configured facet-searchable attributes. To make it facet-searchable add it to the `filterableAttributes` index settings.".to_string(),
+
+            // No rules match but there are some facet searchable attributes
+            (false, None) => format!("Available facet-searchable attributes patterns are: `{}{}`. To make it facet-searchable add it to the `filterableAttributes` index settings.",
                     valid_patterns.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", "),
                     .hidden_fields.then_some(", <..hidden-attributes>").unwrap_or(""),
+                ),
+
+            // A rule matched but facet search isn't enabled
+            (_, Some(rule_index)) => format!("Note: this attribute matches rule #{} in filterableAttributes, but this rule does not enable facetSearch.\nHint: enable facetSearch in rule #{} by adding `\"facetSearch\": true` to the rule.\nHint: prepend another rule matching {} with facetSearch: true before rule #{}",
+                    rule_index, rule_index, .field, rule_index
                 ),
         }
     )]
@@ -184,6 +231,7 @@ and can not be more than 511 bytes.", .document_id.to_string()
         field: String,
         valid_patterns: BTreeSet<String>,
         hidden_fields: bool,
+        matching_rule_index: Option<usize>,
     },
     #[error("Attribute `{}` is not searchable. Available searchable attributes are: `{}{}`.",
         .field,
@@ -388,45 +436,53 @@ pub enum GeoError {
     BadLongitude { document_id: Value, value: Value },
 }
 
+#[allow(dead_code)]
 fn format_invalid_filter_distribution(
     invalid_facets_name: &BTreeSet<String>,
     valid_patterns: &BTreeSet<String>,
 ) -> String {
-    if valid_patterns.is_empty() {
-        return "this index does not have configured filterable attributes.".into();
-    }
-
     let mut result = String::new();
 
-    match invalid_facets_name.len() {
-        0 => (),
-        1 => write!(
-            result,
-            "attribute `{}` is not filterable.",
-            invalid_facets_name.first().unwrap()
-        )
-        .unwrap(),
-        _ => write!(
-            result,
-            "attributes `{}` are not filterable.",
-            invalid_facets_name.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", ")
-        )
-        .unwrap(),
-    };
+    if invalid_facets_name.is_empty() {
+        if valid_patterns.is_empty() {
+            return "this index does not have configured filterable attributes.".into();
+        }
+    } else {
+        match invalid_facets_name.len() {
+            1 => write!(
+                result,
+                "Attribute `{}` is not filterable.",
+                invalid_facets_name.first().unwrap()
+            )
+            .unwrap(),
+            _ => write!(
+                result,
+                "Attributes `{}` are not filterable.",
+                invalid_facets_name.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", ")
+            )
+            .unwrap(),
+        };
+    }
 
-    match valid_patterns.len() {
-        1 => write!(
-            result,
-            " The available filterable attribute pattern is `{}`.",
-            valid_patterns.first().unwrap()
-        )
-        .unwrap(),
-        _ => write!(
-            result,
-            " The available filterable attribute patterns are `{}`.",
-            valid_patterns.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", ")
-        )
-        .unwrap(),
+    if valid_patterns.is_empty() {
+        if !invalid_facets_name.is_empty() {
+            write!(result, " This index does not have configured filterable attributes.").unwrap();
+        }
+    } else {
+        match valid_patterns.len() {
+            1 => write!(
+                result,
+                " Available filterable attributes patterns are: `{}`.",
+                valid_patterns.first().unwrap()
+            )
+            .unwrap(),
+            _ => write!(
+                result,
+                " Available filterable attributes patterns are: `{}`.",
+                valid_patterns.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", ")
+            )
+            .unwrap(),
+        }
     }
 
     result
@@ -438,7 +494,7 @@ fn format_invalid_filter_distribution(
 /// ```ignore
 /// impl From<FieldIdMapMissingEntry> for Error {
 ///     fn from(error: FieldIdMapMissingEntry) -> Error {
-///         Error::from(InternalError::from(error))
+///         Error::from(<InternalError>::from(error))
 ///     }
 /// }
 /// ```

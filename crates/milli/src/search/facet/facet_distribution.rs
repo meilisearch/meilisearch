@@ -378,13 +378,22 @@ impl<'a> FacetDistribution<'a> {
         filterable_attributes_rules: &[FilterableAttributesRule],
     ) -> Result<()> {
         let mut invalid_facets = BTreeSet::new();
+        let mut matching_rule_indices = HashMap::new();
+
         if let Some(facets) = &self.facets {
             for field in facets.keys() {
-                let is_valid_filterable_field =
-                    matching_features(field, filterable_attributes_rules)
-                        .map_or(false, |(_, features)| features.is_filterable());
-                if !is_valid_filterable_field {
+                let matched_rule = matching_features(field, filterable_attributes_rules);
+                let is_filterable =
+                    matched_rule.map_or(false, |(_, features)| features.is_filterable());
+
+                if !is_filterable {
                     invalid_facets.insert(field.to_string());
+
+                    // If the field matched a rule but that rule doesn't enable filtering,
+                    // store the rule index for better error messages
+                    if let Some((rule_index, _)) = matched_rule {
+                        matching_rule_indices.insert(field.to_string(), rule_index);
+                    }
                 }
             }
         }
@@ -400,6 +409,7 @@ impl<'a> FacetDistribution<'a> {
             return Err(Error::UserError(UserError::InvalidFacetsDistribution {
                 invalid_facets_name: invalid_facets,
                 valid_patterns,
+                matching_rule_indices,
             }));
         }
 

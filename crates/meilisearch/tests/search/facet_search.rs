@@ -559,7 +559,7 @@ async fn facet_search_with_filterable_attributes_rules_errors() {
       &json!({"facetName": "genres", "facetQuery": "a"}),
       |response, code| {
           snapshot!(code, @"400 Bad Request");
-          snapshot!(response["message"], @r###""Attribute `genres` is not facet-searchable. This index does not have configured facet-searchable attributes. To make it facet-searchable add it to the `filterableAttributes` index settings.""###);
+          snapshot!(response["message"], @r###""Attribute `genres` is not facet-searchable. Note: this attribute matches rule #0 in filterableAttributes, but this rule does not enable facetSearch.\nHint: enable facetSearch in rule #0 by adding `\"facetSearch\": true` to the rule.\nHint: prepend another rule matching genres with facetSearch: true before rule #0""###);
       },
     )
     .await;
@@ -570,7 +570,7 @@ async fn facet_search_with_filterable_attributes_rules_errors() {
         &json!({"facetName": "genres", "facetQuery": "a"}),
         |response, code| {
             snapshot!(code, @"400 Bad Request");
-            snapshot!(response["message"], @r###""Attribute `genres` is not facet-searchable. This index does not have configured facet-searchable attributes. To make it facet-searchable add it to the `filterableAttributes` index settings.""###);
+            snapshot!(response["message"], @r###""Attribute `genres` is not facet-searchable. Note: this attribute matches rule #0 in filterableAttributes, but this rule does not enable facetSearch.\nHint: enable facetSearch in rule #0 by adding `\"facetSearch\": true` to the rule.\nHint: prepend another rule matching genres with facetSearch: true before rule #0""###);
         },
     ).await;
 
@@ -580,7 +580,7 @@ async fn facet_search_with_filterable_attributes_rules_errors() {
         &json!({"facetName": "genres", "facetQuery": "a"}),
         |response, code| {
             snapshot!(code, @"400 Bad Request");
-            snapshot!(response["message"], @r###""Attribute `genres` is not facet-searchable. This index does not have configured facet-searchable attributes. To make it facet-searchable add it to the `filterableAttributes` index settings.""###);
+            snapshot!(response["message"], @r###""Attribute `genres` is not facet-searchable. Note: this attribute matches rule #0 in filterableAttributes, but this rule does not enable facetSearch.\nHint: enable facetSearch in rule #0 by adding `\"facetSearch\": true` to the rule.\nHint: prepend another rule matching genres with facetSearch: true before rule #0""###);
         },
     ).await;
 
@@ -601,7 +601,7 @@ async fn facet_search_with_filterable_attributes_rules_errors() {
         &json!({"facetName": "doggos.name", "facetQuery": "b"}),
         |response, code| {
             snapshot!(code, @"400 Bad Request");
-            snapshot!(response["message"], @r###""Attribute `doggos.name` is not facet-searchable. This index does not have configured facet-searchable attributes. To make it facet-searchable add it to the `filterableAttributes` index settings.""###);
+            snapshot!(response["message"], @r###""Attribute `doggos.name` is not facet-searchable. Note: this attribute matches rule #0 in filterableAttributes, but this rule does not enable facetSearch.\nHint: enable facetSearch in rule #0 by adding `\"facetSearch\": true` to the rule.\nHint: prepend another rule matching doggos.name with facetSearch: true before rule #0""###);
         },
     ).await;
 
@@ -611,7 +611,7 @@ async fn facet_search_with_filterable_attributes_rules_errors() {
         &json!({"facetName": "doggos.name", "facetQuery": "b"}),
         |response, code| {
             snapshot!(code, @"400 Bad Request");
-            snapshot!(response["message"], @r###""Attribute `doggos.name` is not facet-searchable. This index does not have configured facet-searchable attributes. To make it facet-searchable add it to the `filterableAttributes` index settings.""###);
+            snapshot!(response["message"], @r###""Attribute `doggos.name` is not facet-searchable. Note: this attribute matches rule #0 in filterableAttributes, but this rule does not enable facetSearch.\nHint: enable facetSearch in rule #0 by adding `\"facetSearch\": true` to the rule.\nHint: prepend another rule matching doggos.name with facetSearch: true before rule #0""###);
         },
     ).await;
 }
