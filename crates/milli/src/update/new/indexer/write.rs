@@ -13,7 +13,7 @@ use crate::index::IndexEmbeddingConfig;
 use crate::progress::Progress;
 use crate::update::settings::InnerIndexSettings;
 use crate::vector::{ArroyWrapper, Embedder, EmbeddingConfigs, Embeddings};
-use crate::{Error, Index, InternalError, Result};
+use crate::{Error, Index, InternalError, Result, UserError};
 
 pub fn write_to_db(
     mut writer_receiver: WriterBbqueueReceiver<'_>,
@@ -218,7 +218,12 @@ pub fn write_from_bbqueue(
                     arroy_writers.get(&embedder_id).expect("requested a missing embedder");
                 let mut embeddings = Embeddings::new(*dimensions);
                 let all_embeddings = asvs.read_all_embeddings_into_vec(frame, aligned_embedding);
-                embeddings.append(all_embeddings.to_vec()).unwrap();
+                if embeddings.append(all_embeddings.to_vec()).is_err() {
+                    return Err(Error::UserError(UserError::InvalidVectorDimensions {
+                        expected: *dimensions,
+                        found: all_embeddings.len(),
+                    }));
+                }
                 writer.del_items(wtxn, *dimensions, docid)?;
                 writer.add_items(wtxn, docid, &embeddings)?;
             }
