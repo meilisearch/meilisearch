@@ -20,3 +20,23 @@ make_enum_progress! {
         Finalizing,
     }
 }
+
+make_enum_progress! {
+    pub enum PostProcessingFacets {
+        StringsBulk,
+        StringsIncremental,
+        NumbersBulk,
+        NumbersIncremental,
+        FacetSearch,
+    }
+}
+
+make_enum_progress! {
+    pub enum PostProcessingWords {
+        WordFst,
+        WordPrefixDocids,
+        ExactWordPrefixDocids,
+        WordPrefixFieldIdDocids,
+        WordPrefixPositionDocids,
+    }
+}
