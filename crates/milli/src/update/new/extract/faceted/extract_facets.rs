@@ -9,6 +9,7 @@ use serde_json::Value;
 
 use super::super::cache::BalancedCaches;
 use super::facet_document::extract_document_facets;
+use super::facet_document::extract_geo_data;
 use super::FacetKind;
 use crate::fields_ids_map::metadata::Metadata;
 use crate::filterable_attributes_rules::match_faceted_field;
@@ -117,7 +118,10 @@ impl FacetedDocidsExtractor {
                 },
             ),
             DocumentChange::Update(inner) => {
-                if !inner.has_changed_for_fields(
+                let is_geo_changed = is_geo_enabled
+                    && inner.has_changed_for_geo_fields(rtxn, index, context.db_fields_ids_map)?;
+                // non geo fields
+                let is_field_changed = inner.has_changed_for_fields(
                     &mut |field_name| {
                         match_faceted_field(
                             field_name,
@@ -130,10 +134,37 @@ impl FacetedDocidsExtractor {
                     rtxn,
                     index,
                     context.db_fields_ids_map,
-                )? {
+                )?;
+
+                if !is_geo_changed && !is_field_changed {
                     return Ok(());
                 }
 
+                // if only geo_fields are changed
+                if is_geo_changed && !is_field_changed {
+                    return extract_geo_data(
+                        inner.current(rtxn, index, context.db_fields_ids_map)?,
+                        inner.external_document_id(),
+                        new_fields_ids_map.deref_mut(),
+                        &mut |fid, meta, depth, value| {
+                            Self::facet_fn_with_options(
+                                &context.doc_alloc,
+                                cached_sorter.deref_mut(),
+                                BalancedCaches::insert_del_u32,
+                                &mut del_add_facet_value,
+                                DelAddFacetValue::insert_del,
+                                docid,
+                                fid,
+                                meta,
+                                filterable_attributes,
+                                depth,
+                                value,
+                            )
+                        },
+                    );
+                }
+
+                // if non-geo fields changed along with/without geo fields, extract facets
                 extract_document_facets(
                     inner.current(rtxn, index, context.db_fields_ids_map)?,
                     inner.external_document_id(),

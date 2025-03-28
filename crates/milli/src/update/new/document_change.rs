@@ -243,6 +243,24 @@ impl<'doc> Update<'doc> {
         Ok(has_deleted_fields)
     }
 
+    pub fn has_changed_for_geo_fields<'t, Mapper: FieldIdMapper>(
+        &self,
+        rtxn: &'t RoTxn,
+        index: &'t Index,
+        mapper: &'t Mapper,
+    ) -> Result<bool> {
+        let current_geo = self.current(rtxn, index, mapper)?.geo_field()?;
+        let updated_geo = self.only_changed_fields().geo_field()?;
+        match (current_geo, updated_geo) {
+            // if no changes obtained
+            (None, None) => Ok(false),
+            // if geo fields are added or removed
+            (None, Some(_)) | (Some(_), None) => Ok(true),
+            // comparing their values
+            (Some(current), Some(updated)) => Ok(current.get() != updated.get()),
+        }
+    }
+
     pub fn only_changed_vectors(
         &self,
         doc_alloc: &'doc Bump,
