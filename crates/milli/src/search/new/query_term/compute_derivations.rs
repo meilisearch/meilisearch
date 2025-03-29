@@ -1,3 +1,6 @@
+#![allow(unused_imports)]
+#![allow(unused_variables)]
+
 use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::ops::ControlFlow;
@@ -222,7 +225,7 @@ pub fn partially_initialized_term_from_word(
     word: &str,
     max_typo: u8,
     is_prefix: bool,
-    is_ngram: bool,
+    _is_ngram: bool,
 ) -> Result<QueryTerm> {
     let word_interned = ctx.word_interner.insert(word.to_owned());
 
