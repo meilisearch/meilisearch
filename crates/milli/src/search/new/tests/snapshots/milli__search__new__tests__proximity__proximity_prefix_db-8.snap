@@ -1,5 +1,5 @@
 ---
-source: milli/src/search/new/tests/proximity.rs
+source: crates/milli/src/search/new/tests/proximity.rs
 expression: "format!(\"{document_scores:#?}\")"
 ---
 [
@@ -7,6 +7,14 @@ expression: "format!(\"{document_scores:#?}\")"
         Proximity(
             Rank {
                 rank: 4,
+                max_rank: 4,
+            },
+        ),
+    ],
+    [
+        Proximity(
+            Rank {
+                rank: 3,
                 max_rank: 4,
             },
         ),
@@ -22,15 +30,7 @@ expression: "format!(\"{document_scores:#?}\")"
     [
         Proximity(
             Rank {
-                rank: 1,
-                max_rank: 4,
-            },
-        ),
-    ],
-    [
-        Proximity(
-            Rank {
-                rank: 1,
+                rank: 2,
                 max_rank: 4,
             },
         ),
