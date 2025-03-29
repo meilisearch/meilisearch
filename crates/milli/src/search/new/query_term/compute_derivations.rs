@@ -5,6 +5,8 @@ use std::ops::ControlFlow;
 use fst::automaton::Str;
 use fst::{Automaton, IntoStreamer, Streamer};
 use heed::types::DecodeIgnore;
+use heed::types::*;
+use crate::heed_codec::StrBEU16Codec;
 
 use super::{OneTypoTerm, Phrase, QueryTerm, ZeroTypoTerm};
 use crate::search::fst_utils::{Complement, Intersection, StartsWith, Union};
@@ -171,6 +173,50 @@ fn find_zero_one_two_typo_derivations(
     Ok(())
 }
 
+fn check_prefix_in_databases(
+    ctx: &SearchContext<'_>,
+    word: &str,
+) -> Result<bool> {
+    let mut key = word.as_bytes().to_owned();
+    key.push(0);
+    
+    // Check both databases in a single pass
+    let remap_key_type = ctx
+        .index
+        .word_prefix_docids
+        .remap_types::<Bytes, Bytes>()
+        .prefix_iter(ctx.txn, &key)?
+        .remap_key_type::<StrBEU16Codec>();
+    
+    let mut found = false;
+    for result in remap_key_type {
+        let ((prefix, _), _) = result?;
+        if prefix == word {
+            found = true;
+            break;
+        }
+    }
+    
+    if !found {
+        let remap_key_type = ctx
+            .index
+            .exact_word_prefix_docids
+            .remap_types::<Bytes, Bytes>()
+            .prefix_iter(ctx.txn, &key)?
+            .remap_key_type::<StrBEU16Codec>();
+            
+        for result in remap_key_type {
+            let ((prefix, _), _) = result?;
+            if prefix == word {
+                found = true;
+                break;
+            }
+        }
+    }
+    
+    Ok(found)
+}
+
 pub fn partially_initialized_term_from_word(
     ctx: &mut SearchContext<'_>,
     word: &str,
@@ -195,21 +241,19 @@ pub fn partially_initialized_term_from_word(
     }
 
     let fst = ctx.index.words_fst(ctx.txn)?;
+    
+    // Check if word is a stop word
+    let is_stop_word = ctx.index.stop_words(ctx.txn)?.map_or(false, |stop_words| {
+        stop_words.contains(word)
+    });
 
-    let use_prefix_db = is_prefix
-        && (ctx
-            .index
-            .word_prefix_docids
-            .remap_data_type::<DecodeIgnore>()
-            .get(ctx.txn, word)?
-            .is_some()
-            || (!is_ngram
-                && ctx
-                    .index
-                    .exact_word_prefix_docids
-                    .remap_data_type::<DecodeIgnore>()
-                    .get(ctx.txn, word)?
-                    .is_some()));
+    // For stop words, we only use prefix search if the word is a complete match
+    let use_prefix_db = if is_stop_word {
+        is_prefix && fst.contains(word)
+    } else {
+        is_prefix && check_prefix_in_databases(ctx, word)?
+    };
+    
     let use_prefix_db = if use_prefix_db { Some(word_interned) } else { None };
 
     let mut zero_typo = None;
@@ -220,19 +264,31 @@ pub fn partially_initialized_term_from_word(
     }
 
     if is_prefix && use_prefix_db.is_none() {
-        find_zero_typo_prefix_derivations(
-            word_interned,
-            fst,
-            &mut ctx.word_interner,
-            |derived_word| {
-                if prefix_of.len() < limits::MAX_PREFIX_COUNT {
-                    prefix_of.insert(derived_word);
-                    Ok(ControlFlow::Continue(()))
-                } else {
-                    Ok(ControlFlow::Break(()))
-                }
-            },
-        )?;
+        // Check both regular and exact word databases for prefix matches
+        let mut check_prefix_derivations = |fst_set: fst::Set<Cow<'_, [u8]>>| -> Result<ControlFlow<()>> {
+            find_zero_typo_prefix_derivations(
+                word_interned,
+                fst_set,
+                &mut ctx.word_interner,
+                |derived_word| {
+                    if prefix_of.len() < limits::MAX_PREFIX_COUNT {
+                        prefix_of.insert(derived_word);
+                        Ok(ControlFlow::Continue(()))
+                    } else {
+                        Ok(ControlFlow::Break(()))
+                    }
+                },
+            )?;
+            Ok(ControlFlow::Continue(()))
+        };
+
+        // Check regular words
+        check_prefix_derivations(fst)?;
+
+        // Check exact words if available
+        if let Some(exact_fst) = ctx.index.exact_words(ctx.txn)? {
+            check_prefix_derivations(exact_fst)?;
+        }
     }
     let synonyms = ctx.index.synonyms(ctx.txn)?;
     let mut synonym_word_count = 0;

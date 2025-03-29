@@ -77,6 +77,7 @@ pub mod main_key {
     pub const FACET_SEARCH: &str = "facet_search";
     pub const PREFIX_SEARCH: &str = "prefix_search";
     pub const DOCUMENTS_STATS: &str = "documents_stats";
+    pub const MAX_PREFIX_LENGTH: &str = "max_prefix_length";
 }
 
 pub mod db_name {
@@ -1741,7 +1742,15 @@ impl Index {
 
     pub fn prefix_settings(&self, rtxn: &RoTxn<'_>) -> Result<PrefixSettings> {
         let compute_prefixes = self.prefix_search(rtxn)?.unwrap_or_default();
-        Ok(PrefixSettings { compute_prefixes, max_prefix_length: 4, prefix_count_threshold: 100 })
+        let max_prefix_length = self.main
+            .remap_types::<Str, BEU32>()
+            .get(rtxn, main_key::MAX_PREFIX_LENGTH)?
+            .unwrap_or(4);
+        Ok(PrefixSettings { 
+            compute_prefixes, 
+            max_prefix_length: max_prefix_length as usize,
+            prefix_count_threshold: 100 
+        })
     }
 
     pub fn arroy_stats(&self, rtxn: &RoTxn<'_>) -> Result<ArroyStats> {
@@ -1754,6 +1763,21 @@ impl Index {
             reader.aggregate_stats(rtxn, &mut stats)?;
         }
         Ok(stats)
+    }
+
+    pub(crate) fn put_max_prefix_length(&self, wtxn: &mut RwTxn<'_>, length: u8) -> heed::Result<()> {
+        self.main.remap_types::<Str, BEU32>().put(wtxn, main_key::MAX_PREFIX_LENGTH, &(length as u32))
+    }
+
+    pub fn max_prefix_length(&self, rtxn: &RoTxn<'_>) -> Result<Option<u8>> {
+        Ok(self.main
+            .remap_types::<Str, BEU32>()
+            .get(rtxn, main_key::MAX_PREFIX_LENGTH)?
+            .map(|l| l as u8))
+    }
+
+    pub(crate) fn delete_max_prefix_length(&self, wtxn: &mut RwTxn<'_>) -> heed::Result<bool> {
+        self.main.remap_key_type::<Str>().delete(wtxn, main_key::MAX_PREFIX_LENGTH)
     }
 }
 
