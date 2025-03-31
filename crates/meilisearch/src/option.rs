@@ -874,7 +874,7 @@ fn load_private_key(
     filename: PathBuf,
 ) -> anyhow::Result<rustls::pki_types::PrivateKeyDer<'static>> {
     let rsa_keys = {
-        let keyfile = fs::File::open(filename.clone())
+        let keyfile = fs::File::open(&filename)
             .map_err(|_| anyhow::anyhow!("cannot open private key file"))?;
         let mut reader = BufReader::new(keyfile);
         rsa_private_keys(&mut reader)
@@ -883,7 +883,7 @@ fn load_private_key(
     };
 
     let pkcs8_keys = {
-        let keyfile = fs::File::open(filename.clone())
+        let keyfile = fs::File::open(&filename)
             .map_err(|_| anyhow::anyhow!("cannot open private key file"))?;
         let mut reader = BufReader::new(keyfile);
         rustls_pemfile::pkcs8_private_keys(&mut reader).collect::<Result<Vec<_>, _>>().map_err(
@@ -896,7 +896,7 @@ fn load_private_key(
     };
 
     let ec_keys = {
-        let keyfile = fs::File::open(filename)
+        let keyfile = fs::File::open(&filename)
             .map_err(|_| anyhow::anyhow!("cannot open private key file"))?;
         let mut reader = BufReader::new(keyfile);
         ec_private_keys(&mut reader)
