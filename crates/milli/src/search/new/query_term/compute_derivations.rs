@@ -7,17 +7,21 @@ use std::ops::ControlFlow;
 
 use fst::automaton::Str;
 use fst::{Automaton, IntoStreamer, Streamer};
-use heed::types::DecodeIgnore;
-use heed::types::*;
-use crate::heed_codec::StrBEU16Codec;
+use heed::types::{DecodeIgnore, *};
 
 use super::{OneTypoTerm, Phrase, QueryTerm, ZeroTypoTerm};
+use crate::heed_codec::StrBEU16Codec;
 use crate::search::fst_utils::{Complement, Intersection, StartsWith, Union};
-use crate::search::new::interner::{DedupInterner, Interned};
-use crate::search::new::query_term::{Lazy, TwoTypoTerm};
-use crate::search::new::{limits, SearchContext};
-use crate::search::{build_dfa, get_first};
-use crate::{Result, MAX_WORD_LENGTH};
+use crate::search::new::interner::DedupInterner;
+use crate::search::new::query_term::LocatedQueryTerm;
+use crate::search::new::query_term::QueryTermSubset;
+use crate::search::new::query_term::ZeroTypoTermSubset;
+use crate::search::new::small_bitmap::SmallBitmap;
+use crate::search::new::SearchContext;
+use crate::search::new::Word;
+use crate::search::new::{Interned, Lazy};
+use crate::search::query_term::limits;
+use crate::Result;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum NumberOfTypos {
@@ -176,13 +180,10 @@ fn find_zero_one_two_typo_derivations(
     Ok(())
 }
 
-fn check_prefix_in_databases(
-    ctx: &SearchContext<'_>,
-    word: &str,
-) -> Result<bool> {
+fn check_prefix_in_databases(ctx: &SearchContext<'_>, word: &str) -> Result<bool> {
     let mut key = word.as_bytes().to_owned();
     key.push(0);
-    
+
     // Check both databases in a single pass
     let remap_key_type = ctx
         .index
@@ -190,7 +191,7 @@ fn check_prefix_in_databases(
         .remap_types::<Bytes, Bytes>()
         .prefix_iter(ctx.txn, &key)?
         .remap_key_type::<StrBEU16Codec>();
-    
+
     let mut found = false;
     for result in remap_key_type {
         let ((prefix, _), _) = result?;
@@ -199,15 +200,15 @@ fn check_prefix_in_databases(
             break;
         }
     }
-    
+
     if !found {
         let remap_key_type = ctx
             .index
-            .exact_word_prefix_docids
+            .word_prefix_fid_docids
             .remap_types::<Bytes, Bytes>()
             .prefix_iter(ctx.txn, &key)?
             .remap_key_type::<StrBEU16Codec>();
-            
+
         for result in remap_key_type {
             let ((prefix, _), _) = result?;
             if prefix == word {
@@ -216,7 +217,7 @@ fn check_prefix_in_databases(
             }
         }
     }
-    
+
     Ok(found)
 }
 
@@ -225,7 +226,7 @@ pub fn partially_initialized_term_from_word(
     word: &str,
     max_typo: u8,
     is_prefix: bool,
-    _is_ngram: bool,
+    is_ngram: bool,
 ) -> Result<QueryTerm> {
     let word_interned = ctx.word_interner.insert(word.to_owned());
 
@@ -244,22 +245,23 @@ pub fn partially_initialized_term_from_word(
     }
 
     let fst = ctx.index.words_fst(ctx.txn)?;
-    
+
     // Check if word is a stop word
-    let is_stop_word = ctx.index.stop_words(ctx.txn)?.map_or(false, |stop_words| {
-        stop_words.contains(word)
-    });
+    let is_stop_word =
+        ctx.index.stop_words(ctx.txn)?.map_or(false, |stop_words| stop_words.contains(word));
 
     // For stop words, we only use prefix search if the word is a complete match
     let use_prefix_db = if is_stop_word {
-        is_prefix && fst.contains(word)
+        is_prefix && word.len() <= limits::MAX_WORD_LENGTH
     } else {
         is_prefix && check_prefix_in_databases(ctx, word)?
     };
-    
+
     let use_prefix_db = if use_prefix_db { Some(word_interned) } else { None };
 
     let mut zero_typo = None;
+    let mut one_typo = None;
+    let mut two_typo = None;
     let mut prefix_of = BTreeSet::new();
 
     if fst.contains(word) || ctx.index.exact_word_docids.get(ctx.txn, word)?.is_some() {
@@ -268,22 +270,23 @@ pub fn partially_initialized_term_from_word(
 
     if is_prefix && use_prefix_db.is_none() {
         // Check both regular and exact word databases for prefix matches
-        let mut check_prefix_derivations = |fst_set: fst::Set<Cow<'_, [u8]>>| -> Result<ControlFlow<()>> {
-            find_zero_typo_prefix_derivations(
-                word_interned,
-                fst_set,
-                &mut ctx.word_interner,
-                |derived_word| {
-                    if prefix_of.len() < limits::MAX_PREFIX_COUNT {
-                        prefix_of.insert(derived_word);
-                        Ok(ControlFlow::Continue(()))
-                    } else {
-                        Ok(ControlFlow::Break(()))
-                    }
-                },
-            )?;
-            Ok(ControlFlow::Continue(()))
-        };
+        let mut check_prefix_derivations =
+            |fst_set: fst::Set<Cow<'_, [u8]>>| -> Result<ControlFlow<()>> {
+                find_zero_typo_prefix_derivations(
+                    word_interned,
+                    fst_set,
+                    &mut ctx.word_interner,
+                    |derived_word| {
+                        if prefix_of.len() < limits::MAX_PREFIX_COUNT {
+                            prefix_of.insert(derived_word);
+                            Ok(ControlFlow::Continue(()))
+                        } else {
+                            Ok(ControlFlow::Break(()))
+                        }
+                    },
+                )?;
+                Ok(ControlFlow::Continue(()))
+            };
 
         // Check regular words
         check_prefix_derivations(fst)?;

@@ -36,14 +36,14 @@ pub fn compute_query_term_subset_docids(
     term: &QueryTermSubset,
 ) -> Result<RoaringBitmap> {
     let mut docids = RoaringBitmap::new();
-    
+
     // Handle regular words
     for word in term.all_single_words_except_prefix_db(ctx)? {
         if let Some(word_docids) = ctx.word_docids(universe, word)? {
             docids |= word_docids;
         }
     }
-    
+
     // Handle phrases
     for phrase in term.all_phrases(ctx)? {
         docids |= ctx.get_phrase_docids(phrase)?;
@@ -52,21 +52,19 @@ pub fn compute_query_term_subset_docids(
     // Handle prefix matches with position information
     if let Some(prefix) = term.use_prefix_db(ctx) {
         let mut prefix_docids = RoaringBitmap::new();
-        
+
         // Get all positions where the prefix appears
         let positions = ctx.get_db_word_prefix_positions(prefix.interned())?;
-        
+
         // For each position, get the documents containing the prefix at that position
         for position in positions {
-            if let Some(pos_docids) = ctx.get_db_word_prefix_position_docids(
-                universe,
-                prefix.interned(),
-                position,
-            )? {
+            if let Some(pos_docids) =
+                ctx.get_db_word_prefix_position_docids(universe, prefix.interned(), position)?
+            {
                 prefix_docids |= pos_docids;
             }
         }
-        
+
         // If we found documents with position information, use those
         if !prefix_docids.is_empty() {
             docids |= prefix_docids;

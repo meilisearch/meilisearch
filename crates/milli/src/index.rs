@@ -1742,14 +1742,15 @@ impl Index {
 
     pub fn prefix_settings(&self, rtxn: &RoTxn<'_>) -> Result<PrefixSettings> {
         let compute_prefixes = self.prefix_search(rtxn)?.unwrap_or_default();
-        let max_prefix_length = self.main
+        let max_prefix_length = self
+            .main
             .remap_types::<Str, BEU32>()
             .get(rtxn, main_key::MAX_PREFIX_LENGTH)?
             .unwrap_or(4);
-        Ok(PrefixSettings { 
-            compute_prefixes, 
-            max_prefix_length: max_prefix_length as usize,
-            prefix_count_threshold: 100 
+        Ok(PrefixSettings {
+            compute_prefixes,
+            max_prefix_length: max_prefix_length as u8,
+            prefix_count_threshold: 100,
         })
     }
 
@@ -1766,18 +1767,25 @@ impl Index {
     }
 
     pub fn max_prefix_length(&self, rtxn: &RoTxn<'_>) -> Result<Option<u8>> {
-        Ok(self.main
+        Ok(self
+            .main
             .remap_types::<Str, BEU32>()
             .get(rtxn, main_key::MAX_PREFIX_LENGTH)?
             .map(|l| l as u8))
     }
 
-    #[allow(dead_code)]
-    pub(crate) fn put_max_prefix_length(&self, wtxn: &mut RwTxn<'_>, length: u8) -> heed::Result<()> {
-        self.main.remap_types::<Str, BEU32>().put(wtxn, main_key::MAX_PREFIX_LENGTH, &(length as u32))
+    pub(crate) fn put_max_prefix_length(
+        &self,
+        wtxn: &mut RwTxn<'_>,
+        length: u8,
+    ) -> heed::Result<()> {
+        self.main.remap_types::<Str, BEU32>().put(
+            wtxn,
+            main_key::MAX_PREFIX_LENGTH,
+            &(length as u32),
+        )
     }
 
-    #[allow(dead_code)]
     pub(crate) fn delete_max_prefix_length(&self, wtxn: &mut RwTxn<'_>) -> heed::Result<bool> {
         self.main.remap_key_type::<Str>().delete(wtxn, main_key::MAX_PREFIX_LENGTH)
     }
