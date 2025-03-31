@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       dataset_name:
-        description: 'The name of the dataset used to benchmark (search_songs, search_wiki, search_geo or indexing)'
+        description: "The name of the dataset used to benchmark (search_songs, search_wiki, search_geo or indexing)"
         required: false
-        default: 'search_songs'
+        default: "search_songs"
 
 env:
   BENCH_NAME: ${{ github.event.inputs.dataset_name }}
@@ -18,7 +18,7 @@ jobs:
     timeout-minutes: 4320 # 72h
     steps:
       - uses: actions/checkout@v3
-      - uses: dtolnay/rust-toolchain@1.81
+      - uses: dtolnay/rust-toolchain@1.85
         with:
           profile: minimal
 
@@ -67,7 +67,7 @@ jobs:
           out_dir: critcmp_results
 
       # Helper
-      - name: 'README: compare with another benchmark'
+      - name: "README: compare with another benchmark"
         run: |
           echo "${{ steps.file.outputs.basename }}.json has just been pushed."
           echo 'How to compare this benchmark with another one?'

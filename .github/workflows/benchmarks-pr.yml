@@ -44,7 +44,7 @@ jobs:
             exit 1
           fi
 
-      - uses: dtolnay/rust-toolchain@1.81
+      - uses: dtolnay/rust-toolchain@1.85
         with:
           profile: minimal
 
