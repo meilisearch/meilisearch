@@ -129,6 +129,14 @@ and can not be more than 511 bytes.", .document_id.to_string()
     InvalidGeoField(#[from] GeoError),
     #[error("Invalid vector dimensions: expected: `{}`, found: `{}`.", .expected, .found)]
     InvalidVectorDimensions { expected: usize, found: usize },
+    #[error("Invalid vector dimensions in document with id `{document_id}` in `._vectors.{embedder_name}`.\n  - note: embedding #{embedding_index} has dimensions {found}\n  - note: embedder `{embedder_name}` requires {expected}")]
+    InvalidIndexingVectorDimensions {
+        embedder_name: String,
+        document_id: String,
+        embedding_index: usize,
+        expected: usize,
+        found: usize,
+    },
     #[error("The `_vectors` field in the document with id: `{document_id}` is not an object. Was expecting an object with a key for each embedder with manually provided vectors, but instead got `{value}`")]
     InvalidVectorsMapType { document_id: String, value: Value },
     #[error("Bad embedder configuration in the document with id: `{document_id}`. {error}")]

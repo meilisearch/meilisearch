@@ -454,7 +454,10 @@ impl ErrorCode for milli::Error {
                     }
                     UserError::CriterionError(_) => Code::InvalidSettingsRankingRules,
                     UserError::InvalidGeoField { .. } => Code::InvalidDocumentGeoField,
-                    UserError::InvalidVectorDimensions { .. } => Code::InvalidVectorDimensions,
+                    UserError::InvalidVectorDimensions { .. }
+                    | UserError::InvalidIndexingVectorDimensions { .. } => {
+                        Code::InvalidVectorDimensions
+                    }
                     UserError::InvalidVectorsMapType { .. }
                     | UserError::InvalidVectorsEmbedderConf { .. } => Code::InvalidVectorsType,
                     UserError::TooManyVectors(_, _) => Code::TooManyVectors,
