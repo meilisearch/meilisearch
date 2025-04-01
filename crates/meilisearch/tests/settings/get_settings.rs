@@ -179,7 +179,7 @@ test_setting_routes!(
     {
         setting: typo_tolerance,
         update_verb: patch,
-        default_value: {"enabled": true, "minWordSizeForTypos": {"oneTypo": 5, "twoTypos": 9}, "disableOnWords": [], "disableOnAttributes": []}
+        default_value: {"enabled": true, "minWordSizeForTypos": {"oneTypo": 5, "twoTypos": 9}, "disableOnWords": [], "disableOnAttributes": [], "disableOnNumbers": false}
     },
 );
 

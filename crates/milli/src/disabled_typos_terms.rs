@@ -28,7 +28,7 @@ impl Index {
         self.main.remap_types::<Str, SerdeJson<DisabledTyposTerms>>().put(
             txn,
             main_key::DISABLED_TYPOS_TERMS,
-            &disabled_typos_terms,
+            disabled_typos_terms,
         )?;
 
         Ok(())

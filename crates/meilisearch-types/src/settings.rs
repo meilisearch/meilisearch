@@ -706,6 +706,12 @@ pub fn apply_settings_to_builder(
                 Setting::Reset => builder.reset_exact_attributes(),
                 Setting::NotSet => (),
             }
+
+            match value.disable_on_numbers {
+                Setting::Set(val) => builder.set_disable_on_numbers(val),
+                Setting::Reset => builder.reset_disable_on_numbers(),
+                Setting::NotSet => (),
+            }
         }
         Setting::Reset => {
             // all typo settings need to be reset here.
