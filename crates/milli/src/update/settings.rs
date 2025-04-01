@@ -170,7 +170,7 @@ pub struct Settings<'a, 't, 'i> {
     synonyms: Setting<BTreeMap<String, Vec<String>>>,
     primary_key: Setting<String>,
     authorize_typos: Setting<bool>,
-    disabled_typos_terms: Setting<DisabledTyposTerms>,
+    disable_on_numbers: Setting<bool>,
     min_word_len_two_typos: Setting<u8>,
     min_word_len_one_typo: Setting<u8>,
     exact_words: Setting<BTreeSet<String>>,
@@ -209,7 +209,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             synonyms: Setting::NotSet,
             primary_key: Setting::NotSet,
             authorize_typos: Setting::NotSet,
-            disabled_typos_terms: Setting::NotSet,
+            disable_on_numbers: Setting::NotSet,
             exact_words: Setting::NotSet,
             min_word_len_two_typos: Setting::NotSet,
             min_word_len_one_typo: Setting::NotSet,
@@ -357,8 +357,12 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         self.min_word_len_one_typo = Setting::Reset;
     }
 
-    pub fn set_disabled_typos_terms(&mut self, disabled_typos_terms: DisabledTyposTerms) {
-        self.disabled_typos_terms = Setting::Set(disabled_typos_terms);
+    pub fn set_disable_on_numbers(&mut self, disable_on_numbers: bool) {
+        self.disable_on_numbers = Setting::Set(disable_on_numbers);
+    }
+
+    pub fn reset_disable_on_numbers(&mut self) {
+        self.disable_on_numbers = Setting::Reset;
     }
 
     pub fn set_exact_words(&mut self, words: BTreeSet<String>) {
@@ -874,15 +878,20 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
     }
 
     fn update_disabled_typos_terms(&mut self) -> Result<()> {
-        match self.disabled_typos_terms {
-            Setting::Set(disabled_typos_terms) => {
-                self.index.put_disabled_typos_terms(self.wtxn, &disabled_typos_terms)?;
+        let mut disabled_typos_terms = self.index.disabled_typos_terms(self.wtxn)?;
+        match self.disable_on_numbers {
+            Setting::Set(disable_on_numbers) => {
+                disabled_typos_terms.disable_on_numbers = disable_on_numbers;
             }
             Setting::Reset => {
                 self.index.delete_disabled_typos_terms(self.wtxn)?;
+                disabled_typos_terms.disable_on_numbers =
+                    DisabledTyposTerms::default().disable_on_numbers;
             }
             Setting::NotSet => (),
         }
+
+        self.index.put_disabled_typos_terms(self.wtxn, &disabled_typos_terms)?;
         Ok(())
     }
 
