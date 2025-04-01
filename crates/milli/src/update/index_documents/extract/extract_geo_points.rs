@@ -80,22 +80,28 @@ fn extract_lat_lng(
             let (lat, lng) = match (lat, lng) {
                 (Some(lat), Some(lng)) => (lat, lng),
                 (Some(_), None) => {
-                    return Err(GeoError::MissingLatitude { document_id: document_id() }.into())
+                    return Err(
+                        Box::new(GeoError::MissingLatitude { document_id: document_id() }).into()
+                    )
                 }
                 (None, Some(_)) => {
-                    return Err(GeoError::MissingLongitude { document_id: document_id() }.into())
+                    return Err(
+                        Box::new(GeoError::MissingLongitude { document_id: document_id() }).into()
+                    )
                 }
                 (None, None) => return Ok(None),
             };
             let lat = extract_finite_float_from_value(
                 serde_json::from_slice(lat).map_err(InternalError::SerdeJson)?,
             )
-            .map_err(|lat| GeoError::BadLatitude { document_id: document_id(), value: lat })?;
+            .map_err(|lat| GeoError::BadLatitude { document_id: document_id(), value: lat })
+            .map_err(Box::new)?;
 
             let lng = extract_finite_float_from_value(
                 serde_json::from_slice(lng).map_err(InternalError::SerdeJson)?,
             )
-            .map_err(|lng| GeoError::BadLongitude { document_id: document_id(), value: lng })?;
+            .map_err(|lng| GeoError::BadLongitude { document_id: document_id(), value: lng })
+            .map_err(Box::new)?;
             Ok(Some([lat, lng]))
         }
         None => Ok(None),

@@ -2954,10 +2954,15 @@ pub(crate) mod tests {
                 documents!({ "id" : 6, RESERVED_GEO_FIELD_NAME: {"lat": "unparseable", "lng": "unparseable"}}),
             )
             .unwrap_err();
-        assert!(matches!(
-            err1,
-            Error::UserError(UserError::InvalidGeoField(GeoError::BadLatitudeAndLongitude { .. }))
-        ));
+        match err1 {
+            Error::UserError(UserError::InvalidGeoField(err)) => match *err {
+                GeoError::BadLatitudeAndLongitude { .. } => (),
+                otherwise => {
+                    panic!("err1 is not a BadLatitudeAndLongitude error but rather a {otherwise:?}")
+                }
+            },
+            _ => panic!("err1 is not a BadLatitudeAndLongitude error but rather a {err1:?}"),
+        }
 
         db_snap!(index, geo_faceted_documents_ids); // ensure that no more document was inserted
     }
