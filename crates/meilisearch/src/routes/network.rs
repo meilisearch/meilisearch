@@ -211,7 +211,15 @@ async fn patch_network(
 
                         let merged = DbRemote {
                             url: match new_url {
-                                Setting::Set(new_url) => new_url,
+                                Setting::Set(new_url) => {
+                                    if !new_url.starts_with("http://") && !new_url.starts_with("https://") {
+                                        return Err(ResponseError::from_msg(
+                                            format!("in .remotes.{key}.url: error from Url::parse"),
+                                            meilisearch_types::error::Code::InvalidNetworkUrl,
+                                        ));
+                                    }
+                                    new_url
+                                },
                                 Setting::Reset => {
                                     return Err(ResponseError::from_msg(
                                         format!(
