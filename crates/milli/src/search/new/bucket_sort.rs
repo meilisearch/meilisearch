@@ -252,8 +252,8 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
             || is_below_threshold
         {
             if is_below_threshold {
-                all_candidates -=
-                    next_bucket.candidates | &ranking_rule_universes[cur_ranking_rule_index];
+                all_candidates -= &next_bucket.candidates;
+                all_candidates -= &ranking_rule_universes[cur_ranking_rule_index];
             } else {
                 maybe_add_to_results!(next_bucket.candidates);
             }
