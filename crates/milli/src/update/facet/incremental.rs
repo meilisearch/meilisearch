@@ -101,8 +101,7 @@ impl FacetsUpdateIncremental {
             let key = FacetGroupKeyCodec::<BytesRefCodec>::bytes_decode(key)
                 .map_err(heed::Error::Encoding)?;
 
-            if facet_level_may_be_updated
-                && current_field_id.is_some_and(|fid| fid != key.field_id)
+            if facet_level_may_be_updated && current_field_id.is_some_and(|fid| fid != key.field_id)
             {
                 // Only add or remove a level after making all the field modifications.
                 self.inner.add_or_delete_level(wtxn, current_field_id.unwrap())?;

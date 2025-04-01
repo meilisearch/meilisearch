@@ -269,7 +269,8 @@ fn process_document_tokens<'doc>(
         }
         // drain the proximity window until the head word is considered close to the word we are inserting.
         while word_positions
-            .front().is_some_and(|(_w, p)| index_proximity(*p as u32, pos as u32) >= MAX_DISTANCE)
+            .front()
+            .is_some_and(|(_w, p)| index_proximity(*p as u32, pos as u32) >= MAX_DISTANCE)
         {
             word_positions_into_word_pair_proximity(word_positions, word_pair_proximity);
         }

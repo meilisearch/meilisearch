@@ -559,7 +559,8 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                 let fst = fst::Set::from_iter(stop_words.into_iter())?;
 
                 // Does the new FST differ from the previous one?
-                if current.is_none_or(|current| current.as_fst().as_bytes() != fst.as_fst().as_bytes())
+                if current
+                    .is_none_or(|current| current.as_fst().as_bytes() != fst.as_fst().as_bytes())
                 {
                     // we want to re-create our FST.
                     self.index.put_stop_words(self.wtxn, &fst)?;

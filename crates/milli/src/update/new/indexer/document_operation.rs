@@ -210,11 +210,8 @@ fn extract_addition_payload_changes<'r, 'pl: 'r>(
             primary_key.as_ref().unwrap()
         };
 
-        let external_id = retrieved_primary_key.extract_fields_and_docid(
-            doc,
-            new_fields_ids_map,
-            indexer,
-        )?;
+        let external_id =
+            retrieved_primary_key.extract_fields_and_docid(doc, new_fields_ids_map, indexer)?;
 
         let external_id = external_id.to_de();
         let current_offset = iter.byte_offset();

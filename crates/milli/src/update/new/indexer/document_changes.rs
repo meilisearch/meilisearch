@@ -149,13 +149,11 @@ pub struct IndexingContext<
     pub grenad_parameters: &'indexer GrenadParameters,
 }
 
-impl<
-        MSP,
-    > Copy
+impl<MSP> Copy
     for IndexingContext<
-        '_,     // invariant lifetime of fields ids map
+        '_, // invariant lifetime of fields ids map
         '_, // covariant lifetime of objects that are borrowed  during the entire indexing operation
-        '_,   // covariant lifetime of the index
+        '_, // covariant lifetime of the index
         MSP,
     >
 where
@@ -163,13 +161,11 @@ where
 {
 }
 
-impl<
-        MSP,
-    > Clone
+impl<MSP> Clone
     for IndexingContext<
-        '_,     // invariant lifetime of fields ids map
+        '_, // invariant lifetime of fields ids map
         '_, // covariant lifetime of objects that are borrowed  during the entire indexing operation
-        '_,   // covariant lifetime of the index
+        '_, // covariant lifetime of the index
         MSP,
     >
 where

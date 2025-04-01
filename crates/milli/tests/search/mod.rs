@@ -256,10 +256,7 @@ fn execute_filter(filter: &str, document: &TestDocument) -> Option<String> {
     } else if matches!(filter, "opt1 IS EMPTY" | "NOT opt1 IS NOT EMPTY") {
         id = document.opt1.as_ref().is_some_and(is_empty_value).then(|| document.id.clone());
     } else if matches!(filter, "NOT opt1 IS EMPTY" | "opt1 IS NOT EMPTY") {
-        id = document
-            .opt1
-            .as_ref().is_none_or(|v| !is_empty_value(v))
-            .then(|| document.id.clone());
+        id = document.opt1.as_ref().is_none_or(|v| !is_empty_value(v)).then(|| document.id.clone());
     } else if matches!(filter, "opt1.opt2 IS EMPTY") {
         if document.opt1opt2.as_ref().is_some_and(is_empty_value) {
             id = Some(document.id.clone());

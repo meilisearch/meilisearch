@@ -71,7 +71,8 @@ pub fn find_best_match_interval(matches: &[Match], crop_size: usize) -> [&Match;
     let mut save_best_interval = |interval_first, interval_last| {
         let interval_score = get_interval_score(&matches[interval_first..=interval_last]);
         let is_interval_score_better = &best_interval
-            .as_ref().is_none_or(|MatchIntervalWithScore { score, .. }| interval_score > *score);
+            .as_ref()
+            .is_none_or(|MatchIntervalWithScore { score, .. }| interval_score > *score);
 
         if *is_interval_score_better {
             best_interval = Some(MatchIntervalWithScore {
