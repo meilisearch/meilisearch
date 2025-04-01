@@ -239,15 +239,15 @@ impl Embedder {
 
         let model = BertModel::load(vb, &config).map_err(NewEmbedderError::load_model)?;
 
-        if let Some(pp) = tokenizer.get_padding_mut() {
+        match tokenizer.get_padding_mut() { Some(pp) => {
             pp.strategy = tokenizers::PaddingStrategy::BatchLongest
-        } else {
+        } _ => {
             let pp = PaddingParams {
                 strategy: tokenizers::PaddingStrategy::BatchLongest,
                 ..Default::default()
             };
             tokenizer.with_padding(Some(pp));
-        }
+        }}
 
         let mut this = Self {
             model,

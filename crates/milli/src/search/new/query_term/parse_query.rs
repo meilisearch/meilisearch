@@ -193,7 +193,7 @@ pub fn located_query_terms_from_tokens(
 
 pub fn number_of_typos_allowed<'ctx>(
     ctx: &SearchContext<'ctx>,
-) -> Result<impl Fn(&str) -> u8 + 'ctx> {
+) -> Result<impl Fn(&str) -> u8 + 'ctx + use<'ctx>> {
     let authorize_typos = ctx.index.authorize_typos(ctx.txn)?;
     let min_len_one_typo = ctx.index.min_word_len_one_typo(ctx.txn)?;
     let min_len_two_typos = ctx.index.min_word_len_two_typos(ctx.txn)?;

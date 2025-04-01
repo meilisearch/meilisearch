@@ -8,7 +8,7 @@ use Criterion::*;
 use crate::search::{self, EXTERNAL_DOCUMENTS_IDS};
 
 macro_rules! test_distinct {
-    ($func:ident, $distinct:ident, $exhaustive:ident, $limit:expr, $offset:expr, $criteria:expr, $n_res:expr) => {
+    ($func:ident, $distinct:ident, $exhaustive:ident, $limit:expr, $offset:expr_2021, $criteria:expr_2021, $n_res:expr_2021) => {
         #[test]
         fn $func() {
             let criteria = $criteria;

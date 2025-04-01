@@ -33,7 +33,7 @@ impl From<LocalizedAttributesRuleView> for LocalizedAttributesRule {
 ///
 /// this enum implements `Deserr` in order to be used in the API.
 macro_rules! make_locale {
-    ($(($iso_639_1:ident, $iso_639_1_str:expr) => ($iso_639_3:ident, $iso_639_3_str:expr),)+) => {
+    ($(($iso_639_1:ident, $iso_639_1_str:expr_2021) => ($iso_639_3:ident, $iso_639_3_str:expr_2021),)+) => {
         #[derive(Debug, Copy, Clone, PartialEq, Eq, Deserr, Serialize, Deserialize, Ord, PartialOrd, ToSchema)]
         #[deserr(rename_all = camelCase)]
         #[serde(rename_all = "camelCase")]

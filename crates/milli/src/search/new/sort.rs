@@ -196,10 +196,10 @@ impl<'ctx, Query: RankingRuleQueryTrait> RankingRule<'ctx, Query> for Sort<'ctx,
         universe: &RoaringBitmap,
     ) -> Result<Option<RankingRuleOutput<Query>>> {
         let iter = self.iter.as_mut().unwrap();
-        if let Some(mut bucket) = iter.next_bucket()? {
+        match iter.next_bucket()? { Some(mut bucket) => {
             bucket.candidates &= universe;
             Ok(Some(bucket))
-        } else {
+        } _ => {
             let query = self.original_query.as_ref().unwrap().clone();
             Ok(Some(RankingRuleOutput {
                 query,
@@ -211,7 +211,7 @@ impl<'ctx, Query: RankingRuleQueryTrait> RankingRule<'ctx, Query> for Sort<'ctx,
                     value: serde_json::Value::Null,
                 }),
             }))
-        }
+        }}
     }
 
     #[tracing::instrument(level = "trace", skip_all, target = "search::sort")]

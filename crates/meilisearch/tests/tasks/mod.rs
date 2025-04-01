@@ -228,7 +228,7 @@ async fn list_tasks_status_and_type_filtered() {
 }
 
 macro_rules! assert_valid_summarized_task {
-    ($response:expr, $task_type:literal, $index:literal) => {{
+    ($response:expr_2021, $task_type:literal, $index:literal) => {{
         assert_eq!($response.as_object().unwrap().len(), 5);
         assert!($response["taskUid"].as_u64().is_some());
         assert_eq!($response["indexUid"], $index);

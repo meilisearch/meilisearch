@@ -36,11 +36,11 @@ impl<'a> WordFstBuilder<'a> {
         }
 
         self.word_fst_builder.register(deladd, right, &mut |bytes, deladd, is_modified| {
-            if let Some(prefix_fst_builder) = &mut self.prefix_fst_builder {
+            match &mut self.prefix_fst_builder { Some(prefix_fst_builder) => {
                 prefix_fst_builder.insert_word(bytes, deladd, is_modified)
-            } else {
+            } _ => {
                 Ok(())
-            }
+            }}
         })?;
 
         Ok(())
@@ -52,11 +52,11 @@ impl<'a> WordFstBuilder<'a> {
         rtxn: &heed::RoTxn,
     ) -> Result<(Mmap, Option<PrefixData>)> {
         let words_fst_mmap = self.word_fst_builder.build(&mut |bytes, deladd, is_modified| {
-            if let Some(prefix_fst_builder) = &mut self.prefix_fst_builder {
+            match &mut self.prefix_fst_builder { Some(prefix_fst_builder) => {
                 prefix_fst_builder.insert_word(bytes, deladd, is_modified)
-            } else {
+            } _ => {
                 Ok(())
-            }
+            }}
         })?;
 
         let prefix_data = self

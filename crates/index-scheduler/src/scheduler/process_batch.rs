@@ -47,11 +47,11 @@ impl IndexScheduler {
             Batch::TaskCancelation { mut task } => {
                 // 1. Retrieve the tasks that matched the query at enqueue-time.
                 let matched_tasks =
-                    if let KindWithContent::TaskCancelation { tasks, query: _ } = &task.kind {
+                    match &task.kind { KindWithContent::TaskCancelation { tasks, query: _ } => {
                         tasks
-                    } else {
+                    } _ => {
                         unreachable!()
-                    };
+                    }};
 
                 let rtxn = self.env.read_txn()?;
                 let mut canceled_tasks = self.cancel_matched_tasks(
@@ -83,11 +83,11 @@ impl IndexScheduler {
                 let mut matched_tasks = RoaringBitmap::new();
 
                 for task in tasks.iter() {
-                    if let KindWithContent::TaskDeletion { tasks, query: _ } = &task.kind {
+                    match &task.kind { KindWithContent::TaskDeletion { tasks, query: _ } => {
                         matched_tasks |= tasks;
-                    } else {
+                    } _ => {
                         unreachable!()
-                    }
+                    }}
                 }
 
                 let mut wtxn = self.env.write_txn()?;
@@ -279,11 +279,11 @@ impl IndexScheduler {
                 progress.update_progress(SwappingTheIndexes::EnsuringCorrectnessOfTheSwap);
 
                 let mut wtxn = self.env.write_txn()?;
-                let swaps = if let KindWithContent::IndexSwap { swaps } = &task.kind {
+                let swaps = match &task.kind { KindWithContent::IndexSwap { swaps } => {
                     swaps
-                } else {
+                } _ => {
                     unreachable!()
-                };
+                }};
                 let mut not_found_indexes = BTreeSet::new();
                 for IndexSwap { indexes: (lhs, rhs) } in swaps {
                     for index in [lhs, rhs] {
@@ -532,7 +532,7 @@ impl IndexScheduler {
                 // We must remove the batch entirely
                 if tasks.is_empty() {
                     if let Some(batch) = self.queue.batches.get_batch(wtxn, batch_id)? {
-                        if let Some(BatchEnqueuedAt { earliest, oldest }) = batch.enqueued_at {
+                        match batch.enqueued_at { Some(BatchEnqueuedAt { earliest, oldest }) => {
                             remove_task_datetime(
                                 wtxn,
                                 self.queue.batches.enqueued_at,
@@ -545,7 +545,7 @@ impl IndexScheduler {
                                 oldest,
                                 batch_id,
                             )?;
-                        } else {
+                        } _ => {
                             // If we don't have the enqueued at in the batch it means the database comes from the v1.12
                             // and we still need to find the date by scrolling the database
                             remove_n_tasks_datetime_earlier_than(
@@ -555,7 +555,7 @@ impl IndexScheduler {
                                 batch.stats.total_nb_tasks.clamp(1, 2) as usize,
                                 batch_id,
                             )?;
-                        }
+                        }}
                         remove_task_datetime(
                             wtxn,
                             self.queue.batches.started_at,

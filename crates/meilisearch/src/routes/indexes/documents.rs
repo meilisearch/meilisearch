@@ -619,7 +619,7 @@ fn documents_by_query(
 
     let retrieve_vectors = RetrieveVectors::new(retrieve_vectors);
 
-    let ids = if let Some(ids) = ids {
+    let ids = match ids { Some(ids) => {
         let mut parsed_ids = Vec::with_capacity(ids.len());
         for (index, id) in ids.into_iter().enumerate() {
             let id = id.try_into().map_err(|error| {
@@ -629,9 +629,9 @@ fn documents_by_query(
             parsed_ids.push(id)
         }
         Some(parsed_ids)
-    } else {
+    } _ => {
         None
-    };
+    }};
 
     let index = index_scheduler.index(&index_uid)?;
     let (total, documents) = retrieve_documents(

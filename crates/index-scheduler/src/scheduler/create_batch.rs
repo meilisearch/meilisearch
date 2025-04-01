@@ -499,13 +499,13 @@ impl IndexScheduler {
         // create the batch directly. Otherwise, get the index name associated with the task
         // and use the autobatcher to batch the enqueued tasks associated with it
 
-        let index_name = if let Some(&index_name) = task.indexes().first() {
+        let index_name = match task.indexes().first() { Some(&index_name) => {
             index_name
-        } else {
+        } _ => {
             assert!(matches!(&task.kind, KindWithContent::IndexSwap { swaps } if swaps.is_empty()));
             current_batch.processing(Some(&mut task));
             return Ok(Some((Batch::IndexSwap { task }, current_batch)));
-        };
+        }};
 
         let index_already_exists = self.index_mapper.exists(rtxn, index_name)?;
         let mut primary_key = None;

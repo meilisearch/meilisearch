@@ -453,14 +453,14 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
     } in extractors
     {
         let remove_from_user_provided =
-            if let ExtractionAction::DocumentOperation(DocumentOperation {
+            match action
+            { ExtractionAction::DocumentOperation(DocumentOperation {
                 remove_from_user_provided,
-            }) = action
-            {
+            }) => {
                 remove_from_user_provided
-            } else {
+            } _ => {
                 Default::default()
-            };
+            }};
 
         results.push(ExtractedVectorPoints {
             manual_vectors: writer_into_reader(manual_vectors_writer)?,
@@ -789,11 +789,11 @@ fn embed_chunks(
     match embedder.embed_index(text_chunks, request_threads) {
         Ok(chunks) => Ok(chunks),
         Err(error) => {
-            if let FaultSource::Bug = error.fault {
+            match error.fault { FaultSource::Bug => {
                 Err(crate::Error::InternalError(crate::InternalError::VectorEmbeddingError(
                     error.into(),
                 )))
-            } else {
+            } _ => {
                 let mut msg =
                     format!(r"While embedding documents for embedder `{embedder_name}`: {error}");
 
@@ -827,7 +827,7 @@ fn embed_chunks(
                 }
 
                 Err(crate::Error::UserError(crate::UserError::DocumentEmbeddingError(msg)))
-            }
+            }}
         }
     }
 }

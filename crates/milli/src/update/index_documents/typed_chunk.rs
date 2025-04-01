@@ -689,14 +689,14 @@ pub(crate) fn write_typed_chunk_into_index(
                     .unwrap();
 
                 if embeddings.embedding_count() > usize::from(u8::MAX) {
-                    let external_docid = if let Ok(Some(Ok(index))) = index
+                    let external_docid = match index
                         .external_id_of(wtxn, std::iter::once(docid))
                         .map(|it| it.into_iter().next())
-                    {
+                    { Ok(Some(Ok(index))) => {
                         index
-                    } else {
+                    } _ => {
                         format!("internal docid={docid}")
-                    };
+                    }};
                     return Err(crate::Error::UserError(crate::UserError::TooManyVectors(
                         external_docid,
                         embeddings.embedding_count(),

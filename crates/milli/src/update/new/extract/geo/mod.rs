@@ -95,7 +95,7 @@ pub struct FrozenGeoExtractorData<'extractor> {
 impl FrozenGeoExtractorData<'_> {
     pub fn iter_and_clear_removed(
         &mut self,
-    ) -> io::Result<impl IntoIterator<Item = io::Result<ExtractedGeoPoint>> + '_> {
+    ) -> io::Result<impl IntoIterator<Item = io::Result<ExtractedGeoPoint>> + '_ + use<'_>> {
         Ok(mem::take(&mut self.removed)
             .iter()
             .copied()
@@ -105,7 +105,7 @@ impl FrozenGeoExtractorData<'_> {
 
     pub fn iter_and_clear_inserted(
         &mut self,
-    ) -> io::Result<impl IntoIterator<Item = io::Result<ExtractedGeoPoint>> + '_> {
+    ) -> io::Result<impl IntoIterator<Item = io::Result<ExtractedGeoPoint>> + '_ + use<'_>> {
         Ok(mem::take(&mut self.inserted)
             .iter()
             .copied()

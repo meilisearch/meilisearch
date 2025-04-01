@@ -233,13 +233,13 @@ impl<'doc> VectorDocumentFromVersions<'doc> {
         embedders: &'doc EmbeddingConfigs,
     ) -> Result<Option<Self>> {
         let document = DocumentFromVersions::new(versions);
-        if let Some(vectors_field) = document.vectors_field()? {
+        match document.vectors_field()? { Some(vectors_field) => {
             let vectors = RawMap::from_raw_value_and_hasher(vectors_field, FxBuildHasher, bump)
                 .map_err(UserError::SerdeJson)?;
             Ok(Some(Self { external_document_id, vectors, embedders }))
-        } else {
+        } _ => {
             Ok(None)
-        }
+        }}
     }
 }
 

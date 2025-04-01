@@ -77,11 +77,11 @@ pub fn compute_docids(
                 if universe.is_disjoint(ctx.get_phrase_docids(left_phrase)?) {
                     continue;
                 }
-            } else if let Some(left_word_docids) = ctx.word_docids(Some(universe), left_word)? {
+            } else { match ctx.word_docids(Some(universe), left_word)? { Some(left_word_docids) => {
                 if left_word_docids.is_empty() {
                     continue;
                 }
-            }
+            } _ => {}}}
         }
 
         for (right_word, right_phrase) in right_derivs {

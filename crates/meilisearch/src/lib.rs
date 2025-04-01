@@ -89,11 +89,11 @@ fn is_empty_db(db_path: impl AsRef<Path>) -> bool {
     if !db_path.exists() {
         true
     // if we encounter an error or if the db is a file we consider the db non empty
-    } else if let Ok(dir) = db_path.read_dir() {
+    } else { match db_path.read_dir() { Ok(dir) => {
         dir.count() == 0
-    } else {
+    } _ => {
         true
-    }
+    }}}
 }
 
 /// The handle used to update the logs at runtime. Must be accessible from the `main.rs` and the `route/logs.rs`.
@@ -466,18 +466,18 @@ fn import_dump(
     let reader = File::open(dump_path)?;
     let mut dump_reader = dump::DumpReader::open(reader)?;
 
-    if let Some(date) = dump_reader.date() {
+    match dump_reader.date() { Some(date) => {
         tracing::info!(
             version = ?dump_reader.version(), // TODO: get the meilisearch version instead of the dump version
             %date,
             "Importing a dump of meilisearch"
         );
-    } else {
+    } _ => {
         tracing::info!(
             version = ?dump_reader.version(), // TODO: get the meilisearch version instead of the dump version
             "Importing a dump of meilisearch",
         );
-    }
+    }}
 
     let instance_uid = dump_reader.instance_uid()?;
 

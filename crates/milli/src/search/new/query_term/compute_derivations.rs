@@ -266,11 +266,11 @@ pub fn partially_initialized_term_from_word(
 }
 
 fn find_split_words(ctx: &mut SearchContext<'_>, word: &str) -> Result<Option<Interned<Phrase>>> {
-    if let Some((l, r)) = split_best_frequency(ctx, word)? {
+    match split_best_frequency(ctx, word)? { Some((l, r)) => {
         Ok(Some(ctx.phrase_interner.insert(Phrase { words: vec![Some(l), Some(r)] })))
-    } else {
+    } _ => {
         Ok(None)
-    }
+    }}
 }
 
 impl Interned<QueryTerm> {

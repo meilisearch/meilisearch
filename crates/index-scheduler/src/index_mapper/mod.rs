@@ -272,11 +272,11 @@ impl IndexMapper {
                     if tries >= 100 {
                         panic!("Too many attempts to close index {name} prior to deletion.")
                     }
-                    let reopen = if let Some(reopen) = reopen.wait_timeout(Duration::from_secs(6)) {
+                    let reopen = match reopen.wait_timeout(Duration::from_secs(6)) { Some(reopen) => {
                         reopen
-                    } else {
+                    } _ => {
                         continue;
-                    };
+                    }};
                     reopen.close(&mut self.index_map.write().unwrap());
                     continue;
                 }
@@ -382,11 +382,11 @@ impl IndexMapper {
                 Available(index) => break index,
                 Closing(reopen) => {
                     // Avoiding deadlocks: no lock taken while doing this operation.
-                    let reopen = if let Some(reopen) = reopen.wait_timeout(Duration::from_secs(6)) {
+                    let reopen = match reopen.wait_timeout(Duration::from_secs(6)) { Some(reopen) => {
                         reopen
-                    } else {
+                    } _ => {
                         continue;
-                    };
+                    }};
                     let index_path = self.base_path.join(uuid.to_string());
                     // take the lock to reopen the environment.
                     reopen

@@ -26,11 +26,11 @@ impl IndexScheduler {
         progress.update_progress(DumpCreationProgress::StartTheDumpCreation);
         let started_at = OffsetDateTime::now_utc();
         let (keys, instance_uid) =
-            if let KindWithContent::DumpCreation { keys, instance_uid } = &task.kind {
+            match &task.kind { KindWithContent::DumpCreation { keys, instance_uid } => {
                 (keys, instance_uid)
-            } else {
+            } _ => {
                 unreachable!();
-            };
+            }};
         let dump = dump::DumpWriter::new(*instance_uid)?;
 
         // 1. dump the keys
@@ -206,14 +206,14 @@ impl IndexScheduler {
                         let user_err =
                             milli::Error::UserError(milli::UserError::InvalidVectorsMapType {
                                 document_id: {
-                                    if let Ok(Some(Ok(index))) = index
+                                    match index
                                         .external_id_of(&rtxn, std::iter::once(id))
                                         .map(|it| it.into_iter().next())
-                                    {
+                                    { Ok(Some(Ok(index))) => {
                                         index
-                                    } else {
+                                    } _ => {
                                         format!("internal docid={id}")
-                                    }
+                                    }}
                                 },
                                 value: vectors.clone(),
                             });

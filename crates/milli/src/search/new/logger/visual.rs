@@ -206,11 +206,11 @@ struct DetailedLoggerFinish<'ctx> {
 
 impl<'ctx> DetailedLoggerFinish<'ctx> {
     fn cur_file(&mut self) -> &mut BufWriter<File> {
-        if let Some(file) = self.file_for_internal_state.as_mut() {
+        match self.file_for_internal_state.as_mut() { Some(file) => {
             file
-        } else {
+        } _ => {
             &mut self.index_file
-        }
+        }}
     }
     fn pop_rr_action(&mut self) {
         self.file_for_internal_state = None;
@@ -531,11 +531,11 @@ fill: \"#B6E2D3\"
         paths: Vec<Vec<Interned<R::Condition>>>,
     ) -> Result<()> {
         self.make_new_file_for_internal_state_if_needed()?;
-        let file = if let Some(file) = self.file_for_internal_state.as_mut() {
+        let file = match self.file_for_internal_state.as_mut() { Some(file) => {
             file
-        } else {
+        } _ => {
             &mut self.index_file
-        };
+        }};
         writeln!(file, "Path {{")?;
         for (path_idx, condition_indexes) in paths.iter().enumerate() {
             writeln!(file, "{path_idx} {{")?;

@@ -19,7 +19,7 @@ pub fn retrieve_or_guess_primary_key<'a>(
     // make sure that we have a declared primary key, either fetching it from the index or attempting to guess it.
 
     // do we have an existing declared primary key?
-    let (primary_key, has_changed) = if let Some(primary_key_from_db) = index.primary_key(rtxn)? {
+    let (primary_key, has_changed) = match index.primary_key(rtxn)? { Some(primary_key_from_db) => {
         // did we request a primary key in the operation?
         match primary_key_from_op {
             // we did, and it is different from the DB one
@@ -30,7 +30,7 @@ pub fn retrieve_or_guess_primary_key<'a>(
             }
             _ => (primary_key_from_db, false),
         }
-    } else {
+    } _ => {
         // no primary key in the DB => let's set one
         // did we request a primary key in the operation?
         let primary_key = if let Some(primary_key_from_op) = primary_key_from_op {
@@ -76,7 +76,7 @@ pub fn retrieve_or_guess_primary_key<'a>(
             }
         };
         (primary_key, true)
-    };
+    }};
 
     match PrimaryKey::new_or_insert(primary_key, new_fields_ids_map) {
         Ok(primary_key) => Ok(Ok((primary_key, has_changed))),

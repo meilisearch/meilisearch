@@ -206,17 +206,17 @@ impl IndexScheduler {
             IndexOperation::DocumentEdition { index_uid, mut task } => {
                 progress.update_progress(DocumentEditionProgress::RetrievingConfig);
 
-                let (filter, code) = if let KindWithContent::DocumentEdition {
+                let (filter, code) = match &task.kind
+                { KindWithContent::DocumentEdition {
                     filter_expr,
                     context: _,
                     function,
                     ..
-                } = &task.kind
-                {
+                } => {
                     (filter_expr, function)
-                } else {
+                } _ => {
                     unreachable!()
-                };
+                }};
 
                 let candidates = match filter.as_ref().map(Filter::from_json) {
                     Some(Ok(Some(filter))) => filter
@@ -226,18 +226,18 @@ impl IndexScheduler {
                     Some(Err(e)) => return Err(Error::from_milli(e, Some(index_uid.clone()))),
                 };
 
-                let (original_filter, context, function) = if let Some(Details::DocumentEdition {
+                let (original_filter, context, function) = match task.details
+                { Some(Details::DocumentEdition {
                     original_filter,
                     context,
                     function,
                     ..
-                }) = task.details
-                {
+                }) => {
                     (original_filter, context, function)
-                } else {
+                } _ => {
                     // In the case of a `documentEdition` the details MUST be set
                     unreachable!();
-                };
+                }};
 
                 if candidates.is_empty() {
                     task.status = Status::Succeeded;
@@ -397,16 +397,16 @@ impl IndexScheduler {
                                 };
                             }
                             let will_be_removed = to_delete.len() - before;
-                            if let Some(Details::DocumentDeletionByFilter {
+                            match &mut task.details
+                            { Some(Details::DocumentDeletionByFilter {
                                 original_filter: _,
                                 deleted_documents,
-                            }) = &mut task.details
-                            {
+                            }) => {
                                 *deleted_documents = Some(will_be_removed);
-                            } else {
+                            } _ => {
                                 // In the case of a `documentDeleteByFilter` the details MUST be set
                                 unreachable!()
-                            }
+                            }}
                         }
                         _ => unreachable!(),
                     }

@@ -54,15 +54,15 @@ where
     /// Insert the given value into the dedup-interner, and return
     /// its index.
     pub fn insert(&mut self, s: T) -> Interned<T> {
-        if let Some(interned) = self.lookup.get(&s) {
+        match self.lookup.get(&s) { Some(interned) => {
             *interned
-        } else {
+        } _ => {
             assert!(self.stable_store.len() < u16::MAX as usize);
             self.stable_store.push(s.clone());
             let interned = Interned::from_raw(self.stable_store.len() as u16 - 1);
             self.lookup.insert(s, interned);
             interned
-        }
+        }}
     }
     /// Get a reference to the interned value.
     pub fn get(&self, interned: Interned<T>) -> &T {
@@ -117,7 +117,7 @@ impl<T> FixedSizeInterner<T> {
     pub fn map_indexes<U>(&self, map_f: impl Fn(Interned<T>) -> U) -> MappedInterner<T, U> {
         MappedInterner { stable_store: self.indexes().map(map_f).collect(), _phantom: PhantomData }
     }
-    pub fn indexes(&self) -> impl Iterator<Item = Interned<T>> {
+    pub fn indexes(&self) -> impl Iterator<Item = Interned<T>> + use<T> {
         (0..self.stable_store.len()).map(|i| Interned::from_raw(i as u16))
     }
     pub fn iter(&self) -> impl Iterator<Item = (Interned<T>, &T)> {
@@ -167,7 +167,7 @@ impl<T> Interner<T> {
     pub fn map_indexes<U>(&self, map_f: impl Fn(Interned<T>) -> U) -> MappedInterner<T, U> {
         MappedInterner { stable_store: self.indexes().map(map_f).collect(), _phantom: PhantomData }
     }
-    pub fn indexes(&self) -> impl Iterator<Item = Interned<T>> {
+    pub fn indexes(&self) -> impl Iterator<Item = Interned<T>> + use<T> {
         (0..self.stable_store.len()).map(|i| Interned::from_raw(i as u16))
     }
     pub fn iter(&self) -> impl Iterator<Item = (Interned<T>, &T)> {

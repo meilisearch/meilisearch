@@ -43,9 +43,11 @@ impl Server<Owned> {
         let dir = TempDir::new().unwrap();
 
         if cfg!(windows) {
-            std::env::set_var("TMP", TEST_TEMP_DIR.path());
+            // TODO: Audit that the environment access only happens in single-threaded code.
+            unsafe { std::env::set_var("TMP", TEST_TEMP_DIR.path()) };
         } else {
-            std::env::set_var("TMPDIR", TEST_TEMP_DIR.path());
+            // TODO: Audit that the environment access only happens in single-threaded code.
+            unsafe { std::env::set_var("TMPDIR", TEST_TEMP_DIR.path()) };
         }
 
         let options = default_settings(dir.path());
@@ -58,9 +60,11 @@ impl Server<Owned> {
 
     pub async fn new_auth_with_options(mut options: Opt, dir: TempDir) -> Self {
         if cfg!(windows) {
-            std::env::set_var("TMP", TEST_TEMP_DIR.path());
+            // TODO: Audit that the environment access only happens in single-threaded code.
+            unsafe { std::env::set_var("TMP", TEST_TEMP_DIR.path()) };
         } else {
-            std::env::set_var("TMPDIR", TEST_TEMP_DIR.path());
+            // TODO: Audit that the environment access only happens in single-threaded code.
+            unsafe { std::env::set_var("TMPDIR", TEST_TEMP_DIR.path()) };
         }
 
         options.master_key = Some("MASTER_KEY".to_string());
@@ -191,9 +195,11 @@ impl Server<Shared> {
         let dir = TempDir::new().unwrap();
 
         if cfg!(windows) {
-            std::env::set_var("TMP", TEST_TEMP_DIR.path());
+            // TODO: Audit that the environment access only happens in single-threaded code.
+            unsafe { std::env::set_var("TMP", TEST_TEMP_DIR.path()) };
         } else {
-            std::env::set_var("TMPDIR", TEST_TEMP_DIR.path());
+            // TODO: Audit that the environment access only happens in single-threaded code.
+            unsafe { std::env::set_var("TMPDIR", TEST_TEMP_DIR.path()) };
         }
 
         let options = default_settings(dir.path());
@@ -296,9 +302,9 @@ impl<State> Server<State> {
         &self,
     ) -> impl actix_web::dev::Service<
         actix_http::Request,
-        Response = ServiceResponse<impl MessageBody>,
+        Response = ServiceResponse<impl MessageBody + use<State>>,
         Error = actix_web::Error,
-    > {
+    > + use<State> {
         self.service.init_web_app().await
     }
 

@@ -170,14 +170,14 @@ impl UpdateFile {
     }
 
     pub fn push_document(&mut self, document: &Document) -> Result<()> {
-        if let Some(mut writer) = self.writer.as_mut() {
+        match self.writer.as_mut() { Some(mut writer) => {
             serde_json::to_writer(&mut writer, &document)?;
             writer.write_all(b"\n")?;
-        } else {
+        } _ => {
             let file = File::create(&self.path).unwrap();
             self.writer = Some(BufWriter::new(file));
             self.push_document(document)?;
-        }
+        }}
         Ok(())
     }
 

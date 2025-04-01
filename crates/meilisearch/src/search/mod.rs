@@ -1331,15 +1331,15 @@ impl<'a> HitMaker<'a> {
         let displayed_ids =
             displayed_ids.unwrap_or_else(|| fields_ids_map.iter().map(|(id, _)| id).collect());
 
-        let retrieve_vectors = if let RetrieveVectors::Retrieve = format.retrieve_vectors {
+        let retrieve_vectors = match format.retrieve_vectors { RetrieveVectors::Retrieve => {
             if vectors_is_hidden {
                 RetrieveVectors::Hide
             } else {
                 RetrieveVectors::Retrieve
             }
-        } else {
+        } _ => {
             format.retrieve_vectors
-        };
+        }};
 
         let fids = |attrs: &BTreeSet<String>| {
             let mut ids = BTreeSet::new();

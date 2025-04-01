@@ -25,13 +25,13 @@ pub struct Value(pub serde_json::Value);
 impl Value {
     #[track_caller]
     pub fn uid(&self) -> u64 {
-        if let Some(uid) = self["uid"].as_u64() {
+        match self["uid"].as_u64() { Some(uid) => {
             uid
-        } else if let Some(uid) = self["taskUid"].as_u64() {
+        } _ => { match self["taskUid"].as_u64() { Some(uid) => {
             uid
-        } else {
+        } _ => {
             panic!("Didn't find any task id in: {self}");
-        }
+        }}}}
     }
 
     pub fn has_uid(&self) -> bool {
@@ -150,7 +150,7 @@ macro_rules! json {
 /// Performs a search test on both post and get routes
 #[macro_export]
 macro_rules! test_post_get_search {
-    ($server:expr, $query:expr, |$response:ident, $status_code:ident | $block:expr) => {
+    ($server:expr_2021, $query:expr_2021, |$response:ident, $status_code:ident | $block:expr_2021) => {
         let post_query: meilisearch::routes::search::SearchQueryPost =
             serde_json::from_str(&$query.clone().to_string()).unwrap();
         let get_query: meilisearch::routes::search::SearchQuery = post_query.into();

@@ -195,15 +195,15 @@ pub fn compute_phrase_docids(
     }
     let mut candidates = None;
     for word in words.iter().flatten().copied() {
-        if let Some(word_docids) = ctx.word_docids(None, Word::Original(word))? {
+        match ctx.word_docids(None, Word::Original(word))? { Some(word_docids) => {
             if let Some(candidates) = candidates.as_mut() {
                 *candidates &= word_docids;
             } else {
                 candidates = Some(word_docids);
             }
-        } else {
+        } _ => {
             return Ok(RoaringBitmap::new());
-        }
+        }}
     }
 
     let Some(mut candidates) = candidates else {

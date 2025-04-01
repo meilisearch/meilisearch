@@ -36,7 +36,7 @@ pub fn ascending_facet_sort<'t>(
     candidates: RoaringBitmap,
 ) -> Result<impl Iterator<Item = Result<(RoaringBitmap, &'t [u8])>> + 't> {
     let highest_level = get_highest_level(rtxn, db, field_id)?;
-    if let Some(first_bound) = get_first_facet_value::<BytesRefCodec, _>(rtxn, db, field_id)? {
+    match get_first_facet_value::<BytesRefCodec, _>(rtxn, db, field_id)? { Some(first_bound) => {
         let first_key = FacetGroupKey { field_id, level: highest_level, left_bound: first_bound };
         let iter = db.range(rtxn, &(first_key..)).unwrap().take(usize::MAX);
 
@@ -46,9 +46,9 @@ pub fn ascending_facet_sort<'t>(
             field_id,
             stack: vec![(candidates, iter)],
         }))
-    } else {
+    } _ => {
         Ok(itertools::Either::Right(std::iter::empty()))
-    }
+    }}
 }
 
 struct AscendingFacetSort<'t, 'e> {

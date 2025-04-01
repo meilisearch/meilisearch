@@ -63,7 +63,7 @@ impl Encoder {
         buffer
     }
 
-    pub fn header(self: &Encoder) -> Option<impl TryIntoHeaderPair> {
+    pub fn header(self: &Encoder) -> Option<impl TryIntoHeaderPair + use<>> {
         match self {
             Self::Plain => None,
             Self::Gzip => Some(("Content-Encoding", "gzip")),

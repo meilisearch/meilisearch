@@ -87,13 +87,13 @@ pub fn writer_into_reader(
 /// We use memory mapping inside. So, according to the Rust community, it's unsafe.
 pub unsafe fn as_cloneable_grenad(
     reader: &grenad::Reader<BufReader<File>>,
-) -> Result<grenad::Reader<CursorClonableMmap>> {
+) -> Result<grenad::Reader<CursorClonableMmap>> { unsafe {
     let file = reader.get_ref().get_ref();
     let mmap = memmap2::Mmap::map(file)?;
     let cursor = io::Cursor::new(ClonableMmap::from(mmap));
     let reader = grenad::Reader::new(cursor)?;
     Ok(reader)
-}
+}}
 
 #[derive(Debug, Clone, Copy)]
 pub struct GrenadParameters {

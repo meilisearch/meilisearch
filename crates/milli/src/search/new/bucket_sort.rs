@@ -146,7 +146,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
     let mut cur_offset = 0usize;
 
     macro_rules! maybe_add_to_results {
-        ($candidates:expr) => {
+        ($candidates:expr_2021) => {
             maybe_add_to_results(
                 ctx,
                 from,

@@ -8,7 +8,7 @@ use crate::documents::DocumentsBatchBuilder;
 use crate::Object;
 
 macro_rules! tri {
-    ($e:expr) => {
+    ($e:expr_2021) => {
         match $e {
             Ok(r) => r,
             Err(e) => return Ok(Err(e.into())),

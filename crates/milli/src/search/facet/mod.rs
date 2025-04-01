@@ -23,7 +23,7 @@ fn facet_extreme_value<'t>(
     mut extreme_it: impl Iterator<Item = heed::Result<(RoaringBitmap, &'t [u8])>> + 't,
 ) -> Result<Option<f64>> {
     let extreme_value =
-        if let Some(extreme_value) = extreme_it.next() { extreme_value } else { return Ok(None) };
+        match extreme_it.next() { Some(extreme_value) => { extreme_value } _ => { return Ok(None) }};
     let (_, extreme_value) = extreme_value?;
     OrderedF64Codec::bytes_decode(extreme_value)
         .map(Some)
@@ -67,14 +67,14 @@ where
     level0prefix.push(0);
     let mut level0_iter_forward =
         db.remap_types::<Bytes, DecodeIgnore>().prefix_iter(txn, level0prefix.as_slice())?;
-    if let Some(first) = level0_iter_forward.next() {
+    match level0_iter_forward.next() { Some(first) => {
         let (first_key, _) = first?;
         let first_key = FacetGroupKeyCodec::<BoundCodec>::bytes_decode(first_key)
             .map_err(heed::Error::Decoding)?;
         Ok(Some(first_key.left_bound))
-    } else {
+    } _ => {
         Ok(None)
-    }
+    }}
 }
 
 /// Get the last facet value in the facet database
@@ -91,14 +91,14 @@ where
     level0prefix.push(0);
     let mut level0_iter_backward =
         db.remap_types::<Bytes, DecodeIgnore>().rev_prefix_iter(txn, level0prefix.as_slice())?;
-    if let Some(last) = level0_iter_backward.next() {
+    match level0_iter_backward.next() { Some(last) => {
         let (last_key, _) = last?;
         let last_key = FacetGroupKeyCodec::<BoundCodec>::bytes_decode(last_key)
             .map_err(heed::Error::Decoding)?;
         Ok(Some(last_key.left_bound))
-    } else {
+    } _ => {
         Ok(None)
-    }
+    }}
 }
 
 /// Get the height of the highest level in the facet database

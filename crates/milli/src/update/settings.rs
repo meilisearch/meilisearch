@@ -1401,18 +1401,18 @@ impl InnerIndexSettingsDiff {
     pub fn reindex_searchable_id(&self, id: FieldId) -> Option<DelAddOperation> {
         if self.cache_reindex_searchable_without_user_defined || self.cache_exact_attributes {
             Some(DelAddOperation::DeletionAndAddition)
-        } else if let Some(only_additional_fields) = &self.only_additional_fields {
+        } else { match &self.only_additional_fields { Some(only_additional_fields) => {
             let additional_field = self.new.fields_ids_map.name(id).unwrap();
             if only_additional_fields.contains(additional_field) {
                 Some(DelAddOperation::Addition)
             } else {
                 None
             }
-        } else if self.cache_user_defined_searchables {
+        } _ => if self.cache_user_defined_searchables {
             Some(DelAddOperation::DeletionAndAddition)
         } else {
             None
-        }
+        }}}
     }
 
     /// List the faceted fields from the inner fid map.
@@ -1848,14 +1848,14 @@ pub fn validate_embedding_settings(
                 }
             }
 
-            indexing_embedder = if let Setting::Set(mut embedder) = indexing_embedder {
+            indexing_embedder = match indexing_embedder { Setting::Set(mut embedder) => {
                 embedder.document_template = validate_prompt(
                     name,
                     embedder.document_template,
                     embedder.document_template_max_bytes,
                 )?;
 
-                if let Some(source) = embedder.source.set() {
+                match embedder.source.set() { Some(source) => {
                     let search_embedder = match embedder.search_embedder.clone() {
                         Setting::Set(search_embedder) => Setting::Set(deserialize_sub_embedder(
                             search_embedder,
@@ -1895,16 +1895,16 @@ pub fn validate_embedding_settings(
                         &embedder.binary_quantized,
                         &embedder.distribution,
                     )?;
-                } else {
+                } _ => {
                     return Err(UserError::MissingSourceForNested {
                         embedder_name: NestingContext::Indexing.embedder_name_with_context(name),
                     }
                     .into());
-                }
+                }}
                 Setting::Set(embedder)
-            } else {
+            } _ => {
                 indexing_embedder
-            };
+            }};
         }
     }
     Ok(Setting::Set(EmbeddingSettings {

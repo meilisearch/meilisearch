@@ -403,7 +403,7 @@ impl ErrorCode for milli::Error {
         match self {
             Error::InternalError(_) => Code::Internal,
             Error::IoError(e) => e.error_code(),
-            Error::UserError(ref error) => {
+            Error::UserError(error) => {
                 match error {
                     // TODO: wait for spec for new error codes.
                     UserError::SerdeJson(_)

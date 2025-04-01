@@ -97,12 +97,12 @@ async fn get_batch(
     let filters = index_scheduler.filters();
     let (batches, _) = index_scheduler.get_batches_from_authorized_indexes(&query, filters)?;
 
-    if let Some(batch) = batches.first() {
+    match batches.first() { Some(batch) => {
         let batch_view = BatchView::from_batch(batch);
         Ok(HttpResponse::Ok().json(batch_view))
-    } else {
+    } _ => {
         Err(index_scheduler::Error::BatchNotFound(batch_uid).into())
-    }
+    }}
 }
 
 #[derive(Debug, Serialize, ToSchema)]

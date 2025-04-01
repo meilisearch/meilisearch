@@ -647,7 +647,7 @@ mod comparison_bench {
                 // insert one document
                 //
                 for _ in 0..nbr_doc {
-                    index.insert(&mut txn, 0, &r.gen(), &once(1).collect());
+                    index.insert(&mut txn, 0, &r.r#gen(), &once(1).collect());
                 }
                 let time_spent = timer.elapsed().as_millis();
                 println!("    add {nbr_doc} : {time_spent}ms");

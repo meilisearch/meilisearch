@@ -67,7 +67,7 @@ impl<Method: AggregateMethod> SimilarAggregator<Method> {
 
         ret.total_received = 1;
 
-        if let Some(ref filter) = filter {
+        if let Some(filter) = filter {
             static RE: Lazy<Regex> = Lazy::new(|| Regex::new("AND | OR").unwrap());
             ret.filter_total_number_of_criteria = 1;
 

@@ -307,7 +307,7 @@ pub(crate) fn filter_out_references_to_newer_tasks(task: &mut Task) {
 
 pub(crate) fn check_index_swap_validity(task: &Task) -> Result<()> {
     let swaps =
-        if let KindWithContent::IndexSwap { swaps } = &task.kind { swaps } else { return Ok(()) };
+        match &task.kind { KindWithContent::IndexSwap { swaps } => { swaps } _ => { return Ok(()) }};
     let mut all_indexes = HashSet::new();
     let mut duplicate_indexes = BTreeSet::new();
     for IndexSwap { indexes: (lhs, rhs) } in swaps {
@@ -501,15 +501,15 @@ impl crate::IndexScheduler {
                     } => {
                         assert_eq!(kind.as_kind(), Kind::DocumentDeletion);
                         let (index_uid, documents_ids) =
-                            if let KindWithContent::DocumentDeletion {
+                            match kind
+                            { KindWithContent::DocumentDeletion {
                                 ref index_uid,
                                 ref documents_ids,
-                            } = kind
-                            {
+                            } => {
                                 (index_uid, documents_ids)
-                            } else {
+                            } _ => {
                                 unreachable!()
-                            };
+                            }};
                         assert_eq!(&task_index_uid.unwrap(), index_uid);
 
                         match status {
@@ -526,15 +526,15 @@ impl crate::IndexScheduler {
                     }
                     Details::DocumentDeletionByFilter { deleted_documents, original_filter: _ } => {
                         assert_eq!(kind.as_kind(), Kind::DocumentDeletion);
-                        let (index_uid, _) = if let KindWithContent::DocumentDeletionByFilter {
+                        let (index_uid, _) = match kind
+                        { KindWithContent::DocumentDeletionByFilter {
                             ref index_uid,
                             ref filter_expr,
-                        } = kind
-                        {
+                        } => {
                             (index_uid, filter_expr)
-                        } else {
+                        } _ => {
                             unreachable!()
-                        };
+                        }};
                         assert_eq!(&task_index_uid.unwrap(), index_uid);
 
                         match status {

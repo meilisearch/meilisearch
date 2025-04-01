@@ -91,7 +91,7 @@ fn create_fields_mapping(
         .iter()
         // we sort by id here to ensure a deterministic mapping of the fields, that preserves
         // the original ordering.
-        .sorted_by_key(|(&id, _)| id)
+        .sorted_by_key(|&(&id, _)| id)
         .map(|(field, name)| match index_field_map.id(name) {
             Some(id) => Ok((*field, id)),
             None => index_field_map
