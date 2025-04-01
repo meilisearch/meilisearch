@@ -62,7 +62,7 @@ struct AscendingFacetSort<'t, 'e> {
     )>,
 }
 
-impl<'t, 'e> Iterator for AscendingFacetSort<'t, 'e> {
+impl<'t> Iterator for AscendingFacetSort<'t, '_> {
     type Item = Result<(RoaringBitmap, &'t [u8])>;
 
     fn next(&mut self) -> Option<Self::Item> {

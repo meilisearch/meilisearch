@@ -66,7 +66,7 @@ use tracing_error::ExtractSpanTrace as _;
 use tracing_subscriber::layer::SubscriberExt as _;
 use tracing_trace::processor;
 
-fn on_panic(info: &std::panic::PanicInfo) {
+fn on_panic(info: &std::panic::PanicHookInfo) {
     let info = info.to_string();
     let trace = SpanTrace::capture();
     tracing::error!(%info, %trace);

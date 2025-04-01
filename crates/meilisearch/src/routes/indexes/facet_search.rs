@@ -302,7 +302,7 @@ impl From<FacetSearchQuery> for SearchQuery {
 
         // If exhaustive_facet_count is true, we need to set the page to 0
         // because the facet search is not exhaustive by default.
-        let page = if exhaustive_facet_count.map_or(false, |exhaustive| exhaustive) {
+        let page = if exhaustive_facet_count.is_some_and(|exhaustive| exhaustive) {
             // setting the page to 0 will force the search to be exhaustive when computing the number of hits,
             // but it will skip the bucket sort saving time.
             Some(0)

@@ -271,7 +271,7 @@ fn fetch_matching_values_in_object(
 }
 
 fn starts_with(selector: &str, key: &str) -> bool {
-    selector.strip_prefix(key).map_or(false, |tail| {
+    selector.strip_prefix(key).is_some_and(|tail| {
         tail.chars().next().map(|c| c == PRIMARY_KEY_SPLIT_SYMBOL).unwrap_or(true)
     })
 }

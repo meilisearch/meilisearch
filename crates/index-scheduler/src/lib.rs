@@ -696,7 +696,7 @@ impl IndexScheduler {
                 written: usize,
             }
 
-            impl<'a, 'b> Read for TaskReader<'a, 'b> {
+            impl Read for TaskReader<'_, '_> {
                 fn read(&mut self, mut buf: &mut [u8]) -> std::io::Result<usize> {
                     if self.buffer.is_empty() {
                         match self.tasks.next() {

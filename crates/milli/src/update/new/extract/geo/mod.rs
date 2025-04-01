@@ -92,7 +92,7 @@ pub struct FrozenGeoExtractorData<'extractor> {
     pub spilled_inserted: Option<BufReader<File>>,
 }
 
-impl<'extractor> FrozenGeoExtractorData<'extractor> {
+impl FrozenGeoExtractorData<'_> {
     pub fn iter_and_clear_removed(
         &mut self,
     ) -> io::Result<impl IntoIterator<Item = io::Result<ExtractedGeoPoint>> + '_> {
@@ -160,7 +160,7 @@ impl<'extractor> Extractor<'extractor> for GeoExtractor {
 
         for change in changes {
             if data_ref.spilled_removed.is_none()
-                && max_memory.map_or(false, |mm| context.extractor_alloc.allocated_bytes() >= mm)
+                && max_memory.is_some_and(|mm| context.extractor_alloc.allocated_bytes() >= mm)
             {
                 // We must spill as we allocated too much memory
                 data_ref.spilled_removed = tempfile::tempfile().map(BufWriter::new).map(Some)?;

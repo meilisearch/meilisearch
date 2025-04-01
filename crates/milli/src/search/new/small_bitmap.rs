@@ -263,7 +263,7 @@ impl SmallBitmapInternal {
 
     pub fn contains(&self, x: u16) -> bool {
         let (set, x) = self.get_set_index(x);
-        set & 0b1 << x != 0
+        set & (0b1 << x) != 0
     }
 
     pub fn insert(&mut self, x: u16) {
@@ -381,7 +381,7 @@ pub enum SmallBitmapInternalIter<'b> {
     Tiny(u64),
     Small { cur: u64, next: &'b [u64], base: u16 },
 }
-impl<'b> Iterator for SmallBitmapInternalIter<'b> {
+impl Iterator for SmallBitmapInternalIter<'_> {
     type Item = u16;
 
     fn next(&mut self) -> Option<Self::Item> {

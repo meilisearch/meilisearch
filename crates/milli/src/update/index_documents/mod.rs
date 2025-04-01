@@ -515,9 +515,8 @@ where
             let was_quantized = settings_diff
                 .old
                 .embedding_configs
-                .get(&embedder_name)
-                .map_or(false, |conf| conf.2);
-            let is_quantizing = embedder_config.map_or(false, |action| action.is_being_quantized);
+                .get(&embedder_name).is_some_and(|conf| conf.2);
+            let is_quantizing = embedder_config.is_some_and(|action| action.is_being_quantized);
 
             pool.install(|| {
                 let mut writer = ArroyWrapper::new(vector_arroy, embedder_index, was_quantized);

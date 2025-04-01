@@ -31,7 +31,7 @@ pub struct DocumentExtractorData {
     pub field_distribution_delta: HashMap<String, i64>,
 }
 
-impl<'a, 'b, 'extractor> Extractor<'extractor> for DocumentsExtractor<'a, 'b> {
+impl<'extractor> Extractor<'extractor> for DocumentsExtractor<'_, '_> {
     type Data = FullySend<RefCell<DocumentExtractorData>>;
 
     fn init_data(&self, _extractor_alloc: &'extractor Bump) -> Result<Self::Data> {

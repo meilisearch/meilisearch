@@ -259,7 +259,7 @@ impl<'a> Index<'a, Owned> {
     }
 }
 
-impl<'a> Index<'a, Shared> {
+impl Index<'_, Shared> {
     /// You cannot modify the content of a shared index, thus the delete_document_by_filter call
     /// must fail. If the task successfully enqueue itself, we'll wait for the task to finishes,
     /// and if it succeed the function will panic.

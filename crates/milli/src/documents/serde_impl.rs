@@ -27,7 +27,7 @@ impl<'a, W> DocumentVisitor<'a, W> {
     }
 }
 
-impl<'a, 'de, W: Write> Visitor<'de> for &mut DocumentVisitor<'a, W> {
+impl<'de, W: Write> Visitor<'de> for &mut DocumentVisitor<'_, W> {
     /// This Visitor value is nothing, since it write the value to a file.
     type Value = Result<(), Error>;
 
@@ -61,7 +61,7 @@ impl<'a, 'de, W: Write> Visitor<'de> for &mut DocumentVisitor<'a, W> {
     }
 }
 
-impl<'a, 'de, W> DeserializeSeed<'de> for &mut DocumentVisitor<'a, W>
+impl<'de, W> DeserializeSeed<'de> for &mut DocumentVisitor<'_, W>
 where
     W: Write,
 {

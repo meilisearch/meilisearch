@@ -56,13 +56,13 @@ where
     content: &'t KvReaderFieldId,
 }
 
-impl<'t, Mapper: FieldIdMapper> Clone for DocumentFromDb<'t, Mapper> {
+impl<Mapper: FieldIdMapper> Clone for DocumentFromDb<'_, Mapper> {
     #[inline]
     fn clone(&self) -> Self {
         *self
     }
 }
-impl<'t, Mapper: FieldIdMapper> Copy for DocumentFromDb<'t, Mapper> {}
+impl<Mapper: FieldIdMapper> Copy for DocumentFromDb<'_, Mapper> {}
 
 impl<'t, Mapper: FieldIdMapper> Document<'t> for DocumentFromDb<'t, Mapper> {
     fn iter_top_level_fields(&self) -> impl Iterator<Item = Result<(&'t str, &'t RawValue)>> {
@@ -154,7 +154,7 @@ impl<'a, 'doc> DocumentFromVersions<'a, 'doc> {
     }
 }
 
-impl<'a, 'doc> Document<'doc> for DocumentFromVersions<'a, 'doc> {
+impl<'doc> Document<'doc> for DocumentFromVersions<'_, 'doc> {
     fn iter_top_level_fields(&self) -> impl Iterator<Item = Result<(&'doc str, &'doc RawValue)>> {
         self.versions.iter_top_level_fields().map(Ok)
     }

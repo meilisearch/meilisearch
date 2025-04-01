@@ -25,7 +25,7 @@ impl ExternalDocumentsIds {
 
     /// Returns `true` if hard and soft external documents lists are empty.
     pub fn is_empty(&self, rtxn: &RoTxn<'_>) -> heed::Result<bool> {
-        self.0.is_empty(rtxn).map_err(Into::into)
+        self.0.is_empty(rtxn)
     }
 
     pub fn get<A: AsRef<str>>(

@@ -150,15 +150,12 @@ pub struct IndexingContext<
 }
 
 impl<
-        'fid,     // invariant lifetime of fields ids map
-        'indexer, // covariant lifetime of objects that are borrowed  during the entire indexing operation
-        'index,   // covariant lifetime of the index
         MSP,
     > Copy
     for IndexingContext<
-        'fid,     // invariant lifetime of fields ids map
-        'indexer, // covariant lifetime of objects that are borrowed  during the entire indexing operation
-        'index,   // covariant lifetime of the index
+        '_,     // invariant lifetime of fields ids map
+        '_, // covariant lifetime of objects that are borrowed  during the entire indexing operation
+        '_,   // covariant lifetime of the index
         MSP,
     >
 where
@@ -167,15 +164,12 @@ where
 }
 
 impl<
-        'fid,     // invariant lifetime of fields ids map
-        'indexer, // covariant lifetime of objects that are borrowed  during the entire indexing operation
-        'index,   // covariant lifetime of the index
         MSP,
     > Clone
     for IndexingContext<
-        'fid,     // invariant lifetime of fields ids map
-        'indexer, // covariant lifetime of objects that are borrowed  during the entire indexing operation
-        'index,   // covariant lifetime of the index
+        '_,     // invariant lifetime of fields ids map
+        '_, // covariant lifetime of objects that are borrowed  during the entire indexing operation
+        '_,   // covariant lifetime of the index
         MSP,
     >
 where

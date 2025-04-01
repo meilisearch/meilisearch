@@ -43,7 +43,7 @@ pub struct EmbeddingExtractorData<'extractor>(
 
 unsafe impl MostlySend for EmbeddingExtractorData<'_> {}
 
-impl<'a, 'b, 'extractor> Extractor<'extractor> for EmbeddingExtractor<'a, 'b> {
+impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
     type Data = RefCell<EmbeddingExtractorData<'extractor>>;
 
     fn init_data<'doc>(&'doc self, extractor_alloc: &'extractor Bump) -> crate::Result<Self::Data> {

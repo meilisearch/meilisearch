@@ -192,7 +192,7 @@ impl<'a> Search<'a> {
             // check if the distinct field is in the filterable fields
             let matched_rule = matching_features(distinct, &filterable_fields);
             let is_filterable =
-                matched_rule.map_or(false, |(_, features)| features.is_filterable());
+                matched_rule.is_some_and(|(_, features)| features.is_filterable());
 
             if !is_filterable {
                 // if not, remove the hidden fields from the filterable fields to generate the error message

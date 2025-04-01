@@ -537,7 +537,7 @@ impl<'ctx> SearchContext<'ctx> {
         fid: u16,
     ) -> Result<Option<RoaringBitmap>> {
         // if the requested fid isn't in the restricted list, return None.
-        if self.restricted_fids.as_ref().map_or(false, |fids| !fids.contains(&fid)) {
+        if self.restricted_fids.as_ref().is_some_and(|fids| !fids.contains(&fid)) {
             return Ok(None);
         }
 
@@ -558,7 +558,7 @@ impl<'ctx> SearchContext<'ctx> {
         fid: u16,
     ) -> Result<Option<RoaringBitmap>> {
         // if the requested fid isn't in the restricted list, return None.
-        if self.restricted_fids.as_ref().map_or(false, |fids| !fids.contains(&fid)) {
+        if self.restricted_fids.as_ref().is_some_and(|fids| !fids.contains(&fid)) {
             return Ok(None);
         }
 

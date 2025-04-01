@@ -929,7 +929,6 @@ where
 }
 
 /// Functions used to get default value for `Opt` fields, needs to be function because of serde's default attribute.
-
 fn default_db_path() -> PathBuf {
     PathBuf::from(DEFAULT_DB_PATH)
 }
@@ -1037,7 +1036,7 @@ where
 {
     struct BoolOrInt;
 
-    impl<'de> serde::de::Visitor<'de> for BoolOrInt {
+    impl serde::de::Visitor<'_> for BoolOrInt {
         type Value = ScheduleSnapshot;
 
         fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {

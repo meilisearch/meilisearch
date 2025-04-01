@@ -169,8 +169,7 @@ pub fn is_dry_run(req: &HttpRequest, opt: &Opt) -> Result<bool, ResponseError> {
                 )
             })
         })
-        .transpose()?
-        .map_or(false, |s| s.to_lowercase() == "true"))
+        .transpose()?.is_some_and(|s| s.to_lowercase() == "true"))
 }
 
 #[derive(Debug, Serialize, ToSchema)]

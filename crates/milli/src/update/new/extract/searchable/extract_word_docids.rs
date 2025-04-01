@@ -31,7 +31,7 @@ pub struct WordDocidsBalancedCaches<'extractor> {
     current_docid: Option<DocumentId>,
 }
 
-unsafe impl<'extractor> MostlySend for WordDocidsBalancedCaches<'extractor> {}
+unsafe impl MostlySend for WordDocidsBalancedCaches<'_> {}
 
 impl<'extractor> WordDocidsBalancedCaches<'extractor> {
     pub fn new_in(buckets: usize, max_memory: Option<usize>, alloc: &'extractor Bump) -> Self {
@@ -78,7 +78,7 @@ impl<'extractor> WordDocidsBalancedCaches<'extractor> {
         buffer.extend_from_slice(&position.to_be_bytes());
         self.word_position_docids.insert_add_u32(&buffer, docid)?;
 
-        if self.current_docid.map_or(false, |id| docid != id) {
+        if self.current_docid.is_some_and(|id| docid != id) {
             self.flush_fid_word_count(&mut buffer)?;
         }
 
@@ -123,7 +123,7 @@ impl<'extractor> WordDocidsBalancedCaches<'extractor> {
         buffer.extend_from_slice(&position.to_be_bytes());
         self.word_position_docids.insert_del_u32(&buffer, docid)?;
 
-        if self.current_docid.map_or(false, |id| docid != id) {
+        if self.current_docid.is_some_and(|id| docid != id) {
             self.flush_fid_word_count(&mut buffer)?;
         }
 
@@ -212,7 +212,7 @@ pub struct WordDocidsExtractorData<'a> {
     searchable_attributes: Option<Vec<&'a str>>,
 }
 
-impl<'a, 'extractor> Extractor<'extractor> for WordDocidsExtractorData<'a> {
+impl<'extractor> Extractor<'extractor> for WordDocidsExtractorData<'_> {
     type Data = RefCell<Option<WordDocidsBalancedCaches<'extractor>>>;
 
     fn init_data(&self, extractor_alloc: &'extractor Bump) -> Result<Self::Data> {
