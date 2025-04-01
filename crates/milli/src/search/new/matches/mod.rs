@@ -123,7 +123,7 @@ pub struct Matcher<'t, 'tokenizer, 'b, 'lang> {
     matches: Option<(Vec<Token<'t>>, Vec<Match>)>,
 }
 
-impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
+impl<'t> Matcher<'t, '_, '_, '_> {
     /// Iterates over tokens and save any of them that matches the query.
     fn compute_matches(&mut self) -> &mut Self {
         /// some words are counted as matches only if they are close together and in the good order,

@@ -115,7 +115,7 @@ pub fn enrich_documents_batch<R: Read + Seek>(
 
         if let Some(geo_value) = geo_field_id.and_then(|fid| document.get(fid)) {
             if let Err(user_error) = validate_geo_from_json(&document_id, geo_value)? {
-                return Ok(Err(UserError::from(user_error)));
+                return Ok(Err(UserError::from(Box::new(user_error))));
             }
         }
 

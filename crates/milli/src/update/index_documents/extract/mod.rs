@@ -281,7 +281,7 @@ fn send_original_documents_data(
                         };
                         if !(remove_vectors.is_empty()
                             && manual_vectors.is_empty()
-                            && embeddings.as_ref().map_or(true, |e| e.is_empty()))
+                            && embeddings.as_ref().is_none_or(|e| e.is_empty()))
                         {
                             let _ = lmdb_writer_sx.send(Ok(TypedChunk::VectorPoints {
                                 remove_vectors,

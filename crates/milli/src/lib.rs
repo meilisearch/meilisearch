@@ -204,7 +204,7 @@ pub fn relative_from_absolute_position(absolute: Position) -> (FieldId, Relative
 
 // Compute the absolute word position with the field id of the attribute and relative position in the attribute.
 pub fn absolute_from_relative_position(field_id: FieldId, relative: RelativePosition) -> Position {
-    (field_id as u32) << 16 | (relative as u32)
+    ((field_id as u32) << 16) | (relative as u32)
 }
 // TODO: this is wrong, but will do for now
 /// Compute the "bucketed" absolute position from the field id and relative position in the field.
@@ -372,7 +372,7 @@ pub fn is_faceted(field: &str, faceted_fields: impl IntoIterator<Item = impl AsR
 /// assert!(!is_faceted_by("animaux.chien", "animaux.chie"));
 /// ```
 pub fn is_faceted_by(field: &str, facet: &str) -> bool {
-    field.starts_with(facet) && field[facet.len()..].chars().next().map_or(true, |c| c == '.')
+    field.starts_with(facet) && field[facet.len()..].chars().next().is_none_or(|c| c == '.')
 }
 
 pub fn normalize_facet(original: &str) -> String {

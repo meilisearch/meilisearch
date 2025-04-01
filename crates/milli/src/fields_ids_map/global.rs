@@ -119,7 +119,7 @@ impl<'indexing> GlobalFieldsIdsMap<'indexing> {
     }
 }
 
-impl<'indexing> MutFieldIdMapper for GlobalFieldsIdsMap<'indexing> {
+impl MutFieldIdMapper for GlobalFieldsIdsMap<'_> {
     fn insert(&mut self, name: &str) -> Option<FieldId> {
         self.id_or_insert(name)
     }

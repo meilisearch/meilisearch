@@ -358,7 +358,7 @@ impl<'a> FacetDistribution<'a> {
     ) -> bool {
         // If the field is not filterable, we don't want to compute the facet distribution.
         if !matching_features(name, filterable_attributes_rules)
-            .map_or(false, |(_, features)| features.is_filterable())
+            .is_some_and(|(_, features)| features.is_filterable())
         {
             return false;
         }
@@ -383,8 +383,7 @@ impl<'a> FacetDistribution<'a> {
         if let Some(facets) = &self.facets {
             for field in facets.keys() {
                 let matched_rule = matching_features(field, filterable_attributes_rules);
-                let is_filterable =
-                    matched_rule.map_or(false, |(_, features)| features.is_filterable());
+                let is_filterable = matched_rule.is_some_and(|(_, f)| f.is_filterable());
 
                 if !is_filterable {
                     invalid_facets.insert(field.to_string());

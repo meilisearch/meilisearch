@@ -121,7 +121,7 @@ impl<'extractor> BalancedCaches<'extractor> {
     }
 
     pub fn insert_del_u32(&mut self, key: &[u8], n: u32) -> Result<()> {
-        if self.max_memory.map_or(false, |mm| self.alloc.allocated_bytes() >= mm) {
+        if self.max_memory.is_some_and(|mm| self.alloc.allocated_bytes() >= mm) {
             self.start_spilling()?;
         }
 
@@ -138,7 +138,7 @@ impl<'extractor> BalancedCaches<'extractor> {
     }
 
     pub fn insert_add_u32(&mut self, key: &[u8], n: u32) -> Result<()> {
-        if self.max_memory.map_or(false, |mm| self.alloc.allocated_bytes() >= mm) {
+        if self.max_memory.is_some_and(|mm| self.alloc.allocated_bytes() >= mm) {
             self.start_spilling()?;
         }
 
@@ -623,7 +623,7 @@ pub struct FrozenDelAddBbbul<'bump, B> {
     pub add: Option<FrozenBbbul<'bump, B>>,
 }
 
-impl<'bump, B> FrozenDelAddBbbul<'bump, B> {
+impl<B> FrozenDelAddBbbul<'_, B> {
     fn is_empty(&self) -> bool {
         self.del.is_none() && self.add.is_none()
     }

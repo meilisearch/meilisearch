@@ -327,7 +327,7 @@ impl QueryGraph {
         let mut peekable = term_with_frequency.into_iter().peekable();
         while let Some((idx, frequency)) = peekable.next() {
             term_weight.insert(idx, weight);
-            if peekable.peek().map_or(false, |(_, f)| frequency != *f) {
+            if peekable.peek().is_some_and(|(_, f)| frequency != *f) {
                 weight += 1;
             }
         }

@@ -160,11 +160,11 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
                     let del_geo_support = settings_diff
                         .old
                         .geo_fields_ids
-                        .map_or(false, |(lat, lng)| field_id == lat || field_id == lng);
+                        .is_some_and(|(lat, lng)| field_id == lat || field_id == lng);
                     let add_geo_support = settings_diff
                         .new
                         .geo_fields_ids
-                        .map_or(false, |(lat, lng)| field_id == lat || field_id == lng);
+                        .is_some_and(|(lat, lng)| field_id == lat || field_id == lng);
                     let del_filterable_values =
                         del_value.map(|value| extract_facet_values(&value, del_geo_support));
                     let add_filterable_values =

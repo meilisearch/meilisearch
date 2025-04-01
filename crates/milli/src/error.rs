@@ -151,7 +151,7 @@ and can not be more than 511 bytes.", .document_id.to_string()
         matching_rule_indices: HashMap<String, usize>,
     },
     #[error(transparent)]
-    InvalidGeoField(#[from] GeoError),
+    InvalidGeoField(#[from] Box<GeoError>),
     #[error("Invalid vector dimensions: expected: `{}`, found: `{}`.", .expected, .found)]
     InvalidVectorDimensions { expected: usize, found: usize },
     #[error("The `_vectors` field in the document with id: `{document_id}` is not an object. Was expecting an object with a key for each embedder with manually provided vectors, but instead got `{value}`")]
@@ -519,7 +519,7 @@ error_from_sub_error! {
     str::Utf8Error => InternalError,
     ThreadPoolBuildError => InternalError,
     SerializationError => InternalError,
-    GeoError => UserError,
+    Box<GeoError> => UserError,
     CriterionError => UserError,
 }
 

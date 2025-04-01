@@ -29,8 +29,8 @@ impl<'p, 'indexer, Mapper: MutFieldIdMapper> FieldAndDocidExtractor<'p, 'indexer
     }
 }
 
-impl<'de, 'p, 'indexer: 'de, Mapper: MutFieldIdMapper> Visitor<'de>
-    for FieldAndDocidExtractor<'p, 'indexer, Mapper>
+impl<'de, 'indexer: 'de, Mapper: MutFieldIdMapper> Visitor<'de>
+    for FieldAndDocidExtractor<'_, 'indexer, Mapper>
 {
     type Value =
         Result<Result<DeOrBumpStr<'de, 'indexer>, DocumentIdExtractionError>, crate::UserError>;
@@ -98,7 +98,7 @@ struct NestedPrimaryKeyVisitor<'a, 'bump> {
     bump: &'bump Bump,
 }
 
-impl<'de, 'a, 'bump: 'de> Visitor<'de> for NestedPrimaryKeyVisitor<'a, 'bump> {
+impl<'de, 'bump: 'de> Visitor<'de> for NestedPrimaryKeyVisitor<'_, 'bump> {
     type Value = std::result::Result<Option<DeOrBumpStr<'de, 'bump>>, DocumentIdExtractionError>;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -237,7 +237,7 @@ impl<'de, 'a, Mapper: MutFieldIdMapper> Visitor<'de> for MutFieldIdMapVisitor<'a
 
 pub struct FieldIdMapVisitor<'a, Mapper: FieldIdMapper>(pub &'a Mapper);
 
-impl<'de, 'a, Mapper: FieldIdMapper> Visitor<'de> for FieldIdMapVisitor<'a, Mapper> {
+impl<'de, Mapper: FieldIdMapper> Visitor<'de> for FieldIdMapVisitor<'_, Mapper> {
     type Value = Option<FieldId>;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {

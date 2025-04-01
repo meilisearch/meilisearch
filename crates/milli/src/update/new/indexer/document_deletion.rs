@@ -110,7 +110,7 @@ mod test {
             >,
         }
 
-        unsafe impl<'extractor> MostlySend for DeletionWithData<'extractor> {}
+        unsafe impl MostlySend for DeletionWithData<'_> {}
 
         struct TrackDeletion<'extractor>(PhantomData<&'extractor ()>);
 

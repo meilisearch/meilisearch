@@ -77,7 +77,7 @@ impl<'a> SearchForFacetValues<'a> {
         let filterable_attributes_rules = index.filterable_attributes_rules(rtxn)?;
         let matched_rule = matching_features(&self.facet, &filterable_attributes_rules);
         let is_facet_searchable =
-            matched_rule.map_or(false, |(_, features)| features.is_facet_searchable());
+            matched_rule.is_some_and(|(_, features)| features.is_facet_searchable());
 
         if !is_facet_searchable {
             let matching_field_names =
@@ -135,7 +135,7 @@ impl<'a> SearchForFacetValues<'a> {
 
                 if authorize_typos && field_authorizes_typos {
                     let exact_words_fst = self.search_query.index.exact_words(rtxn)?;
-                    if exact_words_fst.map_or(false, |fst| fst.contains(query)) {
+                    if exact_words_fst.is_some_and(|fst| fst.contains(query)) {
                         if fst.contains(query) {
                             self.fetch_original_facets_using_normalized(
                                 fid,

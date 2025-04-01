@@ -315,7 +315,7 @@ impl Queue {
         if let Some(batch_uids) = batch_uids {
             let mut batch_tasks = RoaringBitmap::new();
             for batch_uid in batch_uids {
-                if processing_batch.as_ref().map_or(false, |batch| batch.uid == *batch_uid) {
+                if processing_batch.as_ref().is_some_and(|batch| batch.uid == *batch_uid) {
                     batch_tasks |= &**processing_tasks;
                 } else {
                     batch_tasks |= self.tasks_in_batch(rtxn, *batch_uid)?;

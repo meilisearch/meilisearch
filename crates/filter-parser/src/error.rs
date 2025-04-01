@@ -35,7 +35,7 @@ impl<E> NomErrorExt<E> for nom::Err<E> {
 pub fn cut_with_err<'a, O>(
     mut parser: impl FnMut(Span<'a>) -> IResult<'a, O>,
     mut with: impl FnMut(Error<'a>) -> Error<'a>,
-) -> impl FnMut(Span<'a>) -> IResult<O> {
+) -> impl FnMut(Span<'a>) -> IResult<'a, O> {
     move |input| match parser.parse(input) {
         Err(nom::Err::Error(e)) => Err(nom::Err::Failure(with(e))),
         rest => rest,
@@ -121,7 +121,7 @@ impl<'a> ParseError<Span<'a>> for Error<'a> {
     }
 }
 
-impl<'a> Display for Error<'a> {
+impl Display for Error<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let input = self.context.fragment();
         // When printing our error message we want to escape all `\n` to be sure we keep our format with the

@@ -960,7 +960,7 @@ impl<'de> Deserialize<'de> for RankingRuleView {
         D: serde::Deserializer<'de>,
     {
         struct Visitor;
-        impl<'de> serde::de::Visitor<'de> for Visitor {
+        impl serde::de::Visitor<'_> for Visitor {
             type Value = RankingRuleView;
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
                 write!(formatter, "the name of a valid ranking rule (string)")

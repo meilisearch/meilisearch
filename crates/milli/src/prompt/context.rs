@@ -15,7 +15,7 @@ impl<'a, D: ObjectView, F: ArrayView> Context<'a, D, F> {
     }
 }
 
-impl<'a, D: ObjectView, F: ArrayView> ObjectView for Context<'a, D, F> {
+impl<D: ObjectView, F: ArrayView> ObjectView for Context<'_, D, F> {
     fn as_value(&self) -> &dyn ValueView {
         self
     }
@@ -52,7 +52,7 @@ impl<'a, D: ObjectView, F: ArrayView> ObjectView for Context<'a, D, F> {
     }
 }
 
-impl<'a, D: ObjectView, F: ArrayView> ValueView for Context<'a, D, F> {
+impl<D: ObjectView, F: ArrayView> ValueView for Context<'_, D, F> {
     fn as_debug(&self) -> &dyn std::fmt::Debug {
         self
     }

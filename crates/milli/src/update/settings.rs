@@ -560,7 +560,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
 
                 // Does the new FST differ from the previous one?
                 if current
-                    .map_or(true, |current| current.as_fst().as_bytes() != fst.as_fst().as_bytes())
+                    .is_none_or(|current| current.as_fst().as_bytes() != fst.as_fst().as_bytes())
                 {
                     // we want to re-create our FST.
                     self.index.put_stop_words(self.wtxn, &fst)?;
@@ -580,7 +580,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                 let current = self.index.non_separator_tokens(self.wtxn)?;
 
                 // Does the new list differ from the previous one?
-                if current.map_or(true, |current| &current != non_separator_tokens) {
+                if current.is_none_or(|current| &current != non_separator_tokens) {
                     self.index.put_non_separator_tokens(self.wtxn, non_separator_tokens)?;
                     true
                 } else {
@@ -605,7 +605,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                 let current = self.index.separator_tokens(self.wtxn)?;
 
                 // Does the new list differ from the previous one?
-                if current.map_or(true, |current| &current != separator_tokens) {
+                if current.is_none_or(|current| &current != separator_tokens) {
                     self.index.put_separator_tokens(self.wtxn, separator_tokens)?;
                     true
                 } else {
@@ -630,7 +630,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                 let current = self.index.dictionary(self.wtxn)?;
 
                 // Does the new list differ from the previous one?
-                if current.map_or(true, |current| &current != dictionary) {
+                if current.is_none_or(|current| &current != dictionary) {
                     self.index.put_dictionary(self.wtxn, dictionary)?;
                     true
                 } else {
@@ -1340,7 +1340,7 @@ impl InnerIndexSettingsDiff {
                 new_settings.embedding_configs.inner_as_ref()
             {
                 let was_quantized =
-                    old_settings.embedding_configs.get(embedder_name).map_or(false, |conf| conf.2);
+                    old_settings.embedding_configs.get(embedder_name).is_some_and(|conf| conf.2);
                 // skip embedders that don't use document templates
                 if !config.uses_document_template() {
                     continue;

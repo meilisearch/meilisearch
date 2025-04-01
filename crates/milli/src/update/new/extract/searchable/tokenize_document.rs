@@ -22,7 +22,7 @@ pub struct DocumentTokenizer<'a> {
     pub max_positions_per_attributes: u32,
 }
 
-impl<'a> DocumentTokenizer<'a> {
+impl DocumentTokenizer<'_> {
     pub fn tokenize_document<'doc>(
         &self,
         document: impl Document<'doc>,

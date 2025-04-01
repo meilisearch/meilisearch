@@ -1544,7 +1544,7 @@ pub fn perform_facet_search(
     let locales = localized_attributes_locales.map(|attr| {
         attr.locales
             .into_iter()
-            .filter(|locale| locales.as_ref().map_or(true, |locales| locales.contains(locale)))
+            .filter(|locale| locales.as_ref().is_none_or(|locales| locales.contains(locale)))
             .collect()
     });
 
