@@ -27,7 +27,7 @@ jobs:
           apt-get update && apt-get install -y curl
           apt-get install build-essential -y
       - name: Setup test with Rust stable
-        uses: dtolnay/rust-toolchain@1.85
+        uses: dtolnay/rust-toolchain@1.100
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2.7.7
       - name: Run cargo check without any default features
@@ -52,7 +52,7 @@ jobs:
       - uses: actions/checkout@v3
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2.7.7
-      - uses: dtolnay/rust-toolchain@1.85
+      - uses: dtolnay/rust-toolchain@1.100
       - name: Run cargo check without any default features
         uses: actions-rs/cargo@v1
         with:
@@ -77,7 +77,7 @@ jobs:
         run: |
           apt-get update
           apt-get install --assume-yes build-essential curl
-      - uses: dtolnay/rust-toolchain@1.85
+      - uses: dtolnay/rust-toolchain@1.100
       - name: Run cargo build with almost all features
         run: |
           cargo build --workspace --locked --release --features "$(cargo xtask list-features --exclude-feature cuda,test-ollama)"
@@ -129,7 +129,7 @@ jobs:
         run: |
           apt-get update
           apt-get install --assume-yes build-essential curl
-      - uses: dtolnay/rust-toolchain@1.85
+      - uses: dtolnay/rust-toolchain@1.100
       - name: Run cargo tree without default features and check lindera is not present
         run: |
           if cargo tree -f '{p} {f}' -e normal --no-default-features | grep -qz lindera; then
@@ -153,7 +153,7 @@ jobs:
         run: |
           apt-get update && apt-get install -y curl
           apt-get install build-essential -y
-      - uses: dtolnay/rust-toolchain@1.85
+      - uses: dtolnay/rust-toolchain@1.100
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2.7.7
       - name: Run tests in debug
@@ -167,7 +167,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: dtolnay/rust-toolchain@1.85
+      - uses: dtolnay/rust-toolchain@1.100
         with:
           profile: minimal
           components: clippy
@@ -184,7 +184,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: dtolnay/rust-toolchain@1.85
+      - uses: dtolnay/rust-toolchain@1.100
         with:
           profile: minimal
           toolchain: nightly-2024-07-09

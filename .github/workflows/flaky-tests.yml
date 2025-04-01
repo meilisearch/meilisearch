@@ -17,7 +17,7 @@ jobs:
         run: |
           apt-get update && apt-get install -y curl
           apt-get install build-essential -y
-      - uses: dtolnay/rust-toolchain@1.85
+      - uses: dtolnay/rust-toolchain@1.100
       - name: Install cargo-flaky
         run: cargo install cargo-flaky
       - name: Run cargo flaky in the dumps
