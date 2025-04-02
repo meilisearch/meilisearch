@@ -3,7 +3,7 @@ use std::fmt;
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::milli::update::IndexDocumentsMethod;
 use meilisearch_types::settings::{Settings, Unchecked};
-use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
+use meilisearch_types::tasks::{BatchStopReason, Kind, KindWithContent, Status, Task};
 use roaring::RoaringBitmap;
 use uuid::Uuid;
 
@@ -440,6 +440,7 @@ impl IndexScheduler {
         let mut current_batch = ProcessingBatch::new(batch_id);
 
         let enqueued = &self.queue.tasks.get_status(rtxn, Status::Enqueued)?;
+        let count_total_enqueued = enqueued.len();
         let failed = &self.queue.tasks.get_status(rtxn, Status::Failed)?;
 
         // 0. The priority over everything is to upgrade the instance
@@ -453,6 +454,10 @@ impl IndexScheduler {
                 current_batch.uid = batch_uid;
             }
             current_batch.processing(&mut tasks);
+            current_batch.reason(BatchStopReason::TaskCannotBeBatched {
+                kind: Kind::UpgradeDatabase,
+                id: tasks.last().unwrap(),
+            });
             return Ok(Some((Batch::UpgradeDatabase { tasks }, current_batch)));
         }
 
@@ -462,6 +467,10 @@ impl IndexScheduler {
             let mut task =
                 self.queue.tasks.get_task(rtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
             current_batch.processing(Some(&mut task));
+            current_batch.reason(BatchStopReason::TaskCannotBeBatched {
+                kind: Kind::TaskCancelation,
+                id: tasks.last().unwrap(),
+            });
             return Ok(Some((Batch::TaskCancelation { task }, current_batch)));
         }
 
@@ -470,6 +479,10 @@ impl IndexScheduler {
         if !to_delete.is_empty() {
             let mut tasks = self.queue.tasks.get_existing_tasks(rtxn, to_delete)?;
             current_batch.processing(&mut tasks);
+            current_batch.reason(BatchStopReason::TaskCannotBeBatched {
+                kind: Kind::TaskDeletion,
+                id: tasks.last().unwrap(),
+            });
             return Ok(Some((Batch::TaskDeletions(tasks), current_batch)));
         }
 
@@ -478,6 +491,10 @@ impl IndexScheduler {
         if !to_snapshot.is_empty() {
             let mut tasks = self.queue.tasks.get_existing_tasks(rtxn, to_snapshot)?;
             current_batch.processing(&mut tasks);
+            current_batch.reason(BatchStopReason::TaskCannotBeBatched {
+                kind: Kind::SnapshotCreation,
+                id: tasks.last().unwrap(),
+            });
             return Ok(Some((Batch::SnapshotCreation(tasks), current_batch)));
         }
 
@@ -487,6 +504,10 @@ impl IndexScheduler {
             let mut task =
                 self.queue.tasks.get_task(rtxn, to_dump)?.ok_or(Error::CorruptedTaskQueue)?;
             current_batch.processing(Some(&mut task));
+            current_batch.reason(BatchStopReason::TaskCannotBeBatched {
+                kind: Kind::DumpCreation,
+                id: tasks.last().unwrap(),
+            });
             return Ok(Some((Batch::Dump(task), current_batch)));
         }
 
@@ -504,6 +525,10 @@ impl IndexScheduler {
         } else {
             assert!(matches!(&task.kind, KindWithContent::IndexSwap { swaps } if swaps.is_empty()));
             current_batch.processing(Some(&mut task));
+            current_batch.reason(BatchStopReason::TaskCannotBeBatched {
+                kind: Kind::IndexSwap,
+                id: tasks.last().unwrap(),
+            });
             return Ok(Some((Batch::IndexSwap { task }, current_batch)));
         };
 
@@ -525,9 +550,14 @@ impl IndexScheduler {
             1
         };
 
+        let mut stop_reason = BatchStopReason::default();
         let mut enqueued = Vec::new();
         let mut total_size: u64 = 0;
-        for task_id in index_tasks.into_iter().take(tasks_limit) {
+        for task_id in index_tasks.into_iter() {
+            if enqueued.len() >= task_limit {
+                stop_reason = BatchStopReason::ReachedTaskLimit { task_limit };
+                break;
+            }
             let task = self
                 .queue
                 .tasks
@@ -539,16 +569,27 @@ impl IndexScheduler {
                 total_size = total_size.saturating_add(content_size);
             }
 
-            if total_size > self.scheduler.batched_tasks_size_limit && !enqueued.is_empty() {
+            let size_limit = self.scheduler.batched_tasks_size_limit;
+            if total_size > size_limit && !enqueued.is_empty() {
+                stop_reason = BatchStopReason::ReachedSizeLimit { size_limit, size: total_size };
                 break;
             }
 
             enqueued.push((task.uid, task.kind));
         }
 
-        if let Some((batchkind, create_index)) =
+        stop_reason.replace_unspecified({
+            if enqueued.len() == count_total_enqueued as usize {
+                BatchStopReason::ExhaustedEnqueuedTasks
+            } else {
+                BatchStopReason::ExhaustedEnqueuedTasksForIndex { index: index_name.to_owned() }
+            }
+        });
+
+        if let Some((batchkind, create_index, autobatch_stop_reason)) =
             autobatcher::autobatch(enqueued, index_already_exists, primary_key.as_deref())
         {
+            current_batch.reason(autobatch_stop_reason.unwrap_or(stop_reason));
             return Ok(self
                 .create_next_batch_index(
                     rtxn,

@@ -675,6 +675,121 @@ impl Details {
     }
 }
 
+#[derive(Default, Debug, Clone)]
+pub enum BatchStopReason {
+    #[default]
+    Unspecified,
+    TaskCannotBeBatched {
+        kind: Kind,
+        id: TaskId,
+    },
+    ExhaustedEnqueuedTasks,
+    ExhaustedEnqueuedTasksForIndex {
+        index: String,
+    },
+    ReachedTaskLimit {
+        task_limit: usize,
+    },
+    ReachedSizeLimit {
+        size_limit: usize,
+        size: usize,
+    },
+    PrimaryKeyIndexMismatch {
+        id: TaskId,
+        in_index: String,
+        in_task: String,
+    },
+    IndexCreationMismatch {
+        id: TaskId,
+    },
+    PrimaryKeyMismatch {
+        id: TaskId,
+        batch_pk: Option<String>,
+        task_pk: Option<String>,
+    },
+    IndexDeletion {
+        id: TaskId,
+    },
+    DocumentOperationWithSettings {
+        id: TaskId,
+    },
+    DocumentOperationWithDeletionByFilter {
+        id: TaskId,
+    },
+    DeletionByFilterWithDocumentOperation {
+        id: TaskId,
+    },
+    SettingsWithDocumentOperation {
+        id: TaskId,
+    },
+}
+
+impl BatchStopReason {
+    pub fn replace_unspecified(&mut self, new: BatchStopReason) {
+        if let BatchStopReason::Unspecified = self {
+            *self = new;
+        }
+    }
+}
+
+pub enum PrimaryKeyMismatchReason {}
+
+impl Display for BatchStopReason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BatchStopReason::Unspecified => f.write_str("unspecified"),
+            BatchStopReason::TaskCannotBeBatched { kind, id } => {
+                write!(f, "task with id {id} of type `{kind}` cannot be batched")
+            }
+            BatchStopReason::ExhaustedEnqueuedTasks => f.write_str("batched all enqueued tasks"),
+            BatchStopReason::ExhaustedEnqueuedTasksForIndex { index } => {
+                write!(f, "batched all enqueued tasks for index `{index}`")
+            }
+            BatchStopReason::ReachedTaskLimit { task_limit } => {
+                write!(f, "reached configured batch limit of {task_limit} tasks")
+            }
+            BatchStopReason::ReachedSizeLimit { size_limit, size } => write!(
+                f,
+                "reached configured batch size limit of {size_limit}B with a total of {size}B"
+            ),
+            BatchStopReason::PrimaryKeyIndexMismatch { id, in_index, in_task } => {
+                write!(f, "primary key `{in_task}` in task with id {id} is different from the primary key of the index `{in_index}`")
+            }
+            BatchStopReason::IndexCreationMismatch { id } => {
+                write!(f, "task with id {id} has different index creation rules as in the batch")
+            }
+            BatchStopReason::PrimaryKeyMismatch { id, batch_pk, task_pk } => {}
+            BatchStopReason::IndexDeletion { id } => {
+                write!(f, "task with id {id} deletes the index")
+            }
+            BatchStopReason::DocumentOperationWithSettings { id } => {
+                write!(
+                    f,
+                    "task with id {id} is a settings change in a batch of document operations"
+                )
+            }
+            BatchStopReason::DocumentOperationWithDeletionByFilter { id } => {
+                write!(
+                    f,
+                    "task with id {id} is a deletion by filter in a batch of document operations"
+                )
+            }
+            BatchStopReason::DeletionByFilterWithDocumentOperation { id } => {
+                write!(
+                    f,
+                    "task with id {id} is a document operation in a batch of deletions by filter"
+                )
+            }
+            BatchStopReason::SettingsWithDocumentOperation { id } => {
+                write!(
+                    f,
+                    "task with id {id} is a document operation in a batch of settings changes"
+                )
+            }
+        }
+    }
+}
+
 /// Serialize a `time::Duration` as a best effort ISO 8601 while waiting for
 /// https://github.com/time-rs/time/issues/378.
 /// This code is a port of the old code of time that was removed in 0.2.

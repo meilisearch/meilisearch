@@ -6,7 +6,7 @@ use time::OffsetDateTime;
 use utoipa::ToSchema;
 
 use crate::task_view::DetailsView;
-use crate::tasks::{Kind, Status};
+use crate::tasks::{BatchStopReason, Kind, Status};
 
 pub type BatchId = u32;
 
@@ -28,11 +28,26 @@ pub struct Batch {
     // Enqueued at is never displayed and is only required when removing a batch.
     // It's always some except when upgrading from a database pre v1.12
     pub enqueued_at: Option<BatchEnqueuedAt>,
+    #[serde(default = "default_stop_reason")]
+    pub stop_reason: String,
+}
+
+fn default_stop_reason() -> String {
+    BatchStopReason::default().to_string()
 }
 
 impl PartialEq for Batch {
     fn eq(&self, other: &Self) -> bool {
-        let Self { uid, progress, details, stats, started_at, finished_at, enqueued_at } = self;
+        let Self {
+            uid,
+            progress,
+            details,
+            stats,
+            started_at,
+            finished_at,
+            enqueued_at,
+            stop_reason,
+        } = self;
 
         *uid == other.uid
             && progress.is_none() == other.progress.is_none()
@@ -41,6 +56,7 @@ impl PartialEq for Batch {
             && started_at == &other.started_at
             && finished_at == &other.finished_at
             && enqueued_at == &other.enqueued_at
+            && stop_reason == &other.stop_reason
     }
 }
 

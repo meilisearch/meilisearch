@@ -5,8 +5,9 @@ tasks affecting a single index into a [batch](crate::batch::Batch).
 The main function of the autobatcher is [`next_autobatch`].
 */
 
-use meilisearch_types::tasks::TaskId;
 use std::ops::ControlFlow::{self, Break, Continue};
+
+use meilisearch_types::tasks::{BatchStopReason, TaskId};
 
 use crate::KindWithContent;
 
@@ -147,14 +148,38 @@ impl BatchKind {
         task_id: TaskId,
         kind: KindWithContent,
         primary_key: Option<&str>,
-    ) -> (ControlFlow<BatchKind, BatchKind>, bool) {
+    ) -> (ControlFlow<(BatchKind, BatchStopReason), BatchKind>, bool) {
         use AutobatchKind as K;
 
         match AutobatchKind::from(kind) {
-            K::IndexCreation => (Break(BatchKind::IndexCreation { id: task_id }), true),
-            K::IndexDeletion => (Break(BatchKind::IndexDeletion { ids: vec![task_id] }), false),
-            K::IndexUpdate => (Break(BatchKind::IndexUpdate { id: task_id }), false),
-            K::IndexSwap => (Break(BatchKind::IndexSwap { id: task_id }), false),
+            K::IndexCreation => (
+                Break((
+                    BatchKind::IndexCreation { id: task_id },
+                    BatchStopReason::TaskCannotBeBatched { kind, id: task_id },
+                )),
+                true,
+            ),
+            K::IndexDeletion => (
+                Break((
+                    BatchKind::IndexDeletion { ids: vec![task_id] },
+                    BatchStopReason::TaskCannotBeBatched { kind, id: task_id },
+                )),
+                false,
+            ),
+            K::IndexUpdate => (
+                Break((
+                    BatchKind::IndexUpdate { id: task_id },
+                    BatchStopReason::TaskCannotBeBatched { kind, id: task_id },
+                )),
+                false,
+            ),
+            K::IndexSwap => (
+                Break((
+                    BatchKind::IndexSwap { id: task_id },
+                    BatchStopReason::TaskCannotBeBatched { kind, id: task_id },
+                )),
+                false,
+            ),
             K::DocumentClear => (Continue(BatchKind::DocumentClear { ids: vec![task_id] }), false),
             K::DocumentImport { allow_index_creation, primary_key: pk }
                 if primary_key.is_none() || pk.is_none() || primary_key == pk.as_deref() =>
@@ -169,15 +194,28 @@ impl BatchKind {
                 )
             }
             // if the primary key set in the task was different than ours we should stop and make this batch fail asap.
-            K::DocumentImport { allow_index_creation, primary_key } => (
-                Break(BatchKind::DocumentOperation {
-                    allow_index_creation,
-                    primary_key,
-                    operation_ids: vec![task_id],
-                }),
+            K::DocumentImport { allow_index_creation, primary_key: pk } => (
+                Break((
+                    BatchKind::DocumentOperation {
+                        allow_index_creation,
+                        primary_key: pk,
+                        operation_ids: vec![task_id],
+                    },
+                    BatchStopReason::PrimaryKeyIndexMismatch {
+                        id: task_id,
+                        in_index: primary_key.unwrap().to_owned(),
+                        in_task: pk.unwrap(),
+                    },
+                )),
                 allow_index_creation,
             ),
-            K::DocumentEdition => (Break(BatchKind::DocumentEdition { id: task_id }), false),
+            K::DocumentEdition => (
+                Break((
+                    BatchKind::DocumentEdition { id: task_id },
+                    BatchStopReason::TaskCannotBeBatched { kind, id: task_id },
+                )),
+                false,
+            ),
             K::DocumentDeletion { by_filter: includes_by_filter } => (
                 Continue(BatchKind::DocumentDeletion {
                     deletion_ids: vec![task_id],
@@ -197,43 +235,40 @@ impl BatchKind {
     /// To ease the writing of the code. `true` can be returned when you don't need to create an index
     /// but false can't be returned if you needs to create an index.
     #[rustfmt::skip]
-    fn accumulate(self, id: TaskId, kind: AutobatchKind, index_already_exists: bool, primary_key: Option<&str>) -> ControlFlow<BatchKind, BatchKind> {
+    fn accumulate(self, id: TaskId, kind: AutobatchKind, index_already_exists: bool, primary_key: Option<&str>) -> ControlFlow<(BatchKind, BatchStopReason), BatchKind> {
         use AutobatchKind as K;
+
+        let pk: Option<String> = match (self.primary_key(), kind.primary_key(), primary_key) {
+            // 1. If both task don't interact with primary key -> we can continue
+            (batch_pk, None | Some(None), _) => {
+                batch_pk.flatten().to_owned()
+            },
+            // 2.1 If we already have a primary-key ->
+            // 2.1.1 If the task we're trying to accumulate have a pk it must be equal to our primary key
+            (batch_pk, Some(Some(task_pk)), Some(index_pk)) => if task_pk == index_pk {
+                Some(task_pk.to_owned())
+            } else {
+                return Break((this, BatchStopReason::PrimaryKeyMismatch { id, batch_pk: todo!(), task_pk: todo!() }))
+            },
+            // 2.2 If we don't have a primary-key ->
+            // 2.2.2 If the batch is set to Some(None), the task should be too
+            (Some(None), Some(None), None) => None,
+            (Some(None), Some(Some(_)), None) => return Break((this, BatchStopReason::PrimaryKeyMismatch { id, batch_pk: todo!(), task_pk: todo!() })),
+            (Some(Some(batch_pk)), Some(None), None) => Some(batch_pk.to_owned()),
+            (Some(Some(batch_pk)), Some(Some(task_pk)), None) => if task_pk == batch_pk {
+                Some(task_pk.to_owned())
+            } else {
+                return Break((this, BatchStopReason::PrimaryKeyMismatch { id, batch_pk: todo!(), task_pk: todo!() }))
+            },
+            (None, Some(Some(task_pk)), None) => Some(task_pk.to_owned())
+        };
 
         match (self, kind) {
             // We don't batch any of these operations
-            (this, K::IndexCreation | K::IndexUpdate | K::IndexSwap | K::DocumentEdition) => Break(this),
+            (this, K::IndexCreation | K::IndexUpdate | K::IndexSwap | K::DocumentEdition) => Break((this, BatchStopReason::TaskCannotBeBatched { kind, id })),
             // We must not batch tasks that don't have the same index creation rights if the index doesn't already exists.
             (this, kind) if !index_already_exists && this.allow_index_creation() == Some(false) && kind.allow_index_creation() == Some(true) => {
-                Break(this)
-            },
-            // NOTE: We need to negate the whole condition since we're checking if we need to break instead of continue.
-            //       I wrote it this way because it's easier to understand than the other way around.
-            (this, kind) if !(
-                // 1. If both task don't interact with primary key -> we can continue
-                (this.primary_key().is_none() && kind.primary_key().is_none()) ||
-                // 2. Else ->
-                (
-                    // 2.1 If we already have a primary-key ->
-                    (
-                        primary_key.is_some() &&
-                        // 2.1.1 If the task we're trying to accumulate have a pk it must be equal to our primary key
-                        // 2.1.2 If the task don't have a primary-key -> we can continue
-                        kind.primary_key().is_none_or(|pk| pk == primary_key)
-                    ) ||
-                    // 2.2 If we don't have a primary-key ->
-                    (
-                        // 2.2.1 If both the batch and the task have a primary key they should be equal
-                        // 2.2.2 If the batch is set to Some(None), the task should be too
-                        // 2.2.3 If the batch is set to None -> we can continue
-                        this.primary_key().zip(kind.primary_key()).map_or(true, |(this, kind)| this == kind)
-                    )
-                )
-
-                ) // closing the negation
-
-            => {
-                Break(this)
+                Break((this, BatchStopReason::IndexCreationMismatch { id }))
             },
             // The index deletion can batch with everything but must stop after
             (
@@ -244,7 +279,7 @@ impl BatchKind {
                 K::IndexDeletion,
             ) => {
                 ids.push(id);
-                Break(BatchKind::IndexDeletion { ids })
+                Break((BatchKind::IndexDeletion { ids }, BatchStopReason::IndexDeletion { id }))
             }
             (
                 BatchKind::ClearAndSettings { settings_ids: mut ids, allow_index_creation: _, mut other },
@@ -252,7 +287,7 @@ impl BatchKind {
             ) => {
                 ids.push(id);
                 ids.append(&mut other);
-                Break(BatchKind::IndexDeletion { ids })
+                Break((BatchKind::IndexDeletion { ids }, BatchStopReason::IndexDeletion { id }))
             }
 
             (
@@ -265,7 +300,7 @@ impl BatchKind {
             (
                 this @ BatchKind::DocumentClear { .. },
                 K::DocumentImport { .. } | K::Settings { .. },
-            ) => Break(this),
+            ) => Break((this, BatchStopReason::DocumentOperationWithSettings { id })),
             (
                 BatchKind::DocumentOperation { allow_index_creation: _, primary_key: _, mut operation_ids },
                 K::DocumentClear,
@@ -277,7 +312,7 @@ impl BatchKind {
             // we can autobatch different kind of document operations and mix replacements with updates
             (
                 BatchKind::DocumentOperation { allow_index_creation, primary_key: _, mut operation_ids },
-                K::DocumentImport { primary_key: pk, .. },
+                K::DocumentImport { primary_key, .. },
             ) => {
                 operation_ids.push(id);
                 Continue(BatchKind::DocumentOperation {
@@ -287,15 +322,15 @@ impl BatchKind {
                 })
             }
             (
-                BatchKind::DocumentOperation { allow_index_creation, primary_key, mut operation_ids },
+                BatchKind::DocumentOperation { allow_index_creation, primary_key: _, mut operation_ids },
                 K::DocumentDeletion { by_filter: false },
             ) => {
                 operation_ids.push(id);
 
                 Continue(BatchKind::DocumentOperation {
                     allow_index_creation,
-                    primary_key,
                     operation_ids,
+                    primary_key: pk,
                 })
             }
             // We can't batch a document operation with a delete by filter
@@ -303,12 +338,12 @@ impl BatchKind {
                 this @ BatchKind::DocumentOperation { .. },
                 K::DocumentDeletion { by_filter: true },
             ) => {
-                Break(this)
+                Break((this, BatchStopReason::DocumentOperationWithDeletionByFilter { id }))
             }
             (
                 this @ BatchKind::DocumentOperation { .. },
                 K::Settings { .. },
-            ) => Break(this),
+            ) => Break((this, BatchStopReason::DocumentOperationWithSettings { id })),
 
             (BatchKind::DocumentDeletion { mut deletion_ids, includes_by_filter: _ }, K::DocumentClear) => {
                 deletion_ids.push(id);
@@ -318,7 +353,7 @@ impl BatchKind {
             (
                 this @ BatchKind::DocumentDeletion { deletion_ids: _, includes_by_filter: true },
                 K::DocumentImport { .. }
-            ) => Break(this),
+            ) => Break((this, BatchStopReason::DeletionByFilterWithDocumentOperation { id })),
             // we can autobatch the deletion and import if the index already exists
             (
                 BatchKind::DocumentDeletion { mut deletion_ids, includes_by_filter: false },
@@ -345,18 +380,18 @@ impl BatchKind {
                     operation_ids: deletion_ids,
                 })
             }
-            // we can't autobatch a deletion and an import if the index does not exists but would be created by an addition
+            // we can't autobatch a deletion and an import if the index does not exist but would be created by an addition
             (
                 this @ BatchKind::DocumentDeletion { .. },
                 K::DocumentImport { .. }
             ) => {
-                Break(this)
+                Break((this, BatchStopReason::IndexCreationMismatch { id }))
             }
             (BatchKind::DocumentDeletion { mut deletion_ids, includes_by_filter }, K::DocumentDeletion { by_filter }) => {
                 deletion_ids.push(id);
                 Continue(BatchKind::DocumentDeletion { deletion_ids, includes_by_filter: includes_by_filter | by_filter })
             }
-            (this @ BatchKind::DocumentDeletion { .. }, K::Settings { .. }) => Break(this),
+            (this @ BatchKind::DocumentDeletion { .. }, K::Settings { .. }) => Break((this, BatchStopReason::DocumentOperationWithSettings { id })),
 
             (
                 BatchKind::Settings { settings_ids, allow_index_creation },
@@ -369,7 +404,7 @@ impl BatchKind {
             (
                 this @ BatchKind::Settings { .. },
                 K::DocumentImport { .. } | K::DocumentDeletion { .. },
-            ) => Break(this),
+            ) => Break((this, BatchStopReason::SettingsWithDocumentOperation { id })),
             (
                 BatchKind::Settings { mut settings_ids, allow_index_creation },
                 K::Settings { .. },
@@ -448,7 +483,7 @@ pub fn autobatch(
     enqueued: Vec<(TaskId, KindWithContent)>,
     index_already_exists: bool,
     primary_key: Option<&str>,
-) -> Option<(BatchKind, bool)> {
+) -> Option<(BatchKind, bool, Option<BatchStopReason>)> {
     let mut enqueued = enqueued.into_iter();
     let (id, kind) = enqueued.next()?;
 
@@ -457,7 +492,9 @@ pub fn autobatch(
 
     let (mut acc, must_create_index) = match BatchKind::new(id, kind, primary_key) {
         (Continue(acc), create) => (acc, create),
-        (Break(acc), create) => return Some((acc, create)),
+        (Break((acc, batch_stop_reason)), create) => {
+            return Some((acc, create, Some(batch_stop_reason)))
+        }
     };
 
     // if an index has been created in the previous step we can consider it as existing.
@@ -466,9 +503,11 @@ pub fn autobatch(
     for (id, kind) in enqueued {
         acc = match acc.accumulate(id, kind.into(), index_exist, primary_key) {
             Continue(acc) => acc,
-            Break(acc) => return Some((acc, must_create_index)),
+            Break((acc, batch_stop_reason)) => {
+                return Some((acc, must_create_index, Some(batch_stop_reason)))
+            }
         };
     }
 
-    Some((acc, must_create_index))
+    Some((acc, must_create_index, None))
 }
