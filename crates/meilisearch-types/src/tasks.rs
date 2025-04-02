@@ -704,8 +704,7 @@ pub enum BatchStopReason {
     },
     PrimaryKeyMismatch {
         id: TaskId,
-        batch_pk: Option<String>,
-        task_pk: Option<String>,
+        reason: PrimaryKeyMismatchReason,
     },
     IndexDeletion {
         id: TaskId,
@@ -732,7 +731,12 @@ impl BatchStopReason {
     }
 }
 
-pub enum PrimaryKeyMismatchReason {}
+#[derive(Debug, Clone)]
+pub enum PrimaryKeyMismatchReason {
+    TaskPrimaryKeyDifferFromIndexPrimaryKey { task_pk: String, index_pk: String },
+    TaskPrimaryKeyDifferFromCurrentBatchPrimaryKey { task_pk: String, batch_pk: String },
+    CannotInterfereWithPrimaryKeyGuessing { task_pk: String },
+}
 
 impl Display for BatchStopReason {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -758,7 +762,23 @@ impl Display for BatchStopReason {
             BatchStopReason::IndexCreationMismatch { id } => {
                 write!(f, "task with id {id} has different index creation rules as in the batch")
             }
-            BatchStopReason::PrimaryKeyMismatch { id, batch_pk, task_pk } => {}
+            BatchStopReason::PrimaryKeyMismatch { reason, id } => match reason {
+                PrimaryKeyMismatchReason::TaskPrimaryKeyDifferFromIndexPrimaryKey {
+                    task_pk,
+                    index_pk,
+                } => {
+                    write!(f, "primary key `{task_pk}` in task with id {id} is different from the primary key of the index `{index_pk}`")
+                }
+                PrimaryKeyMismatchReason::TaskPrimaryKeyDifferFromCurrentBatchPrimaryKey {
+                    task_pk,
+                    batch_pk,
+                } => {
+                    write!(f, "primary key `{task_pk}` in task with id {id} is different from `{batch_pk}`: the primary key of the batch being build")
+                }
+                PrimaryKeyMismatchReason::CannotInterfereWithPrimaryKeyGuessing { task_pk } => {
+                    write!(f, "Task {id} is setting the `{task_pk}` primary key but cannot interfere with primary key guessing of the previous batch")
+                }
+            },
             BatchStopReason::IndexDeletion { id } => {
                 write!(f, "task with id {id} deletes the index")
             }

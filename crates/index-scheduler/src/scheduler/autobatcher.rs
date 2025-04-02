@@ -7,7 +7,7 @@ The main function of the autobatcher is [`next_autobatch`].
 
 use std::ops::ControlFlow::{self, Break, Continue};
 
-use meilisearch_types::tasks::{BatchStopReason, TaskId};
+use meilisearch_types::tasks::{BatchStopReason, PrimaryKeyMismatchReason, TaskId};
 
 use crate::KindWithContent;
 
@@ -241,24 +241,41 @@ impl BatchKind {
         let pk: Option<String> = match (self.primary_key(), kind.primary_key(), primary_key) {
             // 1. If both task don't interact with primary key -> we can continue
             (batch_pk, None | Some(None), _) => {
-                batch_pk.flatten().to_owned()
+                batch_pk.flatten().map(ToOwned::to_owned)
             },
             // 2.1 If we already have a primary-key ->
             // 2.1.1 If the task we're trying to accumulate have a pk it must be equal to our primary key
             (batch_pk, Some(Some(task_pk)), Some(index_pk)) => if task_pk == index_pk {
                 Some(task_pk.to_owned())
             } else {
-                return Break((this, BatchStopReason::PrimaryKeyMismatch { id, batch_pk: todo!(), task_pk: todo!() }))
+                return Break((self, BatchStopReason::PrimaryKeyMismatch {
+                    id,
+                    reason: PrimaryKeyMismatchReason::TaskPrimaryKeyDifferFromIndexPrimaryKey {
+                        task_pk: task_pk.to_owned(),
+                        index_pk: index_pk.to_owned(),
+                    },
+                }))
             },
             // 2.2 If we don't have a primary-key ->
             // 2.2.2 If the batch is set to Some(None), the task should be too
             (Some(None), Some(None), None) => None,
-            (Some(None), Some(Some(_)), None) => return Break((this, BatchStopReason::PrimaryKeyMismatch { id, batch_pk: todo!(), task_pk: todo!() })),
+            (Some(None), Some(Some(task_pk)), None) => return Break((self, BatchStopReason::PrimaryKeyMismatch {
+                id,
+                reason: PrimaryKeyMismatchReason::CannotInterfereWithPrimaryKeyGuessing {
+                    task_pk: task_pk.to_owned(),
+                },
+            })),
             (Some(Some(batch_pk)), Some(None), None) => Some(batch_pk.to_owned()),
             (Some(Some(batch_pk)), Some(Some(task_pk)), None) => if task_pk == batch_pk {
                 Some(task_pk.to_owned())
             } else {
-                return Break((this, BatchStopReason::PrimaryKeyMismatch { id, batch_pk: todo!(), task_pk: todo!() }))
+                return Break((self, BatchStopReason::PrimaryKeyMismatch {
+                    id,
+                    reason: PrimaryKeyMismatchReason::TaskPrimaryKeyDifferFromCurrentBatchPrimaryKey {
+                        batch_pk: batch_pk.to_owned(),
+                        task_pk: task_pk.to_owned(),
+                    },
+                }))
             },
             (None, Some(Some(task_pk)), None) => Some(task_pk.to_owned())
         };
