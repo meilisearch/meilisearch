@@ -691,8 +691,8 @@ pub enum BatchStopReason {
         task_limit: usize,
     },
     ReachedSizeLimit {
-        size_limit: usize,
-        size: usize,
+        size_limit: u64,
+        size: u64,
     },
     PrimaryKeyIndexMismatch {
         id: TaskId,

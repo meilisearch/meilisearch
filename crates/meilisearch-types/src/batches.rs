@@ -32,7 +32,7 @@ pub struct Batch {
     pub stop_reason: String,
 }
 
-fn default_stop_reason() -> String {
+pub fn default_stop_reason() -> String {
     BatchStopReason::default().to_string()
 }
 

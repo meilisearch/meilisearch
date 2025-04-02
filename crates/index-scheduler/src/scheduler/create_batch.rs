@@ -456,7 +456,7 @@ impl IndexScheduler {
             current_batch.processing(&mut tasks);
             current_batch.reason(BatchStopReason::TaskCannotBeBatched {
                 kind: Kind::UpgradeDatabase,
-                id: tasks.last().unwrap(),
+                id: tasks.first().unwrap().uid,
             });
             return Ok(Some((Batch::UpgradeDatabase { tasks }, current_batch)));
         }
@@ -469,7 +469,7 @@ impl IndexScheduler {
             current_batch.processing(Some(&mut task));
             current_batch.reason(BatchStopReason::TaskCannotBeBatched {
                 kind: Kind::TaskCancelation,
-                id: tasks.last().unwrap(),
+                id: task_id,
             });
             return Ok(Some((Batch::TaskCancelation { task }, current_batch)));
         }
@@ -481,7 +481,7 @@ impl IndexScheduler {
             current_batch.processing(&mut tasks);
             current_batch.reason(BatchStopReason::TaskCannotBeBatched {
                 kind: Kind::TaskDeletion,
-                id: tasks.last().unwrap(),
+                id: tasks.first().unwrap().uid,
             });
             return Ok(Some((Batch::TaskDeletions(tasks), current_batch)));
         }
@@ -493,7 +493,7 @@ impl IndexScheduler {
             current_batch.processing(&mut tasks);
             current_batch.reason(BatchStopReason::TaskCannotBeBatched {
                 kind: Kind::SnapshotCreation,
-                id: tasks.last().unwrap(),
+                id: tasks.first().unwrap().uid,
             });
             return Ok(Some((Batch::SnapshotCreation(tasks), current_batch)));
         }
@@ -506,7 +506,7 @@ impl IndexScheduler {
             current_batch.processing(Some(&mut task));
             current_batch.reason(BatchStopReason::TaskCannotBeBatched {
                 kind: Kind::DumpCreation,
-                id: tasks.last().unwrap(),
+                id: task.uid,
             });
             return Ok(Some((Batch::Dump(task), current_batch)));
         }
@@ -527,7 +527,7 @@ impl IndexScheduler {
             current_batch.processing(Some(&mut task));
             current_batch.reason(BatchStopReason::TaskCannotBeBatched {
                 kind: Kind::IndexSwap,
-                id: tasks.last().unwrap(),
+                id: task.uid,
             });
             return Ok(Some((Batch::IndexSwap { task }, current_batch)));
         };
@@ -554,8 +554,8 @@ impl IndexScheduler {
         let mut enqueued = Vec::new();
         let mut total_size: u64 = 0;
         for task_id in index_tasks.into_iter() {
-            if enqueued.len() >= task_limit {
-                stop_reason = BatchStopReason::ReachedTaskLimit { task_limit };
+            if enqueued.len() >= tasks_limit {
+                stop_reason = BatchStopReason::ReachedTaskLimit { task_limit: tasks_limit };
                 break;
             }
             let task = self
