@@ -237,7 +237,7 @@ pub(crate) mod test {
     use meilisearch_types::milli::{self, FilterableAttributesRule};
     use meilisearch_types::settings::{Checked, FacetingSettings, Settings};
     use meilisearch_types::task_view::DetailsView;
-    use meilisearch_types::tasks::{Details, Kind, Status};
+    use meilisearch_types::tasks::{BatchStopReason, Details, Kind, Status};
     use serde_json::{json, Map, Value};
     use time::macros::datetime;
     use uuid::Uuid;
@@ -333,6 +333,7 @@ pub(crate) mod test {
             }),
             started_at: datetime!(2022-11-20 0:00 UTC),
             finished_at: Some(datetime!(2022-11-21 0:00 UTC)),
+            stop_reason: BatchStopReason::Unspecified.to_string(),
         }]
     }
 
