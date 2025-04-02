@@ -1,8 +1,8 @@
-use std::collections::VecDeque;
 use heed::types::{Bytes, Unit};
 use heed::{RoPrefix, RoTxn};
 use roaring::RoaringBitmap;
 use rstar::RTree;
+use std::collections::VecDeque;
 
 use super::facet_string_values;
 use super::ranking_rules::{RankingRule, RankingRuleOutput, RankingRuleQueryTrait};
@@ -238,7 +238,7 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for GeoSort<Q> {
     fn next_bucket(
         &mut self,
         ctx: &mut SearchContext<'ctx>,
-        logger: &mut dyn SearchLogger<Q>,
+        _logger: &mut dyn SearchLogger<Q>,
         universe: &RoaringBitmap,
     ) -> Result<Option<RankingRuleOutput<Q>>> {
         let query = self.query.as_ref().unwrap().clone();
@@ -299,13 +299,13 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for GeoSort<Q> {
                             // same distance, point belongs to current bucket
                             current_bucket.push(id);
                             // remove from cadidates to prevent it from being added to the cache again
-                            geo_candidates.remove(id); 
+                            geo_candidates.remove(id);
                         }
                     } else {
                         // first doc in current bucket
                         current_distance = Some((point, distance));
                         current_bucket.push(id);
-                        geo_candidates.remove(id); 
+                        geo_candidates.remove(id);
                     }
                 }
             } else {
