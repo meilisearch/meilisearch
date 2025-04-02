@@ -773,10 +773,10 @@ impl Display for BatchStopReason {
                     task_pk,
                     batch_pk,
                 } => {
-                    write!(f, "primary key `{task_pk}` in task with id {id} is different from `{batch_pk}`: the primary key of the batch being build")
+                    write!(f, "primary key `{task_pk}` in task with id {id} is different from the primary key of the batch `{batch_pk}`")
                 }
                 PrimaryKeyMismatchReason::CannotInterfereWithPrimaryKeyGuessing { task_pk } => {
-                    write!(f, "Task {id} is setting the `{task_pk}` primary key but cannot interfere with primary key guessing of the previous batch")
+                    write!(f, "task with id {id} is setting the `{task_pk}` primary key but cannot interfere with primary key guessing of the batch")
                 }
             },
             BatchStopReason::IndexDeletion { id } => {
