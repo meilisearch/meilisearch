@@ -164,7 +164,7 @@ impl BatchKind {
             K::IndexDeletion => (
                 Break((
                     BatchKind::IndexDeletion { ids: vec![task_id] },
-                    BatchStopReason::TaskCannotBeBatched { kind, id: task_id },
+                    BatchStopReason::IndexDeletion { id: task_id },
                 )),
                 false,
             ),
