@@ -141,6 +141,9 @@ pub enum KindDump {
         instance_uid: Option<InstanceUid>,
     },
     SnapshotCreation,
+    UpgradeDatabase {
+        from: (u32, u32, u32),
+    },
 }
 
 impl From<Task> for TaskDump {
@@ -210,6 +213,9 @@ impl From<KindWithContent> for KindDump {
                 KindDump::DumpCreation { keys, instance_uid }
             }
             KindWithContent::SnapshotCreation => KindDump::SnapshotCreation,
+            KindWithContent::UpgradeDatabase { from: version } => {
+                KindDump::UpgradeDatabase { from: version }
+            }
         }
     }
 }
@@ -222,14 +228,16 @@ pub(crate) mod test {
 
     use big_s::S;
     use maplit::{btreemap, btreeset};
+    use meilisearch_types::batches::{Batch, BatchEnqueuedAt, BatchStats};
     use meilisearch_types::facet_values_sort::FacetValuesSort;
-    use meilisearch_types::features::RuntimeTogglableFeatures;
+    use meilisearch_types::features::{Network, Remote, RuntimeTogglableFeatures};
     use meilisearch_types::index_uid_pattern::IndexUidPattern;
     use meilisearch_types::keys::{Action, Key};
-    use meilisearch_types::milli;
     use meilisearch_types::milli::update::Setting;
+    use meilisearch_types::milli::{self, FilterableAttributesRule};
     use meilisearch_types::settings::{Checked, FacetingSettings, Settings};
-    use meilisearch_types::tasks::{Details, Status};
+    use meilisearch_types::task_view::DetailsView;
+    use meilisearch_types::tasks::{Details, Kind, Status};
     use serde_json::{json, Map, Value};
     use time::macros::datetime;
     use uuid::Uuid;
@@ -271,7 +279,10 @@ pub(crate) mod test {
         let settings = Settings {
             displayed_attributes: Setting::Set(vec![S("race"), S("name")]).into(),
             searchable_attributes: Setting::Set(vec![S("name"), S("race")]).into(),
-            filterable_attributes: Setting::Set(btreeset! { S("race"), S("age") }),
+            filterable_attributes: Setting::Set(vec![
+                FilterableAttributesRule::Field(S("race")),
+                FilterableAttributesRule::Field(S("age")),
+            ]),
             sortable_attributes: Setting::Set(btreeset! { S("age") }),
             ranking_rules: Setting::NotSet,
             stop_words: Setting::NotSet,
@@ -292,9 +303,37 @@ pub(crate) mod test {
             embedders: Setting::NotSet,
             search_cutoff_ms: Setting::NotSet,
             localized_attributes: Setting::NotSet,
+            facet_search: Setting::NotSet,
+            prefix_search: Setting::NotSet,
             _kind: std::marker::PhantomData,
         };
         settings.check()
+    }
+
+    pub fn create_test_batches() -> Vec<Batch> {
+        vec![Batch {
+            uid: 0,
+            details: DetailsView {
+                received_documents: Some(12),
+                indexed_documents: Some(Some(10)),
+                ..DetailsView::default()
+            },
+            progress: None,
+            stats: BatchStats {
+                total_nb_tasks: 1,
+                status: maplit::btreemap! { Status::Succeeded => 1 },
+                types: maplit::btreemap! { Kind::DocumentAdditionOrUpdate => 1 },
+                index_uids: maplit::btreemap! { "doggo".to_string() => 1 },
+                progress_trace: Default::default(),
+                write_channel_congestion: None,
+            },
+            enqueued_at: Some(BatchEnqueuedAt {
+                earliest: datetime!(2022-11-11 0:00 UTC),
+                oldest: datetime!(2022-11-11 0:00 UTC),
+            }),
+            started_at: datetime!(2022-11-20 0:00 UTC),
+            finished_at: Some(datetime!(2022-11-21 0:00 UTC)),
+        }]
     }
 
     pub fn create_test_tasks() -> Vec<(TaskDump, Option<Vec<Document>>)> {
@@ -419,6 +458,15 @@ pub(crate) mod test {
         index.flush().unwrap();
         index.settings(&settings).unwrap();
 
+        // ========== pushing the batch queue
+        let batches = create_test_batches();
+
+        let mut batch_queue = dump.create_batches_queue().unwrap();
+        for batch in &batches {
+            batch_queue.push_batch(batch).unwrap();
+        }
+        batch_queue.flush().unwrap();
+
         // ========== pushing the task queue
         let tasks = create_test_tasks();
 
@@ -447,6 +495,10 @@ pub(crate) mod test {
 
         dump.create_experimental_features(features).unwrap();
 
+        // ========== network
+        let network = create_test_network();
+        dump.create_network(network).unwrap();
+
         // create the dump
         let mut file = tempfile::tempfile().unwrap();
         dump.persist_to(&mut file).unwrap();
@@ -456,7 +508,14 @@ pub(crate) mod test {
     }
 
     fn create_test_features() -> RuntimeTogglableFeatures {
-        RuntimeTogglableFeatures { vector_store: true, ..Default::default() }
+        RuntimeTogglableFeatures::default()
+    }
+
+    fn create_test_network() -> Network {
+        Network {
+            local: Some("myself".to_string()),
+            remotes: maplit::btreemap! {"other".to_string() => Remote { url: "http://test".to_string(), search_api_key: Some("apiKey".to_string()) }},
+        }
     }
 
     #[test]
@@ -507,5 +566,9 @@ pub(crate) mod test {
         // ==== checking the features
         let expected = create_test_features();
         assert_eq!(dump.features().unwrap().unwrap(), expected);
+
+        // ==== checking the network
+        let expected = create_test_network();
+        assert_eq!(&expected, dump.network().unwrap().unwrap());
     }
 }

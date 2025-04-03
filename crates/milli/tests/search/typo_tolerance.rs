@@ -3,8 +3,9 @@ use std::collections::BTreeSet;
 use bumpalo::Bump;
 use heed::EnvOpenOptions;
 use milli::documents::mmap_from_objects;
+use milli::progress::Progress;
 use milli::update::new::indexer;
-use milli::update::{IndexDocumentsMethod, IndexerConfig, Settings};
+use milli::update::{IndexerConfig, Settings};
 use milli::vector::EmbeddingConfigs;
 use milli::{Criterion, Index, Object, Search, TermsMatchingStrategy};
 use serde_json::from_value;
@@ -107,9 +108,10 @@ fn test_typo_tolerance_two_typo() {
 #[test]
 fn test_typo_disabled_on_word() {
     let tmp = tempdir().unwrap();
-    let mut options = EnvOpenOptions::new();
+    let options = EnvOpenOptions::new();
+    let mut options = options.read_txn_without_tls();
     options.map_size(4096 * 100);
-    let index = Index::new(options, tmp.path()).unwrap();
+    let index = Index::new(options, tmp.path(), true).unwrap();
 
     let doc1: Object = from_value(json!({ "id": 1usize, "data": "zealand" })).unwrap();
     let doc2: Object = from_value(json!({ "id": 2usize, "data": "zearand" })).unwrap();
@@ -122,9 +124,9 @@ fn test_typo_disabled_on_word() {
     let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let mut new_fields_ids_map = db_fields_ids_map.clone();
     let embedders = EmbeddingConfigs::default();
-    let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+    let mut indexer = indexer::DocumentOperation::new();
 
-    indexer.add_documents(&documents).unwrap();
+    indexer.replace_documents(&documents).unwrap();
 
     let indexer_alloc = Bump::new();
     let (document_changes, _operation_stats, primary_key) = indexer
@@ -135,13 +137,14 @@ fn test_typo_disabled_on_word() {
             None,
             &mut new_fields_ids_map,
             &|| false,
-            &|_progress| (),
+            Progress::default(),
         )
         .unwrap();
 
     indexer::index(
         &mut wtxn,
         &index,
+        &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
         config.grenad_parameters(),
         &db_fields_ids_map,
         new_fields_ids_map,
@@ -149,7 +152,7 @@ fn test_typo_disabled_on_word() {
         &document_changes,
         embedders,
         &|| false,
-        &|_| (),
+        &Progress::default(),
     )
     .unwrap();
 

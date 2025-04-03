@@ -82,6 +82,16 @@ pub struct BenchDeriveArgs {
     /// Reason for the benchmark invocation
     #[arg(short, long)]
     reason: Option<String>,
+
+    /// The maximum time in seconds we allow for fetching the task queue before timing out.
+    #[arg(long, default_value_t = 60)]
+    tasks_queue_timeout_secs: u64,
+
+    /// The path to the binary to run.
+    ///
+    /// If unspecified, runs `cargo run` after building Meilisearch with `cargo build`.
+    #[arg(long)]
+    binary_path: Option<PathBuf>,
 }
 
 pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
@@ -127,7 +137,7 @@ pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
     let meili_client = Client::new(
         Some("http://127.0.0.1:7700".into()),
         args.master_key.as_deref(),
-        Some(std::time::Duration::from_secs(60)),
+        Some(std::time::Duration::from_secs(args.tasks_queue_timeout_secs)),
     )?;
 
     // enter runtime
@@ -135,7 +145,7 @@ pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
     rt.block_on(async {
         dashboard_client.send_machine_info(&env).await?;
 
-        let commit_message = build_info.commit_msg.context("missing commit message")?.split('\n').next().unwrap();
+        let commit_message = build_info.commit_msg.unwrap_or_default().split('\n').next().unwrap();
         let max_workloads = args.workload_file.len();
         let reason: Option<&str> = args.reason.as_deref();
         let invocation_uuid = dashboard_client.create_invocation(build_info.clone(), commit_message, env, max_workloads, reason).await?;
@@ -166,6 +176,7 @@ pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
                     args.master_key.as_deref(),
                     workload,
                     &args,
+                    args.binary_path.as_deref(),
                 )
                 .await?;
 

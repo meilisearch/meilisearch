@@ -20,14 +20,14 @@ use meilisearch::{
     LogStderrType, Opt, SubscriberForSecondLayer,
 };
 use meilisearch_auth::{generate_master_key, AuthController, MASTER_KEY_MIN_SIZE};
-use mimalloc::MiMalloc;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt as _;
 use tracing_subscriber::Layer;
 
+#[cfg(not(windows))]
 #[global_allocator]
-static ALLOC: MiMalloc = MiMalloc;
+static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 fn default_log_route_layer() -> LogRouteType {
     None.with_filter(tracing_subscriber::filter::Targets::new().with_target("", LevelFilter::OFF))
@@ -69,7 +69,7 @@ fn setup(opt: &Opt) -> anyhow::Result<(LogRouteHandle, LogStderrHandle)> {
     Ok((route_layer_handle, stderr_layer_handle))
 }
 
-fn on_panic(info: &std::panic::PanicInfo) {
+fn on_panic(info: &std::panic::PanicHookInfo) {
     let info = info.to_string().replace('\n', " ");
     tracing::error!(%info);
 }
@@ -128,6 +128,11 @@ async fn try_main() -> anyhow::Result<()> {
         analytics::Analytics::new(&opt, index_scheduler.clone(), auth_controller.clone()).await;
 
     print_launch_resume(&opt, analytics.clone(), config_read_from);
+
+    tokio::spawn(async move {
+        tokio::signal::ctrl_c().await.unwrap();
+        std::process::exit(130);
+    });
 
     run_http(index_scheduler, auth_controller, opt, log_handle, Arc::new(analytics)).await?;
 

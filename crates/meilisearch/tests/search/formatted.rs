@@ -5,6 +5,58 @@ use crate::common::Server;
 use crate::json;
 
 #[actix_rt::test]
+async fn search_formatted_from_sdk() {
+    let server = Server::new_shared();
+    let index = server.unique_index();
+
+    index
+        .update_settings(
+            json!({ "filterableAttributes": ["genre"], "searchableAttributes": ["title"] }),
+        )
+        .await;
+
+    let documents = json!([
+      { "id": 123,  "title": "Pride and Prejudice",                     "genre": "romance" },
+      { "id": 456,  "title": "Le Petit Prince",                         "genre": "adventure" },
+      { "id": 1,    "title": "Alice In Wonderland",                     "genre": "adventure" },
+      { "id": 2,    "title": "Le Rouge et le Noir",                     "genre": "romance" },
+      { "id": 1344, "title": "The Hobbit",                              "genre": "adventure" },
+      { "id": 4,    "title": "Harry Potter and the Half-Blood Prince",  "genre": "fantasy" },
+      { "id": 7,    "title": "Harry Potter and the Chamber of Secrets", "genre": "fantasy" },
+      { "id": 42,   "title": "The Hitchhiker's Guide to the Galaxy" }
+    ]);
+    let (response, _) = index.add_documents(documents, None).await;
+    index.wait_task(response.uid()).await;
+
+    index
+        .search(
+            json!({ "q":"prince",
+              "attributesToCrop": ["title"],
+              "cropLength": 2,
+              "filter": "genre = adventure",
+              "attributesToHighlight": ["title"],
+              "attributesToRetrieve": ["title"]
+            }),
+            |response, code| {
+                assert_eq!(code, 200, "{}", response);
+                allow_duplicates! {
+                  assert_json_snapshot!(response["hits"][0],
+                        { "._rankingScore" => "[score]" },
+                        @r###"
+                  {
+                    "title": "Le Petit Prince",
+                    "_formatted": {
+                      "title": "…Petit <em>Prince</em>"
+                    }
+                  }
+                  "###);
+                }
+            },
+        )
+        .await;
+}
+
+#[actix_rt::test]
 async fn formatted_contain_wildcard() {
     let server = Server::new_shared();
     let index = server.unique_index();
@@ -13,7 +65,7 @@ async fn formatted_contain_wildcard() {
 
     let documents = NESTED_DOCUMENTS.clone();
     let (response, _) = index.add_documents(documents, None).await;
-    index.wait_task(response.uid()).await;
+    index.wait_task(response.uid()).await.succeeded();
 
     index.search(json!({ "q": "pésti", "attributesToRetrieve": ["father", "mother"], "attributesToHighlight": ["father", "mother", "*"], "attributesToCrop": ["doggos"], "showMatchesPosition": true }),
         |response, code|
@@ -22,7 +74,7 @@ async fn formatted_contain_wildcard() {
             allow_duplicates! {
               assert_json_snapshot!(response["hits"][0],
                     { "._rankingScore" => "[score]" },
-                    @r###"
+                    @r#"
               {
                 "_formatted": {
                   "id": "852",
@@ -32,12 +84,12 @@ async fn formatted_contain_wildcard() {
                   "cattos": [
                     {
                       "start": 0,
-                      "length": 5
+                      "length": 6
                     }
                   ]
                 }
               }
-              "###);
+              "#);
             }
     }
     )
@@ -67,7 +119,7 @@ async fn formatted_contain_wildcard() {
                 allow_duplicates! {
                   assert_json_snapshot!(response["hits"][0],
                  { "._rankingScore" => "[score]" },
-                 @r###"
+                 @r#"
                   {
                     "id": 852,
                     "cattos": "pésti",
@@ -79,12 +131,12 @@ async fn formatted_contain_wildcard() {
                       "cattos": [
                         {
                           "start": 0,
-                          "length": 5
+                          "length": 6
                         }
                       ]
                     }
                   }
-                  "###)
+                  "#)
              }
         })
         .await;
@@ -346,7 +398,7 @@ async fn displayedattr_2_smol() {
 
     let documents = NESTED_DOCUMENTS.clone();
     let (response, _) = index.add_documents(documents, None).await;
-    index.wait_task(response.uid()).await;
+    index.wait_task(response.uid()).await.succeeded();
 
     index
         .search(json!({ "attributesToRetrieve": ["father", "id"], "attributesToHighlight": ["mother"], "attributesToCrop": ["cattos"] }),
@@ -544,7 +596,7 @@ async fn test_cjk_highlight() {
         { "id": 1, "title": "大卫到了扫罗那里" },
     ]);
     let (response, _) = index.add_documents(documents, None).await;
-    index.wait_task(response.uid()).await;
+    index.wait_task(response.uid()).await.succeeded();
 
     index
         .search(json!({"q": "で", "attributesToHighlight": ["title"]}), |response, code| {

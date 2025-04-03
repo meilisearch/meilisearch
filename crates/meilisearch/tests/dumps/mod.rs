@@ -27,9 +27,26 @@ async fn import_dump_v1_movie_raw() {
 
     let (stats, code) = index.stats().await;
     snapshot!(code, @"200 OK");
-    assert_eq!(
-        stats,
-        json!({ "numberOfDocuments": 53, "isIndexing": false, "fieldDistribution": {"genres": 53, "id": 53, "overview": 53, "poster": 53, "release_date": 53, "title": 53 }})
+    snapshot!(
+      json_string!(stats),
+      @r###"
+    {
+      "numberOfDocuments": 53,
+      "rawDocumentDbSize": 21965,
+      "avgDocumentSize": 414,
+      "isIndexing": false,
+      "numberOfEmbeddings": 0,
+      "numberOfEmbeddedDocuments": 0,
+      "fieldDistribution": {
+        "genres": 53,
+        "id": 53,
+        "overview": 53,
+        "poster": 53,
+        "release_date": 53,
+        "title": 53
+      }
+    }
+    "###
     );
 
     let (settings, code) = index.settings().await;
@@ -78,8 +95,11 @@ async fn import_dump_v1_movie_raw() {
       "pagination": {
         "maxTotalHits": 1000
       },
+      "embedders": {},
       "searchCutoffMs": null,
-      "localizedAttributes": null
+      "localizedAttributes": null,
+      "facetSearch": true,
+      "prefixSearch": "indexingTime"
     }
     "###
     );
@@ -169,7 +189,11 @@ async fn import_dump_v1_movie_with_settings() {
         @r###"
     {
       "numberOfDocuments": 53,
+      "rawDocumentDbSize": 21965,
+      "avgDocumentSize": 414,
       "isIndexing": false,
+      "numberOfEmbeddings": 0,
+      "numberOfEmbeddedDocuments": 0,
       "fieldDistribution": {
         "genres": 53,
         "id": 53,
@@ -241,8 +265,11 @@ async fn import_dump_v1_movie_with_settings() {
       "pagination": {
         "maxTotalHits": 1000
       },
+      "embedders": {},
       "searchCutoffMs": null,
-      "localizedAttributes": null
+      "localizedAttributes": null,
+      "facetSearch": true,
+      "prefixSearch": "indexingTime"
     }
     "###
     );
@@ -327,9 +354,26 @@ async fn import_dump_v1_rubygems_with_settings() {
 
     let (stats, code) = index.stats().await;
     snapshot!(code, @"200 OK");
-    assert_eq!(
-        stats,
-        json!({ "numberOfDocuments": 53, "isIndexing": false, "fieldDistribution": {"description": 53, "id": 53, "name": 53, "summary": 53, "total_downloads": 53, "version": 53 }})
+    snapshot!(
+      json_string!(stats),
+      @r###"
+    {
+      "numberOfDocuments": 53,
+      "rawDocumentDbSize": 8606,
+      "avgDocumentSize": 162,
+      "isIndexing": false,
+      "numberOfEmbeddings": 0,
+      "numberOfEmbeddedDocuments": 0,
+      "fieldDistribution": {
+        "description": 53,
+        "id": 53,
+        "name": 53,
+        "summary": 53,
+        "total_downloads": 53,
+        "version": 53
+      }
+    }
+    "###
     );
 
     let (settings, code) = index.settings().await;
@@ -390,8 +434,11 @@ async fn import_dump_v1_rubygems_with_settings() {
       "pagination": {
         "maxTotalHits": 1000
       },
+      "embedders": {},
       "searchCutoffMs": null,
-      "localizedAttributes": null
+      "localizedAttributes": null,
+      "facetSearch": true,
+      "prefixSearch": "indexingTime"
     }
     "###
     );
@@ -474,9 +521,26 @@ async fn import_dump_v2_movie_raw() {
 
     let (stats, code) = index.stats().await;
     snapshot!(code, @"200 OK");
-    assert_eq!(
-        stats,
-        json!({ "numberOfDocuments": 53, "isIndexing": false, "fieldDistribution": {"genres": 53, "id": 53, "overview": 53, "poster": 53, "release_date": 53, "title": 53 }})
+    snapshot!(
+      json_string!(stats),
+      @r###"
+    {
+      "numberOfDocuments": 53,
+      "rawDocumentDbSize": 21965,
+      "avgDocumentSize": 414,
+      "isIndexing": false,
+      "numberOfEmbeddings": 0,
+      "numberOfEmbeddedDocuments": 0,
+      "fieldDistribution": {
+        "genres": 53,
+        "id": 53,
+        "overview": 53,
+        "poster": 53,
+        "release_date": 53,
+        "title": 53
+      }
+    }
+    "###
     );
 
     let (settings, code) = index.settings().await;
@@ -525,8 +589,11 @@ async fn import_dump_v2_movie_raw() {
       "pagination": {
         "maxTotalHits": 1000
       },
+      "embedders": {},
       "searchCutoffMs": null,
-      "localizedAttributes": null
+      "localizedAttributes": null,
+      "facetSearch": true,
+      "prefixSearch": "indexingTime"
     }
     "###
     );
@@ -611,9 +678,26 @@ async fn import_dump_v2_movie_with_settings() {
 
     let (stats, code) = index.stats().await;
     snapshot!(code, @"200 OK");
-    assert_eq!(
-        stats,
-        json!({ "numberOfDocuments": 53, "isIndexing": false, "fieldDistribution": {"genres": 53, "id": 53, "overview": 53, "poster": 53, "release_date": 53, "title": 53 }})
+    snapshot!(
+      json_string!(stats),
+      @r###"
+    {
+      "numberOfDocuments": 53,
+      "rawDocumentDbSize": 21965,
+      "avgDocumentSize": 414,
+      "isIndexing": false,
+      "numberOfEmbeddings": 0,
+      "numberOfEmbeddedDocuments": 0,
+      "fieldDistribution": {
+        "genres": 53,
+        "id": 53,
+        "overview": 53,
+        "poster": 53,
+        "release_date": 53,
+        "title": 53
+      }
+    }
+    "###
     );
 
     let (settings, code) = index.settings().await;
@@ -672,8 +756,11 @@ async fn import_dump_v2_movie_with_settings() {
       "pagination": {
         "maxTotalHits": 1000
       },
+      "embedders": {},
       "searchCutoffMs": null,
-      "localizedAttributes": null
+      "localizedAttributes": null,
+      "facetSearch": true,
+      "prefixSearch": "indexingTime"
     }
     "###
     );
@@ -758,9 +845,26 @@ async fn import_dump_v2_rubygems_with_settings() {
 
     let (stats, code) = index.stats().await;
     snapshot!(code, @"200 OK");
-    assert_eq!(
-        stats,
-        json!({ "numberOfDocuments": 53, "isIndexing": false, "fieldDistribution": {"description": 53, "id": 53, "name": 53, "summary": 53, "total_downloads": 53, "version": 53 }})
+    snapshot!(
+      json_string!(stats),
+      @r###"
+    {
+      "numberOfDocuments": 53,
+      "rawDocumentDbSize": 8606,
+      "avgDocumentSize": 162,
+      "isIndexing": false,
+      "numberOfEmbeddings": 0,
+      "numberOfEmbeddedDocuments": 0,
+      "fieldDistribution": {
+        "description": 53,
+        "id": 53,
+        "name": 53,
+        "summary": 53,
+        "total_downloads": 53,
+        "version": 53
+      }
+    }
+    "###
     );
 
     let (settings, code) = index.settings().await;
@@ -818,8 +922,11 @@ async fn import_dump_v2_rubygems_with_settings() {
       "pagination": {
         "maxTotalHits": 1000
       },
+      "embedders": {},
       "searchCutoffMs": null,
-      "localizedAttributes": null
+      "localizedAttributes": null,
+      "facetSearch": true,
+      "prefixSearch": "indexingTime"
     }
     "###
     );
@@ -902,9 +1009,26 @@ async fn import_dump_v3_movie_raw() {
 
     let (stats, code) = index.stats().await;
     snapshot!(code, @"200 OK");
-    assert_eq!(
-        stats,
-        json!({ "numberOfDocuments": 53, "isIndexing": false, "fieldDistribution": {"genres": 53, "id": 53, "overview": 53, "poster": 53, "release_date": 53, "title": 53 }})
+    snapshot!(
+      json_string!(stats),
+      @r###"
+    {
+      "numberOfDocuments": 53,
+      "rawDocumentDbSize": 21965,
+      "avgDocumentSize": 414,
+      "isIndexing": false,
+      "numberOfEmbeddings": 0,
+      "numberOfEmbeddedDocuments": 0,
+      "fieldDistribution": {
+        "genres": 53,
+        "id": 53,
+        "overview": 53,
+        "poster": 53,
+        "release_date": 53,
+        "title": 53
+      }
+    }
+    "###
     );
 
     let (settings, code) = index.settings().await;
@@ -953,8 +1077,11 @@ async fn import_dump_v3_movie_raw() {
       "pagination": {
         "maxTotalHits": 1000
       },
+      "embedders": {},
       "searchCutoffMs": null,
-      "localizedAttributes": null
+      "localizedAttributes": null,
+      "facetSearch": true,
+      "prefixSearch": "indexingTime"
     }
     "###
     );
@@ -1039,9 +1166,26 @@ async fn import_dump_v3_movie_with_settings() {
 
     let (stats, code) = index.stats().await;
     snapshot!(code, @"200 OK");
-    assert_eq!(
-        stats,
-        json!({ "numberOfDocuments": 53, "isIndexing": false, "fieldDistribution": {"genres": 53, "id": 53, "overview": 53, "poster": 53, "release_date": 53, "title": 53 }})
+    snapshot!(
+      json_string!(stats),
+      @r###"
+    {
+      "numberOfDocuments": 53,
+      "rawDocumentDbSize": 21965,
+      "avgDocumentSize": 414,
+      "isIndexing": false,
+      "numberOfEmbeddings": 0,
+      "numberOfEmbeddedDocuments": 0,
+      "fieldDistribution": {
+        "genres": 53,
+        "id": 53,
+        "overview": 53,
+        "poster": 53,
+        "release_date": 53,
+        "title": 53
+      }
+    }
+    "###
     );
 
     let (settings, code) = index.settings().await;
@@ -1100,8 +1244,11 @@ async fn import_dump_v3_movie_with_settings() {
       "pagination": {
         "maxTotalHits": 1000
       },
+      "embedders": {},
       "searchCutoffMs": null,
-      "localizedAttributes": null
+      "localizedAttributes": null,
+      "facetSearch": true,
+      "prefixSearch": "indexingTime"
     }
     "###
     );
@@ -1186,9 +1333,26 @@ async fn import_dump_v3_rubygems_with_settings() {
 
     let (stats, code) = index.stats().await;
     snapshot!(code, @"200 OK");
-    assert_eq!(
-        stats,
-        json!({ "numberOfDocuments": 53, "isIndexing": false, "fieldDistribution": {"description": 53, "id": 53, "name": 53, "summary": 53, "total_downloads": 53, "version": 53 }})
+    snapshot!(
+      json_string!(stats),
+      @r###"
+    {
+      "numberOfDocuments": 53,
+      "rawDocumentDbSize": 8606,
+      "avgDocumentSize": 162,
+      "isIndexing": false,
+      "numberOfEmbeddings": 0,
+      "numberOfEmbeddedDocuments": 0,
+      "fieldDistribution": {
+        "description": 53,
+        "id": 53,
+        "name": 53,
+        "summary": 53,
+        "total_downloads": 53,
+        "version": 53
+      }
+    }
+    "###
     );
 
     let (settings, code) = index.settings().await;
@@ -1246,8 +1410,11 @@ async fn import_dump_v3_rubygems_with_settings() {
       "pagination": {
         "maxTotalHits": 1000
       },
+      "embedders": {},
       "searchCutoffMs": null,
-      "localizedAttributes": null
+      "localizedAttributes": null,
+      "facetSearch": true,
+      "prefixSearch": "indexingTime"
     }
     "###
     );
@@ -1330,9 +1497,26 @@ async fn import_dump_v4_movie_raw() {
 
     let (stats, code) = index.stats().await;
     snapshot!(code, @"200 OK");
-    assert_eq!(
-        stats,
-        json!({ "numberOfDocuments": 53, "isIndexing": false, "fieldDistribution": {"genres": 53, "id": 53, "overview": 53, "poster": 53, "release_date": 53, "title": 53 }})
+    snapshot!(
+      json_string!(stats),
+      @r###"
+    {
+      "numberOfDocuments": 53,
+      "rawDocumentDbSize": 21965,
+      "avgDocumentSize": 414,
+      "isIndexing": false,
+      "numberOfEmbeddings": 0,
+      "numberOfEmbeddedDocuments": 0,
+      "fieldDistribution": {
+        "genres": 53,
+        "id": 53,
+        "overview": 53,
+        "poster": 53,
+        "release_date": 53,
+        "title": 53
+      }
+    }
+    "###
     );
 
     let (settings, code) = index.settings().await;
@@ -1381,8 +1565,11 @@ async fn import_dump_v4_movie_raw() {
       "pagination": {
         "maxTotalHits": 1000
       },
+      "embedders": {},
       "searchCutoffMs": null,
-      "localizedAttributes": null
+      "localizedAttributes": null,
+      "facetSearch": true,
+      "prefixSearch": "indexingTime"
     }
     "###
     );
@@ -1467,9 +1654,26 @@ async fn import_dump_v4_movie_with_settings() {
 
     let (stats, code) = index.stats().await;
     snapshot!(code, @"200 OK");
-    assert_eq!(
-        stats,
-        json!({ "numberOfDocuments": 53, "isIndexing": false, "fieldDistribution": {"genres": 53, "id": 53, "overview": 53, "poster": 53, "release_date": 53, "title": 53 }})
+    snapshot!(
+      json_string!(stats),
+      @r###"
+    {
+      "numberOfDocuments": 53,
+      "rawDocumentDbSize": 21965,
+      "avgDocumentSize": 414,
+      "isIndexing": false,
+      "numberOfEmbeddings": 0,
+      "numberOfEmbeddedDocuments": 0,
+      "fieldDistribution": {
+        "genres": 53,
+        "id": 53,
+        "overview": 53,
+        "poster": 53,
+        "release_date": 53,
+        "title": 53
+      }
+    }
+    "###
     );
 
     let (settings, code) = index.settings().await;
@@ -1528,8 +1732,11 @@ async fn import_dump_v4_movie_with_settings() {
       "pagination": {
         "maxTotalHits": 1000
       },
+      "embedders": {},
       "searchCutoffMs": null,
-      "localizedAttributes": null
+      "localizedAttributes": null,
+      "facetSearch": true,
+      "prefixSearch": "indexingTime"
     }
     "###
     );
@@ -1614,9 +1821,26 @@ async fn import_dump_v4_rubygems_with_settings() {
 
     let (stats, code) = index.stats().await;
     snapshot!(code, @"200 OK");
-    assert_eq!(
-        stats,
-        json!({ "numberOfDocuments": 53, "isIndexing": false, "fieldDistribution": {"description": 53, "id": 53, "name": 53, "summary": 53, "total_downloads": 53, "version": 53 }})
+    snapshot!(
+      json_string!(stats),
+      @r###"
+    {
+      "numberOfDocuments": 53,
+      "rawDocumentDbSize": 8606,
+      "avgDocumentSize": 162,
+      "isIndexing": false,
+      "numberOfEmbeddings": 0,
+      "numberOfEmbeddedDocuments": 0,
+      "fieldDistribution": {
+        "description": 53,
+        "id": 53,
+        "name": 53,
+        "summary": 53,
+        "total_downloads": 53,
+        "version": 53
+      }
+    }
+    "###
     );
 
     let (settings, code) = index.settings().await;
@@ -1674,8 +1898,11 @@ async fn import_dump_v4_rubygems_with_settings() {
       "pagination": {
         "maxTotalHits": 1000
       },
+      "embedders": {},
       "searchCutoffMs": null,
-      "localizedAttributes": null
+      "localizedAttributes": null,
+      "facetSearch": true,
+      "prefixSearch": "indexingTime"
     }
     "###
     );
@@ -1762,33 +1989,37 @@ async fn import_dump_v5() {
         server.wait_task(task["uid"].as_u64().unwrap()).await;
     }
 
-    let expected_stats = json!({
-        "numberOfDocuments": 10,
-        "isIndexing": false,
-        "fieldDistribution": {
-            "cast": 10,
-            "director": 10,
-            "genres": 10,
-            "id": 10,
-            "overview": 10,
-            "popularity": 10,
-            "poster_path": 10,
-            "producer": 10,
-            "production_companies": 10,
-            "release_date": 10,
-            "tagline": 10,
-            "title": 10,
-            "vote_average": 10,
-            "vote_count": 10
-        }
-    });
-
     let index1 = server.index("test");
     let index2 = server.index("test2");
 
     let (stats, code) = index1.stats().await;
     snapshot!(code, @"200 OK");
-    assert_eq!(stats, expected_stats);
+    snapshot!(json_string!(stats), @r###"
+    {
+      "numberOfDocuments": 10,
+      "rawDocumentDbSize": 6782,
+      "avgDocumentSize": 678,
+      "isIndexing": false,
+      "numberOfEmbeddings": 0,
+      "numberOfEmbeddedDocuments": 0,
+      "fieldDistribution": {
+        "cast": 10,
+        "director": 10,
+        "genres": 10,
+        "id": 10,
+        "overview": 10,
+        "popularity": 10,
+        "poster_path": 10,
+        "producer": 10,
+        "production_companies": 10,
+        "release_date": 10,
+        "tagline": 10,
+        "title": 10,
+        "vote_average": 10,
+        "vote_count": 10
+      }
+    }
+    "###);
 
     let (docs, code) = index2.get_all_documents(GetAllDocumentsOptions::default()).await;
     snapshot!(code, @"200 OK");
@@ -1799,7 +2030,34 @@ async fn import_dump_v5() {
 
     let (stats, code) = index2.stats().await;
     snapshot!(code, @"200 OK");
-    assert_eq!(stats, expected_stats);
+    snapshot!(
+      json_string!(stats),
+      @r###"
+    {
+      "numberOfDocuments": 10,
+      "rawDocumentDbSize": 6782,
+      "avgDocumentSize": 678,
+      "isIndexing": false,
+      "numberOfEmbeddings": 0,
+      "numberOfEmbeddedDocuments": 0,
+      "fieldDistribution": {
+        "cast": 10,
+        "director": 10,
+        "genres": 10,
+        "id": 10,
+        "overview": 10,
+        "popularity": 10,
+        "poster_path": 10,
+        "producer": 10,
+        "production_companies": 10,
+        "release_date": 10,
+        "tagline": 10,
+        "title": 10,
+        "vote_average": 10,
+        "vote_count": 10
+      }
+    }
+    "###);
 
     let (keys, code) = server.list_api_keys("").await;
     snapshot!(code, @"200 OK");
@@ -1869,11 +2127,13 @@ async fn import_dump_v6_containing_experimental_features() {
     meili_snap::snapshot!(code, @"200 OK");
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "vectorStore": false,
       "metrics": false,
       "logsRoute": false,
       "editDocumentsByFunction": false,
-      "containsFilter": false
+      "containsFilter": false,
+      "network": false,
+      "getTaskDocumentsRoute": false,
+      "compositeEmbedders": false
     }
     "###);
 
@@ -1921,8 +2181,11 @@ async fn import_dump_v6_containing_experimental_features() {
       "pagination": {
         "maxTotalHits": 1000
       },
+      "embedders": {},
       "searchCutoffMs": null,
-      "localizedAttributes": null
+      "localizedAttributes": null,
+      "facetSearch": true,
+      "prefixSearch": "indexingTime"
     }
     "###);
 
@@ -1954,6 +2217,70 @@ async fn import_dump_v6_containing_experimental_features() {
         .await;
 }
 
+#[actix_rt::test]
+async fn import_dump_v6_containing_batches_and_enqueued_tasks() {
+    let temp = tempfile::tempdir().unwrap();
+
+    let options = Opt {
+        import_dump: Some(GetDump::TestV6WithBatchesAndEnqueuedTasks.path()),
+        ..default_settings(temp.path())
+    };
+    let mut server = Server::new_auth_with_options(options, temp).await;
+    server.use_api_key("MASTER_KEY");
+    server.wait_task(2).await.succeeded();
+    let (tasks, _) = server.tasks().await;
+    snapshot!(json_string!(tasks, { ".results[1].startedAt" => "[date]", ".results[1].finishedAt" => "[date]", ".results[1].duration" => "[date]" }), name: "tasks");
+    let (batches, _) = server.batches().await;
+    snapshot!(json_string!(batches, {
+        ".results[0].startedAt" => "[date]",
+        ".results[0].finishedAt" => "[date]",
+        ".results[0].duration" => "[date]",
+        ".results[0].stats.progressTrace" => "[progressTrace]",
+        ".results[0].stats.writeChannelCongestion" => "[writeChannelCongestion]",
+    }), name: "batches");
+
+    let (indexes, code) = server.list_indexes(None, None).await;
+    assert_eq!(code, 200, "{indexes}");
+
+    assert_eq!(indexes["results"].as_array().unwrap().len(), 1);
+    assert_eq!(indexes["results"][0]["uid"], json!("kefir"));
+    assert_eq!(indexes["results"][0]["primaryKey"], json!("id"));
+
+    let (response, code) = server.get_features().await;
+    meili_snap::snapshot!(code, @"200 OK");
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    {
+      "metrics": false,
+      "logsRoute": false,
+      "editDocumentsByFunction": false,
+      "containsFilter": false,
+      "network": false,
+      "getTaskDocumentsRoute": false,
+      "compositeEmbedders": false
+    }
+    "###);
+
+    let index = server.index("kefir");
+    let (documents, _) = index.get_all_documents_raw("").await;
+    snapshot!(documents, @r#"
+    {
+      "results": [
+        {
+          "id": 1,
+          "dog": "kefir"
+        },
+        {
+          "id": 2,
+          "dog": "intel"
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 2
+    }
+    "#);
+}
+
 // In this test we must generate the dump ourselves to ensure the
 // `user provided` vectors are well set
 #[actix_rt::test]
@@ -1962,16 +2289,7 @@ async fn generate_and_import_dump_containing_vectors() {
     let temp = tempfile::tempdir().unwrap();
     let mut opt = default_settings(temp.path());
     let server = Server::new_with_options(opt.clone()).await.unwrap();
-    let (code, _) = server.set_features(json!({"vectorStore": true})).await;
-    snapshot!(code, @r###"
-    {
-      "vectorStore": true,
-      "metrics": false,
-      "logsRoute": false,
-      "editDocumentsByFunction": false,
-      "containsFilter": false
-    }
-    "###);
+
     let index = server.index("pets");
     let (response, code) = index
         .update_settings(json!(
@@ -2037,11 +2355,13 @@ async fn generate_and_import_dump_containing_vectors() {
     meili_snap::snapshot!(code, @"200 OK");
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "vectorStore": true,
       "metrics": false,
       "logsRoute": false,
       "editDocumentsByFunction": false,
-      "containsFilter": false
+      "containsFilter": false,
+      "network": false,
+      "getTaskDocumentsRoute": false,
+      "compositeEmbedders": false
     }
     "###);
 
@@ -2097,12 +2417,15 @@ async fn generate_and_import_dump_containing_vectors() {
           "source": "huggingFace",
           "model": "sentence-transformers/all-MiniLM-L6-v2",
           "revision": "e4ce9877abf3edfe10b0d82785e83bdcb973e22e",
+          "pooling": "useModel",
           "documentTemplate": "{{doc.doggo}}",
           "documentTemplateMaxBytes": 400
         }
       },
       "searchCutoffMs": null,
-      "localizedAttributes": null
+      "localizedAttributes": null,
+      "facetSearch": true,
+      "prefixSearch": "indexingTime"
     }
     "###);
 

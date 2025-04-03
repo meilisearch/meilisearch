@@ -20,7 +20,13 @@
 <p align="center">
   <a href="https://deps.rs/repo/github/meilisearch/meilisearch"><img src="https://deps.rs/repo/github/meilisearch/meilisearch/status.svg" alt="Dependency status"></a>
   <a href="https://github.com/meilisearch/meilisearch/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-informational" alt="License"></a>
-  <a href="https://ms-bors.herokuapp.com/repositories/52"><img src="https://bors.tech/images/badge_small.svg" alt="Bors enabled"></a>
+  <a href="https://github.com/meilisearch/meilisearch/queue"><img alt="Merge Queues enabled" src="https://img.shields.io/badge/Merge_Queues-enabled-%2357cf60?logo=github"></a>
+</p>
+
+<p align="center" name="ph-banner">
+  <a href="https://www.producthunt.com/posts/meilisearch-ai">
+    <img src="assets/ph-banner.png" alt="Meilisearch AI-powered search general availability announcement on ProductHunt">
+  </a>
 </p>
 
 <p align="center">⚡ A lightning-fast search engine that fits effortlessly into your apps, websites, and workflow 🔍</p>
@@ -58,6 +64,7 @@ See the list of all our example apps in our [demos repository](https://github.co
 - **[Multi-Tenancy](https://www.meilisearch.com/docs/learn/security/multitenancy_tenant_tokens?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=features):** personalize search results for any number of application tenants
 - **Highly Customizable:** customize Meilisearch to your specific needs or use our out-of-the-box and hassle-free presets
 - **[RESTful API](https://www.meilisearch.com/docs/reference/api/overview?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=features):** integrate Meilisearch in your technical stack with our plugins and SDKs
+- **AI-ready:** works out of the box with [langchain](https://www.meilisearch.com/with/langchain) and the [model context protocol](https://github.com/meilisearch/meilisearch-mcp)
 - **Easy to install, deploy, and maintain**
 
 ## 📖 Documentation

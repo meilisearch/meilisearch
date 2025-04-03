@@ -1,44 +1,187 @@
-use std::collections::HashMap;
+use meili_snap::{json_string, snapshot};
 
-use once_cell::sync::Lazy;
-
-use crate::common::{Server, Value};
+use crate::common::Server;
 use crate::json;
 
-static DEFAULT_SETTINGS_VALUES: Lazy<HashMap<&'static str, Value>> = Lazy::new(|| {
-    let mut map = HashMap::new();
-    map.insert("displayed_attributes", json!(["*"]));
-    map.insert("searchable_attributes", json!(["*"]));
-    map.insert("localized_attributes", json!(null));
-    map.insert("filterable_attributes", json!([]));
-    map.insert("distinct_attribute", json!(null));
-    map.insert(
-        "ranking_rules",
-        json!(["words", "typo", "proximity", "attribute", "sort", "exactness"]),
-    );
-    map.insert("stop_words", json!([]));
-    map.insert("non_separator_tokens", json!([]));
-    map.insert("separator_tokens", json!([]));
-    map.insert("dictionary", json!([]));
-    map.insert("synonyms", json!({}));
-    map.insert(
-        "faceting",
-        json!({
-            "maxValuesPerFacet": json!(100),
-            "sortFacetValuesBy": {
-                "*": "alpha"
+macro_rules! test_setting_routes {
+    ($({setting: $setting:ident, update_verb: $update_verb:ident, default_value: $default_value:tt},) *) => {
+        $(
+            mod $setting {
+                use crate::common::Server;
+
+                #[actix_rt::test]
+                async fn get_unexisting_index() {
+                    let server = Server::new().await;
+                    let url = format!("/indexes/test/settings/{}",
+                        stringify!($setting)
+                        .chars()
+                        .map(|c| if c == '_' { '-' } else { c })
+                        .collect::<String>());
+                    let (_response, code) = server.service.get(url).await;
+                    assert_eq!(code, 404);
+                }
+
+                #[actix_rt::test]
+                async fn update_unexisting_index() {
+                    let server = Server::new().await;
+                    let url = format!("/indexes/test/settings/{}",
+                        stringify!($setting)
+                        .chars()
+                        .map(|c| if c == '_' { '-' } else { c })
+                        .collect::<String>());
+                    let (response, code) = server.service.$update_verb(url, serde_json::Value::Null.into()).await;
+                    assert_eq!(code, 202, "{}", response);
+                    server.index("").wait_task(0).await;
+                    let (response, code) = server.index("test").get().await;
+                    assert_eq!(code, 200, "{}", response);
+                }
+
+                #[actix_rt::test]
+                async fn delete_unexisting_index() {
+                    let server = Server::new().await;
+                    let url = format!("/indexes/test/settings/{}",
+                        stringify!($setting)
+                        .chars()
+                        .map(|c| if c == '_' { '-' } else { c })
+                        .collect::<String>());
+                    let (_, code) = server.service.delete(url).await;
+                    assert_eq!(code, 202);
+                    let response = server.index("").wait_task(0).await;
+                    assert_eq!(response["status"], "failed");
+                }
+
+                #[actix_rt::test]
+                async fn get_default() {
+                    let server = Server::new().await;
+                    let index = server.index("test");
+                    let (response, code) = index.create(None).await;
+                    assert_eq!(code, 202, "{}", response);
+                    index.wait_task(0).await;
+                    let url = format!("/indexes/test/settings/{}",
+                        stringify!($setting)
+                        .chars()
+                        .map(|c| if c == '_' { '-' } else { c })
+                        .collect::<String>());
+                    let (response, code) = server.service.get(url).await;
+                    assert_eq!(code, 200, "{}", response);
+                    let expected = crate::json!($default_value);
+                    assert_eq!(expected, response);
+                }
             }
-        }),
-    );
-    map.insert(
-        "pagination",
-        json!({
-            "maxTotalHits": json!(1000),
-        }),
-    );
-    map.insert("search_cutoff_ms", json!(null));
-    map
-});
+        )*
+
+        #[actix_rt::test]
+        async fn all_setting_tested() {
+            let expected = std::collections::BTreeSet::from_iter(meilisearch::routes::indexes::settings::ALL_SETTINGS_NAMES.iter());
+            let tested = std::collections::BTreeSet::from_iter([$(stringify!($setting)),*].iter());
+            let diff: Vec<_> = expected.difference(&tested).collect();
+            assert!(diff.is_empty(), "Not all settings were tested, please add the following settings to the `test_setting_routes!` macro: {:?}", diff);
+        }
+    };
+}
+
+test_setting_routes!(
+    {
+        setting: filterable_attributes,
+        update_verb: put,
+        default_value: []
+    },
+    {
+        setting: displayed_attributes,
+        update_verb: put,
+        default_value: ["*"]
+    },
+    {
+        setting: localized_attributes,
+        update_verb: put,
+        default_value: null
+    },
+    {
+        setting: searchable_attributes,
+        update_verb: put,
+        default_value: ["*"]
+    },
+    {
+        setting: distinct_attribute,
+        update_verb: put,
+        default_value: null
+    },
+    {
+        setting: stop_words,
+        update_verb: put,
+        default_value: []
+    },
+    {
+        setting: separator_tokens,
+        update_verb: put,
+        default_value: []
+    },
+    {
+        setting: non_separator_tokens,
+        update_verb: put,
+        default_value: []
+    },
+    {
+        setting: dictionary,
+        update_verb: put,
+        default_value: []
+    },
+    {
+        setting: ranking_rules,
+        update_verb: put,
+        default_value: ["words", "typo", "proximity", "attribute", "sort", "exactness"]
+    },
+    {
+        setting: synonyms,
+        update_verb: put,
+        default_value: {}
+    },
+    {
+        setting: pagination,
+        update_verb: patch,
+        default_value: {"maxTotalHits": 1000}
+    },
+    {
+        setting: faceting,
+        update_verb: patch,
+        default_value: {"maxValuesPerFacet": 100, "sortFacetValuesBy": {"*": "alpha"}}
+    },
+    {
+        setting: search_cutoff_ms,
+        update_verb: put,
+        default_value: null
+    },
+    {
+        setting: embedders,
+        update_verb: patch,
+        default_value: {}
+    },
+    {
+        setting: facet_search,
+        update_verb: put,
+        default_value: true
+    },
+    {
+        setting: prefix_search,
+        update_verb: put,
+        default_value: "indexingTime"
+    },
+    {
+        setting: proximity_precision,
+        update_verb: put,
+        default_value: "byWord"
+    },
+    {
+        setting: sortable_attributes,
+        update_verb: put,
+        default_value: []
+    },
+    {
+        setting: typo_tolerance,
+        update_verb: patch,
+        default_value: {"enabled": true, "minWordSizeForTypos": {"oneTypo": 5, "twoTypos": 9}, "disableOnWords": [], "disableOnAttributes": []}
+    },
+);
 
 #[actix_rt::test]
 async fn get_settings_unexisting_index() {
@@ -52,11 +195,11 @@ async fn get_settings() {
     let server = Server::new().await;
     let index = server.index("test");
     let (response, _code) = index.create(None).await;
-    index.wait_task(response.uid()).await;
+    index.wait_task(response.uid()).await.succeeded();
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
     let settings = response.as_object().unwrap();
-    assert_eq!(settings.keys().len(), 17);
+    assert_eq!(settings.keys().len(), 20);
     assert_eq!(settings["displayedAttributes"], json!(["*"]));
     assert_eq!(settings["searchableAttributes"], json!(["*"]));
     assert_eq!(settings["filterableAttributes"], json!([]));
@@ -87,27 +230,18 @@ async fn get_settings() {
     );
     assert_eq!(settings["proximityPrecision"], json!("byWord"));
     assert_eq!(settings["searchCutoffMs"], json!(null));
+    assert_eq!(settings["prefixSearch"], json!("indexingTime"));
+    assert_eq!(settings["facetSearch"], json!(true));
+    assert_eq!(settings["embedders"], json!({}));
 }
 
 #[actix_rt::test]
 async fn secrets_are_hidden_in_settings() {
     let server = Server::new().await;
-    let (response, code) = server.set_features(json!({"vectorStore": true})).await;
-
-    meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
-    {
-      "vectorStore": true,
-      "metrics": false,
-      "logsRoute": false,
-      "editDocumentsByFunction": false,
-      "containsFilter": false
-    }
-    "###);
 
     let index = server.index("test");
     let (response, _code) = index.create(None).await;
-    index.wait_task(response.uid()).await;
+    index.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index
         .update_settings(json!({
@@ -142,7 +276,7 @@ async fn secrets_are_hidden_in_settings() {
 
     let (response, code) = index.settings().await;
     meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r#"
     {
       "displayedAttributes": [
         "*"
@@ -199,13 +333,15 @@ async fn secrets_are_hidden_in_settings() {
         }
       },
       "searchCutoffMs": null,
-      "localizedAttributes": null
+      "localizedAttributes": null,
+      "facetSearch": true,
+      "prefixSearch": "indexingTime"
     }
-    "###);
+    "#);
 
     let (response, code) = server.get_task(settings_update_uid).await;
     meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response["details"]), @r###"
+    meili_snap::snapshot!(meili_snap::json_string!(response["details"]), @r#"
     {
       "embedders": {
         "default": {
@@ -218,7 +354,7 @@ async fn secrets_are_hidden_in_settings() {
         }
       }
     }
-    "###);
+    "#);
 }
 
 #[actix_rt::test]
@@ -233,15 +369,15 @@ async fn error_update_settings_unknown_field() {
 async fn test_partial_update() {
     let server = Server::new().await;
     let index = server.index("test");
-    let (_response, _code) = index.update_settings(json!({"displayedAttributes": ["foo"]})).await;
-    index.wait_task(0).await;
+    let (task, _code) = index.update_settings(json!({"displayedAttributes": ["foo"]})).await;
+    index.wait_task(task.uid()).await.succeeded();
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
     assert_eq!(response["displayedAttributes"], json!(["foo"]));
     assert_eq!(response["searchableAttributes"], json!(["*"]));
 
-    let (_response, _) = index.update_settings(json!({"searchableAttributes": ["bar"]})).await;
-    index.wait_task(1).await;
+    let (task, _) = index.update_settings(json!({"searchableAttributes": ["bar"]})).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
@@ -253,10 +389,10 @@ async fn test_partial_update() {
 async fn error_delete_settings_unexisting_index() {
     let server = Server::new().await;
     let index = server.index("test");
-    let (_response, code) = index.delete_settings().await;
+    let (task, code) = index.delete_settings().await;
     assert_eq!(code, 202);
 
-    let response = index.wait_task(0).await;
+    let response = index.wait_task(task.uid()).await;
 
     assert_eq!(response["status"], "failed");
 }
@@ -277,12 +413,12 @@ async fn reset_all_settings() {
     let (response, code) = index.add_documents(documents, None).await;
     assert_eq!(code, 202);
     assert_eq!(response["taskUid"], 0);
-    index.wait_task(0).await;
+    index.wait_task(response.uid()).await.succeeded();
 
-    index
+    let (update_task,_status_code) = index
         .update_settings(json!({"displayedAttributes": ["name", "age"], "searchableAttributes": ["name"], "stopWords": ["the"], "filterableAttributes": ["age"], "synonyms": {"puppy": ["dog", "doggo", "potat"] }}))
         .await;
-    index.wait_task(1).await;
+    index.wait_task(update_task.uid()).await.succeeded();
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
     assert_eq!(response["displayedAttributes"], json!(["name", "age"]));
@@ -291,8 +427,8 @@ async fn reset_all_settings() {
     assert_eq!(response["synonyms"], json!({"puppy": ["dog", "doggo", "potat"] }));
     assert_eq!(response["filterableAttributes"], json!(["age"]));
 
-    index.delete_settings().await;
-    index.wait_task(2).await;
+    let (delete_task, _status_code) = index.delete_settings().await;
+    index.wait_task(delete_task.uid()).await.succeeded();
 
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
@@ -311,14 +447,14 @@ async fn reset_all_settings() {
 async fn update_setting_unexisting_index() {
     let server = Server::new().await;
     let index = server.index("test");
-    let (_response, code) = index.update_settings(json!({})).await;
+    let (task, code) = index.update_settings(json!({})).await;
     assert_eq!(code, 202);
-    let response = index.wait_task(0).await;
+    let response = index.wait_task(task.uid()).await;
     assert_eq!(response["status"], "succeeded");
     let (_response, code) = index.get().await;
     assert_eq!(code, 200);
-    index.delete_settings().await;
-    let response = index.wait_task(1).await;
+    let (task, _status_code) = index.delete_settings().await;
+    let response = index.wait_task(task.uid()).await;
     assert_eq!(response["status"], "succeeded");
 }
 
@@ -337,93 +473,6 @@ async fn error_update_setting_unexisting_index_invalid_uid() {
     }
     "###);
 }
-
-macro_rules! test_setting_routes {
-    ($($setting:ident $write_method:ident), *) => {
-        $(
-            mod $setting {
-                use crate::common::Server;
-                use super::DEFAULT_SETTINGS_VALUES;
-
-                #[actix_rt::test]
-                async fn get_unexisting_index() {
-                    let server = Server::new().await;
-                    let url = format!("/indexes/test/settings/{}",
-                        stringify!($setting)
-                        .chars()
-                        .map(|c| if c == '_' { '-' } else { c })
-                        .collect::<String>());
-                    let (_response, code) = server.service.get(url).await;
-                    assert_eq!(code, 404);
-                }
-
-                #[actix_rt::test]
-                async fn update_unexisting_index() {
-                    let server = Server::new().await;
-                    let url = format!("/indexes/test/settings/{}",
-                        stringify!($setting)
-                        .chars()
-                        .map(|c| if c == '_' { '-' } else { c })
-                        .collect::<String>());
-                    let (response, code) = server.service.$write_method(url, serde_json::Value::Null.into()).await;
-                    assert_eq!(code, 202, "{}", response);
-                    server.index("").wait_task(0).await;
-                    let (response, code) = server.index("test").get().await;
-                    assert_eq!(code, 200, "{}", response);
-                }
-
-                #[actix_rt::test]
-                async fn delete_unexisting_index() {
-                    let server = Server::new().await;
-                    let url = format!("/indexes/test/settings/{}",
-                        stringify!($setting)
-                        .chars()
-                        .map(|c| if c == '_' { '-' } else { c })
-                        .collect::<String>());
-                    let (_, code) = server.service.delete(url).await;
-                    assert_eq!(code, 202);
-                    let response = server.index("").wait_task(0).await;
-                    assert_eq!(response["status"], "failed");
-                }
-
-                #[actix_rt::test]
-                async fn get_default() {
-                    let server = Server::new().await;
-                    let index = server.index("test");
-                    let (response, code) = index.create(None).await;
-                    assert_eq!(code, 202, "{}", response);
-                    index.wait_task(0).await;
-                    let url = format!("/indexes/test/settings/{}",
-                        stringify!($setting)
-                        .chars()
-                        .map(|c| if c == '_' { '-' } else { c })
-                        .collect::<String>());
-                    let (response, code) = server.service.get(url).await;
-                    assert_eq!(code, 200, "{}", response);
-                    let expected = DEFAULT_SETTINGS_VALUES.get(stringify!($setting)).unwrap();
-                    assert_eq!(expected, &response);
-                }
-            }
-        )*
-    };
-}
-
-test_setting_routes!(
-    filterable_attributes put,
-    displayed_attributes put,
-    localized_attributes put,
-    searchable_attributes put,
-    distinct_attribute put,
-    stop_words put,
-    separator_tokens put,
-    non_separator_tokens put,
-    dictionary put,
-    ranking_rules put,
-    synonyms put,
-    pagination patch,
-    faceting patch,
-    search_cutoff_ms put
-);
 
 #[actix_rt::test]
 async fn error_set_invalid_ranking_rules() {
@@ -448,18 +497,142 @@ async fn set_and_reset_distinct_attribute_with_dedicated_route() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    let (_response, _code) = index.update_distinct_attribute(json!("test")).await;
-    index.wait_task(0).await;
+    let (task, _code) = index.update_distinct_attribute(json!("test")).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, _) = index.get_distinct_attribute().await;
 
     assert_eq!(response, "test");
 
-    index.update_distinct_attribute(json!(null)).await;
+    let (task, _status_code) = index.update_distinct_attribute(json!(null)).await;
 
-    index.wait_task(1).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, _) = index.get_distinct_attribute().await;
 
     assert_eq!(response, json!(null));
+}
+
+#[actix_rt::test]
+async fn granular_filterable_attributes() {
+    let server = Server::new().await;
+    let index = server.index("test");
+    index.create(None).await;
+
+    let (response, code) =
+        index.update_settings(json!({ "filterableAttributes": [
+            { "attributePatterns": ["name"], "features": { "facetSearch": true, "filter": {"equality": true, "comparison": false} } },
+            { "attributePatterns": ["age"], "features": { "facetSearch": false, "filter": {"equality": true, "comparison": true} } },
+            { "attributePatterns": ["id"] },
+            { "attributePatterns": ["default-filterable-features-null"], "features": { "facetSearch": true } },
+            { "attributePatterns": ["default-filterable-features-equality"], "features": { "facetSearch": true, "filter": {"comparison": true} } },
+            { "attributePatterns": ["default-filterable-features-comparison"], "features": { "facetSearch": true, "filter": {"equality": true} } },
+            { "attributePatterns": ["default-filterable-features-empty"], "features": { "facetSearch": true, "filter": {} } },
+            { "attributePatterns": ["default-facet-search"], "features": { "filter": {"equality": true, "comparison": true} } },
+        ] })).await;
+    assert_eq!(code, 202);
+    index.wait_task(response.uid()).await.succeeded();
+
+    let (response, code) = index.settings().await;
+    assert_eq!(code, 200, "{}", response);
+    snapshot!(json_string!(response["filterableAttributes"]), @r###"
+    [
+      {
+        "attributePatterns": [
+          "name"
+        ],
+        "features": {
+          "facetSearch": true,
+          "filter": {
+            "equality": true,
+            "comparison": false
+          }
+        }
+      },
+      {
+        "attributePatterns": [
+          "age"
+        ],
+        "features": {
+          "facetSearch": false,
+          "filter": {
+            "equality": true,
+            "comparison": true
+          }
+        }
+      },
+      {
+        "attributePatterns": [
+          "id"
+        ],
+        "features": {
+          "facetSearch": false,
+          "filter": {
+            "equality": true,
+            "comparison": false
+          }
+        }
+      },
+      {
+        "attributePatterns": [
+          "default-filterable-features-null"
+        ],
+        "features": {
+          "facetSearch": true,
+          "filter": {
+            "equality": true,
+            "comparison": false
+          }
+        }
+      },
+      {
+        "attributePatterns": [
+          "default-filterable-features-equality"
+        ],
+        "features": {
+          "facetSearch": true,
+          "filter": {
+            "equality": true,
+            "comparison": true
+          }
+        }
+      },
+      {
+        "attributePatterns": [
+          "default-filterable-features-comparison"
+        ],
+        "features": {
+          "facetSearch": true,
+          "filter": {
+            "equality": true,
+            "comparison": false
+          }
+        }
+      },
+      {
+        "attributePatterns": [
+          "default-filterable-features-empty"
+        ],
+        "features": {
+          "facetSearch": true,
+          "filter": {
+            "equality": true,
+            "comparison": false
+          }
+        }
+      },
+      {
+        "attributePatterns": [
+          "default-facet-search"
+        ],
+        "features": {
+          "facetSearch": false,
+          "filter": {
+            "equality": true,
+            "comparison": true
+          }
+        }
+      }
+    ]
+    "###);
 }

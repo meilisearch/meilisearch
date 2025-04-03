@@ -11,6 +11,7 @@ use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::locales::Locale;
 use serde_json::Value;
 use tracing::debug;
+use utoipa::{OpenApi, ToSchema};
 
 use crate::analytics::{Aggregate, Analytics};
 use crate::extractors::authentication::policies::*;
@@ -18,20 +19,33 @@ use crate::extractors::authentication::GuardedData;
 use crate::routes::indexes::search::search_kind;
 use crate::search::{
     add_search_rules, perform_facet_search, FacetSearchResult, HybridQuery, MatchingStrategy,
-    RankingScoreThreshold, SearchQuery, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
+    RankingScoreThreshold, SearchQuery, SearchResult, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
     DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
     DEFAULT_SEARCH_OFFSET,
 };
 use crate::search_queue::SearchQueue;
 
+#[derive(OpenApi)]
+#[openapi(
+    paths(search),
+    tags(
+        (
+            name = "Facet Search",
+            description = "The `/facet-search` route allows you to search for facet values. Facet search supports prefix search and typo tolerance. The returned hits are sorted lexicographically in ascending order. You can configure how facets are sorted using the sortFacetValuesBy property of the faceting index settings.",
+            external_docs(url = "https://www.meilisearch.com/docs/reference/api/facet_search"),
+        ),
+    ),
+)]
+pub struct FacetSearchApi;
+
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::resource("").route(web::post().to(search)));
 }
 
-/// # Important
-///
-/// Intentionally don't use `deny_unknown_fields` to ignore search parameters sent by user
-#[derive(Debug, Clone, Default, PartialEq, deserr::Deserr)]
+// # Important
+//
+// Intentionally don't use `deny_unknown_fields` to ignore search parameters sent by user
+#[derive(Debug, Clone, Default, PartialEq, deserr::Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase)]
 pub struct FacetSearchQuery {
     #[deserr(default, error = DeserrJsonError<InvalidFacetSearchQuery>)]
@@ -42,7 +56,7 @@ pub struct FacetSearchQuery {
     pub q: Option<String>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchVector>)]
     pub vector: Option<Vec<f32>>,
-    #[deserr(default, error = DeserrJsonError<InvalidHybridQuery>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchHybridQuery>)]
     pub hybrid: Option<HybridQuery>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchFilter>)]
     pub filter: Option<Value>,
@@ -54,6 +68,8 @@ pub struct FacetSearchQuery {
     pub ranking_score_threshold: Option<RankingScoreThreshold>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchLocales>, default)]
     pub locales: Option<Vec<Locale>>,
+    #[deserr(default, error = DeserrJsonError<InvalidFacetSearchExhaustiveFacetCount>, default)]
+    pub exhaustive_facet_count: Option<bool>,
 }
 
 #[derive(Default)]
@@ -84,6 +100,7 @@ impl FacetSearchAggregator {
             hybrid,
             ranking_score_threshold,
             locales,
+            exhaustive_facet_count,
         } = query;
 
         Self {
@@ -96,7 +113,8 @@ impl FacetSearchAggregator {
                 || attributes_to_search_on.is_some()
                 || hybrid.is_some()
                 || ranking_score_threshold.is_some()
-                || locales.is_some(),
+                || locales.is_some()
+                || exhaustive_facet_count.is_some(),
             ..Default::default()
         }
     }
@@ -158,6 +176,60 @@ impl Aggregate for FacetSearchAggregator {
     }
 }
 
+/// Perform a facet search
+///
+/// Search for a facet value within a given facet.
+#[utoipa::path(
+    post,
+    path = "{indexUid}/facet-search",
+    tag = "Facet Search",
+    security(("Bearer" = ["search", "*"])),
+    params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
+    request_body = FacetSearchQuery,
+    responses(
+        (status = 200, description = "The documents are returned", body = SearchResult, content_type = "application/json", example = json!(
+            {
+              "hits": [
+                {
+                  "id": 2770,
+                  "title": "American Pie 2",
+                  "poster": "https://image.tmdb.org/t/p/w1280/q4LNgUnRfltxzp3gf1MAGiK5LhV.jpg",
+                  "overview": "The whole gang are back and as close as ever. They decide to get even closer by spending the summer together at a beach house. They decide to hold the biggest…",
+                  "release_date": 997405200
+                },
+                {
+                  "id": 190859,
+                  "title": "American Sniper",
+                  "poster": "https://image.tmdb.org/t/p/w1280/svPHnYE7N5NAGO49dBmRhq0vDQ3.jpg",
+                  "overview": "U.S. Navy SEAL Chris Kyle takes his sole mission—protect his comrades—to heart and becomes one of the most lethal snipers in American history. His pinpoint accuracy not only saves countless lives but also makes him a prime…",
+                  "release_date": 1418256000
+                }
+              ],
+              "offset": 0,
+              "limit": 2,
+              "estimatedTotalHits": 976,
+              "processingTimeMs": 35,
+              "query": "american "
+            }
+        )),
+        (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "Index `movies` not found.",
+                "code": "index_not_found",
+                "type": "invalid_request",
+                "link": "https://docs.meilisearch.com/errors#index_not_found"
+            }
+        )),
+        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+    )
+)]
 pub async fn search(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
     search_queue: Data<SearchQueue>,
@@ -184,8 +256,7 @@ pub async fn search(
     }
 
     let index = index_scheduler.index(&index_uid)?;
-    let features = index_scheduler.features();
-    let search_kind = search_kind(&search_query, &index_scheduler, &index, features)?;
+    let search_kind = search_kind(&search_query, &index_scheduler, index_uid.to_string(), &index)?;
     let permit = search_queue.try_get_search_permit().await?;
     let search_result = tokio::task::spawn_blocking(move || {
         perform_facet_search(
@@ -226,13 +297,24 @@ impl From<FacetSearchQuery> for SearchQuery {
             hybrid,
             ranking_score_threshold,
             locales,
+            exhaustive_facet_count,
         } = value;
+
+        // If exhaustive_facet_count is true, we need to set the page to 0
+        // because the facet search is not exhaustive by default.
+        let page = if exhaustive_facet_count.is_some_and(|exhaustive| exhaustive) {
+            // setting the page to 0 will force the search to be exhaustive when computing the number of hits,
+            // but it will skip the bucket sort saving time.
+            Some(0)
+        } else {
+            None
+        };
 
         SearchQuery {
             q,
             offset: DEFAULT_SEARCH_OFFSET(),
             limit: DEFAULT_SEARCH_LIMIT(),
-            page: None,
+            page,
             hits_per_page: None,
             attributes_to_retrieve: None,
             retrieve_vectors: false,

@@ -26,9 +26,12 @@ use typed_chunk::{write_typed_chunk_into_index, ChunkAccumulator, TypedChunk};
 pub use self::enrich::{extract_finite_float_from_value, DocumentId};
 pub use self::helpers::*;
 pub use self::transform::{Transform, TransformOutput};
+use super::facet::clear_facet_levels_based_on_settings_diff;
 use super::new::StdResult;
 use crate::documents::{obkv_to_object, DocumentsBatchReader};
 use crate::error::{Error, InternalError};
+use crate::index::{PrefixSearch, PrefixSettings};
+use crate::progress::Progress;
 use crate::thread_pool_no_abort::ThreadPoolNoAbortBuilder;
 pub use crate::update::index_documents::helpers::CursorClonableMmap;
 use crate::update::{
@@ -82,8 +85,6 @@ pub struct IndexDocuments<'t, 'i, 'a, FP, FA> {
 
 #[derive(Default, Debug, Clone)]
 pub struct IndexDocumentsConfig {
-    pub words_prefix_threshold: Option<u32>,
-    pub max_prefix_length: Option<usize>,
     pub words_positions_level_group_size: Option<NonZeroU32>,
     pub words_positions_min_level_size: Option<NonZeroU32>,
     pub update_method: IndexDocumentsMethod,
@@ -216,9 +217,8 @@ where
             flattened_documents,
         } = output;
 
-        // update the internal facet and searchable list,
+        // update the searchable list,
         // because they might have changed due to the nested documents flattening.
-        settings_diff.new.recompute_facets(self.wtxn, self.index)?;
         settings_diff.new.recompute_searchables(self.wtxn, self.index)?;
 
         let settings_diff = Arc::new(settings_diff);
@@ -308,6 +308,7 @@ where
         let current_span = tracing::Span::current();
 
         // Run extraction pipeline in parallel.
+        let mut modified_docids = RoaringBitmap::new();
         pool.install(|| {
                 let settings_diff_cloned = settings_diff.clone();
                 rayon::spawn(move || {
@@ -368,7 +369,7 @@ where
                         Err(status) => {
                             if let Some(typed_chunks) = chunk_accumulator.pop_longest() {
                                 let (docids, is_merged_database) =
-                                    write_typed_chunk_into_index(self.wtxn, self.index, &settings_diff, typed_chunks)?;
+                                    write_typed_chunk_into_index(self.wtxn, self.index, &settings_diff, typed_chunks, &mut modified_docids)?;
                                 if !docids.is_empty() {
                                     final_documents_ids |= docids;
                                     let documents_seen_count = final_documents_ids.len();
@@ -465,9 +466,18 @@ where
                     }
                 }
 
+                // If the settings are only being updated, we may have to clear some of the facet levels.
+                if settings_diff.settings_update_only() {
+                    clear_facet_levels_based_on_settings_diff(self.wtxn, self.index, &settings_diff)?;
+                }
+
                 Ok(())
             }).map_err(InternalError::from)??;
 
+        if !settings_diff.settings_update_only {
+            // Update the stats of the documents database when there is a document update.
+            self.index.update_documents_stats(self.wtxn, modified_docids)?;
+        }
         // We write the field distribution into the main database
         self.index.put_field_distribution(self.wtxn, &field_distribution)?;
 
@@ -502,16 +512,22 @@ where
                 InternalError::DatabaseMissingEntry { db_name: "embedder_category_id", key: None },
             )?;
             let embedder_config = settings_diff.embedding_config_updates.get(&embedder_name);
-            let was_quantized = settings_diff
-                .old
-                .embedding_configs
-                .get(&embedder_name)
-                .map_or(false, |conf| conf.2);
-            let is_quantizing = embedder_config.map_or(false, |action| action.is_being_quantized);
+            let was_quantized =
+                settings_diff.old.embedding_configs.get(&embedder_name).is_some_and(|conf| conf.2);
+            let is_quantizing = embedder_config.is_some_and(|action| action.is_being_quantized);
 
             pool.install(|| {
                 let mut writer = ArroyWrapper::new(vector_arroy, embedder_index, was_quantized);
-                writer.build_and_quantize(wtxn, &mut rng, dimension, is_quantizing, cancel)?;
+                writer.build_and_quantize(
+                    wtxn,
+                    // In the settings we don't have any progress to share
+                    &Progress::default(),
+                    &mut rng,
+                    dimension,
+                    is_quantizing,
+                    self.indexer_config.max_memory,
+                    cancel,
+                )?;
                 Result::Ok(())
             })
             .map_err(InternalError::from)??;
@@ -565,14 +581,32 @@ where
             self.index.words_prefixes_fst(self.wtxn)?.map_data(|cow| cow.into_owned())?;
 
         // Run the words prefixes update operation.
-        let mut builder = WordsPrefixesFst::new(self.wtxn, self.index);
-        if let Some(value) = self.config.words_prefix_threshold {
-            builder.threshold(value);
+        let PrefixSettings { prefix_count_threshold, max_prefix_length, compute_prefixes } =
+            self.index.prefix_settings(self.wtxn)?;
+
+        // If the prefix search is enabled at indexing time, we compute the prefixes.
+        if compute_prefixes == PrefixSearch::IndexingTime {
+            let mut builder = WordsPrefixesFst::new(self.wtxn, self.index);
+            builder.threshold(prefix_count_threshold);
+            builder.max_prefix_length(max_prefix_length);
+            builder.execute()?;
+        } else {
+            // If the prefix search is disabled at indexing time, we delete the previous words prefixes fst.
+            // And all the associated docids databases.
+            self.index.delete_words_prefixes_fst(self.wtxn)?;
+            self.index.word_prefix_docids.clear(self.wtxn)?;
+            self.index.exact_word_prefix_docids.clear(self.wtxn)?;
+            self.index.word_prefix_position_docids.clear(self.wtxn)?;
+            self.index.word_prefix_fid_docids.clear(self.wtxn)?;
+
+            databases_seen += 3;
+            (self.progress)(UpdateIndexingStep::MergeDataIntoFinalDatabase {
+                databases_seen,
+                total_databases: TOTAL_POSTING_DATABASE_COUNT,
+            });
+
+            return Ok(());
         }
-        if let Some(value) = self.config.max_prefix_length {
-            builder.max_prefix_length(value);
-        }
-        builder.execute()?;
 
         if (self.should_abort)() {
             return Err(Error::InternalError(InternalError::AbortedIndexation));
@@ -746,13 +780,15 @@ mod tests {
     use maplit::hashset;
 
     use super::*;
+    use crate::constants::RESERVED_GEO_FIELD_NAME;
     use crate::documents::mmap_from_objects;
     use crate::index::tests::TempIndex;
     use crate::index::IndexEmbeddingConfig;
+    use crate::progress::Progress;
     use crate::search::TermsMatchingStrategy;
     use crate::update::new::indexer;
     use crate::update::Setting;
-    use crate::{db_snap, Filter, Search, UserError};
+    use crate::{all_obkv_to_json, db_snap, Filter, FilterableAttributesRule, Search, UserError};
 
     #[test]
     fn simple_document_replacement() {
@@ -926,12 +962,12 @@ mod tests {
         index.index_documents_config.update_method = IndexDocumentsMethod::ReplaceDocuments;
 
         index.add_documents(documents!([
-          { "id": 2,    "title": "Pride and Prejudice",                    "author": "Jane Austin",              "genre": "romance",    "price": 3.5, "_geo": { "lat": 12, "lng": 42 } },
+          { "id": 2,    "title": "Pride and Prejudice",                    "author": "Jane Austin",              "genre": "romance",    "price": 3.5, RESERVED_GEO_FIELD_NAME: { "lat": 12, "lng": 42 } },
           { "id": 456,  "title": "Le Petit Prince",                        "author": "Antoine de Saint-Exupéry", "genre": "adventure" , "price": 10.0 },
           { "id": 1,    "title": "Alice In Wonderland",                    "author": "Lewis Carroll",            "genre": "fantasy",    "price": 25.99 },
           { "id": 1344, "title": "The Hobbit",                             "author": "J. R. R. Tolkien",         "genre": "fantasy" },
           { "id": 4,    "title": "Harry Potter and the Half-Blood Prince", "author": "J. K. Rowling",            "genre": "fantasy" },
-          { "id": 42,   "title": "The Hitchhiker's Guide to the Galaxy",   "author": "Douglas Adams", "_geo": { "lat": 35, "lng": 23 } }
+          { "id": 42,   "title": "The Hitchhiker's Guide to the Galaxy",   "author": "Douglas Adams", RESERVED_GEO_FIELD_NAME: { "lat": 35, "lng": 23 } }
         ])).unwrap();
 
         db_snap!(index, word_docids, "initial");
@@ -971,18 +1007,20 @@ mod tests {
         // We send 6 documents and mix the ones that have _geo and those that don't have it.
         index
             .add_documents(documents!([
-              { "id": 2, "price": 3.5, "_geo": { "lat": 12, "lng": 42 } },
+              { "id": 2, "price": 3.5, RESERVED_GEO_FIELD_NAME: { "lat": 12, "lng": 42 } },
               { "id": 456 },
               { "id": 1 },
               { "id": 1344 },
               { "id": 4 },
-              { "id": 42, "_geo": { "lat": 35, "lng": 23 } }
+              { "id": 42, RESERVED_GEO_FIELD_NAME: { "lat": 35, "lng": 23 } }
             ]))
             .unwrap();
 
         index
             .update_settings(|settings| {
-                settings.set_filterable_fields(hashset!(S("_geo")));
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
+                    RESERVED_GEO_FIELD_NAME.to_string(),
+                )]);
             })
             .unwrap();
     }
@@ -994,13 +1032,15 @@ mod tests {
 
         index
             .update_settings(|settings| {
-                settings.set_filterable_fields(hashset!(S("_geo")));
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
+                    RESERVED_GEO_FIELD_NAME.to_string(),
+                )]);
             })
             .unwrap();
 
         let error = index
             .add_documents(documents!([
-              { "id": 0, "_geo": { "lng": 42 } }
+              { "id": 0, RESERVED_GEO_FIELD_NAME: { "lng": 42 } }
             ]))
             .unwrap_err();
         assert_eq!(
@@ -1010,7 +1050,7 @@ mod tests {
 
         let error = index
             .add_documents(documents!([
-              { "id": 0, "_geo": { "lat": 42 } }
+              { "id": 0, RESERVED_GEO_FIELD_NAME: { "lat": 42 } }
             ]))
             .unwrap_err();
         assert_eq!(
@@ -1020,7 +1060,7 @@ mod tests {
 
         let error = index
             .add_documents(documents!([
-              { "id": 0, "_geo": { "lat": "lol", "lng": 42 } }
+              { "id": 0, RESERVED_GEO_FIELD_NAME: { "lat": "lol", "lng": 42 } }
             ]))
             .unwrap_err();
         assert_eq!(
@@ -1030,7 +1070,7 @@ mod tests {
 
         let error = index
             .add_documents(documents!([
-              { "id": 0, "_geo": { "lat": [12, 13], "lng": 42 } }
+              { "id": 0, RESERVED_GEO_FIELD_NAME: { "lat": [12, 13], "lng": 42 } }
             ]))
             .unwrap_err();
         assert_eq!(
@@ -1040,7 +1080,7 @@ mod tests {
 
         let error = index
             .add_documents(documents!([
-              { "id": 0, "_geo": { "lat": 12, "lng": "hello" } }
+              { "id": 0, RESERVED_GEO_FIELD_NAME: { "lat": 12, "lng": "hello" } }
             ]))
             .unwrap_err();
         assert_eq!(
@@ -1058,7 +1098,7 @@ mod tests {
                 { "objectId": 123, "title": "Pride and Prejudice", "comment": "A great book" },
                 { "objectId": 456, "title": "Le Petit Prince",     "comment": "A french book" },
                 { "objectId": 1,   "title": "Alice In Wonderland", "comment": "A weird book" },
-                { "objectId": 30,  "title": "Hamlet", "_geo": { "lat": 12, "lng": 89 } }
+                { "objectId": 30,  "title": "Hamlet", RESERVED_GEO_FIELD_NAME: { "lat": 12, "lng": 89 } }
             ]))
             .unwrap();
 
@@ -1073,7 +1113,7 @@ mod tests {
 
         index
             .add_documents(documents!([
-                { "objectId": 30,  "title": "Hamlet", "_geo": { "lat": 12, "lng": 89 } }
+                { "objectId": 30,  "title": "Hamlet", RESERVED_GEO_FIELD_NAME: { "lat": 12, "lng": 89 } }
             ]))
             .unwrap();
 
@@ -1084,7 +1124,7 @@ mod tests {
 
         index
             .add_documents(documents!([
-                { "objectId": 30,  "title": "Hamlet", "_geo": { "lat": 12, "lng": 89 } }
+                { "objectId": 30,  "title": "Hamlet", RESERVED_GEO_FIELD_NAME: { "lat": 12, "lng": 89 } }
             ]))
             .unwrap();
     }
@@ -1210,15 +1250,16 @@ mod tests {
                 let searchable_fields = vec![S("title"), S("nested.object"), S("nested.machin")];
                 settings.set_searchable_fields(searchable_fields);
 
-                let faceted_fields = hashset!(S("title"), S("nested.object"), S("nested.machin"));
+                let faceted_fields = vec![
+                    FilterableAttributesRule::Field("title".to_string()),
+                    FilterableAttributesRule::Field("nested.object".to_string()),
+                    FilterableAttributesRule::Field("nested.machin".to_string()),
+                ];
                 settings.set_filterable_fields(faceted_fields);
             })
             .unwrap();
 
         let rtxn = index.read_txn().unwrap();
-
-        let facets = index.faceted_fields(&rtxn).unwrap();
-        assert_eq!(facets, hashset!(S("title"), S("nested.object"), S("nested.machin")));
 
         // testing the simple query search
         let mut search = crate::Search::new(&rtxn, &index);
@@ -1414,7 +1455,9 @@ mod tests {
 
         index
             .update_settings(|settings| {
-                settings.set_filterable_fields(hashset!(String::from("dog")));
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
+                    "dog".to_string(),
+                )]);
             })
             .unwrap();
 
@@ -1433,10 +1476,6 @@ mod tests {
 
         let rtxn = index.read_txn().unwrap();
 
-        let hidden = index.faceted_fields(&rtxn).unwrap();
-
-        assert_eq!(hidden, hashset!(S("dog"), S("dog.race"), S("dog.race.bernese mountain")));
-
         for (s, i) in [("zeroth", 0), ("first", 1), ("second", 2), ("third", 3)] {
             let mut search = crate::Search::new(&rtxn, &index);
             let filter = format!(r#""dog.race.bernese mountain" = {s}"#);
@@ -1453,12 +1492,6 @@ mod tests {
 
         db_snap!(index, facet_id_string_docids, @"");
         db_snap!(index, field_id_docid_facet_strings, @"");
-
-        let rtxn = index.read_txn().unwrap();
-
-        let facets = index.faceted_fields(&rtxn).unwrap();
-
-        assert_eq!(facets, hashset!());
 
         // update the settings to test the sortable
         index
@@ -1481,10 +1514,6 @@ mod tests {
         "###);
 
         let rtxn = index.read_txn().unwrap();
-
-        let facets = index.faceted_fields(&rtxn).unwrap();
-
-        assert_eq!(facets, hashset!(S("dog.race"), S("dog.race.bernese mountain")));
 
         let mut search = crate::Search::new(&rtxn, &index);
         search.sort_criteria(vec![crate::AscDesc::Asc(crate::Member::Field(S(
@@ -1693,8 +1722,6 @@ mod tests {
 
         let check_ok = |index: &Index| {
             let rtxn = index.read_txn().unwrap();
-            let facets = index.faceted_fields(&rtxn).unwrap();
-            assert_eq!(facets, hashset!(S("colour"), S("colour.green"), S("colour.green.blue")));
 
             let colour_id = index.fields_ids_map(&rtxn).unwrap().id("colour").unwrap();
             let colour_green_id = index.fields_ids_map(&rtxn).unwrap().id("colour.green").unwrap();
@@ -1714,7 +1741,7 @@ mod tests {
             assert_eq!(bitmap_colour_blue.into_iter().collect::<Vec<_>>(), vec![7]);
         };
 
-        let faceted_fields = hashset!(S("colour"));
+        let faceted_fields = vec![FilterableAttributesRule::Field("colour".to_string())];
 
         let index = TempIndex::new();
         index.add_documents(content()).unwrap();
@@ -1799,8 +1826,6 @@ mod tests {
 
         let check_ok = |index: &Index| {
             let rtxn = index.read_txn().unwrap();
-            let facets = index.faceted_fields(&rtxn).unwrap();
-            assert_eq!(facets, hashset!(S("colour"), S("colour.green"), S("colour.green.blue")));
 
             let colour_id = index.fields_ids_map(&rtxn).unwrap().id("colour").unwrap();
             let colour_green_id = index.fields_ids_map(&rtxn).unwrap().id("colour.green").unwrap();
@@ -1820,7 +1845,7 @@ mod tests {
             assert_eq!(bitmap_colour_blue.into_iter().collect::<Vec<_>>(), vec![3]);
         };
 
-        let faceted_fields = hashset!(S("colour"));
+        let faceted_fields = vec![FilterableAttributesRule::Field("colour".to_string())];
 
         let index = TempIndex::new();
         index.add_documents(content()).unwrap();
@@ -1863,8 +1888,6 @@ mod tests {
 
         let check_ok = |index: &Index| {
             let rtxn = index.read_txn().unwrap();
-            let facets = index.faceted_fields(&rtxn).unwrap();
-            assert_eq!(facets, hashset!(S("tags"), S("tags.green"), S("tags.green.blue")));
 
             let tags_id = index.fields_ids_map(&rtxn).unwrap().id("tags").unwrap();
             let tags_green_id = index.fields_ids_map(&rtxn).unwrap().id("tags.green").unwrap();
@@ -1883,7 +1906,7 @@ mod tests {
             assert_eq!(bitmap_tags_blue.into_iter().collect::<Vec<_>>(), vec![12]);
         };
 
-        let faceted_fields = hashset!(S("tags"));
+        let faceted_fields = vec![FilterableAttributesRule::Field("tags".to_string())];
 
         let index = TempIndex::new();
         index.add_documents(content()).unwrap();
@@ -1932,11 +1955,11 @@ mod tests {
         let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
         let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
-        indexer.add_documents(&doc1).unwrap();
-        indexer.add_documents(&doc2).unwrap();
-        indexer.add_documents(&doc3).unwrap();
-        indexer.add_documents(&doc4).unwrap();
+        let mut indexer = indexer::DocumentOperation::new();
+        indexer.replace_documents(&doc1).unwrap();
+        indexer.replace_documents(&doc2).unwrap();
+        indexer.replace_documents(&doc3).unwrap();
+        indexer.replace_documents(&doc4).unwrap();
 
         let indexer_alloc = Bump::new();
         let (_document_changes, operation_stats, _primary_key) = indexer
@@ -1947,12 +1970,180 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )
             .unwrap();
 
         assert_eq!(operation_stats.iter().filter(|ps| ps.error.is_none()).count(), 1);
         assert_eq!(operation_stats.iter().filter(|ps| ps.error.is_some()).count(), 3);
+    }
+
+    #[test]
+    fn mixing_documents_replace_with_updates() {
+        let index = TempIndex::new_with_map_size(4096 * 100);
+
+        let doc1 = documents! {[{
+            "id": 1,
+            "title": "asdsad",
+            "description": "Wat wat wat, wat"
+        }]};
+
+        let doc2 = documents! {[{
+            "id": 1,
+            "title": "something",
+        }]};
+
+        let doc3 = documents! {[{
+            "id": 1,
+            "title": "another something",
+        }]};
+
+        let doc4 = documents! {[{
+            "id": 1,
+            "description": "This is it!",
+        }]};
+
+        let rtxn = index.inner.read_txn().unwrap();
+        let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
+        let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+        let mut indexer = indexer::DocumentOperation::new();
+        indexer.replace_documents(&doc1).unwrap();
+        indexer.update_documents(&doc2).unwrap();
+        indexer.update_documents(&doc3).unwrap();
+        indexer.update_documents(&doc4).unwrap();
+
+        let indexer_alloc = Bump::new();
+        let (document_changes, operation_stats, primary_key) = indexer
+            .into_changes(
+                &indexer_alloc,
+                &index.inner,
+                &rtxn,
+                None,
+                &mut new_fields_ids_map,
+                &|| false,
+                Progress::default(),
+            )
+            .unwrap();
+
+        assert_eq!(operation_stats.iter().filter(|ps| ps.error.is_none()).count(), 4);
+
+        let mut wtxn = index.write_txn().unwrap();
+        indexer::index(
+            &mut wtxn,
+            &index.inner,
+            &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
+            index.indexer_config.grenad_parameters(),
+            &db_fields_ids_map,
+            new_fields_ids_map,
+            primary_key,
+            &document_changes,
+            EmbeddingConfigs::default(),
+            &|| false,
+            &Progress::default(),
+        )
+        .unwrap();
+        wtxn.commit().unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+        let obkv = index.document(&rtxn, 0).unwrap();
+        let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+
+        let json_document = all_obkv_to_json(obkv, &fields_ids_map).unwrap();
+        let expected = serde_json::json!({
+            "id": 1,
+            "title": "another something",
+            "description": "This is it!",
+        });
+        let expected = expected.as_object().unwrap();
+        assert_eq!(&json_document, expected);
+    }
+
+    #[test]
+    fn mixing_documents_replace_with_updates_even_more() {
+        let index = TempIndex::new_with_map_size(4096 * 100);
+
+        let doc1 = documents! {[{
+            "id": 1,
+            "title": "asdsad",
+            "description": "Wat wat wat, wat"
+        }]};
+
+        let doc2 = documents! {[{
+            "id": 1,
+            "title": "something",
+        }]};
+
+        let doc3 = documents! {[{
+            "id": 1,
+            "title": "another something",
+        }]};
+
+        let doc4 = documents! {[{
+            "id": 1,
+            "title": "Woooof",
+        }]};
+
+        let doc5 = documents! {[{
+            "id": 1,
+            "description": "This is it!",
+        }]};
+
+        let rtxn = index.inner.read_txn().unwrap();
+        let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
+        let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+        let mut indexer = indexer::DocumentOperation::new();
+        indexer.replace_documents(&doc1).unwrap();
+        indexer.update_documents(&doc2).unwrap();
+        indexer.update_documents(&doc3).unwrap();
+        indexer.replace_documents(&doc4).unwrap();
+        indexer.update_documents(&doc5).unwrap();
+
+        let indexer_alloc = Bump::new();
+        let (document_changes, operation_stats, primary_key) = indexer
+            .into_changes(
+                &indexer_alloc,
+                &index.inner,
+                &rtxn,
+                None,
+                &mut new_fields_ids_map,
+                &|| false,
+                Progress::default(),
+            )
+            .unwrap();
+
+        assert_eq!(operation_stats.iter().filter(|ps| ps.error.is_none()).count(), 5);
+
+        let mut wtxn = index.write_txn().unwrap();
+        indexer::index(
+            &mut wtxn,
+            &index.inner,
+            &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
+            index.indexer_config.grenad_parameters(),
+            &db_fields_ids_map,
+            new_fields_ids_map,
+            primary_key,
+            &document_changes,
+            EmbeddingConfigs::default(),
+            &|| false,
+            &Progress::default(),
+        )
+        .unwrap();
+        wtxn.commit().unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+        let obkv = index.document(&rtxn, 0).unwrap();
+        let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+
+        let json_document = all_obkv_to_json(obkv, &fields_ids_map).unwrap();
+        let expected = serde_json::json!({
+            "id": 1,
+            "title": "Woooof",
+            "description": "This is it!",
+        });
+        let expected = expected.as_object().unwrap();
+        assert_eq!(&json_document, expected);
     }
 
     #[test]
@@ -2067,38 +2258,13 @@ mod tests {
 
         index
             .update_settings(|settings| {
-                settings.set_filterable_fields(hashset! { S("title") });
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
+                    "title".to_string(),
+                )]);
             })
             .unwrap();
 
         index.add_documents(doc1).unwrap();
-    }
-
-    #[cfg(feature = "default")]
-    #[test]
-    fn store_detected_script_and_language_per_document_during_indexing() {
-        use charabia::{Language, Script};
-        let index = TempIndex::new();
-        index
-            .add_documents(documents!([
-                { "id": 1, "title": "The quick (\"brown\") fox can't jump 32.3 feet, right? Brr, it's 29.3°F!" },
-                { "id": 2, "title": "人人生而自由﹐在尊嚴和權利上一律平等。他們賦有理性和良心﹐並應以兄弟關係的精神互相對待。" },
-                { "id": 3, "title": "הַשּׁוּעָל הַמָּהִיר (״הַחוּם״) לֹא יָכוֹל לִקְפֹּץ 9.94 מֶטְרִים, נָכוֹן? ברר, 1.5°C- בַּחוּץ!" },
-                { "id": 4, "title": "関西国際空港限定トートバッグ すもももももももものうち" },
-                { "id": 5, "title": "ภาษาไทยง่ายนิดเดียว" },
-                { "id": 6, "title": "The quick 在尊嚴和權利上一律平等。" },
-            ]))
-            .unwrap();
-
-        let rtxn = index.read_txn().unwrap();
-        let key_jpn = (Script::Cj, Language::Jpn);
-        let key_cmn = (Script::Cj, Language::Cmn);
-        let cj_jpn_docs = index.script_language_documents_ids(&rtxn, &key_jpn).unwrap().unwrap();
-        let cj_cmn_docs = index.script_language_documents_ids(&rtxn, &key_cmn).unwrap().unwrap();
-        let expected_cj_jpn_docids = [3].iter().collect();
-        assert_eq!(cj_jpn_docs, expected_cj_jpn_docids);
-        let expected_cj_cmn_docids = [1, 5].iter().collect();
-        assert_eq!(cj_cmn_docs, expected_cj_cmn_docids);
     }
 
     #[test]
@@ -2120,8 +2286,8 @@ mod tests {
 
         let indexer_alloc = Bump::new();
         let embedders = EmbeddingConfigs::default();
-        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
-        indexer.add_documents(&documents).unwrap();
+        let mut indexer = indexer::DocumentOperation::new();
+        indexer.replace_documents(&documents).unwrap();
         indexer.delete_documents(&["2"]);
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(
@@ -2131,13 +2297,14 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )
             .unwrap();
 
         indexer::index(
             &mut wtxn,
             &index.inner,
+            &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
             indexer_config.grenad_parameters(),
             &db_fields_ids_map,
             new_fields_ids_map,
@@ -2145,7 +2312,7 @@ mod tests {
             &document_changes,
             embedders,
             &|| false,
-            &|_| (),
+            &Progress::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();
@@ -2172,14 +2339,14 @@ mod tests {
             { "id": 2, "doggo": { "name": "bob", "age": 20 } },
             { "id": 3, "name": "jean", "age": 25 },
         ]);
-        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::UpdateDocuments);
-        indexer.add_documents(&documents).unwrap();
+        let mut indexer = indexer::DocumentOperation::new();
+        indexer.update_documents(&documents).unwrap();
 
         let documents = documents!([
             { "id": 2, "catto": "jorts" },
             { "id": 3, "legs": 4 },
         ]);
-        indexer.add_documents(&documents).unwrap();
+        indexer.update_documents(&documents).unwrap();
         indexer.delete_documents(&["1", "2"]);
 
         let indexer_alloc = Bump::new();
@@ -2192,13 +2359,14 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )
             .unwrap();
 
         indexer::index(
             &mut wtxn,
             &index.inner,
+            &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
             indexer_config.grenad_parameters(),
             &db_fields_ids_map,
             new_fields_ids_map,
@@ -2206,7 +2374,7 @@ mod tests {
             &document_changes,
             embedders,
             &|| false,
-            &|_| (),
+            &Progress::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();
@@ -2233,8 +2401,8 @@ mod tests {
         ]);
         let indexer_alloc = Bump::new();
         let embedders = EmbeddingConfigs::default();
-        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::UpdateDocuments);
-        indexer.add_documents(&documents).unwrap();
+        let mut indexer = indexer::DocumentOperation::new();
+        indexer.update_documents(&documents).unwrap();
 
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(
@@ -2244,13 +2412,14 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )
             .unwrap();
 
         indexer::index(
             &mut wtxn,
             &index.inner,
+            &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
             indexer_config.grenad_parameters(),
             &db_fields_ids_map,
             new_fields_ids_map,
@@ -2258,7 +2427,7 @@ mod tests {
             &document_changes,
             embedders,
             &|| false,
-            &|_| (),
+            &Progress::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();
@@ -2283,8 +2452,8 @@ mod tests {
         ]);
         let indexer_alloc = Bump::new();
         let embedders = EmbeddingConfigs::default();
-        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::UpdateDocuments);
-        indexer.add_documents(&documents).unwrap();
+        let mut indexer = indexer::DocumentOperation::new();
+        indexer.update_documents(&documents).unwrap();
         indexer.delete_documents(&["1", "2"]);
 
         let (document_changes, _operation_stats, primary_key) = indexer
@@ -2295,13 +2464,14 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )
             .unwrap();
 
         indexer::index(
             &mut wtxn,
             &index.inner,
+            &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
             indexer_config.grenad_parameters(),
             &db_fields_ids_map,
             new_fields_ids_map,
@@ -2309,7 +2479,7 @@ mod tests {
             &document_changes,
             embedders,
             &|| false,
-            &|_| (),
+            &Progress::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();
@@ -2331,14 +2501,14 @@ mod tests {
 
         let indexer_alloc = Bump::new();
         let embedders = EmbeddingConfigs::default();
-        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::UpdateDocuments);
+        let mut indexer = indexer::DocumentOperation::new();
         indexer.delete_documents(&["1", "2"]);
 
         let documents = documents!([
             { "id": 2, "doggo": { "name": "jean", "age": 20 } },
             { "id": 3, "name": "bob", "age": 25 },
         ]);
-        indexer.add_documents(&documents).unwrap();
+        indexer.update_documents(&documents).unwrap();
 
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(
@@ -2348,13 +2518,14 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )
             .unwrap();
 
         indexer::index(
             &mut wtxn,
             &index.inner,
+            &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
             indexer_config.grenad_parameters(),
             &db_fields_ids_map,
             new_fields_ids_map,
@@ -2362,7 +2533,7 @@ mod tests {
             &document_changes,
             embedders,
             &|| false,
-            &|_| (),
+            &Progress::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();
@@ -2385,7 +2556,7 @@ mod tests {
 
         let indexer_alloc = Bump::new();
         let embedders = EmbeddingConfigs::default();
-        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::UpdateDocuments);
+        let mut indexer = indexer::DocumentOperation::new();
 
         indexer.delete_documents(&["1", "2", "1", "2"]);
 
@@ -2394,7 +2565,7 @@ mod tests {
             { "id": 2, "doggo": { "name": "jean", "age": 20 } },
             { "id": 3, "name": "bob", "age": 25 },
         ]);
-        indexer.add_documents(&documents).unwrap();
+        indexer.update_documents(&documents).unwrap();
 
         indexer.delete_documents(&["1", "2", "1", "2"]);
 
@@ -2406,13 +2577,14 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )
             .unwrap();
 
         indexer::index(
             &mut wtxn,
             &index.inner,
+            &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
             indexer_config.grenad_parameters(),
             &db_fields_ids_map,
             new_fields_ids_map,
@@ -2420,7 +2592,7 @@ mod tests {
             &document_changes,
             embedders,
             &|| false,
-            &|_| (),
+            &Progress::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();
@@ -2442,12 +2614,12 @@ mod tests {
 
         let indexer_alloc = Bump::new();
         let embedders = EmbeddingConfigs::default();
-        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::UpdateDocuments);
+        let mut indexer = indexer::DocumentOperation::new();
 
         let documents = documents!([
             { "id": 1, "doggo": "kevin" },
         ]);
-        indexer.add_documents(&documents).unwrap();
+        indexer.update_documents(&documents).unwrap();
 
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(
@@ -2457,13 +2629,14 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )
             .unwrap();
 
         indexer::index(
             &mut wtxn,
             &index.inner,
+            &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
             indexer_config.grenad_parameters(),
             &db_fields_ids_map,
             new_fields_ids_map,
@@ -2471,7 +2644,7 @@ mod tests {
             &document_changes,
             embedders,
             &|| false,
-            &|_| (),
+            &Progress::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();
@@ -2490,7 +2663,7 @@ mod tests {
 
         let indexer_alloc = Bump::new();
         let embedders = EmbeddingConfigs::default();
-        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+        let mut indexer = indexer::DocumentOperation::new();
 
         indexer.delete_documents(&["1"]);
 
@@ -2498,7 +2671,7 @@ mod tests {
             { "id": 1, "catto": "jorts" },
         ]);
 
-        indexer.add_documents(&documents).unwrap();
+        indexer.replace_documents(&documents).unwrap();
 
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(
@@ -2508,13 +2681,14 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )
             .unwrap();
 
         indexer::index(
             &mut wtxn,
             &index.inner,
+            &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
             indexer_config.grenad_parameters(),
             &db_fields_ids_map,
             new_fields_ids_map,
@@ -2522,7 +2696,7 @@ mod tests {
             &document_changes,
             embedders,
             &|| false,
-            &|_| (),
+            &Progress::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();
@@ -2595,6 +2769,7 @@ mod tests {
                         source: Setting::Set(crate::vector::settings::EmbedderSource::UserProvided),
                         model: Setting::NotSet,
                         revision: Setting::NotSet,
+                        pooling: Setting::NotSet,
                         api_key: Setting::NotSet,
                         dimensions: Setting::Set(3),
                         document_template: Setting::NotSet,
@@ -2604,6 +2779,8 @@ mod tests {
                         response: Setting::NotSet,
                         distribution: Setting::NotSet,
                         headers: Setting::NotSet,
+                        search_embedder: Setting::NotSet,
+                        indexing_embedder: Setting::NotSet,
                         binary_quantized: Setting::NotSet,
                     }),
                 );
@@ -2629,8 +2806,9 @@ mod tests {
             embedding_configs.pop().unwrap();
         insta::assert_snapshot!(embedder_name, @"manual");
         insta::assert_debug_snapshot!(user_provided, @"RoaringBitmap<[0, 1, 2]>");
-        let embedder =
-            std::sync::Arc::new(crate::vector::Embedder::new(embedder.embedder_options).unwrap());
+        let embedder = std::sync::Arc::new(
+            crate::vector::Embedder::new(embedder.embedder_options, 0).unwrap(),
+        );
         let res = index
             .search(&rtxn)
             .semantic(embedder_name, embedder, false, Some([0.0, 1.0, 2.0].to_vec()))
@@ -2683,14 +2861,14 @@ mod tests {
 
         let indexer_alloc = Bump::new();
         let embedders = EmbeddingConfigs::default();
-        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+        let mut indexer = indexer::DocumentOperation::new();
 
         // OP
 
         let documents = documents!([
             { "id": 1, "doggo": "bernese" },
         ]);
-        indexer.add_documents(&documents).unwrap();
+        indexer.replace_documents(&documents).unwrap();
 
         // FINISHING
         let (document_changes, _operation_stats, primary_key) = indexer
@@ -2701,13 +2879,14 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )
             .unwrap();
 
         indexer::index(
             &mut wtxn,
             &index.inner,
+            &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
             indexer_config.grenad_parameters(),
             &db_fields_ids_map,
             new_fields_ids_map,
@@ -2715,7 +2894,7 @@ mod tests {
             &document_changes,
             embedders,
             &|| false,
-            &|_| (),
+            &Progress::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();
@@ -2742,14 +2921,14 @@ mod tests {
 
         let indexer_alloc = Bump::new();
         let embedders = EmbeddingConfigs::default();
-        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+        let mut indexer = indexer::DocumentOperation::new();
 
         indexer.delete_documents(&["1"]);
 
         let documents = documents!([
             { "id": 0, "catto": "jorts" },
         ]);
-        indexer.add_documents(&documents).unwrap();
+        indexer.replace_documents(&documents).unwrap();
 
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(
@@ -2759,13 +2938,14 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )
             .unwrap();
 
         indexer::index(
             &mut wtxn,
             &index.inner,
+            &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
             indexer_config.grenad_parameters(),
             &db_fields_ids_map,
             new_fields_ids_map,
@@ -2773,7 +2953,7 @@ mod tests {
             &document_changes,
             embedders,
             &|| false,
-            &|_| (),
+            &Progress::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();
@@ -2799,12 +2979,12 @@ mod tests {
 
         let indexer_alloc = Bump::new();
         let embedders = EmbeddingConfigs::default();
-        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+        let mut indexer = indexer::DocumentOperation::new();
 
         let documents = documents!([
             { "id": 1, "catto": "jorts" },
         ]);
-        indexer.add_documents(&documents).unwrap();
+        indexer.replace_documents(&documents).unwrap();
 
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(
@@ -2814,13 +2994,14 @@ mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )
             .unwrap();
 
         indexer::index(
             &mut wtxn,
             &index.inner,
+            &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
             indexer_config.grenad_parameters(),
             &db_fields_ids_map,
             new_fields_ids_map,
@@ -2828,7 +3009,7 @@ mod tests {
             &document_changes,
             embedders,
             &|| false,
-            &|_| (),
+            &Progress::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();
@@ -2938,7 +3119,10 @@ mod tests {
         index
             .update_settings_using_wtxn(&mut wtxn, |settings| {
                 settings.set_primary_key(S("docid"));
-                settings.set_filterable_fields(hashset! { S("label"), S("label2") });
+                settings.set_filterable_fields(vec![
+                    FilterableAttributesRule::Field("label".to_string()),
+                    FilterableAttributesRule::Field("label2".to_string()),
+                ]);
             })
             .unwrap();
         wtxn.commit().unwrap();
@@ -3117,34 +3301,36 @@ mod tests {
         index
             .update_settings_using_wtxn(&mut wtxn, |settings| {
                 settings.set_primary_key(S("id"));
-                settings.set_filterable_fields(hashset!(S("_geo")));
-                settings.set_sortable_fields(hashset!(S("_geo")));
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
+                    RESERVED_GEO_FIELD_NAME.to_string(),
+                )]);
+                settings.set_sortable_fields(hashset!(S(RESERVED_GEO_FIELD_NAME)));
             })
             .unwrap();
         wtxn.commit().unwrap();
 
         let mut wtxn = index.write_txn().unwrap();
         index.add_documents_using_wtxn(&mut wtxn, documents!([
-            { "id": "1",  "city": "Lille",             "_geo": { "lat": 50.6299, "lng": 3.0569 } },
-            { "id": "2",  "city": "Mons-en-Barœul",    "_geo": { "lat": 50.6415, "lng": 3.1106 } },
-            { "id": "3",  "city": "Hellemmes",         "_geo": { "lat": 50.6312, "lng": 3.1106 } },
-            { "id": "4",  "city": "Villeneuve-d'Ascq", "_geo": { "lat": 50.6224, "lng": 3.1476 } },
-            { "id": "5",  "city": "Hem",               "_geo": { "lat": 50.6552, "lng": 3.1897 } },
-            { "id": "6",  "city": "Roubaix",           "_geo": { "lat": 50.6924, "lng": 3.1763 } },
-            { "id": "7",  "city": "Tourcoing",         "_geo": { "lat": 50.7263, "lng": 3.1541 } },
-            { "id": "8",  "city": "Mouscron",          "_geo": { "lat": 50.7453, "lng": 3.2206 } },
-            { "id": "9",  "city": "Tournai",           "_geo": { "lat": 50.6053, "lng": 3.3758 } },
-            { "id": "10", "city": "Ghent",             "_geo": { "lat": 51.0537, "lng": 3.6957 } },
-            { "id": "11", "city": "Brussels",          "_geo": { "lat": 50.8466, "lng": 4.3370 } },
-            { "id": "12", "city": "Charleroi",         "_geo": { "lat": 50.4095, "lng": 4.4347 } },
-            { "id": "13", "city": "Mons",              "_geo": { "lat": 50.4502, "lng": 3.9623 } },
-            { "id": "14", "city": "Valenciennes",      "_geo": { "lat": 50.3518, "lng": 3.5326 } },
-            { "id": "15", "city": "Arras",             "_geo": { "lat": 50.2844, "lng": 2.7637 } },
-            { "id": "16", "city": "Cambrai",           "_geo": { "lat": 50.1793, "lng": 3.2189 } },
-            { "id": "17", "city": "Bapaume",           "_geo": { "lat": 50.1112, "lng": 2.8547 } },
-            { "id": "18", "city": "Amiens",            "_geo": { "lat": 49.9314, "lng": 2.2710 } },
-            { "id": "19", "city": "Compiègne",         "_geo": { "lat": 49.4449, "lng": 2.7913 } },
-            { "id": "20", "city": "Paris",             "_geo": { "lat": 48.9021, "lng": 2.3708 } }
+            { "id": "1",  "city": "Lille",             RESERVED_GEO_FIELD_NAME: { "lat": 50.6299, "lng": 3.0569 } },
+            { "id": "2",  "city": "Mons-en-Barœul",    RESERVED_GEO_FIELD_NAME: { "lat": 50.6415, "lng": 3.1106 } },
+            { "id": "3",  "city": "Hellemmes",         RESERVED_GEO_FIELD_NAME: { "lat": 50.6312, "lng": 3.1106 } },
+            { "id": "4",  "city": "Villeneuve-d'Ascq", RESERVED_GEO_FIELD_NAME: { "lat": 50.6224, "lng": 3.1476 } },
+            { "id": "5",  "city": "Hem",               RESERVED_GEO_FIELD_NAME: { "lat": 50.6552, "lng": 3.1897 } },
+            { "id": "6",  "city": "Roubaix",           RESERVED_GEO_FIELD_NAME: { "lat": 50.6924, "lng": 3.1763 } },
+            { "id": "7",  "city": "Tourcoing",         RESERVED_GEO_FIELD_NAME: { "lat": 50.7263, "lng": 3.1541 } },
+            { "id": "8",  "city": "Mouscron",          RESERVED_GEO_FIELD_NAME: { "lat": 50.7453, "lng": 3.2206 } },
+            { "id": "9",  "city": "Tournai",           RESERVED_GEO_FIELD_NAME: { "lat": 50.6053, "lng": 3.3758 } },
+            { "id": "10", "city": "Ghent",             RESERVED_GEO_FIELD_NAME: { "lat": 51.0537, "lng": 3.6957 } },
+            { "id": "11", "city": "Brussels",          RESERVED_GEO_FIELD_NAME: { "lat": 50.8466, "lng": 4.3370 } },
+            { "id": "12", "city": "Charleroi",         RESERVED_GEO_FIELD_NAME: { "lat": 50.4095, "lng": 4.4347 } },
+            { "id": "13", "city": "Mons",              RESERVED_GEO_FIELD_NAME: { "lat": 50.4502, "lng": 3.9623 } },
+            { "id": "14", "city": "Valenciennes",      RESERVED_GEO_FIELD_NAME: { "lat": 50.3518, "lng": 3.5326 } },
+            { "id": "15", "city": "Arras",             RESERVED_GEO_FIELD_NAME: { "lat": 50.2844, "lng": 2.7637 } },
+            { "id": "16", "city": "Cambrai",           RESERVED_GEO_FIELD_NAME: { "lat": 50.1793, "lng": 3.2189 } },
+            { "id": "17", "city": "Bapaume",           RESERVED_GEO_FIELD_NAME: { "lat": 50.1112, "lng": 2.8547 } },
+            { "id": "18", "city": "Amiens",            RESERVED_GEO_FIELD_NAME: { "lat": 49.9314, "lng": 2.2710 } },
+            { "id": "19", "city": "Compiègne",         RESERVED_GEO_FIELD_NAME: { "lat": 49.4449, "lng": 2.7913 } },
+            { "id": "20", "city": "Paris",             RESERVED_GEO_FIELD_NAME: { "lat": 48.9021, "lng": 2.3708 } }
         ])).unwrap();
         wtxn.commit().unwrap();
 
@@ -3303,6 +3489,44 @@ mod tests {
         assert_eq!(Some(&2), results.get("number"));
 
         rtxn.commit().unwrap();
+    }
+
+    #[test]
+    fn incremental_update_without_changing_facet_distribution() {
+        let index = TempIndex::new();
+        index
+            .add_documents(documents!([
+                {"id": 0, "some_field": "aaa", "other_field": "aaa" },
+                {"id": 1, "some_field": "bbb", "other_field": "bbb" },
+            ]))
+            .unwrap();
+        {
+            let rtxn = index.read_txn().unwrap();
+            // count field distribution
+            let results = index.field_distribution(&rtxn).unwrap();
+            assert_eq!(Some(&2), results.get("id"));
+            assert_eq!(Some(&2), results.get("some_field"));
+            assert_eq!(Some(&2), results.get("other_field"));
+        }
+
+        let mut index = index;
+        index.index_documents_config.update_method = IndexDocumentsMethod::UpdateDocuments;
+
+        index
+            .add_documents(documents!([
+                {"id": 0, "other_field": "bbb" },
+                {"id": 1, "some_field": "ccc" },
+            ]))
+            .unwrap();
+
+        {
+            let rtxn = index.read_txn().unwrap();
+            // count field distribution
+            let results = index.field_distribution(&rtxn).unwrap();
+            assert_eq!(Some(&2), results.get("id"));
+            assert_eq!(Some(&2), results.get("some_field"));
+            assert_eq!(Some(&2), results.get("other_field"));
+        }
     }
 
     #[test]

@@ -1,0 +1,31 @@
+---
+source: crates/meilisearch/tests/settings/vectors.rs
+---
+{
+  "uid": "[uid]",
+  "batchUid": "[batchUid]",
+  "indexUid": "test",
+  "status": "failed",
+  "type": "settingsUpdate",
+  "canceledBy": null,
+  "details": {
+    "embedders": {
+      "test": {
+        "source": "ollama",
+        "model": "all-minilm",
+        "dimensions": 768,
+        "url": "http://rest.example/"
+      }
+    }
+  },
+  "error": {
+    "message": "Index `test`: Error while generating embeddings: user error: unsupported Ollama URL.\n  - For `ollama` sources, the URL must end with `/api/embed` or `/api/embeddings`\n  - Got `http://rest.example/`",
+    "code": "vector_embedding_error",
+    "type": "invalid_request",
+    "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+  },
+  "duration": "[duration]",
+  "enqueuedAt": "[enqueuedAt]",
+  "startedAt": "[startedAt]",
+  "finishedAt": "[finishedAt]"
+}

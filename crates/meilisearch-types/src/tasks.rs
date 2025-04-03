@@ -4,19 +4,19 @@ use std::fmt::{Display, Write};
 use std::str::FromStr;
 
 use enum_iterator::Sequence;
-use milli::update::new::indexer::document_changes::Progress;
 use milli::update::IndexDocumentsMethod;
 use milli::Object;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize, Serializer};
 use time::{Duration, OffsetDateTime};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::batches::BatchId;
 use crate::error::ResponseError;
 use crate::keys::Key;
 use crate::settings::{Settings, Unchecked};
-use crate::InstanceUid;
+use crate::{versioning, InstanceUid};
 
 pub type TaskId = u32;
 
@@ -41,62 +41,6 @@ pub struct Task {
     pub kind: KindWithContent,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TaskProgress {
-    pub current_step: &'static str,
-    pub finished_steps: u16,
-    pub total_steps: u16,
-    pub finished_substeps: Option<u32>,
-    pub total_substeps: Option<u32>,
-}
-
-impl Default for TaskProgress {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl TaskProgress {
-    pub fn new() -> Self {
-        Self {
-            current_step: "start",
-            finished_steps: 0,
-            total_steps: 1,
-            finished_substeps: None,
-            total_substeps: None,
-        }
-    }
-
-    pub fn update(&mut self, progress: Progress) -> TaskProgress {
-        if self.finished_steps > progress.finished_steps {
-            return *self;
-        }
-
-        if self.current_step != progress.step_name {
-            self.current_step = progress.step_name
-        }
-
-        self.total_steps = progress.total_steps;
-
-        if self.finished_steps < progress.finished_steps {
-            self.finished_substeps = None;
-            self.total_substeps = None;
-        }
-        self.finished_steps = progress.finished_steps;
-        if let Some((finished_substeps, total_substeps)) = progress.finished_total_substep {
-            if let Some(task_finished_substeps) = self.finished_substeps {
-                if task_finished_substeps > finished_substeps {
-                    return *self;
-                }
-            }
-            self.finished_substeps = Some(finished_substeps);
-            self.total_substeps = Some(total_substeps);
-        }
-        *self
-    }
-}
-
 impl Task {
     pub fn index_uid(&self) -> Option<&str> {
         use KindWithContent::*;
@@ -106,6 +50,7 @@ impl Task {
             | SnapshotCreation
             | TaskCancelation { .. }
             | TaskDeletion { .. }
+            | UpgradeDatabase { .. }
             | IndexSwap { .. } => None,
             DocumentAdditionOrUpdate { index_uid, .. }
             | DocumentEdition { index_uid, .. }
@@ -140,7 +85,8 @@ impl Task {
             | KindWithContent::TaskCancelation { .. }
             | KindWithContent::TaskDeletion { .. }
             | KindWithContent::DumpCreation { .. }
-            | KindWithContent::SnapshotCreation => None,
+            | KindWithContent::SnapshotCreation
+            | KindWithContent::UpgradeDatabase { .. } => None,
         }
     }
 }
@@ -206,9 +152,12 @@ pub enum KindWithContent {
         instance_uid: Option<InstanceUid>,
     },
     SnapshotCreation,
+    UpgradeDatabase {
+        from: (u32, u32, u32),
+    },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexSwap {
     pub indexes: (String, String),
@@ -231,6 +180,7 @@ impl KindWithContent {
             KindWithContent::TaskDeletion { .. } => Kind::TaskDeletion,
             KindWithContent::DumpCreation { .. } => Kind::DumpCreation,
             KindWithContent::SnapshotCreation => Kind::SnapshotCreation,
+            KindWithContent::UpgradeDatabase { .. } => Kind::UpgradeDatabase,
         }
     }
 
@@ -241,7 +191,8 @@ impl KindWithContent {
             DumpCreation { .. }
             | SnapshotCreation
             | TaskCancelation { .. }
-            | TaskDeletion { .. } => vec![],
+            | TaskDeletion { .. }
+            | UpgradeDatabase { .. } => vec![],
             DocumentAdditionOrUpdate { index_uid, .. }
             | DocumentEdition { index_uid, .. }
             | DocumentDeletion { index_uid, .. }
@@ -318,6 +269,14 @@ impl KindWithContent {
             }),
             KindWithContent::DumpCreation { .. } => Some(Details::Dump { dump_uid: None }),
             KindWithContent::SnapshotCreation => None,
+            KindWithContent::UpgradeDatabase { from } => Some(Details::UpgradeDatabase {
+                from: (from.0, from.1, from.2),
+                to: (
+                    versioning::VERSION_MAJOR.parse().unwrap(),
+                    versioning::VERSION_MINOR.parse().unwrap(),
+                    versioning::VERSION_PATCH.parse().unwrap(),
+                ),
+            }),
         }
     }
 
@@ -376,6 +335,14 @@ impl KindWithContent {
             }),
             KindWithContent::DumpCreation { .. } => Some(Details::Dump { dump_uid: None }),
             KindWithContent::SnapshotCreation => None,
+            KindWithContent::UpgradeDatabase { from } => Some(Details::UpgradeDatabase {
+                from: *from,
+                to: (
+                    versioning::VERSION_MAJOR.parse().unwrap(),
+                    versioning::VERSION_MINOR.parse().unwrap(),
+                    versioning::VERSION_PATCH.parse().unwrap(),
+                ),
+            }),
         }
     }
 }
@@ -416,13 +383,34 @@ impl From<&KindWithContent> for Option<Details> {
             }),
             KindWithContent::DumpCreation { .. } => Some(Details::Dump { dump_uid: None }),
             KindWithContent::SnapshotCreation => None,
+            KindWithContent::UpgradeDatabase { from } => Some(Details::UpgradeDatabase {
+                from: *from,
+                to: (
+                    versioning::VERSION_MAJOR.parse().unwrap(),
+                    versioning::VERSION_MINOR.parse().unwrap(),
+                    versioning::VERSION_PATCH.parse().unwrap(),
+                ),
+            }),
         }
     }
 }
 
+/// The status of a task.
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Sequence, PartialOrd, Ord,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    Sequence,
+    PartialOrd,
+    Ord,
+    ToSchema,
 )]
+#[schema(example = json!(Status::Processing))]
 #[serde(rename_all = "camelCase")]
 pub enum Status {
     Enqueued,
@@ -481,10 +469,23 @@ impl fmt::Display for ParseTaskStatusError {
 }
 impl std::error::Error for ParseTaskStatusError {}
 
+/// The type of the task.
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Sequence, PartialOrd, Ord,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    Sequence,
+    PartialOrd,
+    Ord,
+    ToSchema,
 )]
 #[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase", example = json!(enum_iterator::all::<Kind>().collect::<Vec<_>>()))]
 pub enum Kind {
     DocumentAdditionOrUpdate,
     DocumentEdition,
@@ -498,6 +499,7 @@ pub enum Kind {
     TaskDeletion,
     DumpCreation,
     SnapshotCreation,
+    UpgradeDatabase,
 }
 
 impl Kind {
@@ -514,6 +516,7 @@ impl Kind {
             | Kind::TaskCancelation
             | Kind::TaskDeletion
             | Kind::DumpCreation
+            | Kind::UpgradeDatabase
             | Kind::SnapshotCreation => false,
         }
     }
@@ -533,6 +536,7 @@ impl Display for Kind {
             Kind::TaskDeletion => write!(f, "taskDeletion"),
             Kind::DumpCreation => write!(f, "dumpCreation"),
             Kind::SnapshotCreation => write!(f, "snapshotCreation"),
+            Kind::UpgradeDatabase => write!(f, "upgradeDatabase"),
         }
     }
 }
@@ -564,6 +568,8 @@ impl FromStr for Kind {
             Ok(Kind::DumpCreation)
         } else if kind.eq_ignore_ascii_case("snapshotCreation") {
             Ok(Kind::SnapshotCreation)
+        } else if kind.eq_ignore_ascii_case("upgradeDatabase") {
+            Ok(Kind::UpgradeDatabase)
         } else {
             Err(ParseTaskKindError(kind.to_owned()))
         }
@@ -637,6 +643,10 @@ pub enum Details {
     IndexSwap {
         swaps: Vec<IndexSwap>,
     },
+    UpgradeDatabase {
+        from: (u32, u32, u32),
+        to: (u32, u32, u32),
+    },
 }
 
 impl Details {
@@ -657,6 +667,7 @@ impl Details {
             Self::SettingsUpdate { .. }
             | Self::IndexInfo { .. }
             | Self::Dump { .. }
+            | Self::UpgradeDatabase { .. }
             | Self::IndexSwap { .. } => (),
         }
 
@@ -717,7 +728,9 @@ pub fn serialize_duration<S: Serializer>(
 
 #[cfg(test)]
 mod tests {
-    use super::Details;
+    use std::str::FromStr;
+
+    use super::{Details, Kind};
     use crate::heed::types::SerdeJson;
     use crate::heed::{BytesDecode, BytesEncode};
 
@@ -732,5 +745,14 @@ mod tests {
         let deserialised = SerdeJson::<Details>::bytes_decode(&serialised).unwrap();
         meili_snap::snapshot!(format!("{:?}", details), @r###"TaskDeletion { matched_tasks: 1, deleted_tasks: None, original_filter: "hello" }"###);
         meili_snap::snapshot!(format!("{:?}", deserialised), @r###"TaskDeletion { matched_tasks: 1, deleted_tasks: None, original_filter: "hello" }"###);
+    }
+
+    #[test]
+    fn all_kind_can_be_from_str() {
+        for kind in enum_iterator::all::<Kind>() {
+            let s = kind.to_string();
+            let k = Kind::from_str(&s).map_err(|e| format!("Could not from_str {s}: {e}")).unwrap();
+            assert_eq!(kind, k, "{kind}.to_string() returned {s} which was parsed as {k}");
+        }
     }
 }

@@ -196,6 +196,10 @@ impl CompatV5ToV6 {
     pub fn features(&self) -> Result<Option<v6::RuntimeTogglableFeatures>> {
         Ok(None)
     }
+
+    pub fn network(&self) -> Result<Option<&v6::Network>> {
+        Ok(None)
+    }
 }
 
 pub enum CompatIndexV5ToV6 {
@@ -318,7 +322,16 @@ impl<T> From<v5::Settings<T>> for v6::Settings<v6::Unchecked> {
         v6::Settings {
             displayed_attributes: v6::Setting::from(settings.displayed_attributes).into(),
             searchable_attributes: v6::Setting::from(settings.searchable_attributes).into(),
-            filterable_attributes: settings.filterable_attributes.into(),
+            filterable_attributes: match settings.filterable_attributes {
+                v5::settings::Setting::Set(filterable_attributes) => v6::Setting::Set(
+                    filterable_attributes
+                        .into_iter()
+                        .map(v6::FilterableAttributesRule::Field)
+                        .collect(),
+                ),
+                v5::settings::Setting::Reset => v6::Setting::Reset,
+                v5::settings::Setting::NotSet => v6::Setting::NotSet,
+            },
             sortable_attributes: settings.sortable_attributes.into(),
             ranking_rules: {
                 match settings.ranking_rules {
@@ -382,6 +395,8 @@ impl<T> From<v5::Settings<T>> for v6::Settings<v6::Unchecked> {
             embedders: v6::Setting::NotSet,
             localized_attributes: v6::Setting::NotSet,
             search_cutoff_ms: v6::Setting::NotSet,
+            facet_search: v6::Setting::NotSet,
+            prefix_search: v6::Setting::NotSet,
             _kind: std::marker::PhantomData,
         }
     }

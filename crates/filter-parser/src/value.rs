@@ -52,7 +52,7 @@ fn quoted_by(quote: char, input: Span) -> IResult<Token> {
 }
 
 // word           = (alphanumeric | _ | - | .)+    except for reserved keywords
-pub fn word_not_keyword<'a>(input: Span<'a>) -> IResult<Token<'a>> {
+pub fn word_not_keyword<'a>(input: Span<'a>) -> IResult<'a, Token<'a>> {
     let (input, word): (_, Token<'a>) =
         take_while1(is_value_component)(input).map(|(s, t)| (s, t.into()))?;
     if is_keyword(word.value()) {

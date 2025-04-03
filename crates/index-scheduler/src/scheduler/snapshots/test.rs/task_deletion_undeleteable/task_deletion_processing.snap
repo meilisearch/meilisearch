@@ -1,0 +1,64 @@
+---
+source: crates/index-scheduler/src/scheduler/test.rs
+snapshot_kind: text
+---
+### Autobatching Enabled = true
+### Processing batch Some(0):
+[3,]
+{uid: 0, details: {"matchedTasks":2,"deletedTasks":null,"originalFilter":"test_query"}, stats: {"totalNbTasks":1,"status":{"processing":1},"types":{"taskDeletion":1},"indexUids":{}}, }
+----------------------------------------------------------------------
+### All Tasks:
+0 {uid: 0, status: enqueued, details: { primary_key: Some("mouse") }, kind: IndexCreation { index_uid: "catto", primary_key: Some("mouse") }}
+1 {uid: 1, status: enqueued, details: { received_documents: 1, indexed_documents: None }, kind: DocumentAdditionOrUpdate { index_uid: "catto", primary_key: None, method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000000, documents_count: 1, allow_index_creation: true }}
+2 {uid: 2, status: enqueued, details: { received_documents: 1, indexed_documents: None }, kind: DocumentAdditionOrUpdate { index_uid: "doggo", primary_key: Some("bone"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000001, documents_count: 1, allow_index_creation: true }}
+3 {uid: 3, status: enqueued, details: { matched_tasks: 2, deleted_tasks: None, original_filter: "test_query" }, kind: TaskDeletion { query: "test_query", tasks: RoaringBitmap<[0, 1]> }}
+----------------------------------------------------------------------
+### Status:
+enqueued [0,1,2,3,]
+----------------------------------------------------------------------
+### Kind:
+"documentAdditionOrUpdate" [1,2,]
+"indexCreation" [0,]
+"taskDeletion" [3,]
+----------------------------------------------------------------------
+### Index Tasks:
+catto [0,1,]
+doggo [2,]
+----------------------------------------------------------------------
+### Index Mapper:
+
+----------------------------------------------------------------------
+### Canceled By:
+
+----------------------------------------------------------------------
+### Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+----------------------------------------------------------------------
+### Started At:
+----------------------------------------------------------------------
+### Finished At:
+----------------------------------------------------------------------
+### All Batches:
+----------------------------------------------------------------------
+### Batch to tasks mapping:
+----------------------------------------------------------------------
+### Batches Status:
+----------------------------------------------------------------------
+### Batches Kind:
+----------------------------------------------------------------------
+### Batches Index Tasks:
+----------------------------------------------------------------------
+### Batches Enqueued At:
+----------------------------------------------------------------------
+### Batches Started At:
+----------------------------------------------------------------------
+### Batches Finished At:
+----------------------------------------------------------------------
+### File Store:
+00000000-0000-0000-0000-000000000000
+00000000-0000-0000-0000-000000000001
+
+----------------------------------------------------------------------

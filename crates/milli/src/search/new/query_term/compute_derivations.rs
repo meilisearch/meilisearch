@@ -215,7 +215,7 @@ pub fn partially_initialized_term_from_word(
     let mut zero_typo = None;
     let mut prefix_of = BTreeSet::new();
 
-    if fst.contains(word) {
+    if fst.contains(word) || ctx.index.exact_word_docids.get(ctx.txn, word)?.is_some() {
         zero_typo = Some(word_interned);
     }
 
@@ -418,7 +418,7 @@ fn split_best_frequency(
         let right = ctx.word_interner.insert(right.to_owned());
 
         if let Some(frequency) = ctx.get_db_word_pair_proximity_docids_len(None, left, right, 1)? {
-            if best.map_or(true, |(old, _, _)| frequency > old) {
+            if best.is_none_or(|(old, _, _)| frequency > old) {
                 best = Some((frequency, left, right));
             }
         }

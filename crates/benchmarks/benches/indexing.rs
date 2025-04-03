@@ -8,14 +8,16 @@ use bumpalo::Bump;
 use criterion::{criterion_group, criterion_main, Criterion};
 use milli::documents::PrimaryKey;
 use milli::heed::{EnvOpenOptions, RwTxn};
+use milli::progress::Progress;
 use milli::update::new::indexer;
-use milli::update::{IndexDocumentsMethod, IndexerConfig, Settings};
+use milli::update::{IndexerConfig, Settings};
 use milli::vector::EmbeddingConfigs;
-use milli::Index;
+use milli::{FilterableAttributesRule, Index};
 use rand::seq::SliceRandom;
 use rand_chacha::rand_core::SeedableRng;
 use roaring::RoaringBitmap;
 
+#[cfg(not(windows))]
 #[global_allocator]
 static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
@@ -33,10 +35,11 @@ fn setup_dir(path: impl AsRef<Path>) {
 fn setup_index() -> Index {
     let path = "benches.mmdb";
     setup_dir(path);
-    let mut options = EnvOpenOptions::new();
+    let options = EnvOpenOptions::new();
+    let mut options = options.read_txn_without_tls();
     options.map_size(100 * 1024 * 1024 * 1024); // 100 GB
     options.max_readers(100);
-    Index::new(options, path).unwrap()
+    Index::new(options, path, true).unwrap()
 }
 
 fn setup_settings<'t>(
@@ -55,7 +58,8 @@ fn setup_settings<'t>(
     let searchable_fields = searchable_fields.iter().map(|s| s.to_string()).collect();
     builder.set_searchable_fields(searchable_fields);
 
-    let filterable_fields = filterable_fields.iter().map(|s| s.to_string()).collect();
+    let filterable_fields =
+        filterable_fields.iter().map(|s| FilterableAttributesRule::Field(s.to_string())).collect();
     builder.set_filterable_fields(filterable_fields);
 
     let sortable_fields = sortable_fields.iter().map(|s| s.to_string()).collect();
@@ -136,10 +140,9 @@ fn indexing_songs_default(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer =
-                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_SONGS, "csv");
-                indexer.add_documents(&documents).unwrap();
+                indexer.replace_documents(&documents).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -150,13 +153,14 @@ fn indexing_songs_default(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -164,7 +168,7 @@ fn indexing_songs_default(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -202,10 +206,9 @@ fn reindexing_songs_default(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer =
-                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_SONGS, "csv");
-                indexer.add_documents(&documents).unwrap();
+                indexer.replace_documents(&documents).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -216,13 +219,14 @@ fn reindexing_songs_default(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -230,7 +234,7 @@ fn reindexing_songs_default(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -246,10 +250,9 @@ fn reindexing_songs_default(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer =
-                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_SONGS, "csv");
-                indexer.add_documents(&documents).unwrap();
+                indexer.replace_documents(&documents).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -260,13 +263,14 @@ fn reindexing_songs_default(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -274,7 +278,7 @@ fn reindexing_songs_default(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -314,10 +318,9 @@ fn deleting_songs_in_batches_default(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer =
-                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_SONGS, "csv");
-                indexer.add_documents(&documents).unwrap();
+                indexer.replace_documents(&documents).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -328,13 +331,14 @@ fn deleting_songs_in_batches_default(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -342,7 +346,7 @@ fn deleting_songs_in_batches_default(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -390,10 +394,9 @@ fn indexing_songs_in_three_batches_default(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer =
-                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_SONGS_1_2, "csv");
-                indexer.add_documents(&documents).unwrap();
+                indexer.replace_documents(&documents).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -404,13 +407,14 @@ fn indexing_songs_in_three_batches_default(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -418,7 +422,7 @@ fn indexing_songs_in_three_batches_default(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -434,10 +438,9 @@ fn indexing_songs_in_three_batches_default(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer =
-                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_SONGS_3_4, "csv");
-                indexer.add_documents(&documents).unwrap();
+                indexer.replace_documents(&documents).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -448,13 +451,14 @@ fn indexing_songs_in_three_batches_default(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -462,7 +466,7 @@ fn indexing_songs_in_three_batches_default(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -474,10 +478,9 @@ fn indexing_songs_in_three_batches_default(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer =
-                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_SONGS_4_4, "csv");
-                indexer.add_documents(&documents).unwrap();
+                indexer.replace_documents(&documents).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -488,13 +491,14 @@ fn indexing_songs_in_three_batches_default(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -502,7 +506,7 @@ fn indexing_songs_in_three_batches_default(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -540,11 +544,10 @@ fn indexing_songs_without_faceted_numbers(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer =
-                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_SONGS, "csv");
 
-                indexer.add_documents(&documents).unwrap();
+                indexer.replace_documents(&documents).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -555,13 +558,14 @@ fn indexing_songs_without_faceted_numbers(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -569,7 +573,7 @@ fn indexing_songs_without_faceted_numbers(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -607,10 +611,9 @@ fn indexing_songs_without_faceted_fields(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer =
-                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_SONGS, "csv");
-                indexer.add_documents(&documents).unwrap();
+                indexer.replace_documents(&documents).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -621,13 +624,14 @@ fn indexing_songs_without_faceted_fields(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -635,7 +639,7 @@ fn indexing_songs_without_faceted_fields(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -673,10 +677,9 @@ fn indexing_wiki(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer =
-                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_WIKI_ARTICLES, "csv");
-                indexer.add_documents(&documents).unwrap();
+                indexer.replace_documents(&documents).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -687,13 +690,14 @@ fn indexing_wiki(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -701,7 +705,7 @@ fn indexing_wiki(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -738,10 +742,9 @@ fn reindexing_wiki(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer =
-                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_WIKI_ARTICLES, "csv");
-                indexer.add_documents(&documents).unwrap();
+                indexer.replace_documents(&documents).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -752,13 +755,14 @@ fn reindexing_wiki(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -766,7 +770,7 @@ fn reindexing_wiki(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -782,10 +786,9 @@ fn reindexing_wiki(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer =
-                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_WIKI_ARTICLES, "csv");
-                indexer.add_documents(&documents).unwrap();
+                indexer.replace_documents(&documents).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -796,13 +799,14 @@ fn reindexing_wiki(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -810,7 +814,7 @@ fn reindexing_wiki(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -849,10 +853,9 @@ fn deleting_wiki_in_batches_default(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer =
-                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_WIKI_ARTICLES, "csv");
-                indexer.add_documents(&documents).unwrap();
+                indexer.replace_documents(&documents).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -863,13 +866,14 @@ fn deleting_wiki_in_batches_default(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -877,7 +881,7 @@ fn deleting_wiki_in_batches_default(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -924,11 +928,10 @@ fn indexing_wiki_in_three_batches(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer =
-                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let mut indexer = indexer::DocumentOperation::new();
                 let documents =
                     utils::documents_from(datasets_paths::SMOL_WIKI_ARTICLES_1_2, "csv");
-                indexer.add_documents(&documents).unwrap();
+                indexer.replace_documents(&documents).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -939,13 +942,14 @@ fn indexing_wiki_in_three_batches(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -953,7 +957,7 @@ fn indexing_wiki_in_three_batches(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -969,11 +973,10 @@ fn indexing_wiki_in_three_batches(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer =
-                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let mut indexer = indexer::DocumentOperation::new();
                 let documents =
                     utils::documents_from(datasets_paths::SMOL_WIKI_ARTICLES_3_4, "csv");
-                indexer.add_documents(&documents).unwrap();
+                indexer.replace_documents(&documents).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -984,13 +987,14 @@ fn indexing_wiki_in_three_batches(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -998,7 +1002,7 @@ fn indexing_wiki_in_three_batches(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -1010,11 +1014,10 @@ fn indexing_wiki_in_three_batches(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer =
-                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let mut indexer = indexer::DocumentOperation::new();
                 let documents =
                     utils::documents_from(datasets_paths::SMOL_WIKI_ARTICLES_4_4, "csv");
-                indexer.add_documents(&documents).unwrap();
+                indexer.replace_documents(&documents).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -1025,13 +1028,14 @@ fn indexing_wiki_in_three_batches(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -1039,7 +1043,7 @@ fn indexing_wiki_in_three_batches(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -1077,10 +1081,9 @@ fn indexing_movies_default(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer =
-                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::MOVIES, "json");
-                indexer.add_documents(&documents).unwrap();
+                indexer.replace_documents(&documents).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -1091,13 +1094,14 @@ fn indexing_movies_default(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -1105,7 +1109,7 @@ fn indexing_movies_default(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -1142,10 +1146,9 @@ fn reindexing_movies_default(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer =
-                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::MOVIES, "json");
-                indexer.add_documents(&documents).unwrap();
+                indexer.replace_documents(&documents).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -1156,13 +1159,14 @@ fn reindexing_movies_default(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -1170,7 +1174,7 @@ fn reindexing_movies_default(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -1186,10 +1190,9 @@ fn reindexing_movies_default(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer =
-                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::MOVIES, "json");
-                indexer.add_documents(&documents).unwrap();
+                indexer.replace_documents(&documents).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -1200,13 +1203,14 @@ fn reindexing_movies_default(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -1214,7 +1218,7 @@ fn reindexing_movies_default(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -1253,10 +1257,9 @@ fn deleting_movies_in_batches_default(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer =
-                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::MOVIES, "json");
-                indexer.add_documents(&documents).unwrap();
+                indexer.replace_documents(&documents).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -1267,13 +1270,14 @@ fn deleting_movies_in_batches_default(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -1281,7 +1285,7 @@ fn deleting_movies_in_batches_default(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -1321,6 +1325,7 @@ fn delete_documents_from_ids(index: Index, document_ids_to_delete: Vec<RoaringBi
         indexer::index(
             &mut wtxn,
             &index,
+            &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
             config.grenad_parameters(),
             &db_fields_ids_map,
             new_fields_ids_map,
@@ -1328,7 +1333,7 @@ fn delete_documents_from_ids(index: Index, document_ids_to_delete: Vec<RoaringBi
             &document_changes,
             EmbeddingConfigs::default(),
             &|| false,
-            &|_| (),
+            &Progress::default(),
         )
         .unwrap();
 
@@ -1364,10 +1369,9 @@ fn indexing_movies_in_three_batches(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer =
-                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::MOVIES_1_2, "json");
-                indexer.add_documents(&documents).unwrap();
+                indexer.replace_documents(&documents).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -1378,13 +1382,14 @@ fn indexing_movies_in_three_batches(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -1392,7 +1397,7 @@ fn indexing_movies_in_three_batches(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -1408,10 +1413,9 @@ fn indexing_movies_in_three_batches(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer =
-                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::MOVIES_3_4, "json");
-                indexer.add_documents(&documents).unwrap();
+                indexer.replace_documents(&documents).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -1422,13 +1426,14 @@ fn indexing_movies_in_three_batches(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -1436,7 +1441,7 @@ fn indexing_movies_in_three_batches(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -1448,10 +1453,9 @@ fn indexing_movies_in_three_batches(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer =
-                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::MOVIES_4_4, "json");
-                indexer.add_documents(&documents).unwrap();
+                indexer.replace_documents(&documents).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -1462,13 +1466,14 @@ fn indexing_movies_in_three_batches(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -1476,7 +1481,7 @@ fn indexing_movies_in_three_batches(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -1537,10 +1542,9 @@ fn indexing_nested_movies_default(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer =
-                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::NESTED_MOVIES, "json");
-                indexer.add_documents(&documents).unwrap();
+                indexer.replace_documents(&documents).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -1551,13 +1555,14 @@ fn indexing_nested_movies_default(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -1565,7 +1570,7 @@ fn indexing_nested_movies_default(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -1627,10 +1632,9 @@ fn deleting_nested_movies_in_batches_default(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer =
-                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::NESTED_MOVIES, "json");
-                indexer.add_documents(&documents).unwrap();
+                indexer.replace_documents(&documents).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -1641,13 +1645,14 @@ fn deleting_nested_movies_in_batches_default(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -1655,7 +1660,7 @@ fn deleting_nested_movies_in_batches_default(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -1709,10 +1714,9 @@ fn indexing_nested_movies_without_faceted_fields(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer =
-                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::NESTED_MOVIES, "json");
-                indexer.add_documents(&documents).unwrap();
+                indexer.replace_documents(&documents).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -1723,13 +1727,14 @@ fn indexing_nested_movies_without_faceted_fields(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -1737,7 +1742,7 @@ fn indexing_nested_movies_without_faceted_fields(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -1775,10 +1780,9 @@ fn indexing_geo(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer =
-                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_ALL_COUNTRIES, "jsonl");
-                indexer.add_documents(&documents).unwrap();
+                indexer.replace_documents(&documents).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -1789,13 +1793,14 @@ fn indexing_geo(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -1803,7 +1808,7 @@ fn indexing_geo(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -1840,10 +1845,9 @@ fn reindexing_geo(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer =
-                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_ALL_COUNTRIES, "jsonl");
-                indexer.add_documents(&documents).unwrap();
+                indexer.replace_documents(&documents).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -1854,13 +1858,14 @@ fn reindexing_geo(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -1868,7 +1873,7 @@ fn reindexing_geo(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -1884,10 +1889,9 @@ fn reindexing_geo(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer =
-                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_ALL_COUNTRIES, "jsonl");
-                indexer.add_documents(&documents).unwrap();
+                indexer.replace_documents(&documents).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -1898,13 +1902,14 @@ fn reindexing_geo(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -1912,7 +1917,7 @@ fn reindexing_geo(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 
@@ -1951,10 +1956,9 @@ fn deleting_geo_in_batches_default(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer =
-                    indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+                let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_ALL_COUNTRIES, "jsonl");
-                indexer.add_documents(&documents).unwrap();
+                indexer.replace_documents(&documents).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -1965,13 +1969,14 @@ fn deleting_geo_in_batches_default(c: &mut Criterion) {
                         None,
                         &mut new_fields_ids_map,
                         &|| false,
-                        &|_progress| (),
+                        Progress::default(),
                     )
                     .unwrap();
 
                 indexer::index(
                     &mut wtxn,
                     &index,
+                    &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -1979,7 +1984,7 @@ fn deleting_geo_in_batches_default(c: &mut Criterion) {
                     &document_changes,
                     EmbeddingConfigs::default(),
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
                 .unwrap();
 

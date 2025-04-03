@@ -58,9 +58,9 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
         .map(|s| s.iter().map(String::as_str).collect());
     let old_dictionary: Option<Vec<_>> =
         settings_diff.old.dictionary.as_ref().map(|s| s.iter().map(String::as_str).collect());
-    let del_builder =
+    let mut del_builder =
         tokenizer_builder(old_stop_words, old_separators.as_deref(), old_dictionary.as_deref());
-    let del_tokenizer = del_builder.into_tokenizer();
+    let del_tokenizer = del_builder.build();
 
     let new_stop_words = settings_diff.new.stop_words.as_ref();
     let new_separators: Option<Vec<_>> = settings_diff
@@ -70,9 +70,9 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
         .map(|s| s.iter().map(String::as_str).collect());
     let new_dictionary: Option<Vec<_>> =
         settings_diff.new.dictionary.as_ref().map(|s| s.iter().map(String::as_str).collect());
-    let add_builder =
+    let mut add_builder =
         tokenizer_builder(new_stop_words, new_separators.as_deref(), new_dictionary.as_deref());
-    let add_tokenizer = add_builder.into_tokenizer();
+    let add_tokenizer = add_builder.build();
 
     // iterate over documents.
     let mut cursor = obkv_documents.into_cursor()?;
@@ -150,9 +150,14 @@ fn searchable_fields_changed(
     obkv: &KvReader<FieldId>,
     settings_diff: &InnerIndexSettingsDiff,
 ) -> bool {
-    let searchable_fields = &settings_diff.new.searchable_fields_ids;
     for (field_id, field_bytes) in obkv.iter() {
-        if searchable_fields.contains(&field_id) {
+        let Some(metadata) = settings_diff.new.fields_ids_map.metadata(field_id) else {
+            // If the field id is not in the fields ids map, skip it.
+            // This happens for the vectors sub-fields. for example:
+            // "_vectors": { "manual": [1, 2, 3]} -> "_vectors.manual" is not registered.
+            continue;
+        };
+        if metadata.is_searchable() {
             let del_add = KvReaderDelAdd::from_slice(field_bytes);
             match (del_add.get(DelAdd::Deletion), del_add.get(DelAdd::Addition)) {
                 // if both fields are None, check the next field.
@@ -200,8 +205,14 @@ fn tokens_from_document<'a>(
     buffers.obkv_buffer.clear();
     let mut document_writer = KvWriterU16::new(&mut buffers.obkv_buffer);
     for (field_id, field_bytes) in obkv.iter() {
+        let Some(metadata) = settings.fields_ids_map.metadata(field_id) else {
+            // If the field id is not in the fields ids map, skip it.
+            // This happens for the vectors sub-fields. for example:
+            // "_vectors": { "manual": [1, 2, 3]} -> "_vectors.manual" is not registered.
+            continue;
+        };
         // if field is searchable.
-        if settings.searchable_fields_ids.contains(&field_id) {
+        if metadata.is_searchable() {
             // extract deletion or addition only.
             if let Some(field_bytes) = KvReaderDelAdd::from_slice(field_bytes).get(del_add) {
                 // parse json.
@@ -216,7 +227,7 @@ fn tokens_from_document<'a>(
                 buffers.field_buffer.clear();
                 if let Some(field) = json_to_string(&value, &mut buffers.field_buffer) {
                     // create an iterator of token with their positions.
-                    let locales = settings.localized_searchable_fields_ids.locales(field_id);
+                    let locales = metadata.locales(&settings.localized_attributes_rules);
                     let tokens = process_tokens(tokenizer.tokenize_with_allow_list(field, locales))
                         .take_while(|(p, _)| (*p as u32) < max_positions_per_attributes);
 

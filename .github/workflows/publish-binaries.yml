@@ -3,7 +3,7 @@ name: Publish binaries to GitHub release
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 2 * * *' # Every day at 2:00am
+    - cron: "0 2 * * *" # Every day at 2:00am
   release:
     types: [published]
 
@@ -37,26 +37,26 @@ jobs:
     runs-on: ubuntu-latest
     needs: check-version
     container:
-      # Use ubuntu-20.04 to compile with glibc 2.28
-      image: ubuntu:20.04
+      # Use ubuntu-22.04 to compile with glibc 2.35
+      image: ubuntu:22.04
     steps:
-    - uses: actions/checkout@v3
-    - name: Install needed dependencies
-      run: |
-        apt-get update && apt-get install -y curl
-        apt-get install build-essential -y
-    - uses: dtolnay/rust-toolchain@1.79
-    - name: Build
-      run: cargo build --release --locked
-    # No need to upload binaries for dry run (cron)
-    - name: Upload binaries to release
-      if: github.event_name == 'release'
-      uses: svenstaro/upload-release-action@2.7.0
-      with:
-        repo_token: ${{ secrets.MEILI_BOT_GH_PAT }}
-        file: target/release/meilisearch
-        asset_name: meilisearch-linux-amd64
-        tag: ${{ github.ref }}
+      - uses: actions/checkout@v3
+      - name: Install needed dependencies
+        run: |
+          apt-get update && apt-get install -y curl
+          apt-get install build-essential -y
+      - uses: dtolnay/rust-toolchain@1.85
+      - name: Build
+        run: cargo build --release --locked
+      # No need to upload binaries for dry run (cron)
+      - name: Upload binaries to release
+        if: github.event_name == 'release'
+        uses: svenstaro/upload-release-action@2.7.0
+        with:
+          repo_token: ${{ secrets.MEILI_BOT_GH_PAT }}
+          file: target/release/meilisearch
+          asset_name: meilisearch-linux-amd64
+          tag: ${{ github.ref }}
 
   publish-macos-windows:
     name: Publish binary for ${{ matrix.os }}
@@ -74,19 +74,19 @@ jobs:
             artifact_name: meilisearch.exe
             asset_name: meilisearch-windows-amd64.exe
     steps:
-    - uses: actions/checkout@v3
-    - uses: dtolnay/rust-toolchain@1.79
-    - name: Build
-      run: cargo build --release --locked
-    # No need to upload binaries for dry run (cron)
-    - name: Upload binaries to release
-      if: github.event_name == 'release'
-      uses: svenstaro/upload-release-action@2.7.0
-      with:
-        repo_token: ${{ secrets.MEILI_BOT_GH_PAT }}
-        file: target/release/${{ matrix.artifact_name }}
-        asset_name: ${{ matrix.asset_name }}
-        tag: ${{ github.ref }}
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@1.85
+      - name: Build
+        run: cargo build --release --locked
+      # No need to upload binaries for dry run (cron)
+      - name: Upload binaries to release
+        if: github.event_name == 'release'
+        uses: svenstaro/upload-release-action@2.7.0
+        with:
+          repo_token: ${{ secrets.MEILI_BOT_GH_PAT }}
+          file: target/release/${{ matrix.artifact_name }}
+          asset_name: ${{ matrix.asset_name }}
+          tag: ${{ github.ref }}
 
   publish-macos-apple-silicon:
     name: Publish binary for macOS silicon
@@ -101,7 +101,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
       - name: Installing Rust toolchain
-        uses: dtolnay/rust-toolchain@1.79
+        uses: dtolnay/rust-toolchain@1.85
         with:
           profile: minimal
           target: ${{ matrix.target }}
@@ -127,8 +127,8 @@ jobs:
     env:
       DEBIAN_FRONTEND: noninteractive
     container:
-      # Use ubuntu-20.04 to compile with glibc 2.28
-      image: ubuntu:20.04
+      # Use ubuntu-22.04 to compile with glibc 2.35
+      image: ubuntu:22.04
     strategy:
       matrix:
         include:
@@ -148,7 +148,7 @@ jobs:
           add-apt-repository "deb [arch=$(dpkg --print-architecture)] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
           apt-get update -y && apt-get install -y docker-ce
       - name: Installing Rust toolchain
-        uses: dtolnay/rust-toolchain@1.79
+        uses: dtolnay/rust-toolchain@1.85
         with:
           profile: minimal
           target: ${{ matrix.target }}

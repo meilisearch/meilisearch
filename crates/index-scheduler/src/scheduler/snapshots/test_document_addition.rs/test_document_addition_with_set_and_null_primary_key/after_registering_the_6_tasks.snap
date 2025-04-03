@@ -1,0 +1,68 @@
+---
+source: crates/index-scheduler/src/scheduler/test_document_addition.rs
+snapshot_kind: text
+---
+### Autobatching Enabled = true
+### Processing batch None:
+[]
+----------------------------------------------------------------------
+### All Tasks:
+0 {uid: 0, status: enqueued, details: { received_documents: 1, indexed_documents: None }, kind: DocumentAdditionOrUpdate { index_uid: "doggos", primary_key: None, method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000000, documents_count: 1, allow_index_creation: true }}
+1 {uid: 1, status: enqueued, details: { received_documents: 1, indexed_documents: None }, kind: DocumentAdditionOrUpdate { index_uid: "doggos", primary_key: Some("bork"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000001, documents_count: 1, allow_index_creation: true }}
+2 {uid: 2, status: enqueued, details: { received_documents: 1, indexed_documents: None }, kind: DocumentAdditionOrUpdate { index_uid: "doggos", primary_key: Some("paw"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000002, documents_count: 1, allow_index_creation: true }}
+3 {uid: 3, status: enqueued, details: { received_documents: 1, indexed_documents: None }, kind: DocumentAdditionOrUpdate { index_uid: "doggos", primary_key: None, method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000003, documents_count: 1, allow_index_creation: true }}
+4 {uid: 4, status: enqueued, details: { received_documents: 1, indexed_documents: None }, kind: DocumentAdditionOrUpdate { index_uid: "doggos", primary_key: None, method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000004, documents_count: 1, allow_index_creation: true }}
+5 {uid: 5, status: enqueued, details: { received_documents: 1, indexed_documents: None }, kind: DocumentAdditionOrUpdate { index_uid: "doggos", primary_key: Some("paw"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000005, documents_count: 1, allow_index_creation: true }}
+----------------------------------------------------------------------
+### Status:
+enqueued [0,1,2,3,4,5,]
+----------------------------------------------------------------------
+### Kind:
+"documentAdditionOrUpdate" [0,1,2,3,4,5,]
+----------------------------------------------------------------------
+### Index Tasks:
+doggos [0,1,2,3,4,5,]
+----------------------------------------------------------------------
+### Index Mapper:
+
+----------------------------------------------------------------------
+### Canceled By:
+
+----------------------------------------------------------------------
+### Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+[timestamp] [4,]
+[timestamp] [5,]
+----------------------------------------------------------------------
+### Started At:
+----------------------------------------------------------------------
+### Finished At:
+----------------------------------------------------------------------
+### All Batches:
+----------------------------------------------------------------------
+### Batch to tasks mapping:
+----------------------------------------------------------------------
+### Batches Status:
+----------------------------------------------------------------------
+### Batches Kind:
+----------------------------------------------------------------------
+### Batches Index Tasks:
+----------------------------------------------------------------------
+### Batches Enqueued At:
+----------------------------------------------------------------------
+### Batches Started At:
+----------------------------------------------------------------------
+### Batches Finished At:
+----------------------------------------------------------------------
+### File Store:
+00000000-0000-0000-0000-000000000000
+00000000-0000-0000-0000-000000000001
+00000000-0000-0000-0000-000000000002
+00000000-0000-0000-0000-000000000003
+00000000-0000-0000-0000-000000000004
+00000000-0000-0000-0000-000000000005
+
+----------------------------------------------------------------------

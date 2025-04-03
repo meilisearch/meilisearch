@@ -7,17 +7,25 @@ use aweb::rt::task::JoinError;
 use convert_case::Casing;
 use milli::heed::{Error as HeedError, MdbError};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
 pub struct ResponseError {
     #[serde(skip)]
     pub code: StatusCode,
+    /// The error message.
     pub message: String,
+    /// The error code.
+    #[schema(value_type = Code)]
     #[serde(rename = "code")]
     error_code: String,
+    /// The error type.
+    #[schema(value_type = ErrorType)]
     #[serde(rename = "type")]
     error_type: String,
+    /// A link to the documentation about this specific error.
     #[serde(rename = "link")]
     error_link: String,
 }
@@ -97,7 +105,9 @@ pub trait ErrorCode {
 }
 
 #[allow(clippy::enum_variant_names)]
-enum ErrorType {
+#[derive(ToSchema)]
+#[schema(rename_all = "snake_case")]
+pub enum ErrorType {
     Internal,
     InvalidRequest,
     Auth,
@@ -129,7 +139,8 @@ impl fmt::Display for ErrorType {
 /// `MyErrorCode::default().error_code()`.
 macro_rules! make_error_codes {
     ($($code_ident:ident, $err_type:ident, $status:ident);*) => {
-        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, ToSchema)]
+        #[schema(rename_all = "snake_case")]
         pub enum Code {
             $($code_ident),*
         }
@@ -230,10 +241,12 @@ InvalidDocumentGeoField               , InvalidRequest       , BAD_REQUEST ;
 InvalidVectorDimensions               , InvalidRequest       , BAD_REQUEST ;
 InvalidVectorsType                    , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentId                     , InvalidRequest       , BAD_REQUEST ;
+InvalidDocumentIds                    , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentLimit                  , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentOffset                 , InvalidRequest       , BAD_REQUEST ;
-InvalidEmbedder                       , InvalidRequest       , BAD_REQUEST ;
-InvalidHybridQuery                    , InvalidRequest       , BAD_REQUEST ;
+InvalidSearchEmbedder                 , InvalidRequest       , BAD_REQUEST ;
+InvalidSimilarEmbedder                , InvalidRequest       , BAD_REQUEST ;
+InvalidSearchHybridQuery              , InvalidRequest       , BAD_REQUEST ;
 InvalidIndexLimit                     , InvalidRequest       , BAD_REQUEST ;
 InvalidIndexOffset                    , InvalidRequest       , BAD_REQUEST ;
 InvalidIndexPrimaryKey                , InvalidRequest       , BAD_REQUEST ;
@@ -248,7 +261,13 @@ InvalidMultiSearchMergeFacets         , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchQueryFacets         , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchQueryPagination     , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchQueryRankingRules   , InvalidRequest       , BAD_REQUEST ;
+InvalidMultiSearchQueryPosition       , InvalidRequest       , BAD_REQUEST ;
+InvalidMultiSearchRemote              , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchWeight              , InvalidRequest       , BAD_REQUEST ;
+InvalidNetworkRemotes                 , InvalidRequest       , BAD_REQUEST ;
+InvalidNetworkSelf                    , InvalidRequest       , BAD_REQUEST ;
+InvalidNetworkSearchApiKey            , InvalidRequest       , BAD_REQUEST ;
+InvalidNetworkUrl                     , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchAttributesToSearchOn     , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchAttributesToCrop         , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchAttributesToHighlight    , InvalidRequest       , BAD_REQUEST ;
@@ -263,6 +282,7 @@ InvalidSearchCropMarker               , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchFacets                   , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchSemanticRatio            , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchLocales                  , InvalidRequest       , BAD_REQUEST ;
+InvalidFacetSearchExhaustiveFacetCount, InvalidRequest       , BAD_REQUEST ;
 InvalidFacetSearchFacetName           , InvalidRequest       , BAD_REQUEST ;
 InvalidSimilarId                      , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchFilter                   , InvalidRequest       , BAD_REQUEST ;
@@ -279,6 +299,7 @@ InvalidSearchPage                     , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchQ                        , InvalidRequest       , BAD_REQUEST ;
 InvalidFacetSearchQuery               , InvalidRequest       , BAD_REQUEST ;
 InvalidFacetSearchName                , InvalidRequest       , BAD_REQUEST ;
+FacetSearchDisabled                   , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchVector                   , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchShowMatchesPosition      , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchShowRankingScore         , InvalidRequest       , BAD_REQUEST ;
@@ -290,6 +311,8 @@ InvalidSearchDistinct                 , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsDisplayedAttributes    , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsDistinctAttribute      , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsProximityPrecision     , InvalidRequest       , BAD_REQUEST ;
+InvalidSettingsFacetSearch            , InvalidRequest       , BAD_REQUEST ;
+InvalidSettingsPrefixSearch           , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsFaceting               , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsFilterableAttributes   , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsPagination             , InvalidRequest       , BAD_REQUEST ;
@@ -336,14 +359,22 @@ MissingDocumentId                     , InvalidRequest       , BAD_REQUEST ;
 MissingFacetSearchFacetName           , InvalidRequest       , BAD_REQUEST ;
 MissingIndexUid                       , InvalidRequest       , BAD_REQUEST ;
 MissingMasterKey                      , Auth                 , UNAUTHORIZED ;
+MissingNetworkUrl                     , InvalidRequest       , BAD_REQUEST ;
 MissingPayload                        , InvalidRequest       , BAD_REQUEST ;
 MissingSearchHybrid                   , InvalidRequest       , BAD_REQUEST ;
 MissingSwapIndexes                    , InvalidRequest       , BAD_REQUEST ;
 MissingTaskFilters                    , InvalidRequest       , BAD_REQUEST ;
 NoSpaceLeftOnDevice                   , System               , UNPROCESSABLE_ENTITY;
 PayloadTooLarge                       , InvalidRequest       , PAYLOAD_TOO_LARGE ;
+RemoteBadResponse                     , System               , BAD_GATEWAY ;
+RemoteBadRequest                      , InvalidRequest       , BAD_REQUEST ;
+RemoteCouldNotSendRequest             , System               , BAD_GATEWAY ;
+RemoteInvalidApiKey                   , Auth                 , FORBIDDEN ;
+RemoteRemoteError                     , System               , BAD_GATEWAY ;
+RemoteTimeout                         , System               , BAD_GATEWAY ;
 TooManySearchRequests                 , System               , SERVICE_UNAVAILABLE ;
 TaskNotFound                          , InvalidRequest       , NOT_FOUND ;
+TaskFileNotFound                      , InvalidRequest       , NOT_FOUND ;
 BatchNotFound                         , InvalidRequest       , NOT_FOUND ;
 TooManyOpenFiles                      , System               , UNPROCESSABLE_ENTITY ;
 TooManyVectors                        , InvalidRequest       , BAD_REQUEST ;
@@ -376,7 +407,7 @@ impl ErrorCode for milli::Error {
                 match error {
                     // TODO: wait for spec for new error codes.
                     UserError::SerdeJson(_)
-                    | UserError::InvalidLmdbOpenOptions
+                    | UserError::EnvAlreadyOpened
                     | UserError::DocumentLimitReached
                     | UserError::UnknownInternalDocumentId { .. } => Code::Internal,
                     UserError::InvalidStoreFile => Code::InvalidStoreFile,
@@ -385,6 +416,7 @@ impl ErrorCode for milli::Error {
                     UserError::AttributeLimitReached => Code::MaxFieldsLimitExceeded,
                     UserError::InvalidFilter(_) => Code::InvalidSearchFilter,
                     UserError::InvalidFilterExpression(..) => Code::InvalidSearchFilter,
+                    UserError::FilterOperatorNotAllowed { .. } => Code::InvalidSearchFilter,
                     UserError::MissingDocumentId { .. } => Code::MissingDocumentId,
                     UserError::InvalidDocumentId { .. } | UserError::TooManyDocumentIds { .. } => {
                         Code::InvalidDocumentId
@@ -399,9 +431,10 @@ impl ErrorCode for milli::Error {
                     | UserError::InvalidUrl { .. }
                     | UserError::InvalidSettingsDocumentTemplateMaxBytes { .. }
                     | UserError::InvalidPrompt(_)
-                    | UserError::InvalidDisableBinaryQuantization { .. } => {
-                        Code::InvalidSettingsEmbedders
-                    }
+                    | UserError::InvalidDisableBinaryQuantization { .. }
+                    | UserError::InvalidSourceForNested { .. }
+                    | UserError::MissingSourceForNested { .. }
+                    | UserError::InvalidSettingsEmbedder { .. } => Code::InvalidSettingsEmbedders,
                     UserError::TooManyEmbedders(_) => Code::InvalidSettingsEmbedders,
                     UserError::InvalidPromptForEmbeddings(..) => Code::InvalidSettingsEmbedders,
                     UserError::NoPrimaryKeyCandidateFound => Code::IndexPrimaryKeyNoCandidateFound,
@@ -429,7 +462,8 @@ impl ErrorCode for milli::Error {
                     UserError::InvalidMinTypoWordLenSetting(_, _) => {
                         Code::InvalidSettingsTypoTolerance
                     }
-                    UserError::InvalidEmbedder(_) => Code::InvalidEmbedder,
+                    UserError::InvalidSearchEmbedder(_) => Code::InvalidSearchEmbedder,
+                    UserError::InvalidSimilarEmbedder(_) => Code::InvalidSimilarEmbedder,
                     UserError::VectorEmbeddingError(_) | UserError::DocumentEmbeddingError(_) => {
                         Code::VectorEmbeddingError
                     }
@@ -470,8 +504,7 @@ impl ErrorCode for HeedError {
             HeedError::Mdb(_)
             | HeedError::Encoding(_)
             | HeedError::Decoding(_)
-            | HeedError::DatabaseClosing
-            | HeedError::BadOpenOptions { .. } => Code::Internal,
+            | HeedError::EnvAlreadyOpened => Code::Internal,
         }
     }
 }
@@ -547,7 +580,7 @@ impl fmt::Display for deserr_codes::InvalidSimilarId {
             "the value of `id` is invalid. \
             A document identifier can be of type integer or string, \
             only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_), \
-            and can not be more than 512 bytes."
+            and can not be more than 511 bytes."
         )
     }
 }
@@ -564,6 +597,18 @@ impl fmt::Display for deserr_codes::InvalidSearchRankingScoreThreshold {
 impl fmt::Display for deserr_codes::InvalidSimilarRankingScoreThreshold {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         deserr_codes::InvalidSearchRankingScoreThreshold.fmt(f)
+    }
+}
+
+impl fmt::Display for deserr_codes::InvalidNetworkUrl {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "the value of `url` is invalid, expected a string.")
+    }
+}
+
+impl fmt::Display for deserr_codes::InvalidNetworkSearchApiKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "the value of `searchApiKey` is invalid, expected a string.")
     }
 }
 

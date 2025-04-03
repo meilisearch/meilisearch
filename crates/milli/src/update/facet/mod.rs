@@ -79,22 +79,30 @@ pub const FACET_MIN_LEVEL_SIZE: u8 = 5;
 use std::collections::BTreeSet;
 use std::fs::File;
 use std::io::BufReader;
+use std::ops::Bound;
 
 use grenad::Merger;
 use heed::types::{Bytes, DecodeIgnore};
+use heed::BytesDecode as _;
+use roaring::RoaringBitmap;
 use time::OffsetDateTime;
 use tracing::debug;
 
 use self::incremental::FacetsUpdateIncremental;
+use super::settings::{InnerIndexSettings, InnerIndexSettingsDiff};
 use super::{FacetsUpdateBulk, MergeDeladdBtreesetString, MergeDeladdCboRoaringBitmaps};
 use crate::facet::FacetType;
-use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec, FacetGroupValueCodec};
+use crate::heed_codec::facet::{
+    FacetGroupKey, FacetGroupKeyCodec, FacetGroupValueCodec, OrderedF64Codec,
+};
 use crate::heed_codec::BytesRefCodec;
+use crate::search::facet::get_highest_level;
 use crate::update::del_add::{DelAdd, KvReaderDelAdd};
 use crate::{try_split_array_at, FieldId, Index, Result};
 
 pub mod bulk;
 pub mod incremental;
+pub mod new_incremental;
 
 /// A builder used to add new elements to the `facet_id_string_docids` or `facet_id_f64_docids` databases.
 ///
@@ -140,7 +148,11 @@ impl<'i> FacetsUpdate<'i> {
         }
     }
 
-    pub fn execute(self, wtxn: &mut heed::RwTxn<'_>) -> Result<()> {
+    pub fn execute(
+        self,
+        wtxn: &mut heed::RwTxn<'_>,
+        new_settings: &InnerIndexSettings,
+    ) -> Result<()> {
         if self.data_size == 0 {
             return Ok(());
         }
@@ -149,8 +161,7 @@ impl<'i> FacetsUpdate<'i> {
 
         // See self::comparison_bench::benchmark_facet_indexing
         if self.data_size >= (self.database.len(wtxn)? / 500) {
-            let field_ids =
-                self.index.faceted_fields_ids(wtxn)?.iter().copied().collect::<Vec<_>>();
+            let field_ids = facet_levels_field_ids(new_settings);
             let bulk_update = FacetsUpdateBulk::new(
                 self.index,
                 field_ids,
@@ -170,6 +181,14 @@ impl<'i> FacetsUpdate<'i> {
                 self.max_group_size,
             );
             incremental_update.execute(wtxn)?;
+        }
+
+        if !self.index.facet_search(wtxn)? {
+            // If facet search is disabled, we don't need to compute facet search databases.
+            // We clear the facet search databases.
+            self.index.facet_id_string_fst.clear(wtxn)?;
+            self.index.facet_id_normalized_string_strings.clear(wtxn)?;
+            return Ok(());
         }
 
         match self.normalized_delta_data {
@@ -276,6 +295,53 @@ fn index_facet_search(
     Ok(())
 }
 
+/// Clear all the levels greater than 0 for given field ids.
+pub fn clear_facet_levels<'a, I>(
+    wtxn: &mut heed::RwTxn<'_>,
+    db: &heed::Database<FacetGroupKeyCodec<BytesRefCodec>, DecodeIgnore>,
+    field_ids: I,
+) -> Result<()>
+where
+    I: IntoIterator<Item = &'a FieldId>,
+{
+    for field_id in field_ids {
+        let field_id = *field_id;
+        let left = FacetGroupKey::<&[u8]> { field_id, level: 1, left_bound: &[] };
+        let right = FacetGroupKey::<&[u8]> { field_id, level: u8::MAX, left_bound: &[] };
+        let range = left..=right;
+        db.delete_range(wtxn, &range).map(drop)?;
+    }
+    Ok(())
+}
+
+pub fn clear_facet_levels_based_on_settings_diff(
+    wtxn: &mut heed::RwTxn<'_>,
+    index: &Index,
+    settings_diff: &InnerIndexSettingsDiff,
+) -> Result<()> {
+    let new_field_ids: BTreeSet<_> = facet_levels_field_ids(&settings_diff.new);
+    let old_field_ids: BTreeSet<_> = facet_levels_field_ids(&settings_diff.old);
+
+    let field_ids_to_clear: Vec<_> = old_field_ids.difference(&new_field_ids).copied().collect();
+    clear_facet_levels(wtxn, &index.facet_id_string_docids.remap_types(), &field_ids_to_clear)?;
+    clear_facet_levels(wtxn, &index.facet_id_f64_docids.remap_types(), &field_ids_to_clear)?;
+    Ok(())
+}
+
+fn facet_levels_field_ids<B>(settings: &InnerIndexSettings) -> B
+where
+    B: FromIterator<FieldId>,
+{
+    settings
+        .fields_ids_map
+        .iter_id_metadata()
+        .filter(|(_, metadata)| {
+            metadata.require_facet_level_database(&settings.filterable_attributes_rules)
+        })
+        .map(|(id, _)| id)
+        .collect()
+}
+
 #[cfg(test)]
 pub(crate) mod test_helpers {
     use std::cell::Cell;
@@ -286,7 +352,7 @@ pub(crate) mod test_helpers {
 
     use grenad::MergerBuilder;
     use heed::types::Bytes;
-    use heed::{BytesDecode, BytesEncode, Env, RoTxn, RwTxn};
+    use heed::{BytesDecode, BytesEncode, Env, RoTxn, RwTxn, WithoutTls};
     use roaring::RoaringBitmap;
 
     use super::bulk::FacetsUpdateBulkInner;
@@ -324,7 +390,7 @@ pub(crate) mod test_helpers {
         for<'a> BoundCodec:
             BytesEncode<'a> + BytesDecode<'a, DItem = <BoundCodec as BytesEncode<'a>>::EItem>,
     {
-        pub env: Env,
+        pub env: Env<WithoutTls>,
         pub content: heed::Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
         pub group_size: Cell<u8>,
         pub min_level_size: Cell<u8>,
@@ -338,35 +404,6 @@ pub(crate) mod test_helpers {
         for<'a> BoundCodec:
             BytesEncode<'a> + BytesDecode<'a, DItem = <BoundCodec as BytesEncode<'a>>::EItem>,
     {
-        #[cfg(all(test, fuzzing))]
-        pub fn open_from_tempdir(
-            tempdir: Rc<tempfile::TempDir>,
-            group_size: u8,
-            max_group_size: u8,
-            min_level_size: u8,
-        ) -> FacetIndex<BoundCodec> {
-            let group_size = std::cmp::min(16, std::cmp::max(group_size, 2)); // 2 <= x <= 16
-            let max_group_size = std::cmp::min(16, std::cmp::max(group_size * 2, max_group_size)); // 2*group_size <= x <= 16
-            let min_level_size = std::cmp::min(17, std::cmp::max(1, min_level_size)); // 1 <= x <= 17
-
-            let mut options = heed::EnvOpenOptions::new();
-            let options = options.map_size(4096 * 4 * 10 * 1000);
-            unsafe {
-                options.flag(heed::flags::Flags::MdbAlwaysFreePages);
-            }
-            let env = options.open(tempdir.path()).unwrap();
-            let content = env.open_database(None).unwrap().unwrap();
-
-            FacetIndex {
-                content,
-                group_size: Cell::new(group_size),
-                max_group_size: Cell::new(max_group_size),
-                min_level_size: Cell::new(min_level_size),
-                _tempdir: tempdir,
-                env,
-                _phantom: PhantomData,
-            }
-        }
         pub fn new(
             group_size: u8,
             max_group_size: u8,
@@ -375,7 +412,8 @@ pub(crate) mod test_helpers {
             let group_size = group_size.clamp(2, 127);
             let max_group_size = std::cmp::min(127, std::cmp::max(group_size * 2, max_group_size)); // 2*group_size <= x <= 127
             let min_level_size = std::cmp::max(1, min_level_size); // 1 <= x <= inf
-            let mut options = heed::EnvOpenOptions::new();
+            let options = heed::EnvOpenOptions::new();
+            let mut options = options.read_txn_without_tls();
             let options = options.map_size(4096 * 4 * 1000 * 100);
             let tempdir = tempfile::TempDir::new().unwrap();
             let env = unsafe { options.open(tempdir.path()) }.unwrap();
@@ -392,26 +430,6 @@ pub(crate) mod test_helpers {
                 env,
                 _phantom: PhantomData,
             }
-        }
-
-        #[cfg(all(test, fuzzing))]
-        pub fn set_group_size(&self, group_size: u8) {
-            // 2 <= x <= 64
-            self.group_size.set(std::cmp::min(64, std::cmp::max(group_size, 2)));
-        }
-        #[cfg(all(test, fuzzing))]
-        pub fn set_max_group_size(&self, max_group_size: u8) {
-            // 2*group_size <= x <= 128
-            let max_group_size = std::cmp::max(4, std::cmp::min(128, max_group_size));
-            self.max_group_size.set(max_group_size);
-            if self.group_size.get() < max_group_size / 2 {
-                self.group_size.set(max_group_size / 2);
-            }
-        }
-        #[cfg(all(test, fuzzing))]
-        pub fn set_min_level_size(&self, min_level_size: u8) {
-            // 1 <= x <= inf
-            self.min_level_size.set(std::cmp::max(1, min_level_size));
         }
 
         pub fn insert<'a>(
@@ -636,5 +654,196 @@ mod comparison_bench {
                 txn.abort();
             }
         }
+    }
+}
+
+/// Run sanity checks on the specified fid tree
+///
+/// 1. No "orphan" child value, any child value has a parent
+/// 2. Any docid in the child appears in the parent
+/// 3. No docid in the parent is missing from all its children
+/// 4. no group is bigger than max_group_size
+/// 5. Less than 50% of groups are bigger than group_size
+/// 6. group size matches the number of children
+/// 7. max_level is < 255
+pub(crate) fn sanity_checks(
+    index: &Index,
+    rtxn: &heed::RoTxn,
+    field_id: FieldId,
+    facet_type: FacetType,
+    group_size: usize,
+    _min_level_size: usize, // might add a check on level size later
+    max_group_size: usize,
+) -> Result<()> {
+    tracing::info!(%field_id, ?facet_type, "performing sanity checks");
+    let database = match facet_type {
+        FacetType::String => {
+            index.facet_id_string_docids.remap_key_type::<FacetGroupKeyCodec<BytesRefCodec>>()
+        }
+        FacetType::Number => {
+            index.facet_id_f64_docids.remap_key_type::<FacetGroupKeyCodec<BytesRefCodec>>()
+        }
+    };
+
+    let leaf_prefix: FacetGroupKey<&[u8]> = FacetGroupKey { field_id, level: 0, left_bound: &[] };
+
+    let leaf_it = database.prefix_iter(rtxn, &leaf_prefix)?;
+
+    let max_level = get_highest_level(rtxn, database, field_id)?;
+    if max_level == u8::MAX {
+        panic!("max_level == 255");
+    }
+
+    for leaf in leaf_it {
+        let (leaf_facet_value, leaf_docids) = leaf?;
+        let mut current_level = 0;
+
+        let mut current_parent_facet_value: Option<FacetGroupKey<&[u8]>> = None;
+        let mut current_parent_docids: Option<crate::heed_codec::facet::FacetGroupValue> = None;
+        loop {
+            current_level += 1;
+            if current_level >= max_level {
+                break;
+            }
+            let parent_key_right_bound = FacetGroupKey {
+                field_id,
+                level: current_level,
+                left_bound: leaf_facet_value.left_bound,
+            };
+            let (parent_facet_value, parent_docids) = database
+                .get_lower_than_or_equal_to(rtxn, &parent_key_right_bound)?
+                .expect("no parent found");
+            if parent_facet_value.level != current_level {
+                panic!(
+                    "wrong parent level, found_level={}, expected_level={}",
+                    parent_facet_value.level, current_level
+                );
+            }
+            if parent_facet_value.field_id != field_id {
+                panic!("wrong parent fid");
+            }
+            if parent_facet_value.left_bound > leaf_facet_value.left_bound {
+                panic!("wrong parent left bound");
+            }
+
+            if !leaf_docids.bitmap.is_subset(&parent_docids.bitmap) {
+                panic!(
+                    "missing docids from leaf in parent, current_level={}, parent={}, child={}, missing={missing:?}, child_len={}, child={:?}",
+                    current_level,
+                    facet_to_string(parent_facet_value.left_bound, facet_type),
+                    facet_to_string(leaf_facet_value.left_bound, facet_type),
+                    leaf_docids.bitmap.len(),
+                    leaf_docids.bitmap.clone(),
+                    missing=leaf_docids.bitmap - parent_docids.bitmap,
+                )
+            }
+
+            if let Some(current_parent_facet_value) = current_parent_facet_value {
+                if current_parent_facet_value.field_id != parent_facet_value.field_id {
+                    panic!("wrong parent parent fid");
+                }
+                if current_parent_facet_value.level + 1 != parent_facet_value.level {
+                    panic!("wrong parent parent level");
+                }
+                if current_parent_facet_value.left_bound < parent_facet_value.left_bound {
+                    panic!("wrong parent parent left bound");
+                }
+            }
+
+            if let Some(current_parent_docids) = current_parent_docids {
+                if !current_parent_docids.bitmap.is_subset(&parent_docids.bitmap) {
+                    panic!("missing docids from intermediate node in parent, parent_level={}, parent={}, intermediate={}, missing={missing:?}, intermediate={:?}",
+                    parent_facet_value.level,
+                    facet_to_string(parent_facet_value.left_bound, facet_type),
+                    facet_to_string(current_parent_facet_value.unwrap().left_bound, facet_type),
+                    current_parent_docids.bitmap.clone(),
+                    missing=current_parent_docids.bitmap - parent_docids.bitmap,
+                    );
+                }
+            }
+
+            current_parent_facet_value = Some(parent_facet_value);
+            current_parent_docids = Some(parent_docids);
+        }
+    }
+    tracing::info!(%field_id, ?facet_type, "checked all leaves");
+
+    let mut current_level = max_level;
+    let mut greater_than_group = 0usize;
+    let mut total = 0usize;
+    loop {
+        if current_level == 0 {
+            break;
+        }
+        let child_level = current_level - 1;
+        tracing::info!(%field_id, ?facet_type, %current_level, "checked groups for level");
+        let level_groups_prefix: FacetGroupKey<&[u8]> =
+            FacetGroupKey { field_id, level: current_level, left_bound: &[] };
+        let mut level_groups_it = database.prefix_iter(rtxn, &level_groups_prefix)?.peekable();
+
+        'group_it: loop {
+            let Some(group) = level_groups_it.next() else { break 'group_it };
+
+            let (group_facet_value, group_docids) = group?;
+            let child_left_bound = group_facet_value.left_bound.to_owned();
+            let mut expected_docids = RoaringBitmap::new();
+            let mut expected_size = 0usize;
+            let right_bound = level_groups_it
+                .peek()
+                .and_then(|res| res.as_ref().ok())
+                .map(|(key, _)| key.left_bound);
+            let child_left_bound = FacetGroupKey {
+                field_id,
+                level: child_level,
+                left_bound: child_left_bound.as_slice(),
+            };
+            let child_left_bound = Bound::Included(&child_left_bound);
+            let child_right_bound;
+            let child_right_bound = if let Some(right_bound) = right_bound {
+                child_right_bound =
+                    FacetGroupKey { field_id, level: child_level, left_bound: right_bound };
+                Bound::Excluded(&child_right_bound)
+            } else {
+                Bound::Unbounded
+            };
+            let children = database.range(rtxn, &(child_left_bound, child_right_bound))?;
+            for child in children {
+                let (child_facet_value, child_docids) = child?;
+                if child_facet_value.field_id != field_id {
+                    break;
+                }
+                if child_facet_value.level != child_level {
+                    break;
+                }
+                expected_size += 1;
+                expected_docids |= &child_docids.bitmap;
+            }
+            assert_eq!(expected_size, group_docids.size as usize);
+            assert!(expected_size <= max_group_size);
+            assert_eq!(expected_docids, group_docids.bitmap);
+            total += 1;
+            if expected_size > group_size {
+                greater_than_group += 1;
+            }
+        }
+
+        current_level -= 1;
+    }
+    if greater_than_group * 2 > total {
+        panic!("too many groups have a size > group_size");
+    }
+
+    tracing::info!("sanity checks OK");
+
+    Ok(())
+}
+
+fn facet_to_string(facet_value: &[u8], facet_type: FacetType) -> String {
+    match facet_type {
+        FacetType::String => bstr::BStr::new(facet_value).to_string(),
+        FacetType::Number => match OrderedF64Codec::bytes_decode(facet_value) {
+            Ok(value) => value.to_string(),
+            Err(e) => format!("error: {e} (bytes: {facet_value:?}"),
+        },
     }
 }

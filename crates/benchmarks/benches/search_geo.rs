@@ -2,9 +2,10 @@ mod datasets_paths;
 mod utils;
 
 use criterion::{criterion_group, criterion_main};
-use milli::update::Settings;
+use milli::{update::Settings, FilterableAttributesRule};
 use utils::Conf;
 
+#[cfg(not(windows))]
 #[global_allocator]
 static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
@@ -20,8 +21,10 @@ fn base_conf(builder: &mut Settings) {
         ["name", "alternatenames", "elevation"].iter().map(|s| s.to_string()).collect();
     builder.set_searchable_fields(searchable_fields);
 
-    let filterable_fields =
-        ["_geo", "population", "elevation"].iter().map(|s| s.to_string()).collect();
+    let filterable_fields = ["_geo", "population", "elevation"]
+        .iter()
+        .map(|s| FilterableAttributesRule::Field(s.to_string()))
+        .collect();
     builder.set_filterable_fields(filterable_fields);
 
     let sortable_fields =

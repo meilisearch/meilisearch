@@ -6,6 +6,7 @@ use hf_hub::api::sync::ApiError;
 
 use super::parsed_vectors::ParsedVectorsDiff;
 use super::rest::ConfigurationSource;
+use super::MAX_COMPOSITE_DISTANCE;
 use crate::error::FaultSource;
 use crate::update::new::vector_document::VectorDocument;
 use crate::{FieldDistribution, PanicCatched};
@@ -67,7 +68,7 @@ pub enum EmbedErrorKind {
     #[error("could not authenticate against {embedding} server{server_reply}{hint}", embedding=match *.1 {
         ConfigurationSource::User => "embedding",
         ConfigurationSource::OpenAi => "OpenAI",
-        ConfigurationSource::Ollama => "ollama"
+        ConfigurationSource::Ollama => "Ollama"
     },
     server_reply=option_info(.0.as_deref(), "server replied with "),
     hint=match *.1 {
@@ -86,9 +87,9 @@ pub enum EmbedErrorKind {
     },
     option_info(.0.as_deref(), "server replied with "))]
     RestBadRequest(Option<String>, ConfigurationSource),
-    #[error("received internal error HTTP {0} from embedding server{}", option_info(.1.as_deref(), "server replied with "))]
+    #[error("received internal error HTTP {} from embedding server{}", .0, option_info(.1.as_deref(), "server replied with "))]
     RestInternalServerError(u16, Option<String>),
-    #[error("received unexpected HTTP {0} from embedding server{}", option_info(.1.as_deref(), "server replied with "))]
+    #[error("received unexpected HTTP {} from embedding server{}", .0, option_info(.1.as_deref(), "server replied with "))]
     RestOtherStatusCode(u16, Option<String>),
     #[error("could not reach embedding server:\n  - {0}")]
     RestNetwork(ureq::Transport),
@@ -262,6 +263,31 @@ impl NewEmbedderError {
         }
     }
 
+    pub fn open_pooling_config(
+        pooling_config_filename: PathBuf,
+        inner: std::io::Error,
+    ) -> NewEmbedderError {
+        let open_config = OpenPoolingConfig { filename: pooling_config_filename, inner };
+
+        Self {
+            kind: NewEmbedderErrorKind::OpenPoolingConfig(open_config),
+            fault: FaultSource::Runtime,
+        }
+    }
+
+    pub fn deserialize_pooling_config(
+        model_name: String,
+        pooling_config_filename: PathBuf,
+        inner: serde_json::Error,
+    ) -> NewEmbedderError {
+        let deserialize_pooling_config =
+            DeserializePoolingConfig { model_name, filename: pooling_config_filename, inner };
+        Self {
+            kind: NewEmbedderErrorKind::DeserializePoolingConfig(deserialize_pooling_config),
+            fault: FaultSource::Runtime,
+        }
+    }
+
     pub fn open_tokenizer(
         tokenizer_filename: PathBuf,
         inner: Box<dyn std::error::Error + Send + Sync>,
@@ -306,6 +332,81 @@ impl NewEmbedderError {
             fault: FaultSource::User,
         }
     }
+
+    pub(crate) fn ollama_unsupported_url(url: String) -> NewEmbedderError {
+        Self { kind: NewEmbedderErrorKind::OllamaUnsupportedUrl(url), fault: FaultSource::User }
+    }
+
+    pub(crate) fn composite_dimensions_mismatch(
+        search_dimensions: usize,
+        index_dimensions: usize,
+    ) -> NewEmbedderError {
+        Self {
+            kind: NewEmbedderErrorKind::CompositeDimensionsMismatch {
+                search_dimensions,
+                index_dimensions,
+            },
+            fault: FaultSource::User,
+        }
+    }
+
+    pub(crate) fn composite_test_embedding_failed(
+        inner: EmbedError,
+        failing_embedder: &'static str,
+    ) -> NewEmbedderError {
+        Self {
+            kind: NewEmbedderErrorKind::CompositeTestEmbeddingFailed { inner, failing_embedder },
+            fault: FaultSource::Runtime,
+        }
+    }
+
+    pub(crate) fn composite_embedding_count_mismatch(
+        search_count: usize,
+        index_count: usize,
+    ) -> NewEmbedderError {
+        Self {
+            kind: NewEmbedderErrorKind::CompositeEmbeddingCountMismatch {
+                search_count,
+                index_count,
+            },
+            fault: FaultSource::Runtime,
+        }
+    }
+
+    pub(crate) fn composite_embedding_value_mismatch(
+        distance: f32,
+        hint: CompositeEmbedderContainsHuggingFace,
+    ) -> NewEmbedderError {
+        Self {
+            kind: NewEmbedderErrorKind::CompositeEmbeddingValueMismatch { distance, hint },
+            fault: FaultSource::User,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum CompositeEmbedderContainsHuggingFace {
+    Both,
+    Search,
+    Indexing,
+    None,
+}
+
+impl std::fmt::Display for CompositeEmbedderContainsHuggingFace {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CompositeEmbedderContainsHuggingFace::Both => f.write_str(
+                "\n  - Make sure the `model`, `revision` and `pooling` of both embedders match.",
+            ),
+            CompositeEmbedderContainsHuggingFace::Search => f.write_str(
+                "\n  - Consider trying a different `pooling` method for the search embedder.",
+            ),
+            CompositeEmbedderContainsHuggingFace::Indexing => f.write_str(
+                "\n  - Consider trying a different `pooling` method for the indexing embedder.",
+            ),
+            CompositeEmbedderContainsHuggingFace::None => Ok(()),
+        }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -316,8 +417,23 @@ pub struct OpenConfig {
 }
 
 #[derive(Debug, thiserror::Error)]
+#[error("could not open pooling config at {filename}: {inner}")]
+pub struct OpenPoolingConfig {
+    pub filename: PathBuf,
+    pub inner: std::io::Error,
+}
+
+#[derive(Debug, thiserror::Error)]
 #[error("for model '{model_name}', could not deserialize config at {filename} as JSON: {inner}")]
 pub struct DeserializeConfig {
+    pub model_name: String,
+    pub filename: PathBuf,
+    pub inner: serde_json::Error,
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("for model '{model_name}', could not deserialize file at `{filename}` as a pooling config: {inner}")]
+pub struct DeserializePoolingConfig {
     pub model_name: String,
     pub filename: PathBuf,
     pub inner: serde_json::Error,
@@ -350,7 +466,11 @@ pub enum NewEmbedderErrorKind {
     #[error(transparent)]
     OpenConfig(OpenConfig),
     #[error(transparent)]
+    OpenPoolingConfig(OpenPoolingConfig),
+    #[error(transparent)]
     DeserializeConfig(DeserializeConfig),
+    #[error(transparent)]
+    DeserializePoolingConfig(DeserializePoolingConfig),
     #[error(transparent)]
     UnsupportedModel(UnsupportedModel),
     #[error(transparent)]
@@ -369,6 +489,16 @@ pub enum NewEmbedderErrorKind {
     LoadModel(candle_core::Error),
     #[error("{0}")]
     CouldNotParseTemplate(String),
+    #[error("unsupported Ollama URL.\n  - For `ollama` sources, the URL must end with `/api/embed` or `/api/embeddings`\n  - Got `{0}`")]
+    OllamaUnsupportedUrl(String),
+    #[error("error while generating test embeddings.\n  - the dimensions of embeddings produced at search time and at indexing time don't match.\n  - Search time dimensions: {search_dimensions}\n  - Indexing time dimensions: {index_dimensions}\n  - Note: Dimensions of embeddings produced by both embedders are required to match.")]
+    CompositeDimensionsMismatch { search_dimensions: usize, index_dimensions: usize },
+    #[error("error while generating test embeddings.\n  - could not generate test embedding with embedder at {failing_embedder} time.\n  - Embedding failed with {inner}")]
+    CompositeTestEmbeddingFailed { inner: EmbedError, failing_embedder: &'static str },
+    #[error("error while generating test embeddings.\n  - the number of generated embeddings differs.\n  - {search_count} embeddings for the search time embedder.\n  - {index_count} embeddings for the indexing time embedder.")]
+    CompositeEmbeddingCountMismatch { search_count: usize, index_count: usize },
+    #[error("error while generating test embeddings.\n  - the embeddings produced at search time and indexing time are not similar enough.\n  - angular distance {distance:.2}\n  - Meilisearch requires a maximum distance of {MAX_COMPOSITE_DISTANCE}.\n  - Note: check that both embedders produce similar embeddings.{hint}")]
+    CompositeEmbeddingValueMismatch { distance: f32, hint: CompositeEmbedderContainsHuggingFace },
 }
 
 pub struct PossibleEmbeddingMistakes {

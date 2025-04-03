@@ -1,6 +1,6 @@
-#![cfg_attr(all(test, fuzzing), feature(no_coverage))]
 #![allow(clippy::type_complexity)]
 
+#[cfg(not(windows))]
 #[cfg(test)]
 #[global_allocator]
 pub static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
@@ -9,11 +9,14 @@ pub static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 pub mod documents;
 
 mod asc_desc;
+mod attribute_patterns;
 mod criterion;
+pub mod database_stats;
 mod error;
 mod external_documents_ids;
 pub mod facet;
 mod fields_ids_map;
+mod filterable_attributes_rules;
 pub mod heed_codec;
 pub mod index;
 mod localized_attributes_rules;
@@ -29,7 +32,9 @@ pub mod vector;
 #[cfg(test)]
 #[macro_use]
 pub mod snapshot_tests;
+pub mod constants;
 mod fieldids_weights_map;
+pub mod progress;
 
 use std::collections::{BTreeMap, HashMap};
 use std::convert::{TryFrom, TryInto};
@@ -49,6 +54,8 @@ pub use thread_pool_no_abort::{PanicCatched, ThreadPoolNoAbort, ThreadPoolNoAbor
 pub use {charabia as tokenizer, heed, rhai};
 
 pub use self::asc_desc::{AscDesc, AscDescError, Member, SortError};
+pub use self::attribute_patterns::AttributePatterns;
+pub use self::attribute_patterns::PatternMatch;
 pub use self::criterion::{default_criteria, Criterion, CriterionError};
 pub use self::error::{
     Error, FieldIdMapMissingEntry, InternalError, SerializationError, UserError,
@@ -56,6 +63,10 @@ pub use self::error::{
 pub use self::external_documents_ids::ExternalDocumentsIds;
 pub use self::fieldids_weights_map::FieldidsWeightsMap;
 pub use self::fields_ids_map::{FieldsIdsMap, GlobalFieldsIdsMap};
+pub use self::filterable_attributes_rules::{
+    FilterFeatures, FilterableAttributesFeatures, FilterableAttributesPatterns,
+    FilterableAttributesRule,
+};
 pub use self::heed_codec::{
     BEU16StrCodec, BEU32StrCodec, BoRoaringBitmapCodec, BoRoaringBitmapLenCodec,
     CboRoaringBitmapCodec, CboRoaringBitmapLenCodec, FieldIdWordCountCodec, ObkvCodec,
@@ -64,13 +75,15 @@ pub use self::heed_codec::{
 };
 pub use self::index::Index;
 pub use self::localized_attributes_rules::LocalizedAttributesRule;
-use self::localized_attributes_rules::LocalizedFieldIds;
 pub use self::search::facet::{FacetValueHit, SearchForFacetValues};
 pub use self::search::similar::Similar;
 pub use self::search::{
     FacetDistribution, Filter, FormatOptions, MatchBounds, MatcherBuilder, MatchingWords, OrderBy,
     Search, SearchResult, SemanticSearch, TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
 };
+pub use self::update::ChannelCongestion;
+
+pub use arroy;
 
 pub type Result<T> = std::result::Result<T, error::Error>;
 
@@ -191,7 +204,7 @@ pub fn relative_from_absolute_position(absolute: Position) -> (FieldId, Relative
 
 // Compute the absolute word position with the field id of the attribute and relative position in the attribute.
 pub fn absolute_from_relative_position(field_id: FieldId, relative: RelativePosition) -> Position {
-    (field_id as u32) << 16 | (relative as u32)
+    ((field_id as u32) << 16) | (relative as u32)
 }
 // TODO: this is wrong, but will do for now
 /// Compute the "bucketed" absolute position from the field id and relative position in the field.
@@ -359,7 +372,7 @@ pub fn is_faceted(field: &str, faceted_fields: impl IntoIterator<Item = impl AsR
 /// assert!(!is_faceted_by("animaux.chien", "animaux.chie"));
 /// ```
 pub fn is_faceted_by(field: &str, facet: &str) -> bool {
-    field.starts_with(facet) && field[facet.len()..].chars().next().map_or(true, |c| c == '.')
+    field.starts_with(facet) && field[facet.len()..].chars().next().is_none_or(|c| c == '.')
 }
 
 pub fn normalize_facet(original: &str) -> String {

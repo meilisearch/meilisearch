@@ -1,4 +1,6 @@
 mod binary_quantized;
+#[cfg(feature = "test-ollama")]
+mod ollama;
 mod openai;
 mod rest;
 mod settings;
@@ -13,36 +15,13 @@ use crate::common::{default_settings, GetAllDocumentsOptions, Server};
 use crate::json;
 
 async fn get_server_vector() -> Server {
-    let server = Server::new().await;
-    let (value, code) = server.set_features(json!({"vectorStore": true})).await;
-    snapshot!(code, @"200 OK");
-    snapshot!(value, @r###"
-  {
-    "vectorStore": true,
-    "metrics": false,
-    "logsRoute": false,
-    "editDocumentsByFunction": false,
-    "containsFilter": false
-  }
-  "###);
-    server
+    Server::new().await
 }
 
 #[actix_rt::test]
 async fn add_remove_user_provided() {
     let server = Server::new().await;
     let index = server.index("doggo");
-    let (value, code) = server.set_features(json!({"vectorStore": true})).await;
-    snapshot!(code, @"200 OK");
-    snapshot!(value, @r###"
-    {
-      "vectorStore": true,
-      "metrics": false,
-      "logsRoute": false,
-      "editDocumentsByFunction": false,
-      "containsFilter": false
-    }
-    "###);
 
     let (response, code) = index
         .update_settings(json!({
@@ -55,7 +34,7 @@ async fn add_remove_user_provided() {
         }))
         .await;
     snapshot!(code, @"202 Accepted");
-    server.wait_task(response.uid()).await;
+    server.wait_task(response.uid()).await.succeeded();
 
     let documents = json!([
       {"id": 0, "name": "kefir", "_vectors": { "manual": [0, 0, 0] }},
@@ -63,7 +42,7 @@ async fn add_remove_user_provided() {
     ]);
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let (documents, _code) = index
         .get_all_documents(GetAllDocumentsOptions { retrieve_vectors: true, ..Default::default() })
@@ -116,12 +95,12 @@ async fn add_remove_user_provided() {
     ]);
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let (documents, _code) = index
         .get_all_documents(GetAllDocumentsOptions { retrieve_vectors: true, ..Default::default() })
         .await;
-    snapshot!(json_string!(documents), @r###"
+    snapshot!(json_string!(documents), @r#"
     {
       "results": [
         {
@@ -155,16 +134,16 @@ async fn add_remove_user_provided() {
       "limit": 20,
       "total": 2
     }
-    "###);
+    "#);
 
     let (value, code) = index.delete_document(0).await;
     snapshot!(code, @"202 Accepted");
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let (documents, _code) = index
         .get_all_documents(GetAllDocumentsOptions { retrieve_vectors: true, ..Default::default() })
         .await;
-    snapshot!(json_string!(documents), @r###"
+    snapshot!(json_string!(documents), @r#"
     {
       "results": [
         {
@@ -182,22 +161,102 @@ async fn add_remove_user_provided() {
       "limit": 20,
       "total": 1
     }
+    "#);
+}
+
+#[actix_rt::test]
+async fn user_provide_mismatched_embedding_dimension() {
+    let server = Server::new().await;
+    let index = server.index("doggo");
+
+    let (response, code) = index
+        .update_settings(json!({
+          "embedders": {
+              "manual": {
+                  "source": "userProvided",
+                  "dimensions": 3,
+              }
+          },
+        }))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(response.uid()).await.succeeded();
+
+    let documents = json!([
+      {"id": 0, "name": "kefir", "_vectors": { "manual": [0, 0] }},
+    ]);
+    let (value, code) = index.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+    let task = index.wait_task(value.uid()).await;
+    snapshot!(task, @r#"
+    {
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "doggo",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "error": {
+        "message": "Index `doggo`: Invalid vector dimensions: expected: `3`, found: `2`.",
+        "code": "invalid_vector_dimensions",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_vector_dimensions"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "#);
+
+    // FIXME: /!\ Case where number of embeddings is divisor of `dimensions` would still pass
+    let new_document = json!([
+      {"id": 0, "name": "kefir", "_vectors": { "manual": [[0, 0], [1, 1], [2, 2]] }},
+    ]);
+    let (response, code) = index.add_documents(new_document, None).await;
+    snapshot!(code, @"202 Accepted");
+    index.wait_task(response.uid()).await.succeeded();
+    let (documents, _code) = index
+        .get_all_documents(GetAllDocumentsOptions { retrieve_vectors: true, ..Default::default() })
+        .await;
+    snapshot!(json_string!(documents), @r###"
+    {
+      "results": [
+        {
+          "id": 0,
+          "name": "kefir",
+          "_vectors": {
+            "manual": {
+              "embeddings": [
+                [
+                  0.0,
+                  0.0,
+                  1.0
+                ],
+                [
+                  1.0,
+                  2.0,
+                  2.0
+                ]
+              ],
+              "regenerate": false
+            }
+          }
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 1
+    }
     "###);
 }
 
 async fn generate_default_user_provided_documents(server: &Server) -> Index {
     let index = server.index("doggo");
-    let (value, code) = server.set_features(json!({"vectorStore": true})).await;
-    snapshot!(code, @"200 OK");
-    snapshot!(value, @r###"
-    {
-      "vectorStore": true,
-      "metrics": false,
-      "logsRoute": false,
-      "editDocumentsByFunction": false,
-      "containsFilter": false
-    }
-    "###);
 
     let (response, code) = index
         .update_settings(json!({
@@ -221,7 +280,7 @@ async fn generate_default_user_provided_documents(server: &Server) -> Index {
     ]);
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     index
 }
@@ -250,7 +309,7 @@ async fn user_provided_embeddings_error() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Bad embedder configuration in the document with id: `0`. Missing field `._vectors.manual.regenerate`\n  - note: `._vectors.manual` must be an array of floats, an array of arrays of floats, or an object with field `regenerate`",
+        "message": "Index `doggo`: Bad embedder configuration in the document with id: `0`. Missing field `._vectors.manual.regenerate`\n  - note: `._vectors.manual` must be an array of floats, an array of arrays of floats, or an object with field `regenerate`",
         "code": "invalid_vectors_type",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_vectors_type"
@@ -280,7 +339,7 @@ async fn user_provided_embeddings_error() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Bad embedder configuration in the document with id: `0`. Missing field `._vectors.manual.regenerate`\n  - note: `._vectors.manual` must be an array of floats, an array of arrays of floats, or an object with field `regenerate`",
+        "message": "Index `doggo`: Bad embedder configuration in the document with id: `0`. Missing field `._vectors.manual.regenerate`\n  - note: `._vectors.manual` must be an array of floats, an array of arrays of floats, or an object with field `regenerate`",
         "code": "invalid_vectors_type",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_vectors_type"
@@ -311,7 +370,7 @@ async fn user_provided_embeddings_error() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Bad embedder configuration in the document with id: `0`. Could not parse `._vectors.manual.regenerate`: invalid type: string \"yes please\", expected a boolean at line 1 column 26",
+        "message": "Index `doggo`: Bad embedder configuration in the document with id: `0`. Could not parse `._vectors.manual.regenerate`: invalid type: string \"yes please\", expected a boolean at line 1 column 26",
         "code": "invalid_vectors_type",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_vectors_type"
@@ -340,7 +399,7 @@ async fn user_provided_embeddings_error() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Bad embedder configuration in the document with id: `0`. Invalid value type at `._vectors.manual.embeddings`: expected null or an array, but found a boolean: `true`",
+        "message": "Index `doggo`: Bad embedder configuration in the document with id: `0`. Invalid value type at `._vectors.manual.embeddings`: expected null or an array, but found a boolean: `true`",
         "code": "invalid_vectors_type",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_vectors_type"
@@ -369,7 +428,7 @@ async fn user_provided_embeddings_error() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Bad embedder configuration in the document with id: `0`. Invalid value type at `._vectors.manual.embeddings[0]`: expected a number or an array, but found a boolean: `true`",
+        "message": "Index `doggo`: Bad embedder configuration in the document with id: `0`. Invalid value type at `._vectors.manual.embeddings[0]`: expected a number or an array, but found a boolean: `true`",
         "code": "invalid_vectors_type",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_vectors_type"
@@ -398,7 +457,7 @@ async fn user_provided_embeddings_error() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Bad embedder configuration in the document with id: `0`. Invalid value type at `._vectors.manual.embeddings[0][0]`: expected a number, but found a boolean: `true`",
+        "message": "Index `doggo`: Bad embedder configuration in the document with id: `0`. Invalid value type at `._vectors.manual.embeddings[0][0]`: expected a number, but found a boolean: `true`",
         "code": "invalid_vectors_type",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_vectors_type"
@@ -440,7 +499,7 @@ async fn user_provided_embeddings_error() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Bad embedder configuration in the document with id: `0`. Invalid value type at `._vectors.manual.embeddings[1]`: expected a number, but found an array: `[0.2,0.3]`",
+        "message": "Index `doggo`: Bad embedder configuration in the document with id: `0`. Invalid value type at `._vectors.manual.embeddings[1]`: expected a number, but found an array: `[0.2,0.3]`",
         "code": "invalid_vectors_type",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_vectors_type"
@@ -469,7 +528,7 @@ async fn user_provided_embeddings_error() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Bad embedder configuration in the document with id: `0`. Invalid value type at `._vectors.manual.embeddings[1]`: expected an array, but found a number: `0.3`",
+        "message": "Index `doggo`: Bad embedder configuration in the document with id: `0`. Invalid value type at `._vectors.manual.embeddings[1]`: expected an array, but found a number: `0.3`",
         "code": "invalid_vectors_type",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_vectors_type"
@@ -498,7 +557,7 @@ async fn user_provided_embeddings_error() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Bad embedder configuration in the document with id: `0`. Invalid value type at `._vectors.manual.embeddings[0][1]`: expected a number, but found a boolean: `true`",
+        "message": "Index `doggo`: Bad embedder configuration in the document with id: `0`. Invalid value type at `._vectors.manual.embeddings[0][1]`: expected a number, but found a boolean: `true`",
         "code": "invalid_vectors_type",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_vectors_type"
@@ -539,7 +598,7 @@ async fn user_provided_vectors_error() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "While embedding documents for embedder `manual`: no vectors provided for document `40` and at least 4 other document(s)\n- Note: `manual` has `source: userProvided`, so documents must provide embeddings as an array in `_vectors.manual`.\n- Hint: opt-out for a document with `_vectors.manual: null`",
+        "message": "Index `doggo`: While embedding documents for embedder `manual`: no vectors provided for document `40` and at least 4 other document(s)\n- Note: `manual` has `source: userProvided`, so documents must provide embeddings as an array in `_vectors.manual`.\n- Hint: opt-out for a document with `_vectors.manual: null`",
         "code": "vector_embedding_error",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
@@ -569,7 +628,7 @@ async fn user_provided_vectors_error() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "While embedding documents for embedder `manual`: no vectors provided for document `42`\n- Note: `manual` has `source: userProvided`, so documents must provide embeddings as an array in `_vectors.manual`.\n- Hint: try replacing `_vector` by `_vectors` in 1 document(s).",
+        "message": "Index `doggo`: While embedding documents for embedder `manual`: no vectors provided for document `42`\n- Note: `manual` has `source: userProvided`, so documents must provide embeddings as an array in `_vectors.manual`.\n- Hint: try replacing `_vector` by `_vectors` in 1 document(s).",
         "code": "vector_embedding_error",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
@@ -599,7 +658,7 @@ async fn user_provided_vectors_error() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "While embedding documents for embedder `manual`: no vectors provided for document `42`\n- Note: `manual` has `source: userProvided`, so documents must provide embeddings as an array in `_vectors.manual`.\n- Hint: try replacing `_vectors.manaul` by `_vectors.manual` in 1 document(s).",
+        "message": "Index `doggo`: While embedding documents for embedder `manual`: no vectors provided for document `42`\n- Note: `manual` has `source: userProvided`, so documents must provide embeddings as an array in `_vectors.manual`.\n- Hint: try replacing `_vectors.manaul` by `_vectors.manual` in 1 document(s).",
         "code": "vector_embedding_error",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
@@ -618,7 +677,7 @@ async fn clear_documents() {
     let index = generate_default_user_provided_documents(&server).await;
 
     let (value, _code) = index.clear_all_documents().await;
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     // Make sure the documents DB has been cleared
     let (documents, _code) = index
@@ -654,17 +713,6 @@ async fn add_remove_one_vector_4588() {
     // https://github.com/meilisearch/meilisearch/issues/4588
     let server = Server::new().await;
     let index = server.index("doggo");
-    let (value, code) = server.set_features(json!({"vectorStore": true})).await;
-    snapshot!(code, @"200 OK");
-    snapshot!(value, @r###"
-    {
-      "vectorStore": true,
-      "metrics": false,
-      "logsRoute": false,
-      "editDocumentsByFunction": false,
-      "containsFilter": false
-    }
-    "###);
 
     let (response, code) = index
         .update_settings(json!({
@@ -721,7 +769,7 @@ async fn add_remove_one_vector_4588() {
     let (documents, _code) = index
         .get_all_documents(GetAllDocumentsOptions { retrieve_vectors: true, ..Default::default() })
         .await;
-    snapshot!(json_string!(documents), @r###"
+    snapshot!(json_string!(documents), @r#"
     {
       "results": [
         {
@@ -739,5 +787,5 @@ async fn add_remove_one_vector_4588() {
       "limit": 20,
       "total": 1
     }
-    "###);
+    "#);
 }

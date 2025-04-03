@@ -2,30 +2,114 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
 
-use heed::RoTxn;
+use bumpalo::Bump;
 
-use super::tokenize_document::DocumentTokenizer;
-use super::SearchableExtractor;
+use super::match_searchable_field;
+use super::tokenize_document::{tokenizer_builder, DocumentTokenizer};
 use crate::proximity::{index_proximity, MAX_DISTANCE};
 use crate::update::new::document::Document;
 use crate::update::new::extract::cache::BalancedCaches;
-use crate::update::new::indexer::document_changes::DocumentChangeContext;
+use crate::update::new::indexer::document_changes::{
+    extract, DocumentChangeContext, DocumentChanges, Extractor, IndexingContext,
+};
 use crate::update::new::ref_cell_ext::RefCellExt as _;
+use crate::update::new::steps::IndexingStep;
+use crate::update::new::thread_local::{FullySend, ThreadLocal};
 use crate::update::new::DocumentChange;
-use crate::{FieldId, GlobalFieldsIdsMap, Index, Result};
+use crate::{FieldId, GlobalFieldsIdsMap, Result, MAX_POSITION_PER_ATTRIBUTE};
+
+pub struct WordPairProximityDocidsExtractorData<'a> {
+    tokenizer: DocumentTokenizer<'a>,
+    searchable_attributes: Option<Vec<&'a str>>,
+    max_memory_by_thread: Option<usize>,
+    buckets: usize,
+}
+
+impl<'extractor> Extractor<'extractor> for WordPairProximityDocidsExtractorData<'_> {
+    type Data = RefCell<BalancedCaches<'extractor>>;
+
+    fn init_data(&self, extractor_alloc: &'extractor Bump) -> Result<Self::Data> {
+        Ok(RefCell::new(BalancedCaches::new_in(
+            self.buckets,
+            self.max_memory_by_thread,
+            extractor_alloc,
+        )))
+    }
+
+    fn process<'doc>(
+        &self,
+        changes: impl Iterator<Item = Result<DocumentChange<'doc>>>,
+        context: &DocumentChangeContext<Self::Data>,
+    ) -> Result<()> {
+        for change in changes {
+            let change = change?;
+            WordPairProximityDocidsExtractor::extract_document_change(
+                context,
+                &self.tokenizer,
+                self.searchable_attributes.as_deref(),
+                change,
+            )?;
+        }
+        Ok(())
+    }
+}
 
 pub struct WordPairProximityDocidsExtractor;
 
-impl SearchableExtractor for WordPairProximityDocidsExtractor {
-    fn attributes_to_extract<'a>(
-        rtxn: &'a RoTxn,
-        index: &'a Index,
-    ) -> Result<Option<Vec<&'a str>>> {
-        index.user_defined_searchable_fields(rtxn).map_err(Into::into)
-    }
+impl WordPairProximityDocidsExtractor {
+    pub fn run_extraction<'pl, 'fid, 'indexer, 'index, 'extractor, DC: DocumentChanges<'pl>, MSP>(
+        document_changes: &DC,
+        indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP>,
+        extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
+        step: IndexingStep,
+    ) -> Result<Vec<BalancedCaches<'extractor>>>
+    where
+        MSP: Fn() -> bool + Sync,
+    {
+        // Warning: this is duplicated code from extract_word_docids.rs
+        let rtxn = indexing_context.index.read_txn()?;
+        let stop_words = indexing_context.index.stop_words(&rtxn)?;
+        let allowed_separators = indexing_context.index.allowed_separators(&rtxn)?;
+        let allowed_separators: Option<Vec<_>> =
+            allowed_separators.as_ref().map(|s| s.iter().map(String::as_str).collect());
+        let dictionary = indexing_context.index.dictionary(&rtxn)?;
+        let dictionary: Option<Vec<_>> =
+            dictionary.as_ref().map(|s| s.iter().map(String::as_str).collect());
+        let mut builder = tokenizer_builder(
+            stop_words.as_ref(),
+            allowed_separators.as_deref(),
+            dictionary.as_deref(),
+        );
+        let tokenizer = builder.build();
+        let localized_attributes_rules =
+            indexing_context.index.localized_attributes_rules(&rtxn)?.unwrap_or_default();
+        let document_tokenizer = DocumentTokenizer {
+            tokenizer: &tokenizer,
+            localized_attributes_rules: &localized_attributes_rules,
+            max_positions_per_attributes: MAX_POSITION_PER_ATTRIBUTE,
+        };
+        let extractor_data = WordPairProximityDocidsExtractorData {
+            tokenizer: document_tokenizer,
+            searchable_attributes: indexing_context.index.user_defined_searchable_fields(&rtxn)?,
+            max_memory_by_thread: indexing_context.grenad_parameters.max_memory_by_thread(),
+            buckets: rayon::current_num_threads(),
+        };
+        let datastore = ThreadLocal::new();
+        {
+            let span =
+                tracing::trace_span!(target: "indexing::documents::extract", "docids_extraction");
+            let _entered = span.enter();
+            extract(
+                document_changes,
+                &extractor_data,
+                indexing_context,
+                extractor_allocs,
+                &datastore,
+                step,
+            )?;
+        }
 
-    fn attributes_to_skip<'a>(_rtxn: &'a RoTxn, _index: &'a Index) -> Result<Vec<&'a str>> {
-        Ok(Vec::new())
+        Ok(datastore.into_iter().map(RefCell::into_inner).collect())
     }
 
     // This method is reimplemented to count the number of words in the document in each field
@@ -34,6 +118,7 @@ impl SearchableExtractor for WordPairProximityDocidsExtractor {
     fn extract_document_change(
         context: &DocumentChangeContext<RefCell<BalancedCaches>>,
         document_tokenizer: &DocumentTokenizer,
+        searchable_attributes: Option<&[&str]>,
         document_change: DocumentChange,
     ) -> Result<()> {
         let doc_alloc = &context.doc_alloc;
@@ -70,6 +155,17 @@ impl SearchableExtractor for WordPairProximityDocidsExtractor {
                 )?;
             }
             DocumentChange::Update(inner) => {
+                if !inner.has_changed_for_fields(
+                    &mut |field_name: &str| {
+                        match_searchable_field(field_name, searchable_attributes)
+                    },
+                    rtxn,
+                    index,
+                    context.db_fields_ids_map,
+                )? {
+                    return Ok(());
+                }
+
                 let document = inner.current(rtxn, index, context.db_fields_ids_map)?;
                 process_document_tokens(
                     document,
@@ -174,7 +270,7 @@ fn process_document_tokens<'doc>(
         // drain the proximity window until the head word is considered close to the word we are inserting.
         while word_positions
             .front()
-            .map_or(false, |(_w, p)| index_proximity(*p as u32, pos as u32) >= MAX_DISTANCE)
+            .is_some_and(|(_w, p)| index_proximity(*p as u32, pos as u32) >= MAX_DISTANCE)
         {
             word_positions_into_word_pair_proximity(word_positions, word_pair_proximity);
         }

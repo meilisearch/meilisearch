@@ -19,7 +19,9 @@ use meilisearch_types::locales::Locale;
 use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::vector::Embedder;
-use meilisearch_types::milli::{FacetValueHit, OrderBy, SearchForFacetValues, TimeBudget};
+use meilisearch_types::milli::{
+    FacetValueHit, InternalError, OrderBy, PatternMatch, SearchForFacetValues, TimeBudget,
+};
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
 use milli::tokenizer::{Language, TokenizerBuilder};
@@ -28,13 +30,19 @@ use milli::{
     MatchBounds, MatcherBuilder, SortError, TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
 };
 use regex::Regex;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+#[cfg(test)]
+mod mod_test;
+use utoipa::ToSchema;
 
 use crate::error::MeilisearchHttpError;
 
 mod federated;
-pub use federated::{perform_federated_search, FederatedSearch, Federation, FederationOptions};
+pub use federated::{
+    perform_federated_search, FederatedSearch, FederatedSearchResult, Federation,
+    FederationOptions, MergeFacets, PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE,
+};
 
 mod ranking_rules;
 
@@ -48,18 +56,20 @@ pub const DEFAULT_HIGHLIGHT_PRE_TAG: fn() -> String = || "<em>".to_string();
 pub const DEFAULT_HIGHLIGHT_POST_TAG: fn() -> String = || "</em>".to_string();
 pub const DEFAULT_SEMANTIC_RATIO: fn() -> SemanticRatio = || SemanticRatio(0.5);
 
-#[derive(Clone, Default, PartialEq, Deserr)]
+#[derive(Clone, Default, PartialEq, Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct SearchQuery {
     #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
     pub q: Option<String>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchVector>)]
     pub vector: Option<Vec<f32>>,
-    #[deserr(default, error = DeserrJsonError<InvalidHybridQuery>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchHybridQuery>)]
     pub hybrid: Option<HybridQuery>,
     #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSearchOffset>)]
+    #[schema(default = DEFAULT_SEARCH_OFFSET)]
     pub offset: usize,
     #[deserr(default = DEFAULT_SEARCH_LIMIT(), error = DeserrJsonError<InvalidSearchLimit>)]
+    #[schema(default = DEFAULT_SEARCH_LIMIT)]
     pub limit: usize,
     #[deserr(default, error = DeserrJsonError<InvalidSearchPage>)]
     pub page: Option<usize>,
@@ -71,15 +81,16 @@ pub struct SearchQuery {
     pub retrieve_vectors: bool,
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToCrop>)]
     pub attributes_to_crop: Option<Vec<String>>,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchCropLength>, default = DEFAULT_CROP_LENGTH())]
+    #[deserr(error = DeserrJsonError<InvalidSearchCropLength>, default = DEFAULT_CROP_LENGTH())]
+    #[schema(default = DEFAULT_CROP_LENGTH)]
     pub crop_length: usize,
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToHighlight>)]
     pub attributes_to_highlight: Option<HashSet<String>>,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchShowMatchesPosition>, default)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchShowMatchesPosition>)]
     pub show_matches_position: bool,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScore>, default)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScore>)]
     pub show_ranking_score: bool,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScoreDetails>, default)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScoreDetails>)]
     pub show_ranking_score_details: bool,
     #[deserr(default, error = DeserrJsonError<InvalidSearchFilter>)]
     pub filter: Option<Value>,
@@ -89,26 +100,28 @@ pub struct SearchQuery {
     pub distinct: Option<String>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchFacets>)]
     pub facets: Option<Vec<String>>,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchHighlightPreTag>, default = DEFAULT_HIGHLIGHT_PRE_TAG())]
+    #[deserr(error = DeserrJsonError<InvalidSearchHighlightPreTag>, default = DEFAULT_HIGHLIGHT_PRE_TAG())]
+    #[schema(default = DEFAULT_HIGHLIGHT_PRE_TAG)]
     pub highlight_pre_tag: String,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchHighlightPostTag>, default = DEFAULT_HIGHLIGHT_POST_TAG())]
+    #[deserr(error = DeserrJsonError<InvalidSearchHighlightPostTag>, default = DEFAULT_HIGHLIGHT_POST_TAG())]
+    #[schema(default = DEFAULT_HIGHLIGHT_POST_TAG)]
     pub highlight_post_tag: String,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchCropMarker>, default = DEFAULT_CROP_MARKER())]
+    #[deserr(error = DeserrJsonError<InvalidSearchCropMarker>, default = DEFAULT_CROP_MARKER())]
+    #[schema(default = DEFAULT_CROP_MARKER)]
     pub crop_marker: String,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchMatchingStrategy>, default)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchMatchingStrategy>)]
     pub matching_strategy: MatchingStrategy,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToSearchOn>, default)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToSearchOn>)]
     pub attributes_to_search_on: Option<Vec<String>>,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchRankingScoreThreshold>, default)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchRankingScoreThreshold>)]
     pub ranking_score_threshold: Option<RankingScoreThreshold>,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchLocales>, default)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchLocales>)]
     pub locales: Option<Vec<Locale>>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Deserr)]
+#[derive(Debug, Clone, Copy, PartialEq, Deserr, ToSchema, Serialize)]
 #[deserr(try_from(f64) = TryFrom::try_from -> InvalidSearchRankingScoreThreshold)]
 pub struct RankingScoreThreshold(f64);
-
 impl std::convert::TryFrom<f64> for RankingScoreThreshold {
     type Error = InvalidSearchRankingScoreThreshold;
 
@@ -262,12 +275,15 @@ impl fmt::Debug for SearchQuery {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Deserr)]
-#[deserr(error = DeserrJsonError<InvalidHybridQuery>, rename_all = camelCase, deny_unknown_fields)]
+#[derive(Debug, Clone, Default, PartialEq, Deserr, ToSchema, Serialize)]
+#[deserr(error = DeserrJsonError<InvalidSearchHybridQuery>, rename_all = camelCase, deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
 pub struct HybridQuery {
     #[deserr(default, error = DeserrJsonError<InvalidSearchSemanticRatio>, default)]
+    #[schema(value_type = f32, default)]
+    #[serde(default)]
     pub semantic_ratio: SemanticRatio,
-    #[deserr(error = DeserrJsonError<InvalidEmbedder>)]
+    #[deserr(error = DeserrJsonError<InvalidSearchEmbedder>)]
     pub embedder: String,
 }
 
@@ -281,39 +297,63 @@ pub enum SearchKind {
 impl SearchKind {
     pub(crate) fn semantic(
         index_scheduler: &index_scheduler::IndexScheduler,
+        index_uid: String,
         index: &Index,
         embedder_name: &str,
         vector_len: Option<usize>,
     ) -> Result<Self, ResponseError> {
-        let (embedder_name, embedder, quantized) =
-            Self::embedder(index_scheduler, index, embedder_name, vector_len)?;
+        let (embedder_name, embedder, quantized) = Self::embedder(
+            index_scheduler,
+            index_uid,
+            index,
+            embedder_name,
+            vector_len,
+            Route::Search,
+        )?;
         Ok(Self::SemanticOnly { embedder_name, embedder, quantized })
     }
 
     pub(crate) fn hybrid(
         index_scheduler: &index_scheduler::IndexScheduler,
+        index_uid: String,
         index: &Index,
         embedder_name: &str,
         semantic_ratio: f32,
         vector_len: Option<usize>,
     ) -> Result<Self, ResponseError> {
-        let (embedder_name, embedder, quantized) =
-            Self::embedder(index_scheduler, index, embedder_name, vector_len)?;
+        let (embedder_name, embedder, quantized) = Self::embedder(
+            index_scheduler,
+            index_uid,
+            index,
+            embedder_name,
+            vector_len,
+            Route::Search,
+        )?;
         Ok(Self::Hybrid { embedder_name, embedder, quantized, semantic_ratio })
     }
 
     pub(crate) fn embedder(
         index_scheduler: &index_scheduler::IndexScheduler,
+        index_uid: String,
         index: &Index,
         embedder_name: &str,
         vector_len: Option<usize>,
+        route: Route,
     ) -> Result<(String, Arc<Embedder>, bool), ResponseError> {
-        let embedder_configs = index.embedding_configs(&index.read_txn()?)?;
-        let embedders = index_scheduler.embedders(embedder_configs)?;
+        let rtxn = index.read_txn()?;
+        let embedder_configs = index.embedding_configs(&rtxn)?;
+        let embedders = index_scheduler.embedders(index_uid, embedder_configs)?;
 
         let (embedder, _, quantized) = embedders
             .get(embedder_name)
-            .ok_or(milli::UserError::InvalidEmbedder(embedder_name.to_owned()))
+            .ok_or(match route {
+                Route::Search | Route::MultiSearch => {
+                    milli::UserError::InvalidSearchEmbedder(embedder_name.to_owned())
+                }
+                Route::Similar => {
+                    milli::UserError::InvalidSimilarEmbedder(embedder_name.to_owned())
+                }
+            })
             .map_err(milli::Error::from)?;
 
         if let Some(vector_len) = vector_len {
@@ -332,7 +372,7 @@ impl SearchKind {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Deserr)]
+#[derive(Debug, Clone, Copy, PartialEq, Deserr, Serialize)]
 #[deserr(try_from(f32) = TryFrom::try_from -> InvalidSearchSemanticRatio)]
 pub struct SemanticRatio(f32);
 
@@ -374,8 +414,10 @@ impl SearchQuery {
 // This struct contains the fields of `SearchQuery` inline.
 // This is because neither deserr nor serde support `flatten` when using `deny_unknown_fields.
 // The `From<SearchQueryWithIndex>` implementation ensures both structs remain up to date.
-#[derive(Debug, Clone, PartialEq, Deserr)]
+#[derive(Debug, Clone, Serialize, PartialEq, Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
 pub struct SearchQueryWithIndex {
     #[deserr(error = DeserrJsonError<InvalidIndexUid>, missing_field_error = DeserrJsonError::missing_index_uid)]
     pub index_uid: IndexUid,
@@ -383,7 +425,7 @@ pub struct SearchQueryWithIndex {
     pub q: Option<String>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
     pub vector: Option<Vec<f32>>,
-    #[deserr(default, error = DeserrJsonError<InvalidHybridQuery>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchHybridQuery>)]
     pub hybrid: Option<HybridQuery>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchOffset>)]
     pub offset: Option<usize>,
@@ -455,6 +497,72 @@ impl SearchQueryWithIndex {
         self.facets.as_deref().filter(|v| !v.is_empty())
     }
 
+    pub fn from_index_query_federation(
+        index_uid: IndexUid,
+        query: SearchQuery,
+        federation_options: Option<FederationOptions>,
+    ) -> Self {
+        let SearchQuery {
+            q,
+            vector,
+            hybrid,
+            offset,
+            limit,
+            page,
+            hits_per_page,
+            attributes_to_retrieve,
+            retrieve_vectors,
+            attributes_to_crop,
+            crop_length,
+            attributes_to_highlight,
+            show_matches_position,
+            show_ranking_score,
+            show_ranking_score_details,
+            filter,
+            sort,
+            distinct,
+            facets,
+            highlight_pre_tag,
+            highlight_post_tag,
+            crop_marker,
+            matching_strategy,
+            attributes_to_search_on,
+            ranking_score_threshold,
+            locales,
+        } = query;
+
+        SearchQueryWithIndex {
+            index_uid,
+            q,
+            vector,
+            hybrid,
+            offset: if offset == DEFAULT_SEARCH_OFFSET() { None } else { Some(offset) },
+            limit: if limit == DEFAULT_SEARCH_LIMIT() { None } else { Some(limit) },
+            page,
+            hits_per_page,
+            attributes_to_retrieve,
+            retrieve_vectors,
+            attributes_to_crop,
+            crop_length,
+            attributes_to_highlight,
+            show_ranking_score,
+            show_ranking_score_details,
+            show_matches_position,
+            filter,
+            sort,
+            distinct,
+            facets,
+            highlight_pre_tag,
+            highlight_post_tag,
+            crop_marker,
+            matching_strategy,
+            attributes_to_search_on,
+            ranking_score_threshold,
+            locales,
+            federation_options,
+        }
+    }
+
     pub fn into_index_query_federation(self) -> (IndexUid, SearchQuery, Option<FederationOptions>) {
         let SearchQueryWithIndex {
             index_uid,
@@ -523,18 +631,19 @@ impl SearchQueryWithIndex {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Deserr)]
+#[derive(Debug, Clone, PartialEq, Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct SimilarQuery {
     #[deserr(error = DeserrJsonError<InvalidSimilarId>)]
-    pub id: ExternalDocumentId,
+    #[schema(value_type = String)]
+    pub id: serde_json::Value,
     #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSimilarOffset>)]
     pub offset: usize,
     #[deserr(default = DEFAULT_SEARCH_LIMIT(), error = DeserrJsonError<InvalidSimilarLimit>)]
     pub limit: usize,
     #[deserr(default, error = DeserrJsonError<InvalidSimilarFilter>)]
     pub filter: Option<Value>,
-    #[deserr(error = DeserrJsonError<InvalidEmbedder>)]
+    #[deserr(error = DeserrJsonError<InvalidSimilarEmbedder>)]
     pub embedder: String,
     #[deserr(default, error = DeserrJsonError<InvalidSimilarAttributesToRetrieve>)]
     pub attributes_to_retrieve: Option<BTreeSet<String>>,
@@ -545,11 +654,11 @@ pub struct SimilarQuery {
     #[deserr(default, error = DeserrJsonError<InvalidSimilarShowRankingScoreDetails>, default)]
     pub show_ranking_score_details: bool,
     #[deserr(default, error = DeserrJsonError<InvalidSimilarRankingScoreThreshold>, default)]
+    #[schema(value_type = f64)]
     pub ranking_score_threshold: Option<RankingScoreThresholdSimilar>,
 }
 
-#[derive(Debug, Clone, PartialEq, Deserr)]
-#[deserr(try_from(Value) = TryFrom::try_from -> InvalidSimilarId)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ExternalDocumentId(String);
 
 impl AsRef<str> for ExternalDocumentId {
@@ -565,7 +674,7 @@ impl ExternalDocumentId {
 }
 
 impl TryFrom<String> for ExternalDocumentId {
-    type Error = InvalidSimilarId;
+    type Error = milli::UserError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
         serde_json::Value::String(value).try_into()
@@ -573,15 +682,16 @@ impl TryFrom<String> for ExternalDocumentId {
 }
 
 impl TryFrom<Value> for ExternalDocumentId {
-    type Error = InvalidSimilarId;
+    type Error = milli::UserError;
 
     fn try_from(value: Value) -> Result<Self, Self::Error> {
-        Ok(Self(milli::documents::validate_document_id_value(value).map_err(|_| InvalidSimilarId)?))
+        Ok(Self(milli::documents::validate_document_id_value(value)?))
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Deserr)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Deserr, ToSchema, Serialize)]
 #[deserr(rename_all = camelCase)]
+#[serde(rename_all = "camelCase")]
 pub enum MatchingStrategy {
     /// Remove query words from last to first
     Last,
@@ -627,22 +737,25 @@ impl From<FacetValuesSort> for OrderBy {
     }
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct SearchHit {
     #[serde(flatten)]
+    #[schema(additional_properties, inline, value_type = HashMap<String, Value>)]
     pub document: Document,
-    #[serde(rename = "_formatted", skip_serializing_if = "Document::is_empty")]
+    #[serde(default, rename = "_formatted", skip_serializing_if = "Document::is_empty")]
+    #[schema(additional_properties, value_type = HashMap<String, Value>)]
     pub formatted: Document,
-    #[serde(rename = "_matchesPosition", skip_serializing_if = "Option::is_none")]
+    #[serde(default, rename = "_matchesPosition", skip_serializing_if = "Option::is_none")]
     pub matches_position: Option<MatchesPosition>,
-    #[serde(rename = "_rankingScore", skip_serializing_if = "Option::is_none")]
+    #[serde(default, rename = "_rankingScore", skip_serializing_if = "Option::is_none")]
     pub ranking_score: Option<f64>,
-    #[serde(rename = "_rankingScoreDetails", skip_serializing_if = "Option::is_none")]
+    #[serde(default, rename = "_rankingScoreDetails", skip_serializing_if = "Option::is_none")]
     pub ranking_score_details: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
-#[derive(Serialize, Clone, PartialEq)]
+#[derive(Serialize, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
 pub struct SearchResult {
     pub hits: Vec<SearchHit>,
     pub query: String,
@@ -650,6 +763,7 @@ pub struct SearchResult {
     #[serde(flatten)]
     pub hits_info: HitsInfo,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = Option<BTreeMap<String, Value>>)]
     pub facet_distribution: Option<BTreeMap<String, IndexMap<String, u64>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub facet_stats: Option<BTreeMap<String, FacetStats>>,
@@ -704,7 +818,7 @@ impl fmt::Debug for SearchResult {
     }
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Debug, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SimilarResult {
     pub hits: Vec<SearchHit>,
@@ -714,24 +828,27 @@ pub struct SimilarResult {
     pub hits_info: HitsInfo,
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Debug, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
 pub struct SearchResultWithIndex {
     pub index_uid: String,
     #[serde(flatten)]
     pub result: SearchResult,
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, ToSchema)]
 #[serde(untagged)]
 pub enum HitsInfo {
     #[serde(rename_all = "camelCase")]
+    #[schema(rename_all = "camelCase")]
     Pagination { hits_per_page: usize, page: usize, total_pages: usize, total_hits: usize },
     #[serde(rename_all = "camelCase")]
+    #[schema(rename_all = "camelCase")]
     OffsetLimit { limit: usize, offset: usize, estimated_total_hits: usize },
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ToSchema)]
 pub struct FacetStats {
     pub min: f64,
     pub max: f64,
@@ -799,7 +916,7 @@ fn prepare_search<'t>(
                     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
 
                     embedder
-                        .embed_one(query.q.clone().unwrap(), Some(deadline))
+                        .embed_search(query.q.as_ref().unwrap(), Some(deadline))
                         .map_err(milli::vector::Error::from)
                         .map_err(milli::Error::from)?
                 }
@@ -890,6 +1007,7 @@ fn prepare_search<'t>(
 }
 
 pub fn perform_search(
+    index_uid: String,
     index: &Index,
     query: SearchQuery,
     search_kind: SearchKind,
@@ -916,7 +1034,7 @@ pub fn perform_search(
             used_negative_operator,
         },
         semantic_hit_count,
-    ) = search_from_kind(search_kind, search)?;
+    ) = search_from_kind(index_uid, search_kind, search)?;
 
     let SearchQuery {
         q,
@@ -1013,15 +1131,17 @@ pub fn perform_search(
     Ok(result)
 }
 
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
 pub struct ComputedFacets {
+    #[schema(value_type = BTreeMap<String, BTreeMap<String, u64>>)]
     pub distribution: BTreeMap<String, IndexMap<String, u64>>,
     pub stats: BTreeMap<String, FacetStats>,
 }
 
-enum Route {
+pub enum Route {
     Search,
     MultiSearch,
+    Similar,
 }
 
 fn compute_facet_distribution_stats<S: AsRef<str>>(
@@ -1069,17 +1189,27 @@ fn compute_facet_distribution_stats<S: AsRef<str>>(
 }
 
 pub fn search_from_kind(
+    index_uid: String,
     search_kind: SearchKind,
     search: milli::Search<'_>,
 ) -> Result<(milli::SearchResult, Option<u32>), MeilisearchHttpError> {
     let (milli_result, semantic_hit_count) = match &search_kind {
-        SearchKind::KeywordOnly => (search.execute()?, None),
+        SearchKind::KeywordOnly => {
+            let results = search
+                .execute()
+                .map_err(|e| MeilisearchHttpError::from_milli(e, Some(index_uid.to_string())))?;
+            (results, None)
+        }
         SearchKind::SemanticOnly { .. } => {
-            let results = search.execute()?;
+            let results = search
+                .execute()
+                .map_err(|e| MeilisearchHttpError::from_milli(e, Some(index_uid.to_string())))?;
             let semantic_hit_count = results.document_scores.len() as u32;
             (results, Some(semantic_hit_count))
         }
-        SearchKind::Hybrid { semantic_ratio, .. } => search.execute_hybrid(*semantic_ratio)?,
+        SearchKind::Hybrid { semantic_ratio, .. } => search
+            .execute_hybrid(*semantic_ratio)
+            .map_err(|e| MeilisearchHttpError::from_milli(e, Some(index_uid)))?,
     };
     Ok((milli_result, semantic_hit_count))
 }
@@ -1102,10 +1232,6 @@ struct AttributesFormat {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RetrieveVectors {
-    /// Do not touch the `_vectors` field
-    ///
-    /// this is the behavior when the vectorStore feature is disabled
-    Ignore,
     /// Remove the `_vectors` field
     ///
     /// this is the behavior when the vectorStore feature is enabled, and `retrieveVectors` is `false`
@@ -1117,15 +1243,11 @@ pub enum RetrieveVectors {
 }
 
 impl RetrieveVectors {
-    pub fn new(
-        retrieve_vector: bool,
-        features: index_scheduler::RoFeatures,
-    ) -> Result<Self, index_scheduler::Error> {
-        match (retrieve_vector, features.check_vector("Passing `retrieveVectors` as a parameter")) {
-            (true, Ok(())) => Ok(Self::Retrieve),
-            (true, Err(error)) => Err(error),
-            (false, Ok(())) => Ok(Self::Hide),
-            (false, Err(_)) => Ok(Self::Ignore),
+    pub fn new(retrieve_vector: bool) -> Self {
+        if retrieve_vector {
+            Self::Retrieve
+        } else {
+            Self::Hide
         }
     }
 }
@@ -1181,7 +1303,7 @@ impl<'a> HitMaker<'a> {
         rtxn: &'a RoTxn<'a>,
         format: AttributesFormat,
         mut formatter_builder: MatcherBuilder<'a>,
-    ) -> Result<Self, MeilisearchHttpError> {
+    ) -> milli::Result<Self> {
         formatter_builder.crop_marker(format.crop_marker);
         formatter_builder.highlight_prefix(format.highlight_pre_tag);
         formatter_builder.highlight_suffix(format.highlight_post_tag);
@@ -1191,8 +1313,7 @@ impl<'a> HitMaker<'a> {
             .displayed_fields_ids(rtxn)?
             .map(|fields| fields.into_iter().collect::<BTreeSet<_>>());
 
-        let vectors_fid =
-            fields_ids_map.id(milli::vector::parsed_vectors::RESERVED_VECTORS_FIELD_NAME);
+        let vectors_fid = fields_ids_map.id(milli::constants::RESERVED_VECTORS_FIELD_NAME);
 
         let vectors_is_hidden = match (&displayed_ids, vectors_fid) {
             // displayed_ids is a wildcard, so `_vectors` can be displayed regardless of its fid
@@ -1201,8 +1322,7 @@ impl<'a> HitMaker<'a> {
             (Some(_), None) => {
                 // unwrap as otherwise we'd go to the first one
                 let displayed_names = index.displayed_fields(rtxn)?.unwrap();
-                !displayed_names
-                    .contains(&milli::vector::parsed_vectors::RESERVED_VECTORS_FIELD_NAME)
+                !displayed_names.contains(&milli::constants::RESERVED_VECTORS_FIELD_NAME)
             }
             // displayed_ids is a finit list, so hide if `_vectors` is not part of it
             (Some(map), Some(vectors_fid)) => map.contains(&vectors_fid),
@@ -1276,11 +1396,7 @@ impl<'a> HitMaker<'a> {
         })
     }
 
-    pub fn make_hit(
-        &self,
-        id: u32,
-        score: &[ScoreDetails],
-    ) -> Result<SearchHit, MeilisearchHttpError> {
+    pub fn make_hit(&self, id: u32, score: &[ScoreDetails]) -> milli::Result<SearchHit> {
         let (_, obkv) =
             self.index.iter_documents(self.rtxn, std::iter::once(id))?.next().unwrap()?;
 
@@ -1323,7 +1439,10 @@ impl<'a> HitMaker<'a> {
                     .is_some_and(|conf| conf.user_provided.contains(id));
                 let embeddings =
                     ExplicitVectors { embeddings: Some(vector.into()), regenerate: !user_provided };
-                vectors.insert(name, serde_json::to_value(embeddings)?);
+                vectors.insert(
+                    name,
+                    serde_json::to_value(embeddings).map_err(InternalError::SerdeJson)?,
+                );
             }
             document.insert("_vectors".into(), vectors.into());
         }
@@ -1369,7 +1488,7 @@ fn make_hits<'a>(
     format: AttributesFormat,
     matching_words: milli::MatchingWords,
     documents_ids_scores: impl Iterator<Item = (u32, &'a Vec<ScoreDetails>)> + 'a,
-) -> Result<Vec<SearchHit>, MeilisearchHttpError> {
+) -> milli::Result<Vec<SearchHit>> {
     let mut documents = Vec::new();
 
     let dictionary = index.dictionary(rtxn)?;
@@ -1407,17 +1526,25 @@ pub fn perform_facet_search(
         None => TimeBudget::default(),
     };
 
+    if !index.facet_search(&rtxn)? {
+        return Err(ResponseError::from_msg(
+            "The facet search is disabled for this index".to_string(),
+            Code::FacetSearchDisabled,
+        ));
+    }
+
     // In the faceted search context, we want to use the intersection between the locales provided by the user
     // and the locales of the facet string.
     // If the facet string is not localized, we **ignore** the locales provided by the user because the facet data has no locale.
     // If the user does not provide locales, we use the locales of the facet string.
     let localized_attributes = index.localized_attributes_rules(&rtxn)?.unwrap_or_default();
-    let localized_attributes_locales =
-        localized_attributes.into_iter().find(|attr| attr.match_str(&facet_name));
+    let localized_attributes_locales = localized_attributes
+        .into_iter()
+        .find(|attr| attr.match_str(&facet_name) == PatternMatch::Match);
     let locales = localized_attributes_locales.map(|attr| {
         attr.locales
             .into_iter()
-            .filter(|locale| locales.as_ref().map_or(true, |locales| locales.contains(locale)))
+            .filter(|locale| locales.as_ref().is_none_or(|locales| locales.contains(locale)))
             .collect()
     });
 
@@ -1470,6 +1597,11 @@ pub fn perform_similar(
         show_ranking_score_details,
         ranking_score_threshold,
     } = query;
+
+    let id: ExternalDocumentId = id.try_into().map_err(|error| {
+        let msg = format!("Invalid value at `.id`: {error}");
+        ResponseError::from_msg(msg, Code::InvalidSimilarId)
+    })?;
 
     // using let-else rather than `?` so that the borrow checker identifies we're always returning here,
     // preventing a use-after-move
@@ -1557,7 +1689,7 @@ pub fn perform_similar(
     Ok(result)
 }
 
-fn insert_geo_distance(sorts: &[String], document: &mut Document) {
+pub fn insert_geo_distance(sorts: &[String], document: &mut Document) {
     lazy_static::lazy_static! {
         static ref GEO_REGEX: Regex =
             Regex::new(r"_geoPoint\(\s*([[:digit:].\-]+)\s*,\s*([[:digit:].\-]+)\s*\)").unwrap();
@@ -1690,12 +1822,12 @@ fn make_document(
     displayed_attributes: &BTreeSet<FieldId>,
     field_ids_map: &FieldsIdsMap,
     obkv: &obkv::KvReaderU16,
-) -> Result<Document, MeilisearchHttpError> {
+) -> milli::Result<Document> {
     let mut document = serde_json::Map::new();
 
     // recreate the original json
     for (key, value) in obkv.iter() {
-        let value = serde_json::from_slice(value)?;
+        let value = serde_json::from_slice(value).map_err(InternalError::SerdeJson)?;
         let key = field_ids_map.name(key).expect("Missing field name").to_string();
 
         document.insert(key, value);
@@ -1720,7 +1852,7 @@ fn format_fields(
     displayable_ids: &BTreeSet<FieldId>,
     locales: Option<&[Language]>,
     localized_attributes: &[LocalizedAttributesRule],
-) -> Result<(Option<MatchesPosition>, Document), MeilisearchHttpError> {
+) -> milli::Result<(Option<MatchesPosition>, Document)> {
     let mut matches_position = compute_matches.then(BTreeMap::new);
     let mut document = document.clone();
 
@@ -1759,7 +1891,7 @@ fn format_fields(
             let locales = locales.or_else(|| {
                 localized_attributes
                     .iter()
-                    .find(|rule| rule.match_str(key))
+                    .find(|rule| rule.match_str(key) == PatternMatch::Match)
                     .map(LocalizedAttributesRule::locales)
             });
 
@@ -1898,121 +2030,5 @@ fn parse_filter_array(arr: &[Value]) -> Result<Option<Filter>, MeilisearchHttpEr
         }
     }
 
-    Ok(Filter::from_array(ands)?)
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn test_insert_geo_distance() {
-        let value: Document = serde_json::from_str(
-            r#"{
-              "_geo": {
-                "lat": 50.629973371633746,
-                "lng": 3.0569447399419567
-              },
-              "city": "Lille",
-              "id": "1"
-            }"#,
-        )
-        .unwrap();
-
-        let sorters = &["_geoPoint(50.629973371633746,3.0569447399419567):desc".to_string()];
-        let mut document = value.clone();
-        insert_geo_distance(sorters, &mut document);
-        assert_eq!(document.get("_geoDistance"), Some(&json!(0)));
-
-        let sorters = &["_geoPoint(50.629973371633746, 3.0569447399419567):asc".to_string()];
-        let mut document = value.clone();
-        insert_geo_distance(sorters, &mut document);
-        assert_eq!(document.get("_geoDistance"), Some(&json!(0)));
-
-        let sorters =
-            &["_geoPoint(   50.629973371633746   ,  3.0569447399419567   ):desc".to_string()];
-        let mut document = value.clone();
-        insert_geo_distance(sorters, &mut document);
-        assert_eq!(document.get("_geoDistance"), Some(&json!(0)));
-
-        let sorters = &[
-            "prix:asc",
-            "villeneuve:desc",
-            "_geoPoint(50.629973371633746, 3.0569447399419567):asc",
-            "ubu:asc",
-        ]
-        .map(|s| s.to_string());
-        let mut document = value.clone();
-        insert_geo_distance(sorters, &mut document);
-        assert_eq!(document.get("_geoDistance"), Some(&json!(0)));
-
-        // only the first geoPoint is used to compute the distance
-        let sorters = &[
-            "chien:desc",
-            "_geoPoint(50.629973371633746, 3.0569447399419567):asc",
-            "pangolin:desc",
-            "_geoPoint(100.0, -80.0):asc",
-            "chat:asc",
-        ]
-        .map(|s| s.to_string());
-        let mut document = value.clone();
-        insert_geo_distance(sorters, &mut document);
-        assert_eq!(document.get("_geoDistance"), Some(&json!(0)));
-
-        // there was no _geoPoint so nothing is inserted in the document
-        let sorters = &["chien:asc".to_string()];
-        let mut document = value;
-        insert_geo_distance(sorters, &mut document);
-        assert_eq!(document.get("_geoDistance"), None);
-    }
-
-    #[test]
-    fn test_insert_geo_distance_with_coords_as_string() {
-        let value: Document = serde_json::from_str(
-            r#"{
-              "_geo": {
-                "lat": "50",
-                "lng": 3
-              }
-            }"#,
-        )
-        .unwrap();
-
-        let sorters = &["_geoPoint(50,3):desc".to_string()];
-        let mut document = value.clone();
-        insert_geo_distance(sorters, &mut document);
-        assert_eq!(document.get("_geoDistance"), Some(&json!(0)));
-
-        let value: Document = serde_json::from_str(
-            r#"{
-              "_geo": {
-                "lat": "50",
-                "lng": "3"
-              },
-              "id": "1"
-            }"#,
-        )
-        .unwrap();
-
-        let sorters = &["_geoPoint(50,3):desc".to_string()];
-        let mut document = value.clone();
-        insert_geo_distance(sorters, &mut document);
-        assert_eq!(document.get("_geoDistance"), Some(&json!(0)));
-
-        let value: Document = serde_json::from_str(
-            r#"{
-              "_geo": {
-                "lat": 50,
-                "lng": "3"
-              },
-              "id": "1"
-            }"#,
-        )
-        .unwrap();
-
-        let sorters = &["_geoPoint(50,3):desc".to_string()];
-        let mut document = value.clone();
-        insert_geo_distance(sorters, &mut document);
-        assert_eq!(document.get("_geoDistance"), Some(&json!(0)));
-    }
+    Filter::from_array(ands).map_err(|e| MeilisearchHttpError::from_milli(e, None))
 }

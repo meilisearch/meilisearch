@@ -1,0 +1,79 @@
+---
+source: crates/meilisearch/tests/dumps/mod.rs
+---
+{
+  "results": [
+    {
+      "uid": 2,
+      "progress": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "succeeded": 1
+        },
+        "types": {
+          "documentAdditionOrUpdate": 1
+        },
+        "indexUids": {
+          "kefir": 1
+        },
+        "progressTrace": "[progressTrace]",
+        "writeChannelCongestion": "[writeChannelCongestion]"
+      },
+      "duration": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    },
+    {
+      "uid": 1,
+      "progress": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "succeeded": 1
+        },
+        "types": {
+          "documentAdditionOrUpdate": 1
+        },
+        "indexUids": {
+          "kefir": 1
+        }
+      },
+      "duration": "PT0.144827890S",
+      "startedAt": "2025-02-04T10:15:21.275640274Z",
+      "finishedAt": "2025-02-04T10:15:21.420468164Z"
+    },
+    {
+      "uid": 0,
+      "progress": null,
+      "details": {},
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "succeeded": 1
+        },
+        "types": {
+          "indexCreation": 1
+        },
+        "indexUids": {
+          "kefir": 1
+        }
+      },
+      "duration": "PT0.032902186S",
+      "startedAt": "2025-02-04T10:14:43.559526162Z",
+      "finishedAt": "2025-02-04T10:14:43.592428348Z"
+    }
+  ],
+  "total": 3,
+  "limit": 20,
+  "from": 2,
+  "next": null
+}

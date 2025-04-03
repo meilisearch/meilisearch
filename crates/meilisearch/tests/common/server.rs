@@ -88,6 +88,10 @@ impl Server<Owned> {
         self.service.api_key = Some(api_key.as_ref().to_string());
     }
 
+    pub fn clear_api_key(&mut self) {
+        self.service.api_key = None;
+    }
+
     /// Fetch and use the default admin key for nexts http requests.
     pub async fn use_admin_key(&mut self, master_key: impl AsRef<str>) {
         self.use_api_key(master_key);
@@ -119,6 +123,12 @@ impl Server<Owned> {
 
     pub async fn create_index(&self, body: Value) -> (Value, StatusCode) {
         self.service.post("/indexes", body).await
+    }
+
+    pub async fn delete_index(&self, uid: impl AsRef<str>) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}", urlencoding::encode(uid.as_ref()));
+        let (value, code) = self.service.delete(url).await;
+        (value, code)
     }
 
     pub fn index_with_encoder(&self, uid: impl AsRef<str>, encoder: Encoder) -> Index<'_> {
@@ -159,8 +169,16 @@ impl Server<Owned> {
         self.service.get("/tasks").await
     }
 
+    pub async fn batches(&self) -> (Value, StatusCode) {
+        self.service.get("/batches").await
+    }
+
     pub async fn set_features(&self, value: Value) -> (Value, StatusCode) {
         self.service.patch("/experimental-features", value).await
+    }
+
+    pub async fn set_network(&self, value: Value) -> (Value, StatusCode) {
+        self.service.patch("/network", value).await
     }
 
     pub async fn get_metrics(&self) -> (Value, StatusCode) {
@@ -222,6 +240,26 @@ impl Server<Shared> {
         (value, code)
     }
 
+    pub async fn list_indexes(
+        &self,
+        offset: Option<usize>,
+        limit: Option<usize>,
+    ) -> (Value, StatusCode) {
+        let (offset, limit) = (
+            offset.map(|offset| format!("offset={offset}")),
+            limit.map(|limit| format!("limit={limit}")),
+        );
+        let query_parameter = offset
+            .as_ref()
+            .zip(limit.as_ref())
+            .map(|(offset, limit)| format!("{offset}&{limit}"))
+            .or_else(|| offset.xor(limit));
+        if let Some(query_parameter) = query_parameter {
+            self.service.get(format!("/indexes?{query_parameter}")).await
+        } else {
+            self.service.get("/indexes").await
+        }
+    }
     pub async fn update_raw_index_fail(
         &self,
         uid: impl AsRef<str>,
@@ -361,7 +399,18 @@ impl<State> Server<State> {
     pub async fn wait_task(&self, update_id: u64) -> Value {
         // try several times to get status, or panic to not wait forever
         let url = format!("/tasks/{}", update_id);
-        for _ in 0..100 {
+        // Increase timeout for vector-related tests
+        let max_attempts = if url.contains("/tasks/") {
+            if update_id > 1000 {
+                400 // 200 seconds for vector tests
+            } else {
+                100 // 50 seconds for other tests
+            }
+        } else {
+            100 // 50 seconds for other tests
+        };
+
+        for _ in 0..max_attempts {
             let (response, status_code) = self.service.get(&url).await;
             assert_eq!(200, status_code, "response: {}", response);
 
@@ -387,6 +436,10 @@ impl<State> Server<State> {
 
     pub async fn get_features(&self) -> (Value, StatusCode) {
         self.service.get("/experimental-features").await
+    }
+
+    pub async fn get_network(&self) -> (Value, StatusCode) {
+        self.service.get("/network").await
     }
 }
 

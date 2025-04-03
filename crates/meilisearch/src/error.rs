@@ -4,6 +4,7 @@ use byte_unit::{Byte, UnitType};
 use meilisearch_types::document_formats::{DocumentFormatError, PayloadType};
 use meilisearch_types::error::{Code, ErrorCode, ResponseError};
 use meilisearch_types::index_uid::{IndexUid, IndexUidFormatError};
+use meilisearch_types::milli;
 use meilisearch_types::milli::OrderBy;
 use serde_json::Value;
 use tokio::task::JoinError;
@@ -18,15 +19,15 @@ pub enum MeilisearchHttpError {
     #[error("The Content-Type `{0}` does not support the use of a csv delimiter. The csv delimiter can only be used with the Content-Type `text/csv`.")]
     CsvDelimiterWithWrongContentType(String),
     #[error(
-        "The Content-Type `{0}` is invalid. Accepted values for the Content-Type header are: {}",
-        .1.iter().map(|s| format!("`{}`", s)).collect::<Vec<_>>().join(", ")
+        "The Content-Type `{}` is invalid. Accepted values for the Content-Type header are: {}",
+        .0, .1.iter().map(|s| format!("`{}`", s)).collect::<Vec<_>>().join(", ")
     )]
     InvalidContentType(String, Vec<String>),
     #[error("Document `{0}` not found.")]
     DocumentNotFound(String),
     #[error("Sending an empty filter is forbidden.")]
     EmptyFilter,
-    #[error("Invalid syntax for the filter parameter: `expected {}, found: {1}`.", .0.join(", "))]
+    #[error("Invalid syntax for the filter parameter: `expected {}, found: {}`.", .0.join(", "), .1)]
     InvalidExpression(&'static [&'static str], Value),
     #[error("Using `federationOptions` is not allowed in a non-federated search.\n - Hint: remove `federationOptions` from query #{0} or add `federation` to the request.")]
     FederationOptionsInNonFederatedRequest(usize),
@@ -62,8 +63,11 @@ pub enum MeilisearchHttpError {
     HeedError(#[from] meilisearch_types::heed::Error),
     #[error(transparent)]
     IndexScheduler(#[from] index_scheduler::Error),
-    #[error(transparent)]
-    Milli(#[from] meilisearch_types::milli::Error),
+    #[error("{}", match .index_name {
+        Some(name) if !name.is_empty() => format!("Index `{}`: {error}", name),
+        _ => format!("{error}")
+    })]
+    Milli { error: milli::Error, index_name: Option<String> },
     #[error(transparent)]
     Payload(#[from] PayloadError),
     #[error(transparent)]
@@ -74,6 +78,12 @@ pub enum MeilisearchHttpError {
     Join(#[from] JoinError),
     #[error("Invalid request: missing `hybrid` parameter when `vector` is present.")]
     MissingSearchHybrid,
+}
+
+impl MeilisearchHttpError {
+    pub(crate) fn from_milli(error: milli::Error, index_name: Option<String>) -> Self {
+        Self::Milli { error, index_name }
+    }
 }
 
 impl ErrorCode for MeilisearchHttpError {
@@ -95,7 +105,7 @@ impl ErrorCode for MeilisearchHttpError {
             MeilisearchHttpError::SerdeJson(_) => Code::Internal,
             MeilisearchHttpError::HeedError(_) => Code::Internal,
             MeilisearchHttpError::IndexScheduler(e) => e.error_code(),
-            MeilisearchHttpError::Milli(e) => e.error_code(),
+            MeilisearchHttpError::Milli { error, .. } => error.error_code(),
             MeilisearchHttpError::Payload(e) => e.error_code(),
             MeilisearchHttpError::FileStore(_) => Code::Internal,
             MeilisearchHttpError::DocumentFormat(e) => e.error_code(),

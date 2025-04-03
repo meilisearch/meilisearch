@@ -113,6 +113,7 @@ mod tests {
     use CriterionError::*;
 
     use super::*;
+    use crate::constants::RESERVED_GEO_FIELD_NAME;
 
     #[test]
     fn parse_criterion() {
@@ -153,7 +154,7 @@ mod tests {
             ("price:aasc", InvalidName { name: S("price:aasc") }),
             ("price:asc and desc", InvalidName { name: S("price:asc and desc") }),
             ("price:asc:truc", InvalidName { name: S("price:asc:truc") }),
-            ("_geo:asc", ReservedName { name: S("_geo") }),
+            ("_geo:asc", ReservedName { name: S(RESERVED_GEO_FIELD_NAME) }),
             ("_geoDistance:asc", ReservedName { name: S("_geoDistance") }),
             ("_geoPoint:asc", ReservedNameForSort { name: S("_geoPoint") }),
             ("_geoPoint(42, 75):asc", ReservedNameForSort { name: S("_geoPoint") }),

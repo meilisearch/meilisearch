@@ -1,10 +1,13 @@
 use bumpalo::Bump;
 use heed::RoTxn;
 
-use super::document::{DocumentFromDb, DocumentFromVersions, MergedDocument, Versions};
+use super::document::{
+    Document as _, DocumentFromDb, DocumentFromVersions, MergedDocument, Versions,
+};
 use super::vector_document::{
     MergedVectorDocument, VectorDocumentFromDb, VectorDocumentFromVersions,
 };
+use crate::attribute_patterns::PatternMatch;
 use crate::documents::FieldIdMapper;
 use crate::vector::EmbeddingConfigs;
 use crate::{DocumentId, Index, Result};
@@ -24,7 +27,7 @@ pub struct Update<'doc> {
     docid: DocumentId,
     external_document_id: &'doc str,
     new: Versions<'doc>,
-    has_deletion: bool,
+    from_scratch: bool,
 }
 
 pub struct Insertion<'doc> {
@@ -106,9 +109,9 @@ impl<'doc> Update<'doc> {
         docid: DocumentId,
         external_document_id: &'doc str,
         new: Versions<'doc>,
-        has_deletion: bool,
+        from_scratch: bool,
     ) -> Self {
-        Update { docid, new, external_document_id, has_deletion }
+        Update { docid, new, external_document_id, from_scratch }
     }
 
     pub fn docid(&self) -> DocumentId {
@@ -141,7 +144,7 @@ impl<'doc> Update<'doc> {
         )?)
     }
 
-    pub fn updated(&self) -> DocumentFromVersions<'_, 'doc> {
+    pub fn only_changed_fields(&self) -> DocumentFromVersions<'_, 'doc> {
         DocumentFromVersions::new(&self.new)
     }
 
@@ -151,7 +154,7 @@ impl<'doc> Update<'doc> {
         index: &'t Index,
         mapper: &'t Mapper,
     ) -> Result<MergedDocument<'_, 'doc, 't, Mapper>> {
-        if self.has_deletion {
+        if self.from_scratch {
             Ok(MergedDocument::without_db(DocumentFromVersions::new(&self.new)))
         } else {
             MergedDocument::with_db(
@@ -164,7 +167,83 @@ impl<'doc> Update<'doc> {
         }
     }
 
-    pub fn updated_vectors(
+    /// Returns whether the updated version of the document is different from the current version for the subset of fields selected by `selector`.
+    ///
+    /// `true` if at least one top-level-field that is exactly a selected field or a parent of a selected field changed.
+    /// Otherwise `false`.
+    ///
+    /// - Note: `_geo` and `_vectors` are not taken into account by this function.
+    pub fn has_changed_for_fields<'t, Mapper: FieldIdMapper>(
+        &self,
+        selector: &mut impl FnMut(&str) -> PatternMatch,
+        rtxn: &'t RoTxn,
+        index: &'t Index,
+        mapper: &'t Mapper,
+    ) -> Result<bool> {
+        let mut changed = false;
+        let mut cached_current = None;
+        let mut updated_selected_field_count = 0;
+
+        for entry in self.only_changed_fields().iter_top_level_fields() {
+            let (key, updated_value) = entry?;
+
+            if selector(key) == PatternMatch::NoMatch {
+                continue;
+            }
+
+            updated_selected_field_count += 1;
+            let current = match cached_current {
+                Some(current) => current,
+                None => self.current(rtxn, index, mapper)?,
+            };
+            let current_value = current.top_level_field(key)?;
+            let Some(current_value) = current_value else {
+                changed = true;
+                break;
+            };
+
+            if current_value.get() != updated_value.get() {
+                changed = true;
+                break;
+            }
+            cached_current = Some(current);
+        }
+
+        if !self.from_scratch {
+            // no field deletion or update, so fields that don't appear in `updated` cannot have changed
+            return Ok(changed);
+        }
+
+        if changed {
+            return Ok(true);
+        }
+
+        // we saw all updated fields, and set `changed` if any field wasn't in `current`.
+        // so if there are as many fields in `current` as in `updated`, then nothing changed.
+        // If there is any more fields in `current`, then they are missing in `updated`.
+        let has_deleted_fields = {
+            let current = match cached_current {
+                Some(current) => current,
+                None => self.current(rtxn, index, mapper)?,
+            };
+
+            let mut current_selected_field_count = 0;
+            for entry in current.iter_top_level_fields() {
+                let (key, _) = entry?;
+
+                if selector(key) == PatternMatch::NoMatch {
+                    continue;
+                }
+                current_selected_field_count += 1;
+            }
+
+            current_selected_field_count != updated_selected_field_count
+        };
+
+        Ok(has_deleted_fields)
+    }
+
+    pub fn only_changed_vectors(
         &self,
         doc_alloc: &'doc Bump,
         embedders: &'doc EmbeddingConfigs,
@@ -180,7 +259,7 @@ impl<'doc> Update<'doc> {
         doc_alloc: &'doc Bump,
         embedders: &'doc EmbeddingConfigs,
     ) -> Result<Option<MergedVectorDocument<'doc>>> {
-        if self.has_deletion {
+        if self.from_scratch {
             MergedVectorDocument::without_db(
                 self.external_document_id,
                 &self.new,

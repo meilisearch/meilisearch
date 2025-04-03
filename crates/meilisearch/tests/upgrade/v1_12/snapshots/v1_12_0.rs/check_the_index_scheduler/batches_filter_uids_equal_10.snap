@@ -1,0 +1,39 @@
+---
+source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
+snapshot_kind: text
+---
+{
+  "results": [
+    {
+      "uid": 10,
+      "progress": null,
+      "details": {
+        "faceting": {
+          "maxValuesPerFacet": 99
+        },
+        "pagination": {
+          "maxTotalHits": 15
+        }
+      },
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "succeeded": 1
+        },
+        "types": {
+          "settingsUpdate": 1
+        },
+        "indexUids": {
+          "kefir": 1
+        }
+      },
+      "duration": "[duration]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+  ],
+  "total": 1,
+  "limit": 20,
+  "from": 10,
+  "next": null
+}

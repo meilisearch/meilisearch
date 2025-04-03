@@ -4,7 +4,9 @@ use std::time::Duration;
 use std::{fs, thread};
 
 use meilisearch_types::heed::types::{SerdeJson, Str};
-use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn};
+use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn, WithoutTls};
+use meilisearch_types::milli;
+use meilisearch_types::milli::database_stats::DatabaseStats;
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::{FieldDistribution, Index};
 use serde::{Deserialize, Serialize};
@@ -15,12 +17,17 @@ use uuid::Uuid;
 use self::index_map::IndexMap;
 use self::IndexStatus::{Available, BeingDeleted, Closing, Missing};
 use crate::uuid_codec::UuidCodec;
-use crate::{Error, Result};
+use crate::{Error, IndexBudget, IndexSchedulerOptions, Result};
 
 mod index_map;
 
-const INDEX_MAPPING: &str = "index-mapping";
-const INDEX_STATS: &str = "index-stats";
+/// The number of database used by index mapper
+const NUMBER_OF_DATABASES: u32 = 2;
+/// Database const names for the `IndexMapper`.
+mod db_name {
+    pub const INDEX_MAPPING: &str = "index-mapping";
+    pub const INDEX_STATS: &str = "index-stats";
+}
 
 /// Structure managing meilisearch's indexes.
 ///
@@ -92,19 +99,32 @@ pub enum IndexStatus {
 /// The statistics that can be computed from an `Index` object.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct IndexStats {
-    /// Number of documents in the index.
-    pub number_of_documents: u64,
+    /// Stats of the documents database.
+    #[serde(default)]
+    pub documents_database_stats: DatabaseStats,
+
+    #[serde(default, skip_serializing)]
+    pub number_of_documents: Option<u64>,
+
     /// Size taken up by the index' DB, in bytes.
     ///
     /// This includes the size taken by both the used and free pages of the DB, and as the free pages
     /// are not returned to the disk after a deletion, this number is typically larger than
     /// `used_database_size` that only includes the size of the used pages.
     pub database_size: u64,
+    /// Number of embeddings in the index.
+    /// Option: retrocompatible with the stats of the pre-v1.13.0 versions of meilisearch
+    pub number_of_embeddings: Option<u64>,
+    /// Number of embedded documents in the index.
+    /// Option: retrocompatible with the stats of the pre-v1.13.0 versions of meilisearch
+    pub number_of_embedded_documents: Option<u64>,
     /// Size taken by the used pages of the index' DB, in bytes.
     ///
     /// As the DB backend does not return to the disk the pages that are not currently used by the DB,
     /// this value is typically smaller than `database_size`.
     pub used_database_size: u64,
+    /// The primary key of the index
+    pub primary_key: Option<String>,
     /// Association of every field name with the number of times it occurs in the documents.
     pub field_distribution: FieldDistribution,
     /// Creation date of the index.
@@ -121,11 +141,16 @@ impl IndexStats {
     /// # Parameters
     ///
     /// - rtxn: a RO transaction for the index, obtained from `Index::read_txn()`.
-    pub fn new(index: &Index, rtxn: &RoTxn) -> Result<Self> {
+    pub fn new(index: &Index, rtxn: &RoTxn) -> milli::Result<Self> {
+        let arroy_stats = index.arroy_stats(rtxn)?;
         Ok(IndexStats {
-            number_of_documents: index.number_of_documents(rtxn)?,
+            number_of_embeddings: Some(arroy_stats.number_of_embeddings),
+            number_of_embedded_documents: Some(arroy_stats.documents.len()),
+            documents_database_stats: index.documents_stats(rtxn)?.unwrap_or_default(),
+            number_of_documents: None,
             database_size: index.on_disk_size()?,
             used_database_size: index.used_size()?,
+            primary_key: index.primary_key(rtxn)?.map(|s| s.to_string()),
             field_distribution: index.field_distribution(rtxn)?,
             created_at: index.created_at(rtxn)?,
             updated_at: index.updated_at(rtxn)?,
@@ -134,29 +159,25 @@ impl IndexStats {
 }
 
 impl IndexMapper {
-    pub fn new(
-        env: &Env,
-        base_path: PathBuf,
-        index_base_map_size: usize,
-        index_growth_amount: usize,
-        index_count: usize,
-        enable_mdb_writemap: bool,
-        indexer_config: IndexerConfig,
-    ) -> Result<Self> {
-        let mut wtxn = env.write_txn()?;
-        let index_mapping = env.create_database(&mut wtxn, Some(INDEX_MAPPING))?;
-        let index_stats = env.create_database(&mut wtxn, Some(INDEX_STATS))?;
-        wtxn.commit()?;
+    pub(crate) const fn nb_db() -> u32 {
+        NUMBER_OF_DATABASES
+    }
 
+    pub fn new(
+        env: &Env<WithoutTls>,
+        wtxn: &mut RwTxn,
+        options: &IndexSchedulerOptions,
+        budget: IndexBudget,
+    ) -> Result<Self> {
         Ok(Self {
-            index_map: Arc::new(RwLock::new(IndexMap::new(index_count))),
-            index_mapping,
-            index_stats,
-            base_path,
-            index_base_map_size,
-            index_growth_amount,
-            enable_mdb_writemap,
-            indexer_config: Arc::new(indexer_config),
+            index_map: Arc::new(RwLock::new(IndexMap::new(budget.index_count))),
+            index_mapping: env.create_database(wtxn, Some(db_name::INDEX_MAPPING))?,
+            index_stats: env.create_database(wtxn, Some(db_name::INDEX_STATS))?,
+            base_path: options.indexes_path.clone(),
+            index_base_map_size: budget.map_size,
+            index_growth_amount: options.index_growth_amount,
+            enable_mdb_writemap: options.enable_mdb_writemap,
+            indexer_config: options.indexer_config.clone(),
             currently_updating_index: Default::default(),
         })
     }
@@ -183,13 +204,24 @@ impl IndexMapper {
                 // Error if the UUIDv4 somehow already exists in the map, since it should be fresh.
                 // This is very unlikely to happen in practice.
                 // TODO: it would be better to lazily create the index. But we need an Index::open function for milli.
-                let index = self.index_map.write().unwrap().create(
-                    &uuid,
-                    &index_path,
-                    date,
-                    self.enable_mdb_writemap,
-                    self.index_base_map_size,
-                )?;
+                let index = self
+                    .index_map
+                    .write()
+                    .unwrap()
+                    .create(
+                        &uuid,
+                        &index_path,
+                        date,
+                        self.enable_mdb_writemap,
+                        self.index_base_map_size,
+                        true,
+                    )
+                    .map_err(|e| Error::from_milli(e, Some(uuid.to_string())))?;
+                let index_rtxn = index.read_txn()?;
+                let stats = crate::index_mapper::IndexStats::new(&index, &index_rtxn)
+                    .map_err(|e| Error::from_milli(e, Some(name.to_string())))?;
+                self.store_stats_of(&mut wtxn, name, &stats)?;
+                drop(index_rtxn);
 
                 wtxn.commit()?;
 
@@ -357,7 +389,9 @@ impl IndexMapper {
                     };
                     let index_path = self.base_path.join(uuid.to_string());
                     // take the lock to reopen the environment.
-                    reopen.reopen(&mut self.index_map.write().unwrap(), &index_path)?;
+                    reopen
+                        .reopen(&mut self.index_map.write().unwrap(), &index_path)
+                        .map_err(|e| Error::from_milli(e, Some(uuid.to_string())))?;
                     continue;
                 }
                 BeingDeleted => return Err(Error::IndexNotFound(name.to_string())),
@@ -372,13 +406,16 @@ impl IndexMapper {
                         Missing => {
                             let index_path = self.base_path.join(uuid.to_string());
 
-                            break index_map.create(
-                                &uuid,
-                                &index_path,
-                                None,
-                                self.enable_mdb_writemap,
-                                self.index_base_map_size,
-                            )?;
+                            break index_map
+                                .create(
+                                    &uuid,
+                                    &index_path,
+                                    None,
+                                    self.enable_mdb_writemap,
+                                    self.index_base_map_size,
+                                    false,
+                                )
+                                .map_err(|e| Error::from_milli(e, Some(uuid.to_string())))?;
                         }
                         Available(index) => break index,
                         Closing(_) => {
@@ -460,6 +497,7 @@ impl IndexMapper {
                 let index = self.index(rtxn, index_uid)?;
                 let index_rtxn = index.read_txn()?;
                 IndexStats::new(&index, &index_rtxn)
+                    .map_err(|e| Error::from_milli(e, Some(uuid.to_string())))
             }
         }
     }

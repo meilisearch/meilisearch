@@ -69,12 +69,12 @@ use std::io::BufReader;
 use std::{io, iter, mem};
 
 use bumpalo::Bump;
+use bumparaw_collections::bbbul::{BitPacker, BitPacker4x};
+use bumparaw_collections::map::FrozenMap;
+use bumparaw_collections::{Bbbul, FrozenBbbul};
 use grenad::ReaderCursor;
 use hashbrown::hash_map::RawEntryMut;
 use hashbrown::HashMap;
-use raw_collections::bbbul::{BitPacker, BitPacker4x};
-use raw_collections::map::FrozenMap;
-use raw_collections::{Bbbul, FrozenBbbul};
 use roaring::RoaringBitmap;
 use rustc_hash::FxBuildHasher;
 
@@ -121,7 +121,7 @@ impl<'extractor> BalancedCaches<'extractor> {
     }
 
     pub fn insert_del_u32(&mut self, key: &[u8], n: u32) -> Result<()> {
-        if self.max_memory.map_or(false, |mm| self.alloc.allocated_bytes() >= mm) {
+        if self.max_memory.is_some_and(|mm| self.alloc.allocated_bytes() >= mm) {
             self.start_spilling()?;
         }
 
@@ -138,7 +138,7 @@ impl<'extractor> BalancedCaches<'extractor> {
     }
 
     pub fn insert_add_u32(&mut self, key: &[u8], n: u32) -> Result<()> {
-        if self.max_memory.map_or(false, |mm| self.alloc.allocated_bytes() >= mm) {
+        if self.max_memory.is_some_and(|mm| self.alloc.allocated_bytes() >= mm) {
             self.start_spilling()?;
         }
 
@@ -177,12 +177,12 @@ impl<'extractor> BalancedCaches<'extractor> {
         Ok(())
     }
 
-    pub fn freeze(&mut self) -> Result<Vec<FrozenCache<'_, 'extractor>>> {
+    pub fn freeze(&mut self, source_id: usize) -> Result<Vec<FrozenCache<'_, 'extractor>>> {
         match &mut self.caches {
             InnerCaches::Normal(NormalCaches { caches }) => caches
                 .iter_mut()
                 .enumerate()
-                .map(|(bucket, map)| {
+                .map(|(bucket_id, map)| {
                     // safety: we are transmuting the Bbbul into a FrozenBbbul
                     //         that are the same size.
                     let map = unsafe {
@@ -201,14 +201,19 @@ impl<'extractor> BalancedCaches<'extractor> {
                             >,
                         >(map)
                     };
-                    Ok(FrozenCache { bucket, cache: FrozenMap::new(map), spilled: Vec::new() })
+                    Ok(FrozenCache {
+                        source_id,
+                        bucket_id,
+                        cache: FrozenMap::new(map),
+                        spilled: Vec::new(),
+                    })
                 })
                 .collect(),
             InnerCaches::Spilling(SpillingCaches { caches, spilled_entries, .. }) => caches
                 .iter_mut()
                 .zip(mem::take(spilled_entries))
                 .enumerate()
-                .map(|(bucket, (map, sorter))| {
+                .map(|(bucket_id, (map, sorter))| {
                     let spilled = sorter
                         .into_reader_cursors()?
                         .into_iter()
@@ -234,7 +239,7 @@ impl<'extractor> BalancedCaches<'extractor> {
                             >,
                         >(map)
                     };
-                    Ok(FrozenCache { bucket, cache: FrozenMap::new(map), spilled })
+                    Ok(FrozenCache { source_id, bucket_id, cache: FrozenMap::new(map), spilled })
                 })
                 .collect(),
         }
@@ -415,21 +420,21 @@ fn spill_entry_to_sorter(
     match deladd {
         DelAddRoaringBitmap { del: Some(del), add: None } => {
             cbo_buffer.clear();
-            CboRoaringBitmapCodec::serialize_into(&del, cbo_buffer);
+            CboRoaringBitmapCodec::serialize_into_vec(&del, cbo_buffer);
             value_writer.insert(DelAdd::Deletion, &cbo_buffer)?;
         }
         DelAddRoaringBitmap { del: None, add: Some(add) } => {
             cbo_buffer.clear();
-            CboRoaringBitmapCodec::serialize_into(&add, cbo_buffer);
+            CboRoaringBitmapCodec::serialize_into_vec(&add, cbo_buffer);
             value_writer.insert(DelAdd::Addition, &cbo_buffer)?;
         }
         DelAddRoaringBitmap { del: Some(del), add: Some(add) } => {
             cbo_buffer.clear();
-            CboRoaringBitmapCodec::serialize_into(&del, cbo_buffer);
+            CboRoaringBitmapCodec::serialize_into_vec(&del, cbo_buffer);
             value_writer.insert(DelAdd::Deletion, &cbo_buffer)?;
 
             cbo_buffer.clear();
-            CboRoaringBitmapCodec::serialize_into(&add, cbo_buffer);
+            CboRoaringBitmapCodec::serialize_into_vec(&add, cbo_buffer);
             value_writer.insert(DelAdd::Addition, &cbo_buffer)?;
         }
         DelAddRoaringBitmap { del: None, add: None } => return Ok(()),
@@ -440,7 +445,8 @@ fn spill_entry_to_sorter(
 }
 
 pub struct FrozenCache<'a, 'extractor> {
-    bucket: usize,
+    bucket_id: usize,
+    source_id: usize,
     cache: FrozenMap<
         'a,
         'extractor,
@@ -457,40 +463,36 @@ pub fn transpose_and_freeze_caches<'a, 'extractor>(
     let width = caches.first().map(BalancedCaches::buckets).unwrap_or(0);
     let mut bucket_caches: Vec<_> = iter::repeat_with(Vec::new).take(width).collect();
 
-    for thread_cache in caches {
-        for frozen in thread_cache.freeze()? {
-            bucket_caches[frozen.bucket].push(frozen);
+    for (thread_index, thread_cache) in caches.iter_mut().enumerate() {
+        for frozen in thread_cache.freeze(thread_index)? {
+            bucket_caches[frozen.bucket_id].push(frozen);
         }
     }
 
     Ok(bucket_caches)
 }
 
-/// Merges the caches that must be all associated to the same bucket.
+/// Merges the caches that must be all associated to the same bucket
+/// but make sure to sort the different buckets before performing the merges.
 ///
 /// # Panics
 ///
 /// - If the bucket IDs in these frozen caches are not exactly the same.
-pub fn merge_caches<F>(frozen: Vec<FrozenCache>, mut f: F) -> Result<()>
+pub fn merge_caches_sorted<F>(frozen: Vec<FrozenCache>, mut f: F) -> Result<()>
 where
     F: for<'a> FnMut(&'a [u8], DelAddRoaringBitmap) -> Result<()>,
 {
     let mut maps = Vec::new();
-    let mut readers = Vec::new();
-    let mut current_bucket = None;
-    for FrozenCache { bucket, cache, ref mut spilled } in frozen {
-        assert_eq!(*current_bucket.get_or_insert(bucket), bucket);
-        maps.push(cache);
-        readers.append(spilled);
-    }
-
-    // First manage the spilled entries by looking into the HashMaps,
-    // merge them and mark them as dummy.
     let mut heap = BinaryHeap::new();
-    for (source_index, source) in readers.into_iter().enumerate() {
-        let mut cursor = source.into_cursor()?;
-        if cursor.move_on_next()?.is_some() {
-            heap.push(Entry { cursor, source_index });
+    let mut current_bucket = None;
+    for FrozenCache { source_id, bucket_id, cache, spilled } in frozen {
+        assert_eq!(*current_bucket.get_or_insert(bucket_id), bucket_id);
+        maps.push((source_id, cache));
+        for reader in spilled {
+            let mut cursor = reader.into_cursor()?;
+            if cursor.move_on_next()?.is_some() {
+                heap.push(Entry { cursor, source_id });
+            }
         }
     }
 
@@ -507,25 +509,29 @@ where
 
         let mut output = DelAddRoaringBitmap::from_bytes(first_value)?;
         while let Some(mut entry) = heap.peek_mut() {
-            if let Some((key, _value)) = entry.cursor.current() {
-                if first_key == key {
-                    let new = DelAddRoaringBitmap::from_bytes(first_value)?;
-                    output = output.merge(new);
-                    // When we are done we the current value of this entry move make
-                    // it move forward and let the heap reorganize itself (on drop)
-                    if entry.cursor.move_on_next()?.is_none() {
-                        PeekMut::pop(entry);
-                    }
-                } else {
+            if let Some((key, value)) = entry.cursor.current() {
+                if first_key != key {
                     break;
+                }
+
+                let new = DelAddRoaringBitmap::from_bytes(value)?;
+                output = output.merge(new);
+                // When we are done we the current value of this entry move make
+                // it move forward and let the heap reorganize itself (on drop)
+                if entry.cursor.move_on_next()?.is_none() {
+                    PeekMut::pop(entry);
                 }
             }
         }
 
         // Once we merged all of the spilled bitmaps we must also
         // fetch the entries from the non-spilled entries (the HashMaps).
-        for (map_index, map) in maps.iter_mut().enumerate() {
-            if first_entry.source_index != map_index {
+        for (source_id, map) in maps.iter_mut() {
+            debug_assert!(
+                !(map.get(first_key).is_some() && first_entry.source_id == *source_id),
+                "A thread should not have spiled a key that has been inserted in the cache"
+            );
+            if first_entry.source_id != *source_id {
                 if let Some(new) = map.get_mut(first_key) {
                     output.union_and_clear_bbbul(new);
                 }
@@ -537,22 +543,22 @@ where
 
         // Don't forget to put the first entry back into the heap.
         if first_entry.cursor.move_on_next()?.is_some() {
-            heap.push(first_entry)
+            heap.push(first_entry);
         }
     }
 
     // Then manage the content on the HashMap entries that weren't taken (mem::take).
-    while let Some(mut map) = maps.pop() {
-        for (key, bbbul) in map.iter_mut() {
-            // Make sure we don't try to work with entries already managed by the spilled
-            if bbbul.is_empty() {
-                continue;
-            }
+    while let Some((_, mut map)) = maps.pop() {
+        // Make sure we don't try to work with entries already managed by the spilled
+        let mut ordered_entries: Vec<_> =
+            map.iter_mut().filter(|(_, bbbul)| !bbbul.is_empty()).collect();
+        ordered_entries.sort_unstable_by_key(|(key, _)| *key);
 
+        for (key, bbbul) in ordered_entries {
             let mut output = DelAddRoaringBitmap::empty();
             output.union_and_clear_bbbul(bbbul);
 
-            for rhs in maps.iter_mut() {
+            for (_, rhs) in maps.iter_mut() {
                 if let Some(new) = rhs.get_mut(key) {
                     output.union_and_clear_bbbul(new);
                 }
@@ -568,14 +574,14 @@ where
 
 struct Entry<R> {
     cursor: ReaderCursor<R>,
-    source_index: usize,
+    source_id: usize,
 }
 
 impl<R> Ord for Entry<R> {
     fn cmp(&self, other: &Entry<R>) -> Ordering {
         let skey = self.cursor.current().map(|(k, _)| k);
         let okey = other.cursor.current().map(|(k, _)| k);
-        skey.cmp(&okey).then(self.source_index.cmp(&other.source_index)).reverse()
+        skey.cmp(&okey).then(self.source_id.cmp(&other.source_id)).reverse()
     }
 }
 
@@ -617,7 +623,7 @@ pub struct FrozenDelAddBbbul<'bump, B> {
     pub add: Option<FrozenBbbul<'bump, B>>,
 }
 
-impl<'bump, B> FrozenDelAddBbbul<'bump, B> {
+impl<B> FrozenDelAddBbbul<'_, B> {
     fn is_empty(&self) -> bool {
         self.del.is_none() && self.add.is_none()
     }
@@ -673,9 +679,7 @@ impl DelAddRoaringBitmap {
             let del = self.del.get_or_insert_with(RoaringBitmap::new);
             let mut iter = bbbul.iter_and_clear();
             while let Some(block) = iter.next_block() {
-                let iter = block.iter().copied();
-                let block = RoaringBitmap::from_sorted_iter(iter).unwrap();
-                *del |= block;
+                del.extend(block);
             }
         }
 
@@ -683,9 +687,7 @@ impl DelAddRoaringBitmap {
             let add = self.add.get_or_insert_with(RoaringBitmap::new);
             let mut iter = bbbul.iter_and_clear();
             while let Some(block) = iter.next_block() {
-                let iter = block.iter().copied();
-                let block = RoaringBitmap::from_sorted_iter(iter).unwrap();
-                *add |= block;
+                add.extend(block);
             }
         }
     }
@@ -709,15 +711,17 @@ impl DelAddRoaringBitmap {
         DelAddRoaringBitmap { del, add }
     }
 
-    pub fn apply_to(&self, documents_ids: &mut RoaringBitmap) {
+    pub fn apply_to(&self, documents_ids: &mut RoaringBitmap, modified_docids: &mut RoaringBitmap) {
         let DelAddRoaringBitmap { del, add } = self;
 
         if let Some(del) = del {
             *documents_ids -= del;
+            *modified_docids |= del;
         }
 
         if let Some(add) = add {
             *documents_ids |= add;
+            *modified_docids |= add;
         }
     }
 }

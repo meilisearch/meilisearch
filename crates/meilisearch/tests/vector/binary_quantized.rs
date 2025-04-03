@@ -8,17 +8,6 @@ use crate::vector::generate_default_user_provided_documents;
 async fn retrieve_binary_quantize_status_in_the_settings() {
     let server = Server::new().await;
     let index = server.index("doggo");
-    let (value, code) = server.set_features(json!({"vectorStore": true})).await;
-    snapshot!(code, @"200 OK");
-    snapshot!(value, @r###"
-    {
-      "vectorStore": true,
-      "metrics": false,
-      "logsRoute": false,
-      "editDocumentsByFunction": false,
-      "containsFilter": false
-    }
-    "###);
 
     let (response, code) = index
         .update_settings(json!({
@@ -35,7 +24,7 @@ async fn retrieve_binary_quantize_status_in_the_settings() {
 
     let (settings, code) = index.settings().await;
     snapshot!(code, @"200 OK");
-    snapshot!(settings["embedders"]["manual"], @r###"{"source":"userProvided","dimensions":3}"###);
+    snapshot!(settings["embedders"]["manual"], @r#"{"source":"userProvided","dimensions":3}"#);
 
     let (response, code) = index
         .update_settings(json!({
@@ -53,7 +42,7 @@ async fn retrieve_binary_quantize_status_in_the_settings() {
 
     let (settings, code) = index.settings().await;
     snapshot!(code, @"200 OK");
-    snapshot!(settings["embedders"]["manual"], @r###"{"source":"userProvided","dimensions":3,"binaryQuantized":false}"###);
+    snapshot!(settings["embedders"]["manual"], @r#"{"source":"userProvided","dimensions":3,"binaryQuantized":false}"#);
 
     let (response, code) = index
         .update_settings(json!({
@@ -71,24 +60,13 @@ async fn retrieve_binary_quantize_status_in_the_settings() {
 
     let (settings, code) = index.settings().await;
     snapshot!(code, @"200 OK");
-    snapshot!(settings["embedders"]["manual"], @r###"{"source":"userProvided","dimensions":3,"binaryQuantized":true}"###);
+    snapshot!(settings["embedders"]["manual"], @r#"{"source":"userProvided","dimensions":3,"binaryQuantized":true}"#);
 }
 
 #[actix_rt::test]
 async fn binary_quantize_before_sending_documents() {
     let server = Server::new().await;
     let index = server.index("doggo");
-    let (value, code) = server.set_features(json!({"vectorStore": true})).await;
-    snapshot!(code, @"200 OK");
-    snapshot!(value, @r###"
-    {
-      "vectorStore": true,
-      "metrics": false,
-      "logsRoute": false,
-      "editDocumentsByFunction": false,
-      "containsFilter": false
-    }
-    "###);
 
     let (response, code) = index
         .update_settings(json!({
@@ -163,17 +141,6 @@ async fn binary_quantize_before_sending_documents() {
 async fn binary_quantize_after_sending_documents() {
     let server = Server::new().await;
     let index = server.index("doggo");
-    let (value, code) = server.set_features(json!({"vectorStore": true})).await;
-    snapshot!(code, @"200 OK");
-    snapshot!(value, @r###"
-    {
-      "vectorStore": true,
-      "metrics": false,
-      "logsRoute": false,
-      "editDocumentsByFunction": false,
-      "containsFilter": false
-    }
-    "###);
 
     let (response, code) = index
         .update_settings(json!({
@@ -261,17 +228,6 @@ async fn binary_quantize_after_sending_documents() {
 async fn try_to_disable_binary_quantization() {
     let server = Server::new().await;
     let index = server.index("doggo");
-    let (value, code) = server.set_features(json!({"vectorStore": true})).await;
-    snapshot!(code, @"200 OK");
-    snapshot!(value, @r###"
-    {
-      "vectorStore": true,
-      "metrics": false,
-      "logsRoute": false,
-      "editDocumentsByFunction": false,
-      "containsFilter": false
-    }
-    "###);
 
     let (response, code) = index
         .update_settings(json!({
@@ -300,7 +256,7 @@ async fn try_to_disable_binary_quantization() {
         .await;
     snapshot!(code, @"202 Accepted");
     let ret = server.wait_task(response.uid()).await;
-    snapshot!(ret, @r###"
+    snapshot!(ret, @r#"
     {
       "uid": "[uid]",
       "batchUid": "[batch_uid]",
@@ -318,7 +274,7 @@ async fn try_to_disable_binary_quantization() {
         }
       },
       "error": {
-        "message": "`.embedders.manual.binaryQuantized`: Cannot disable the binary quantization.\n - Note: Binary quantization is a lossy operation that cannot be reverted.\n - Hint: Add a new embedder that is non-quantized and regenerate the vectors.",
+        "message": "Index `doggo`: `.embedders.manual.binaryQuantized`: Cannot disable the binary quantization.\n - Note: Binary quantization is a lossy operation that cannot be reverted.\n - Hint: Add a new embedder that is non-quantized and regenerate the vectors.",
         "code": "invalid_settings_embedders",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_settings_embedders"
@@ -328,7 +284,7 @@ async fn try_to_disable_binary_quantization() {
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "###);
+    "#);
 }
 
 #[actix_rt::test]

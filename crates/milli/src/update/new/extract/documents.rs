@@ -4,6 +4,7 @@ use bumpalo::Bump;
 use hashbrown::HashMap;
 
 use super::DelAddRoaringBitmap;
+use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::update::new::channel::DocumentsSender;
 use crate::update::new::document::{write_to_obkv, Document as _};
 use crate::update::new::indexer::document_changes::{DocumentChangeContext, Extractor};
@@ -12,13 +13,14 @@ use crate::update::new::thread_local::FullySend;
 use crate::update::new::DocumentChange;
 use crate::vector::EmbeddingConfigs;
 use crate::Result;
-pub struct DocumentsExtractor<'a> {
-    document_sender: &'a DocumentsSender<'a>,
+
+pub struct DocumentsExtractor<'a, 'b> {
+    document_sender: DocumentsSender<'a, 'b>,
     embedders: &'a EmbeddingConfigs,
 }
 
-impl<'a> DocumentsExtractor<'a> {
-    pub fn new(document_sender: &'a DocumentsSender<'a>, embedders: &'a EmbeddingConfigs) -> Self {
+impl<'a, 'b> DocumentsExtractor<'a, 'b> {
+    pub fn new(document_sender: DocumentsSender<'a, 'b>, embedders: &'a EmbeddingConfigs) -> Self {
         Self { document_sender, embedders }
     }
 }
@@ -29,7 +31,7 @@ pub struct DocumentExtractorData {
     pub field_distribution_delta: HashMap<String, i64>,
 }
 
-impl<'a, 'extractor> Extractor<'extractor> for DocumentsExtractor<'a> {
+impl<'extractor> Extractor<'extractor> for DocumentsExtractor<'_, '_> {
     type Data = FullySend<RefCell<DocumentExtractorData>>;
 
     fn init_data(&self, _extractor_alloc: &'extractor Bump) -> Result<Self::Data> {
@@ -61,8 +63,10 @@ impl<'a, 'extractor> Extractor<'extractor> for DocumentsExtractor<'a> {
                         context.index,
                         &context.db_fields_ids_map,
                     )?;
-                    let geo_iter =
-                        content.geo_field().transpose().map(|res| res.map(|rv| ("_geo", rv)));
+                    let geo_iter = content
+                        .geo_field()
+                        .transpose()
+                        .map(|res| res.map(|rv| (RESERVED_GEO_FIELD_NAME, rv)));
                     for res in content.iter_top_level_fields().chain(geo_iter) {
                         let (f, _) = res?;
                         let entry = document_extractor_data
@@ -78,8 +82,10 @@ impl<'a, 'extractor> Extractor<'extractor> for DocumentsExtractor<'a> {
                     let docid = update.docid();
                     let content =
                         update.current(&context.rtxn, context.index, &context.db_fields_ids_map)?;
-                    let geo_iter =
-                        content.geo_field().transpose().map(|res| res.map(|rv| ("_geo", rv)));
+                    let geo_iter = content
+                        .geo_field()
+                        .transpose()
+                        .map(|res| res.map(|rv| (RESERVED_GEO_FIELD_NAME, rv)));
                     for res in content.iter_top_level_fields().chain(geo_iter) {
                         let (f, _) = res?;
                         let entry = document_extractor_data
@@ -88,9 +94,12 @@ impl<'a, 'extractor> Extractor<'extractor> for DocumentsExtractor<'a> {
                             .or_default();
                         *entry -= 1;
                     }
-                    let content = update.updated();
-                    let geo_iter =
-                        content.geo_field().transpose().map(|res| res.map(|rv| ("_geo", rv)));
+                    let content =
+                        update.merged(&context.rtxn, context.index, &context.db_fields_ids_map)?;
+                    let geo_iter = content
+                        .geo_field()
+                        .transpose()
+                        .map(|res| res.map(|rv| (RESERVED_GEO_FIELD_NAME, rv)));
                     for res in content.iter_top_level_fields().chain(geo_iter) {
                         let (f, _) = res?;
                         let entry = document_extractor_data
@@ -120,8 +129,10 @@ impl<'a, 'extractor> Extractor<'extractor> for DocumentsExtractor<'a> {
                 DocumentChange::Insertion(insertion) => {
                     let docid = insertion.docid();
                     let content = insertion.inserted();
-                    let geo_iter =
-                        content.geo_field().transpose().map(|res| res.map(|rv| ("_geo", rv)));
+                    let geo_iter = content
+                        .geo_field()
+                        .transpose()
+                        .map(|res| res.map(|rv| (RESERVED_GEO_FIELD_NAME, rv)));
                     for res in content.iter_top_level_fields().chain(geo_iter) {
                         let (f, _) = res?;
                         let entry = document_extractor_data

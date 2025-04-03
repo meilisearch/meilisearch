@@ -10,8 +10,8 @@ use crate::json;
 async fn error_get_unexisting_batch_status() {
     let server = Server::new().await;
     let index = server.index("test");
-    index.create(None).await;
-    index.wait_task(0).await;
+    let (task, _coder) = index.create(None).await;
+    index.wait_task(task.uid()).await.succeeded();
     let (response, code) = index.get_batch(1).await;
 
     let expected_response = json!({
@@ -29,8 +29,8 @@ async fn error_get_unexisting_batch_status() {
 async fn get_batch_status() {
     let server = Server::new().await;
     let index = server.index("test");
-    index.create(None).await;
-    index.wait_task(0).await;
+    let (task, _status_code) = index.create(None).await;
+    index.wait_task(task.uid()).await.succeeded();
     let (_response, code) = index.get_batch(0).await;
     assert_eq!(code, 200);
 }
@@ -39,11 +39,10 @@ async fn get_batch_status() {
 async fn list_batches() {
     let server = Server::new().await;
     let index = server.index("test");
-    index.create(None).await;
-    index.wait_task(0).await;
-    index
-        .add_documents(serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(), None)
-        .await;
+    let (task, _status_code) = index.create(None).await;
+    index.wait_task(task.uid()).await.succeeded();
+    let (task, _status_code) = index.create(None).await;
+    index.wait_task(task.uid()).await.failed();
     let (response, code) = index.list_batches().await;
     assert_eq!(code, 200);
     assert_eq!(
@@ -96,11 +95,12 @@ async fn list_batches_pagination_and_reverse() {
 async fn list_batches_with_star_filters() {
     let server = Server::new().await;
     let index = server.index("test");
-    let (batch, _code) = index.create(None).await;
-    index.wait_task(batch.uid()).await;
-    index
-        .add_documents(serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(), None)
-        .await;
+    let (task, _code) = index.create(None).await;
+    index.wait_task(task.uid()).await.succeeded();
+    let index = server.index("test");
+    let (task, _code) = index.create(None).await;
+    index.wait_task(task.uid()).await.failed();
+
     let (response, code) = index.service.get("/batches?indexUids=test").await;
     assert_eq!(code, 200);
     assert_eq!(response["results"].as_array().unwrap().len(), 2);
@@ -141,24 +141,20 @@ async fn list_batches_with_star_filters() {
 async fn list_batches_status_filtered() {
     let server = Server::new().await;
     let index = server.index("test");
-    index.create(None).await;
-    index.wait_task(0).await;
-    index
-        .add_documents(serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(), None)
-        .await;
+    let (task, _status_code) = index.create(None).await;
+    index.wait_task(task.uid()).await.succeeded();
+    let (task, _status_code) = index.create(None).await;
+    index.wait_task(task.uid()).await.failed();
 
     let (response, code) = index.filtered_batches(&[], &["succeeded"], &[]).await;
     assert_eq!(code, 200, "{}", response);
     assert_eq!(response["results"].as_array().unwrap().len(), 1);
 
-    // We can't be sure that the update isn't already processed so we can't test this
-    // let (response, code) = index.filtered_batches(&[], &["processing"]).await;
-    // assert_eq!(code, 200, "{}", response);
-    // assert_eq!(response["results"].as_array().unwrap().len(), 1);
-
-    index.wait_task(1).await;
-
     let (response, code) = index.filtered_batches(&[], &["succeeded"], &[]).await;
+    assert_eq!(code, 200, "{}", response);
+    assert_eq!(response["results"].as_array().unwrap().len(), 1);
+
+    let (response, code) = index.filtered_batches(&[], &["succeeded", "failed"], &[]).await;
     assert_eq!(code, 200, "{}", response);
     assert_eq!(response["results"].as_array().unwrap().len(), 2);
 }
@@ -167,31 +163,30 @@ async fn list_batches_status_filtered() {
 async fn list_batches_type_filtered() {
     let server = Server::new().await;
     let index = server.index("test");
-    index.create(None).await;
-    index.wait_task(0).await;
-    index
-        .add_documents(serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(), None)
-        .await;
-
+    let (task, _) = index.create(None).await;
+    index.wait_task(task.uid()).await.succeeded();
+    let (task, _) = index.delete().await;
+    index.wait_task(task.uid()).await.succeeded();
     let (response, code) = index.filtered_batches(&["indexCreation"], &[], &[]).await;
     assert_eq!(code, 200, "{}", response);
     assert_eq!(response["results"].as_array().unwrap().len(), 1);
 
     let (response, code) =
-        index.filtered_batches(&["indexCreation", "documentAdditionOrUpdate"], &[], &[]).await;
+        index.filtered_batches(&["indexCreation", "IndexDeletion"], &[], &[]).await;
     assert_eq!(code, 200, "{}", response);
     assert_eq!(response["results"].as_array().unwrap().len(), 2);
+
+    let (response, code) = index.filtered_batches(&["indexCreation"], &[], &[]).await;
+    assert_eq!(code, 200, "{}", response);
+    assert_eq!(response["results"].as_array().unwrap().len(), 1);
 }
 
 #[actix_rt::test]
 async fn list_batches_invalid_canceled_by_filter() {
     let server = Server::new().await;
     let index = server.index("test");
-    index.create(None).await;
-    index.wait_task(0).await;
-    index
-        .add_documents(serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(), None)
-        .await;
+    let (task, _status_code) = index.create(None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = index.filtered_batches(&[], &[], &["0"]).await;
     assert_eq!(code, 200, "{}", response);
@@ -202,11 +197,10 @@ async fn list_batches_invalid_canceled_by_filter() {
 async fn list_batches_status_and_type_filtered() {
     let server = Server::new().await;
     let index = server.index("test");
-    index.create(None).await;
-    index.wait_task(0).await;
-    index
-        .add_documents(serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(), None)
-        .await;
+    let (task, _status_code) = index.create(None).await;
+    index.wait_task(task.uid()).await.succeeded();
+    let (task, _status_code) = index.update(Some("id")).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = index.filtered_batches(&["indexCreation"], &["failed"], &[]).await;
     assert_eq!(code, 200, "{}", response);
@@ -214,7 +208,7 @@ async fn list_batches_status_and_type_filtered() {
 
     let (response, code) = index
         .filtered_batches(
-            &["indexCreation", "documentAdditionOrUpdate"],
+            &["indexCreation", "IndexUpdate"],
             &["succeeded", "processing", "enqueued"],
             &[],
         )
@@ -224,7 +218,7 @@ async fn list_batches_status_and_type_filtered() {
 }
 
 #[actix_rt::test]
-async fn get_batch_filter_error() {
+async fn list_batch_filter_error() {
     let server = Server::new().await;
 
     let (response, code) = server.batches_filter("lol=pied").await;
@@ -276,14 +270,23 @@ async fn get_batch_filter_error() {
 async fn test_summarized_document_addition_or_update() {
     let server = Server::new().await;
     let index = server.index("test");
-    index.add_documents(json!({ "id": 42, "content": "doggos & fluff" }), None).await;
-    index.wait_task(0).await;
+    let (task, _status_code) =
+        index.add_documents(json!({ "id": 42, "content": "doggos & fluff" }), None).await;
+    index.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(0).await;
     assert_json_snapshot!(batch,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
-        @r#"
+        {
+            ".duration" => "[duration]",
+            ".enqueuedAt" => "[date]",
+            ".startedAt" => "[date]",
+            ".finishedAt" => "[date]",
+            ".stats.progressTrace" => "[progressTrace]",
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+        },
+        @r###"
     {
       "uid": 0,
+      "progress": null,
       "details": {
         "receivedDocuments": 1,
         "indexedDocuments": 1
@@ -298,22 +301,33 @@ async fn test_summarized_document_addition_or_update() {
         },
         "indexUids": {
           "test": 1
-        }
+        },
+        "progressTrace": "[progressTrace]",
+        "writeChannelCongestion": "[writeChannelCongestion]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "#);
+    "###);
 
-    index.add_documents(json!({ "id": 42, "content": "doggos & fluff" }), Some("id")).await;
-    index.wait_task(1).await;
+    let (task, _status_code) =
+        index.add_documents(json!({ "id": 42, "content": "doggos & fluff" }), Some("id")).await;
+    index.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(1).await;
     assert_json_snapshot!(batch,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
-        @r#"
+        {
+            ".duration" => "[duration]",
+            ".enqueuedAt" => "[date]",
+            ".startedAt" => "[date]",
+            ".finishedAt" => "[date]",
+            ".stats.progressTrace" => "[progressTrace]",
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+        },
+        @r###"
     {
       "uid": 1,
+      "progress": null,
       "details": {
         "receivedDocuments": 1,
         "indexedDocuments": 1
@@ -328,27 +342,37 @@ async fn test_summarized_document_addition_or_update() {
         },
         "indexUids": {
           "test": 1
-        }
+        },
+        "progressTrace": "[progressTrace]",
+        "writeChannelCongestion": "[writeChannelCongestion]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "#);
+    "###);
 }
 
 #[actix_web::test]
 async fn test_summarized_delete_documents_by_batch() {
     let server = Server::new().await;
     let index = server.index("test");
-    index.delete_batch(vec![1, 2, 3]).await;
-    index.wait_task(0).await;
+    let (task, _status_code) = index.delete_batch(vec![1, 2, 3]).await;
+    index.wait_task(task.uid()).await.failed();
     let (batch, _) = index.get_batch(0).await;
     assert_json_snapshot!(batch,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
-        @r#"
+        {
+            ".duration" => "[duration]",
+            ".enqueuedAt" => "[date]",
+            ".startedAt" => "[date]",
+            ".finishedAt" => "[date]",
+            ".stats.progressTrace" => "[progressTrace]",
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+        },
+        @r###"
     {
       "uid": 0,
+      "progress": null,
       "details": {
         "providedIds": 3,
         "deletedDocuments": 0
@@ -363,23 +387,32 @@ async fn test_summarized_delete_documents_by_batch() {
         },
         "indexUids": {
           "test": 1
-        }
+        },
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "#);
+    "###);
 
     index.create(None).await;
-    index.delete_batch(vec![42]).await;
-    index.wait_task(2).await;
+    let (task, _status_code) = index.delete_batch(vec![42]).await;
+    index.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(2).await;
     assert_json_snapshot!(batch,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
-        @r#"
+        {
+            ".duration" => "[duration]",
+            ".enqueuedAt" => "[date]",
+            ".startedAt" => "[date]",
+            ".finishedAt" => "[date]",
+            ".stats.progressTrace" => "[progressTrace]",
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+        },
+        @r###"
     {
       "uid": 2,
+      "progress": null,
       "details": {
         "providedIds": 1,
         "deletedDocuments": 0
@@ -394,13 +427,14 @@ async fn test_summarized_delete_documents_by_batch() {
         },
         "indexUids": {
           "test": 1
-        }
+        },
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "#);
+    "###);
 }
 
 #[actix_web::test]
@@ -408,14 +442,23 @@ async fn test_summarized_delete_documents_by_filter() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    index.delete_document_by_filter(json!({ "filter": "doggo = bernese" })).await;
-    index.wait_task(0).await;
+    let (task, _status_code) =
+        index.delete_document_by_filter(json!({ "filter": "doggo = bernese" })).await;
+    index.wait_task(task.uid()).await.failed();
     let (batch, _) = index.get_batch(0).await;
     assert_json_snapshot!(batch,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
-        @r#"
+        {
+            ".duration" => "[duration]",
+            ".enqueuedAt" => "[date]",
+            ".startedAt" => "[date]",
+            ".finishedAt" => "[date]",
+            ".stats.progressTrace" => "[progressTrace]",
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+        },
+        @r###"
     {
       "uid": 0,
+      "progress": null,
       "details": {
         "providedIds": 0,
         "deletedDocuments": 0,
@@ -431,23 +474,33 @@ async fn test_summarized_delete_documents_by_filter() {
         },
         "indexUids": {
           "test": 1
-        }
+        },
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "#);
+    "###);
 
     index.create(None).await;
-    index.delete_document_by_filter(json!({ "filter": "doggo = bernese" })).await;
-    index.wait_task(2).await;
+    let (task, _status_code) =
+        index.delete_document_by_filter(json!({ "filter": "doggo = bernese" })).await;
+    index.wait_task(task.uid()).await.failed();
     let (batch, _) = index.get_batch(2).await;
     assert_json_snapshot!(batch,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
-        @r#"
+        {
+            ".duration" => "[duration]",
+            ".enqueuedAt" => "[date]",
+            ".startedAt" => "[date]",
+            ".finishedAt" => "[date]",
+            ".stats.progressTrace" => "[progressTrace]",
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+        },
+        @r###"
     {
       "uid": 2,
+      "progress": null,
       "details": {
         "providedIds": 0,
         "deletedDocuments": 0,
@@ -463,23 +516,33 @@ async fn test_summarized_delete_documents_by_filter() {
         },
         "indexUids": {
           "test": 1
-        }
+        },
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "#);
+    "###);
 
     index.update_settings(json!({ "filterableAttributes": ["doggo"] })).await;
-    index.delete_document_by_filter(json!({ "filter": "doggo = bernese" })).await;
-    index.wait_task(4).await;
+    let (task, _status_code) =
+        index.delete_document_by_filter(json!({ "filter": "doggo = bernese" })).await;
+    index.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(4).await;
     assert_json_snapshot!(batch,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+        {
+            ".duration" => "[duration]",
+            ".enqueuedAt" => "[date]",
+            ".startedAt" => "[date]",
+            ".finishedAt" => "[date]",
+            ".stats.progressTrace" => "[progressTrace]",
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+        },
         @r#"
     {
       "uid": 4,
+      "progress": null,
       "details": {
         "providedIds": 0,
         "deletedDocuments": 0,
@@ -495,7 +558,8 @@ async fn test_summarized_delete_documents_by_filter() {
         },
         "indexUids": {
           "test": 1
-        }
+        },
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -508,14 +572,23 @@ async fn test_summarized_delete_documents_by_filter() {
 async fn test_summarized_delete_document_by_id() {
     let server = Server::new().await;
     let index = server.index("test");
-    index.delete_document(1).await;
-    index.wait_task(0).await;
+    let (task, _status_code) = index.delete_document(1).await;
+    index.wait_task(task.uid()).await.failed();
     let (batch, _) = index.get_batch(0).await;
     assert_json_snapshot!(batch,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+        {
+            ".uid" => "[uid]",
+            ".duration" => "[duration]",
+            ".enqueuedAt" => "[date]",
+            ".startedAt" => "[date]",
+            ".finishedAt" => "[date]",
+            ".stats.progressTrace" => "[progressTrace]",
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+        },
         @r#"
     {
-      "uid": 0,
+      "uid": "[uid]",
+      "progress": null,
       "details": {
         "providedIds": 1,
         "deletedDocuments": 0
@@ -530,7 +603,8 @@ async fn test_summarized_delete_document_by_id() {
         },
         "indexUids": {
           "test": 1
-        }
+        },
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -539,14 +613,22 @@ async fn test_summarized_delete_document_by_id() {
     "#);
 
     index.create(None).await;
-    index.delete_document(42).await;
-    index.wait_task(2).await;
+    let (task, _status_code) = index.delete_document(42).await;
+    index.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(2).await;
     assert_json_snapshot!(batch,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+        {
+            ".duration" => "[duration]",
+            ".enqueuedAt" => "[date]",
+            ".startedAt" => "[date]",
+            ".finishedAt" => "[date]",
+            ".stats.progressTrace" => "[progressTrace]",
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+        },
         @r#"
     {
       "uid": 2,
+      "progress": null,
       "details": {
         "providedIds": 1,
         "deletedDocuments": 0
@@ -561,7 +643,8 @@ async fn test_summarized_delete_document_by_id() {
         },
         "indexUids": {
           "test": 1
-        }
+        },
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -586,14 +669,22 @@ async fn test_summarized_settings_update() {
     }
     "###);
 
-    index.update_settings(json!({ "displayedAttributes": ["doggos", "name"], "filterableAttributes": ["age", "nb_paw_pads"], "sortableAttributes": ["iq"] })).await;
-    index.wait_task(0).await;
+    let (task,_status_code) = index.update_settings(json!({ "displayedAttributes": ["doggos", "name"], "filterableAttributes": ["age", "nb_paw_pads"], "sortableAttributes": ["iq"] })).await;
+    index.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(0).await;
     assert_json_snapshot!(batch,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
-        @r#"
+        {
+            ".duration" => "[duration]",
+            ".enqueuedAt" => "[date]",
+            ".startedAt" => "[date]",
+            ".finishedAt" => "[date]",
+            ".stats.progressTrace" => "[progressTrace]",
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+        },
+        @r###"
     {
       "uid": 0,
+      "progress": null,
       "details": {
         "displayedAttributes": [
           "doggos",
@@ -617,27 +708,36 @@ async fn test_summarized_settings_update() {
         },
         "indexUids": {
           "test": 1
-        }
+        },
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "#);
+    "###);
 }
 
 #[actix_web::test]
 async fn test_summarized_index_creation() {
     let server = Server::new().await;
     let index = server.index("test");
-    index.create(None).await;
-    index.wait_task(0).await;
+    let (task, _status_code) = index.create(None).await;
+    index.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(0).await;
     assert_json_snapshot!(batch,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
-        @r#"
+        {
+            ".duration" => "[duration]",
+            ".enqueuedAt" => "[date]",
+            ".startedAt" => "[date]",
+            ".finishedAt" => "[date]",
+            ".stats.progressTrace" => "[progressTrace]",
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+        },
+        @r###"
     {
       "uid": 0,
+      "progress": null,
       "details": {},
       "stats": {
         "totalNbTasks": 1,
@@ -649,22 +749,31 @@ async fn test_summarized_index_creation() {
         },
         "indexUids": {
           "test": 1
-        }
+        },
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "#);
+    "###);
 
-    index.create(Some("doggos")).await;
-    index.wait_task(1).await;
+    let (task, _status_code) = index.create(Some("doggos")).await;
+    index.wait_task(task.uid()).await.failed();
     let (batch, _) = index.get_batch(1).await;
     assert_json_snapshot!(batch,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
-        @r#"
+        {
+            ".duration" => "[duration]",
+            ".enqueuedAt" => "[date]",
+            ".startedAt" => "[date]",
+            ".finishedAt" => "[date]",
+            ".stats.progressTrace" => "[progressTrace]",
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+        },
+        @r###"
     {
       "uid": 1,
+      "progress": null,
       "details": {
         "primaryKey": "doggos"
       },
@@ -678,13 +787,14 @@ async fn test_summarized_index_creation() {
         },
         "indexUids": {
           "test": 1
-        }
+        },
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "#);
+    "###);
 }
 
 #[actix_web::test]
@@ -692,7 +802,7 @@ async fn test_summarized_index_deletion() {
     let server = Server::new().await;
     let index = server.index("test");
     let (ret, _code) = index.delete().await;
-    let batch = index.wait_task(ret.uid()).await;
+    let batch = index.wait_task(ret.uid()).await.failed();
     snapshot!(batch,
         @r###"
     {
@@ -723,7 +833,7 @@ async fn test_summarized_index_deletion() {
     // both batches may get autobatched and the deleted documents count will be wrong.
     let (ret, _code) =
         index.add_documents(json!({ "id": 42, "content": "doggos & fluff" }), Some("id")).await;
-    let batch = index.wait_task(ret.uid()).await;
+    let batch = index.wait_task(ret.uid()).await.succeeded();
     snapshot!(batch,
         @r###"
     {
@@ -746,7 +856,7 @@ async fn test_summarized_index_deletion() {
     "###);
 
     let (ret, _code) = index.delete().await;
-    let batch = index.wait_task(ret.uid()).await;
+    let batch = index.wait_task(ret.uid()).await.succeeded();
     snapshot!(batch,
         @r###"
     {
@@ -769,7 +879,7 @@ async fn test_summarized_index_deletion() {
 
     // What happens when you delete an index that doesn't exists.
     let (ret, _code) = index.delete().await;
-    let batch = index.wait_task(ret.uid()).await;
+    let batch = index.wait_task(ret.uid()).await.failed();
     snapshot!(batch,
         @r###"
     {
@@ -801,14 +911,22 @@ async fn test_summarized_index_update() {
     let server = Server::new().await;
     let index = server.index("test");
     // If the index doesn't exist yet, we should get errors with or without the primary key.
-    index.update(None).await;
-    index.wait_task(0).await;
+    let (task, _status_code) = index.update(None).await;
+    index.wait_task(task.uid()).await.failed();
     let (batch, _) = index.get_batch(0).await;
     assert_json_snapshot!(batch,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
-        @r#"
+        {
+            ".duration" => "[duration]",
+            ".enqueuedAt" => "[date]",
+            ".startedAt" => "[date]",
+            ".finishedAt" => "[date]",
+            ".stats.progressTrace" => "[progressTrace]",
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+        },
+        @r###"
     {
       "uid": 0,
+      "progress": null,
       "details": {},
       "stats": {
         "totalNbTasks": 1,
@@ -820,22 +938,31 @@ async fn test_summarized_index_update() {
         },
         "indexUids": {
           "test": 1
-        }
+        },
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "#);
+    "###);
 
-    index.update(Some("bones")).await;
-    index.wait_task(1).await;
+    let (task, _status_code) = index.update(Some("bones")).await;
+    index.wait_task(task.uid()).await.failed();
     let (batch, _) = index.get_batch(1).await;
     assert_json_snapshot!(batch,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
-        @r#"
+        {
+            ".duration" => "[duration]",
+            ".enqueuedAt" => "[date]",
+            ".startedAt" => "[date]",
+            ".finishedAt" => "[date]",
+            ".stats.progressTrace" => "[progressTrace]",
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+        },
+        @r###"
     {
       "uid": 1,
+      "progress": null,
       "details": {
         "primaryKey": "bones"
       },
@@ -849,25 +976,34 @@ async fn test_summarized_index_update() {
         },
         "indexUids": {
           "test": 1
-        }
+        },
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "#);
+    "###);
 
     // And run the same two tests once the index do exists.
     index.create(None).await;
 
-    index.update(None).await;
-    index.wait_task(3).await;
+    let (task, _status_code) = index.update(None).await;
+    index.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(3).await;
     assert_json_snapshot!(batch,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+        {
+            ".duration" => "[duration]",
+            ".enqueuedAt" => "[date]",
+            ".startedAt" => "[date]",
+            ".finishedAt" => "[date]",
+            ".stats.progressTrace" => "[progressTrace]",
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+        },
         @r#"
     {
       "uid": 3,
+      "progress": null,
       "details": {},
       "stats": {
         "totalNbTasks": 1,
@@ -879,7 +1015,8 @@ async fn test_summarized_index_update() {
         },
         "indexUids": {
           "test": 1
-        }
+        },
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
@@ -887,14 +1024,22 @@ async fn test_summarized_index_update() {
     }
     "#);
 
-    index.update(Some("bones")).await;
-    index.wait_task(4).await;
+    let (task, _status_code) = index.update(Some("bones")).await;
+    index.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(4).await;
     assert_json_snapshot!(batch,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
-        @r#"
+        {
+            ".duration" => "[duration]",
+            ".enqueuedAt" => "[date]",
+            ".startedAt" => "[date]",
+            ".finishedAt" => "[date]",
+            ".stats.progressTrace" => "[progressTrace]",
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+        },
+        @r###"
     {
       "uid": 4,
+      "progress": null,
       "details": {
         "primaryKey": "bones"
       },
@@ -908,30 +1053,39 @@ async fn test_summarized_index_update() {
         },
         "indexUids": {
           "test": 1
-        }
+        },
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "#);
+    "###);
 }
 
 #[actix_web::test]
 async fn test_summarized_index_swap() {
     let server = Server::new().await;
-    server
+    let (task, _status_code) = server
         .index_swap(json!([
             { "indexes": ["doggos", "cattos"] }
         ]))
         .await;
-    server.wait_task(0).await;
+    server.wait_task(task.uid()).await.failed();
     let (batch, _) = server.get_batch(0).await;
     assert_json_snapshot!(batch,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
-        @r#"
+        {
+            ".duration" => "[duration]",
+            ".enqueuedAt" => "[date]",
+            ".startedAt" => "[date]",
+            ".finishedAt" => "[date]",
+            ".stats.progressTrace" => "[progressTrace]",
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+        },
+        @r###"
     {
       "uid": 0,
+      "progress": null,
       "details": {
         "swaps": [
           {
@@ -950,53 +1104,56 @@ async fn test_summarized_index_swap() {
         "types": {
           "indexSwap": 1
         },
-        "indexUids": {}
+        "indexUids": {},
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "#);
+    "###);
 
     server.index("doggos").create(None).await;
-    server.index("cattos").create(None).await;
+    let (task, _status_code) = server.index("cattos").create(None).await;
     server
         .index_swap(json!([
             { "indexes": ["doggos", "cattos"] }
         ]))
         .await;
-    server.wait_task(3).await;
-    let (batch, _) = server.get_batch(3).await;
+    server.wait_task(task.uid()).await.succeeded();
+    let (batch, _) = server.get_batch(1).await;
     assert_json_snapshot!(batch,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
-        @r#"
+        {
+            ".duration" => "[duration]",
+            ".enqueuedAt" => "[date]",
+            ".startedAt" => "[date]",
+            ".finishedAt" => "[date]",
+            ".stats.progressTrace" => "[progressTrace]",
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+        },
+        @r###"
     {
-      "uid": 3,
-      "details": {
-        "swaps": [
-          {
-            "indexes": [
-              "doggos",
-              "cattos"
-            ]
-          }
-        ]
-      },
+      "uid": 1,
+      "progress": null,
+      "details": {},
       "stats": {
         "totalNbTasks": 1,
         "status": {
           "succeeded": 1
         },
         "types": {
-          "indexSwap": 1
+          "indexCreation": 1
         },
-        "indexUids": {}
+        "indexUids": {
+          "doggos": 1
+        },
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "#);
+    "###);
 }
 
 #[actix_web::test]
@@ -1004,16 +1161,24 @@ async fn test_summarized_batch_cancelation() {
     let server = Server::new().await;
     let index = server.index("doggos");
     // to avoid being flaky we're only going to cancel an already finished batch :(
-    index.create(None).await;
-    index.wait_task(0).await;
-    server.cancel_tasks("uids=0").await;
-    index.wait_task(1).await;
+    let (task, _status_code) = index.create(None).await;
+    index.wait_task(task.uid()).await.succeeded();
+    let (task, _status_code) = server.cancel_tasks("uids=0").await;
+    index.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(1).await;
     assert_json_snapshot!(batch,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
-        @r#"
+        {
+            ".duration" => "[duration]",
+            ".enqueuedAt" => "[date]",
+            ".startedAt" => "[date]",
+            ".finishedAt" => "[date]",
+            ".stats.progressTrace" => "[progressTrace]",
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+        },
+        @r###"
     {
       "uid": 1,
+      "progress": null,
       "details": {
         "matchedTasks": 1,
         "canceledTasks": 0,
@@ -1027,13 +1192,14 @@ async fn test_summarized_batch_cancelation() {
         "types": {
           "taskCancelation": 1
         },
-        "indexUids": {}
+        "indexUids": {},
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "#);
+    "###);
 }
 
 #[actix_web::test]
@@ -1041,16 +1207,24 @@ async fn test_summarized_batch_deletion() {
     let server = Server::new().await;
     let index = server.index("doggos");
     // to avoid being flaky we're only going to delete an already finished batch :(
-    index.create(None).await;
-    index.wait_task(0).await;
-    server.delete_tasks("uids=0").await;
-    index.wait_task(1).await;
+    let (task, _status_code) = index.create(None).await;
+    index.wait_task(task.uid()).await.succeeded();
+    let (task, _status_code) = server.delete_tasks("uids=0").await;
+    index.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(1).await;
     assert_json_snapshot!(batch,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
-        @r#"
+        {
+            ".duration" => "[duration]",
+            ".enqueuedAt" => "[date]",
+            ".startedAt" => "[date]",
+            ".finishedAt" => "[date]",
+            ".stats.progressTrace" => "[progressTrace]",
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+        },
+        @r###"
     {
       "uid": 1,
+      "progress": null,
       "details": {
         "matchedTasks": 1,
         "deletedTasks": 1,
@@ -1064,26 +1238,36 @@ async fn test_summarized_batch_deletion() {
         "types": {
           "taskDeletion": 1
         },
-        "indexUids": {}
+        "indexUids": {},
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "#);
+    "###);
 }
 
 #[actix_web::test]
 async fn test_summarized_dump_creation() {
     let server = Server::new().await;
-    server.create_dump().await;
-    server.wait_task(0).await;
+    let (task, _status_code) = server.create_dump().await;
+    server.wait_task(task.uid()).await;
     let (batch, _) = server.get_batch(0).await;
     assert_json_snapshot!(batch,
-        { ".details.dumpUid" => "[dumpUid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
-        @r#"
+        {
+            ".details.dumpUid" => "[dumpUid]",
+            ".duration" => "[duration]",
+            ".enqueuedAt" => "[date]",
+            ".startedAt" => "[date]",
+            ".finishedAt" => "[date]",
+            ".stats.progressTrace" => "[progressTrace]",
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+        },
+        @r###"
     {
       "uid": 0,
+      "progress": null,
       "details": {
         "dumpUid": "[dumpUid]"
       },
@@ -1095,11 +1279,12 @@ async fn test_summarized_dump_creation() {
         "types": {
           "dumpCreation": 1
         },
-        "indexUids": {}
+        "indexUids": {},
+        "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "#);
+    "###);
 }

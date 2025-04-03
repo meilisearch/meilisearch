@@ -17,7 +17,7 @@ use crate::Result;
 pub struct PhraseDocIdsCache {
     pub cache: FxHashMap<Interned<Phrase>, RoaringBitmap>,
 }
-impl<'ctx> SearchContext<'ctx> {
+impl SearchContext<'_> {
     /// Get the document ids associated with the given phrase
     pub fn get_phrase_docids(&mut self, phrase: Interned<Phrase>) -> Result<&RoaringBitmap> {
         if self.phrase_docids.cache.contains_key(&phrase) {
@@ -193,14 +193,22 @@ pub fn compute_phrase_docids(
     if words.is_empty() {
         return Ok(RoaringBitmap::new());
     }
-    let mut candidates = RoaringBitmap::new();
+    let mut candidates = None;
     for word in words.iter().flatten().copied() {
         if let Some(word_docids) = ctx.word_docids(None, Word::Original(word))? {
-            candidates |= word_docids;
+            if let Some(candidates) = candidates.as_mut() {
+                *candidates &= word_docids;
+            } else {
+                candidates = Some(word_docids);
+            }
         } else {
             return Ok(RoaringBitmap::new());
         }
     }
+
+    let Some(mut candidates) = candidates else {
+        return Ok(RoaringBitmap::new());
+    };
 
     let winsize = words.len().min(3);
 

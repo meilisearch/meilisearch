@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 use std::io::{BufReader, BufWriter, Read, Seek, Write};
 
 use hashbrown::HashMap;
@@ -25,7 +25,7 @@ impl WordPrefixDocids {
     fn new(
         database: Database<Bytes, CboRoaringBitmapCodec>,
         prefix_database: Database<Bytes, CboRoaringBitmapCodec>,
-        grenad_parameters: GrenadParameters,
+        grenad_parameters: &GrenadParameters,
     ) -> WordPrefixDocids {
         WordPrefixDocids {
             database,
@@ -37,8 +37,8 @@ impl WordPrefixDocids {
     fn execute(
         self,
         wtxn: &mut heed::RwTxn,
-        prefix_to_compute: &HashSet<Prefix>,
-        prefix_to_delete: &HashSet<Prefix>,
+        prefix_to_compute: &BTreeSet<Prefix>,
+        prefix_to_delete: &BTreeSet<Prefix>,
     ) -> Result<()> {
         delete_prefixes(wtxn, &self.prefix_database, prefix_to_delete)?;
         self.recompute_modified_prefixes(wtxn, prefix_to_compute)
@@ -48,7 +48,7 @@ impl WordPrefixDocids {
     fn recompute_modified_prefixes(
         &self,
         wtxn: &mut RwTxn,
-        prefixes: &HashSet<Prefix>,
+        prefixes: &BTreeSet<Prefix>,
     ) -> Result<()> {
         // We fetch the docids associated to the newly added word prefix fst only.
         // And collect the CboRoaringBitmaps pointers in an HashMap.
@@ -76,7 +76,7 @@ impl WordPrefixDocids {
                 .union()?;
 
             buffer.clear();
-            CboRoaringBitmapCodec::serialize_into(&output, buffer);
+            CboRoaringBitmapCodec::serialize_into_vec(&output, buffer);
             index.push(PrefixEntry { prefix, serialized_length: buffer.len() });
             file.write_all(buffer)
         })?;
@@ -127,7 +127,7 @@ impl<'a, 'rtxn> FrozenPrefixBitmaps<'a, 'rtxn> {
     pub fn from_prefixes(
         database: Database<Bytes, CboRoaringBitmapCodec>,
         rtxn: &'rtxn RoTxn,
-        prefixes: &'a HashSet<Prefix>,
+        prefixes: &'a BTreeSet<Prefix>,
     ) -> heed::Result<Self> {
         let database = database.remap_data_type::<Bytes>();
 
@@ -149,7 +149,7 @@ impl<'a, 'rtxn> FrozenPrefixBitmaps<'a, 'rtxn> {
     }
 }
 
-unsafe impl<'a, 'rtxn> Sync for FrozenPrefixBitmaps<'a, 'rtxn> {}
+unsafe impl Sync for FrozenPrefixBitmaps<'_, '_> {}
 
 struct WordPrefixIntegerDocids {
     database: Database<Bytes, CboRoaringBitmapCodec>,
@@ -161,7 +161,7 @@ impl WordPrefixIntegerDocids {
     fn new(
         database: Database<Bytes, CboRoaringBitmapCodec>,
         prefix_database: Database<Bytes, CboRoaringBitmapCodec>,
-        grenad_parameters: GrenadParameters,
+        grenad_parameters: &GrenadParameters,
     ) -> WordPrefixIntegerDocids {
         WordPrefixIntegerDocids {
             database,
@@ -173,8 +173,8 @@ impl WordPrefixIntegerDocids {
     fn execute(
         self,
         wtxn: &mut heed::RwTxn,
-        prefix_to_compute: &HashSet<Prefix>,
-        prefix_to_delete: &HashSet<Prefix>,
+        prefix_to_compute: &BTreeSet<Prefix>,
+        prefix_to_delete: &BTreeSet<Prefix>,
     ) -> Result<()> {
         delete_prefixes(wtxn, &self.prefix_database, prefix_to_delete)?;
         self.recompute_modified_prefixes(wtxn, prefix_to_compute)
@@ -184,7 +184,7 @@ impl WordPrefixIntegerDocids {
     fn recompute_modified_prefixes(
         &self,
         wtxn: &mut RwTxn,
-        prefixes: &HashSet<Prefix>,
+        prefixes: &BTreeSet<Prefix>,
     ) -> Result<()> {
         // We fetch the docids associated to the newly added word prefix fst only.
         // And collect the CboRoaringBitmaps pointers in an HashMap.
@@ -205,15 +205,22 @@ impl WordPrefixIntegerDocids {
             let (ref mut index, ref mut file, ref mut buffer) = *refmut;
 
             for (&pos, bitmaps_bytes) in frozen.bitmaps(prefix).unwrap() {
-                let output = bitmaps_bytes
-                    .iter()
-                    .map(|bytes| CboRoaringBitmapCodec::deserialize_from(bytes))
-                    .union()?;
-
-                buffer.clear();
-                CboRoaringBitmapCodec::serialize_into(&output, buffer);
-                index.push(PrefixIntegerEntry { prefix, pos, serialized_length: buffer.len() });
-                file.write_all(buffer)?;
+                if bitmaps_bytes.is_empty() {
+                    index.push(PrefixIntegerEntry { prefix, pos, serialized_length: None });
+                } else {
+                    let output = bitmaps_bytes
+                        .iter()
+                        .map(|bytes| CboRoaringBitmapCodec::deserialize_from(bytes))
+                        .union()?;
+                    buffer.clear();
+                    CboRoaringBitmapCodec::serialize_into_vec(&output, buffer);
+                    index.push(PrefixIntegerEntry {
+                        prefix,
+                        pos,
+                        serialized_length: Some(buffer.len()),
+                    });
+                    file.write_all(buffer)?;
+                }
             }
 
             Result::Ok(())
@@ -230,14 +237,24 @@ impl WordPrefixIntegerDocids {
             file.rewind()?;
             let mut file = BufReader::new(file);
             for PrefixIntegerEntry { prefix, pos, serialized_length } in index {
-                buffer.resize(serialized_length, 0);
-                file.read_exact(&mut buffer)?;
-
                 key_buffer.clear();
                 key_buffer.extend_from_slice(prefix.as_bytes());
                 key_buffer.push(0);
                 key_buffer.extend_from_slice(&pos.to_be_bytes());
-                self.prefix_database.remap_data_type::<Bytes>().put(wtxn, &key_buffer, &buffer)?;
+                match serialized_length {
+                    Some(serialized_length) => {
+                        buffer.resize(serialized_length, 0);
+                        file.read_exact(&mut buffer)?;
+                        self.prefix_database.remap_data_type::<Bytes>().put(
+                            wtxn,
+                            &key_buffer,
+                            &buffer,
+                        )?;
+                    }
+                    None => {
+                        self.prefix_database.delete(wtxn, &key_buffer)?;
+                    }
+                }
             }
         }
 
@@ -249,7 +266,7 @@ impl WordPrefixIntegerDocids {
 struct PrefixIntegerEntry<'a> {
     prefix: &'a str,
     pos: u16,
-    serialized_length: usize,
+    serialized_length: Option<usize>,
 }
 
 /// TODO doc
@@ -262,7 +279,7 @@ impl<'a, 'rtxn> FrozenPrefixIntegerBitmaps<'a, 'rtxn> {
     pub fn from_prefixes(
         database: Database<Bytes, CboRoaringBitmapCodec>,
         rtxn: &'rtxn RoTxn,
-        prefixes: &'a HashSet<Prefix>,
+        prefixes: &'a BTreeSet<Prefix>,
     ) -> heed::Result<Self> {
         let database = database.remap_data_type::<Bytes>();
 
@@ -285,13 +302,13 @@ impl<'a, 'rtxn> FrozenPrefixIntegerBitmaps<'a, 'rtxn> {
     }
 }
 
-unsafe impl<'a, 'rtxn> Sync for FrozenPrefixIntegerBitmaps<'a, 'rtxn> {}
+unsafe impl Sync for FrozenPrefixIntegerBitmaps<'_, '_> {}
 
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::prefix")]
 fn delete_prefixes(
     wtxn: &mut RwTxn,
     prefix_database: &Database<Bytes, CboRoaringBitmapCodec>,
-    prefixes: &HashSet<Prefix>,
+    prefixes: &BTreeSet<Prefix>,
 ) -> Result<()> {
     // We remove all the entries that are no more required in this word prefix docids database.
     for prefix in prefixes {
@@ -309,9 +326,9 @@ fn delete_prefixes(
 pub fn compute_word_prefix_docids(
     wtxn: &mut RwTxn,
     index: &Index,
-    prefix_to_compute: &HashSet<Prefix>,
-    prefix_to_delete: &HashSet<Prefix>,
-    grenad_parameters: GrenadParameters,
+    prefix_to_compute: &BTreeSet<Prefix>,
+    prefix_to_delete: &BTreeSet<Prefix>,
+    grenad_parameters: &GrenadParameters,
 ) -> Result<()> {
     WordPrefixDocids::new(
         index.word_docids.remap_key_type(),
@@ -325,9 +342,9 @@ pub fn compute_word_prefix_docids(
 pub fn compute_exact_word_prefix_docids(
     wtxn: &mut RwTxn,
     index: &Index,
-    prefix_to_compute: &HashSet<Prefix>,
-    prefix_to_delete: &HashSet<Prefix>,
-    grenad_parameters: GrenadParameters,
+    prefix_to_compute: &BTreeSet<Prefix>,
+    prefix_to_delete: &BTreeSet<Prefix>,
+    grenad_parameters: &GrenadParameters,
 ) -> Result<()> {
     WordPrefixDocids::new(
         index.exact_word_docids.remap_key_type(),
@@ -341,9 +358,9 @@ pub fn compute_exact_word_prefix_docids(
 pub fn compute_word_prefix_fid_docids(
     wtxn: &mut RwTxn,
     index: &Index,
-    prefix_to_compute: &HashSet<Prefix>,
-    prefix_to_delete: &HashSet<Prefix>,
-    grenad_parameters: GrenadParameters,
+    prefix_to_compute: &BTreeSet<Prefix>,
+    prefix_to_delete: &BTreeSet<Prefix>,
+    grenad_parameters: &GrenadParameters,
 ) -> Result<()> {
     WordPrefixIntegerDocids::new(
         index.word_fid_docids.remap_key_type(),
@@ -357,9 +374,9 @@ pub fn compute_word_prefix_fid_docids(
 pub fn compute_word_prefix_position_docids(
     wtxn: &mut RwTxn,
     index: &Index,
-    prefix_to_compute: &HashSet<Prefix>,
-    prefix_to_delete: &HashSet<Prefix>,
-    grenad_parameters: GrenadParameters,
+    prefix_to_compute: &BTreeSet<Prefix>,
+    prefix_to_delete: &BTreeSet<Prefix>,
+    grenad_parameters: &GrenadParameters,
 ) -> Result<()> {
     WordPrefixIntegerDocids::new(
         index.word_position_docids.remap_key_type(),

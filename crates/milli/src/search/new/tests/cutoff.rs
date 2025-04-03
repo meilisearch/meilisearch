@@ -5,13 +5,11 @@
 
 use std::time::Duration;
 
-use big_s::S;
-use maplit::hashset;
 use meili_snap::snapshot;
 
 use crate::index::tests::TempIndex;
 use crate::score_details::{ScoreDetails, ScoringStrategy};
-use crate::{Criterion, Filter, Search, TimeBudget};
+use crate::{Criterion, Filter, FilterableAttributesRule, Search, TimeBudget};
 
 fn create_index() -> TempIndex {
     let index = TempIndex::new();
@@ -20,7 +18,7 @@ fn create_index() -> TempIndex {
         .update_settings(|s| {
             s.set_primary_key("id".to_owned());
             s.set_searchable_fields(vec!["text".to_owned()]);
-            s.set_filterable_fields(hashset! { S("id") });
+            s.set_filterable_fields(vec![FilterableAttributesRule::Field("id".to_owned())]);
             s.set_criteria(vec![Criterion::Words, Criterion::Typo]);
         })
         .unwrap();

@@ -1,7 +1,9 @@
 use meili_snap::*;
 
-use crate::common::{shared_does_not_exists_index, Server};
+use crate::common::{shared_does_not_exists_index, Server, DOCUMENTS, NESTED_DOCUMENTS};
 use crate::json;
+
+use super::test_settings_documents_indexing_swapping_and_search;
 
 #[actix_rt::test]
 async fn search_unexisting_index() {
@@ -430,7 +432,7 @@ async fn search_non_filterable_facets() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Invalid facet distribution, attribute `doggo` is not filterable. The available filterable attribute is `title`.",
+      "message": "Invalid facet distribution: Attribute `doggo` is not filterable. Available filterable attributes patterns are: `title`.",
       "code": "invalid_search_facets",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
@@ -441,7 +443,7 @@ async fn search_non_filterable_facets() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Invalid facet distribution, attribute `doggo` is not filterable. The available filterable attribute is `title`.",
+      "message": "Invalid facet distribution: Attribute `doggo` is not filterable. Available filterable attributes patterns are: `title`.",
       "code": "invalid_search_facets",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
@@ -461,7 +463,7 @@ async fn search_non_filterable_facets_multiple_filterable() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Invalid facet distribution, attribute `doggo` is not filterable. The available filterable attributes are `genres, title`.",
+      "message": "Invalid facet distribution: Attribute `doggo` is not filterable. Available filterable attributes patterns are: `genres, title`.",
       "code": "invalid_search_facets",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
@@ -472,7 +474,7 @@ async fn search_non_filterable_facets_multiple_filterable() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Invalid facet distribution, attribute `doggo` is not filterable. The available filterable attributes are `genres, title`.",
+      "message": "Invalid facet distribution: Attribute `doggo` is not filterable. Available filterable attributes patterns are: `genres, title`.",
       "code": "invalid_search_facets",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
@@ -491,7 +493,7 @@ async fn search_non_filterable_facets_no_filterable() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Invalid facet distribution, this index does not have configured filterable attributes.",
+      "message": "Invalid facet distribution: Attribute `doggo` is not filterable. This index does not have configured filterable attributes.",
       "code": "invalid_search_facets",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
@@ -502,7 +504,7 @@ async fn search_non_filterable_facets_no_filterable() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Invalid facet distribution, this index does not have configured filterable attributes.",
+      "message": "Invalid facet distribution: Attribute `doggo` is not filterable. This index does not have configured filterable attributes.",
       "code": "invalid_search_facets",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
@@ -522,7 +524,7 @@ async fn search_non_filterable_facets_multiple_facets() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Invalid facet distribution, attributes `doggo, neko` are not filterable. The available filterable attributes are `genres, title`.",
+      "message": "Invalid facet distribution: Attributes `doggo, neko` are not filterable. Available filterable attributes patterns are: `genres, title`.",
       "code": "invalid_search_facets",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
@@ -533,7 +535,7 @@ async fn search_non_filterable_facets_multiple_facets() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Invalid facet distribution, attributes `doggo, neko` are not filterable. The available filterable attributes are `genres, title`.",
+      "message": "Invalid facet distribution: Attributes `doggo, neko` are not filterable. Available filterable attributes patterns are: `genres, title`.",
       "code": "invalid_search_facets",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
@@ -636,14 +638,11 @@ async fn search_bad_matching_strategy() {
 
 #[actix_rt::test]
 async fn filter_invalid_syntax_object() {
-    let server = Server::new_shared();
-    let index = server.unique_index();
-
-    let (task, _code) = index.update_settings(json!({"filterableAttributes": ["title"]})).await;
-    index.wait_task(task.uid()).await;
-
-    index
-        .search(json!({"filter": "title & Glass"}), |response, code| {
+    test_settings_documents_indexing_swapping_and_search(
+        &DOCUMENTS,
+        &json!({"filterableAttributes": ["title"]}),
+        &json!({"filter": "title & Glass"}),
+        |response, code| {
             snapshot!(response, @r###"
             {
               "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `title & Glass`.\n1:14 title & Glass",
@@ -653,20 +652,18 @@ async fn filter_invalid_syntax_object() {
             }
             "###);
             snapshot!(code, @"400 Bad Request");
-        })
-        .await;
+        },
+    )
+    .await;
 }
 
 #[actix_rt::test]
 async fn filter_invalid_syntax_array() {
-    let server = Server::new_shared();
-    let index = server.unique_index();
-
-    let (task, _code) = index.update_settings(json!({"filterableAttributes": ["title"]})).await;
-    index.wait_task(task.uid()).await;
-
-    index
-        .search(json!({"filter": ["title & Glass"]}), |response, code| {
+    test_settings_documents_indexing_swapping_and_search(
+        &DOCUMENTS,
+        &json!({"filterableAttributes": ["title"]}),
+        &json!({"filter": ["title & Glass"]}),
+        |response, code| {
             snapshot!(response, @r###"
             {
               "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `title & Glass`.\n1:14 title & Glass",
@@ -676,206 +673,327 @@ async fn filter_invalid_syntax_array() {
             }
             "###);
             snapshot!(code, @"400 Bad Request");
-        })
-        .await;
+        },
+    )
+    .await;
 }
 
 #[actix_rt::test]
 async fn filter_invalid_syntax_string() {
-    let server = Server::new_shared();
-    let index = server.unique_index();
-
-    let (task, _code) = index.update_settings(json!({"filterableAttributes": ["title"]})).await;
-    index.wait_task(task.uid()).await;
-
-    let expected_response = json!({
-        "message": "Found unexpected characters at the end of the filter: `XOR title = Glass`. You probably forgot an `OR` or an `AND` rule.\n15:32 title = Glass XOR title = Glass",
-        "code": "invalid_search_filter",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
-    });
-    index
-        .search(json!({"filter": "title = Glass XOR title = Glass"}), |response, code| {
-            assert_eq!(response, expected_response);
-            assert_eq!(code, 400);
-        })
-        .await;
+    test_settings_documents_indexing_swapping_and_search(
+        &DOCUMENTS,
+        &json!({"filterableAttributes": ["title"]}),
+        &json!({"filter": "title = Glass XOR title = Glass"}),
+        |response, code| {
+            snapshot!(response, @r###"
+            {
+              "message": "Found unexpected characters at the end of the filter: `XOR title = Glass`. You probably forgot an `OR` or an `AND` rule.\n15:32 title = Glass XOR title = Glass",
+              "code": "invalid_search_filter",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+            }
+            "###);
+            snapshot!(code, @"400 Bad Request");
+        },
+    )
+    .await;
 }
 
 #[actix_rt::test]
 async fn filter_invalid_attribute_array() {
-    let server = Server::new_shared();
-    let index = server.unique_index();
-
-    let (task, _code) = index.update_settings(json!({"filterableAttributes": ["title"]})).await;
-    index.wait_task(task.uid()).await;
-
-    let expected_response = json!({
-        "message": "Attribute `many` is not filterable. Available filterable attributes are: `title`.\n1:5 many = Glass",
-        "code": "invalid_search_filter",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
-    });
-    index
-        .search(json!({"filter": ["many = Glass"]}), |response, code| {
-            assert_eq!(response, expected_response);
-            assert_eq!(code, 400);
-        })
-        .await;
+    test_settings_documents_indexing_swapping_and_search(
+        &DOCUMENTS,
+        &json!({"filterableAttributes": ["title"]}),
+        &json!({"filter": ["many = Glass"]}),
+        |response, code| {
+            snapshot!(response, @r###"
+            {
+              "message": "Index `test`: Attribute `many` is not filterable. Available filterable attribute patterns are: `title`.\n1:5 many = Glass",
+              "code": "invalid_search_filter",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+            }
+            "###);
+            snapshot!(code, @"400 Bad Request");
+        },
+    )
+    .await;
 }
 
 #[actix_rt::test]
 async fn filter_invalid_attribute_string() {
-    let server = Server::new_shared();
-    let index = server.unique_index();
-
-    let (task, _code) = index.update_settings(json!({"filterableAttributes": ["title"]})).await;
-    index.wait_task(task.uid()).await;
-
-    let expected_response = json!({
-        "message": "Attribute `many` is not filterable. Available filterable attributes are: `title`.\n1:5 many = Glass",
-        "code": "invalid_search_filter",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
-    });
-    index
-        .search(json!({"filter": "many = Glass"}), |response, code| {
-            assert_eq!(response, expected_response);
-            assert_eq!(code, 400);
-        })
-        .await;
+    test_settings_documents_indexing_swapping_and_search(
+        &DOCUMENTS,
+        &json!({"filterableAttributes": ["title"]}),
+        &json!({"filter": "many = Glass"}),
+        |response, code| {
+            snapshot!(response, @r###"
+            {
+              "message": "Index `test`: Attribute `many` is not filterable. Available filterable attribute patterns are: `title`.\n1:5 many = Glass",
+              "code": "invalid_search_filter",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+            }
+            "###);
+            snapshot!(code, @"400 Bad Request");
+        },
+    )
+    .await;
 }
 
 #[actix_rt::test]
 async fn filter_reserved_geo_attribute_array() {
-    let server = Server::new_shared();
-    let index = server.unique_index();
-
-    let (task, _code) = index.update_settings(json!({"filterableAttributes": ["title"]})).await;
-    index.wait_task(task.uid()).await;
-
-    let expected_response = json!({
-        "message": "`_geo` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:13 _geo = Glass",
-        "code": "invalid_search_filter",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
-    });
-    index
-        .search(json!({"filter": ["_geo = Glass"]}), |response, code| {
-            assert_eq!(response, expected_response);
-            assert_eq!(code, 400);
-        })
-        .await;
+    test_settings_documents_indexing_swapping_and_search(
+        &DOCUMENTS,
+        &json!({"filterableAttributes": ["title"]}),
+        &json!({"filter": ["_geo = Glass"]}),
+        |response, code| {
+            snapshot!(response, @r###"
+            {
+              "message": "`_geo` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:13 _geo = Glass",
+              "code": "invalid_search_filter",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+            }
+            "###);
+            snapshot!(code, @"400 Bad Request");
+        },
+    )
+    .await;
 }
 
 #[actix_rt::test]
 async fn filter_reserved_geo_attribute_string() {
-    let server = Server::new_shared();
-    let index = server.unique_index();
-
-    let (task, _code) = index.update_settings(json!({"filterableAttributes": ["title"]})).await;
-    index.wait_task(task.uid()).await;
-
-    let expected_response = json!({
-        "message": "`_geo` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:13 _geo = Glass",
-        "code": "invalid_search_filter",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
-    });
-    index
-        .search(json!({"filter": "_geo = Glass"}), |response, code| {
-            assert_eq!(response, expected_response);
-            assert_eq!(code, 400);
-        })
-        .await;
+    test_settings_documents_indexing_swapping_and_search(
+        &DOCUMENTS,
+        &json!({"filterableAttributes": ["title"]}),
+        &json!({"filter": "_geo = Glass"}),
+        |response, code| {
+            snapshot!(response, @r###"
+            {
+              "message": "`_geo` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:13 _geo = Glass",
+              "code": "invalid_search_filter",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+            }
+            "###);
+            snapshot!(code, @"400 Bad Request");
+        },
+    )
+    .await;
 }
 
 #[actix_rt::test]
 async fn filter_reserved_attribute_array() {
-    let server = Server::new_shared();
-    let index = server.unique_index();
-
-    let (task, _code) = index.update_settings(json!({"filterableAttributes": ["title"]})).await;
-    index.wait_task(task.uid()).await;
-
-    let expected_response = json!({
-        "message": "`_geoDistance` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:21 _geoDistance = Glass",
-        "code": "invalid_search_filter",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
-    });
-    index
-        .search(json!({"filter": ["_geoDistance = Glass"]}), |response, code| {
-            assert_eq!(response, expected_response);
-            assert_eq!(code, 400);
-        })
-        .await;
+    test_settings_documents_indexing_swapping_and_search(
+        &DOCUMENTS,
+        &json!({"filterableAttributes": ["title"]}),
+        &json!({"filter": ["_geoDistance = Glass"]}),
+        |response, code| {
+            snapshot!(response, @r###"
+            {
+              "message": "`_geoDistance` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:21 _geoDistance = Glass",
+              "code": "invalid_search_filter",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+            }
+            "###);
+            snapshot!(code, @"400 Bad Request");
+        },
+    )
+    .await;
 }
 
 #[actix_rt::test]
 async fn filter_reserved_attribute_string() {
-    let server = Server::new_shared();
-    let index = server.unique_index();
-
-    let (task, _code) = index.update_settings(json!({"filterableAttributes": ["title"]})).await;
-    index.wait_task(task.uid()).await;
-
-    let expected_response = json!({
-       "message": "`_geoDistance` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:21 _geoDistance = Glass",
-        "code": "invalid_search_filter",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
-    });
-    index
-        .search(json!({"filter": "_geoDistance = Glass"}), |response, code| {
-            assert_eq!(response, expected_response);
-            assert_eq!(code, 400);
-        })
-        .await;
+    test_settings_documents_indexing_swapping_and_search(
+        &DOCUMENTS,
+        &json!({"filterableAttributes": ["title"]}),
+        &json!({"filter": "_geoDistance = Glass"}),
+        |response, code| {
+            snapshot!(response, @r###"
+            {
+              "message": "`_geoDistance` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:21 _geoDistance = Glass",
+              "code": "invalid_search_filter",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+            }
+            "###);
+            snapshot!(code, @"400 Bad Request");
+        },
+    )
+    .await;
 }
 
 #[actix_rt::test]
 async fn filter_reserved_geo_point_array() {
-    let server = Server::new_shared();
-    let index = server.unique_index();
-
-    let (task, _code) = index.update_settings(json!({"filterableAttributes": ["title"]})).await;
-    index.wait_task(task.uid()).await;
-
-    let expected_response = json!({
-        "message": "`_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:18 _geoPoint = Glass",
-        "code": "invalid_search_filter",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
-    });
-    index
-        .search(json!({"filter": ["_geoPoint = Glass"]}), |response, code| {
-            assert_eq!(response, expected_response);
-            assert_eq!(code, 400);
-        })
-        .await;
+    test_settings_documents_indexing_swapping_and_search(
+        &DOCUMENTS,
+        &json!({"filterableAttributes": ["title"]}),
+        &json!({"filter": ["_geoPoint = Glass"]}),
+        |response, code| {
+            snapshot!(response, @r###"
+            {
+              "message": "`_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:18 _geoPoint = Glass",
+              "code": "invalid_search_filter",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+            }
+            "###);
+            snapshot!(code, @"400 Bad Request");
+        },
+    )
+    .await;
 }
 
 #[actix_rt::test]
 async fn filter_reserved_geo_point_string() {
-    let server = Server::new_shared();
-    let index = server.unique_index();
+    test_settings_documents_indexing_swapping_and_search(
+        &DOCUMENTS,
+        &json!({"filterableAttributes": ["title"]}),
+        &json!({"filter": "_geoPoint = Glass"}),
+        |response, code| {
+            snapshot!(response, @r###"
+            {
+              "message": "`_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:18 _geoPoint = Glass",
+              "code": "invalid_search_filter",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+            }
+            "###);
+            snapshot!(code, @"400 Bad Request");
+        },
+    )
+    .await;
+}
 
-    let (task, _code) = index.update_settings(json!({"filterableAttributes": ["title"]})).await;
-    index.wait_task(task.uid()).await;
+#[actix_rt::test]
+async fn search_with_pattern_filter_settings_errors() {
+    // Check if the Equality filter works with patterns
+    test_settings_documents_indexing_swapping_and_search(
+        &NESTED_DOCUMENTS,
+        &json!({"filterableAttributes": [{
+            "attributePatterns": ["cattos","doggos.age"],
+            "features": {
+                "facetSearch": false,
+                "filter": {"equality": false, "comparison": true}
+            }
+        }]}),
+        &json!({
+            "filter": "cattos = pésti"
+        }),
+        |response, code| {
+            snapshot!(code, @"400 Bad Request");
+            snapshot!(json_string!(response), @r#"
+            {
+              "message": "Index `test`: Filter operator `=` is not allowed for the attribute `cattos`.\n  - Note: allowed operators: OR, AND, NOT, <, >, <=, >=, TO, IS EMPTY, IS NULL, EXISTS.\n  - Note: field `cattos` matched rule #0 in `filterableAttributes`\n  - Hint: enable equality in rule #0 by modifying the features.filter object\n  - Hint: prepend another rule matching `cattos` with appropriate filter features before rule #0",
+              "code": "invalid_search_filter",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+            }
+            "#);
+        },
+    )
+    .await;
 
-    let expected_response = json!({
-       "message": "`_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:18 _geoPoint = Glass",
-        "code": "invalid_search_filter",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
-    });
-    index
-        .search(json!({"filter": "_geoPoint = Glass"}), |response, code| {
-            assert_eq!(response, expected_response);
-            assert_eq!(code, 400);
-        })
-        .await;
+    test_settings_documents_indexing_swapping_and_search(
+    &NESTED_DOCUMENTS,
+    &json!({"filterableAttributes": [{
+        "attributePatterns": ["cattos","doggos.age"],
+        "features": {
+            "facetSearch": false,
+            "filter": {"equality": false, "comparison": true}
+        }
+    }]}),
+    &json!({
+        "filter": "cattos IN [pésti, simba]"
+    }),
+    |response, code| {
+        snapshot!(code, @"400 Bad Request");
+        snapshot!(json_string!(response), @r#"
+        {
+          "message": "Index `test`: Filter operator `=` is not allowed for the attribute `cattos`.\n  - Note: allowed operators: OR, AND, NOT, <, >, <=, >=, TO, IS EMPTY, IS NULL, EXISTS.\n  - Note: field `cattos` matched rule #0 in `filterableAttributes`\n  - Hint: enable equality in rule #0 by modifying the features.filter object\n  - Hint: prepend another rule matching `cattos` with appropriate filter features before rule #0",
+          "code": "invalid_search_filter",
+          "type": "invalid_request",
+          "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+        }
+        "#);
+    },
+)
+.await;
+
+    // Check if the Comparison filter works with patterns
+    test_settings_documents_indexing_swapping_and_search(
+        &NESTED_DOCUMENTS,
+        &json!({"filterableAttributes": [{"attributePatterns": ["cattos","doggos.age"]}]}),
+        &json!({
+            "filter": "doggos.age > 2"
+        }),
+        |response, code| {
+            snapshot!(code, @"400 Bad Request");
+            snapshot!(json_string!(response), @r#"
+            {
+              "message": "Index `test`: Filter operator `>` is not allowed for the attribute `doggos.age`.\n  - Note: allowed operators: OR, AND, NOT, =, !=, IN, IS EMPTY, IS NULL, EXISTS.\n  - Note: field `doggos.age` matched rule #0 in `filterableAttributes`\n  - Hint: enable comparison in rule #0 by modifying the features.filter object\n  - Hint: prepend another rule matching `doggos.age` with appropriate filter features before rule #0",
+              "code": "invalid_search_filter",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+            }
+            "#);
+        },
+    )
+    .await;
+
+    test_settings_documents_indexing_swapping_and_search(
+        &NESTED_DOCUMENTS,
+        &json!({"filterableAttributes": [{
+            "attributePatterns": ["cattos","doggos.age"],
+            "features": {
+                "facetSearch": false,
+                "filter": {"equality": true, "comparison": false}
+            }
+        }]}),
+        &json!({
+            "filter": "doggos.age > 2"
+        }),
+        |response, code| {
+            snapshot!(code, @"400 Bad Request");
+            snapshot!(json_string!(response), @r#"
+            {
+              "message": "Index `test`: Filter operator `>` is not allowed for the attribute `doggos.age`.\n  - Note: allowed operators: OR, AND, NOT, =, !=, IN, IS EMPTY, IS NULL, EXISTS.\n  - Note: field `doggos.age` matched rule #0 in `filterableAttributes`\n  - Hint: enable comparison in rule #0 by modifying the features.filter object\n  - Hint: prepend another rule matching `doggos.age` with appropriate filter features before rule #0",
+              "code": "invalid_search_filter",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+            }
+            "#);
+        },
+    )
+    .await;
+
+    test_settings_documents_indexing_swapping_and_search(
+        &NESTED_DOCUMENTS,
+        &json!({"filterableAttributes": [{
+            "attributePatterns": ["cattos","doggos.age"],
+            "features": {
+                "facetSearch": false,
+                "filter": {"equality": true, "comparison": false}
+            }
+        }]}),
+        &json!({
+            "filter": "doggos.age 2 TO 4"
+        }),
+        |response, code| {
+            snapshot!(code, @"400 Bad Request");
+            snapshot!(json_string!(response), @r#"
+            {
+              "message": "Index `test`: Filter operator `TO` is not allowed for the attribute `doggos.age`.\n  - Note: allowed operators: OR, AND, NOT, =, !=, IN, IS EMPTY, IS NULL, EXISTS.\n  - Note: field `doggos.age` matched rule #0 in `filterableAttributes`\n  - Hint: enable comparison in rule #0 by modifying the features.filter object\n  - Hint: prepend another rule matching `doggos.age` with appropriate filter features before rule #0",
+              "code": "invalid_search_filter",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+            }
+            "#);
+        },
+    )
+    .await;
 }
 
 #[actix_rt::test]
@@ -884,7 +1002,7 @@ async fn sort_geo_reserved_attribute() {
     let index = server.unique_index();
 
     let (task, _code) = index.update_settings(json!({"sortableAttributes": ["id"]})).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let expected_response = json!({
         "message": "`_geo` is a reserved keyword and thus can't be used as a sort expression. Use the _geoPoint(latitude, longitude) built-in rule to sort on _geo field coordinates.",
@@ -911,7 +1029,7 @@ async fn sort_reserved_attribute() {
     let index = server.unique_index();
 
     let (task, _code) = index.update_settings(json!({"sortableAttributes": ["id"]})).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let expected_response = json!({
         "message": "`_geoDistance` is a reserved keyword and thus can't be used as a sort expression.",
@@ -940,7 +1058,7 @@ async fn sort_unsortable_attribute() {
     index.wait_task(response.uid()).await.succeeded();
 
     let expected_response = json!({
-        "message": "Attribute `title` is not sortable. Available sortable attributes are: `id`.",
+        "message": format!("Index `{}`: Attribute `title` is not sortable. Available sortable attributes are: `id`.", index.uid),
         "code": "invalid_search_sort",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_search_sort"
@@ -998,7 +1116,7 @@ async fn sort_unset_ranking_rule() {
     index.wait_task(response.uid()).await.succeeded();
 
     let expected_response = json!({
-        "message": "You must specify where `sort` is listed in the rankingRules setting to use the sort parameter at search time.",
+        "message": format!("Index `{}`: You must specify where `sort` is listed in the rankingRules setting to use the sort parameter at search time.", index.uid),
         "code": "invalid_search_sort",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_search_sort"
@@ -1018,86 +1136,80 @@ async fn sort_unset_ranking_rule() {
 
 #[actix_rt::test]
 async fn search_on_unknown_field() {
-    let server = Server::new_shared();
-    let index = server.unique_index();
-    let (response, _code) =
-        index.update_settings_searchable_attributes(json!(["id", "title"])).await;
-    index.wait_task(response.uid()).await.succeeded();
-
-    index
-        .search(
-            json!({"q": "Captain Marvel", "attributesToSearchOn": ["unknown"]}),
-            |response, code| {
-                snapshot!(code, @"400 Bad Request");
-                snapshot!(json_string!(response), @r###"
-                {
-                  "message": "Attribute `unknown` is not searchable. Available searchable attributes are: `id, title`.",
-                  "code": "invalid_search_attributes_to_search_on",
-                  "type": "invalid_request",
-                  "link": "https://docs.meilisearch.com/errors#invalid_search_attributes_to_search_on"
-                }
-                "###);
-            },
-        )
-        .await;
+    test_settings_documents_indexing_swapping_and_search(
+        &DOCUMENTS,
+        &json!({"searchableAttributes": ["id", "title"]}),
+        &json!({"q": "Captain Marvel", "attributesToSearchOn": ["unknown"]}),
+        |response, code| {
+            snapshot!(code, @"400 Bad Request");
+            snapshot!(response, @r###"
+            {
+              "message": "Index `test`: Attribute `unknown` is not searchable. Available searchable attributes are: `id, title`.",
+              "code": "invalid_search_attributes_to_search_on",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#invalid_search_attributes_to_search_on"
+            }
+            "###);
+        },
+    )
+    .await;
 }
 
 #[actix_rt::test]
 async fn search_on_unknown_field_plus_joker() {
-    let server = Server::new_shared();
-    let index = server.unique_index();
-    let (response, _code) =
-        index.update_settings_searchable_attributes(json!(["id", "title"])).await;
-    index.wait_task(response.uid()).await.succeeded();
+    test_settings_documents_indexing_swapping_and_search(
+        &DOCUMENTS,
+        &json!({"searchableAttributes": ["id", "title"]}),
+        &json!({"q": "Captain Marvel", "attributesToSearchOn": ["*", "unknown"]}),
+        |response, code| {
+            snapshot!(code, @"400 Bad Request");
+            snapshot!(response, @r###"
+            {
+              "message": "Index `test`: Attribute `unknown` is not searchable. Available searchable attributes are: `id, title`.",
+              "code": "invalid_search_attributes_to_search_on",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#invalid_search_attributes_to_search_on"
+            }
+            "###);
+        },
+    )
+    .await;
 
-    index
-        .search(
-            json!({"q": "Captain Marvel", "attributesToSearchOn": ["*", "unknown"]}),
-            |response, code| {
-                snapshot!(code, @"400 Bad Request");
-                snapshot!(json_string!(response), @r###"
-                {
-                  "message": "Attribute `unknown` is not searchable. Available searchable attributes are: `id, title`.",
-                  "code": "invalid_search_attributes_to_search_on",
-                  "type": "invalid_request",
-                  "link": "https://docs.meilisearch.com/errors#invalid_search_attributes_to_search_on"
-                }
-                "###);
-            },
-        )
-        .await;
-
-    index
-        .search(
-            json!({"q": "Captain Marvel", "attributesToSearchOn": ["unknown", "*"]}),
-            |response, code| {
-                snapshot!(code, @"400 Bad Request");
-                snapshot!(json_string!(response), @r###"
-                {
-                  "message": "Attribute `unknown` is not searchable. Available searchable attributes are: `id, title`.",
-                  "code": "invalid_search_attributes_to_search_on",
-                  "type": "invalid_request",
-                  "link": "https://docs.meilisearch.com/errors#invalid_search_attributes_to_search_on"
-                }
-                "###);
-            },
-        )
-        .await;
+    test_settings_documents_indexing_swapping_and_search(
+        &DOCUMENTS,
+        &json!({"searchableAttributes": ["id", "title"]}),
+        &json!({"q": "Captain Marvel", "attributesToSearchOn": ["unknown", "*"]}),
+        |response, code| {
+            snapshot!(code, @"400 Bad Request");
+            snapshot!(response, @r###"
+            {
+              "message": "Index `test`: Attribute `unknown` is not searchable. Available searchable attributes are: `id, title`.",
+              "code": "invalid_search_attributes_to_search_on",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#invalid_search_attributes_to_search_on"
+            }
+            "###);
+        },
+    )
+    .await;
 }
 
 #[actix_rt::test]
 async fn distinct_at_search_time() {
-    let server = Server::new_shared();
-    let index = server.unique_index();
+    let server = Server::new().await;
+    let index = server.index("test");
     let (task, _) = index.create(None).await;
     index.wait_task(task.uid()).await.succeeded();
+    let (response, _code) =
+        index.add_documents(json!([{"id": 1, "color": "Doggo", "machin": "Action"}]), None).await;
+    index.wait_task(response.uid()).await.succeeded();
 
     let (response, code) =
         index.search_post(json!({"page": 0, "hitsPerPage": 2, "distinct": "doggo.truc"})).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "Attribute `doggo.truc` is not filterable and thus, cannot be used as distinct attribute. This index does not have configured filterable attributes.",
+      "message": "Index `test`: Attribute `doggo.truc` is not filterable and thus, cannot be used as distinct attribute. This index does not have configured filterable attributes.",
       "code": "invalid_search_distinct",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_distinct"
@@ -1105,14 +1217,14 @@ async fn distinct_at_search_time() {
     "###);
 
     let (task, _) = index.update_settings_filterable_attributes(json!(["color", "machin"])).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) =
         index.search_post(json!({"page": 0, "hitsPerPage": 2, "distinct": "doggo.truc"})).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "Attribute `doggo.truc` is not filterable and thus, cannot be used as distinct attribute. Available filterable attributes are: `color, machin`.",
+      "message": "Index `test`: Attribute `doggo.truc` is not filterable and thus, cannot be used as distinct attribute. Available filterable attributes patterns are: `color, machin`.",
       "code": "invalid_search_distinct",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_distinct"
@@ -1120,14 +1232,14 @@ async fn distinct_at_search_time() {
     "###);
 
     let (task, _) = index.update_settings_displayed_attributes(json!(["color"])).await;
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) =
         index.search_post(json!({"page": 0, "hitsPerPage": 2, "distinct": "doggo.truc"})).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "Attribute `doggo.truc` is not filterable and thus, cannot be used as distinct attribute. Available filterable attributes are: `color, <..hidden-attributes>`.",
+      "message": "Index `test`: Attribute `doggo.truc` is not filterable and thus, cannot be used as distinct attribute. Available filterable attributes patterns are: `color, <..hidden-attributes>`.",
       "code": "invalid_search_distinct",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_distinct"

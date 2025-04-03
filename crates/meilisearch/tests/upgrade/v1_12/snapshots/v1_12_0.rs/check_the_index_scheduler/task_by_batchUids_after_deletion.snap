@@ -1,0 +1,11 @@
+---
+source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
+snapshot_kind: text
+---
+{
+  "results": [],
+  "total": 0,
+  "limit": 20,
+  "from": null,
+  "next": null
+}

@@ -92,11 +92,12 @@ mod test {
 
     use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
     use crate::index::tests::TempIndex;
+    use crate::progress::Progress;
     use crate::update::new::indexer::document_changes::{
         extract, DocumentChangeContext, Extractor, IndexingContext,
     };
     use crate::update::new::indexer::DocumentDeletion;
-    use crate::update::new::steps::Step;
+    use crate::update::new::steps::IndexingStep;
     use crate::update::new::thread_local::{MostlySend, ThreadLocal};
     use crate::update::new::DocumentChange;
     use crate::DocumentId;
@@ -109,7 +110,7 @@ mod test {
             >,
         }
 
-        unsafe impl<'extractor> MostlySend for DeletionWithData<'extractor> {}
+        unsafe impl MostlySend for DeletionWithData<'_> {}
 
         struct TrackDeletion<'extractor>(PhantomData<&'extractor ()>);
 
@@ -164,7 +165,8 @@ mod test {
             doc_allocs: &doc_allocs,
             fields_ids_map_store: &fields_ids_map_store,
             must_stop_processing: &(|| false),
-            send_progress: &(|_progress| {}),
+            progress: &Progress::default(),
+            grenad_parameters: &Default::default(),
         };
 
         for _ in 0..3 {
@@ -176,7 +178,7 @@ mod test {
                 context,
                 &mut extractor_allocs,
                 &datastore,
-                Step::ExtractingDocuments,
+                IndexingStep::ExtractingDocuments,
             )
             .unwrap();
 

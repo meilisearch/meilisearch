@@ -11,39 +11,42 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-actix-web = { version = "4.8.0", default-features = false }
-anyhow = "1.0.86"
+actix-web = { version = "4.9.0", default-features = false }
+anyhow = "1.0.95"
 bumpalo = "3.16.0"
+bumparaw-collections = "0.1.4"
 convert_case = "0.6.0"
-csv = "1.3.0"
-deserr = { version = "0.6.2", features = ["actix-web"] }
+csv = "1.3.1"
+deserr = { version = "0.6.3", features = ["actix-web"] }
 either = { version = "1.13.0", features = ["serde"] }
 enum-iterator = "2.1.0"
 file-store = { path = "../file-store" }
-flate2 = "1.0.30"
+flate2 = "1.0.35"
 fst = "0.4.7"
-memmap2 = "0.9.4"
+memmap2 = "0.9.5"
 milli = { path = "../milli" }
-raw-collections = { git = "https://github.com/meilisearch/raw-collections.git", version = "0.1.0" }
-roaring = { version = "0.10.6", features = ["serde"] }
-serde = { version = "1.0.204", features = ["derive"] }
+roaring = { version = "0.10.10", features = ["serde"] }
+rustc-hash = "2.1.0"
+serde = { version = "1.0.217", features = ["derive"] }
 serde-cs = "0.2.4"
-serde_json = "1.0.120"
-tar = "0.4.41"
-tempfile = "3.10.1"
-thiserror = "1.0.61"
-time = { version = "0.3.36", features = [
+serde_json = { version = "1.0.135", features = ["preserve_order"] }
+tar = "0.4.43"
+tempfile = "3.15.0"
+thiserror = "2.0.9"
+time = { version = "0.3.37", features = [
     "serde-well-known",
     "formatting",
     "parsing",
     "macros",
 ] }
-tokio = "1.38"
-uuid = { version = "1.10.0", features = ["serde", "v4"] }
+tokio = "1.42"
+utoipa = { version = "5.3.1", features = ["macros"] }
+uuid = { version = "1.11.0", features = ["serde", "v4"] }
 bitflags = "2.6.0"
 
 [dev-dependencies]
-insta = "1.39.0"
+# fixed version due to format breakages in v1.40
+insta = "=1.39.0"
 meili-snap = { path = "../meili-snap" }
 
 [features]

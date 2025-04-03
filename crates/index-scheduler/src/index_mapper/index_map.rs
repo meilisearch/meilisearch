@@ -1,16 +1,17 @@
 use std::collections::BTreeMap;
+use std::env::VarError;
 use std::path::Path;
+use std::str::FromStr;
 use std::time::Duration;
 
 use meilisearch_types::heed::{EnvClosingEvent, EnvFlags, EnvOpenOptions};
-use meilisearch_types::milli::Index;
+use meilisearch_types::milli::{Index, Result};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
 use super::IndexStatus::{self, Available, BeingDeleted, Closing, Missing};
+use crate::clamp_to_page_size;
 use crate::lru::{InsertionOutcome, LruMap};
-use crate::{clamp_to_page_size, Result};
-
 /// Keep an internally consistent view of the open indexes in memory.
 ///
 /// This view is made of an LRU cache that will evict the least frequently used indexes when new indexes are opened.
@@ -103,7 +104,7 @@ impl ReopenableIndex {
                 return Ok(());
             }
             map.unavailable.remove(&self.uuid);
-            map.create(&self.uuid, path, None, self.enable_mdb_writemap, self.map_size)?;
+            map.create(&self.uuid, path, None, self.enable_mdb_writemap, self.map_size, false)?;
         }
         Ok(())
     }
@@ -172,11 +173,12 @@ impl IndexMap {
         date: Option<(OffsetDateTime, OffsetDateTime)>,
         enable_mdb_writemap: bool,
         map_size: usize,
+        creation: bool,
     ) -> Result<Index> {
         if !matches!(self.get_unavailable(uuid), Missing) {
             panic!("Attempt to open an index that was unavailable");
         }
-        let index = create_or_open_index(path, date, enable_mdb_writemap, map_size)?;
+        let index = create_or_open_index(path, date, enable_mdb_writemap, map_size, creation)?;
         match self.available.insert(*uuid, index.clone()) {
             InsertionOutcome::InsertedNew => (),
             InsertionOutcome::Evicted(evicted_uuid, evicted_index) => {
@@ -300,18 +302,31 @@ fn create_or_open_index(
     date: Option<(OffsetDateTime, OffsetDateTime)>,
     enable_mdb_writemap: bool,
     map_size: usize,
+    creation: bool,
 ) -> Result<Index> {
-    let mut options = EnvOpenOptions::new();
+    let options = EnvOpenOptions::new();
+    let mut options = options.read_txn_without_tls();
     options.map_size(clamp_to_page_size(map_size));
-    options.max_readers(1024);
+
+    // You can find more details about this experimental
+    // environment variable on the following GitHub discussion:
+    // <https://github.com/orgs/meilisearch/discussions/806>
+    let max_readers = match std::env::var("MEILI_EXPERIMENTAL_INDEX_MAX_READERS") {
+        Ok(value) => u32::from_str(&value).unwrap(),
+        Err(VarError::NotPresent) => 1024,
+        Err(VarError::NotUnicode(value)) => panic!(
+            "Invalid unicode for the `MEILI_EXPERIMENTAL_INDEX_MAX_READERS` env var: {value:?}"
+        ),
+    };
+    options.max_readers(max_readers);
     if enable_mdb_writemap {
         unsafe { options.flags(EnvFlags::WRITE_MAP) };
     }
 
     if let Some((created, updated)) = date {
-        Ok(Index::new_with_creation_dates(options, path, created, updated)?)
+        Ok(Index::new_with_creation_dates(options, path, created, updated, creation)?)
     } else {
-        Ok(Index::new(options, path)?)
+        Ok(Index::new(options, path, creation)?)
     }
 }
 
@@ -319,17 +334,17 @@ fn create_or_open_index(
 #[cfg(test)]
 mod tests {
 
-    use meilisearch_types::heed::Env;
+    use meilisearch_types::heed::{Env, WithoutTls};
     use meilisearch_types::Index;
     use uuid::Uuid;
 
     use super::super::IndexMapper;
-    use crate::tests::IndexSchedulerHandle;
+    use crate::test_utils::IndexSchedulerHandle;
     use crate::utils::clamp_to_page_size;
     use crate::IndexScheduler;
 
     impl IndexMapper {
-        fn test() -> (Self, Env, IndexSchedulerHandle) {
+        fn test() -> (Self, Env<WithoutTls>, IndexSchedulerHandle) {
             let (index_scheduler, handle) = IndexScheduler::test(true, vec![]);
             (index_scheduler.index_mapper, index_scheduler.env, handle)
         }

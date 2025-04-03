@@ -1,0 +1,4 @@
+---
+source: crates/meilisearch/tests/settings/vectors.rs
+---
+400 Bad Request

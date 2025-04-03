@@ -4,6 +4,7 @@
 mod distinct;
 mod errors;
 mod facet_search;
+mod filters;
 mod formatted;
 mod geo;
 mod hybrid;
@@ -15,14 +16,63 @@ mod pagination;
 mod restrict_searchable;
 mod search_queue;
 
+use meili_snap::{json_string, snapshot};
 use meilisearch::Opt;
 use tempfile::TempDir;
 
 use crate::common::{
     default_settings, shared_index_with_documents, shared_index_with_nested_documents, Server,
-    DOCUMENTS, FRUITS_DOCUMENTS, NESTED_DOCUMENTS, SCORE_DOCUMENTS, VECTOR_DOCUMENTS,
+    Value, DOCUMENTS, FRUITS_DOCUMENTS, NESTED_DOCUMENTS, SCORE_DOCUMENTS, VECTOR_DOCUMENTS,
 };
 use crate::json;
+
+async fn test_settings_documents_indexing_swapping_and_search(
+    documents: &Value,
+    settings: &Value,
+    query: &Value,
+    test: impl Fn(Value, actix_http::StatusCode) + std::panic::UnwindSafe + Clone,
+) {
+    let temp = TempDir::new().unwrap();
+    let server = Server::new_with_options(Opt { ..default_settings(temp.path()) }).await.unwrap();
+
+    eprintln!("Documents -> Settings -> test");
+    let index = server.index("test");
+
+    let (task, code) = index.add_documents(documents.clone(), None).await;
+    assert_eq!(code, 202, "{}", task);
+    let response = index.wait_task(task.uid()).await;
+    assert!(response.is_success(), "{:?}", response);
+
+    let (task, code) = index.update_settings(settings.clone()).await;
+    assert_eq!(code, 202, "{}", task);
+    let response = index.wait_task(task.uid()).await;
+    assert!(response.is_success(), "{:?}", response);
+
+    index.search(query.clone(), test.clone()).await;
+    let (task, code) = server.delete_index("test").await;
+    assert_eq!(code, 202, "{}", task);
+    let response = server.wait_task(task.uid()).await;
+    assert!(response.is_success(), "{:?}", response);
+
+    eprintln!("Settings -> Documents -> test");
+    let index = server.index("test");
+
+    let (task, code) = index.update_settings(settings.clone()).await;
+    assert_eq!(code, 202, "{}", task);
+    let response = index.wait_task(task.uid()).await;
+    assert!(response.is_success(), "{:?}", response);
+
+    let (task, code) = index.add_documents(documents.clone(), None).await;
+    assert_eq!(code, 202, "{}", task);
+    let response = index.wait_task(task.uid()).await;
+    assert!(response.is_success(), "{:?}", response);
+
+    index.search(query.clone(), test.clone()).await;
+    let (task, code) = server.delete_index("test").await;
+    assert_eq!(code, 202, "{}", task);
+    let response = server.wait_task(task.uid()).await;
+    assert!(response.is_success(), "{:?}", response);
+}
 
 #[actix_rt::test]
 async fn simple_placeholder_search() {
@@ -63,6 +113,105 @@ async fn simple_search() {
 }
 
 #[actix_rt::test]
+async fn search_with_stop_word() {
+    // related to https://github.com/meilisearch/meilisearch/issues/4984
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (_, code) = index
+        .update_settings(json!({"stopWords": ["the", "The", "a", "an", "to", "in", "of"]}))
+        .await;
+    meili_snap::snapshot!(code, @"202 Accepted");
+
+    let documents = DOCUMENTS.clone();
+    index.add_documents(documents, None).await;
+    index.wait_task(1).await;
+
+    // prefix search
+    index
+        .search(json!({"q": "to the", "attributesToHighlight": ["title"], "attributesToRetrieve": ["title"] }), |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            snapshot!(json_string!(response["hits"]), @"[]");
+        })
+        .await;
+
+    // non-prefix search
+    index
+          .search(json!({"q": "to the ", "attributesToHighlight": ["title"], "attributesToRetrieve": ["title"] }), |response, code| {
+              assert_eq!(code, 200, "{}", response);
+              snapshot!(json_string!(response["hits"]), @r###"
+              [
+                {
+                  "title": "Shazam!",
+                  "_formatted": {
+                    "title": "Shazam!"
+                  }
+                },
+                {
+                  "title": "Captain Marvel",
+                  "_formatted": {
+                    "title": "Captain Marvel"
+                  }
+                },
+                {
+                  "title": "Escape Room",
+                  "_formatted": {
+                    "title": "Escape Room"
+                  }
+                },
+                {
+                  "title": "How to Train Your Dragon: The Hidden World",
+                  "_formatted": {
+                    "title": "How to Train Your Dragon: The Hidden World"
+                  }
+                },
+                {
+                  "title": "Gläss",
+                  "_formatted": {
+                    "title": "Gläss"
+                  }
+                }
+              ]
+              "###);
+          })
+          .await;
+}
+
+#[actix_rt::test]
+async fn search_with_typo_settings() {
+    // related to https://github.com/meilisearch/meilisearch/issues/5240
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (_, code) = index
+        .update_settings(json!({"typoTolerance": { "disableOnAttributes": ["title", "id"]}}))
+        .await;
+    meili_snap::snapshot!(code, @"202 Accepted");
+
+    let documents = DOCUMENTS.clone();
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
+
+    index
+        .search(json!({"q": "287947" }), |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            snapshot!(json_string!(response["hits"]), @r###"
+            [
+              {
+                "title": "Shazam!",
+                "id": "287947",
+                "color": [
+                  "green",
+                  "blue"
+                ]
+              }
+            ]
+            "###);
+        })
+        .await;
+}
+
+#[actix_rt::test]
 async fn phrase_search_with_stop_word() {
     // related to https://github.com/meilisearch/meilisearch/issues/3521
     let server = Server::new().await;
@@ -72,8 +221,8 @@ async fn phrase_search_with_stop_word() {
     meili_snap::snapshot!(code, @"202 Accepted");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     index
         .search(json!({"q": "how \"to\" train \"the" }), |response, code| {
@@ -152,11 +301,12 @@ async fn negative_special_cases_search() {
     let index = server.index("test");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
-    index.update_settings(json!({"synonyms": { "escape": ["gläss"] }})).await;
-    index.wait_task(1).await;
+    let (task, _status_code) =
+        index.update_settings(json!({"synonyms": { "escape": ["gläss"] }})).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     // There is a synonym for escape -> glass but we don't want "escape", only the derivates: glass
     index
@@ -181,8 +331,8 @@ async fn test_kanji_language_detection() {
         { "id": 1, "title": "東京のお寿司。" },
         { "id": 2, "title": "הַשּׁוּעָל הַמָּהִיר (״הַחוּם״) לֹא יָכוֹל לִקְפֹּץ 9.94 מֶטְרִים, נָכוֹן? ברר, 1.5°C- בַּחוּץ!" }
     ]);
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     index
         .search(json!({"q": "東京"}), |response, code| {
@@ -204,11 +354,11 @@ async fn test_thai_language() {
         { "id": 1, "title": "สบู่สมุนไพรชาเขียว 100 กรัม จำนวน 6 ก้อน" },
         { "id": 2, "title": "สบู่สมุนไพรฝางแดงผสมว่านหางจรเข้ 100 กรัม จำนวน 6 ก้อน" }
     ]);
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
-    index.update_settings(json!({"rankingRules": ["exactness"]})).await;
-    index.wait_task(1).await;
+    let (task, _status_code) = index.update_settings(json!({"rankingRules": ["exactness"]})).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     index
         .search(json!({"q": "สบู"}), |response, code| {
@@ -252,118 +402,6 @@ async fn search_multiple_params() {
             },
         )
         .await;
-}
-
-#[actix_rt::test]
-async fn search_with_filter_string_notation() {
-    let server = Server::new().await;
-    let index = server.index("test");
-
-    let (_, code) = index.update_settings(json!({"filterableAttributes": ["title"]})).await;
-    meili_snap::snapshot!(code, @"202 Accepted");
-
-    let documents = DOCUMENTS.clone();
-    let (_, code) = index.add_documents(documents, None).await;
-    meili_snap::snapshot!(code, @"202 Accepted");
-    let res = index.wait_task(1).await;
-    meili_snap::snapshot!(res["status"], @r###""succeeded""###);
-
-    index
-        .search(
-            json!({
-                "filter": "title = Gläss"
-            }),
-            |response, code| {
-                assert_eq!(code, 200, "{}", response);
-                assert_eq!(response["hits"].as_array().unwrap().len(), 1);
-            },
-        )
-        .await;
-
-    let index = server.index("nested");
-
-    let (_, code) =
-        index.update_settings(json!({"filterableAttributes": ["cattos", "doggos.age"]})).await;
-    meili_snap::snapshot!(code, @"202 Accepted");
-
-    let documents = NESTED_DOCUMENTS.clone();
-    let (_, code) = index.add_documents(documents, None).await;
-    meili_snap::snapshot!(code, @"202 Accepted");
-    let res = index.wait_task(3).await;
-    meili_snap::snapshot!(res["status"], @r###""succeeded""###);
-
-    index
-        .search(
-            json!({
-                "filter": "cattos = pésti"
-            }),
-            |response, code| {
-                assert_eq!(code, 200, "{}", response);
-                assert_eq!(response["hits"].as_array().unwrap().len(), 1);
-                assert_eq!(response["hits"][0]["id"], json!(852));
-            },
-        )
-        .await;
-
-    index
-        .search(
-            json!({
-                "filter": "doggos.age > 5"
-            }),
-            |response, code| {
-                assert_eq!(code, 200, "{}", response);
-                assert_eq!(response["hits"].as_array().unwrap().len(), 2);
-                assert_eq!(response["hits"][0]["id"], json!(654));
-                assert_eq!(response["hits"][1]["id"], json!(951));
-            },
-        )
-        .await;
-}
-
-#[actix_rt::test]
-async fn search_with_filter_array_notation() {
-    let index = shared_index_with_documents().await;
-    let (response, code) = index
-        .search_post(json!({
-            "filter": ["title = Gläss"]
-        }))
-        .await;
-    assert_eq!(code, 200, "{}", response);
-    assert_eq!(response["hits"].as_array().unwrap().len(), 1);
-
-    let (response, code) = index
-        .search_post(json!({
-            "filter": [["title = Gläss", "title = \"Shazam!\"", "title = \"Escape Room\""]]
-        }))
-        .await;
-    assert_eq!(code, 200, "{}", response);
-    assert_eq!(response["hits"].as_array().unwrap().len(), 3);
-}
-
-#[actix_rt::test]
-async fn search_with_contains_filter() {
-    let temp = TempDir::new().unwrap();
-    let server = Server::new_with_options(Opt {
-        experimental_contains_filter: true,
-        ..default_settings(temp.path())
-    })
-    .await
-    .unwrap();
-    let index = server.index("movies");
-
-    index.update_settings(json!({"filterableAttributes": ["title"]})).await;
-
-    let documents = DOCUMENTS.clone();
-    let (request, _code) = index.add_documents(documents, None).await;
-    index.wait_task(request.uid()).await.succeeded();
-
-    let (response, code) = index
-        .search_post(json!({
-            "filter": "title CONTAINS cap"
-        }))
-        .await;
-    assert_eq!(code, 200, "{}", response);
-    assert_eq!(response["hits"].as_array().unwrap().len(), 2);
 }
 
 #[actix_rt::test]
@@ -488,7 +526,7 @@ async fn search_facet_distribution() {
             |response, code| {
                 assert_eq!(code, 200, "{}", response);
                 let dist = response["facetDistribution"].as_object().unwrap();
-                assert_eq!(dist.len(), 1);
+                assert_eq!(dist.len(), 1, "{:?}", dist);
                 assert_eq!(
                     dist["doggos.name"],
                     json!({ "bobby": 1, "buddy": 1, "gros bill": 1, "turbo": 1, "fast": 1})
@@ -505,7 +543,7 @@ async fn search_facet_distribution() {
             |response, code| {
                 assert_eq!(code, 200, "{}", response);
                 let dist = response["facetDistribution"].as_object().unwrap();
-                assert_eq!(dist.len(), 3);
+                assert_eq!(dist.len(), 3, "{:?}", dist);
                 assert_eq!(
                     dist["doggos.name"],
                     json!({ "bobby": 1, "buddy": 1, "gros bill": 1, "turbo": 1, "fast": 1})
@@ -541,8 +579,8 @@ async fn displayed_attributes() {
     index.update_settings(json!({ "displayedAttributes": ["title"] })).await;
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) =
         index.search_post(json!({ "attributesToRetrieve": ["title", "id"] })).await;
@@ -556,8 +594,8 @@ async fn placeholder_search_is_hard_limited() {
     let index = server.index("test");
 
     let documents: Vec<_> = (0..1200).map(|i| json!({ "id": i, "text": "I am unique!" })).collect();
-    index.add_documents(documents.into(), None).await;
-    index.wait_task(0).await;
+    let (task, _status_code) = index.add_documents(documents.into(), None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     index
         .search(
@@ -584,8 +622,9 @@ async fn placeholder_search_is_hard_limited() {
         )
         .await;
 
-    index.update_settings(json!({ "pagination": { "maxTotalHits": 10_000 } })).await;
-    index.wait_task(1).await;
+    let (task, _status_code) =
+        index.update_settings(json!({ "pagination": { "maxTotalHits": 10_000 } })).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     index
         .search(
@@ -619,8 +658,8 @@ async fn search_is_hard_limited() {
     let index = server.index("test");
 
     let documents: Vec<_> = (0..1200).map(|i| json!({ "id": i, "text": "I am unique!" })).collect();
-    index.add_documents(documents.into(), None).await;
-    index.wait_task(0).await;
+    let (task, _status_code) = index.add_documents(documents.into(), None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     index
         .search(
@@ -649,8 +688,9 @@ async fn search_is_hard_limited() {
         )
         .await;
 
-    index.update_settings(json!({ "pagination": { "maxTotalHits": 10_000 } })).await;
-    index.wait_task(1).await;
+    let (task, _status_code) =
+        index.update_settings(json!({ "pagination": { "maxTotalHits": 10_000 } })).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     index
         .search(
@@ -688,8 +728,8 @@ async fn faceting_max_values_per_facet() {
     index.update_settings(json!({ "filterableAttributes": ["number"] })).await;
 
     let documents: Vec<_> = (0..10_000).map(|id| json!({ "id": id, "number": id * 10 })).collect();
-    index.add_documents(json!(documents), None).await;
-    index.wait_task(1).await;
+    let (task, _status_code) = index.add_documents(json!(documents), None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     index
         .search(
@@ -704,8 +744,9 @@ async fn faceting_max_values_per_facet() {
         )
         .await;
 
-    index.update_settings(json!({ "faceting": { "maxValuesPerFacet": 10_000 } })).await;
-    index.wait_task(2).await;
+    let (task, _status_code) =
+        index.update_settings(json!({ "faceting": { "maxValuesPerFacet": 10_000 } })).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     index
         .search(
@@ -729,7 +770,7 @@ async fn test_score_details() {
     let documents = DOCUMENTS.clone();
 
     let res = index.add_documents(json!(documents), None).await;
-    index.wait_task(res.0.uid()).await;
+    index.wait_task(res.0.uid()).await.succeeded();
 
     index
         .search(
@@ -748,13 +789,6 @@ async fn test_score_details() {
                       "green",
                       "red"
                     ],
-                    "_vectors": {
-                      "manual": [
-                        -100,
-                        231,
-                        32
-                      ]
-                    },
                     "_rankingScoreDetails": {
                       "words": {
                         "order": 0,
@@ -802,7 +836,7 @@ async fn test_score() {
     let documents = SCORE_DOCUMENTS.clone();
 
     let res = index.add_documents(json!(documents), None).await;
-    index.wait_task(res.0.uid()).await;
+    index.wait_task(res.0.uid()).await.succeeded();
 
     index
         .search(
@@ -855,7 +889,7 @@ async fn test_score_threshold() {
     let documents = SCORE_DOCUMENTS.clone();
 
     let res = index.add_documents(json!(documents), None).await;
-    index.wait_task(res.0.uid()).await;
+    index.wait_task(res.0.uid()).await.succeeded();
 
     index
         .search(
@@ -1011,7 +1045,7 @@ async fn test_degraded_score_details() {
     index.add_documents(json!(documents), None).await;
     // We can't really use anything else than 0ms here; otherwise, the test will get flaky.
     let (res, _code) = index.update_settings(json!({ "searchCutoffMs": 0 })).await;
-    index.wait_task(res.uid()).await;
+    index.wait_task(res.uid()).await.succeeded();
 
     index
         .search(
@@ -1089,206 +1123,6 @@ async fn test_degraded_score_details() {
         .await;
 }
 
-#[actix_rt::test]
-async fn experimental_feature_vector_store() {
-    let server = Server::new().await;
-    let index = server.index("test");
-
-    let documents = DOCUMENTS.clone();
-
-    index.add_documents(json!(documents), None).await;
-    index.wait_task(0).await;
-
-    let (response, code) = index
-        .search_post(json!({
-            "vector": [1.0, 2.0, 3.0],
-            "hybrid": {
-              "embedder": "manual",
-            },
-            "showRankingScore": true
-        }))
-        .await;
-
-    {
-        meili_snap::snapshot!(code, @"400 Bad Request");
-        meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
-          {
-            "message": "Passing `vector` as a parameter requires enabling the `vector store` experimental feature. See https://github.com/meilisearch/product/discussions/677",
-            "code": "feature_not_enabled",
-            "type": "invalid_request",
-            "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
-          }
-          "###);
-    }
-
-    index
-        .search(json!({
-            "retrieveVectors": true,
-            "showRankingScore": true
-        }), |response, code|{
-            meili_snap::snapshot!(code, @"400 Bad Request");
-            meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
-            {
-              "message": "Passing `retrieveVectors` as a parameter requires enabling the `vector store` experimental feature. See https://github.com/meilisearch/product/discussions/677",
-              "code": "feature_not_enabled",
-              "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
-            }
-            "###);
-        })
-        .await;
-
-    let (response, code) = server.set_features(json!({"vectorStore": true})).await;
-    meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(response["vectorStore"], @"true");
-
-    let (response, code) = index
-        .update_settings(json!({"embedders": {
-            "manual": {
-                "source": "userProvided",
-                "dimensions": 3,
-            }
-        }}))
-        .await;
-
-    meili_snap::snapshot!(response, @r###"
-    {
-      "taskUid": 1,
-      "indexUid": "test",
-      "status": "enqueued",
-      "type": "settingsUpdate",
-      "enqueuedAt": "[date]"
-    }
-    "###);
-    meili_snap::snapshot!(code, @"202 Accepted");
-    let response = index.wait_task(response.uid()).await;
-
-    meili_snap::snapshot!(meili_snap::json_string!(response["status"]), @"\"succeeded\"");
-
-    let (response, code) = index
-        .search_post(json!({
-            "vector": [1.0, 2.0, 3.0],
-            "hybrid": {
-              "embedder": "manual",
-            },
-            "showRankingScore": true,
-            "retrieveVectors": true,
-        }))
-        .await;
-
-    meili_snap::snapshot!(code, @"200 OK");
-    // vector search returns all documents that don't have vectors in the last bucket, like all sorts
-    meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
-    [
-      {
-        "title": "Shazam!",
-        "id": "287947",
-        "color": [
-          "green",
-          "blue"
-        ],
-        "_vectors": {
-          "manual": {
-            "embeddings": [
-              [
-                1.0,
-                2.0,
-                3.0
-              ]
-            ],
-            "regenerate": false
-          }
-        },
-        "_rankingScore": 1.0
-      },
-      {
-        "title": "Captain Marvel",
-        "id": "299537",
-        "color": [
-          "yellow",
-          "blue"
-        ],
-        "_vectors": {
-          "manual": {
-            "embeddings": [
-              [
-                1.0,
-                2.0,
-                54.0
-              ]
-            ],
-            "regenerate": false
-          }
-        },
-        "_rankingScore": 0.9129111766815186
-      },
-      {
-        "title": "Gläss",
-        "id": "450465",
-        "color": [
-          "blue",
-          "red"
-        ],
-        "_vectors": {
-          "manual": {
-            "embeddings": [
-              [
-                -100.0,
-                340.0,
-                90.0
-              ]
-            ],
-            "regenerate": false
-          }
-        },
-        "_rankingScore": 0.8106412887573242
-      },
-      {
-        "title": "How to Train Your Dragon: The Hidden World",
-        "id": "166428",
-        "color": [
-          "green",
-          "red"
-        ],
-        "_vectors": {
-          "manual": {
-            "embeddings": [
-              [
-                -100.0,
-                231.0,
-                32.0
-              ]
-            ],
-            "regenerate": false
-          }
-        },
-        "_rankingScore": 0.7412010431289673
-      },
-      {
-        "title": "Escape Room",
-        "id": "522681",
-        "color": [
-          "yellow",
-          "red"
-        ],
-        "_vectors": {
-          "manual": {
-            "embeddings": [
-              [
-                10.0,
-                -23.0,
-                32.0
-              ]
-            ],
-            "regenerate": false
-          }
-        },
-        "_rankingScore": 0.6972063183784485
-      }
-    ]
-    "###);
-}
-
 #[cfg(feature = "default")]
 #[actix_rt::test]
 async fn camelcased_words() {
@@ -1303,8 +1137,8 @@ async fn camelcased_words() {
         { "id": 3, "title": "TestAb" },
         { "id": 4, "title": "testab" },
     ]);
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     index
         .search(json!({"q": "deLonghi"}), |response, code| {
@@ -1521,13 +1355,14 @@ async fn simple_search_with_strange_synonyms() {
     let server = Server::new().await;
     let index = server.index("test");
 
-    index.update_settings(json!({ "synonyms": {"&": ["to"], "to": ["&"]} })).await;
-    let r = index.wait_task(0).await;
+    let (task, _status_code) =
+        index.update_settings(json!({ "synonyms": {"&": ["to"], "to": ["&"]} })).await;
+    let r = index.wait_task(task.uid()).await;
     meili_snap::snapshot!(r["status"], @r###""succeeded""###);
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     index
         .search(json!({"q": "How to train"}), |response, code| {
@@ -1540,14 +1375,7 @@ async fn simple_search_with_strange_synonyms() {
                 "color": [
                   "green",
                   "red"
-                ],
-                "_vectors": {
-                  "manual": [
-                    -100,
-                    231,
-                    32
-                  ]
-                }
+                ]
               }
             ]
             "###);
@@ -1565,14 +1393,7 @@ async fn simple_search_with_strange_synonyms() {
                 "color": [
                   "green",
                   "red"
-                ],
-                "_vectors": {
-                  "manual": [
-                    -100,
-                    231,
-                    32
-                  ]
-                }
+                ]
               }
             ]
             "###);
@@ -1590,14 +1411,7 @@ async fn simple_search_with_strange_synonyms() {
                 "color": [
                   "green",
                   "red"
-                ],
-                "_vectors": {
-                  "manual": [
-                    -100,
-                    231,
-                    32
-                  ]
-                }
+                ]
               }
             ]
             "###);
@@ -1613,11 +1427,12 @@ async fn change_attributes_settings() {
     index.update_settings(json!({ "searchableAttributes": ["father", "mother"] })).await;
 
     let documents = NESTED_DOCUMENTS.clone();
-    index.add_documents(json!(documents), None).await;
-    index.wait_task(1).await;
+    let (task, _status_code) = index.add_documents(json!(documents), None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
-    index.update_settings(json!({ "searchableAttributes": ["father", "mother", "doggos"], "filterableAttributes": ["doggos"] })).await;
-    index.wait_task(2).await;
+    let (task,_status_code) =
+        index.update_settings(json!({ "searchableAttributes": ["father", "mother", "doggos"], "filterableAttributes": ["doggos"] })).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     // search
     index
@@ -1678,5 +1493,346 @@ async fn change_attributes_settings() {
                 "###);
             },
         )
+        .await;
+}
+
+#[actix_rt::test]
+async fn test_nested_fields() {
+    let documents = json!([
+        {
+            "id": 0,
+            "title": "The zeroth document",
+        },
+        {
+            "id": 1,
+            "title": "The first document",
+            "nested": {
+                "object": "field",
+                "machin": "bidule",
+            },
+        },
+        {
+            "id": 2,
+            "title": "The second document",
+            "nested": [
+                "array",
+                {
+                    "object": "field",
+                },
+                {
+                    "prout": "truc",
+                    "machin": "lol",
+                },
+            ],
+        },
+        {
+            "id": 3,
+            "title": "The third document",
+            "nested": "I lied",
+        },
+    ]);
+
+    let settings = json!({
+        "searchableAttributes": ["title", "nested.object", "nested.machin"],
+        "filterableAttributes": ["title", "nested.object", "nested.machin"]
+    });
+
+    // Test empty search returns all documents
+    test_settings_documents_indexing_swapping_and_search(
+        &documents,
+        &settings,
+        &json!({"q": "document"}),
+        |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            snapshot!(json_string!(response["hits"]), @r###"
+        [
+          {
+            "id": 0,
+            "title": "The zeroth document"
+          },
+          {
+            "id": 1,
+            "title": "The first document",
+            "nested": {
+              "object": "field",
+              "machin": "bidule"
+            }
+          },
+          {
+            "id": 2,
+            "title": "The second document",
+            "nested": [
+              "array",
+              {
+                "object": "field"
+              },
+              {
+                "prout": "truc",
+                "machin": "lol"
+              }
+            ]
+          },
+          {
+            "id": 3,
+            "title": "The third document",
+            "nested": "I lied"
+          }
+        ]
+        "###);
+        },
+    )
+    .await;
+
+    // Test searching specific documents
+    test_settings_documents_indexing_swapping_and_search(
+        &documents,
+        &settings,
+        &json!({"q": "zeroth"}),
+        |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            snapshot!(json_string!(response["hits"]), @r###"
+        [
+          {
+            "id": 0,
+            "title": "The zeroth document"
+          }
+        ]
+        "###);
+        },
+    )
+    .await;
+
+    test_settings_documents_indexing_swapping_and_search(
+        &documents,
+        &settings,
+        &json!({"q": "first"}),
+        |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            snapshot!(json_string!(response["hits"]), @r###"
+        [
+          {
+            "id": 1,
+            "title": "The first document",
+            "nested": {
+              "object": "field",
+              "machin": "bidule"
+            }
+          }
+        ]
+        "###);
+        },
+    )
+    .await;
+
+    // Test searching nested fields
+    test_settings_documents_indexing_swapping_and_search(
+        &documents,
+        &settings,
+        &json!({"q": "field"}),
+        |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            snapshot!(json_string!(response["hits"]), @r###"
+      [
+        {
+          "id": 1,
+          "title": "The first document",
+          "nested": {
+            "object": "field",
+            "machin": "bidule"
+          }
+        },
+        {
+          "id": 2,
+          "title": "The second document",
+          "nested": [
+            "array",
+            {
+              "object": "field"
+            },
+            {
+              "prout": "truc",
+              "machin": "lol"
+            }
+          ]
+        }
+      ]
+      "###);
+        },
+    )
+    .await;
+
+    test_settings_documents_indexing_swapping_and_search(
+        &documents,
+        &settings,
+        &json!({"q": "array"}),
+        |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            // nested is not searchable
+            snapshot!(json_string!(response["hits"]), @"[]");
+        },
+    )
+    .await;
+
+    test_settings_documents_indexing_swapping_and_search(
+        &documents,
+        &settings,
+        &json!({"q": "lied"}),
+        |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            // nested is not searchable
+            snapshot!(json_string!(response["hits"]), @"[]");
+        },
+    )
+    .await;
+
+    // Test filtering on nested fields
+    test_settings_documents_indexing_swapping_and_search(
+        &documents,
+        &settings,
+        &json!({"filter": "nested.object = field"}),
+        |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            snapshot!(json_string!(response["hits"]), @r###"
+        [
+          {
+            "id": 1,
+            "title": "The first document",
+            "nested": {
+              "object": "field",
+              "machin": "bidule"
+            }
+          },
+          {
+            "id": 2,
+            "title": "The second document",
+            "nested": [
+              "array",
+              {
+                "object": "field"
+              },
+              {
+                "prout": "truc",
+                "machin": "lol"
+              }
+            ]
+          }
+        ]
+        "###);
+        },
+    )
+    .await;
+
+    test_settings_documents_indexing_swapping_and_search(
+        &documents,
+        &settings,
+        &json!({"filter": "nested.machin = bidule"}),
+        |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            snapshot!(json_string!(response["hits"]), @r###"
+        [
+          {
+            "id": 1,
+            "title": "The first document",
+            "nested": {
+              "object": "field",
+              "machin": "bidule"
+            }
+          }
+        ]
+        "###);
+        },
+    )
+    .await;
+
+    // Test filtering on non-filterable nested field fails
+    test_settings_documents_indexing_swapping_and_search(
+        &documents,
+        &settings,
+        &json!({"filter": "nested = array"}),
+        |response, code| {
+            assert_eq!(code, 400, "{}", response);
+            snapshot!(json_string!(response), @r###"
+            {
+              "message": "Index `test`: Attribute `nested` is not filterable. Available filterable attribute patterns are: `nested.machin`, `nested.object`, `title`.\n1:7 nested = array",
+              "code": "invalid_search_filter",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+            }
+            "###);
+        },
+    )
+    .await;
+
+    // Test filtering on non-filterable nested field fails
+    test_settings_documents_indexing_swapping_and_search(
+        &documents,
+        &settings,
+        &json!({"filter": r#"nested = "I lied""#}),
+        |response, code| {
+            assert_eq!(code, 400, "{}", response);
+            snapshot!(json_string!(response), @r###"
+            {
+              "message": "Index `test`: Attribute `nested` is not filterable. Available filterable attribute patterns are: `nested.machin`, `nested.object`, `title`.\n1:7 nested = \"I lied\"",
+              "code": "invalid_search_filter",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+            }
+            "###);
+        },
+    )
+    .await;
+}
+
+/// Modifying facets with different casing should work correctly
+#[actix_rt::test]
+async fn change_facet_casing() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (response, code) = index
+        .update_settings(json!({
+            "filterableAttributes": ["dog"],
+        }))
+        .await;
+    assert_eq!("202", code.as_str(), "{:?}", response);
+    index.wait_task(response.uid()).await;
+
+    let (response, _code) = index
+        .add_documents(
+            json!([
+                {
+                    "id": 1,
+                    "dog": "Bouvier Bernois"
+                }
+            ]),
+            None,
+        )
+        .await;
+    index.wait_task(response.uid()).await;
+
+    let (response, _code) = index
+        .add_documents(
+            json!([
+                {
+                    "id": 1,
+                    "dog": "bouvier bernois"
+                }
+            ]),
+            None,
+        )
+        .await;
+    index.wait_task(response.uid()).await;
+
+    index
+        .search(json!({ "facets": ["dog"] }), |response, code| {
+            meili_snap::snapshot!(code, @"200 OK");
+            meili_snap::snapshot!(meili_snap::json_string!(response["facetDistribution"]), @r###"
+            {
+              "dog": {
+                "bouvier bernois": 1
+              }
+            }
+            "###);
+        })
         .await;
 }

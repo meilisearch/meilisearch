@@ -271,7 +271,7 @@ fn fetch_matching_values_in_object(
 }
 
 fn starts_with(selector: &str, key: &str) -> bool {
-    selector.strip_prefix(key).map_or(false, |tail| {
+    selector.strip_prefix(key).is_some_and(|tail| {
         tail.chars().next().map(|c| c == PRIMARY_KEY_SPLIT_SYMBOL).unwrap_or(true)
     })
 }
@@ -280,7 +280,7 @@ fn starts_with(selector: &str, key: &str) -> bool {
 
 pub fn validate_document_id_str(document_id: &str) -> Option<&str> {
     if document_id.is_empty()
-        || document_id.len() > 512
+        || document_id.len() >= 512
         || !document_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
     {
         None

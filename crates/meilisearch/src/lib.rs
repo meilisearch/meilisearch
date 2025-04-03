@@ -7,6 +7,8 @@ pub mod extractors;
 pub mod metrics;
 pub mod middleware;
 pub mod option;
+#[cfg(test)]
+mod option_test;
 pub mod routes;
 pub mod search;
 pub mod search_queue;
@@ -30,14 +32,18 @@ use analytics::Analytics;
 use anyhow::bail;
 use error::PayloadError;
 use extractors::payload::PayloadConfig;
+use index_scheduler::versioning::Versioning;
 use index_scheduler::{IndexScheduler, IndexSchedulerOptions};
-use meilisearch_auth::AuthController;
+use meilisearch_auth::{open_auth_store_env, AuthController};
+use meilisearch_types::milli::constants::VERSION_MAJOR;
 use meilisearch_types::milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
 use meilisearch_types::milli::update::{IndexDocumentsConfig, IndexDocumentsMethod};
 use meilisearch_types::settings::apply_settings_to_builder;
 use meilisearch_types::tasks::KindWithContent;
-use meilisearch_types::versioning::{check_version_file, create_current_version_file};
-use meilisearch_types::{compression, milli, VERSION_FILE_NAME};
+use meilisearch_types::versioning::{
+    create_current_version_file, get_version, VersionFileError, VERSION_MINOR, VERSION_PATCH,
+};
+use meilisearch_types::{compression, heed, milli, VERSION_FILE_NAME};
 pub use option::Opt;
 use option::ScheduleSnapshot;
 use search_queue::SearchQueue;
@@ -186,13 +192,13 @@ impl tracing_actix_web::RootSpanBuilder for AwebTracingLogger {
 
                 if let Some(error) = response.response().error() {
                     // use the status code already constructed for the outgoing HTTP response
-                    span.record("error", &tracing::field::display(error.as_response_error()));
+                    span.record("error", tracing::field::display(error.as_response_error()));
                 }
             }
             Err(error) => {
                 let code: i32 = error.error_response().status().as_u16().into();
                 span.record("status_code", code);
-                span.record("error", &tracing::field::display(error.as_response_error()));
+                span.record("error", tracing::field::display(error.as_response_error()));
             }
         };
     }
@@ -204,13 +210,48 @@ enum OnFailure {
 }
 
 pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Arc<AuthController>)> {
+    let index_scheduler_opt = IndexSchedulerOptions {
+        version_file_path: opt.db_path.join(VERSION_FILE_NAME),
+        auth_path: opt.db_path.join("auth"),
+        tasks_path: opt.db_path.join("tasks"),
+        update_file_path: opt.db_path.join("update_files"),
+        indexes_path: opt.db_path.join("indexes"),
+        snapshots_path: opt.snapshot_dir.clone(),
+        dumps_path: opt.dump_dir.clone(),
+        webhook_url: opt.task_webhook_url.as_ref().map(|url| url.to_string()),
+        webhook_authorization_header: opt.task_webhook_authorization_header.clone(),
+        task_db_size: opt.max_task_db_size.as_u64() as usize,
+        index_base_map_size: opt.max_index_size.as_u64() as usize,
+        enable_mdb_writemap: opt.experimental_reduce_indexing_memory_usage,
+        indexer_config: Arc::new((&opt.indexer_options).try_into()?),
+        autobatching_enabled: true,
+        cleanup_enabled: !opt.experimental_replication_parameters,
+        max_number_of_tasks: 1_000_000,
+        max_number_of_batched_tasks: opt.experimental_max_number_of_batched_tasks,
+        batched_tasks_size_limit: opt.experimental_limit_batched_tasks_total_size,
+        index_growth_amount: byte_unit::Byte::from_str("10GiB").unwrap().as_u64() as usize,
+        index_count: DEFAULT_INDEX_COUNT,
+        instance_features: opt.to_instance_features(),
+        auto_upgrade: opt.experimental_dumpless_upgrade,
+        embedding_cache_cap: opt.experimental_embedding_cache_entries,
+    };
+    let bin_major: u32 = VERSION_MAJOR.parse().unwrap();
+    let bin_minor: u32 = VERSION_MINOR.parse().unwrap();
+    let bin_patch: u32 = VERSION_PATCH.parse().unwrap();
+    let binary_version = (bin_major, bin_minor, bin_patch);
+
     let empty_db = is_empty_db(&opt.db_path);
     let (index_scheduler, auth_controller) = if let Some(ref snapshot_path) = opt.import_snapshot {
         let snapshot_path_exists = snapshot_path.exists();
         // the db is empty and the snapshot exists, import it
         if empty_db && snapshot_path_exists {
             match compression::from_tar_gz(snapshot_path, &opt.db_path) {
-                Ok(()) => open_or_create_database_unchecked(opt, OnFailure::RemoveDb)?,
+                Ok(()) => open_or_create_database_unchecked(
+                    opt,
+                    index_scheduler_opt,
+                    OnFailure::RemoveDb,
+                    binary_version, // the db is empty
+                )?,
                 Err(e) => {
                     std::fs::remove_dir_all(&opt.db_path)?;
                     return Err(e);
@@ -227,14 +268,18 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Arc<
             bail!("snapshot doesn't exist at {}", snapshot_path.display())
         // the snapshot and the db exist, and we can ignore the snapshot because of the ignore_snapshot_if_db_exists flag
         } else {
-            open_or_create_database(opt, empty_db)?
+            open_or_create_database(opt, index_scheduler_opt, empty_db, binary_version)?
         }
     } else if let Some(ref path) = opt.import_dump {
         let src_path_exists = path.exists();
         // the db is empty and the dump exists, import it
         if empty_db && src_path_exists {
-            let (mut index_scheduler, mut auth_controller) =
-                open_or_create_database_unchecked(opt, OnFailure::RemoveDb)?;
+            let (mut index_scheduler, mut auth_controller) = open_or_create_database_unchecked(
+                opt,
+                index_scheduler_opt,
+                OnFailure::RemoveDb,
+                binary_version, // the db is empty
+            )?;
             match import_dump(&opt.db_path, path, &mut index_scheduler, &mut auth_controller) {
                 Ok(()) => (index_scheduler, auth_controller),
                 Err(e) => {
@@ -254,10 +299,10 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Arc<
         // the dump and the db exist and we can ignore the dump because of the ignore_dump_if_db_exists flag
         // or, the dump is missing but we can ignore that because of the ignore_missing_dump flag
         } else {
-            open_or_create_database(opt, empty_db)?
+            open_or_create_database(opt, index_scheduler_opt, empty_db, binary_version)?
         }
     } else {
-        open_or_create_database(opt, empty_db)?
+        open_or_create_database(opt, index_scheduler_opt, empty_db, binary_version)?
     };
 
     // We create a loop in a thread that registers snapshotCreation tasks
@@ -285,41 +330,23 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Arc<
 /// Try to start the IndexScheduler and AuthController without checking the VERSION file or anything.
 fn open_or_create_database_unchecked(
     opt: &Opt,
+    index_scheduler_opt: IndexSchedulerOptions,
     on_failure: OnFailure,
+    version: (u32, u32, u32),
 ) -> anyhow::Result<(IndexScheduler, AuthController)> {
     // we don't want to create anything in the data.ms yet, thus we
     // wrap our two builders in a closure that'll be executed later.
-    let auth_controller = AuthController::new(&opt.db_path, &opt.master_key);
-    let instance_features = opt.to_instance_features();
+    std::fs::create_dir_all(&index_scheduler_opt.auth_path)?;
+    let auth_env = open_auth_store_env(&index_scheduler_opt.auth_path).unwrap();
+    let auth_controller = AuthController::new(auth_env.clone(), &opt.master_key);
     let index_scheduler_builder = || -> anyhow::Result<_> {
-        Ok(IndexScheduler::new(IndexSchedulerOptions {
-            version_file_path: opt.db_path.join(VERSION_FILE_NAME),
-            auth_path: opt.db_path.join("auth"),
-            tasks_path: opt.db_path.join("tasks"),
-            update_file_path: opt.db_path.join("update_files"),
-            indexes_path: opt.db_path.join("indexes"),
-            snapshots_path: opt.snapshot_dir.clone(),
-            dumps_path: opt.dump_dir.clone(),
-            webhook_url: opt.task_webhook_url.as_ref().map(|url| url.to_string()),
-            webhook_authorization_header: opt.task_webhook_authorization_header.clone(),
-            task_db_size: opt.max_task_db_size.as_u64() as usize,
-            index_base_map_size: opt.max_index_size.as_u64() as usize,
-            enable_mdb_writemap: opt.experimental_reduce_indexing_memory_usage,
-            indexer_config: (&opt.indexer_options).try_into()?,
-            autobatching_enabled: true,
-            cleanup_enabled: !opt.experimental_replication_parameters,
-            max_number_of_tasks: 1_000_000,
-            max_number_of_batched_tasks: opt.experimental_max_number_of_batched_tasks,
-            index_growth_amount: byte_unit::Byte::from_str("10GiB").unwrap().as_u64() as usize,
-            index_count: DEFAULT_INDEX_COUNT,
-            instance_features,
-        })?)
+        Ok(IndexScheduler::new(index_scheduler_opt, auth_env, version)?)
     };
 
     match (
         index_scheduler_builder(),
         auth_controller.map_err(anyhow::Error::from),
-        create_current_version_file(&opt.db_path).map_err(anyhow::Error::from),
+        create_current_version_file(&opt.db_path),
     ) {
         (Ok(i), Ok(a), Ok(())) => Ok((i, a)),
         (Err(e), _, _) | (_, Err(e), _) | (_, _, Err(e)) => {
@@ -331,16 +358,103 @@ fn open_or_create_database_unchecked(
     }
 }
 
+/// Ensures Meilisearch version is compatible with the database, returns an error in case of version mismatch.
+/// Returns the version that was contained in the version file
+fn check_version(
+    opt: &Opt,
+    index_scheduler_opt: &IndexSchedulerOptions,
+    binary_version: (u32, u32, u32),
+) -> anyhow::Result<(u32, u32, u32)> {
+    let (bin_major, bin_minor, bin_patch) = binary_version;
+    let (db_major, db_minor, db_patch) = get_version(&opt.db_path)?;
+
+    if db_major != bin_major || db_minor != bin_minor || db_patch != bin_patch {
+        if opt.experimental_dumpless_upgrade {
+            update_version_file_for_dumpless_upgrade(
+                opt,
+                index_scheduler_opt,
+                (db_major, db_minor, db_patch),
+                (bin_major, bin_minor, bin_patch),
+            )?;
+        } else {
+            return Err(VersionFileError::VersionMismatch {
+                major: db_major,
+                minor: db_minor,
+                patch: db_patch,
+            }
+            .into());
+        }
+    }
+
+    Ok((db_major, db_minor, db_patch))
+}
+
+/// Persists the version of the current Meilisearch binary to a VERSION file
+pub fn update_version_file_for_dumpless_upgrade(
+    opt: &Opt,
+    index_scheduler_opt: &IndexSchedulerOptions,
+    from: (u32, u32, u32),
+    to: (u32, u32, u32),
+) -> Result<(), VersionFileError> {
+    let (from_major, from_minor, from_patch) = from;
+    let (to_major, to_minor, to_patch) = to;
+
+    // Early exit in case of error
+    if from_major > to_major
+        || (from_major == to_major && from_minor > to_minor)
+        || (from_major == to_major && from_minor == to_minor && from_patch > to_patch)
+    {
+        return Err(VersionFileError::DowngradeNotSupported {
+            major: from_major,
+            minor: from_minor,
+            patch: from_patch,
+        });
+    } else if from_major < 1 || (from_major == to_major && from_minor < 12) {
+        return Err(VersionFileError::TooOldForAutomaticUpgrade {
+            major: from_major,
+            minor: from_minor,
+            patch: from_patch,
+        });
+    }
+
+    // In the case of v1.12, the index-scheduler didn't store its internal version at the time.
+    // => We must write it immediately **in the index-scheduler** otherwise we'll update the version file
+    //    there is a risk of DB corruption if a restart happens after writing the version file but before
+    //    writing the version in the index-scheduler. See <https://github.com/meilisearch/meilisearch/issues/5280>
+    if from_major == 1 && from_minor == 12 {
+        let env = unsafe {
+            heed::EnvOpenOptions::new()
+                .read_txn_without_tls()
+                .max_dbs(Versioning::nb_db())
+                .map_size(index_scheduler_opt.task_db_size)
+                .open(&index_scheduler_opt.tasks_path)
+        }?;
+        let mut wtxn = env.write_txn()?;
+        let versioning = Versioning::raw_new(&env, &mut wtxn)?;
+        versioning.set_version(&mut wtxn, (from_major, from_minor, from_patch))?;
+        wtxn.commit()?;
+        // Should be instant since we're the only one using the env
+        env.prepare_for_closing().wait();
+    }
+
+    create_current_version_file(&opt.db_path)?;
+    Ok(())
+}
+
 /// Ensure you're in a valid state and open the IndexScheduler + AuthController for you.
 fn open_or_create_database(
     opt: &Opt,
+    index_scheduler_opt: IndexSchedulerOptions,
     empty_db: bool,
+    binary_version: (u32, u32, u32),
 ) -> anyhow::Result<(IndexScheduler, AuthController)> {
-    if !empty_db {
-        check_version_file(&opt.db_path)?;
-    }
+    let version = if !empty_db {
+        check_version(opt, &index_scheduler_opt, binary_version)?
+    } else {
+        binary_version
+    };
 
-    open_or_create_database_unchecked(opt, OnFailure::KeepDb)
+    open_or_create_database_unchecked(opt, index_scheduler_opt, OnFailure::KeepDb, version)
 }
 
 fn import_dump(
@@ -382,9 +496,12 @@ fn import_dump(
         keys.push(key);
     }
 
-    // 3. Import the runtime features.
+    // 3. Import the runtime features and network
     let features = dump_reader.features()?.unwrap_or_default();
     index_scheduler.put_runtime_features(features)?;
+
+    let network = dump_reader.network()?.cloned().unwrap_or_default();
+    index_scheduler.put_network(network)?;
 
     let indexer_config = index_scheduler.indexer_config();
 
@@ -395,6 +512,7 @@ fn import_dump(
     for index_reader in dump_reader.indexes()? {
         let mut index_reader = index_reader?;
         let metadata = index_reader.metadata();
+        let uid = metadata.uid.clone();
         tracing::info!("Importing index `{}`.", metadata.uid);
 
         let date = Some((metadata.created_at, metadata.updated_at));
@@ -432,7 +550,7 @@ fn import_dump(
         let reader = DocumentsBatchReader::from_reader(reader)?;
 
         let embedder_configs = index.embedding_configs(&wtxn)?;
-        let embedders = index_scheduler.embedders(embedder_configs)?;
+        let embedders = index_scheduler.embedders(uid.to_string(), embedder_configs)?;
 
         let builder = milli::update::IndexDocuments::new(
             &mut wtxn,
@@ -454,11 +572,19 @@ fn import_dump(
         builder.execute()?;
         wtxn.commit()?;
         tracing::info!("All documents successfully imported.");
+
+        index_scheduler.refresh_index_stats(&uid)?;
     }
 
+    // 5. Import the queue
     let mut index_scheduler_dump = index_scheduler.register_dumped_task()?;
+    // 5.1. Import the batches
+    for ret in dump_reader.batches()? {
+        let batch = ret?;
+        index_scheduler_dump.register_dumped_batch(batch)?;
+    }
 
-    // 5. Import the tasks.
+    // 5.2. Import the tasks
     for ret in dump_reader.tasks()? {
         let (task, file) = ret?;
         index_scheduler_dump.register_dumped_task(task, file)?;

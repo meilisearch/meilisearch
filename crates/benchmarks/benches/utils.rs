@@ -10,8 +10,9 @@ use bumpalo::Bump;
 use criterion::BenchmarkId;
 use memmap2::Mmap;
 use milli::heed::EnvOpenOptions;
+use milli::progress::Progress;
 use milli::update::new::indexer;
-use milli::update::{IndexDocumentsMethod, IndexerConfig, Settings};
+use milli::update::{IndexerConfig, Settings};
 use milli::vector::EmbeddingConfigs;
 use milli::{Criterion, Filter, Index, Object, TermsMatchingStrategy};
 use serde_json::Value;
@@ -64,10 +65,11 @@ pub fn base_setup(conf: &Conf) -> Index {
     }
     create_dir_all(conf.database_name).unwrap();
 
-    let mut options = EnvOpenOptions::new();
+    let options = EnvOpenOptions::new();
+    let mut options = options.read_txn_without_tls();
     options.map_size(100 * 1024 * 1024 * 1024); // 100 GB
     options.max_readers(100);
-    let index = Index::new(options, conf.database_name).unwrap();
+    let index = Index::new(options, conf.database_name, true).unwrap();
 
     let config = IndexerConfig::default();
     let mut wtxn = index.write_txn().unwrap();
@@ -98,8 +100,8 @@ pub fn base_setup(conf: &Conf) -> Index {
     let mut new_fields_ids_map = db_fields_ids_map.clone();
 
     let documents = documents_from(conf.dataset, conf.dataset_format);
-    let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
-    indexer.add_documents(&documents).unwrap();
+    let mut indexer = indexer::DocumentOperation::new();
+    indexer.replace_documents(&documents).unwrap();
 
     let indexer_alloc = Bump::new();
     let (document_changes, _operation_stats, primary_key) = indexer
@@ -110,13 +112,14 @@ pub fn base_setup(conf: &Conf) -> Index {
             None,
             &mut new_fields_ids_map,
             &|| false,
-            &|_progress| (),
+            Progress::default(),
         )
         .unwrap();
 
     indexer::index(
         &mut wtxn,
         &index,
+        &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
         config.grenad_parameters(),
         &db_fields_ids_map,
         new_fields_ids_map,
@@ -124,7 +127,7 @@ pub fn base_setup(conf: &Conf) -> Index {
         &document_changes,
         EmbeddingConfigs::default(),
         &|| false,
-        &|_| (),
+        &Progress::default(),
     )
     .unwrap();
 

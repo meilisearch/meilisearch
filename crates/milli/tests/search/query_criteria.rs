@@ -5,8 +5,9 @@ use bumpalo::Bump;
 use heed::EnvOpenOptions;
 use itertools::Itertools;
 use maplit::hashset;
+use milli::progress::Progress;
 use milli::update::new::indexer;
-use milli::update::{IndexDocumentsMethod, IndexerConfig, Settings};
+use milli::update::{IndexerConfig, Settings};
 use milli::vector::EmbeddingConfigs;
 use milli::{AscDesc, Criterion, Index, Member, Search, SearchResult, TermsMatchingStrategy};
 use rand::Rng;
@@ -261,9 +262,10 @@ fn criteria_mixup() {
 #[test]
 fn criteria_ascdesc() {
     let path = tempfile::tempdir().unwrap();
-    let mut options = EnvOpenOptions::new();
+    let options = EnvOpenOptions::new();
+    let mut options = options.read_txn_without_tls();
     options.map_size(12 * 1024 * 1024); // 10 MB
-    let index = Index::new(options, &path).unwrap();
+    let index = Index::new(options, &path, true).unwrap();
 
     let mut wtxn = index.write_txn().unwrap();
     let config = IndexerConfig::default();
@@ -287,7 +289,7 @@ fn criteria_ascdesc() {
     let mut new_fields_ids_map = db_fields_ids_map.clone();
 
     let embedders = EmbeddingConfigs::default();
-    let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+    let mut indexer = indexer::DocumentOperation::new();
 
     let mut file = tempfile::tempfile().unwrap();
     (0..ASC_DESC_CANDIDATES_THRESHOLD + 1).for_each(|_| {
@@ -317,7 +319,7 @@ fn criteria_ascdesc() {
     file.sync_all().unwrap();
 
     let payload = unsafe { memmap2::Mmap::map(&file).unwrap() };
-    indexer.add_documents(&payload).unwrap();
+    indexer.replace_documents(&payload).unwrap();
     let (document_changes, _operation_stats, primary_key) = indexer
         .into_changes(
             &indexer_alloc,
@@ -326,13 +328,14 @@ fn criteria_ascdesc() {
             None,
             &mut new_fields_ids_map,
             &|| false,
-            &|_progress| (),
+            Progress::default(),
         )
         .unwrap();
 
     indexer::index(
         &mut wtxn,
         &index,
+        &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
         config.grenad_parameters(),
         &db_fields_ids_map,
         new_fields_ids_map,
@@ -340,7 +343,7 @@ fn criteria_ascdesc() {
         &document_changes,
         embedders,
         &|| false,
-        &|_| (),
+        &Progress::default(),
     )
     .unwrap();
 

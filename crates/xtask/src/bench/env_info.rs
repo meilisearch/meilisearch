@@ -27,8 +27,7 @@ impl Environment {
 
         let unknown_string = String::from("Unknown");
         let mut system = System::new();
-        system.refresh_cpu();
-        system.refresh_cpu_frequency();
+        system.refresh_cpu_all();
         system.refresh_memory();
 
         let (cpu, frequency) = match system.cpus().first() {
@@ -50,9 +49,7 @@ impl Environment {
         if let Some(os) = System::os_version() {
             software.push(VersionInfo { name: os, version: String::from("kernel-release") });
         }
-        if let Some(arch) = System::cpu_arch() {
-            software.push(VersionInfo { name: arch, version: String::from("arch") });
-        }
+        software.push(VersionInfo { name: System::cpu_arch(), version: String::from("arch") });
 
         Self {
             hostname: System::host_name(),

@@ -1,3 +1,4 @@
+use std::fmt;
 use std::time::Instant;
 
 use ordered_float::OrderedFloat;
@@ -6,7 +7,7 @@ use rayon::slice::ParallelSlice as _;
 
 use super::error::{EmbedError, NewEmbedderError};
 use super::rest::{Embedder as RestEmbedder, EmbedderOptions as RestEmbedderOptions};
-use super::DistributionShift;
+use super::{DistributionShift, EmbeddingCache, REQUEST_PARALLELISM};
 use crate::error::FaultSource;
 use crate::vector::error::EmbedErrorKind;
 use crate::vector::Embedding;
@@ -168,7 +169,6 @@ fn infer_api_key() -> String {
         .unwrap_or_default()
 }
 
-#[derive(Debug)]
 pub struct Embedder {
     tokenizer: tiktoken_rs::CoreBPE,
     rest_embedder: RestEmbedder,
@@ -176,7 +176,7 @@ pub struct Embedder {
 }
 
 impl Embedder {
-    pub fn new(options: EmbedderOptions) -> Result<Self, NewEmbedderError> {
+    pub fn new(options: EmbedderOptions, cache_cap: usize) -> Result<Self, NewEmbedderError> {
         let mut inferred_api_key = Default::default();
         let api_key = options.api_key.as_ref().unwrap_or_else(|| {
             inferred_api_key = infer_api_key();
@@ -201,6 +201,7 @@ impl Embedder {
                 }),
                 headers: Default::default(),
             },
+            cache_cap,
             super::rest::ConfigurationSource::OpenAi,
         )?;
 
@@ -250,40 +251,57 @@ impl Embedder {
         Ok(all_embeddings)
     }
 
-    pub fn embed_chunks(
+    pub fn embed_index(
         &self,
         text_chunks: Vec<Vec<String>>,
         threads: &ThreadPoolNoAbort,
     ) -> Result<Vec<Vec<Embedding>>, EmbedError> {
-        threads
-            .install(move || {
-                text_chunks.into_par_iter().map(move |chunk| self.embed(&chunk, None)).collect()
-            })
-            .map_err(|error| EmbedError {
-                kind: EmbedErrorKind::PanicInThreadPool(error),
-                fault: FaultSource::Bug,
-            })?
+        // This condition helps reduce the number of active rayon jobs
+        // so that we avoid consuming all the LMDB rtxns and avoid stack overflows.
+        if threads.active_operations() >= REQUEST_PARALLELISM {
+            text_chunks.into_iter().map(move |chunk| self.embed(&chunk, None)).collect()
+        } else {
+            threads
+                .install(move || {
+                    text_chunks.into_par_iter().map(move |chunk| self.embed(&chunk, None)).collect()
+                })
+                .map_err(|error| EmbedError {
+                    kind: EmbedErrorKind::PanicInThreadPool(error),
+                    fault: FaultSource::Bug,
+                })?
+        }
     }
 
-    pub(crate) fn embed_chunks_ref(
+    pub(crate) fn embed_index_ref(
         &self,
         texts: &[&str],
         threads: &ThreadPoolNoAbort,
     ) -> Result<Vec<Vec<f32>>, EmbedError> {
-        threads
-            .install(move || {
-                let embeddings: Result<Vec<Vec<Embedding>>, _> = texts
-                    .par_chunks(self.prompt_count_in_chunk_hint())
-                    .map(move |chunk| self.embed(chunk, None))
-                    .collect();
+        // This condition helps reduce the number of active rayon jobs
+        // so that we avoid consuming all the LMDB rtxns and avoid stack overflows.
+        if threads.active_operations() >= REQUEST_PARALLELISM {
+            let embeddings: Result<Vec<Vec<Embedding>>, _> = texts
+                .chunks(self.prompt_count_in_chunk_hint())
+                .map(move |chunk| self.embed(chunk, None))
+                .collect();
+            let embeddings = embeddings?;
+            Ok(embeddings.into_iter().flatten().collect())
+        } else {
+            threads
+                .install(move || {
+                    let embeddings: Result<Vec<Vec<Embedding>>, _> = texts
+                        .par_chunks(self.prompt_count_in_chunk_hint())
+                        .map(move |chunk| self.embed(chunk, None))
+                        .collect();
 
-                let embeddings = embeddings?;
-                Ok(embeddings.into_iter().flatten().collect())
-            })
-            .map_err(|error| EmbedError {
-                kind: EmbedErrorKind::PanicInThreadPool(error),
-                fault: FaultSource::Bug,
-            })?
+                    let embeddings = embeddings?;
+                    Ok(embeddings.into_iter().flatten().collect())
+                })
+                .map_err(|error| EmbedError {
+                    kind: EmbedErrorKind::PanicInThreadPool(error),
+                    fault: FaultSource::Bug,
+                })?
+        }
     }
 
     pub fn chunk_count_hint(&self) -> usize {
@@ -300,5 +318,19 @@ impl Embedder {
 
     pub fn distribution(&self) -> Option<DistributionShift> {
         self.options.distribution()
+    }
+
+    pub(super) fn cache(&self) -> &EmbeddingCache {
+        self.rest_embedder.cache()
+    }
+}
+
+impl fmt::Debug for Embedder {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Embedder")
+            .field("tokenizer", &"CoreBPE")
+            .field("rest_embedder", &self.rest_embedder)
+            .field("options", &self.options)
+            .finish()
     }
 }

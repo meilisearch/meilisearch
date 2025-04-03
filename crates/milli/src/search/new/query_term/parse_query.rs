@@ -28,6 +28,7 @@ pub fn located_query_terms_from_tokens(
     words_limit: Option<usize>,
 ) -> Result<ExtractedTokens> {
     let nbr_typos = number_of_typos_allowed(ctx)?;
+    let allow_prefix_search = ctx.is_prefix_search_allowed();
 
     let mut query_terms = Vec::new();
 
@@ -94,7 +95,7 @@ pub fn located_query_terms_from_tokens(
                         ctx,
                         word,
                         nbr_typos(word),
-                        true,
+                        allow_prefix_search,
                         false,
                     )?;
                     let located_term = LocatedQueryTerm {
@@ -202,7 +203,7 @@ pub fn number_of_typos_allowed<'ctx>(
     Ok(Box::new(move |word: &str| {
         if !authorize_typos
             || word.len() < min_len_one_typo as usize
-            || exact_words.as_ref().map_or(false, |fst| fst.contains(word))
+            || exact_words.as_ref().is_some_and(|fst| fst.contains(word))
         {
             0
         } else if word.len() < min_len_two_typos as usize {

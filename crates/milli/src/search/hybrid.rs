@@ -151,7 +151,7 @@ impl ScoreWithRatioResult {
     }
 }
 
-impl<'a> Search<'a> {
+impl Search<'_> {
     #[tracing::instrument(level = "trace", skip_all, target = "search::hybrid")]
     pub fn execute_hybrid(&self, semantic_ratio: f32) -> Result<(SearchResult, Option<u32>)> {
         // TODO: find classier way to achieve that than to reset vector and query params
@@ -203,11 +203,15 @@ impl<'a> Search<'a> {
 
                 let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
 
-                match embedder.embed_one(query, Some(deadline)) {
+                match embedder.embed_search(&query, Some(deadline)) {
                     Ok(embedding) => embedding,
                     Err(error) => {
                         tracing::error!(error=%error, "Embedding failed");
-                        return Ok((keyword_results, Some(0)));
+                        return Ok(return_keyword_results(
+                            self.limit,
+                            self.offset,
+                            keyword_results,
+                        ));
                     }
                 }
             }

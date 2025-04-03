@@ -11,48 +11,22 @@ async fn index_with_documents_user_provided<'a>(
 ) -> Index<'a> {
     let index = server.index("test");
 
-    let (response, code) = server.set_features(json!({"vectorStore": true})).await;
-
-    meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
-    {
-      "vectorStore": true,
-      "metrics": false,
-      "logsRoute": false,
-      "editDocumentsByFunction": false,
-      "containsFilter": false
-    }
-    "###);
-
     let (response, code) = index
         .update_settings(json!({ "embedders": {"default": {
                 "source": "userProvided",
                 "dimensions": 2}}} ))
         .await;
     assert_eq!(202, code, "{:?}", response);
-    index.wait_task(response.uid()).await;
+    index.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index.add_documents(documents.clone(), None).await;
     assert_eq!(202, code, "{:?}", response);
-    index.wait_task(response.uid()).await;
+    index.wait_task(response.uid()).await.succeeded();
     index
 }
 
 async fn index_with_documents_hf<'a>(server: &'a Server, documents: &Value) -> Index<'a> {
     let index = server.index("test");
-
-    let (response, code) = server.set_features(json!({"vectorStore": true})).await;
-
-    meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
-    {
-      "vectorStore": true,
-      "metrics": false,
-      "logsRoute": false,
-      "editDocumentsByFunction": false,
-      "containsFilter": false
-    }
-    "###);
 
     let (response, code) = index
         .update_settings(json!({ "embedders": {"default": {
@@ -63,11 +37,11 @@ async fn index_with_documents_hf<'a>(server: &'a Server, documents: &Value) -> I
         }}} ))
         .await;
     assert_eq!(202, code, "{:?}", response);
-    index.wait_task(response.uid()).await;
+    index.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index.add_documents(documents.clone(), None).await;
     assert_eq!(202, code, "{:?}", response);
-    index.wait_task(response.uid()).await;
+    index.wait_task(response.uid()).await.succeeded();
     index
 }
 
@@ -260,7 +234,7 @@ async fn distribution_shift() {
 
     snapshot!(code, @"202 Accepted");
     let response = server.wait_task(response.uid()).await;
-    snapshot!(response["details"], @r###"{"embedders":{"default":{"distribution":{"mean":0.998,"sigma":0.01}}}}"###);
+    snapshot!(response["details"], @r#"{"embedders":{"default":{"distribution":{"mean":0.998,"sigma":0.01}}}}"#);
 
     let (response, code) = index.search_post(search).await;
     snapshot!(code, @"200 OK");
@@ -573,7 +547,7 @@ async fn retrieve_vectors() {
         .update_settings(json!({ "displayedAttributes": ["id", "title", "desc", "_vectors"]} ))
         .await;
     assert_eq!(202, code, "{:?}", response);
-    index.wait_task(response.uid()).await;
+    index.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index
         .search_post(
@@ -623,7 +597,7 @@ async fn retrieve_vectors() {
     let (response, code) =
         index.update_settings(json!({ "displayedAttributes": ["id", "title", "desc"]} )).await;
     assert_eq!(202, code, "{:?}", response);
-    index.wait_task(response.uid()).await;
+    index.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index
         .search_post(

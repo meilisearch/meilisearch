@@ -1,29 +1,30 @@
 use big_s::S;
 use bumpalo::Bump;
 use heed::EnvOpenOptions;
-use maplit::hashset;
 use milli::documents::mmap_from_objects;
+use milli::progress::Progress;
 use milli::update::new::indexer;
-use milli::update::{IndexDocumentsMethod, IndexerConfig, Settings};
+use milli::update::{IndexerConfig, Settings};
 use milli::vector::EmbeddingConfigs;
-use milli::{FacetDistribution, Index, Object, OrderBy};
+use milli::{FacetDistribution, FilterableAttributesRule, Index, Object, OrderBy};
 use serde_json::{from_value, json};
 
 #[test]
 fn test_facet_distribution_with_no_facet_values() {
     let path = tempfile::tempdir().unwrap();
-    let mut options = EnvOpenOptions::new();
+    let options = EnvOpenOptions::new();
+    let mut options = options.read_txn_without_tls();
     options.map_size(10 * 1024 * 1024); // 10 MB
-    let index = Index::new(options, &path).unwrap();
+    let index = Index::new(options, &path, true).unwrap();
 
     let mut wtxn = index.write_txn().unwrap();
     let config = IndexerConfig::default();
     let mut builder = Settings::new(&mut wtxn, &index, &config);
 
-    builder.set_filterable_fields(hashset! {
-        S("genres"),
-        S("tags"),
-    });
+    builder.set_filterable_fields(vec![
+        FilterableAttributesRule::Field(S("genres")),
+        FilterableAttributesRule::Field(S("tags")),
+    ]);
     builder.execute(|_| (), || false).unwrap();
     wtxn.commit().unwrap();
 
@@ -35,7 +36,7 @@ fn test_facet_distribution_with_no_facet_values() {
     let mut new_fields_ids_map = db_fields_ids_map.clone();
 
     let embedders = EmbeddingConfigs::default();
-    let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+    let mut indexer = indexer::DocumentOperation::new();
 
     let doc1: Object = from_value(
         json!({ "id": 123, "title": "What a week, hu...", "genres": [], "tags": ["blue"] }),
@@ -46,7 +47,7 @@ fn test_facet_distribution_with_no_facet_values() {
     let documents = mmap_from_objects(vec![doc1, doc2]);
 
     // index documents
-    indexer.add_documents(&documents).unwrap();
+    indexer.replace_documents(&documents).unwrap();
 
     let indexer_alloc = Bump::new();
     let (document_changes, _operation_stats, primary_key) = indexer
@@ -57,13 +58,14 @@ fn test_facet_distribution_with_no_facet_values() {
             None,
             &mut new_fields_ids_map,
             &|| false,
-            &|_progress| (),
+            Progress::default(),
         )
         .unwrap();
 
     indexer::index(
         &mut wtxn,
         &index,
+        &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
         config.grenad_parameters(),
         &db_fields_ids_map,
         new_fields_ids_map,
@@ -71,7 +73,7 @@ fn test_facet_distribution_with_no_facet_values() {
         &document_changes,
         embedders,
         &|| false,
-        &|_| (),
+        &Progress::default(),
     )
     .unwrap();
 

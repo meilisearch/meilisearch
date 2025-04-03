@@ -9,7 +9,9 @@ use serde::{Deserialize, Serialize};
 
 use super::error::EmbedErrorKind;
 use super::json_template::ValueTemplate;
-use super::{DistributionShift, EmbedError, Embedding, NewEmbedderError, REQUEST_PARALLELISM};
+use super::{
+    DistributionShift, EmbedError, Embedding, EmbeddingCache, NewEmbedderError, REQUEST_PARALLELISM,
+};
 use crate::error::FaultSource;
 use crate::ThreadPoolNoAbort;
 
@@ -75,6 +77,7 @@ pub struct Embedder {
     data: EmbedderData,
     dimensions: usize,
     distribution: Option<DistributionShift>,
+    cache: EmbeddingCache,
 }
 
 /// All data needed to perform requests and parse responses
@@ -123,6 +126,7 @@ enum InputType {
 impl Embedder {
     pub fn new(
         options: EmbedderOptions,
+        cache_cap: usize,
         configuration_source: ConfigurationSource,
     ) -> Result<Self, NewEmbedderError> {
         let bearer = options.api_key.as_deref().map(|api_key| format!("Bearer {api_key}"));
@@ -130,6 +134,7 @@ impl Embedder {
         let client = ureq::AgentBuilder::new()
             .max_idle_connections(REQUEST_PARALLELISM * 2)
             .max_idle_connections_per_host(REQUEST_PARALLELISM * 2)
+            .timeout(std::time::Duration::from_secs(30))
             .build();
 
         let request = Request::new(options.request)?;
@@ -151,7 +156,12 @@ impl Embedder {
             infer_dimensions(&data)?
         };
 
-        Ok(Self { data, dimensions, distribution: options.distribution })
+        Ok(Self {
+            data,
+            dimensions,
+            distribution: options.distribution,
+            cache: EmbeddingCache::new(cache_cap),
+        })
     }
 
     pub fn embed(
@@ -175,7 +185,7 @@ impl Embedder {
 
     pub fn embed_tokens(
         &self,
-        tokens: &[usize],
+        tokens: &[u32],
         deadline: Option<Instant>,
     ) -> Result<Embedding, EmbedError> {
         let mut embeddings = embed(&self.data, tokens, 1, Some(self.dimensions), deadline)?;
@@ -183,40 +193,58 @@ impl Embedder {
         Ok(embeddings.pop().unwrap())
     }
 
-    pub fn embed_chunks(
+    pub fn embed_index(
         &self,
         text_chunks: Vec<Vec<String>>,
         threads: &ThreadPoolNoAbort,
     ) -> Result<Vec<Vec<Embedding>>, EmbedError> {
-        threads
-            .install(move || {
-                text_chunks.into_par_iter().map(move |chunk| self.embed(chunk, None)).collect()
-            })
-            .map_err(|error| EmbedError {
-                kind: EmbedErrorKind::PanicInThreadPool(error),
-                fault: FaultSource::Bug,
-            })?
+        // This condition helps reduce the number of active rayon jobs
+        // so that we avoid consuming all the LMDB rtxns and avoid stack overflows.
+        if threads.active_operations() >= REQUEST_PARALLELISM {
+            text_chunks.into_iter().map(move |chunk| self.embed(chunk, None)).collect()
+        } else {
+            threads
+                .install(move || {
+                    text_chunks.into_par_iter().map(move |chunk| self.embed(chunk, None)).collect()
+                })
+                .map_err(|error| EmbedError {
+                    kind: EmbedErrorKind::PanicInThreadPool(error),
+                    fault: FaultSource::Bug,
+                })?
+        }
     }
 
-    pub(crate) fn embed_chunks_ref(
+    pub(crate) fn embed_index_ref(
         &self,
         texts: &[&str],
         threads: &ThreadPoolNoAbort,
     ) -> Result<Vec<Embedding>, EmbedError> {
-        threads
-            .install(move || {
-                let embeddings: Result<Vec<Vec<Embedding>>, _> = texts
-                    .par_chunks(self.prompt_count_in_chunk_hint())
-                    .map(move |chunk| self.embed_ref(chunk, None))
-                    .collect();
+        // This condition helps reduce the number of active rayon jobs
+        // so that we avoid consuming all the LMDB rtxns and avoid stack overflows.
+        if threads.active_operations() >= REQUEST_PARALLELISM {
+            let embeddings: Result<Vec<Vec<Embedding>>, _> = texts
+                .chunks(self.prompt_count_in_chunk_hint())
+                .map(move |chunk| self.embed_ref(chunk, None))
+                .collect();
 
-                let embeddings = embeddings?;
-                Ok(embeddings.into_iter().flatten().collect())
-            })
-            .map_err(|error| EmbedError {
-                kind: EmbedErrorKind::PanicInThreadPool(error),
-                fault: FaultSource::Bug,
-            })?
+            let embeddings = embeddings?;
+            Ok(embeddings.into_iter().flatten().collect())
+        } else {
+            threads
+                .install(move || {
+                    let embeddings: Result<Vec<Vec<Embedding>>, _> = texts
+                        .par_chunks(self.prompt_count_in_chunk_hint())
+                        .map(move |chunk| self.embed_ref(chunk, None))
+                        .collect();
+
+                    let embeddings = embeddings?;
+                    Ok(embeddings.into_iter().flatten().collect())
+                })
+                .map_err(|error| EmbedError {
+                    kind: EmbedErrorKind::PanicInThreadPool(error),
+                    fault: FaultSource::Bug,
+                })?
+        }
     }
 
     pub fn chunk_count_hint(&self) -> usize {
@@ -236,6 +264,10 @@ impl Embedder {
 
     pub fn distribution(&self) -> Option<DistributionShift> {
         self.distribution
+    }
+
+    pub(super) fn cache(&self) -> &EmbeddingCache {
+        &self.cache
     }
 }
 

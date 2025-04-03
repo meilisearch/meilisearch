@@ -3,9 +3,10 @@ use std::collections::HashMap;
 use charabia::{SeparatorKind, Token, TokenKind, Tokenizer, TokenizerBuilder};
 use serde_json::Value;
 
+use crate::attribute_patterns::PatternMatch;
 use crate::update::new::document::Document;
 use crate::update::new::extract::perm_json_p::{
-    seek_leaf_values_in_array, seek_leaf_values_in_object, select_field, Depth, Selection,
+    seek_leaf_values_in_array, seek_leaf_values_in_object, Depth,
 };
 use crate::{
     FieldId, GlobalFieldsIdsMap, InternalError, LocalizedAttributesRule, Result, UserError,
@@ -17,13 +18,11 @@ const MAX_DISTANCE: u32 = 8;
 
 pub struct DocumentTokenizer<'a> {
     pub tokenizer: &'a Tokenizer<'a>,
-    pub attribute_to_extract: Option<&'a [&'a str]>,
-    pub attribute_to_skip: &'a [&'a str],
     pub localized_attributes_rules: &'a [LocalizedAttributesRule],
     pub max_positions_per_attributes: u32,
 }
 
-impl<'a> DocumentTokenizer<'a> {
+impl DocumentTokenizer<'_> {
     pub fn tokenize_document<'doc>(
         &self,
         document: impl Document<'doc>,
@@ -31,87 +30,94 @@ impl<'a> DocumentTokenizer<'a> {
         token_fn: &mut impl FnMut(&str, FieldId, u16, &str) -> Result<()>,
     ) -> Result<()> {
         let mut field_position = HashMap::new();
+        let mut tokenize_field = |field_name: &str, _depth, value: &Value| {
+            let Some((field_id, meta)) = field_id_map.id_with_metadata_or_insert(field_name) else {
+                return Err(UserError::AttributeLimitReached.into());
+            };
+
+            if meta.is_searchable() {
+                self.tokenize_field(field_id, field_name, value, token_fn, &mut field_position)?;
+            }
+
+            // todo: should be a match on the field_name using `match_field_legacy` function,
+            // but for legacy reasons we iterate over all the fields to fill the field_id_map.
+            Ok(PatternMatch::Match)
+        };
 
         for entry in document.iter_top_level_fields() {
             let (field_name, value) = entry?;
-
-            let mut tokenize_field = |field_name: &str, _depth, value: &Value| {
-                let Some(field_id) = field_id_map.id_or_insert(field_name) else {
-                    return Err(UserError::AttributeLimitReached.into());
-                };
-
-                if select_field(field_name, self.attribute_to_extract, self.attribute_to_skip)
-                    != Selection::Select
-                {
-                    return Ok(());
-                }
-
-                let position = field_position
-                    .entry(field_id)
-                    .and_modify(|counter| *counter += MAX_DISTANCE)
-                    .or_insert(0);
-                if *position >= self.max_positions_per_attributes {
-                    return Ok(());
-                }
-
-                let text;
-                let tokens = match value {
-                    Value::Number(n) => {
-                        text = n.to_string();
-                        self.tokenizer.tokenize(text.as_str())
-                    }
-                    Value::Bool(b) => {
-                        text = b.to_string();
-                        self.tokenizer.tokenize(text.as_str())
-                    }
-                    Value::String(text) => {
-                        let locales = self
-                            .localized_attributes_rules
-                            .iter()
-                            .find(|rule| rule.match_str(field_name))
-                            .map(|rule| rule.locales());
-                        self.tokenizer.tokenize_with_allow_list(text.as_str(), locales)
-                    }
-                    _ => return Ok(()),
-                };
-
-                // create an iterator of token with their positions.
-                let tokens = process_tokens(*position, tokens)
-                    .take_while(|(p, _)| *p < self.max_positions_per_attributes);
-
-                for (index, token) in tokens {
-                    // keep a word only if it is not empty and fit in a LMDB key.
-                    let token = token.lemma().trim();
-                    if !token.is_empty() && token.len() <= MAX_WORD_LENGTH {
-                        *position = index;
-                        if let Ok(position) = (*position).try_into() {
-                            token_fn(field_name, field_id, position, token)?;
-                        }
-                    }
-                }
-
-                Ok(())
-            };
-
             // parse json.
             match serde_json::to_value(value).map_err(InternalError::SerdeJson)? {
                 Value::Object(object) => seek_leaf_values_in_object(
                     &object,
-                    None,
-                    &[],
                     field_name,
                     Depth::OnBaseKey,
                     &mut tokenize_field,
                 )?,
                 Value::Array(array) => seek_leaf_values_in_array(
                     &array,
-                    None,
-                    &[],
                     field_name,
                     Depth::OnBaseKey,
                     &mut tokenize_field,
                 )?,
-                value => tokenize_field(field_name, Depth::OnBaseKey, &value)?,
+                value => {
+                    tokenize_field(field_name, Depth::OnBaseKey, &value)?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn tokenize_field(
+        &self,
+        field_id: FieldId,
+        field_name: &str,
+        value: &Value,
+        token_fn: &mut impl FnMut(&str, u16, u16, &str) -> std::result::Result<(), crate::Error>,
+        field_position: &mut HashMap<u16, u32>,
+    ) -> Result<()> {
+        let position = field_position
+            .entry(field_id)
+            .and_modify(|counter| *counter += MAX_DISTANCE)
+            .or_insert(0);
+        if *position >= self.max_positions_per_attributes {
+            return Ok(());
+        }
+
+        let text;
+        let tokens = match value {
+            Value::Number(n) => {
+                text = n.to_string();
+                self.tokenizer.tokenize(text.as_str())
+            }
+            Value::Bool(b) => {
+                text = b.to_string();
+                self.tokenizer.tokenize(text.as_str())
+            }
+            Value::String(text) => {
+                let locales = self
+                    .localized_attributes_rules
+                    .iter()
+                    .find(|rule| rule.match_str(field_name) == PatternMatch::Match)
+                    .map(|rule| rule.locales());
+                self.tokenizer.tokenize_with_allow_list(text.as_str(), locales)
+            }
+            _ => return Ok(()),
+        };
+
+        // create an iterator of token with their positions.
+        let tokens = process_tokens(*position, tokens)
+            .take_while(|(p, _)| *p < self.max_positions_per_attributes);
+
+        for (index, token) in tokens {
+            // keep a word only if it is not empty and fit in a LMDB key.
+            let token = token.lemma().trim();
+            if !token.is_empty() && token.len() <= MAX_WORD_LENGTH {
+                *position = index;
+                if let Ok(position) = (*position).try_into() {
+                    token_fn(field_name, field_id, position, token)?;
+                }
             }
         }
 
@@ -176,9 +182,10 @@ pub fn tokenizer_builder<'a>(
 #[cfg(test)]
 mod test {
     use bumpalo::Bump;
+    use bumparaw_collections::RawMap;
     use charabia::TokenizerBuilder;
     use meili_snap::snapshot;
-    use raw_collections::RawMap;
+    use rustc_hash::FxBuildHasher;
     use serde_json::json;
     use serde_json::value::RawValue;
 
@@ -214,15 +221,20 @@ mod test {
         let mut tb = TokenizerBuilder::default();
         let document_tokenizer = DocumentTokenizer {
             tokenizer: &tb.build(),
-            attribute_to_extract: None,
-            attribute_to_skip: &["not-me", "me-nether.nope"],
             localized_attributes_rules: &[],
             max_positions_per_attributes: 1000,
         };
 
         let fields_ids_map = FieldIdMapWithMetadata::new(
             fields_ids_map,
-            MetadataBuilder::new(Default::default(), Default::default(), Default::default(), None),
+            MetadataBuilder::new(
+                Default::default(),
+                Default::default(),
+                Default::default(),
+                None,
+                None,
+                Default::default(),
+            ),
         );
 
         let fields_ids_map_lock = std::sync::RwLock::new(fields_ids_map);
@@ -234,7 +246,7 @@ mod test {
 
         let bump = Bump::new();
         let document: &RawValue = serde_json::from_str(&document).unwrap();
-        let document = RawMap::from_raw_value(document, &bump).unwrap();
+        let document = RawMap::from_raw_value_and_hasher(document, FxBuildHasher, &bump).unwrap();
 
         let document = Versions::single(document);
         let document = DocumentFromVersions::new(&document);
@@ -265,6 +277,10 @@ mod test {
                 16,
             ]: "catto",
             [
+                3,
+                0,
+            ]: "unsearchable",
+            [
                 5,
                 0,
             ]: "10",
@@ -276,6 +292,10 @@ mod test {
                 8,
                 0,
             ]: "23",
+            [
+                9,
+                0,
+            ]: "unsearchable",
         }
         "###);
     }

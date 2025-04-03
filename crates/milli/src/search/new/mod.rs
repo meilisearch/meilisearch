@@ -49,6 +49,8 @@ pub use self::geo_sort::Strategy as GeoSortStrategy;
 use self::graph_based_ranking_rule::Words;
 use self::interner::Interned;
 use self::vector_sort::VectorSort;
+use crate::constants::RESERVED_GEO_FIELD_NAME;
+use crate::index::PrefixSearch;
 use crate::localized_attributes_rules::LocalizedFieldIds;
 use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::search::new::distinct::apply_distinct_rule;
@@ -68,6 +70,7 @@ pub struct SearchContext<'ctx> {
     pub term_interner: Interner<QueryTerm>,
     pub phrase_docids: PhraseDocIdsCache,
     pub restricted_fids: Option<RestrictedFids>,
+    pub prefix_search: PrefixSearch,
 }
 
 impl<'ctx> SearchContext<'ctx> {
@@ -85,6 +88,8 @@ impl<'ctx> SearchContext<'ctx> {
             }
         }
 
+        let prefix_search = index.prefix_search(txn)?.unwrap_or_default();
+
         Ok(Self {
             index,
             txn,
@@ -94,7 +99,12 @@ impl<'ctx> SearchContext<'ctx> {
             term_interner: <_>::default(),
             phrase_docids: <_>::default(),
             restricted_fids: None,
+            prefix_search,
         })
+    }
+
+    pub fn is_prefix_search_allowed(&self) -> bool {
+        self.prefix_search != PrefixSearch::Disabled
     }
 
     pub fn attributes_to_search_on(
@@ -553,7 +563,7 @@ fn resolve_sort_criteria<'ctx, Query: RankingRuleQueryTrait>(
     Ok(())
 }
 
-#[tracing::instrument(level = "trace", skip_all, target = "search::universe")]
+#[tracing::instrument(level = "debug", skip_all, target = "search::universe")]
 pub fn filtered_universe(
     index: &Index,
     txn: &RoTxn<'_>,
@@ -854,12 +864,12 @@ fn check_sort_criteria(
                 }
                 .into());
             }
-            Member::Geo(_) if !sortable_fields.contains("_geo") => {
+            Member::Geo(_) if !sortable_fields.contains(RESERVED_GEO_FIELD_NAME) => {
                 let (valid_fields, hidden_fields) =
                     ctx.index.remove_hidden_fields(ctx.txn, sortable_fields)?;
 
                 return Err(UserError::InvalidSortableAttribute {
-                    field: "_geo".to_string(),
+                    field: RESERVED_GEO_FIELD_NAME.to_string(),
                     valid_fields,
                     hidden_fields,
                 }

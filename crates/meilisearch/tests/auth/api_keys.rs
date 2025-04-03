@@ -421,7 +421,7 @@ async fn error_add_api_key_invalid_parameters_actions() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
-      "message": "Unknown value `doc.add` at `.actions[0]`: expected one of `search`, `documents.add`, `documents.get`, `documents.delete`, `documents.*`, `indexes.create`, `indexes.get`, `indexes.update`, `indexes.delete`, `indexes.swap`, `indexes.*`, `tasks.cancel`, `tasks.delete`, `tasks.get`, `tasks.*`, `settings.get`, `settings.update`, `settings.*`, `stats.get`, `stats.*`, `metrics.get`, `metrics.*`, `dumps.create`, `dumps.*`, `snapshots.create`, `snapshots.*`, `version`, `keys.create`, `keys.get`, `keys.update`, `keys.delete`, `experimental.get`, `experimental.update`, `*`",
+      "message": "Unknown value `doc.add` at `.actions[0]`: expected one of `search`, `documents.add`, `documents.get`, `documents.delete`, `documents.*`, `indexes.create`, `indexes.get`, `indexes.update`, `indexes.delete`, `indexes.swap`, `indexes.*`, `tasks.cancel`, `tasks.delete`, `tasks.get`, `tasks.*`, `settings.get`, `settings.update`, `settings.*`, `stats.get`, `stats.*`, `metrics.get`, `metrics.*`, `dumps.create`, `dumps.*`, `snapshots.create`, `snapshots.*`, `version`, `keys.create`, `keys.get`, `keys.update`, `keys.delete`, `experimental.get`, `experimental.update`, `network.get`, `network.update`, `*`",
       "code": "invalid_api_key_actions",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_api_key_actions"

@@ -259,7 +259,7 @@ impl<'a> Index<'a, Owned> {
     }
 }
 
-impl<'a> Index<'a, Shared> {
+impl Index<'_, Shared> {
     /// You cannot modify the content of a shared index, thus the delete_document_by_filter call
     /// must fail. If the task successfully enqueue itself, we'll wait for the task to finishes,
     /// and if it succeed the function will panic.
@@ -411,7 +411,7 @@ impl<State> Index<'_, State> {
         self.service.get(url).await
     }
 
-    pub async fn get_document_by_filter(&self, payload: Value) -> (Value, StatusCode) {
+    pub async fn fetch_documents(&self, payload: Value) -> (Value, StatusCode) {
         let url = format!("/indexes/{}/documents/fetch", urlencode(self.uid.as_ref()));
         self.service.post(url, payload).await
     }

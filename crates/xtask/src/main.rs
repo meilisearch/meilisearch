@@ -6,8 +6,8 @@ use xtask::bench::BenchDeriveArgs;
 /// List features available in the workspace
 #[derive(Parser, Debug)]
 struct ListFeaturesDeriveArgs {
-    /// Feature to exclude from the list. Repeat the argument to exclude multiple features
-    #[arg(short, long)]
+    /// Feature to exclude from the list. Use a comma to separate multiple features.
+    #[arg(short, long, value_delimiter = ',')]
     exclude_feature: Vec<String>,
 }
 
@@ -16,6 +16,7 @@ struct ListFeaturesDeriveArgs {
 #[command(author, version, about, long_about)]
 #[command(name = "cargo xtask")]
 #[command(bin_name = "cargo xtask")]
+#[allow(clippy::large_enum_variant)] // please, that's enough...
 enum Command {
     ListFeatures(ListFeaturesDeriveArgs),
     Bench(BenchDeriveArgs),

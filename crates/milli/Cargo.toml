@@ -15,72 +15,71 @@ license.workspace = true
 big_s = "1.0.2"
 bimap = { version = "0.6.3", features = ["serde"] }
 bincode = "1.3.3"
-bstr = "1.9.1"
-bytemuck = { version = "1.18.0", features = ["extern_crate_alloc"] }
+bstr = "1.11.3"
+bytemuck = { version = "1.21.0", features = ["extern_crate_alloc"] }
 byteorder = "1.5.0"
-# charabia = { version = "0.9.0", default-features = false }
-charabia = { git = "https://github.com/meilisearch/charabia", branch = "mutualize-char-normalizer", default-features = false }
+charabia = { version = "0.9.3", default-features = false }
 concat-arrays = "0.1.2"
-crossbeam-channel = "0.5.13"
-deserr = "0.6.2"
+convert_case = "0.6.0"
+crossbeam-channel = "0.5.14"
+deserr = "0.6.3"
 either = { version = "1.13.0", features = ["serde"] }
 flatten-serde-json = { path = "../flatten-serde-json" }
 fst = "0.4.7"
 fxhash = "0.2.1"
 geoutils = "0.5.1"
-grenad = { version = "0.4.7", default-features = false, features = [
-    "rayon",    # TODO Should we keep this feature
+grenad = { version = "0.5.0", default-features = false, features = [
+    "rayon",
     "tempfile",
-], git = "https://github.com/meilisearch/grenad", branch = "various-improvements" }
-heed = { version = "0.20.3", default-features = false, features = [
+] }
+heed = { version = "0.22.0", default-features = false, features = [
     "serde-json",
     "serde-bincode",
-    "read-txn-no-tls",
 ] }
-indexmap = { version = "2.2.6", features = ["serde"] }
+indexmap = { version = "2.7.0", features = ["serde"] }
 json-depth-checker = { path = "../json-depth-checker" }
 levenshtein_automata = { version = "0.2.1", features = ["fst_automaton"] }
-memchr = "2.5.0"
-memmap2 = "0.9.4"
-obkv = { git = "https://github.com/kerollmops/obkv", branch = "unsized-kvreader" }
-once_cell = "1.19.0"
-ordered-float = "4.2.1"
+memchr = "2.7.4"
+memmap2 = "0.9.5"
+obkv = "0.3.0"
+once_cell = "1.20.2"
+ordered-float = "4.6.0"
 rayon = "1.10.0"
-roaring = { version = "0.10.6", features = ["serde"] }
-rstar = { version = "0.12.0", features = ["serde"] }
-serde = { version = "1.0.204", features = ["derive"] }
-serde_json = { version = "1.0.120", features = ["preserve_order", "raw_value"] }
+roaring = { version = "0.10.10", features = ["serde"] }
+rstar = { version = "0.12.2", features = ["serde"] }
+serde = { version = "1.0.217", features = ["derive"] }
+serde_json = { version = "1.0.135", features = ["preserve_order", "raw_value"] }
 slice-group-by = "0.3.1"
 smallstr = { version = "0.3.0", features = ["serde"] }
 smallvec = "1.13.2"
 smartstring = "1.0.1"
-tempfile = "3.10.1"
-thiserror = "1.0.61"
-time = { version = "0.3.36", features = [
+tempfile = "3.15.0"
+thiserror = "2.0.9"
+time = { version = "0.3.37", features = [
     "serde-well-known",
     "formatting",
     "parsing",
     "macros",
 ] }
-uuid = { version = "1.10.0", features = ["v4"] }
+uuid = { version = "1.11.0", features = ["v4"] }
 
 filter-parser = { path = "../filter-parser" }
 
 # documents words self-join
-itertools = "0.13.0"
+itertools = "0.14.0"
 
-csv = "1.3.0"
-candle-core = { version = "0.6.0" }
-candle-transformers = { version = "0.6.0" }
-candle-nn = { version = "0.6.0" }
+csv = "1.3.1"
+candle-core = { version = "0.8.2" }
+candle-transformers = { version = "0.8.2" }
+candle-nn = { version = "0.8.2" }
 tokenizers = { git = "https://github.com/huggingface/tokenizers.git", tag = "v0.15.2", version = "0.15.2", default-features = false, features = [
     "onig",
 ] }
 hf-hub = { git = "https://github.com/dureuill/hf-hub.git", branch = "rust_tls", default-features = false, features = [
     "online",
 ] }
-tiktoken-rs = "0.5.9"
-liquid = "0.26.6"
+tiktoken-rs = "0.6.0"
+liquid = "0.26.9"
 rhai = { git = "https://github.com/rhaiscript/rhai", rev = "ef3df63121d27aacd838f366f2b83fd65f20a1e4", features = [
     "serde",
     "no_module",
@@ -88,33 +87,42 @@ rhai = { git = "https://github.com/rhaiscript/rhai", rev = "ef3df63121d27aacd838
     "no_time",
     "sync",
 ] }
-arroy = "0.5.0"
+arroy = "0.6.1"
 rand = "0.8.5"
-tracing = "0.1.40"
-ureq = { version = "2.10.0", features = ["json"] }
-url = "2.5.2"
+tracing = "0.1.41"
+ureq = { version = "2.12.1", features = ["json"] }
+url = "2.5.4"
 rayon-par-bridge = "0.1.0"
-hashbrown = "0.15.0"
-raw-collections = { git = "https://github.com/meilisearch/raw-collections.git", version = "0.1.0" }
+hashbrown = "0.15.2"
 bumpalo = "3.16.0"
+bumparaw-collections = "0.1.4"
 thread_local = "1.1.8"
-allocator-api2 = "0.2.18"
-rustc-hash = "2.0.0"
+allocator-api2 = "0.2.21"
+rustc-hash = "2.1.0"
 uell = "0.1.0"
 enum-iterator = "2.1.0"
+bbqueue = { git = "https://github.com/meilisearch/bbqueue" }
+flume = { version = "0.11.1", default-features = false }
+utoipa = { version = "5.3.1", features = [
+    "non_strict_integers",
+    "preserve_order",
+    "uuid",
+    "time",
+    "openapi_extensions",
+] }
+lru = "0.13.0"
 
 [dev-dependencies]
 mimalloc = { version = "0.1.43", default-features = false }
-insta = "1.39.0"
+# fixed version due to format breakages in v1.40
+insta = "=1.39.0"
 maplit = "1.0.2"
 md5 = "0.7.0"
 meili-snap = { path = "../meili-snap" }
 rand = { version = "0.8.5", features = ["small_rng"] }
 
 [features]
-all-tokenizations = [
-    "charabia/default",
-]
+all-tokenizations = ["charabia/default"]
 
 # Use POSIX semaphores instead of SysV semaphores in LMDB
 # For more information on this feature, see heed's Cargo.toml

@@ -1,12 +1,13 @@
 use deserr::Deserr;
-use milli::LocalizedAttributesRule;
+use milli::{AttributePatterns, LocalizedAttributesRule};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserr, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserr, Serialize, Deserialize, ToSchema)]
 #[deserr(rename_all = camelCase)]
 #[serde(rename_all = "camelCase")]
 pub struct LocalizedAttributesRuleView {
-    pub attribute_patterns: Vec<String>,
+    pub attribute_patterns: AttributePatterns,
     pub locales: Vec<Locale>,
 }
 
@@ -33,7 +34,7 @@ impl From<LocalizedAttributesRuleView> for LocalizedAttributesRule {
 /// this enum implements `Deserr` in order to be used in the API.
 macro_rules! make_locale {
     ($(($iso_639_1:ident, $iso_639_1_str:expr) => ($iso_639_3:ident, $iso_639_3_str:expr),)+) => {
-        #[derive(Debug, Copy, Clone, PartialEq, Eq, Deserr, Serialize, Deserialize, Ord, PartialOrd)]
+        #[derive(Debug, Copy, Clone, PartialEq, Eq, Deserr, Serialize, Deserialize, Ord, PartialOrd, ToSchema)]
         #[deserr(rename_all = camelCase)]
         #[serde(rename_all = "camelCase")]
         pub enum Locale {

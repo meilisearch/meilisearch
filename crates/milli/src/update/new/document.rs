@@ -1,13 +1,14 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use bumparaw_collections::RawMap;
 use heed::RoTxn;
-use raw_collections::RawMap;
+use rustc_hash::FxBuildHasher;
 use serde_json::value::RawValue;
 
 use super::vector_document::VectorDocument;
 use super::{KvReaderFieldId, KvWriterFieldId};
+use crate::constants::{RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME};
 use crate::documents::FieldIdMapper;
-use crate::vector::parsed_vectors::RESERVED_VECTORS_FIELD_NAME;
 use crate::{DocumentId, GlobalFieldsIdsMap, Index, InternalError, Result, UserError};
 
 /// A view into a document that can represent either the current version from the DB,
@@ -55,13 +56,13 @@ where
     content: &'t KvReaderFieldId,
 }
 
-impl<'t, Mapper: FieldIdMapper> Clone for DocumentFromDb<'t, Mapper> {
+impl<Mapper: FieldIdMapper> Clone for DocumentFromDb<'_, Mapper> {
     #[inline]
     fn clone(&self) -> Self {
         *self
     }
 }
-impl<'t, Mapper: FieldIdMapper> Copy for DocumentFromDb<'t, Mapper> {}
+impl<Mapper: FieldIdMapper> Copy for DocumentFromDb<'_, Mapper> {}
 
 impl<'t, Mapper: FieldIdMapper> Document<'t> for DocumentFromDb<'t, Mapper> {
     fn iter_top_level_fields(&self) -> impl Iterator<Item = Result<(&'t str, &'t RawValue)>> {
@@ -79,7 +80,7 @@ impl<'t, Mapper: FieldIdMapper> Document<'t> for DocumentFromDb<'t, Mapper> {
                 Err(error) => return Some(Err(error.into())),
             };
 
-            if name == RESERVED_VECTORS_FIELD_NAME || name == "_geo" {
+            if name == RESERVED_VECTORS_FIELD_NAME || name == RESERVED_GEO_FIELD_NAME {
                 continue;
             }
 
@@ -99,7 +100,7 @@ impl<'t, Mapper: FieldIdMapper> Document<'t> for DocumentFromDb<'t, Mapper> {
     }
 
     fn geo_field(&self) -> Result<Option<&'t RawValue>> {
-        self.field("_geo")
+        self.field(RESERVED_GEO_FIELD_NAME)
     }
 
     fn top_level_fields_count(&self) -> usize {
@@ -114,7 +115,7 @@ impl<'t, Mapper: FieldIdMapper> Document<'t> for DocumentFromDb<'t, Mapper> {
     }
 
     fn top_level_field(&self, k: &str) -> Result<Option<&'t RawValue>> {
-        if k == RESERVED_VECTORS_FIELD_NAME || k == "_geo" {
+        if k == RESERVED_VECTORS_FIELD_NAME || k == RESERVED_GEO_FIELD_NAME {
             return Ok(None);
         }
         self.field(k)
@@ -153,7 +154,7 @@ impl<'a, 'doc> DocumentFromVersions<'a, 'doc> {
     }
 }
 
-impl<'a, 'doc> Document<'doc> for DocumentFromVersions<'a, 'doc> {
+impl<'doc> Document<'doc> for DocumentFromVersions<'_, 'doc> {
     fn iter_top_level_fields(&self) -> impl Iterator<Item = Result<(&'doc str, &'doc RawValue)>> {
         self.versions.iter_top_level_fields().map(Ok)
     }
@@ -366,7 +367,9 @@ where
     }
 
     if let Some(geo_value) = document.geo_field()? {
-        let fid = fields_ids_map.id_or_insert("_geo").ok_or(UserError::AttributeLimitReached)?;
+        let fid = fields_ids_map
+            .id_or_insert(RESERVED_GEO_FIELD_NAME)
+            .ok_or(UserError::AttributeLimitReached)?;
         fields_ids_map.id_or_insert("_geo.lat").ok_or(UserError::AttributeLimitReached)?;
         fields_ids_map.id_or_insert("_geo.lng").ok_or(UserError::AttributeLimitReached)?;
         unordered_field_buffer.push((fid, geo_value));
@@ -385,12 +388,12 @@ pub type Entry<'doc> = (&'doc str, &'doc RawValue);
 
 #[derive(Debug)]
 pub struct Versions<'doc> {
-    data: RawMap<'doc>,
+    data: RawMap<'doc, FxBuildHasher>,
 }
 
 impl<'doc> Versions<'doc> {
     pub fn multiple(
-        mut versions: impl Iterator<Item = Result<RawMap<'doc>>>,
+        mut versions: impl Iterator<Item = Result<RawMap<'doc, FxBuildHasher>>>,
     ) -> Result<Option<Self>> {
         let Some(data) = versions.next() else { return Ok(None) };
         let mut data = data?;
@@ -403,12 +406,14 @@ impl<'doc> Versions<'doc> {
         Ok(Some(Self::single(data)))
     }
 
-    pub fn single(version: RawMap<'doc>) -> Self {
+    pub fn single(version: RawMap<'doc, FxBuildHasher>) -> Self {
         Self { data: version }
     }
 
     pub fn iter_top_level_fields(&self) -> impl Iterator<Item = (&'doc str, &'doc RawValue)> + '_ {
-        self.data.iter().filter(|(k, _)| *k != RESERVED_VECTORS_FIELD_NAME && *k != "_geo")
+        self.data
+            .iter()
+            .filter(|(k, _)| *k != RESERVED_VECTORS_FIELD_NAME && *k != RESERVED_GEO_FIELD_NAME)
     }
 
     pub fn vectors_field(&self) -> Option<&'doc RawValue> {
@@ -416,7 +421,7 @@ impl<'doc> Versions<'doc> {
     }
 
     pub fn geo_field(&self) -> Option<&'doc RawValue> {
-        self.data.get("_geo")
+        self.data.get(RESERVED_GEO_FIELD_NAME)
     }
 
     pub fn len(&self) -> usize {
@@ -428,7 +433,7 @@ impl<'doc> Versions<'doc> {
     }
 
     pub fn top_level_field(&self, k: &str) -> Option<&'doc RawValue> {
-        if k == RESERVED_VECTORS_FIELD_NAME || k == "_geo" {
+        if k == RESERVED_VECTORS_FIELD_NAME || k == RESERVED_GEO_FIELD_NAME {
             return None;
         }
         self.data.get(k)

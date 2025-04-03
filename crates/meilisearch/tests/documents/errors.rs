@@ -604,7 +604,7 @@ async fn delete_document_by_filter() {
         "originalFilter": "\"doggo = bernese\""
       },
       "error": {
-        "message": "Attribute `doggo` is not filterable. This index does not have configured filterable attributes.\n1:6 doggo = bernese",
+        "message": "Index `EMPTY_INDEX`: Attribute `doggo` is not filterable. This index does not have configured filterable attributes.\n1:6 doggo = bernese",
         "code": "invalid_document_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
@@ -636,7 +636,7 @@ async fn delete_document_by_filter() {
         "originalFilter": "\"catto = jorts\""
       },
       "error": {
-        "message": "Attribute `catto` is not filterable. Available filterable attributes are: `id`, `title`.\n1:6 catto = jorts",
+        "message": "Index `SHARED_DOCUMENTS`: Attribute `catto` is not filterable. Available filterable attribute patterns are: `id`, `title`.\n1:6 catto = jorts",
         "code": "invalid_document_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
@@ -667,7 +667,7 @@ async fn fetch_document_by_filter() {
         .await;
     index.wait_task(task.uid()).await.succeeded();
 
-    let (response, code) = index.get_document_by_filter(json!(null)).await;
+    let (response, code) = index.fetch_documents(json!(null)).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
@@ -678,7 +678,7 @@ async fn fetch_document_by_filter() {
     }
     "###);
 
-    let (response, code) = index.get_document_by_filter(json!({ "offset": "doggo" })).await;
+    let (response, code) = index.fetch_documents(json!({ "offset": "doggo" })).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
@@ -689,7 +689,7 @@ async fn fetch_document_by_filter() {
     }
     "###);
 
-    let (response, code) = index.get_document_by_filter(json!({ "limit": "doggo" })).await;
+    let (response, code) = index.fetch_documents(json!({ "limit": "doggo" })).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
@@ -700,7 +700,7 @@ async fn fetch_document_by_filter() {
     }
     "###);
 
-    let (response, code) = index.get_document_by_filter(json!({ "fields": "doggo" })).await;
+    let (response, code) = index.fetch_documents(json!({ "fields": "doggo" })).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
@@ -711,7 +711,7 @@ async fn fetch_document_by_filter() {
     }
     "###);
 
-    let (response, code) = index.get_document_by_filter(json!({ "filter": true })).await;
+    let (response, code) = index.fetch_documents(json!({ "filter": true })).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
@@ -722,7 +722,7 @@ async fn fetch_document_by_filter() {
     }
     "###);
 
-    let (response, code) = index.get_document_by_filter(json!({ "filter": "cool doggo" })).await;
+    let (response, code) = index.fetch_documents(json!({ "filter": "cool doggo" })).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
@@ -733,12 +733,11 @@ async fn fetch_document_by_filter() {
     }
     "###);
 
-    let (response, code) =
-        index.get_document_by_filter(json!({ "filter": "doggo = bernese" })).await;
+    let (response, code) = index.fetch_documents(json!({ "filter": "doggo = bernese" })).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "Attribute `doggo` is not filterable. Available filterable attributes are: `color`.\n1:6 doggo = bernese",
+      "message": "Attribute `doggo` is not filterable. Available filterable attribute patterns are: `color`.\n1:6 doggo = bernese",
       "code": "invalid_document_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
@@ -760,34 +759,15 @@ async fn retrieve_vectors() {
       "link": "https://docs.meilisearch.com/errors#invalid_document_retrieve_vectors"
     }
     "###);
-    let (response, _code) = index.get_all_documents_raw("?retrieveVectors=true").await;
-    snapshot!(response, @r###"
-    {
-      "message": "Passing `retrieveVectors` as a parameter requires enabling the `vector store` experimental feature. See https://github.com/meilisearch/product/discussions/677",
-      "code": "feature_not_enabled",
-      "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
-    }
-    "###);
 
     // FETCH ALL DOCUMENTS BY POST
-    let (response, _code) =
-        index.get_document_by_filter(json!({ "retrieveVectors": "tamo" })).await;
+    let (response, _code) = index.fetch_documents(json!({ "retrieveVectors": "tamo" })).await;
     snapshot!(response, @r###"
     {
       "message": "Invalid value type at `.retrieveVectors`: expected a boolean, but found a string: `\"tamo\"`",
       "code": "invalid_document_retrieve_vectors",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_document_retrieve_vectors"
-    }
-    "###);
-    let (response, _code) = index.get_document_by_filter(json!({ "retrieveVectors": true })).await;
-    snapshot!(response, @r###"
-    {
-      "message": "Passing `retrieveVectors` as a parameter requires enabling the `vector store` experimental feature. See https://github.com/meilisearch/product/discussions/677",
-      "code": "feature_not_enabled",
-      "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
     }
     "###);
 
@@ -799,15 +779,6 @@ async fn retrieve_vectors() {
       "code": "invalid_document_retrieve_vectors",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_document_retrieve_vectors"
-    }
-    "###);
-    let (response, _code) = index.get_document(0, Some(json!({"retrieveVectors": true}))).await;
-    snapshot!(response, @r###"
-    {
-      "message": "Passing `retrieveVectors` as a parameter requires enabling the `vector store` experimental feature. See https://github.com/meilisearch/product/discussions/677",
-      "code": "feature_not_enabled",
-      "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
     }
     "###);
 }

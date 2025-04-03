@@ -980,7 +980,7 @@ async fn add_documents_no_index_creation() {
     snapshot!(code, @"202 Accepted");
     assert_eq!(response["taskUid"], 0);
 
-    index.wait_task(0).await;
+    index.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index.get_task(0).await;
     snapshot!(code, @"200 OK");
@@ -1059,9 +1059,9 @@ async fn document_addition_with_primary_key() {
     }
     "###);
 
-    index.wait_task(0).await;
+    index.wait_task(response.uid()).await.succeeded();
 
-    let (response, code) = index.get_task(0).await;
+    let (response, code) = index.get_task(response.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
@@ -1169,7 +1169,7 @@ async fn replace_document() {
     }
     "###);
 
-    index.wait_task(0).await;
+    index.wait_task(response.uid()).await.succeeded();
 
     let documents = json!([
         {
@@ -1178,12 +1178,12 @@ async fn replace_document() {
         }
     ]);
 
-    let (_response, code) = index.add_documents(documents, None).await;
+    let (task, code) = index.add_documents(documents, None).await;
     snapshot!(code,@"202 Accepted");
 
-    index.wait_task(1).await;
+    index.wait_task(task.uid()).await.succeeded();
 
-    let (response, code) = index.get_task(1).await;
+    let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
@@ -1220,9 +1220,89 @@ async fn replace_document() {
 #[actix_rt::test]
 async fn add_no_documents() {
     let server = Server::new().await;
-    let index = server.index("test");
-    let (_response, code) = index.add_documents(json!([]), None).await;
+    let index = server.index("kefir");
+    let (task, code) = index.add_documents(json!([]), None).await;
     snapshot!(code, @"202 Accepted");
+    let task = server.wait_task(task.uid()).await;
+    let task = task.succeeded();
+    snapshot!(task, @r#"
+    {
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "kefir",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 0,
+        "indexedDocuments": 0
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "#);
+
+    let (task, _code) = index.add_documents(json!([]), Some("kefkef")).await;
+    let task = server.wait_task(task.uid()).await;
+    let task = task.succeeded();
+    snapshot!(task, @r#"
+    {
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "kefir",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 0,
+        "indexedDocuments": 0
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "#);
+
+    let (task, _code) = index.add_documents(json!([{ "kefkef": 1 }]), None).await;
+    let task = server.wait_task(task.uid()).await;
+    let task = task.succeeded();
+    snapshot!(task, @r#"
+    {
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "kefir",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "#);
+    let (documents, _status) = index.get_all_documents(GetAllDocumentsOptions::default()).await;
+    snapshot!(documents, @r#"
+    {
+      "results": [
+        {
+          "kefkef": 1
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 1
+    }
+    "#);
 }
 
 #[actix_rt::test]
@@ -1264,15 +1344,18 @@ async fn error_add_documents_bad_document_id() {
     let server = Server::new().await;
     let index = server.index("test");
     index.create(Some("docid")).await;
+
+    // unsupported characters
+
     let documents = json!([
         {
             "docid": "foo & bar",
             "content": "foobar"
         }
     ]);
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
-    let (response, code) = index.get_task(1).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.failed();
+    let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
@@ -1288,7 +1371,81 @@ async fn error_add_documents_bad_document_id() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Document identifier `\"foo & bar\"` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_), and can not be more than 512 bytes.",
+        "message": "Document identifier `\"foo & bar\"` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_), and can not be more than 511 bytes.",
+        "code": "invalid_document_id",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_document_id"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    // More than 512 bytes
+    let documents = json!([
+        {
+            "docid": "a".repeat(600),
+            "content": "foobar"
+        }
+    ]);
+    let (value, _code) = index.add_documents(documents, None).await;
+    index.wait_task(value.uid()).await.failed();
+    let (response, code) = index.get_task(value.uid()).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+      @r###"
+    {
+      "uid": 2,
+      "batchUid": 2,
+      "indexUid": "test",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "error": {
+        "message": "Document identifier `\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_), and can not be more than 511 bytes.",
+        "code": "invalid_document_id",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_document_id"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    // Exactly 512 bytes
+    let documents = json!([
+        {
+            "docid": "a".repeat(512),
+            "content": "foobar"
+        }
+    ]);
+    let (value, _code) = index.add_documents(documents, None).await;
+    index.wait_task(value.uid()).await.failed();
+    let (response, code) = index.get_task(value.uid()).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    @r###"
+    {
+      "uid": 3,
+      "batchUid": 3,
+      "indexUid": "test",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "error": {
+        "message": "Document identifier `\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_), and can not be more than 511 bytes.",
         "code": "invalid_document_id",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_id"
@@ -1312,9 +1469,9 @@ async fn error_add_documents_missing_document_id() {
             "content": "foobar"
         }
     ]);
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
-    let (response, code) = index.get_task(1).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.failed();
+    let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
@@ -1362,7 +1519,7 @@ async fn error_document_field_limit_reached_in_one_document() {
     let (response, code) = index.update_documents(documents, Some("id")).await;
     snapshot!(code, @"202 Accepted");
 
-    let response = index.wait_task(response.uid()).await;
+    let response = index.wait_task(response.uid()).await.failed();
     snapshot!(code, @"202 Accepted");
     // Documents without a primary key are not accepted.
     snapshot!(response,
@@ -1624,8 +1781,8 @@ async fn add_documents_with_geo_field() {
         },
     ]);
 
-    index.add_documents(documents, None).await;
-    let response = index.wait_task(1).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    let response = index.wait_task(task.uid()).await;
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
@@ -1646,6 +1803,275 @@ async fn add_documents_with_geo_field() {
       "finishedAt": "[date]"
     }
     "###);
+
+    let (response, code) = index.get_all_documents(GetAllDocumentsOptions::default()).await;
+
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    @r###"
+    {
+      "results": [
+        {
+          "id": "1"
+        },
+        {
+          "id": "2",
+          "_geo": null
+        },
+        {
+          "id": "3",
+          "_geo": {
+            "lat": 1,
+            "lng": 1
+          }
+        },
+        {
+          "id": "4",
+          "_geo": {
+            "lat": "1",
+            "lng": "1"
+          }
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 4
+    }
+    "###);
+
+    let (response, code) = index
+        .search_post(json!({"sort": ["_geoPoint(50.629973371633746,3.0569447399419567):desc"]}))
+        .await;
+    snapshot!(code, @"200 OK");
+    // we are expecting docs 4 and 3 first as they have geo
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }),
+    @r###"
+    {
+      "hits": [
+        {
+          "id": "4",
+          "_geo": {
+            "lat": "1",
+            "lng": "1"
+          },
+          "_geoDistance": 5522018
+        },
+        {
+          "id": "3",
+          "_geo": {
+            "lat": 1,
+            "lng": 1
+          },
+          "_geoDistance": 5522018
+        },
+        {
+          "id": "1"
+        },
+        {
+          "id": "2",
+          "_geo": null
+        }
+      ],
+      "query": "",
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 4
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn update_documents_with_geo_field() {
+    let server = Server::new().await;
+    let index = server.index("doggo");
+    index.update_settings(json!({"sortableAttributes": ["_geo"]})).await;
+
+    let documents = json!([
+        {
+            "id": "1",
+        },
+        {
+            "id": "2",
+            "_geo": null,
+        },
+        {
+            "id": "3",
+            "_geo": { "lat": 1, "lng": 1 },
+        },
+        {
+            "id": "4",
+            "_geo": { "lat": "1", "lng": "1" },
+        },
+    ]);
+
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    let response = index.wait_task(task.uid()).await;
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "uid": 1,
+      "batchUid": 1,
+      "indexUid": "doggo",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 4,
+        "indexedDocuments": 4
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    let (response, code) = index
+        .search_post(json!({"sort": ["_geoPoint(50.629973371633746,3.0569447399419567):desc"]}))
+        .await;
+    snapshot!(code, @"200 OK");
+    // we are expecting docs 4 and 3 first as they have geo
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }),
+    @r###"
+    {
+      "hits": [
+        {
+          "id": "4",
+          "_geo": {
+            "lat": "1",
+            "lng": "1"
+          },
+          "_geoDistance": 5522018
+        },
+        {
+          "id": "3",
+          "_geo": {
+            "lat": 1,
+            "lng": 1
+          },
+          "_geoDistance": 5522018
+        },
+        {
+          "id": "1"
+        },
+        {
+          "id": "2",
+          "_geo": null
+        }
+      ],
+      "query": "",
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 4
+    }
+    "###);
+
+    let updated_documents = json!([{
+      "id": "3",
+      "doggo": "kefir",
+    }]);
+    let (task, _status_code) = index.update_documents(updated_documents, None).await;
+    let response = index.wait_task(task.uid()).await;
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r###"
+    {
+      "uid": 2,
+      "batchUid": 2,
+      "indexUid": "doggo",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+    let (response, code) = index.get_all_documents(GetAllDocumentsOptions::default()).await;
+
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    @r###"
+    {
+      "results": [
+        {
+          "id": "1"
+        },
+        {
+          "id": "2",
+          "_geo": null
+        },
+        {
+          "id": "3",
+          "_geo": {
+            "lat": 1,
+            "lng": 1
+          },
+          "doggo": "kefir"
+        },
+        {
+          "id": "4",
+          "_geo": {
+            "lat": "1",
+            "lng": "1"
+          }
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 4
+    }
+    "###);
+
+    let (response, code) = index
+        .search_post(json!({"sort": ["_geoPoint(50.629973371633746,3.0569447399419567):desc"]}))
+        .await;
+    snapshot!(code, @"200 OK");
+    // the search response should not have changed: we are expecting docs 4 and 3 first as they have geo
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }),
+    @r###"
+    {
+      "hits": [
+        {
+          "id": "4",
+          "_geo": {
+            "lat": "1",
+            "lng": "1"
+          },
+          "_geoDistance": 5522018
+        },
+        {
+          "id": "3",
+          "_geo": {
+            "lat": 1,
+            "lng": 1
+          },
+          "doggo": "kefir",
+          "_geoDistance": 5522018
+        },
+        {
+          "id": "1"
+        },
+        {
+          "id": "2",
+          "_geo": null
+        }
+      ],
+      "query": "",
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 4
+    }
+    "###);
 }
 
 #[actix_rt::test]
@@ -1663,9 +2089,9 @@ async fn add_documents_invalid_geo_field() {
         }
     ]);
 
-    index.add_documents(documents, None).await;
-    index.wait_task(2).await;
-    let (response, code) = index.get_task(2).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.failed();
+    let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
@@ -1681,7 +2107,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "The `_geo` field in the document with the id: `\"11\"` is not an object. Was expecting an object with the `_geo.lat` and `_geo.lng` fields but instead got `\"foobar\"`.",
+        "message": "Index `test`: The `_geo` field in the document with the id: `\"11\"` is not an object. Was expecting an object with the `_geo.lat` and `_geo.lng` fields but instead got `\"foobar\"`.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -1701,9 +2127,9 @@ async fn add_documents_invalid_geo_field() {
         }
     ]);
 
-    index.add_documents(documents, None).await;
-    index.wait_task(3).await;
-    let (response, code) = index.get_task(3).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.failed();
+    let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
@@ -1719,7 +2145,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Could not find latitude nor longitude in the document with the id: `\"11\"`. Was expecting `_geo.lat` and `_geo.lng` fields.",
+        "message": "Index `test`: Could not find latitude nor longitude in the document with the id: `\"11\"`. Was expecting `_geo.lat` and `_geo.lng` fields.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -1739,9 +2165,9 @@ async fn add_documents_invalid_geo_field() {
         }
     ]);
 
-    index.add_documents(documents, None).await;
-    index.wait_task(4).await;
-    let (response, code) = index.get_task(4).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.failed();
+    let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
@@ -1757,7 +2183,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Could not find latitude nor longitude in the document with the id: `\"11\"`. Was expecting `_geo.lat` and `_geo.lng` fields.",
+        "message": "Index `test`: Could not find latitude nor longitude in the document with the id: `\"11\"`. Was expecting `_geo.lat` and `_geo.lng` fields.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -1777,9 +2203,9 @@ async fn add_documents_invalid_geo_field() {
         }
     ]);
 
-    index.add_documents(documents, None).await;
-    index.wait_task(5).await;
-    let (response, code) = index.get_task(5).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.failed();
+    let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
@@ -1795,7 +2221,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Could not find longitude in the document with the id: `\"11\"`. Was expecting a `_geo.lng` field.",
+        "message": "Index `test`: Could not find longitude in the document with the id: `\"11\"`. Was expecting a `_geo.lng` field.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -1815,9 +2241,9 @@ async fn add_documents_invalid_geo_field() {
         }
     ]);
 
-    index.add_documents(documents, None).await;
-    index.wait_task(6).await;
-    let (response, code) = index.get_task(6).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.failed();
+    let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
@@ -1833,7 +2259,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Could not find latitude in the document with the id: `\"11\"`. Was expecting a `_geo.lat` field.",
+        "message": "Index `test`: Could not find latitude in the document with the id: `\"11\"`. Was expecting a `_geo.lat` field.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -1853,9 +2279,9 @@ async fn add_documents_invalid_geo_field() {
         }
     ]);
 
-    index.add_documents(documents, None).await;
-    index.wait_task(7).await;
-    let (response, code) = index.get_task(7).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.failed();
+    let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
@@ -1871,7 +2297,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Could not find longitude in the document with the id: `\"11\"`. Was expecting a `_geo.lng` field.",
+        "message": "Index `test`: Could not find longitude in the document with the id: `\"11\"`. Was expecting a `_geo.lng` field.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -1891,9 +2317,9 @@ async fn add_documents_invalid_geo_field() {
         }
     ]);
 
-    index.add_documents(documents, None).await;
-    index.wait_task(8).await;
-    let (response, code) = index.get_task(8).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.failed();
+    let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
@@ -1909,7 +2335,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Could not find latitude in the document with the id: `\"11\"`. Was expecting a `_geo.lat` field.",
+        "message": "Index `test`: Could not find latitude in the document with the id: `\"11\"`. Was expecting a `_geo.lat` field.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -1929,9 +2355,9 @@ async fn add_documents_invalid_geo_field() {
         }
     ]);
 
-    index.add_documents(documents, None).await;
-    index.wait_task(9).await;
-    let (response, code) = index.get_task(9).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.failed();
+    let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
@@ -1947,7 +2373,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Could not parse latitude nor longitude in the document with the id: `\"11\"`. Was expecting finite numbers but instead got `false` and `true`.",
+        "message": "Index `test`: Could not parse latitude nor longitude in the document with the id: `\"11\"`. Was expecting finite numbers but instead got `false` and `true`.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -1967,9 +2393,9 @@ async fn add_documents_invalid_geo_field() {
         }
     ]);
 
-    index.add_documents(documents, None).await;
-    index.wait_task(10).await;
-    let (response, code) = index.get_task(10).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.failed();
+    let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
@@ -1985,7 +2411,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Could not find longitude in the document with the id: `\"11\"`. Was expecting a `_geo.lng` field.",
+        "message": "Index `test`: Could not find longitude in the document with the id: `\"11\"`. Was expecting a `_geo.lng` field.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -2005,9 +2431,9 @@ async fn add_documents_invalid_geo_field() {
         }
     ]);
 
-    index.add_documents(documents, None).await;
-    index.wait_task(11).await;
-    let (response, code) = index.get_task(11).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.failed();
+    let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
@@ -2023,7 +2449,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Could not find latitude in the document with the id: `\"11\"`. Was expecting a `_geo.lat` field.",
+        "message": "Index `test`: Could not find latitude in the document with the id: `\"11\"`. Was expecting a `_geo.lat` field.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -2043,9 +2469,9 @@ async fn add_documents_invalid_geo_field() {
         }
     ]);
 
-    index.add_documents(documents, None).await;
-    index.wait_task(12).await;
-    let (response, code) = index.get_task(12).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.failed();
+    let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
@@ -2061,7 +2487,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Could not parse latitude nor longitude in the document with the id: `\"11\"`. Was expecting finite numbers but instead got `\"doggo\"` and `\"doggo\"`.",
+        "message": "Index `test`: Could not parse latitude nor longitude in the document with the id: `\"11\"`. Was expecting finite numbers but instead got `\"doggo\"` and `\"doggo\"`.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -2081,9 +2507,9 @@ async fn add_documents_invalid_geo_field() {
         }
     ]);
 
-    index.add_documents(documents, None).await;
-    index.wait_task(13).await;
-    let (response, code) = index.get_task(13).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.failed();
+    let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
@@ -2099,7 +2525,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "The `_geo` field in the document with the id: `\"11\"` contains the following unexpected fields: `{\"doggo\":\"are the best\"}`.",
+        "message": "Index `test`: The `_geo` field in the document with the id: `\"11\"` contains the following unexpected fields: `{\"doggo\":\"are the best\"}`.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -2123,7 +2549,7 @@ async fn add_documents_invalid_geo_field() {
 
     let (response, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let response = index.wait_task(response.uid()).await;
+    let response = index.wait_task(response.uid()).await.failed();
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
@@ -2138,7 +2564,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Could not parse longitude in the document with the id: `\"12\"`. Was expecting a finite number but instead got `null`.",
+        "message": "Index `test`: Could not parse longitude in the document with the id: `\"12\"`. Was expecting a finite number but instead got `null`.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -2160,7 +2586,7 @@ async fn add_documents_invalid_geo_field() {
 
     let (response, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let response = index.wait_task(response.uid()).await;
+    let response = index.wait_task(response.uid()).await.failed();
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
@@ -2175,7 +2601,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Could not parse latitude in the document with the id: `\"12\"`. Was expecting a finite number but instead got `null`.",
+        "message": "Index `test`: Could not parse latitude in the document with the id: `\"12\"`. Was expecting a finite number but instead got `null`.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -2197,7 +2623,7 @@ async fn add_documents_invalid_geo_field() {
 
     let (response, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let response = index.wait_task(response.uid()).await;
+    let response = index.wait_task(response.uid()).await.failed();
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
@@ -2212,7 +2638,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Could not parse latitude nor longitude in the document with the id: `\"13\"`. Was expecting finite numbers but instead got `null` and `null`.",
+        "message": "Index `test`: Could not parse latitude nor longitude in the document with the id: `\"13\"`. Was expecting finite numbers but instead got `null` and `null`.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -2241,7 +2667,7 @@ async fn add_invalid_geo_and_then_settings() {
     ]);
     let (ret, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let ret = index.wait_task(ret.uid()).await;
+    let ret = index.wait_task(ret.uid()).await.succeeded();
     snapshot!(ret, @r###"
     {
       "uid": "[uid]",
@@ -2264,7 +2690,7 @@ async fn add_invalid_geo_and_then_settings() {
 
     let (ret, code) = index.update_settings(json!({ "sortableAttributes": ["_geo"] })).await;
     snapshot!(code, @"202 Accepted");
-    let ret = index.wait_task(ret.uid()).await;
+    let ret = index.wait_task(ret.uid()).await.failed();
     snapshot!(ret, @r###"
     {
       "uid": "[uid]",
@@ -2279,7 +2705,7 @@ async fn add_invalid_geo_and_then_settings() {
         ]
       },
       "error": {
-        "message": "Could not parse latitude in the document with the id: `\"11\"`. Was expecting a finite number but instead got `null`.",
+        "message": "Index `test`: Could not parse latitude in the document with the id: `\"11\"`. Was expecting a finite number but instead got `null`.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -2331,9 +2757,9 @@ async fn error_primary_key_inference() {
         }
     ]);
 
-    index.add_documents(documents, None).await;
-    index.wait_task(0).await;
-    let (response, code) = index.get_task(0).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.failed();
+    let (response, code) = index.get_task(task.uid()).await;
     assert_eq!(code, 200);
 
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
@@ -2372,9 +2798,9 @@ async fn error_primary_key_inference() {
         }
     ]);
 
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
-    let (response, code) = index.get_task(1).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.failed();
+    let (response, code) = index.get_task(task.uid()).await;
     assert_eq!(code, 200);
 
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
@@ -2411,9 +2837,9 @@ async fn error_primary_key_inference() {
         }
     ]);
 
-    index.add_documents(documents, None).await;
-    index.wait_task(2).await;
-    let (response, code) = index.get_task(2).await;
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
+    let (response, code) = index.get_task(task.uid()).await;
     assert_eq!(code, 200);
 
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
@@ -2450,14 +2876,14 @@ async fn add_documents_with_primary_key_twice() {
         }
     ]);
 
-    index.add_documents(documents.clone(), Some("title")).await;
-    index.wait_task(0).await;
-    let (response, _code) = index.get_task(0).await;
+    let (task, _status_code) = index.add_documents(documents.clone(), Some("title")).await;
+    index.wait_task(task.uid()).await.succeeded();
+    let (response, _code) = index.get_task(task.uid()).await;
     assert_eq!(response["status"], "succeeded");
 
-    index.add_documents(documents, Some("title")).await;
-    index.wait_task(1).await;
-    let (response, _code) = index.get_task(1).await;
+    let (task, _status_code) = index.add_documents(documents, Some("title")).await;
+    index.wait_task(task.uid()).await.succeeded();
+    let (response, _code) = index.get_task(task.uid()).await;
     assert_eq!(response["status"], "succeeded");
 }
 

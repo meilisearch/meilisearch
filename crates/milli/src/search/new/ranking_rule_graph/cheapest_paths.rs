@@ -8,7 +8,7 @@ with them, they are "unconditional". These kinds of edges are used to "skip" a n
 The algorithm uses a depth-first search. It benefits from two main optimisations:
 - The list of all possible costs to go from any node to the END node is precomputed
 - The `DeadEndsCache` reduces the number of valid paths drastically, by making some edges
-untraversable depending on what other edges were selected.
+  untraversable depending on what other edges were selected.
 
 These two optimisations are meant to avoid traversing edges that wouldn't lead
 to a valid path. In practically all cases, we avoid the exponential complexity
@@ -24,6 +24,7 @@ For example, the DeadEndsCache could say the following:
     - if we take `g`, then `[f]` is also forbidden
         - etc.
     - etc.
+
 As we traverse the graph, we also traverse the `DeadEndsCache` and keep a list of forbidden
 conditions in memory. Then, we know to avoid all edges which have a condition that is forbidden.
 

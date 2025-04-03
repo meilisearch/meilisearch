@@ -1,15 +1,16 @@
 use std::collections::BTreeSet;
 use std::fmt::Write;
 
-use meilisearch_types::batches::Batch;
+use meilisearch_types::batches::{Batch, BatchEnqueuedAt, BatchStats};
 use meilisearch_types::heed::types::{SerdeBincode, SerdeJson, Str};
 use meilisearch_types::heed::{Database, RoTxn};
 use meilisearch_types::milli::{CboRoaringBitmapCodec, RoaringBitmapCodec, BEU32};
-use meilisearch_types::tasks::{Details, Task};
+use meilisearch_types::tasks::{Details, Kind, Status, Task};
+use meilisearch_types::versioning;
 use roaring::RoaringBitmap;
 
 use crate::index_mapper::IndexMapper;
-use crate::{IndexScheduler, Kind, Status, BEI128};
+use crate::{IndexScheduler, BEI128};
 
 pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
     // Since we'll snapshot the index right afterward, we don't need to ensure it's internally consistent for every run.
@@ -18,41 +19,15 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
     scheduler.assert_internally_consistent();
 
     let IndexScheduler {
-        autobatching_enabled,
         cleanup_enabled: _,
-        must_stop_processing: _,
         processing_tasks,
-        file_store,
         env,
-        all_tasks,
-        all_batches,
-        batch_to_tasks_mapping,
-        // task reverse index
-        status,
-        kind,
-        index_tasks,
-        canceled_by,
-        enqueued_at,
-        started_at,
-        finished_at,
-
-        // batch reverse index
-        batch_status,
-        batch_kind,
-        batch_index_tasks,
-        batch_enqueued_at,
-        batch_started_at,
-        batch_finished_at,
+        version,
+        queue,
+        scheduler,
 
         index_mapper,
         features: _,
-        max_number_of_tasks: _,
-        max_number_of_batched_tasks: _,
-        wake_up: _,
-        dumps_path: _,
-        snapshots_path: _,
-        auth_path: _,
-        version_file_path: _,
         webhook_url: _,
         webhook_authorization_header: _,
         test_breakpoint_sdr: _,
@@ -65,8 +40,18 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
 
     let mut snap = String::new();
 
+    let indx_sched_version = version.get_version(&rtxn).unwrap();
+    let latest_version = (
+        versioning::VERSION_MAJOR.parse().unwrap(),
+        versioning::VERSION_MINOR.parse().unwrap(),
+        versioning::VERSION_PATCH.parse().unwrap(),
+    );
+    if indx_sched_version != Some(latest_version) {
+        snap.push_str(&format!("index scheduler running on version {indx_sched_version:?}\n"));
+    }
+
     let processing = processing_tasks.read().unwrap().clone();
-    snap.push_str(&format!("### Autobatching Enabled = {autobatching_enabled}\n"));
+    snap.push_str(&format!("### Autobatching Enabled = {}\n", scheduler.autobatching_enabled));
     snap.push_str(&format!(
         "### Processing batch {:?}:\n",
         processing.batch.as_ref().map(|batch| batch.uid)
@@ -79,19 +64,19 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
     snap.push_str("\n----------------------------------------------------------------------\n");
 
     snap.push_str("### All Tasks:\n");
-    snap.push_str(&snapshot_all_tasks(&rtxn, *all_tasks));
+    snap.push_str(&snapshot_all_tasks(&rtxn, queue.tasks.all_tasks));
     snap.push_str("----------------------------------------------------------------------\n");
 
     snap.push_str("### Status:\n");
-    snap.push_str(&snapshot_status(&rtxn, *status));
+    snap.push_str(&snapshot_status(&rtxn, queue.tasks.status));
     snap.push_str("----------------------------------------------------------------------\n");
 
     snap.push_str("### Kind:\n");
-    snap.push_str(&snapshot_kind(&rtxn, *kind));
+    snap.push_str(&snapshot_kind(&rtxn, queue.tasks.kind));
     snap.push_str("----------------------------------------------------------------------\n");
 
     snap.push_str("### Index Tasks:\n");
-    snap.push_str(&snapshot_index_tasks(&rtxn, *index_tasks));
+    snap.push_str(&snapshot_index_tasks(&rtxn, queue.tasks.index_tasks));
     snap.push_str("----------------------------------------------------------------------\n");
 
     snap.push_str("### Index Mapper:\n");
@@ -99,55 +84,55 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
     snap.push_str("\n----------------------------------------------------------------------\n");
 
     snap.push_str("### Canceled By:\n");
-    snap.push_str(&snapshot_canceled_by(&rtxn, *canceled_by));
+    snap.push_str(&snapshot_canceled_by(&rtxn, queue.tasks.canceled_by));
     snap.push_str("\n----------------------------------------------------------------------\n");
 
     snap.push_str("### Enqueued At:\n");
-    snap.push_str(&snapshot_date_db(&rtxn, *enqueued_at));
+    snap.push_str(&snapshot_date_db(&rtxn, queue.tasks.enqueued_at));
     snap.push_str("----------------------------------------------------------------------\n");
 
     snap.push_str("### Started At:\n");
-    snap.push_str(&snapshot_date_db(&rtxn, *started_at));
+    snap.push_str(&snapshot_date_db(&rtxn, queue.tasks.started_at));
     snap.push_str("----------------------------------------------------------------------\n");
 
     snap.push_str("### Finished At:\n");
-    snap.push_str(&snapshot_date_db(&rtxn, *finished_at));
+    snap.push_str(&snapshot_date_db(&rtxn, queue.tasks.finished_at));
     snap.push_str("----------------------------------------------------------------------\n");
 
     snap.push_str("### All Batches:\n");
-    snap.push_str(&snapshot_all_batches(&rtxn, *all_batches));
+    snap.push_str(&snapshot_all_batches(&rtxn, queue.batches.all_batches));
     snap.push_str("----------------------------------------------------------------------\n");
 
     snap.push_str("### Batch to tasks mapping:\n");
-    snap.push_str(&snapshot_batches_to_tasks_mappings(&rtxn, *batch_to_tasks_mapping));
+    snap.push_str(&snapshot_batches_to_tasks_mappings(&rtxn, queue.batch_to_tasks_mapping));
     snap.push_str("----------------------------------------------------------------------\n");
 
     snap.push_str("### Batches Status:\n");
-    snap.push_str(&snapshot_status(&rtxn, *batch_status));
+    snap.push_str(&snapshot_status(&rtxn, queue.batches.status));
     snap.push_str("----------------------------------------------------------------------\n");
 
     snap.push_str("### Batches Kind:\n");
-    snap.push_str(&snapshot_kind(&rtxn, *batch_kind));
+    snap.push_str(&snapshot_kind(&rtxn, queue.batches.kind));
     snap.push_str("----------------------------------------------------------------------\n");
 
     snap.push_str("### Batches Index Tasks:\n");
-    snap.push_str(&snapshot_index_tasks(&rtxn, *batch_index_tasks));
+    snap.push_str(&snapshot_index_tasks(&rtxn, queue.batches.index_tasks));
     snap.push_str("----------------------------------------------------------------------\n");
 
     snap.push_str("### Batches Enqueued At:\n");
-    snap.push_str(&snapshot_date_db(&rtxn, *batch_enqueued_at));
+    snap.push_str(&snapshot_date_db(&rtxn, queue.batches.enqueued_at));
     snap.push_str("----------------------------------------------------------------------\n");
 
     snap.push_str("### Batches Started At:\n");
-    snap.push_str(&snapshot_date_db(&rtxn, *batch_started_at));
+    snap.push_str(&snapshot_date_db(&rtxn, queue.batches.started_at));
     snap.push_str("----------------------------------------------------------------------\n");
 
     snap.push_str("### Batches Finished At:\n");
-    snap.push_str(&snapshot_date_db(&rtxn, *batch_finished_at));
+    snap.push_str(&snapshot_date_db(&rtxn, queue.batches.finished_at));
     snap.push_str("----------------------------------------------------------------------\n");
 
     snap.push_str("### File Store:\n");
-    snap.push_str(&snapshot_file_store(file_store));
+    snap.push_str(&snapshot_file_store(&queue.file_store));
     snap.push_str("\n----------------------------------------------------------------------\n");
 
     snap
@@ -306,6 +291,9 @@ fn snapshot_details(d: &Details) -> String {
         Details::IndexSwap { swaps } => {
             format!("{{ swaps: {swaps:?} }}")
         }
+        Details::UpgradeDatabase { from, to } => {
+            format!("{{ from: {from:?}, to: {to:?} }}")
+        }
     }
 }
 
@@ -353,14 +341,23 @@ pub fn snapshot_canceled_by(rtxn: &RoTxn, db: Database<BEU32, RoaringBitmapCodec
 
 pub fn snapshot_batch(batch: &Batch) -> String {
     let mut snap = String::new();
-    let Batch { uid, details, stats, started_at, finished_at } = batch;
+    let Batch { uid, details, stats, started_at, finished_at, progress: _, enqueued_at } = batch;
+    let stats = BatchStats {
+        progress_trace: Default::default(),
+        write_channel_congestion: None,
+        ..stats.clone()
+    };
     if let Some(finished_at) = finished_at {
         assert!(finished_at > started_at);
     }
+    let BatchEnqueuedAt { earliest, oldest } = enqueued_at.unwrap();
+    assert!(*started_at > earliest);
+    assert!(earliest >= oldest);
+
     snap.push('{');
     snap.push_str(&format!("uid: {uid}, "));
     snap.push_str(&format!("details: {}, ", serde_json::to_string(details).unwrap()));
-    snap.push_str(&format!("stats: {}, ", serde_json::to_string(stats).unwrap()));
+    snap.push_str(&format!("stats: {}, ", serde_json::to_string(&stats).unwrap()));
     snap.push('}');
     snap
 }
@@ -373,7 +370,8 @@ pub fn snapshot_index_mapper(rtxn: &RoTxn, mapper: &IndexMapper) -> String {
         let stats = mapper.stats_of(rtxn, &name).unwrap();
         s.push_str(&format!(
             "{name}: {{ number_of_documents: {}, field_distribution: {:?} }}\n",
-            stats.number_of_documents, stats.field_distribution
+            stats.documents_database_stats.number_of_entries(),
+            stats.field_distribution
         ));
     }
 

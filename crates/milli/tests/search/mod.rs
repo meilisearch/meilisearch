@@ -7,10 +7,13 @@ use bumpalo::Bump;
 use either::{Either, Left, Right};
 use heed::EnvOpenOptions;
 use maplit::{btreemap, hashset};
+use milli::progress::Progress;
 use milli::update::new::indexer;
-use milli::update::{IndexDocumentsMethod, IndexerConfig, Settings};
+use milli::update::{IndexerConfig, Settings};
 use milli::vector::EmbeddingConfigs;
-use milli::{AscDesc, Criterion, DocumentId, Index, Member, TermsMatchingStrategy};
+use milli::{
+    AscDesc, Criterion, DocumentId, FilterableAttributesRule, Index, Member, TermsMatchingStrategy,
+};
 use serde::{Deserialize, Deserializer};
 use slice_group_by::GroupBy;
 
@@ -31,9 +34,10 @@ pub const CONTENT: &str = include_str!("../assets/test_set.ndjson");
 
 pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     let path = tempfile::tempdir().unwrap();
-    let mut options = EnvOpenOptions::new();
+    let options = EnvOpenOptions::new();
+    let mut options = options.read_txn_without_tls();
     options.map_size(10 * 1024 * 1024); // 10 MB
-    let index = Index::new(options, &path).unwrap();
+    let index = Index::new(options, &path, true).unwrap();
 
     let mut wtxn = index.write_txn().unwrap();
     let config = IndexerConfig::default();
@@ -41,14 +45,14 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     let mut builder = Settings::new(&mut wtxn, &index, &config);
 
     builder.set_criteria(criteria.to_vec());
-    builder.set_filterable_fields(hashset! {
-        S("tag"),
-        S("asc_desc_rank"),
-        S("_geo"),
-        S("opt1"),
-        S("opt1.opt2"),
-        S("tag_in")
-    });
+    builder.set_filterable_fields(vec![
+        FilterableAttributesRule::Field(S("tag")),
+        FilterableAttributesRule::Field(S("asc_desc_rank")),
+        FilterableAttributesRule::Field(S("_geo")),
+        FilterableAttributesRule::Field(S("opt1")),
+        FilterableAttributesRule::Field(S("opt1.opt2")),
+        FilterableAttributesRule::Field(S("tag_in")),
+    ]);
     builder.set_sortable_fields(hashset! {
         S("tag"),
         S("asc_desc_rank"),
@@ -71,7 +75,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     let mut new_fields_ids_map = db_fields_ids_map.clone();
 
     let embedders = EmbeddingConfigs::default();
-    let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+    let mut indexer = indexer::DocumentOperation::new();
 
     let mut file = tempfile::tempfile().unwrap();
     file.write_all(CONTENT.as_bytes()).unwrap();
@@ -79,7 +83,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     let payload = unsafe { memmap2::Mmap::map(&file).unwrap() };
 
     // index documents
-    indexer.add_documents(&payload).unwrap();
+    indexer.replace_documents(&payload).unwrap();
 
     let indexer_alloc = Bump::new();
     let (document_changes, operation_stats, primary_key) = indexer
@@ -90,7 +94,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
             None,
             &mut new_fields_ids_map,
             &|| false,
-            &|_progress| (),
+            Progress::default(),
         )
         .unwrap();
 
@@ -101,6 +105,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     indexer::index(
         &mut wtxn,
         &index,
+        &milli::ThreadPoolNoAbortBuilder::new().build().unwrap(),
         config.grenad_parameters(),
         &db_fields_ids_map,
         new_fields_ids_map,
@@ -108,7 +113,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
         &document_changes,
         embedders,
         &|| false,
-        &|_| (),
+        &Progress::default(),
     )
     .unwrap();
 
@@ -237,11 +242,11 @@ fn execute_filter(filter: &str, document: &TestDocument) -> Option<String> {
             id = contains_key_rec(opt1, "opt2").then(|| document.id.clone());
         }
     } else if matches!(filter, "opt1 IS NULL" | "NOT opt1 IS NOT NULL") {
-        id = document.opt1.as_ref().map_or(false, |v| v.is_null()).then(|| document.id.clone());
+        id = document.opt1.as_ref().is_some_and(|v| v.is_null()).then(|| document.id.clone());
     } else if matches!(filter, "NOT opt1 IS NULL" | "opt1 IS NOT NULL") {
-        id = document.opt1.as_ref().map_or(true, |v| !v.is_null()).then(|| document.id.clone());
+        id = document.opt1.as_ref().is_none_or(|v| !v.is_null()).then(|| document.id.clone());
     } else if matches!(filter, "opt1.opt2 IS NULL") {
-        if document.opt1opt2.as_ref().map_or(false, |v| v.is_null()) {
+        if document.opt1opt2.as_ref().is_some_and(|v| v.is_null()) {
             id = Some(document.id.clone());
         } else if let Some(opt1) = &document.opt1 {
             if !opt1.is_null() {
@@ -249,15 +254,11 @@ fn execute_filter(filter: &str, document: &TestDocument) -> Option<String> {
             }
         }
     } else if matches!(filter, "opt1 IS EMPTY" | "NOT opt1 IS NOT EMPTY") {
-        id = document.opt1.as_ref().map_or(false, is_empty_value).then(|| document.id.clone());
+        id = document.opt1.as_ref().is_some_and(is_empty_value).then(|| document.id.clone());
     } else if matches!(filter, "NOT opt1 IS EMPTY" | "opt1 IS NOT EMPTY") {
-        id = document
-            .opt1
-            .as_ref()
-            .map_or(true, |v| !is_empty_value(v))
-            .then(|| document.id.clone());
+        id = document.opt1.as_ref().is_none_or(|v| !is_empty_value(v)).then(|| document.id.clone());
     } else if matches!(filter, "opt1.opt2 IS EMPTY") {
-        if document.opt1opt2.as_ref().map_or(false, is_empty_value) {
+        if document.opt1opt2.as_ref().is_some_and(is_empty_value) {
             id = Some(document.id.clone());
         }
     } else if matches!(

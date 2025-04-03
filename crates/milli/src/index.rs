@@ -1,38 +1,42 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::convert::TryInto;
 use std::fs::File;
 use std::path::Path;
 
-use heed::types::*;
+use heed::{types::*, WithoutTls};
 use heed::{CompactionOption, Database, RoTxn, RwTxn, Unspecified};
 use roaring::RoaringBitmap;
 use rstar::RTree;
 use serde::{Deserialize, Serialize};
 
+use crate::constants::{self, RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME};
+use crate::database_stats::DatabaseStats;
 use crate::documents::PrimaryKey;
 use crate::error::{InternalError, UserError};
+use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
 use crate::fields_ids_map::FieldsIdsMap;
 use crate::heed_codec::facet::{
     FacetGroupKeyCodec, FacetGroupValueCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec,
     FieldIdCodec, OrderedF64Codec,
 };
+use crate::heed_codec::version::VersionCodec;
 use crate::heed_codec::{BEU16StrCodec, FstSetCodec, StrBEU16Codec, StrRefCodec};
 use crate::order_by_map::OrderByMap;
 use crate::proximity::ProximityPrecision;
-use crate::vector::parsed_vectors::RESERVED_VECTORS_FIELD_NAME;
-use crate::vector::{ArroyWrapper, Embedding, EmbeddingConfig};
+use crate::vector::{ArroyStats, ArroyWrapper, Embedding, EmbeddingConfig};
 use crate::{
     default_criteria, CboRoaringBitmapCodec, Criterion, DocumentId, ExternalDocumentsIds,
     FacetDistribution, FieldDistribution, FieldId, FieldIdMapMissingEntry, FieldIdWordCountCodec,
-    FieldidsWeightsMap, GeoPoint, LocalizedAttributesRule, ObkvCodec, Result, RoaringBitmapCodec,
-    RoaringBitmapLenCodec, Search, U8StrStrCodec, Weight, BEU16, BEU32, BEU64,
+    FieldidsWeightsMap, FilterableAttributesRule, GeoPoint, LocalizedAttributesRule, ObkvCodec,
+    Result, RoaringBitmapCodec, RoaringBitmapLenCodec, Search, U8StrStrCodec, Weight, BEU16, BEU32,
+    BEU64,
 };
 
 pub const DEFAULT_MIN_WORD_LEN_ONE_TYPO: u8 = 5;
 pub const DEFAULT_MIN_WORD_LEN_TWO_TYPOS: u8 = 9;
 
 pub mod main_key {
+    pub const VERSION_KEY: &str = "version";
     pub const CRITERIA_KEY: &str = "criteria";
     pub const DISPLAYED_FIELDS_KEY: &str = "displayed-fields";
     pub const DISTINCT_FIELD_KEY: &str = "distinct-field-key";
@@ -70,6 +74,9 @@ pub mod main_key {
     pub const EMBEDDING_CONFIGS: &str = "embedding_configs";
     pub const SEARCH_CUTOFF: &str = "search_cutoff";
     pub const LOCALIZED_ATTRIBUTES_RULES: &str = "localized_attributes_rules";
+    pub const FACET_SEARCH: &str = "facet_search";
+    pub const PREFIX_SEARCH: &str = "prefix_search";
+    pub const DOCUMENTS_STATS: &str = "documents_stats";
 }
 
 pub mod db_name {
@@ -103,7 +110,7 @@ pub mod db_name {
 #[derive(Clone)]
 pub struct Index {
     /// The LMDB environment which this index is associated with.
-    pub(crate) env: heed::Env,
+    pub(crate) env: heed::Env<WithoutTls>,
 
     /// Contains many different types (e.g. the fields ids map).
     pub(crate) main: Database<Unspecified, Unspecified>,
@@ -170,10 +177,11 @@ pub struct Index {
 
 impl Index {
     pub fn new_with_creation_dates<P: AsRef<Path>>(
-        mut options: heed::EnvOpenOptions,
+        mut options: heed::EnvOpenOptions<WithoutTls>,
         path: P,
         created_at: time::OffsetDateTime,
         updated_at: time::OffsetDateTime,
+        creation: bool,
     ) -> Result<Index> {
         use db_name::*;
 
@@ -221,12 +229,9 @@ impl Index {
         let vector_arroy = env.create_database(&mut wtxn, Some(VECTOR_ARROY))?;
 
         let documents = env.create_database(&mut wtxn, Some(DOCUMENTS))?;
-        wtxn.commit()?;
 
-        Index::set_creation_dates(&env, main, created_at, updated_at)?;
-
-        Ok(Index {
-            env,
+        let this = Index {
+            env: env.clone(),
             main,
             external_documents_ids,
             word_docids,
@@ -251,16 +256,35 @@ impl Index {
             vector_arroy,
             embedder_category_id,
             documents,
-        })
+        };
+        if this.get_version(&wtxn)?.is_none() && creation {
+            this.put_version(
+                &mut wtxn,
+                (
+                    constants::VERSION_MAJOR.parse().unwrap(),
+                    constants::VERSION_MINOR.parse().unwrap(),
+                    constants::VERSION_PATCH.parse().unwrap(),
+                ),
+            )?;
+        }
+        wtxn.commit()?;
+
+        Index::set_creation_dates(&this.env, this.main, created_at, updated_at)?;
+
+        Ok(this)
     }
 
-    pub fn new<P: AsRef<Path>>(options: heed::EnvOpenOptions, path: P) -> Result<Index> {
+    pub fn new<P: AsRef<Path>>(
+        options: heed::EnvOpenOptions<WithoutTls>,
+        path: P,
+        creation: bool,
+    ) -> Result<Index> {
         let now = time::OffsetDateTime::now_utc();
-        Self::new_with_creation_dates(options, path, now, now)
+        Self::new_with_creation_dates(options, path, now, now, creation)
     }
 
     fn set_creation_dates(
-        env: &heed::Env,
+        env: &heed::Env<WithoutTls>,
         main: Database<Unspecified, Unspecified>,
         created_at: time::OffsetDateTime,
         updated_at: time::OffsetDateTime,
@@ -282,12 +306,12 @@ impl Index {
     }
 
     /// Create a read transaction to be able to read the index.
-    pub fn read_txn(&self) -> heed::Result<RoTxn<'_>> {
+    pub fn read_txn(&self) -> heed::Result<RoTxn<'_, WithoutTls>> {
         self.env.read_txn()
     }
 
     /// Create a static read transaction to be able to read the index without keeping a reference to it.
-    pub fn static_read_txn(&self) -> heed::Result<RoTxn<'static>> {
+    pub fn static_read_txn(&self) -> heed::Result<RoTxn<'static, WithoutTls>> {
         self.env.clone().static_read_txn()
     }
 
@@ -316,8 +340,12 @@ impl Index {
         self.env.info().map_size
     }
 
-    pub fn copy_to_file<P: AsRef<Path>>(&self, path: P, option: CompactionOption) -> Result<File> {
-        self.env.copy_to_file(path, option).map_err(Into::into)
+    pub fn copy_to_file(&self, file: &mut File, option: CompactionOption) -> Result<()> {
+        self.env.copy_to_file(file, option).map_err(Into::into)
+    }
+
+    pub fn copy_to_path<P: AsRef<Path>>(&self, path: P, option: CompactionOption) -> Result<File> {
+        self.env.copy_to_path(path, option).map_err(Into::into)
     }
 
     /// Returns an `EnvClosingEvent` that can be used to wait for the closing event,
@@ -327,6 +355,26 @@ impl Index {
     /// when all references are dropped, the last one will eventually close the environment.
     pub fn prepare_for_closing(self) -> heed::EnvClosingEvent {
         self.env.prepare_for_closing()
+    }
+
+    /* version */
+
+    /// Writes the version of the database.
+    pub(crate) fn put_version(
+        &self,
+        wtxn: &mut RwTxn<'_>,
+        (major, minor, patch): (u32, u32, u32),
+    ) -> heed::Result<()> {
+        self.main.remap_types::<Str, VersionCodec>().put(
+            wtxn,
+            main_key::VERSION_KEY,
+            &(major, minor, patch),
+        )
+    }
+
+    /// Get the version of the database. `None` if it was never set.
+    pub(crate) fn get_version(&self, rtxn: &RoTxn<'_>) -> heed::Result<Option<(u32, u32, u32)>> {
+        self.main.remap_types::<Str, VersionCodec>().get(rtxn, main_key::VERSION_KEY)
     }
 
     /* documents ids */
@@ -360,6 +408,58 @@ impl Index {
             .remap_types::<Str, RoaringBitmapLenCodec>()
             .get(rtxn, main_key::DOCUMENTS_IDS_KEY)?;
         Ok(count.unwrap_or_default())
+    }
+
+    /// Updates the stats of the documents database based on the previous stats and the modified docids.
+    pub fn update_documents_stats(
+        &self,
+        wtxn: &mut RwTxn<'_>,
+        modified_docids: roaring::RoaringBitmap,
+    ) -> Result<()> {
+        let before_rtxn = self.read_txn()?;
+        let document_stats = match self.documents_stats(&before_rtxn)? {
+            Some(before_stats) => DatabaseStats::recompute(
+                before_stats,
+                self.documents.remap_types(),
+                &before_rtxn,
+                wtxn,
+                modified_docids.iter().map(|docid| docid.to_be_bytes()),
+            )?,
+            None => {
+                // This should never happen when there are already documents in the index, the documents stats should be present.
+                // If it happens, it means that the index was not properly initialized/upgraded.
+                debug_assert_eq!(
+                    self.documents.len(&before_rtxn)?,
+                    0,
+                    "The documents stats should be present when there are documents in the index"
+                );
+                tracing::warn!("No documents stats found, creating new ones");
+                DatabaseStats::new(self.documents.remap_types(), &*wtxn)?
+            }
+        };
+
+        self.put_documents_stats(wtxn, document_stats)?;
+        Ok(())
+    }
+
+    /// Writes the stats of the documents database.
+    pub fn put_documents_stats(
+        &self,
+        wtxn: &mut RwTxn<'_>,
+        stats: DatabaseStats,
+    ) -> heed::Result<()> {
+        self.main.remap_types::<Str, SerdeJson<DatabaseStats>>().put(
+            wtxn,
+            main_key::DOCUMENTS_STATS,
+            &stats,
+        )
+    }
+
+    /// Returns the stats of the documents database.
+    pub fn documents_stats(&self, rtxn: &RoTxn<'_>) -> heed::Result<Option<DatabaseStats>> {
+        self.main
+            .remap_types::<Str, SerdeJson<DatabaseStats>>()
+            .get(rtxn, main_key::DOCUMENTS_STATS)
     }
 
     /* primary key */
@@ -418,6 +518,16 @@ impl Index {
             .unwrap_or_default())
     }
 
+    /// Returns the fields ids map with metadata.
+    ///
+    /// This structure is not yet stored in the index, and is generated on the fly.
+    pub fn fields_ids_map_with_metadata(&self, rtxn: &RoTxn<'_>) -> Result<FieldIdMapWithMetadata> {
+        Ok(FieldIdMapWithMetadata::new(
+            self.fields_ids_map(rtxn)?,
+            MetadataBuilder::from_index(self, rtxn)?,
+        ))
+    }
+
     /* fieldids weights map */
     // This maps the fields ids to their weights.
     // Their weights is defined by the ordering of the searchable attributes.
@@ -451,6 +561,17 @@ impl Index {
     /// Delete the fieldsids weights map
     pub fn delete_fieldids_weights_map(&self, wtxn: &mut RwTxn<'_>) -> heed::Result<bool> {
         self.main.remap_key_type::<Str>().delete(wtxn, main_key::FIELDIDS_WEIGHTS_MAP_KEY)
+    }
+
+    pub fn max_searchable_attribute_weight(&self, rtxn: &RoTxn<'_>) -> Result<Option<Weight>> {
+        let user_defined_searchable_fields = self.user_defined_searchable_fields(rtxn)?;
+        if let Some(user_defined_searchable_fields) = user_defined_searchable_fields {
+            if !user_defined_searchable_fields.contains(&"*") {
+                return Ok(Some(user_defined_searchable_fields.len().saturating_sub(1) as Weight));
+            }
+        }
+
+        Ok(None)
     }
 
     pub fn searchable_fields_and_weights<'a>(
@@ -643,8 +764,7 @@ impl Index {
         &self,
         wtxn: &mut RwTxn<'_>,
         user_fields: &[&str],
-        non_searchable_fields_ids: &[FieldId],
-        fields_ids_map: &FieldsIdsMap,
+        fields_ids_map: &FieldIdMapWithMetadata,
     ) -> Result<()> {
         // We can write the user defined searchable fields as-is.
         self.put_user_defined_searchable_fields(wtxn, user_fields)?;
@@ -652,29 +772,17 @@ impl Index {
         let mut weights = FieldidsWeightsMap::default();
 
         // Now we generate the real searchable fields:
-        // 1. Take the user defined searchable fields as-is to keep the priority defined by the attributes criterion.
-        // 2. Iterate over the user defined searchable fields.
-        // 3. If a user defined field is a subset of a field defined in the fields_ids_map
-        // (ie doggo.name is a subset of doggo) right after doggo and with the same weight.
         let mut real_fields = Vec::new();
-
-        for (id, field_from_map) in fields_ids_map.iter() {
-            for (weight, user_field) in user_fields.iter().enumerate() {
-                if crate::is_faceted_by(field_from_map, user_field)
-                    && !real_fields.contains(&field_from_map)
-                    && !non_searchable_fields_ids.contains(&id)
-                {
-                    real_fields.push(field_from_map);
-
-                    let weight: u16 =
-                        weight.try_into().map_err(|_| UserError::AttributeLimitReached)?;
-                    weights.insert(id, weight);
-                }
+        for (id, field_from_map, metadata) in fields_ids_map.iter() {
+            if let Some(weight) = metadata.searchable_weight() {
+                real_fields.push(field_from_map);
+                weights.insert(id, weight);
             }
         }
 
         self.put_searchable_fields(wtxn, &real_fields)?;
         self.put_fieldids_weights_map(wtxn, &weights)?;
+
         Ok(())
     }
 
@@ -781,46 +889,37 @@ impl Index {
 
     /* filterable fields */
 
-    /// Writes the filterable fields names in the database.
-    pub(crate) fn put_filterable_fields(
+    /// Writes the filterable attributes rules in the database.
+    pub(crate) fn put_filterable_attributes_rules(
         &self,
         wtxn: &mut RwTxn<'_>,
-        fields: &HashSet<String>,
+        fields: &[FilterableAttributesRule],
     ) -> heed::Result<()> {
         self.main.remap_types::<Str, SerdeJson<_>>().put(
             wtxn,
             main_key::FILTERABLE_FIELDS_KEY,
-            fields,
+            &fields,
         )
     }
 
-    /// Deletes the filterable fields ids in the database.
-    pub(crate) fn delete_filterable_fields(&self, wtxn: &mut RwTxn<'_>) -> heed::Result<bool> {
+    /// Deletes the filterable attributes rules in the database.
+    pub(crate) fn delete_filterable_attributes_rules(
+        &self,
+        wtxn: &mut RwTxn<'_>,
+    ) -> heed::Result<bool> {
         self.main.remap_key_type::<Str>().delete(wtxn, main_key::FILTERABLE_FIELDS_KEY)
     }
 
-    /// Returns the filterable fields names.
-    pub fn filterable_fields(&self, rtxn: &RoTxn<'_>) -> heed::Result<HashSet<String>> {
+    /// Returns the filterable attributes rules.
+    pub fn filterable_attributes_rules(
+        &self,
+        rtxn: &RoTxn<'_>,
+    ) -> heed::Result<Vec<FilterableAttributesRule>> {
         Ok(self
             .main
             .remap_types::<Str, SerdeJson<_>>()
             .get(rtxn, main_key::FILTERABLE_FIELDS_KEY)?
             .unwrap_or_default())
-    }
-
-    /// Identical to `filterable_fields`, but returns ids instead.
-    pub fn filterable_fields_ids(&self, rtxn: &RoTxn<'_>) -> Result<HashSet<FieldId>> {
-        let fields = self.filterable_fields(rtxn)?;
-        let fields_ids_map = self.fields_ids_map(rtxn)?;
-
-        let mut fields_ids = HashSet::new();
-        for name in fields {
-            if let Some(field_id) = fields_ids_map.id(&name) {
-                fields_ids.insert(field_id);
-            }
-        }
-
-        Ok(fields_ids)
     }
 
     /* sortable fields */
@@ -859,83 +958,37 @@ impl Index {
         Ok(fields.into_iter().filter_map(|name| fields_ids_map.id(&name)).collect())
     }
 
-    /* faceted fields */
-
-    /// Writes the faceted fields in the database.
-    pub(crate) fn put_faceted_fields(
-        &self,
-        wtxn: &mut RwTxn<'_>,
-        fields: &HashSet<String>,
-    ) -> heed::Result<()> {
-        self.main.remap_types::<Str, SerdeJson<_>>().put(
-            wtxn,
-            main_key::HIDDEN_FACETED_FIELDS_KEY,
-            fields,
-        )
+    /// Returns true if the geo feature is enabled.
+    pub fn is_geo_enabled(&self, rtxn: &RoTxn<'_>) -> Result<bool> {
+        let geo_filter = self.is_geo_filtering_enabled(rtxn)?;
+        let geo_sortable = self.is_geo_sorting_enabled(rtxn)?;
+        Ok(geo_filter || geo_sortable)
     }
 
-    /// Returns the faceted fields names.
-    pub fn faceted_fields(&self, rtxn: &RoTxn<'_>) -> heed::Result<HashSet<String>> {
-        Ok(self
-            .main
-            .remap_types::<Str, SerdeJson<_>>()
-            .get(rtxn, main_key::HIDDEN_FACETED_FIELDS_KEY)?
-            .unwrap_or_default())
+    /// Returns true if the geo sorting feature is enabled.
+    pub fn is_geo_sorting_enabled(&self, rtxn: &RoTxn<'_>) -> Result<bool> {
+        let geo_sortable = self.sortable_fields(rtxn)?.contains(RESERVED_GEO_FIELD_NAME);
+        Ok(geo_sortable)
     }
 
-    /// Identical to `faceted_fields`, but returns ids instead.
-    pub fn faceted_fields_ids(&self, rtxn: &RoTxn<'_>) -> Result<HashSet<FieldId>> {
-        let fields = self.faceted_fields(rtxn)?;
-        let fields_ids_map = self.fields_ids_map(rtxn)?;
-
-        let mut fields_ids = HashSet::new();
-        for name in fields {
-            if let Some(field_id) = fields_ids_map.id(&name) {
-                fields_ids.insert(field_id);
-            }
-        }
-
-        Ok(fields_ids)
+    /// Returns true if the geo filtering feature is enabled.
+    pub fn is_geo_filtering_enabled(&self, rtxn: &RoTxn<'_>) -> Result<bool> {
+        let geo_filter =
+            self.filterable_attributes_rules(rtxn)?.iter().any(|field| field.has_geo());
+        Ok(geo_filter)
     }
 
-    /* faceted documents ids */
-
-    /// Returns the user defined faceted fields names.
-    ///
-    /// The user faceted fields are the union of all the filterable, sortable, distinct, and Asc/Desc fields.
-    pub fn user_defined_faceted_fields(&self, rtxn: &RoTxn<'_>) -> Result<HashSet<String>> {
-        let filterable_fields = self.filterable_fields(rtxn)?;
-        let sortable_fields = self.sortable_fields(rtxn)?;
-        let distinct_field = self.distinct_field(rtxn)?;
-        let asc_desc_fields =
-            self.criteria(rtxn)?.into_iter().filter_map(|criterion| match criterion {
+    pub fn asc_desc_fields(&self, rtxn: &RoTxn<'_>) -> Result<HashSet<String>> {
+        let asc_desc_fields = self
+            .criteria(rtxn)?
+            .into_iter()
+            .filter_map(|criterion| match criterion {
                 Criterion::Asc(field) | Criterion::Desc(field) => Some(field),
                 _otherwise => None,
-            });
+            })
+            .collect();
 
-        let mut faceted_fields = filterable_fields;
-        faceted_fields.extend(sortable_fields);
-        faceted_fields.extend(asc_desc_fields);
-        if let Some(field) = distinct_field {
-            faceted_fields.insert(field.to_owned());
-        }
-
-        Ok(faceted_fields)
-    }
-
-    /// Identical to `user_defined_faceted_fields`, but returns ids instead.
-    pub fn user_defined_faceted_fields_ids(&self, rtxn: &RoTxn<'_>) -> Result<HashSet<FieldId>> {
-        let fields = self.user_defined_faceted_fields(rtxn)?;
-        let fields_ids_map = self.fields_ids_map(rtxn)?;
-
-        let mut fields_ids = HashSet::new();
-        for name in fields {
-            if let Some(field_id) = fields_ids_map.id(&name) {
-                fields_ids.insert(field_id);
-            }
-        }
-
-        Ok(fields_ids)
+        Ok(asc_desc_fields)
     }
 
     /* faceted documents ids */
@@ -1231,6 +1284,10 @@ impl Index {
             main_key::WORDS_PREFIXES_FST_KEY,
             fst.as_fst().as_bytes(),
         )
+    }
+
+    pub(crate) fn delete_words_prefixes_fst(&self, wtxn: &mut RwTxn<'_>) -> heed::Result<bool> {
+        self.main.remap_key_type::<Str>().delete(wtxn, main_key::WORDS_PREFIXES_FST_KEY)
     }
 
     /// Returns the FST which is the words prefixes dictionary of the engine.
@@ -1562,6 +1619,41 @@ impl Index {
         self.main.remap_key_type::<Str>().delete(txn, main_key::PROXIMITY_PRECISION)
     }
 
+    pub fn prefix_search(&self, txn: &RoTxn<'_>) -> heed::Result<Option<PrefixSearch>> {
+        self.main.remap_types::<Str, SerdeBincode<PrefixSearch>>().get(txn, main_key::PREFIX_SEARCH)
+    }
+
+    pub(crate) fn put_prefix_search(
+        &self,
+        txn: &mut RwTxn<'_>,
+        val: PrefixSearch,
+    ) -> heed::Result<()> {
+        self.main.remap_types::<Str, SerdeBincode<PrefixSearch>>().put(
+            txn,
+            main_key::PREFIX_SEARCH,
+            &val,
+        )
+    }
+
+    pub(crate) fn delete_prefix_search(&self, txn: &mut RwTxn<'_>) -> heed::Result<bool> {
+        self.main.remap_key_type::<Str>().delete(txn, main_key::PREFIX_SEARCH)
+    }
+
+    pub fn facet_search(&self, txn: &RoTxn<'_>) -> heed::Result<bool> {
+        self.main
+            .remap_types::<Str, SerdeBincode<bool>>()
+            .get(txn, main_key::FACET_SEARCH)
+            .map(|v| v.unwrap_or(true))
+    }
+
+    pub(crate) fn put_facet_search(&self, txn: &mut RwTxn<'_>, val: bool) -> heed::Result<()> {
+        self.main.remap_types::<Str, SerdeBincode<bool>>().put(txn, main_key::FACET_SEARCH, &val)
+    }
+
+    pub(crate) fn delete_facet_search(&self, txn: &mut RwTxn<'_>) -> heed::Result<bool> {
+        self.main.remap_key_type::<Str>().delete(txn, main_key::FACET_SEARCH)
+    }
+
     pub fn localized_attributes_rules(
         &self,
         rtxn: &RoTxn<'_>,
@@ -1647,12 +1739,21 @@ impl Index {
         Ok(res)
     }
 
-    pub fn prefix_settings(&self, _rtxn: &RoTxn<'_>) -> Result<PrefixSettings> {
-        Ok(PrefixSettings {
-            compute_prefixes: true,
-            max_prefix_length: 4,
-            prefix_count_threshold: 100,
-        })
+    pub fn prefix_settings(&self, rtxn: &RoTxn<'_>) -> Result<PrefixSettings> {
+        let compute_prefixes = self.prefix_search(rtxn)?.unwrap_or_default();
+        Ok(PrefixSettings { compute_prefixes, max_prefix_length: 4, prefix_count_threshold: 100 })
+    }
+
+    pub fn arroy_stats(&self, rtxn: &RoTxn<'_>) -> Result<ArroyStats> {
+        let mut stats = ArroyStats::default();
+        let embedding_configs = self.embedding_configs(rtxn)?;
+        for config in embedding_configs {
+            let embedder_id = self.embedder_category_id.get(rtxn, &config.name)?.unwrap();
+            let reader =
+                ArroyWrapper::new(self.vector_arroy, embedder_id, config.config.quantized());
+            reader.aggregate_stats(rtxn, &mut stats)?;
+        }
+        Ok(stats)
     }
 }
 
@@ -1665,9 +1766,17 @@ pub struct IndexEmbeddingConfig {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct PrefixSettings {
-    pub prefix_count_threshold: u64,
+    pub prefix_count_threshold: usize,
     pub max_prefix_length: usize,
-    pub compute_prefixes: bool,
+    pub compute_prefixes: PrefixSearch,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum PrefixSearch {
+    #[default]
+    IndexingTime,
+    Disabled,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -1682,12 +1791,14 @@ pub(crate) mod tests {
     use big_s::S;
     use bumpalo::Bump;
     use heed::{EnvOpenOptions, RwTxn};
-    use maplit::{btreemap, hashset};
+    use maplit::btreemap;
     use memmap2::Mmap;
     use tempfile::TempDir;
 
+    use crate::constants::RESERVED_GEO_FIELD_NAME;
     use crate::error::{Error, InternalError};
     use crate::index::{DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS};
+    use crate::progress::Progress;
     use crate::update::new::indexer;
     use crate::update::settings::InnerIndexSettings;
     use crate::update::{
@@ -1696,7 +1807,8 @@ pub(crate) mod tests {
     use crate::vector::settings::{EmbedderSource, EmbeddingSettings};
     use crate::vector::EmbeddingConfigs;
     use crate::{
-        db_snap, obkv_to_json, Filter, Index, Search, SearchResult, ThreadPoolNoAbortBuilder,
+        db_snap, obkv_to_json, Filter, FilterableAttributesRule, Index, Search, SearchResult,
+        ThreadPoolNoAbortBuilder,
     };
 
     pub(crate) struct TempIndex {
@@ -1717,10 +1829,11 @@ pub(crate) mod tests {
     impl TempIndex {
         /// Creates a temporary index
         pub fn new_with_map_size(size: usize) -> Self {
-            let mut options = EnvOpenOptions::new();
+            let options = EnvOpenOptions::new();
+            let mut options = options.read_txn_without_tls();
             options.map_size(size);
             let _tempdir = TempDir::new_in(".").unwrap();
-            let inner = Index::new(options, _tempdir.path()).unwrap();
+            let inner = Index::new(options, _tempdir.path(), true).unwrap();
             let indexer_config = IndexerConfig::default();
             let index_documents_config = IndexDocumentsConfig::default();
             Self { inner, indexer_config, index_documents_config, _tempdir }
@@ -1752,9 +1865,15 @@ pub(crate) mod tests {
 
             let embedders =
                 InnerIndexSettings::from_index(&self.inner, &rtxn, None)?.embedding_configs;
-            let mut indexer =
-                indexer::DocumentOperation::new(self.index_documents_config.update_method);
-            indexer.add_documents(&documents).unwrap();
+            let mut indexer = indexer::DocumentOperation::new();
+            match self.index_documents_config.update_method {
+                IndexDocumentsMethod::ReplaceDocuments => {
+                    indexer.replace_documents(&documents).unwrap()
+                }
+                IndexDocumentsMethod::UpdateDocuments => {
+                    indexer.update_documents(&documents).unwrap()
+                }
+            }
 
             let indexer_alloc = Bump::new();
             let (document_changes, operation_stats, primary_key) = indexer.into_changes(
@@ -1764,7 +1883,7 @@ pub(crate) mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )?;
 
             if let Some(error) = operation_stats.into_iter().find_map(|stat| stat.error) {
@@ -1775,6 +1894,7 @@ pub(crate) mod tests {
                 indexer::index(
                     wtxn,
                     &self.inner,
+                    &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     indexer_config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -1782,7 +1902,7 @@ pub(crate) mod tests {
                     &document_changes,
                     embedders,
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
             })
             .unwrap()?;
@@ -1840,8 +1960,7 @@ pub(crate) mod tests {
             let embedders =
                 InnerIndexSettings::from_index(&self.inner, &rtxn, None)?.embedding_configs;
 
-            let mut indexer =
-                indexer::DocumentOperation::new(self.index_documents_config.update_method);
+            let mut indexer = indexer::DocumentOperation::new();
             let external_document_ids: Vec<_> =
                 external_document_ids.iter().map(AsRef::as_ref).collect();
             indexer.delete_documents(external_document_ids.as_slice());
@@ -1854,7 +1973,7 @@ pub(crate) mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )?;
 
             if let Some(error) = operation_stats.into_iter().find_map(|stat| stat.error) {
@@ -1865,6 +1984,7 @@ pub(crate) mod tests {
                 indexer::index(
                     wtxn,
                     &self.inner,
+                    &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     indexer_config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -1872,7 +1992,7 @@ pub(crate) mod tests {
                     &document_changes,
                     embedders,
                     &|| false,
-                    &|_| (),
+                    &Progress::default(),
                 )
             })
             .unwrap()?;
@@ -1917,13 +2037,13 @@ pub(crate) mod tests {
         let mut new_fields_ids_map = db_fields_ids_map.clone();
 
         let embedders = EmbeddingConfigs::default();
-        let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+        let mut indexer = indexer::DocumentOperation::new();
         let payload = documents!([
             { "id": 1, "name": "kevin" },
             { "id": 2, "name": "bob", "age": 20 },
             { "id": 2, "name": "bob", "age": 20 },
         ]);
-        indexer.add_documents(&payload).unwrap();
+        indexer.replace_documents(&payload).unwrap();
 
         let indexer_alloc = Bump::new();
         let (document_changes, _operation_stats, primary_key) = indexer
@@ -1934,7 +2054,7 @@ pub(crate) mod tests {
                 None,
                 &mut new_fields_ids_map,
                 &|| false,
-                &|_progress| (),
+                Progress::default(),
             )
             .unwrap();
 
@@ -1945,6 +2065,7 @@ pub(crate) mod tests {
                 indexer::index(
                     &mut wtxn,
                     &index.inner,
+                    &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
                     indexer_config.grenad_parameters(),
                     &db_fields_ids_map,
                     new_fields_ids_map,
@@ -1952,7 +2073,7 @@ pub(crate) mod tests {
                     &document_changes,
                     embedders,
                     &|| should_abort.load(Relaxed),
-                    &|_| (),
+                    &Progress::default(),
                 )
             })
             .unwrap()
@@ -2095,7 +2216,7 @@ pub(crate) mod tests {
         let rtxn = index.read_txn().unwrap();
 
         let real = index.searchable_fields(&rtxn).unwrap();
-        assert_eq!(real, &["doggo", "name"]);
+        assert!(real.is_empty());
         let user_defined = index.user_defined_searchable_fields(&rtxn).unwrap().unwrap();
         assert_eq!(user_defined, &["doggo", "name"]);
 
@@ -2123,16 +2244,18 @@ pub(crate) mod tests {
 
         index
             .update_settings(|settings| {
-                settings.set_filterable_fields(hashset! { S("_geo") });
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
+                    RESERVED_GEO_FIELD_NAME.to_string(),
+                )]);
             })
             .unwrap();
         index
             .add_documents(documents!([
-                { "id": 0, "_geo": { "lat": "0", "lng": "0" } },
-                { "id": 1, "_geo": { "lat": 0, "lng": "-175" } },
-                { "id": 2, "_geo": { "lat": "0", "lng": 175 } },
-                { "id": 3, "_geo": { "lat": 85, "lng": 0 } },
-                { "id": 4, "_geo": { "lat": "-85", "lng": "0" } },
+                { "id": 0, RESERVED_GEO_FIELD_NAME: { "lat": "0", "lng": "0" } },
+                { "id": 1, RESERVED_GEO_FIELD_NAME: { "lat": 0, "lng": "-175" } },
+                { "id": 2, RESERVED_GEO_FIELD_NAME: { "lat": "0", "lng": 175 } },
+                { "id": 3, RESERVED_GEO_FIELD_NAME: { "lat": 85, "lng": 0 } },
+                { "id": 4, RESERVED_GEO_FIELD_NAME: { "lat": "-85", "lng": "0" } },
             ]))
             .unwrap();
 
@@ -2231,7 +2354,9 @@ pub(crate) mod tests {
 
         index
             .update_settings(|settings| {
-                settings.set_filterable_fields(hashset! { S("doggo") });
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
+                    "doggo".to_string(),
+                )]);
             })
             .unwrap();
         index
@@ -2268,15 +2393,14 @@ pub(crate) mod tests {
 
     #[test]
     fn replace_documents_external_ids_and_soft_deletion_check() {
-        use big_s::S;
-        use maplit::hashset;
-
         let index = TempIndex::new();
 
         index
             .update_settings(|settings| {
                 settings.set_primary_key("id".to_owned());
-                settings.set_filterable_fields(hashset! { S("doggo") });
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
+                    "doggo".to_string(),
+                )]);
             })
             .unwrap();
 
@@ -2809,25 +2933,36 @@ pub(crate) mod tests {
         index
             .update_settings(|settings| {
                 settings.set_primary_key("id".to_string());
-                settings.set_filterable_fields(HashSet::from(["_geo".to_string()]));
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
+                    RESERVED_GEO_FIELD_NAME.to_string(),
+                )]);
             })
             .unwrap();
 
         // happy path
-        index.add_documents(documents!({ "id" : 5, "_geo": {"lat": 12.0, "lng": 11.0}})).unwrap();
+        index
+            .add_documents(
+                documents!({ "id" : 5, RESERVED_GEO_FIELD_NAME: {"lat": 12.0, "lng": 11.0}}),
+            )
+            .unwrap();
 
         db_snap!(index, geo_faceted_documents_ids);
 
         // both are unparseable, we expect GeoError::BadLatitudeAndLongitude
         let err1 = index
             .add_documents(
-                documents!({ "id" : 6, "_geo": {"lat": "unparseable", "lng": "unparseable"}}),
+                documents!({ "id" : 6, RESERVED_GEO_FIELD_NAME: {"lat": "unparseable", "lng": "unparseable"}}),
             )
             .unwrap_err();
-        assert!(matches!(
-            err1,
-            Error::UserError(UserError::InvalidGeoField(GeoError::BadLatitudeAndLongitude { .. }))
-        ));
+        match err1 {
+            Error::UserError(UserError::InvalidGeoField(err)) => match *err {
+                GeoError::BadLatitudeAndLongitude { .. } => (),
+                otherwise => {
+                    panic!("err1 is not a BadLatitudeAndLongitude error but rather a {otherwise:?}")
+                }
+            },
+            _ => panic!("err1 is not a BadLatitudeAndLongitude error but rather a {err1:?}"),
+        }
 
         db_snap!(index, geo_faceted_documents_ids); // ensure that no more document was inserted
     }
@@ -2839,13 +2974,15 @@ pub(crate) mod tests {
         index
             .update_settings(|settings| {
                 settings.set_primary_key("id".to_string());
-                settings.set_filterable_fields(HashSet::from(["_geo".to_string()]));
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
+                    RESERVED_GEO_FIELD_NAME.to_string(),
+                )]);
             })
             .unwrap();
 
         let err = index
             .add_documents(
-                documents!({ "id" : "doggo", "_geo": { "lat": 1, "lng": 2, "doggo": "are the best" }}),
+                documents!({ "id" : "doggo", RESERVED_GEO_FIELD_NAME: { "lat": 1, "lng": 2, "doggo": "are the best" }}),
             )
             .unwrap_err();
         insta::assert_snapshot!(err, @r###"The `_geo` field in the document with the id: `"doggo"` contains the following unexpected fields: `{"doggo":"are the best"}`."###);
@@ -2855,7 +2992,7 @@ pub(crate) mod tests {
         // multiple fields and complex values
         let err = index
             .add_documents(
-                documents!({ "id" : "doggo", "_geo": { "lat": 1, "lng": 2, "doggo": "are the best", "and": { "all": ["cats", { "are": "beautiful" } ] } } }),
+                documents!({ "id" : "doggo", RESERVED_GEO_FIELD_NAME: { "lat": 1, "lng": 2, "doggo": "are the best", "and": { "all": ["cats", { "are": "beautiful" } ] } } }),
             )
             .unwrap_err();
         insta::assert_snapshot!(err, @r###"The `_geo` field in the document with the id: `"doggo"` contains the following unexpected fields: `{"and":{"all":["cats",{"are":"beautiful"}]},"doggo":"are the best"}`."###);
@@ -2872,7 +3009,9 @@ pub(crate) mod tests {
         index
             .update_settings(|settings| {
                 settings.set_searchable_fields(vec![S("name")]);
-                settings.set_filterable_fields(HashSet::from([S("age")]));
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
+                    "age".to_string(),
+                )]);
             })
             .unwrap();
 
@@ -2880,35 +3019,37 @@ pub(crate) mod tests {
             .add_documents(documents!({ "id": 1, "name": "Many", "age": 28, "realName": "Maxime" }))
             .unwrap();
         db_snap!(index, fields_ids_map, @r###"
-        0   name             |
-        1   id               |
+        0   id               |
+        1   name             |
         2   age              |
         3   realName         |
         "###);
         db_snap!(index, searchable_fields, @r###"["name"]"###);
         db_snap!(index, fieldids_weights_map, @r###"
         fid weight
-        0   0   |
+        1   0   |
         "###);
 
         index
             .update_settings(|settings| {
                 settings.set_searchable_fields(vec![S("name"), S("realName")]);
-                settings.set_filterable_fields(HashSet::from([S("age")]));
+                settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
+                    "age".to_string(),
+                )]);
             })
             .unwrap();
 
         // The order of the field id map shouldn't change
         db_snap!(index, fields_ids_map, @r###"
-        0   name             |
-        1   id               |
+        0   id               |
+        1   name             |
         2   age              |
         3   realName         |
         "###);
         db_snap!(index, searchable_fields, @r###"["name", "realName"]"###);
         db_snap!(index, fieldids_weights_map, @r###"
         fid weight
-        0   0   |
+        1   0   |
         3   1   |
         "###);
     }
@@ -2993,14 +3134,16 @@ pub(crate) mod tests {
         index
             .update_settings(|settings| {
                 settings.set_searchable_fields(vec![S("_vectors"), S("_vectors.doggo")]);
-                settings.set_filterable_fields(hashset![S("_vectors"), S("_vectors.doggo")]);
+                settings.set_filterable_fields(vec![
+                    FilterableAttributesRule::Field("_vectors".to_string()),
+                    FilterableAttributesRule::Field("_vectors.doggo".to_string()),
+                ]);
             })
             .unwrap();
 
         db_snap!(index, fields_ids_map, @r###"
         0   id               |
         1   _vectors         |
-        2   _vectors.doggo   |
         "###);
         db_snap!(index, searchable_fields, @"[]");
         db_snap!(index, fieldids_weights_map, @r###"
@@ -3033,7 +3176,6 @@ pub(crate) mod tests {
         db_snap!(index, fields_ids_map, @r###"
         0   id               |
         1   _vectors         |
-        2   _vectors.doggo   |
         "###);
         db_snap!(index, searchable_fields, @"[]");
         db_snap!(index, fieldids_weights_map, @r###"

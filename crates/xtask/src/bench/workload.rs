@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::{Seek as _, Write as _};
+use std::path::Path;
 
 use anyhow::{bail, Context as _};
 use futures_util::TryStreamExt as _;
@@ -85,13 +86,13 @@ pub async fn execute(
     master_key: Option<&str>,
     workload: Workload,
     args: &BenchDeriveArgs,
+    binary_path: Option<&Path>,
 ) -> anyhow::Result<()> {
     assets::fetch_assets(assets_client, &workload.assets, &args.asset_folder).await?;
 
     let workload_uuid = dashboard_client.create_workload(invocation_uuid, &workload).await?;
 
     let mut tasks = Vec::new();
-
     for i in 0..workload.run_count {
         tasks.push(
             execute_run(
@@ -102,6 +103,7 @@ pub async fn execute(
                 master_key,
                 &workload,
                 args,
+                binary_path,
                 i,
             )
             .await?,
@@ -109,7 +111,6 @@ pub async fn execute(
     }
 
     let mut reports = Vec::with_capacity(workload.run_count as usize);
-
     for task in tasks {
         reports.push(
             task.await
@@ -133,13 +134,31 @@ async fn execute_run(
     master_key: Option<&str>,
     workload: &Workload,
     args: &BenchDeriveArgs,
+    binary_path: Option<&Path>,
     run_number: u16,
 ) -> anyhow::Result<tokio::task::JoinHandle<anyhow::Result<std::fs::File>>> {
     meili_process::delete_db();
 
-    meili_process::build().await?;
+    let run_command = match binary_path {
+        Some(binary_path) => tokio::process::Command::new(binary_path),
+        None => {
+            meili_process::build().await?;
+            let mut command = tokio::process::Command::new("cargo");
+            command
+                .arg("run")
+                .arg("--release")
+                .arg("-p")
+                .arg("meilisearch")
+                .arg("--bin")
+                .arg("meilisearch")
+                .arg("--");
+            command
+        }
+    };
+
     let meilisearch =
-        meili_process::start(meili_client, master_key, workload, &args.asset_folder).await?;
+        meili_process::start(meili_client, master_key, workload, &args.asset_folder, run_command)
+            .await?;
 
     let processor = run_commands(
         dashboard_client,

@@ -49,17 +49,6 @@ static DOCUMENTS: Lazy<Value> = Lazy::new(|| {
 async fn basic() {
     let server = Server::new().await;
     let index = server.index("test");
-    let (value, code) = server.set_features(json!({"vectorStore": true})).await;
-    snapshot!(code, @"200 OK");
-    snapshot!(value, @r###"
-    {
-      "vectorStore": true,
-      "metrics": false,
-      "logsRoute": false,
-      "editDocumentsByFunction": false,
-      "containsFilter": false
-    }
-    "###);
 
     let (response, code) = index
         .update_settings(json!({
@@ -77,7 +66,7 @@ async fn basic() {
     let documents = DOCUMENTS.clone();
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     index
         .similar(
@@ -246,17 +235,6 @@ async fn basic() {
 async fn ranking_score_threshold() {
     let server = Server::new().await;
     let index = server.index("test");
-    let (value, code) = server.set_features(json!({"vectorStore": true})).await;
-    snapshot!(code, @"200 OK");
-    snapshot!(value, @r###"
-    {
-      "vectorStore": true,
-      "metrics": false,
-      "logsRoute": false,
-      "editDocumentsByFunction": false,
-      "containsFilter": false
-    }
-    "###);
 
     let (response, code) = index
         .update_settings(json!({
@@ -274,7 +252,7 @@ async fn ranking_score_threshold() {
     let documents = DOCUMENTS.clone();
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     index
         .similar(
@@ -527,17 +505,6 @@ async fn ranking_score_threshold() {
 async fn filter() {
     let server = Server::new().await;
     let index = server.index("test");
-    let (value, code) = server.set_features(json!({"vectorStore": true})).await;
-    snapshot!(code, @"200 OK");
-    snapshot!(value, @r###"
-    {
-      "vectorStore": true,
-      "metrics": false,
-      "logsRoute": false,
-      "editDocumentsByFunction": false,
-      "containsFilter": false
-    }
-    "###);
 
     let (response, code) = index
         .update_settings(json!({
@@ -555,7 +522,7 @@ async fn filter() {
     let documents = DOCUMENTS.clone();
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     index
         .similar(
@@ -656,17 +623,6 @@ async fn filter() {
 async fn limit_and_offset() {
     let server = Server::new().await;
     let index = server.index("test");
-    let (value, code) = server.set_features(json!({"vectorStore": true})).await;
-    snapshot!(code, @"200 OK");
-    snapshot!(value, @r###"
-    {
-      "vectorStore": true,
-      "metrics": false,
-      "logsRoute": false,
-      "editDocumentsByFunction": false,
-      "containsFilter": false
-    }
-    "###);
 
     let (response, code) = index
         .update_settings(json!({
@@ -684,7 +640,7 @@ async fn limit_and_offset() {
     let documents = DOCUMENTS.clone();
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     index
         .similar(

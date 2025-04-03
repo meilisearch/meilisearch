@@ -22,7 +22,7 @@ members = [
 ]
 
 [workspace.package]
-version = "1.12.0"
+version = "1.14.0"
 authors = [
     "Quentin de Quelen <quentin@dequelen.me>",
     "Clément Renault <clement@meilisearch.com>",
@@ -36,6 +36,12 @@ license = "MIT"
 [profile.release]
 codegen-units = 1
 
+# We now compile heed without the NDEBUG define for better performance.
+# However, we still enable debug assertions for a better detection of
+# disk corruption on the cloud or in OSS.
+[profile.release.package.heed]
+debug-assertions = true
+
 [profile.dev.package.flate2]
 opt-level = 3
 
@@ -43,6 +49,3 @@ opt-level = 3
 opt-level = 3
 [profile.dev.package.roaring]
 opt-level = 3
-
-[patch.crates-io]
-roaring = { git = "https://github.com/RoaringBitmap/roaring-rs", branch = "clone-iter-slice" }

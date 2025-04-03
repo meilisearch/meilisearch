@@ -56,7 +56,7 @@ async fn perform_snapshot() {
     let (task, code) = server.index("test1").create(Some("prim")).await;
     meili_snap::snapshot!(code, @"202 Accepted");
 
-    index.wait_task(task.uid()).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     // wait for the _next task_ to process, aka the snapshot that should be enqueued at some point
 
@@ -111,6 +111,7 @@ async fn perform_snapshot() {
 }
 
 #[actix_rt::test]
+#[cfg_attr(target_os = "windows", ignore)]
 async fn perform_on_demand_snapshot() {
     let temp = tempfile::tempdir().unwrap();
     let snapshot_dir = tempfile::tempdir().unwrap();
@@ -129,11 +130,11 @@ async fn perform_on_demand_snapshot() {
 
     index.load_test_set().await;
 
-    server.index("doggo").create(Some("bone")).await;
-    index.wait_task(2).await;
+    let (task, _status_code) = server.index("doggo").create(Some("bone")).await;
+    index.wait_task(task.uid()).await.succeeded();
 
-    server.index("doggo").create(Some("bone")).await;
-    index.wait_task(2).await;
+    let (task, _status_code) = server.index("doggo").create(Some("bone")).await;
+    index.wait_task(task.uid()).await.failed();
 
     let (task, code) = server.create_snapshot().await;
     snapshot!(code, @"202 Accepted");

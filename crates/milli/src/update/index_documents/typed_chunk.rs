@@ -55,7 +55,7 @@ impl ChunkAccumulator {
         match self
             .inner
             .iter()
-            .position(|right| right.first().map_or(false, |right| chunk.mergeable_with(right)))
+            .position(|right| right.first().is_some_and(|right| chunk.mergeable_with(right)))
         {
             Some(position) => {
                 let v = self.inner.get_mut(position).unwrap();
@@ -129,6 +129,7 @@ pub(crate) fn write_typed_chunk_into_index(
     index: &Index,
     settings_diff: &InnerIndexSettingsDiff,
     typed_chunks: Vec<TypedChunk>,
+    modified_docids: &mut RoaringBitmap,
 ) -> Result<(RoaringBitmap, bool)> {
     let mut is_merged_database = false;
     match typed_chunks[0] {
@@ -137,8 +138,7 @@ pub(crate) fn write_typed_chunk_into_index(
             let _entered = span.enter();
 
             let fields_ids_map = index.fields_ids_map(wtxn)?;
-            let vectors_fid =
-                fields_ids_map.id(crate::vector::parsed_vectors::RESERVED_VECTORS_FIELD_NAME);
+            let vectors_fid = fields_ids_map.id(crate::constants::RESERVED_VECTORS_FIELD_NAME);
 
             let mut builder = MergerBuilder::new(KeepLatestObkv);
             for typed_chunk in typed_chunks {
@@ -215,6 +215,7 @@ pub(crate) fn write_typed_chunk_into_index(
                         kind: DocumentOperationKind::Create,
                     });
                     docids.insert(docid);
+                    modified_docids.insert(docid);
                 } else {
                     db.delete(wtxn, &docid)?;
                     operations.push(DocumentOperation {
@@ -223,6 +224,7 @@ pub(crate) fn write_typed_chunk_into_index(
                         kind: DocumentOperationKind::Delete,
                     });
                     docids.remove(docid);
+                    modified_docids.insert(docid);
                 }
             }
             let external_documents_docids = index.external_documents_ids();
@@ -363,7 +365,7 @@ pub(crate) fn write_typed_chunk_into_index(
             let merger = builder.build();
 
             let indexer = FacetsUpdate::new(index, FacetType::Number, merger, None, data_size);
-            indexer.execute(wtxn)?;
+            indexer.execute(wtxn, &settings_diff.new)?;
             is_merged_database = true;
         }
         TypedChunk::FieldIdFacetStringDocids(_) => {
@@ -399,7 +401,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 Some(normalized_facet_id_string_merger),
                 data_size,
             );
-            indexer.execute(wtxn)?;
+            indexer.execute(wtxn, &settings_diff.new)?;
             is_merged_database = true;
         }
         TypedChunk::FieldIdFacetExistsDocids(_) => {
@@ -662,11 +664,8 @@ pub(crate) fn write_typed_chunk_into_index(
             let embedder_index = index.embedder_category_id.get(wtxn, &embedder_name)?.ok_or(
                 InternalError::DatabaseMissingEntry { db_name: "embedder_category_id", key: None },
             )?;
-            let binary_quantized = settings_diff
-                .old
-                .embedding_configs
-                .get(&embedder_name)
-                .map_or(false, |conf| conf.2);
+            let binary_quantized =
+                settings_diff.old.embedding_configs.get(&embedder_name).is_some_and(|conf| conf.2);
             // FIXME: allow customizing distance
             let writer = ArroyWrapper::new(index.vector_arroy, embedder_index, binary_quantized);
 

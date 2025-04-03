@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::vector::parsed_vectors::RESERVED_VECTORS_FIELD_NAME;
+use crate::constants::RESERVED_VECTORS_FIELD_NAME;
 use crate::{FieldId, FieldsIdsMap, Weight};
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -41,11 +41,6 @@ impl FieldidsWeightsMap {
     /// Returns weight corresponding to the key.
     pub fn weight(&self, fid: FieldId) -> Option<Weight> {
         self.map.get(&fid).copied()
-    }
-
-    /// Returns highest weight contained in the map if any.
-    pub fn max_weight(&self) -> Option<Weight> {
-        self.map.values().copied().max()
     }
 
     /// Return an iterator visiting all field ids in arbitrary order.

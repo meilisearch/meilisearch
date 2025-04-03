@@ -1,18 +1,29 @@
 use std::sync::{Arc, RwLock};
 
-use meilisearch_types::features::{InstanceTogglableFeatures, RuntimeTogglableFeatures};
+use meilisearch_types::features::{InstanceTogglableFeatures, Network, RuntimeTogglableFeatures};
 use meilisearch_types::heed::types::{SerdeJson, Str};
-use meilisearch_types::heed::{Database, Env, RwTxn};
+use meilisearch_types::heed::{Database, Env, RwTxn, WithoutTls};
 
 use crate::error::FeatureNotEnabledError;
 use crate::Result;
 
-const EXPERIMENTAL_FEATURES: &str = "experimental-features";
+/// The number of database used by features
+const NUMBER_OF_DATABASES: u32 = 1;
+/// Database const names for the `FeatureData`.
+mod db_name {
+    pub const EXPERIMENTAL_FEATURES: &str = "experimental-features";
+}
+
+mod db_keys {
+    pub const EXPERIMENTAL_FEATURES: &str = "experimental-features";
+    pub const NETWORK: &str = "network";
+}
 
 #[derive(Clone)]
 pub(crate) struct FeatureData {
     persisted: Database<Str, SerdeJson<RuntimeTogglableFeatures>>,
     runtime: Arc<RwLock<RuntimeTogglableFeatures>>,
+    network: Arc<RwLock<Network>>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -56,19 +67,6 @@ impl RoFeatures {
         }
     }
 
-    pub fn check_vector(&self, disabled_action: &'static str) -> Result<()> {
-        if self.runtime.vector_store {
-            Ok(())
-        } else {
-            Err(FeatureNotEnabledError {
-                disabled_action,
-                feature: "vector store",
-                issue_link: "https://github.com/meilisearch/product/discussions/677",
-            }
-            .into())
-        }
-    }
-
     pub fn check_edit_documents_by_function(&self, disabled_action: &'static str) -> Result<()> {
         if self.runtime.edit_documents_by_function {
             Ok(())
@@ -94,17 +92,62 @@ impl RoFeatures {
             .into())
         }
     }
+
+    pub fn check_network(&self, disabled_action: &'static str) -> Result<()> {
+        if self.runtime.network {
+            Ok(())
+        } else {
+            Err(FeatureNotEnabledError {
+                disabled_action,
+                feature: "network",
+                issue_link: "https://github.com/orgs/meilisearch/discussions/805",
+            }
+            .into())
+        }
+    }
+
+    pub fn check_get_task_documents_route(&self) -> Result<()> {
+        if self.runtime.get_task_documents_route {
+            Ok(())
+        } else {
+            Err(FeatureNotEnabledError {
+                disabled_action: "Getting the documents of an enqueued task",
+                feature: "get task documents route",
+                issue_link: "https://github.com/orgs/meilisearch/discussions/808",
+            }
+            .into())
+        }
+    }
+
+    pub fn check_composite_embedders(&self, disabled_action: &'static str) -> Result<()> {
+        if self.runtime.composite_embedders {
+            Ok(())
+        } else {
+            Err(FeatureNotEnabledError {
+                disabled_action,
+                feature: "composite embedders",
+                issue_link: "https://github.com/orgs/meilisearch/discussions/816",
+            }
+            .into())
+        }
+    }
 }
 
 impl FeatureData {
-    pub fn new(env: &Env, instance_features: InstanceTogglableFeatures) -> Result<Self> {
-        let mut wtxn = env.write_txn()?;
-        let runtime_features_db = env.create_database(&mut wtxn, Some(EXPERIMENTAL_FEATURES))?;
-        wtxn.commit()?;
+    pub(crate) const fn nb_db() -> u32 {
+        NUMBER_OF_DATABASES
+    }
 
-        let txn = env.read_txn()?;
+    pub fn new(
+        env: &Env<WithoutTls>,
+        wtxn: &mut RwTxn,
+        instance_features: InstanceTogglableFeatures,
+    ) -> Result<Self> {
+        let runtime_features_db =
+            env.create_database(wtxn, Some(db_name::EXPERIMENTAL_FEATURES))?;
+
         let persisted_features: RuntimeTogglableFeatures =
-            runtime_features_db.get(&txn, EXPERIMENTAL_FEATURES)?.unwrap_or_default();
+            runtime_features_db.get(wtxn, db_keys::EXPERIMENTAL_FEATURES)?.unwrap_or_default();
         let InstanceTogglableFeatures { metrics, logs_route, contains_filter } = instance_features;
         let runtime = Arc::new(RwLock::new(RuntimeTogglableFeatures {
             metrics: metrics || persisted_features.metrics,
@@ -113,7 +156,14 @@ impl FeatureData {
             ..persisted_features
         }));
 
-        Ok(Self { persisted: runtime_features_db, runtime })
+        let network_db = runtime_features_db.remap_data_type::<SerdeJson<Network>>();
+        let network: Network = network_db.get(wtxn, db_keys::NETWORK)?.unwrap_or_default();
+
+        Ok(Self {
+            persisted: runtime_features_db,
+            runtime,
+            network: Arc::new(RwLock::new(network)),
+        })
     }
 
     pub fn put_runtime_features(
@@ -121,7 +171,7 @@ impl FeatureData {
         mut wtxn: RwTxn,
         features: RuntimeTogglableFeatures,
     ) -> Result<()> {
-        self.persisted.put(&mut wtxn, EXPERIMENTAL_FEATURES, &features)?;
+        self.persisted.put(&mut wtxn, db_keys::EXPERIMENTAL_FEATURES, &features)?;
         wtxn.commit()?;
 
         // safe to unwrap, the lock will only fail if:
@@ -141,5 +191,22 @@ impl FeatureData {
 
     pub fn features(&self) -> RoFeatures {
         RoFeatures::new(self)
+    }
+
+    pub fn put_network(&self, mut wtxn: RwTxn, new_network: Network) -> Result<()> {
+        self.persisted.remap_data_type::<SerdeJson<Network>>().put(
+            &mut wtxn,
+            db_keys::NETWORK,
+            &new_network,
+        )?;
+        wtxn.commit()?;
+
+        let mut network = self.network.write().unwrap();
+        *network = new_network;
+        Ok(())
+    }
+
+    pub fn network(&self) -> Network {
+        Network::clone(&*self.network.read().unwrap())
     }
 }

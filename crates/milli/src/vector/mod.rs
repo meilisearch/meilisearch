@@ -1,5 +1,6 @@
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::num::NonZeroUsize;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use arroy::distances::{BinaryQuantizedCosine, Cosine};
@@ -9,11 +10,14 @@ use heed::{RoTxn, RwTxn, Unspecified};
 use ordered_float::OrderedFloat;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 use self::error::{EmbedError, NewEmbedderError};
+use crate::progress::Progress;
 use crate::prompt::{Prompt, PromptData};
 use crate::ThreadPoolNoAbort;
 
+pub mod composite;
 pub mod error;
 pub mod hf;
 pub mod json_template;
@@ -30,6 +34,7 @@ pub use self::error::Error;
 pub type Embedding = Vec<f32>;
 
 pub const REQUEST_PARALLELISM: usize = 40;
+pub const MAX_COMPOSITE_DISTANCE: f32 = 0.01;
 
 pub struct ArroyWrapper {
     quantized: bool,
@@ -54,7 +59,7 @@ impl ArroyWrapper {
         &'a self,
         rtxn: &'a RoTxn<'a>,
         db: arroy::Database<D>,
-    ) -> impl Iterator<Item = Result<arroy::Reader<D>, arroy::Error>> + 'a {
+    ) -> impl Iterator<Item = Result<arroy::Reader<'a, D>, arroy::Error>> + 'a {
         arroy_db_range_for_embedder(self.embedder_index).map_while(move |index| {
             match arroy::Reader::open(rtxn, index, db) {
                 Ok(reader) => match reader.is_empty(rtxn) {
@@ -77,12 +82,15 @@ impl ArroyWrapper {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn build_and_quantize<R: rand::Rng + rand::SeedableRng>(
         &mut self,
         wtxn: &mut RwTxn,
+        progress: &Progress,
         rng: &mut R,
         dimension: usize,
         quantizing: bool,
+        arroy_memory: Option<usize>,
         cancel: &(impl Fn() -> bool + Sync + Send),
     ) -> Result<(), arroy::Error> {
         for index in arroy_db_range_for_embedder(self.embedder_index) {
@@ -102,9 +110,19 @@ impl ArroyWrapper {
                 // sensitive.
                 if quantizing && !self.quantized {
                     let writer = writer.prepare_changing_distance::<BinaryQuantizedCosine>(wtxn)?;
-                    writer.builder(rng).cancel(cancel).build(wtxn)?;
+                    writer
+                        .builder(rng)
+                        .available_memory(arroy_memory.unwrap_or(usize::MAX))
+                        .progress(|step| progress.update_progress_from_arroy(step))
+                        .cancel(cancel)
+                        .build(wtxn)?;
                 } else if writer.need_build(wtxn)? {
-                    writer.builder(rng).cancel(cancel).build(wtxn)?;
+                    writer
+                        .builder(rng)
+                        .available_memory(arroy_memory.unwrap_or(usize::MAX))
+                        .progress(|step| progress.update_progress_from_arroy(step))
+                        .cancel(cancel)
+                        .build(wtxn)?;
                 } else if writer.is_empty(wtxn)? {
                     break;
                 }
@@ -409,8 +427,43 @@ impl ArroyWrapper {
     fn quantized_db(&self) -> arroy::Database<BinaryQuantizedCosine> {
         self.database.remap_data_type()
     }
+
+    pub fn aggregate_stats(
+        &self,
+        rtxn: &RoTxn,
+        stats: &mut ArroyStats,
+    ) -> Result<(), arroy::Error> {
+        if self.quantized {
+            for reader in self.readers(rtxn, self.quantized_db()) {
+                let reader = reader?;
+                let documents = reader.item_ids();
+                if documents.is_empty() {
+                    break;
+                }
+                stats.documents |= documents;
+                stats.number_of_embeddings += documents.len();
+            }
+        } else {
+            for reader in self.readers(rtxn, self.angular_db()) {
+                let reader = reader?;
+                let documents = reader.item_ids();
+                if documents.is_empty() {
+                    break;
+                }
+                stats.documents |= documents;
+                stats.number_of_embeddings += documents.len();
+            }
+        }
+
+        Ok(())
+    }
 }
 
+#[derive(Debug, Default, Clone)]
+pub struct ArroyStats {
+    pub number_of_embeddings: u64,
+    pub documents: RoaringBitmap,
+}
 /// One or multiple embeddings stored consecutively in a flat vector.
 pub struct Embeddings<F> {
     data: Vec<F>,
@@ -475,7 +528,7 @@ impl<F> Embeddings<F> {
         Ok(())
     }
 
-    /// Append a flat vector of embeddings a the end of the embeddings.
+    /// Append a flat vector of embeddings at the end of the embeddings.
     ///
     /// If `embeddings.len() % self.dimension != 0`, then the append operation fails.
     pub fn append(&mut self, mut embeddings: Vec<F>) -> Result<(), Vec<F>> {
@@ -500,6 +553,48 @@ pub enum Embedder {
     Ollama(ollama::Embedder),
     /// An embedder based on making embedding queries against a generic JSON/REST embedding server.
     Rest(rest::Embedder),
+    /// An embedder composed of an embedder at search time and an embedder at indexing time.
+    Composite(composite::Embedder),
+}
+
+#[derive(Debug)]
+struct EmbeddingCache {
+    data: Option<Mutex<lru::LruCache<String, Embedding>>>,
+}
+
+impl EmbeddingCache {
+    const MAX_TEXT_LEN: usize = 2000;
+
+    pub fn new(cap: usize) -> Self {
+        let data = NonZeroUsize::new(cap).map(lru::LruCache::new).map(Mutex::new);
+        Self { data }
+    }
+
+    /// Get the embedding corresponding to `text`, if any is present in the cache.
+    pub fn get(&self, text: &str) -> Option<Embedding> {
+        let data = self.data.as_ref()?;
+        if text.len() > Self::MAX_TEXT_LEN {
+            return None;
+        }
+        let mut cache = data.lock().unwrap();
+
+        cache.get(text).cloned()
+    }
+
+    /// Puts a new embedding for the specified `text`
+    pub fn put(&self, text: String, embedding: Embedding) {
+        let Some(data) = self.data.as_ref() else {
+            return;
+        };
+        if text.len() > Self::MAX_TEXT_LEN {
+            return;
+        }
+        tracing::trace!(text, "embedding added to cache");
+
+        let mut cache = data.lock().unwrap();
+
+        cache.put(text, embedding);
+    }
 }
 
 /// Configuration for an embedder.
@@ -569,6 +664,7 @@ pub enum EmbedderOptions {
     Ollama(ollama::EmbedderOptions),
     UserProvided(manual::EmbedderOptions),
     Rest(rest::EmbedderOptions),
+    Composite(composite::EmbedderOptions),
 }
 
 impl Default for EmbedderOptions {
@@ -579,75 +675,102 @@ impl Default for EmbedderOptions {
 
 impl Embedder {
     /// Spawns a new embedder built from its options.
-    pub fn new(options: EmbedderOptions) -> std::result::Result<Self, NewEmbedderError> {
+    pub fn new(
+        options: EmbedderOptions,
+        cache_cap: usize,
+    ) -> std::result::Result<Self, NewEmbedderError> {
         Ok(match options {
-            EmbedderOptions::HuggingFace(options) => Self::HuggingFace(hf::Embedder::new(options)?),
-            EmbedderOptions::OpenAi(options) => Self::OpenAi(openai::Embedder::new(options)?),
-            EmbedderOptions::Ollama(options) => Self::Ollama(ollama::Embedder::new(options)?),
+            EmbedderOptions::HuggingFace(options) => {
+                Self::HuggingFace(hf::Embedder::new(options, cache_cap)?)
+            }
+            EmbedderOptions::OpenAi(options) => {
+                Self::OpenAi(openai::Embedder::new(options, cache_cap)?)
+            }
+            EmbedderOptions::Ollama(options) => {
+                Self::Ollama(ollama::Embedder::new(options, cache_cap)?)
+            }
             EmbedderOptions::UserProvided(options) => {
                 Self::UserProvided(manual::Embedder::new(options))
             }
-            EmbedderOptions::Rest(options) => {
-                Self::Rest(rest::Embedder::new(options, rest::ConfigurationSource::User)?)
+            EmbedderOptions::Rest(options) => Self::Rest(rest::Embedder::new(
+                options,
+                cache_cap,
+                rest::ConfigurationSource::User,
+            )?),
+            EmbedderOptions::Composite(options) => {
+                Self::Composite(composite::Embedder::new(options, cache_cap)?)
             }
         })
     }
 
-    /// Embed one or multiple texts.
-    ///
-    /// Each text can be embedded as one or multiple embeddings.
-    pub fn embed(
-        &self,
-        texts: Vec<String>,
-        deadline: Option<Instant>,
-    ) -> std::result::Result<Vec<Embedding>, EmbedError> {
-        match self {
-            Embedder::HuggingFace(embedder) => embedder.embed(texts),
-            Embedder::OpenAi(embedder) => embedder.embed(&texts, deadline),
-            Embedder::Ollama(embedder) => embedder.embed(&texts, deadline),
-            Embedder::UserProvided(embedder) => embedder.embed(&texts),
-            Embedder::Rest(embedder) => embedder.embed(texts, deadline),
-        }
-    }
+    /// Embed in search context
 
-    pub fn embed_one(
+    #[tracing::instrument(level = "debug", skip_all, target = "search")]
+    pub fn embed_search(
         &self,
-        text: String,
+        text: &str,
         deadline: Option<Instant>,
     ) -> std::result::Result<Embedding, EmbedError> {
-        let mut embedding = self.embed(vec![text], deadline)?;
-        let embedding = embedding.pop().ok_or_else(EmbedError::missing_embedding)?;
+        if let Some(cache) = self.cache() {
+            if let Some(embedding) = cache.get(text) {
+                tracing::trace!(text, "embedding found in cache");
+                return Ok(embedding);
+            }
+        }
+        let embedding = match self {
+            Embedder::HuggingFace(embedder) => embedder.embed_one(text),
+            Embedder::OpenAi(embedder) => {
+                embedder.embed(&[text], deadline)?.pop().ok_or_else(EmbedError::missing_embedding)
+            }
+            Embedder::Ollama(embedder) => {
+                embedder.embed(&[text], deadline)?.pop().ok_or_else(EmbedError::missing_embedding)
+            }
+            Embedder::UserProvided(embedder) => embedder.embed_one(text),
+            Embedder::Rest(embedder) => embedder
+                .embed_ref(&[text], deadline)?
+                .pop()
+                .ok_or_else(EmbedError::missing_embedding),
+            Embedder::Composite(embedder) => embedder.search.embed_one(text, deadline),
+        }?;
+
+        if let Some(cache) = self.cache() {
+            cache.put(text.to_owned(), embedding.clone());
+        }
+
         Ok(embedding)
     }
 
     /// Embed multiple chunks of texts.
     ///
     /// Each chunk is composed of one or multiple texts.
-    pub fn embed_chunks(
+    pub fn embed_index(
         &self,
         text_chunks: Vec<Vec<String>>,
         threads: &ThreadPoolNoAbort,
     ) -> std::result::Result<Vec<Vec<Embedding>>, EmbedError> {
         match self {
-            Embedder::HuggingFace(embedder) => embedder.embed_chunks(text_chunks),
-            Embedder::OpenAi(embedder) => embedder.embed_chunks(text_chunks, threads),
-            Embedder::Ollama(embedder) => embedder.embed_chunks(text_chunks, threads),
-            Embedder::UserProvided(embedder) => embedder.embed_chunks(text_chunks),
-            Embedder::Rest(embedder) => embedder.embed_chunks(text_chunks, threads),
+            Embedder::HuggingFace(embedder) => embedder.embed_index(text_chunks),
+            Embedder::OpenAi(embedder) => embedder.embed_index(text_chunks, threads),
+            Embedder::Ollama(embedder) => embedder.embed_index(text_chunks, threads),
+            Embedder::UserProvided(embedder) => embedder.embed_index(text_chunks),
+            Embedder::Rest(embedder) => embedder.embed_index(text_chunks, threads),
+            Embedder::Composite(embedder) => embedder.index.embed_index(text_chunks, threads),
         }
     }
 
-    pub fn embed_chunks_ref(
+    /// Non-owning variant of [`Self::embed_index`].
+    pub fn embed_index_ref(
         &self,
         texts: &[&str],
         threads: &ThreadPoolNoAbort,
     ) -> std::result::Result<Vec<Embedding>, EmbedError> {
         match self {
-            Embedder::HuggingFace(embedder) => embedder.embed_chunks_ref(texts),
-            Embedder::OpenAi(embedder) => embedder.embed_chunks_ref(texts, threads),
-            Embedder::Ollama(embedder) => embedder.embed_chunks_ref(texts, threads),
-            Embedder::UserProvided(embedder) => embedder.embed_chunks_ref(texts),
-            Embedder::Rest(embedder) => embedder.embed_chunks_ref(texts, threads),
+            Embedder::HuggingFace(embedder) => embedder.embed_index_ref(texts),
+            Embedder::OpenAi(embedder) => embedder.embed_index_ref(texts, threads),
+            Embedder::Ollama(embedder) => embedder.embed_index_ref(texts, threads),
+            Embedder::UserProvided(embedder) => embedder.embed_index_ref(texts),
+            Embedder::Rest(embedder) => embedder.embed_index_ref(texts, threads),
+            Embedder::Composite(embedder) => embedder.index.embed_index_ref(texts, threads),
         }
     }
 
@@ -659,6 +782,7 @@ impl Embedder {
             Embedder::Ollama(embedder) => embedder.chunk_count_hint(),
             Embedder::UserProvided(_) => 100,
             Embedder::Rest(embedder) => embedder.chunk_count_hint(),
+            Embedder::Composite(embedder) => embedder.index.chunk_count_hint(),
         }
     }
 
@@ -670,6 +794,7 @@ impl Embedder {
             Embedder::Ollama(embedder) => embedder.prompt_count_in_chunk_hint(),
             Embedder::UserProvided(_) => 1,
             Embedder::Rest(embedder) => embedder.prompt_count_in_chunk_hint(),
+            Embedder::Composite(embedder) => embedder.index.prompt_count_in_chunk_hint(),
         }
     }
 
@@ -681,6 +806,7 @@ impl Embedder {
             Embedder::Ollama(embedder) => embedder.dimensions(),
             Embedder::UserProvided(embedder) => embedder.dimensions(),
             Embedder::Rest(embedder) => embedder.dimensions(),
+            Embedder::Composite(embedder) => embedder.dimensions(),
         }
     }
 
@@ -692,6 +818,7 @@ impl Embedder {
             Embedder::Ollama(embedder) => embedder.distribution(),
             Embedder::UserProvided(embedder) => embedder.distribution(),
             Embedder::Rest(embedder) => embedder.distribution(),
+            Embedder::Composite(embedder) => embedder.distribution(),
         }
     }
 
@@ -702,6 +829,18 @@ impl Embedder {
             | Embedder::Ollama(_)
             | Embedder::Rest(_) => true,
             Embedder::UserProvided(_) => false,
+            Embedder::Composite(embedder) => embedder.index.uses_document_template(),
+        }
+    }
+
+    fn cache(&self) -> Option<&EmbeddingCache> {
+        match self {
+            Embedder::HuggingFace(embedder) => Some(embedder.cache()),
+            Embedder::OpenAi(embedder) => Some(embedder.cache()),
+            Embedder::UserProvided(_) => None,
+            Embedder::Ollama(embedder) => Some(embedder.cache()),
+            Embedder::Rest(embedder) => Some(embedder.cache()),
+            Embedder::Composite(embedder) => embedder.search.cache(),
         }
     }
 }
@@ -710,18 +849,20 @@ impl Embedder {
 ///
 /// The intended use is to make the similarity score more comparable to the regular ranking score.
 /// This allows to correct effects where results are too "packed" around a certain value.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize, Serialize, ToSchema)]
 #[serde(from = "DistributionShiftSerializable")]
 #[serde(into = "DistributionShiftSerializable")]
 pub struct DistributionShift {
     /// Value where the results are "packed".
     ///
     /// Similarity scores are translated so that they are packed around 0.5 instead
+    #[schema(value_type = f32)]
     pub current_mean: OrderedFloat<f32>,
 
     /// standard deviation of a similarity score.
     ///
     /// Set below 0.4 to make the results less packed around the mean, and above 0.4 to make them more packed.
+    #[schema(value_type = f32)]
     pub current_sigma: OrderedFloat<f32>,
 }
 

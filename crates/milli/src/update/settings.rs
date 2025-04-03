@@ -6,31 +6,35 @@ use std::sync::Arc;
 
 use charabia::{Normalize, Tokenizer, TokenizerBuilder};
 use deserr::{DeserializeError, Deserr};
-use itertools::{EitherOrBoth, Itertools};
+use itertools::{merge_join_by, EitherOrBoth, Itertools};
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use time::OffsetDateTime;
 
-use super::del_add::DelAddOperation;
+use super::del_add::{DelAdd, DelAddOperation};
 use super::index_documents::{IndexDocumentsConfig, Transform};
 use super::IndexerConfig;
+use crate::attribute_patterns::PatternMatch;
+use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::criterion::Criterion;
 use crate::error::UserError;
+use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
+use crate::filterable_attributes_rules::match_faceted_field;
 use crate::index::{
-    IndexEmbeddingConfig, DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS,
+    IndexEmbeddingConfig, PrefixSearch, DEFAULT_MIN_WORD_LEN_ONE_TYPO,
+    DEFAULT_MIN_WORD_LEN_TWO_TYPOS,
 };
 use crate::order_by_map::OrderByMap;
 use crate::prompt::default_max_bytes;
 use crate::proximity::ProximityPrecision;
 use crate::update::index_documents::IndexDocumentsMethod;
 use crate::update::{IndexDocuments, UpdateIndexingStep};
-use crate::vector::parsed_vectors::RESERVED_VECTORS_FIELD_NAME;
 use crate::vector::settings::{
-    check_set, check_unset, EmbedderAction, EmbedderSource, EmbeddingSettings, ReindexAction,
-    WriteBackToDocuments,
+    EmbedderAction, EmbedderSource, EmbeddingSettings, NestingContext, ReindexAction,
+    SubEmbeddingSettings, WriteBackToDocuments,
 };
 use crate::vector::{Embedder, EmbeddingConfig, EmbeddingConfigs};
-use crate::{FieldId, FieldsIdsMap, Index, LocalizedAttributesRule, LocalizedFieldIds, Result};
+use crate::{FieldId, FilterableAttributesRule, Index, LocalizedAttributesRule, Result};
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum Setting<T> {
@@ -154,7 +158,7 @@ pub struct Settings<'a, 't, 'i> {
 
     searchable_fields: Setting<Vec<String>>,
     displayed_fields: Setting<Vec<String>>,
-    filterable_fields: Setting<HashSet<String>>,
+    filterable_fields: Setting<Vec<FilterableAttributesRule>>,
     sortable_fields: Setting<HashSet<String>>,
     criteria: Setting<Vec<Criterion>>,
     stop_words: Setting<BTreeSet<String>>,
@@ -177,6 +181,8 @@ pub struct Settings<'a, 't, 'i> {
     embedder_settings: Setting<BTreeMap<String, Setting<EmbeddingSettings>>>,
     search_cutoff: Setting<u64>,
     localized_attributes_rules: Setting<Vec<LocalizedAttributesRule>>,
+    prefix_search: Setting<PrefixSearch>,
+    facet_search: Setting<bool>,
 }
 
 impl<'a, 't, 'i> Settings<'a, 't, 'i> {
@@ -212,6 +218,8 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             embedder_settings: Setting::NotSet,
             search_cutoff: Setting::NotSet,
             localized_attributes_rules: Setting::NotSet,
+            prefix_search: Setting::NotSet,
+            facet_search: Setting::NotSet,
             indexer_config,
         }
     }
@@ -236,8 +244,8 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         self.filterable_fields = Setting::Reset;
     }
 
-    pub fn set_filterable_fields(&mut self, names: HashSet<String>) {
-        self.filterable_fields = Setting::Set(names);
+    pub fn set_filterable_fields(&mut self, rules: Vec<FilterableAttributesRule>) {
+        self.filterable_fields = Setting::Set(rules);
     }
 
     pub fn set_sortable_fields(&mut self, names: HashSet<String>) {
@@ -418,6 +426,22 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         self.localized_attributes_rules = Setting::Reset;
     }
 
+    pub fn set_prefix_search(&mut self, value: PrefixSearch) {
+        self.prefix_search = Setting::Set(value);
+    }
+
+    pub fn reset_prefix_search(&mut self) {
+        self.prefix_search = Setting::Reset;
+    }
+
+    pub fn set_facet_search(&mut self, value: bool) {
+        self.facet_search = Setting::Set(value);
+    }
+
+    pub fn reset_facet_search(&mut self) {
+        self.facet_search = Setting::Reset;
+    }
+
     #[tracing::instrument(
         level = "trace"
         skip(self, progress_callback, should_abort, settings_diff),
@@ -495,7 +519,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
     }
 
     /// Updates the index's searchable attributes.
-    fn update_searchable(&mut self) -> Result<bool> {
+    fn update_user_defined_searchable_attributes(&mut self) -> Result<bool> {
         match self.searchable_fields {
             Setting::Set(ref fields) => {
                 // Check to see if the searchable fields changed before doing anything else
@@ -508,26 +532,10 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                     return Ok(false);
                 }
 
-                // Since we're updating the settings we can only add new fields at the end of the field id map
-                let mut fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
                 // fields are deduplicated, only the first occurrence is taken into account
                 let names = fields.iter().unique().map(String::as_str).collect::<Vec<_>>();
 
-                // Add all the searchable attributes to the field map, and then add the
-                // remaining fields from the old field map to the new one
-                for name in names.iter() {
-                    // The fields ids map won't change the field id of already present elements thus only the
-                    // new fields will be inserted.
-                    fields_ids_map.insert(name).ok_or(UserError::AttributeLimitReached)?;
-                }
-
-                self.index.put_all_searchable_fields_from_fields_ids_map(
-                    self.wtxn,
-                    &names,
-                    &fields_ids_map.nested_ids(RESERVED_VECTORS_FIELD_NAME),
-                    &fields_ids_map,
-                )?;
-                self.index.put_fields_ids_map(self.wtxn, &fields_ids_map)?;
+                self.index.put_user_defined_searchable_fields(self.wtxn, &names)?;
                 Ok(true)
             }
             Setting::Reset => Ok(self.index.delete_all_searchable_fields(self.wtxn)?),
@@ -552,7 +560,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
 
                 // Does the new FST differ from the previous one?
                 if current
-                    .map_or(true, |current| current.as_fst().as_bytes() != fst.as_fst().as_bytes())
+                    .is_none_or(|current| current.as_fst().as_bytes() != fst.as_fst().as_bytes())
                 {
                     // we want to re-create our FST.
                     self.index.put_stop_words(self.wtxn, &fst)?;
@@ -572,7 +580,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                 let current = self.index.non_separator_tokens(self.wtxn)?;
 
                 // Does the new list differ from the previous one?
-                if current.map_or(true, |current| &current != non_separator_tokens) {
+                if current.is_none_or(|current| &current != non_separator_tokens) {
                     self.index.put_non_separator_tokens(self.wtxn, non_separator_tokens)?;
                     true
                 } else {
@@ -597,7 +605,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                 let current = self.index.separator_tokens(self.wtxn)?;
 
                 // Does the new list differ from the previous one?
-                if current.map_or(true, |current| &current != separator_tokens) {
+                if current.is_none_or(|current| &current != separator_tokens) {
                     self.index.put_separator_tokens(self.wtxn, separator_tokens)?;
                     true
                 } else {
@@ -622,7 +630,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                 let current = self.index.dictionary(self.wtxn)?;
 
                 // Does the new list differ from the previous one?
-                if current.map_or(true, |current| &current != dictionary) {
+                if current.is_none_or(|current| &current != dictionary) {
                     self.index.put_dictionary(self.wtxn, dictionary)?;
                     true
                 } else {
@@ -739,14 +747,10 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
     fn update_filterable(&mut self) -> Result<()> {
         match self.filterable_fields {
             Setting::Set(ref fields) => {
-                let mut new_facets = HashSet::new();
-                for name in fields {
-                    new_facets.insert(name.clone());
-                }
-                self.index.put_filterable_fields(self.wtxn, &new_facets)?;
+                self.index.put_filterable_attributes_rules(self.wtxn, fields)?;
             }
             Setting::Reset => {
-                self.index.delete_filterable_fields(self.wtxn)?;
+                self.index.delete_filterable_attributes_rules(self.wtxn)?;
             }
             Setting::NotSet => (),
         }
@@ -944,10 +948,46 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                     false
                 } else {
                     self.index.put_proximity_precision(self.wtxn, new)?;
-                    true
+                    old.is_some() || new != ProximityPrecision::default()
                 }
             }
             Setting::Reset => self.index.delete_proximity_precision(self.wtxn)?,
+            Setting::NotSet => false,
+        };
+
+        Ok(changed)
+    }
+
+    fn update_prefix_search(&mut self) -> Result<bool> {
+        let changed = match self.prefix_search {
+            Setting::Set(new) => {
+                let old = self.index.prefix_search(self.wtxn)?;
+                if old == Some(new) {
+                    false
+                } else {
+                    self.index.put_prefix_search(self.wtxn, new)?;
+                    old.is_some() || new != PrefixSearch::default()
+                }
+            }
+            Setting::Reset => self.index.delete_prefix_search(self.wtxn)?,
+            Setting::NotSet => false,
+        };
+
+        Ok(changed)
+    }
+
+    fn update_facet_search(&mut self) -> Result<bool> {
+        let changed = match self.facet_search {
+            Setting::Set(new) => {
+                let old = self.index.facet_search(self.wtxn)?;
+                if old == new {
+                    false
+                } else {
+                    self.index.put_facet_search(self.wtxn, new)?;
+                    true
+                }
+            }
+            Setting::Reset => self.index.delete_facet_search(self.wtxn)?,
             Setting::NotSet => false,
         };
 
@@ -1200,15 +1240,17 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         self.update_separator_tokens()?;
         self.update_dictionary()?;
         self.update_synonyms()?;
-        self.update_searchable()?;
+        self.update_user_defined_searchable_attributes()?;
         self.update_exact_attributes()?;
         self.update_proximity_precision()?;
+        self.update_prefix_search()?;
+        self.update_facet_search()?;
         self.update_localized_attributes_rules()?;
 
         let embedding_config_updates = self.update_embedding_configs()?;
 
         let mut new_inner_settings = InnerIndexSettings::from_index(self.index, self.wtxn, None)?;
-        new_inner_settings.recompute_facets(self.wtxn, self.index)?;
+        new_inner_settings.recompute_searchables(self.wtxn, self.index)?;
 
         let primary_key_id = self
             .index
@@ -1260,8 +1302,8 @@ impl InnerIndexSettingsDiff {
         settings_update_only: bool,
     ) -> Self {
         let only_additional_fields = match (
-            &old_settings.user_defined_searchable_fields,
-            &new_settings.user_defined_searchable_fields,
+            &old_settings.user_defined_searchable_attributes,
+            &new_settings.user_defined_searchable_attributes,
         ) {
             (None, None) | (Some(_), None) | (None, Some(_)) => None, // None means *
             (Some(old), Some(new)) => {
@@ -1282,14 +1324,15 @@ impl InnerIndexSettingsDiff {
                 || old_settings.allowed_separators != new_settings.allowed_separators
                 || old_settings.dictionary != new_settings.dictionary
                 || old_settings.proximity_precision != new_settings.proximity_precision
-                || old_settings.localized_searchable_fields_ids
-                    != new_settings.localized_searchable_fields_ids
+                || old_settings.prefix_search != new_settings.prefix_search
+                || old_settings.localized_attributes_rules
+                    != new_settings.localized_attributes_rules
         };
 
         let cache_exact_attributes = old_settings.exact_attributes != new_settings.exact_attributes;
 
-        let cache_user_defined_searchables = old_settings.user_defined_searchable_fields
-            != new_settings.user_defined_searchable_fields;
+        let cache_user_defined_searchables = old_settings.user_defined_searchable_attributes
+            != new_settings.user_defined_searchable_attributes;
 
         // if the user-defined searchables changed, then we need to reindex prompts.
         if cache_user_defined_searchables {
@@ -1297,7 +1340,7 @@ impl InnerIndexSettingsDiff {
                 new_settings.embedding_configs.inner_as_ref()
             {
                 let was_quantized =
-                    old_settings.embedding_configs.get(embedder_name).map_or(false, |conf| conf.2);
+                    old_settings.embedding_configs.get(embedder_name).is_some_and(|conf| conf.2);
                 // skip embedders that don't use document templates
                 if !config.uses_document_template() {
                     continue;
@@ -1372,27 +1415,75 @@ impl InnerIndexSettingsDiff {
         }
     }
 
+    /// List the faceted fields from the inner fid map.
+    /// This is used to list the faceted fields when we are reindexing,
+    /// but it can't be used in document addition because the field id map must be exhaustive.
+    pub fn list_faceted_fields_from_fid_map(&self, del_add: DelAdd) -> BTreeSet<FieldId> {
+        let settings = match del_add {
+            DelAdd::Deletion => &self.old,
+            DelAdd::Addition => &self.new,
+        };
+
+        settings
+            .fields_ids_map
+            .iter_id_metadata()
+            .filter(|(_, metadata)| metadata.is_faceted(&settings.filterable_attributes_rules))
+            .map(|(id, _)| id)
+            .collect()
+    }
+
+    pub fn facet_fids_changed(&self) -> bool {
+        for eob in merge_join_by(
+            self.old.fields_ids_map.iter().filter(|(_, _, metadata)| {
+                metadata.is_faceted(&self.old.filterable_attributes_rules)
+            }),
+            self.new.fields_ids_map.iter().filter(|(_, _, metadata)| {
+                metadata.is_faceted(&self.new.filterable_attributes_rules)
+            }),
+            |(old_fid, _, _), (new_fid, _, _)| old_fid.cmp(new_fid),
+        ) {
+            match eob {
+                // If there is a difference, we need to reindex facet databases.
+                EitherOrBoth::Left(_) | EitherOrBoth::Right(_) => return true,
+                // If the field is faceted in both old and new settings, we check the facet-searchable and facet level database.
+                EitherOrBoth::Both((_, _, old_metadata), (_, _, new_metadata)) => {
+                    // Check if the field is facet-searchable in the old and new settings.
+                    // If there is a difference, we need to reindex facet-search database.
+                    let old_filterable_features = old_metadata
+                        .filterable_attributes_features(&self.old.filterable_attributes_rules);
+                    let new_filterable_features = new_metadata
+                        .filterable_attributes_features(&self.new.filterable_attributes_rules);
+                    let is_old_facet_searchable =
+                        old_filterable_features.is_facet_searchable() && self.old.facet_search;
+                    let is_new_facet_searchable =
+                        new_filterable_features.is_facet_searchable() && self.new.facet_search;
+                    if is_old_facet_searchable != is_new_facet_searchable {
+                        return true;
+                    }
+
+                    // Check if the field needs a facet level database in the old and new settings.
+                    // If there is a difference, we need to reindex facet level databases.
+                    let old_facet_level_database = old_metadata
+                        .require_facet_level_database(&self.old.filterable_attributes_rules);
+                    let new_facet_level_database = new_metadata
+                        .require_facet_level_database(&self.new.filterable_attributes_rules);
+                    if old_facet_level_database != new_facet_level_database {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        false
+    }
+
+    pub fn global_facet_settings_changed(&self) -> bool {
+        self.old.localized_attributes_rules != self.new.localized_attributes_rules
+            || self.old.facet_search != self.new.facet_search
+    }
+
     pub fn reindex_facets(&self) -> bool {
-        let existing_fields = &self.new.existing_fields;
-        if existing_fields.iter().any(|field| field.contains('.')) {
-            return true;
-        }
-
-        let old_faceted_fields = &self.old.user_defined_faceted_fields;
-        if old_faceted_fields.iter().any(|field| field.contains('.')) {
-            return true;
-        }
-
-        // If there is new faceted fields we indicate that we must reindex as we must
-        // index new fields as facets. It means that the distinct attribute,
-        // an Asc/Desc criterion or a filtered attribute as be added or removed.
-        let new_faceted_fields = &self.new.user_defined_faceted_fields;
-        if new_faceted_fields.iter().any(|field| field.contains('.')) {
-            return true;
-        }
-
-        (existing_fields - old_faceted_fields) != (existing_fields - new_faceted_fields)
-            || self.old.localized_faceted_fields_ids != self.new.localized_faceted_fields_ids
+        self.facet_fids_changed() || self.global_facet_settings_changed()
     }
 
     pub fn reindex_vectors(&self) -> bool {
@@ -1407,10 +1498,6 @@ impl InnerIndexSettingsDiff {
         self.old.geo_fields_ids != self.new.geo_fields_ids
             || (!self.settings_update_only && self.new.geo_fields_ids.is_some())
     }
-
-    pub fn modified_faceted_fields(&self) -> HashSet<String> {
-        &self.old.user_defined_faceted_fields ^ &self.new.user_defined_faceted_fields
-    }
 }
 
 #[derive(Clone)]
@@ -1418,20 +1505,19 @@ pub(crate) struct InnerIndexSettings {
     pub stop_words: Option<fst::Set<Vec<u8>>>,
     pub allowed_separators: Option<BTreeSet<String>>,
     pub dictionary: Option<BTreeSet<String>>,
-    pub fields_ids_map: FieldsIdsMap,
-    pub user_defined_faceted_fields: HashSet<String>,
-    pub user_defined_searchable_fields: Option<Vec<String>>,
-    pub faceted_fields_ids: HashSet<FieldId>,
-    pub searchable_fields_ids: Vec<FieldId>,
+    pub fields_ids_map: FieldIdMapWithMetadata,
+    pub localized_attributes_rules: Vec<LocalizedAttributesRule>,
+    pub filterable_attributes_rules: Vec<FilterableAttributesRule>,
+    pub asc_desc_fields: HashSet<String>,
+    pub distinct_field: Option<String>,
+    pub user_defined_searchable_attributes: Option<Vec<String>>,
+    pub sortable_fields: HashSet<String>,
     pub exact_attributes: HashSet<FieldId>,
     pub proximity_precision: ProximityPrecision,
     pub embedding_configs: EmbeddingConfigs,
-    pub existing_fields: HashSet<String>,
     pub geo_fields_ids: Option<(FieldId, FieldId)>,
-    pub non_searchable_fields_ids: Vec<FieldId>,
-    pub non_faceted_fields_ids: Vec<FieldId>,
-    pub localized_searchable_fields_ids: LocalizedFieldIds,
-    pub localized_faceted_fields_ids: LocalizedFieldIds,
+    pub prefix_search: PrefixSearch,
+    pub facet_search: bool,
 }
 
 impl InnerIndexSettings {
@@ -1445,97 +1531,65 @@ impl InnerIndexSettings {
         let allowed_separators = index.allowed_separators(rtxn)?;
         let dictionary = index.dictionary(rtxn)?;
         let mut fields_ids_map = index.fields_ids_map(rtxn)?;
-        let user_defined_searchable_fields = index.user_defined_searchable_fields(rtxn)?;
-        let user_defined_searchable_fields =
-            user_defined_searchable_fields.map(|sf| sf.into_iter().map(String::from).collect());
-        let user_defined_faceted_fields = index.user_defined_faceted_fields(rtxn)?;
-        let mut searchable_fields_ids = index.searchable_fields_ids(rtxn)?;
-        let mut faceted_fields_ids = index.faceted_fields_ids(rtxn)?;
         let exact_attributes = index.exact_attributes_ids(rtxn)?;
         let proximity_precision = index.proximity_precision(rtxn)?.unwrap_or_default();
         let embedding_configs = match embedding_configs {
             Some(embedding_configs) => embedding_configs,
             None => embedders(index.embedding_configs(rtxn)?)?,
         };
-        let existing_fields: HashSet<_> = index
-            .field_distribution(rtxn)?
-            .into_iter()
-            .filter_map(|(field, count)| (count != 0).then_some(field))
-            .collect();
-        // index.fields_ids_map($a)? ==>> fields_ids_map
-        let geo_fields_ids = match fields_ids_map.id("_geo") {
-            Some(gfid) => {
-                let is_sortable = index.sortable_fields_ids(rtxn)?.contains(&gfid);
-                let is_filterable = index.filterable_fields_ids(rtxn)?.contains(&gfid);
+        let prefix_search = index.prefix_search(rtxn)?.unwrap_or_default();
+        let facet_search = index.facet_search(rtxn)?;
+        let geo_fields_ids = match fields_ids_map.id(RESERVED_GEO_FIELD_NAME) {
+            Some(_) if index.is_geo_enabled(rtxn)? => {
                 // if `_geo` is faceted then we get the `lat` and `lng`
-                if is_sortable || is_filterable {
-                    let field_ids = fields_ids_map
-                        .insert("_geo.lat")
-                        .zip(fields_ids_map.insert("_geo.lng"))
-                        .ok_or(UserError::AttributeLimitReached)?;
-                    Some(field_ids)
-                } else {
-                    None
-                }
+                let field_ids = fields_ids_map
+                    .insert("_geo.lat")
+                    .zip(fields_ids_map.insert("_geo.lng"))
+                    .ok_or(UserError::AttributeLimitReached)?;
+                Some(field_ids)
             }
-            None => None,
+            _ => None,
         };
-        let localized_attributes_rules = index.localized_attributes_rules(rtxn)?;
-        let localized_searchable_fields_ids = LocalizedFieldIds::new(
-            &localized_attributes_rules,
-            &fields_ids_map,
-            searchable_fields_ids.iter().cloned(),
-        );
-        let localized_faceted_fields_ids = LocalizedFieldIds::new(
-            &localized_attributes_rules,
-            &fields_ids_map,
-            faceted_fields_ids.iter().cloned(),
-        );
-
-        let vectors_fids = fields_ids_map.nested_ids(RESERVED_VECTORS_FIELD_NAME);
-        searchable_fields_ids.retain(|id| !vectors_fids.contains(id));
-        faceted_fields_ids.retain(|id| !vectors_fids.contains(id));
+        let localized_attributes_rules =
+            index.localized_attributes_rules(rtxn)?.unwrap_or_default();
+        let filterable_attributes_rules = index.filterable_attributes_rules(rtxn)?;
+        let sortable_fields = index.sortable_fields(rtxn)?;
+        let asc_desc_fields = index.asc_desc_fields(rtxn)?;
+        let distinct_field = index.distinct_field(rtxn)?.map(|f| f.to_string());
+        let user_defined_searchable_attributes = index
+            .user_defined_searchable_fields(rtxn)?
+            .map(|fields| fields.into_iter().map(|f| f.to_string()).collect());
+        let builder = MetadataBuilder::from_index(index, rtxn)?;
+        let fields_ids_map = FieldIdMapWithMetadata::new(fields_ids_map, builder);
 
         Ok(Self {
             stop_words,
             allowed_separators,
             dictionary,
             fields_ids_map,
-            user_defined_faceted_fields,
-            user_defined_searchable_fields,
-            faceted_fields_ids,
-            searchable_fields_ids,
+            localized_attributes_rules,
+            filterable_attributes_rules,
+            asc_desc_fields,
+            distinct_field,
+            user_defined_searchable_attributes,
+            sortable_fields,
             exact_attributes,
             proximity_precision,
             embedding_configs,
-            existing_fields,
             geo_fields_ids,
-            non_searchable_fields_ids: vectors_fids.clone(),
-            non_faceted_fields_ids: vectors_fids.clone(),
-            localized_searchable_fields_ids,
-            localized_faceted_fields_ids,
+            prefix_search,
+            facet_search,
         })
     }
 
-    // find and insert the new field ids
-    pub fn recompute_facets(&mut self, wtxn: &mut heed::RwTxn<'_>, index: &Index) -> Result<()> {
-        let new_facets = self
-            .fields_ids_map
-            .iter()
-            .filter(|(fid, _field)| !self.non_faceted_fields_ids.contains(fid))
-            .filter(|(_fid, field)| crate::is_faceted(field, &self.user_defined_faceted_fields))
-            .map(|(_fid, field)| field.to_string())
-            .collect();
-        index.put_faceted_fields(wtxn, &new_facets)?;
-
-        self.faceted_fields_ids = index.faceted_fields_ids(wtxn)?;
-        let localized_attributes_rules = index.localized_attributes_rules(wtxn)?;
-        self.localized_faceted_fields_ids = LocalizedFieldIds::new(
-            &localized_attributes_rules,
-            &self.fields_ids_map,
-            self.faceted_fields_ids.iter().cloned(),
-        );
-        Ok(())
+    pub fn match_faceted_field(&self, field: &str) -> PatternMatch {
+        match_faceted_field(
+            field,
+            &self.filterable_attributes_rules,
+            &self.sortable_fields,
+            &self.asc_desc_fields,
+            &self.distinct_field,
+        )
     }
 
     // find and insert the new field ids
@@ -1545,7 +1599,7 @@ impl InnerIndexSettings {
         index: &Index,
     ) -> Result<()> {
         let searchable_fields = self
-            .user_defined_searchable_fields
+            .user_defined_searchable_attributes
             .as_ref()
             .map(|searchable| searchable.iter().map(|s| s.as_str()).collect::<Vec<_>>());
 
@@ -1554,17 +1608,9 @@ impl InnerIndexSettings {
             index.put_all_searchable_fields_from_fields_ids_map(
                 wtxn,
                 &searchable_fields,
-                &self.non_searchable_fields_ids,
                 &self.fields_ids_map,
             )?;
         }
-        self.searchable_fields_ids = index.searchable_fields_ids(wtxn)?;
-        let localized_attributes_rules = index.localized_attributes_rules(wtxn)?;
-        self.localized_searchable_fields_ids = LocalizedFieldIds::new(
-            &localized_attributes_rules,
-            &self.fields_ids_map,
-            self.searchable_fields_ids.iter().cloned(),
-        );
 
         Ok(())
     }
@@ -1582,7 +1628,8 @@ fn embedders(embedding_configs: Vec<IndexEmbeddingConfig>) -> Result<EmbeddingCo
                 let prompt = Arc::new(prompt.try_into().map_err(crate::Error::from)?);
 
                 let embedder = Arc::new(
-                    Embedder::new(embedder_options.clone())
+                    // cache_cap: no cache needed for indexing purposes
+                    Embedder::new(embedder_options.clone(), 0)
                         .map_err(crate::vector::Error::from)
                         .map_err(crate::Error::from)?,
                 );
@@ -1595,25 +1642,12 @@ fn embedders(embedding_configs: Vec<IndexEmbeddingConfig>) -> Result<EmbeddingCo
 
 fn validate_prompt(
     name: &str,
-    new: Setting<EmbeddingSettings>,
-) -> Result<Setting<EmbeddingSettings>> {
-    match new {
-        Setting::Set(EmbeddingSettings {
-            source,
-            model,
-            revision,
-            api_key,
-            dimensions,
-            document_template: Setting::Set(template),
-            document_template_max_bytes,
-            url,
-            request,
-            response,
-            distribution,
-            headers,
-            binary_quantized: binary_quantize,
-        }) => {
-            let max_bytes = match document_template_max_bytes.set() {
+    new_prompt: Setting<String>,
+    max_bytes: Setting<usize>,
+) -> Result<Setting<String>> {
+    match new_prompt {
+        Setting::Set(template) => {
+            let max_bytes = match max_bytes.set() {
                 Some(max_bytes) => NonZeroUsize::new(max_bytes).ok_or_else(|| {
                     crate::error::UserError::InvalidSettingsDocumentTemplateMaxBytes {
                         embedder_name: name.to_owned(),
@@ -1631,21 +1665,7 @@ fn validate_prompt(
             .map(|prompt| crate::prompt::PromptData::from(prompt).template)
             .map_err(|inner| UserError::InvalidPromptForEmbeddings(name.to_owned(), inner))?;
 
-            Ok(Setting::Set(EmbeddingSettings {
-                source,
-                model,
-                revision,
-                api_key,
-                dimensions,
-                document_template: Setting::Set(template),
-                document_template_max_bytes,
-                url,
-                request,
-                response,
-                distribution,
-                headers,
-                binary_quantized: binary_quantize,
-            }))
+            Ok(Setting::Set(template))
         }
         new => Ok(new),
     }
@@ -1655,12 +1675,12 @@ pub fn validate_embedding_settings(
     settings: Setting<EmbeddingSettings>,
     name: &str,
 ) -> Result<Setting<EmbeddingSettings>> {
-    let settings = validate_prompt(name, settings)?;
     let Setting::Set(settings) = settings else { return Ok(settings) };
     let EmbeddingSettings {
         source,
         model,
         revision,
+        pooling,
         api_key,
         dimensions,
         document_template,
@@ -1668,10 +1688,14 @@ pub fn validate_embedding_settings(
         url,
         request,
         response,
+        search_embedder,
+        mut indexing_embedder,
         distribution,
         headers,
         binary_quantized: binary_quantize,
     } = settings;
+
+    let document_template = validate_prompt(name, document_template, document_template_max_bytes)?;
 
     if let Some(0) = dimensions.set() {
         return Err(crate::error::UserError::InvalidSettingsDimensions {
@@ -1698,10 +1722,12 @@ pub fn validate_embedding_settings(
     }
 
     let Some(inferred_source) = source.set() else {
+        // we are validating the fused settings, so we always have a source
         return Ok(Setting::Set(EmbeddingSettings {
             source,
             model,
             revision,
+            pooling,
             api_key,
             dimensions,
             document_template,
@@ -1709,19 +1735,35 @@ pub fn validate_embedding_settings(
             url,
             request,
             response,
+            search_embedder,
+            indexing_embedder,
             distribution,
             headers,
             binary_quantized: binary_quantize,
         }));
     };
+    EmbeddingSettings::check_settings(
+        name,
+        inferred_source,
+        NestingContext::NotNested,
+        &model,
+        &revision,
+        &pooling,
+        &dimensions,
+        &api_key,
+        &url,
+        &request,
+        &response,
+        &document_template,
+        &document_template_max_bytes,
+        &headers,
+        &search_embedder,
+        &indexing_embedder,
+        &binary_quantize,
+        &distribution,
+    )?;
     match inferred_source {
         EmbedderSource::OpenAi => {
-            check_unset(&revision, EmbeddingSettings::REVISION, inferred_source, name)?;
-
-            check_unset(&request, EmbeddingSettings::REQUEST, inferred_source, name)?;
-            check_unset(&response, EmbeddingSettings::RESPONSE, inferred_source, name)?;
-            check_unset(&headers, EmbeddingSettings::HEADERS, inferred_source, name)?;
-
             if let Setting::Set(model) = &model {
                 let model = crate::vector::openai::EmbeddingModel::from_name(model.as_str())
                     .ok_or(crate::error::UserError::InvalidOpenAiModel {
@@ -1752,58 +1794,124 @@ pub fn validate_embedding_settings(
                 }
             }
         }
-        EmbedderSource::Ollama => {
-            check_set(&model, EmbeddingSettings::MODEL, inferred_source, name)?;
-            check_unset(&revision, EmbeddingSettings::REVISION, inferred_source, name)?;
+        EmbedderSource::Ollama
+        | EmbedderSource::HuggingFace
+        | EmbedderSource::UserProvided
+        | EmbedderSource::Rest => {}
+        EmbedderSource::Composite => {
+            if let Setting::Set(embedder) = &search_embedder {
+                if let Some(source) = embedder.source.set() {
+                    let search_embedder = match embedder.search_embedder.clone() {
+                        Setting::Set(search_embedder) => Setting::Set(deserialize_sub_embedder(
+                            search_embedder,
+                            name,
+                            NestingContext::Search,
+                        )?),
+                        Setting::Reset => Setting::Reset,
+                        Setting::NotSet => Setting::NotSet,
+                    };
+                    let indexing_embedder = match embedder.indexing_embedder.clone() {
+                        Setting::Set(indexing_embedder) => Setting::Set(deserialize_sub_embedder(
+                            indexing_embedder,
+                            name,
+                            NestingContext::Search,
+                        )?),
+                        Setting::Reset => Setting::Reset,
+                        Setting::NotSet => Setting::NotSet,
+                    };
+                    EmbeddingSettings::check_nested_source(name, source, NestingContext::Search)?;
+                    EmbeddingSettings::check_settings(
+                        name,
+                        source,
+                        NestingContext::Search,
+                        &embedder.model,
+                        &embedder.revision,
+                        &embedder.pooling,
+                        &embedder.dimensions,
+                        &embedder.api_key,
+                        &embedder.url,
+                        &embedder.request,
+                        &embedder.response,
+                        &embedder.document_template,
+                        &embedder.document_template_max_bytes,
+                        &embedder.headers,
+                        &search_embedder,
+                        &indexing_embedder,
+                        &embedder.binary_quantized,
+                        &embedder.distribution,
+                    )?;
+                } else {
+                    return Err(UserError::MissingSourceForNested {
+                        embedder_name: NestingContext::Search.embedder_name_with_context(name),
+                    }
+                    .into());
+                }
+            }
 
-            check_unset(&request, EmbeddingSettings::REQUEST, inferred_source, name)?;
-            check_unset(&response, EmbeddingSettings::RESPONSE, inferred_source, name)?;
-            check_unset(&headers, EmbeddingSettings::HEADERS, inferred_source, name)?;
-        }
-        EmbedderSource::HuggingFace => {
-            check_unset(&api_key, EmbeddingSettings::API_KEY, inferred_source, name)?;
-            check_unset(&dimensions, EmbeddingSettings::DIMENSIONS, inferred_source, name)?;
+            indexing_embedder = if let Setting::Set(mut embedder) = indexing_embedder {
+                embedder.document_template = validate_prompt(
+                    name,
+                    embedder.document_template,
+                    embedder.document_template_max_bytes,
+                )?;
 
-            check_unset(&url, EmbeddingSettings::URL, inferred_source, name)?;
-            check_unset(&request, EmbeddingSettings::REQUEST, inferred_source, name)?;
-            check_unset(&response, EmbeddingSettings::RESPONSE, inferred_source, name)?;
-            check_unset(&headers, EmbeddingSettings::HEADERS, inferred_source, name)?;
-        }
-        EmbedderSource::UserProvided => {
-            check_unset(&model, EmbeddingSettings::MODEL, inferred_source, name)?;
-            check_unset(&revision, EmbeddingSettings::REVISION, inferred_source, name)?;
-            check_unset(&api_key, EmbeddingSettings::API_KEY, inferred_source, name)?;
-            check_unset(
-                &document_template,
-                EmbeddingSettings::DOCUMENT_TEMPLATE,
-                inferred_source,
-                name,
-            )?;
-            check_unset(
-                &document_template_max_bytes,
-                EmbeddingSettings::DOCUMENT_TEMPLATE_MAX_BYTES,
-                inferred_source,
-                name,
-            )?;
-            check_set(&dimensions, EmbeddingSettings::DIMENSIONS, inferred_source, name)?;
-
-            check_unset(&url, EmbeddingSettings::URL, inferred_source, name)?;
-            check_unset(&request, EmbeddingSettings::REQUEST, inferred_source, name)?;
-            check_unset(&response, EmbeddingSettings::RESPONSE, inferred_source, name)?;
-            check_unset(&headers, EmbeddingSettings::HEADERS, inferred_source, name)?;
-        }
-        EmbedderSource::Rest => {
-            check_unset(&model, EmbeddingSettings::MODEL, inferred_source, name)?;
-            check_unset(&revision, EmbeddingSettings::REVISION, inferred_source, name)?;
-            check_set(&url, EmbeddingSettings::URL, inferred_source, name)?;
-            check_set(&request, EmbeddingSettings::REQUEST, inferred_source, name)?;
-            check_set(&response, EmbeddingSettings::RESPONSE, inferred_source, name)?;
+                if let Some(source) = embedder.source.set() {
+                    let search_embedder = match embedder.search_embedder.clone() {
+                        Setting::Set(search_embedder) => Setting::Set(deserialize_sub_embedder(
+                            search_embedder,
+                            name,
+                            NestingContext::Indexing,
+                        )?),
+                        Setting::Reset => Setting::Reset,
+                        Setting::NotSet => Setting::NotSet,
+                    };
+                    let indexing_embedder = match embedder.indexing_embedder.clone() {
+                        Setting::Set(indexing_embedder) => Setting::Set(deserialize_sub_embedder(
+                            indexing_embedder,
+                            name,
+                            NestingContext::Indexing,
+                        )?),
+                        Setting::Reset => Setting::Reset,
+                        Setting::NotSet => Setting::NotSet,
+                    };
+                    EmbeddingSettings::check_nested_source(name, source, NestingContext::Indexing)?;
+                    EmbeddingSettings::check_settings(
+                        name,
+                        source,
+                        NestingContext::Indexing,
+                        &embedder.model,
+                        &embedder.revision,
+                        &embedder.pooling,
+                        &embedder.dimensions,
+                        &embedder.api_key,
+                        &embedder.url,
+                        &embedder.request,
+                        &embedder.response,
+                        &embedder.document_template,
+                        &embedder.document_template_max_bytes,
+                        &embedder.headers,
+                        &search_embedder,
+                        &indexing_embedder,
+                        &embedder.binary_quantized,
+                        &embedder.distribution,
+                    )?;
+                } else {
+                    return Err(UserError::MissingSourceForNested {
+                        embedder_name: NestingContext::Indexing.embedder_name_with_context(name),
+                    }
+                    .into());
+                }
+                Setting::Set(embedder)
+            } else {
+                indexing_embedder
+            };
         }
     }
     Ok(Setting::Set(EmbeddingSettings {
         source,
         model,
         revision,
+        pooling,
         api_key,
         dimensions,
         document_template,
@@ -1811,970 +1919,31 @@ pub fn validate_embedding_settings(
         url,
         request,
         response,
+        search_embedder,
+        indexing_embedder,
         distribution,
         headers,
         binary_quantized: binary_quantize,
     }))
 }
 
-#[cfg(test)]
-mod tests {
-    use big_s::S;
-    use heed::types::Bytes;
-    use maplit::{btreemap, btreeset, hashset};
-    use meili_snap::snapshot;
-
-    use super::*;
-    use crate::error::Error;
-    use crate::index::tests::TempIndex;
-    use crate::update::ClearDocuments;
-    use crate::{db_snap, Criterion, Filter, SearchResult};
-
-    #[test]
-    fn set_and_reset_searchable_fields() {
-        let index = TempIndex::new();
-
-        // First we send 3 documents with ids from 1 to 3.
-        let mut wtxn = index.write_txn().unwrap();
-
-        index
-            .add_documents_using_wtxn(
-                &mut wtxn,
-                documents!([
-                    { "id": 1, "name": "kevin", "age": 23 },
-                    { "id": 2, "name": "kevina", "age": 21},
-                    { "id": 3, "name": "benoit", "age": 34 }
-                ]),
-            )
-            .unwrap();
-
-        // We change the searchable fields to be the "name" field only.
-        index
-            .update_settings_using_wtxn(&mut wtxn, |settings| {
-                settings.set_searchable_fields(vec!["name".into()]);
+fn deserialize_sub_embedder(
+    sub_embedder: serde_json::Value,
+    embedder_name: &str,
+    context: NestingContext,
+) -> std::result::Result<SubEmbeddingSettings, UserError> {
+    match deserr::deserialize::<_, _, deserr::errors::JsonError>(sub_embedder) {
+        Ok(sub_embedder) => Ok(sub_embedder),
+        Err(error) => {
+            let message = format!("{error}{}", context.nesting_embedders());
+            Err(UserError::InvalidSettingsEmbedder {
+                embedder_name: context.embedder_name_with_context(embedder_name),
+                message,
             })
-            .unwrap();
-
-        wtxn.commit().unwrap();
-
-        db_snap!(index, fields_ids_map, @r###"
-        0   id               |
-        1   name             |
-        2   age              |
-        "###);
-        db_snap!(index, searchable_fields, @r###"["name"]"###);
-        db_snap!(index, fieldids_weights_map, @r###"
-        fid weight
-        1   0   |
-        "###);
-
-        // Check that the searchable field is correctly set to "name" only.
-        let rtxn = index.read_txn().unwrap();
-        // When we search for something that is not in
-        // the searchable fields it must not return any document.
-        let result = index.search(&rtxn).query("23").execute().unwrap();
-        assert_eq!(result.documents_ids, Vec::<u32>::new());
-
-        // When we search for something that is in the searchable fields
-        // we must find the appropriate document.
-        let result = index.search(&rtxn).query(r#""kevin""#).execute().unwrap();
-        let documents = index.documents(&rtxn, result.documents_ids).unwrap();
-        let fid_map = index.fields_ids_map(&rtxn).unwrap();
-        assert_eq!(documents.len(), 1);
-        assert_eq!(documents[0].1.get(fid_map.id("name").unwrap()), Some(&br#""kevin""#[..]));
-        drop(rtxn);
-
-        // We change the searchable fields to be the "name" field only.
-        index
-            .update_settings(|settings| {
-                settings.reset_searchable_fields();
-            })
-            .unwrap();
-
-        db_snap!(index, fields_ids_map, @r###"
-        0   id               |
-        1   name             |
-        2   age              |
-        "###);
-        db_snap!(index, searchable_fields, @r###"["id", "name", "age"]"###);
-        db_snap!(index, fieldids_weights_map, @r###"
-        fid weight
-        0   0   |
-        1   0   |
-        2   0   |
-        "###);
-
-        // Check that the searchable field have been reset and documents are found now.
-        let rtxn = index.read_txn().unwrap();
-        let fid_map = index.fields_ids_map(&rtxn).unwrap();
-        let user_defined_searchable_fields = index.user_defined_searchable_fields(&rtxn).unwrap();
-        snapshot!(format!("{user_defined_searchable_fields:?}"), @"None");
-        // the searchable fields should contain all the fields
-        let searchable_fields = index.searchable_fields(&rtxn).unwrap();
-        snapshot!(format!("{searchable_fields:?}"), @r###"["id", "name", "age"]"###);
-        let result = index.search(&rtxn).query("23").execute().unwrap();
-        assert_eq!(result.documents_ids.len(), 1);
-        let documents = index.documents(&rtxn, result.documents_ids).unwrap();
-        assert_eq!(documents[0].1.get(fid_map.id("name").unwrap()), Some(&br#""kevin""#[..]));
-    }
-
-    #[test]
-    fn mixup_searchable_with_displayed_fields() {
-        let index = TempIndex::new();
-
-        let mut wtxn = index.write_txn().unwrap();
-        // First we send 3 documents with ids from 1 to 3.
-        index
-            .add_documents_using_wtxn(
-                &mut wtxn,
-                documents!([
-                    { "id": 0, "name": "kevin", "age": 23},
-                    { "id": 1, "name": "kevina", "age": 21 },
-                    { "id": 2, "name": "benoit", "age": 34 }
-                ]),
-            )
-            .unwrap();
-
-        // In the same transaction we change the displayed fields to be only the "age".
-        // We also change the searchable fields to be the "name" field only.
-        index
-            .update_settings_using_wtxn(&mut wtxn, |settings| {
-                settings.set_displayed_fields(vec!["age".into()]);
-                settings.set_searchable_fields(vec!["name".into()]);
-            })
-            .unwrap();
-        wtxn.commit().unwrap();
-
-        // Check that the displayed fields are correctly set to `None` (default value).
-        let rtxn = index.read_txn().unwrap();
-        let fields_ids = index.displayed_fields(&rtxn).unwrap();
-        assert_eq!(fields_ids.unwrap(), (&["age"][..]));
-        drop(rtxn);
-
-        // We change the searchable fields to be the "name" field only.
-        index
-            .update_settings(|settings| {
-                settings.reset_searchable_fields();
-            })
-            .unwrap();
-
-        // Check that the displayed fields always contains only the "age" field.
-        let rtxn = index.read_txn().unwrap();
-        let fields_ids = index.displayed_fields(&rtxn).unwrap();
-        assert_eq!(fields_ids.unwrap(), &["age"][..]);
-    }
-
-    #[test]
-    fn default_displayed_fields() {
-        let index = TempIndex::new();
-
-        // First we send 3 documents with ids from 1 to 3.
-        index
-            .add_documents(documents!([
-                { "id": 0, "name": "kevin", "age": 23},
-                { "id": 1, "name": "kevina", "age": 21 },
-                { "id": 2, "name": "benoit", "age": 34 }
-            ]))
-            .unwrap();
-
-        // Check that the displayed fields are correctly set to `None` (default value).
-        let rtxn = index.read_txn().unwrap();
-        let fields_ids = index.displayed_fields(&rtxn).unwrap();
-        assert_eq!(fields_ids, None);
-    }
-
-    #[test]
-    fn set_and_reset_displayed_field() {
-        let index = TempIndex::new();
-
-        let mut wtxn = index.write_txn().unwrap();
-        index
-            .add_documents_using_wtxn(
-                &mut wtxn,
-                documents!([
-                    { "id": 0, "name": "kevin", "age": 23},
-                    { "id": 1, "name": "kevina", "age": 21 },
-                    { "id": 2, "name": "benoit", "age": 34 }
-                ]),
-            )
-            .unwrap();
-        index
-            .update_settings_using_wtxn(&mut wtxn, |settings| {
-                settings.set_displayed_fields(vec!["age".into()]);
-            })
-            .unwrap();
-        wtxn.commit().unwrap();
-
-        // Check that the displayed fields are correctly set to only the "age" field.
-        let rtxn = index.read_txn().unwrap();
-        let fields_ids = index.displayed_fields(&rtxn).unwrap();
-        assert_eq!(fields_ids.unwrap(), &["age"][..]);
-        drop(rtxn);
-
-        // We reset the fields ids to become `None`, the default value.
-        index
-            .update_settings(|settings| {
-                settings.reset_displayed_fields();
-            })
-            .unwrap();
-
-        // Check that the displayed fields are correctly set to `None` (default value).
-        let rtxn = index.read_txn().unwrap();
-        let fields_ids = index.displayed_fields(&rtxn).unwrap();
-        assert_eq!(fields_ids, None);
-    }
-
-    #[test]
-    fn set_filterable_fields() {
-        let index = TempIndex::new();
-
-        // Set the filterable fields to be the age.
-        index
-            .update_settings(|settings| {
-                settings.set_filterable_fields(hashset! { S("age") });
-            })
-            .unwrap();
-
-        // Then index some documents.
-        index
-            .add_documents(documents!([
-                { "id": 0, "name": "kevin", "age": 23},
-                { "id": 1, "name": "kevina", "age": 21 },
-                { "id": 2, "name": "benoit", "age": 34 }
-            ]))
-            .unwrap();
-
-        // Check that the displayed fields are correctly set.
-        let rtxn = index.read_txn().unwrap();
-        let fields_ids = index.filterable_fields(&rtxn).unwrap();
-        assert_eq!(fields_ids, hashset! { S("age") });
-        // Only count the field_id 0 and level 0 facet values.
-        // TODO we must support typed CSVs for numbers to be understood.
-        let fidmap = index.fields_ids_map(&rtxn).unwrap();
-        for document in index.all_documents(&rtxn).unwrap() {
-            let document = document.unwrap();
-            let json = crate::obkv_to_json(&fidmap.ids().collect::<Vec<_>>(), &fidmap, document.1)
-                .unwrap();
-            println!("json: {:?}", json);
         }
-        let count = index
-            .facet_id_f64_docids
-            .remap_key_type::<Bytes>()
-            // The faceted field id is 2u16
-            .prefix_iter(&rtxn, &[0, 2, 0])
-            .unwrap()
-            .count();
-        assert_eq!(count, 3);
-        drop(rtxn);
-
-        // Index a little more documents with new and current facets values.
-        index
-            .add_documents(documents!([
-                { "id": 3, "name": "kevin2", "age": 23},
-                { "id": 4, "name": "kevina2", "age": 21 },
-                { "id": 5, "name": "benoit", "age": 35 }
-            ]))
-            .unwrap();
-
-        let rtxn = index.read_txn().unwrap();
-        // Only count the field_id 0 and level 0 facet values.
-        let count = index
-            .facet_id_f64_docids
-            .remap_key_type::<Bytes>()
-            .prefix_iter(&rtxn, &[0, 2, 0])
-            .unwrap()
-            .count();
-        assert_eq!(count, 4);
-
-        // Set the filterable fields to be the age and the name.
-        index
-            .update_settings(|settings| {
-                settings.set_filterable_fields(hashset! { S("age"),  S("name") });
-            })
-            .unwrap();
-
-        // Check that the displayed fields are correctly set.
-        let rtxn = index.read_txn().unwrap();
-        let fields_ids = index.filterable_fields(&rtxn).unwrap();
-        assert_eq!(fields_ids, hashset! { S("age"),  S("name") });
-
-        let rtxn = index.read_txn().unwrap();
-        // Only count the field_id 2 and level 0 facet values.
-        let count = index
-            .facet_id_f64_docids
-            .remap_key_type::<Bytes>()
-            .prefix_iter(&rtxn, &[0, 2, 0])
-            .unwrap()
-            .count();
-        assert_eq!(count, 4);
-
-        let rtxn = index.read_txn().unwrap();
-        // Only count the field_id 1 and level 0 facet values.
-        let count = index
-            .facet_id_string_docids
-            .remap_key_type::<Bytes>()
-            .prefix_iter(&rtxn, &[0, 1])
-            .unwrap()
-            .count();
-        assert_eq!(count, 5);
-
-        // Remove the age from the filterable fields.
-        index
-            .update_settings(|settings| {
-                settings.set_filterable_fields(hashset! { S("name") });
-            })
-            .unwrap();
-
-        // Check that the displayed fields are correctly set.
-        let rtxn = index.read_txn().unwrap();
-        let fields_ids = index.filterable_fields(&rtxn).unwrap();
-        assert_eq!(fields_ids, hashset! { S("name") });
-
-        let rtxn = index.read_txn().unwrap();
-        // Only count the field_id 2 and level 0 facet values.
-        let count = index
-            .facet_id_f64_docids
-            .remap_key_type::<Bytes>()
-            .prefix_iter(&rtxn, &[0, 2, 0])
-            .unwrap()
-            .count();
-        assert_eq!(count, 0);
-
-        let rtxn = index.read_txn().unwrap();
-        // Only count the field_id 1 and level 0 facet values.
-        let count = index
-            .facet_id_string_docids
-            .remap_key_type::<Bytes>()
-            .prefix_iter(&rtxn, &[0, 1])
-            .unwrap()
-            .count();
-        assert_eq!(count, 5);
-    }
-
-    #[test]
-    fn set_asc_desc_field() {
-        let index = TempIndex::new();
-
-        // Set the filterable fields to be the age.
-        index
-            .update_settings(|settings| {
-                settings.set_displayed_fields(vec![S("name")]);
-                settings.set_criteria(vec![Criterion::Asc("age".to_owned())]);
-            })
-            .unwrap();
-
-        // Then index some documents.
-        index
-            .add_documents(documents!([
-                { "id": 0, "name": "kevin", "age": 23},
-                { "id": 1, "name": "kevina", "age": 21 },
-                { "id": 2, "name": "benoit", "age": 34 }
-            ]))
-            .unwrap();
-
-        // Run an empty query just to ensure that the search results are ordered.
-        let rtxn = index.read_txn().unwrap();
-        let SearchResult { documents_ids, .. } = index.search(&rtxn).execute().unwrap();
-        let documents = index.documents(&rtxn, documents_ids).unwrap();
-
-        // Fetch the documents "age" field in the ordre in which the documents appear.
-        let age_field_id = index.fields_ids_map(&rtxn).unwrap().id("age").unwrap();
-        let iter = documents.into_iter().map(|(_, doc)| {
-            let bytes = doc.get(age_field_id).unwrap();
-            let string = std::str::from_utf8(bytes).unwrap();
-            string.parse::<u32>().unwrap()
-        });
-
-        assert_eq!(iter.collect::<Vec<_>>(), vec![21, 23, 34]);
-    }
-
-    #[test]
-    fn set_distinct_field() {
-        let index = TempIndex::new();
-
-        // Set the filterable fields to be the age.
-        index
-            .update_settings(|settings| {
-                // Don't display the generated `id` field.
-                settings.set_displayed_fields(vec![S("name"), S("age")]);
-                settings.set_distinct_field(S("age"));
-            })
-            .unwrap();
-
-        // Then index some documents.
-        index
-            .add_documents(documents!([
-                { "id": 0, "name": "kevin",  "age": 23 },
-                { "id": 1, "name": "kevina", "age": 21 },
-                { "id": 2, "name": "benoit", "age": 34 },
-                { "id": 3, "name": "bernard", "age": 34 },
-                { "id": 4, "name": "bertrand", "age": 34 },
-                { "id": 5, "name": "bernie", "age": 34 },
-                { "id": 6, "name": "ben", "age": 34 }
-            ]))
-            .unwrap();
-
-        // Run an empty query just to ensure that the search results are ordered.
-        let rtxn = index.read_txn().unwrap();
-        let SearchResult { documents_ids, .. } = index.search(&rtxn).execute().unwrap();
-
-        // There must be at least one document with a 34 as the age.
-        assert_eq!(documents_ids.len(), 3);
-    }
-
-    #[test]
-    fn set_nested_distinct_field() {
-        let index = TempIndex::new();
-
-        // Set the filterable fields to be the age.
-        index
-            .update_settings(|settings| {
-                // Don't display the generated `id` field.
-                settings.set_displayed_fields(vec![S("person")]);
-                settings.set_distinct_field(S("person.age"));
-            })
-            .unwrap();
-
-        // Then index some documents.
-        index
-            .add_documents(documents!([
-                { "id": 0, "person": { "name": "kevin", "age": 23 }},
-                { "id": 1, "person": { "name": "kevina", "age": 21 }},
-                { "id": 2, "person": { "name": "benoit", "age": 34 }},
-                { "id": 3, "person": { "name": "bernard", "age": 34 }},
-                { "id": 4, "person": { "name": "bertrand", "age": 34 }},
-                { "id": 5, "person": { "name": "bernie", "age": 34 }},
-                { "id": 6, "person": { "name": "ben", "age": 34 }}
-            ]))
-            .unwrap();
-
-        // Run an empty query just to ensure that the search results are ordered.
-        let rtxn = index.read_txn().unwrap();
-        let SearchResult { documents_ids, .. } = index.search(&rtxn).execute().unwrap();
-
-        // There must be at least one document with a 34 as the age.
-        assert_eq!(documents_ids.len(), 3);
-    }
-
-    #[test]
-    fn default_stop_words() {
-        let index = TempIndex::new();
-
-        // First we send 3 documents with ids from 1 to 3.
-        index
-            .add_documents(documents!([
-                { "id": 0, "name": "kevin", "age": 23},
-                { "id": 1, "name": "kevina", "age": 21 },
-                { "id": 2, "name": "benoit", "age": 34 }
-            ]))
-            .unwrap();
-
-        // Ensure there is no stop_words by default
-        let rtxn = index.read_txn().unwrap();
-        let stop_words = index.stop_words(&rtxn).unwrap();
-        assert!(stop_words.is_none());
-    }
-
-    #[test]
-    fn set_and_reset_stop_words() {
-        let index = TempIndex::new();
-
-        let mut wtxn = index.write_txn().unwrap();
-        // First we send 3 documents with ids from 1 to 3.
-        index
-            .add_documents_using_wtxn(
-                &mut wtxn,
-                documents!([
-                    { "id": 0, "name": "kevin", "age": 23, "maxim": "I love dogs" },
-                    { "id": 1, "name": "kevina", "age": 21, "maxim": "Doggos are the best" },
-                    { "id": 2, "name": "benoit", "age": 34, "maxim": "The crepes are really good" },
-                ]),
-            )
-            .unwrap();
-
-        // In the same transaction we provide some stop_words
-        let set = btreeset! { "i".to_string(), "the".to_string(), "are".to_string() };
-        index
-            .update_settings_using_wtxn(&mut wtxn, |settings| {
-                settings.set_stop_words(set.clone());
-            })
-            .unwrap();
-
-        wtxn.commit().unwrap();
-
-        // Ensure stop_words are effectively stored
-        let rtxn = index.read_txn().unwrap();
-        let stop_words = index.stop_words(&rtxn).unwrap();
-        assert!(stop_words.is_some()); // at this point the index should return something
-
-        let stop_words = stop_words.unwrap();
-        let expected = fst::Set::from_iter(&set).unwrap();
-        assert_eq!(stop_words.as_fst().as_bytes(), expected.as_fst().as_bytes());
-
-        // when we search for something that is a non prefix stop_words it should be ignored
-        // thus we should get a placeholder search (all the results = 3)
-        let result = index.search(&rtxn).query("the ").execute().unwrap();
-        assert_eq!(result.documents_ids.len(), 3);
-        let result = index.search(&rtxn).query("i ").execute().unwrap();
-        assert_eq!(result.documents_ids.len(), 3);
-        let result = index.search(&rtxn).query("are ").execute().unwrap();
-        assert_eq!(result.documents_ids.len(), 3);
-
-        let result = index.search(&rtxn).query("dog").execute().unwrap();
-        assert_eq!(result.documents_ids.len(), 2); // we have two maxims talking about doggos
-        let result = index.search(&rtxn).query("benoît").execute().unwrap();
-        assert_eq!(result.documents_ids.len(), 1); // there is one benoit in our data
-
-        // now we'll reset the stop_words and ensure it's None
-        index
-            .update_settings(|settings| {
-                settings.reset_stop_words();
-            })
-            .unwrap();
-
-        let rtxn = index.read_txn().unwrap();
-        let stop_words = index.stop_words(&rtxn).unwrap();
-        assert!(stop_words.is_none());
-
-        // now we can search for the stop words
-        let result = index.search(&rtxn).query("the").execute().unwrap();
-        assert_eq!(result.documents_ids.len(), 2);
-        let result = index.search(&rtxn).query("i").execute().unwrap();
-        assert_eq!(result.documents_ids.len(), 1);
-        let result = index.search(&rtxn).query("are").execute().unwrap();
-        assert_eq!(result.documents_ids.len(), 2);
-
-        // the rest of the search is still not impacted
-        let result = index.search(&rtxn).query("dog").execute().unwrap();
-        assert_eq!(result.documents_ids.len(), 2); // we have two maxims talking about doggos
-        let result = index.search(&rtxn).query("benoît").execute().unwrap();
-        assert_eq!(result.documents_ids.len(), 1); // there is one benoit in our data
-    }
-
-    #[test]
-    fn set_and_reset_synonyms() {
-        let index = TempIndex::new();
-
-        let mut wtxn = index.write_txn().unwrap();
-        // Send 3 documents with ids from 1 to 3.
-        index
-            .add_documents_using_wtxn(
-                &mut wtxn,
-                documents!([
-                    { "id": 0, "name": "kevin", "age": 23, "maxim": "I love dogs"},
-                    { "id": 1, "name": "kevina", "age": 21, "maxim": "Doggos are the best"},
-                    { "id": 2, "name": "benoit", "age": 34, "maxim": "The crepes are really good"},
-                ]),
-            )
-            .unwrap();
-
-        // In the same transaction provide some synonyms
-        index
-            .update_settings_using_wtxn(&mut wtxn, |settings| {
-                settings.set_synonyms(btreemap! {
-                    "blini".to_string() => vec!["crepes".to_string()],
-                    "super like".to_string() => vec!["love".to_string()],
-                    "puppies".to_string() => vec!["dogs".to_string(), "doggos".to_string()]
-                });
-            })
-            .unwrap();
-        wtxn.commit().unwrap();
-
-        // Ensure synonyms are effectively stored
-        let rtxn = index.read_txn().unwrap();
-        let synonyms = index.synonyms(&rtxn).unwrap();
-        assert!(!synonyms.is_empty()); // at this point the index should return something
-
-        // Check that we can use synonyms
-        let result = index.search(&rtxn).query("blini").execute().unwrap();
-        assert_eq!(result.documents_ids.len(), 1);
-        let result = index.search(&rtxn).query("super like").execute().unwrap();
-        assert_eq!(result.documents_ids.len(), 1);
-        let result = index.search(&rtxn).query("puppies").execute().unwrap();
-        assert_eq!(result.documents_ids.len(), 2);
-
-        // Reset the synonyms
-        index
-            .update_settings(|settings| {
-                settings.reset_synonyms();
-            })
-            .unwrap();
-
-        // Ensure synonyms are reset
-        let rtxn = index.read_txn().unwrap();
-        let synonyms = index.synonyms(&rtxn).unwrap();
-        assert!(synonyms.is_empty());
-
-        // Check that synonyms are no longer work
-        let result = index.search(&rtxn).query("blini").execute().unwrap();
-        assert!(result.documents_ids.is_empty());
-        let result = index.search(&rtxn).query("super like").execute().unwrap();
-        assert!(result.documents_ids.is_empty());
-        let result = index.search(&rtxn).query("puppies").execute().unwrap();
-        assert!(result.documents_ids.is_empty());
-    }
-
-    #[test]
-    fn thai_synonyms() {
-        let index = TempIndex::new();
-
-        let mut wtxn = index.write_txn().unwrap();
-        // Send 3 documents with ids from 1 to 3.
-        index
-            .add_documents_using_wtxn(
-                &mut wtxn,
-                documents!([
-                    { "id": 0, "name": "ยี่ปุ่น" },
-                    { "id": 1, "name": "ญี่ปุ่น" },
-                ]),
-            )
-            .unwrap();
-
-        // In the same transaction provide some synonyms
-        index
-            .update_settings_using_wtxn(&mut wtxn, |settings| {
-                settings.set_synonyms(btreemap! {
-                    "japanese".to_string() => vec![S("ญี่ปุ่น"), S("ยี่ปุ่น")],
-                });
-            })
-            .unwrap();
-        wtxn.commit().unwrap();
-
-        // Ensure synonyms are effectively stored
-        let rtxn = index.read_txn().unwrap();
-        let synonyms = index.synonyms(&rtxn).unwrap();
-        assert!(!synonyms.is_empty()); // at this point the index should return something
-
-        // Check that we can use synonyms
-        let result = index.search(&rtxn).query("japanese").execute().unwrap();
-        assert_eq!(result.documents_ids.len(), 2);
-    }
-
-    #[test]
-    fn setting_searchable_recomputes_other_settings() {
-        let index = TempIndex::new();
-
-        // Set all the settings except searchable
-        index
-            .update_settings(|settings| {
-                settings.set_displayed_fields(vec!["hello".to_string()]);
-                settings.set_filterable_fields(hashset! { S("age"), S("toto") });
-                settings.set_criteria(vec![Criterion::Asc(S("toto"))]);
-            })
-            .unwrap();
-
-        // check the output
-        let rtxn = index.read_txn().unwrap();
-        assert_eq!(&["hello"][..], index.displayed_fields(&rtxn).unwrap().unwrap());
-        // since no documents have been pushed the primary key is still unset
-        assert!(index.primary_key(&rtxn).unwrap().is_none());
-        assert_eq!(vec![Criterion::Asc("toto".to_string())], index.criteria(&rtxn).unwrap());
-        drop(rtxn);
-
-        // We set toto and age as searchable to force reordering of the fields
-        index
-            .update_settings(|settings| {
-                settings.set_searchable_fields(vec!["toto".to_string(), "age".to_string()]);
-            })
-            .unwrap();
-
-        let rtxn = index.read_txn().unwrap();
-        assert_eq!(&["hello"][..], index.displayed_fields(&rtxn).unwrap().unwrap());
-        assert!(index.primary_key(&rtxn).unwrap().is_none());
-        assert_eq!(vec![Criterion::Asc("toto".to_string())], index.criteria(&rtxn).unwrap());
-    }
-
-    #[test]
-    fn setting_not_filterable_cant_filter() {
-        let index = TempIndex::new();
-
-        // Set all the settings except searchable
-        index
-            .update_settings(|settings| {
-                settings.set_displayed_fields(vec!["hello".to_string()]);
-                // It is only Asc(toto), there is a facet database but it is denied to filter with toto.
-                settings.set_criteria(vec![Criterion::Asc(S("toto"))]);
-            })
-            .unwrap();
-
-        let rtxn = index.read_txn().unwrap();
-        let filter = Filter::from_str("toto = 32").unwrap().unwrap();
-        let _ = filter.evaluate(&rtxn, &index).unwrap_err();
-    }
-
-    #[test]
-    fn setting_primary_key() {
-        let index = TempIndex::new();
-
-        let mut wtxn = index.write_txn().unwrap();
-        // Set the primary key settings
-        index
-            .update_settings_using_wtxn(&mut wtxn, |settings| {
-                settings.set_primary_key(S("mykey"));
-            })
-            .unwrap();
-        wtxn.commit().unwrap();
-        let mut wtxn = index.write_txn().unwrap();
-        assert_eq!(index.primary_key(&wtxn).unwrap(), Some("mykey"));
-
-        // Then index some documents with the "mykey" primary key.
-        index
-            .add_documents_using_wtxn(
-                &mut wtxn,
-                documents!([
-                    { "mykey": 1, "name": "kevin",  "age": 23 },
-                    { "mykey": 2, "name": "kevina", "age": 21 },
-                    { "mykey": 3, "name": "benoit", "age": 34 },
-                    { "mykey": 4, "name": "bernard", "age": 34 },
-                    { "mykey": 5, "name": "bertrand", "age": 34 },
-                    { "mykey": 6, "name": "bernie", "age": 34 },
-                    { "mykey": 7, "name": "ben", "age": 34 }
-                ]),
-            )
-            .unwrap();
-        wtxn.commit().unwrap();
-
-        // Updating settings with the same primary key should do nothing
-        let mut wtxn = index.write_txn().unwrap();
-        index
-            .update_settings_using_wtxn(&mut wtxn, |settings| {
-                settings.set_primary_key(S("mykey"));
-            })
-            .unwrap();
-        assert_eq!(index.primary_key(&wtxn).unwrap(), Some("mykey"));
-        wtxn.commit().unwrap();
-
-        // Updating the settings with a different (or no) primary key causes an error
-        let mut wtxn = index.write_txn().unwrap();
-        let error = index
-            .update_settings_using_wtxn(&mut wtxn, |settings| {
-                settings.reset_primary_key();
-            })
-            .unwrap_err();
-        assert!(matches!(error, Error::UserError(UserError::PrimaryKeyCannotBeChanged(_))));
-        wtxn.abort();
-
-        // But if we clear the database...
-        let mut wtxn = index.write_txn().unwrap();
-        let builder = ClearDocuments::new(&mut wtxn, &index);
-        builder.execute().unwrap();
-        wtxn.commit().unwrap();
-
-        // ...we can change the primary key
-        index
-            .update_settings(|settings| {
-                settings.set_primary_key(S("myid"));
-            })
-            .unwrap();
-    }
-
-    #[test]
-    fn setting_impact_relevancy() {
-        let index = TempIndex::new();
-
-        // Set the genres setting
-        index
-            .update_settings(|settings| {
-                settings.set_filterable_fields(hashset! { S("genres") });
-            })
-            .unwrap();
-
-        index.add_documents(documents!([
-          {
-            "id": 11,
-            "title": "Star Wars",
-            "overview":
-              "Princess Leia is captured and held hostage by the evil Imperial forces in their effort to take over the galactic Empire. Venturesome Luke Skywalker and dashing captain Han Solo team together with the loveable robot duo R2-D2 and C-3PO to rescue the beautiful princess and restore peace and justice in the Empire.",
-            "genres": ["Adventure", "Action", "Science Fiction"],
-            "poster": "https://image.tmdb.org/t/p/w500/6FfCtAuVAW8XJjZ7eWeLibRLWTw.jpg",
-            "release_date": 233366400
-          },
-          {
-            "id": 30,
-            "title": "Magnetic Rose",
-            "overview": "",
-            "genres": ["Animation", "Science Fiction"],
-            "poster": "https://image.tmdb.org/t/p/w500/gSuHDeWemA1menrwfMRChnSmMVN.jpg",
-            "release_date": 819676800
-          }
-        ])).unwrap();
-
-        let rtxn = index.read_txn().unwrap();
-        let SearchResult { documents_ids, .. } = index.search(&rtxn).query("S").execute().unwrap();
-        let first_id = documents_ids[0];
-        let documents = index.documents(&rtxn, documents_ids).unwrap();
-        let (_, content) = documents.iter().find(|(id, _)| *id == first_id).unwrap();
-
-        let fid = index.fields_ids_map(&rtxn).unwrap().id("title").unwrap();
-        let line = std::str::from_utf8(content.get(fid).unwrap()).unwrap();
-        assert_eq!(line, r#""Star Wars""#);
-    }
-
-    #[test]
-    fn test_disable_typo() {
-        let index = TempIndex::new();
-
-        let mut txn = index.write_txn().unwrap();
-        assert!(index.authorize_typos(&txn).unwrap());
-
-        index
-            .update_settings_using_wtxn(&mut txn, |settings| {
-                settings.set_autorize_typos(false);
-            })
-            .unwrap();
-
-        assert!(!index.authorize_typos(&txn).unwrap());
-    }
-
-    #[test]
-    fn update_min_word_len_for_typo() {
-        let index = TempIndex::new();
-
-        // Set the genres setting
-        index
-            .update_settings(|settings| {
-                settings.set_min_word_len_one_typo(8);
-                settings.set_min_word_len_two_typos(8);
-            })
-            .unwrap();
-
-        let txn = index.read_txn().unwrap();
-        assert_eq!(index.min_word_len_one_typo(&txn).unwrap(), 8);
-        assert_eq!(index.min_word_len_two_typos(&txn).unwrap(), 8);
-
-        index
-            .update_settings(|settings| {
-                settings.reset_min_word_len_one_typo();
-                settings.reset_min_word_len_two_typos();
-            })
-            .unwrap();
-
-        let txn = index.read_txn().unwrap();
-        assert_eq!(index.min_word_len_one_typo(&txn).unwrap(), DEFAULT_MIN_WORD_LEN_ONE_TYPO);
-        assert_eq!(index.min_word_len_two_typos(&txn).unwrap(), DEFAULT_MIN_WORD_LEN_TWO_TYPOS);
-    }
-
-    #[test]
-    fn update_invalid_min_word_len_for_typo() {
-        let index = TempIndex::new();
-
-        // Set the genres setting
-        index
-            .update_settings(|settings| {
-                settings.set_min_word_len_one_typo(10);
-                settings.set_min_word_len_two_typos(7);
-            })
-            .unwrap_err();
-    }
-
-    #[test]
-    fn update_exact_words_normalization() {
-        let index = TempIndex::new();
-
-        let mut txn = index.write_txn().unwrap();
-        // Set the genres setting
-        index
-            .update_settings_using_wtxn(&mut txn, |settings| {
-                let words = btreeset! { S("Ab"), S("ac") };
-                settings.set_exact_words(words);
-            })
-            .unwrap();
-
-        let exact_words = index.exact_words(&txn).unwrap().unwrap();
-        for word in exact_words.into_fst().stream().into_str_vec().unwrap() {
-            assert!(word.0 == "ac" || word.0 == "ab");
-        }
-    }
-
-    #[test]
-    fn test_correct_settings_init() {
-        let index = TempIndex::new();
-
-        index
-            .update_settings(|settings| {
-                // we don't actually update the settings, just check their content
-                let Settings {
-                    wtxn: _,
-                    index: _,
-                    indexer_config: _,
-                    searchable_fields,
-                    displayed_fields,
-                    filterable_fields,
-                    sortable_fields,
-                    criteria,
-                    stop_words,
-                    non_separator_tokens,
-                    separator_tokens,
-                    dictionary,
-                    distinct_field,
-                    synonyms,
-                    primary_key,
-                    authorize_typos,
-                    min_word_len_two_typos,
-                    min_word_len_one_typo,
-                    exact_words,
-                    exact_attributes,
-                    max_values_per_facet,
-                    sort_facet_values_by,
-                    pagination_max_total_hits,
-                    proximity_precision,
-                    embedder_settings,
-                    search_cutoff,
-                    localized_attributes_rules,
-                } = settings;
-                assert!(matches!(searchable_fields, Setting::NotSet));
-                assert!(matches!(displayed_fields, Setting::NotSet));
-                assert!(matches!(filterable_fields, Setting::NotSet));
-                assert!(matches!(sortable_fields, Setting::NotSet));
-                assert!(matches!(criteria, Setting::NotSet));
-                assert!(matches!(stop_words, Setting::NotSet));
-                assert!(matches!(non_separator_tokens, Setting::NotSet));
-                assert!(matches!(separator_tokens, Setting::NotSet));
-                assert!(matches!(dictionary, Setting::NotSet));
-                assert!(matches!(distinct_field, Setting::NotSet));
-                assert!(matches!(synonyms, Setting::NotSet));
-                assert!(matches!(primary_key, Setting::NotSet));
-                assert!(matches!(authorize_typos, Setting::NotSet));
-                assert!(matches!(min_word_len_two_typos, Setting::NotSet));
-                assert!(matches!(min_word_len_one_typo, Setting::NotSet));
-                assert!(matches!(exact_words, Setting::NotSet));
-                assert!(matches!(exact_attributes, Setting::NotSet));
-                assert!(matches!(max_values_per_facet, Setting::NotSet));
-                assert!(matches!(sort_facet_values_by, Setting::NotSet));
-                assert!(matches!(pagination_max_total_hits, Setting::NotSet));
-                assert!(matches!(proximity_precision, Setting::NotSet));
-                assert!(matches!(embedder_settings, Setting::NotSet));
-                assert!(matches!(search_cutoff, Setting::NotSet));
-                assert!(matches!(localized_attributes_rules, Setting::NotSet));
-            })
-            .unwrap();
-    }
-
-    #[test]
-    fn settings_must_ignore_soft_deleted() {
-        use serde_json::json;
-
-        let index = TempIndex::new();
-
-        let mut docs = vec![];
-        for i in 0..10 {
-            docs.push(json!({ "id": i, "title": format!("{:x}", i) }));
-        }
-        index.add_documents(documents! { docs }).unwrap();
-
-        index.delete_documents((0..5).map(|id| id.to_string()).collect());
-
-        let mut wtxn = index.write_txn().unwrap();
-        index
-            .update_settings_using_wtxn(&mut wtxn, |settings| {
-                settings.set_searchable_fields(vec!["id".to_string()]);
-            })
-            .unwrap();
-        wtxn.commit().unwrap();
-
-        let rtxn = index.write_txn().unwrap();
-        let docs: StdResult<Vec<_>, _> = index.all_documents(&rtxn).unwrap().collect();
-        let docs = docs.unwrap();
-        assert_eq!(docs.len(), 5);
     }
 }
+
+#[cfg(test)]
+#[path = "test_settings.rs"]
+mod tests;

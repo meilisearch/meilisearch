@@ -1,0 +1,16 @@
+---
+source: crates/index-scheduler/src/scheduler/test_embedders.rs
+expression: doc
+snapshot_kind: text
+---
+{
+  "doggo": "kefir",
+  "breed": "patou",
+  "_vectors": {
+    "noise": [
+      0.1,
+      0.2,
+      0.3
+    ]
+  }
+}

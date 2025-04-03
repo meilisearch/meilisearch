@@ -8,9 +8,10 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use meilisearch_types::facet_values_sort::FacetValuesSort;
 use meilisearch_types::locales::{Locale, LocalizedAttributesRuleView};
 use meilisearch_types::milli::update::Setting;
-use meilisearch_types::milli::vector::settings::EmbeddingSettings;
+use meilisearch_types::milli::FilterableAttributesRule;
 use meilisearch_types::settings::{
-    FacetingSettings, PaginationSettings, ProximityPrecisionView, RankingRuleView, TypoSettings,
+    FacetingSettings, PaginationSettings, PrefixSearchSettings, ProximityPrecisionView,
+    RankingRuleView, SettingEmbeddingSettings, TypoSettings,
 };
 use serde::Serialize;
 
@@ -36,6 +37,8 @@ pub struct SettingsAnalytics {
     pub dictionary: DictionaryAnalytics,
     pub separator_tokens: SeparatorTokensAnalytics,
     pub non_separator_tokens: NonSeparatorTokensAnalytics,
+    pub facet_search: FacetSearchAnalytics,
+    pub prefix_search: PrefixSearchAnalytics,
 }
 
 impl Aggregate for SettingsAnalytics {
@@ -87,6 +90,10 @@ impl Aggregate for SettingsAnalytics {
             filterable_attributes: FilterableAttributesAnalytics {
                 total: new.filterable_attributes.total.or(self.filterable_attributes.total),
                 has_geo: new.filterable_attributes.has_geo.or(self.filterable_attributes.has_geo),
+                has_patterns: new
+                    .filterable_attributes
+                    .has_patterns
+                    .or(self.filterable_attributes.has_patterns),
             },
             distinct_attribute: DistinctAttributeAnalytics {
                 set: self.distinct_attribute.set | new.distinct_attribute.set,
@@ -182,6 +189,14 @@ impl Aggregate for SettingsAnalytics {
             },
             non_separator_tokens: NonSeparatorTokensAnalytics {
                 total: new.non_separator_tokens.total.or(self.non_separator_tokens.total),
+            },
+            facet_search: FacetSearchAnalytics {
+                set: new.facet_search.set | self.facet_search.set,
+                value: new.facet_search.value.or(self.facet_search.value),
+            },
+            prefix_search: PrefixSearchAnalytics {
+                set: new.prefix_search.set | self.prefix_search.set,
+                value: new.prefix_search.value.or(self.prefix_search.value),
             },
         })
     }
@@ -318,13 +333,19 @@ impl SortableAttributesAnalytics {
 pub struct FilterableAttributesAnalytics {
     pub total: Option<usize>,
     pub has_geo: Option<bool>,
+    pub has_patterns: Option<bool>,
 }
 
 impl FilterableAttributesAnalytics {
-    pub fn new(setting: Option<&BTreeSet<String>>) -> Self {
+    pub fn new(setting: Option<&Vec<FilterableAttributesRule>>) -> Self {
         Self {
             total: setting.as_ref().map(|filter| filter.len()),
-            has_geo: setting.as_ref().map(|filter| filter.contains("_geo")),
+            has_geo: setting
+                .as_ref()
+                .map(|filter| filter.iter().any(FilterableAttributesRule::has_geo)),
+            has_patterns: setting.as_ref().map(|filter| {
+                filter.iter().any(|rule| matches!(rule, FilterableAttributesRule::Pattern(_)))
+            }),
         }
     }
 
@@ -486,13 +507,13 @@ pub struct EmbeddersAnalytics {
 }
 
 impl EmbeddersAnalytics {
-    pub fn new(setting: Option<&BTreeMap<String, Setting<EmbeddingSettings>>>) -> Self {
+    pub fn new(setting: Option<&BTreeMap<String, SettingEmbeddingSettings>>) -> Self {
         let mut sources = std::collections::HashSet::new();
 
         if let Some(s) = &setting {
             for source in s
                 .values()
-                .filter_map(|config| config.clone().set())
+                .filter_map(|config| config.inner.clone().set())
                 .filter_map(|config| config.source.set())
             {
                 use meilisearch_types::milli::vector::settings::EmbedderSource;
@@ -502,6 +523,7 @@ impl EmbeddersAnalytics {
                     EmbedderSource::UserProvided => sources.insert("userProvided".to_string()),
                     EmbedderSource::Ollama => sources.insert("ollama".to_string()),
                     EmbedderSource::Rest => sources.insert("rest".to_string()),
+                    EmbedderSource::Composite => sources.insert("composite".to_string()),
                 };
             }
         };
@@ -511,18 +533,18 @@ impl EmbeddersAnalytics {
             sources: Some(sources),
             document_template_used: setting.as_ref().map(|map| {
                 map.values()
-                    .filter_map(|config| config.clone().set())
+                    .filter_map(|config| config.inner.clone().set())
                     .any(|config| config.document_template.set().is_some())
             }),
             document_template_max_bytes: setting.as_ref().and_then(|map| {
                 map.values()
-                    .filter_map(|config| config.clone().set())
+                    .filter_map(|config| config.inner.clone().set())
                     .filter_map(|config| config.document_template_max_bytes.set())
                     .max()
             }),
             binary_quantization_used: setting.as_ref().map(|map| {
                 map.values()
-                    .filter_map(|config| config.clone().set())
+                    .filter_map(|config| config.inner.clone().set())
                     .any(|config| config.binary_quantized.set().is_some())
             }),
         }
@@ -618,5 +640,37 @@ impl NonSeparatorTokensAnalytics {
 
     pub fn into_settings(self) -> SettingsAnalytics {
         SettingsAnalytics { non_separator_tokens: self, ..Default::default() }
+    }
+}
+
+#[derive(Serialize, Default)]
+pub struct FacetSearchAnalytics {
+    pub set: bool,
+    pub value: Option<bool>,
+}
+
+impl FacetSearchAnalytics {
+    pub fn new(settings: Option<&bool>) -> Self {
+        Self { set: settings.is_some(), value: settings.copied() }
+    }
+
+    pub fn into_settings(self) -> SettingsAnalytics {
+        SettingsAnalytics { facet_search: self, ..Default::default() }
+    }
+}
+
+#[derive(Serialize, Default)]
+pub struct PrefixSearchAnalytics {
+    pub set: bool,
+    pub value: Option<PrefixSearchSettings>,
+}
+
+impl PrefixSearchAnalytics {
+    pub fn new(settings: Option<&PrefixSearchSettings>) -> Self {
+        Self { set: settings.is_some(), value: settings.cloned() }
+    }
+
+    pub fn into_settings(self) -> SettingsAnalytics {
+        SettingsAnalytics { prefix_search: self, ..Default::default() }
     }
 }

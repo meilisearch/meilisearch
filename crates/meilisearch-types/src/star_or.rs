@@ -6,6 +6,7 @@ use std::str::FromStr;
 use deserr::{DeserializeError, Deserr, MergeWithError, ValueKind};
 use serde::de::Visitor;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use utoipa::PartialSchema;
 
 use crate::deserr::query_params::FromQueryParameter;
 
@@ -65,7 +66,7 @@ where
         /// not supported on untagged enums.
         struct StarOrVisitor<T>(PhantomData<T>);
 
-        impl<'de, T, FE> Visitor<'de> for StarOrVisitor<T>
+        impl<T, FE> Visitor<'_> for StarOrVisitor<T>
         where
             T: FromStr<Err = FE>,
             FE: fmt::Display,
@@ -229,7 +230,7 @@ pub enum OptionStarOrList<T> {
     List(Vec<T>),
 }
 
-impl<T> OptionStarOrList<T> {
+impl<T: PartialSchema> OptionStarOrList<T> {
     pub fn is_some(&self) -> bool {
         match self {
             Self::None => false,

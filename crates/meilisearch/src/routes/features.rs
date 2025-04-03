@@ -8,11 +8,25 @@ use meilisearch_types::error::ResponseError;
 use meilisearch_types::keys::actions;
 use serde::Serialize;
 use tracing::debug;
+use utoipa::{OpenApi, ToSchema};
 
 use crate::analytics::{Aggregate, Analytics};
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
+
+#[derive(OpenApi)]
+#[openapi(
+    paths(get_features, patch_features),
+    tags((
+        name = "Experimental features",
+        description = "The `/experimental-features` route allows you to activate or deactivate some of Meilisearch's experimental features.
+
+This route is **synchronous**. This means that no task object will be returned, and any activated or deactivated features will be made available or unavailable immediately.",
+        external_docs(url = "https://www.meilisearch.com/docs/reference/api/experimental_features"),
+    )),
+)]
+pub struct ExperimentalFeaturesApi;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
@@ -22,6 +36,34 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     );
 }
 
+/// Get all experimental features
+///
+/// Get a list of all experimental features that can be activated via the /experimental-features route and whether or not they are currently activated.
+#[utoipa::path(
+    get,
+    path = "",
+    tag = "Experimental features",
+    security(("Bearer" = ["experimental_features.get", "experimental_features.*", "*"])),
+    responses(
+        (status = OK, description = "Experimental features are returned", body = RuntimeTogglableFeatures, content_type = "application/json", example = json!(RuntimeTogglableFeatures {
+            metrics: Some(true),
+            logs_route: Some(false),
+            edit_documents_by_function: Some(false),
+            contains_filter: Some(false),
+            network: Some(false),
+            get_task_documents_route: Some(false),
+            composite_embedders: Some(false),
+        })),
+        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+    )
+)]
 async fn get_features(
     index_scheduler: GuardedData<
         ActionPolicy<{ actions::EXPERIMENTAL_FEATURES_GET }>,
@@ -31,15 +73,16 @@ async fn get_features(
     let features = index_scheduler.features();
 
     let features = features.runtime_features();
+    let features: RuntimeTogglableFeatures = features.into();
     debug!(returns = ?features, "Get features");
     HttpResponse::Ok().json(features)
 }
 
-#[derive(Debug, Deserr)]
+#[derive(Debug, Deserr, ToSchema, Serialize)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
 pub struct RuntimeTogglableFeatures {
-    #[deserr(default)]
-    pub vector_store: Option<bool>,
     #[deserr(default)]
     pub metrics: Option<bool>,
     #[deserr(default)]
@@ -48,15 +91,47 @@ pub struct RuntimeTogglableFeatures {
     pub edit_documents_by_function: Option<bool>,
     #[deserr(default)]
     pub contains_filter: Option<bool>,
+    #[deserr(default)]
+    pub network: Option<bool>,
+    #[deserr(default)]
+    pub get_task_documents_route: Option<bool>,
+    #[deserr(default)]
+    pub composite_embedders: Option<bool>,
+}
+
+impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogglableFeatures {
+    fn from(value: meilisearch_types::features::RuntimeTogglableFeatures) -> Self {
+        let meilisearch_types::features::RuntimeTogglableFeatures {
+            metrics,
+            logs_route,
+            edit_documents_by_function,
+            contains_filter,
+            network,
+            get_task_documents_route,
+            composite_embedders,
+        } = value;
+
+        Self {
+            metrics: Some(metrics),
+            logs_route: Some(logs_route),
+            edit_documents_by_function: Some(edit_documents_by_function),
+            contains_filter: Some(contains_filter),
+            network: Some(network),
+            get_task_documents_route: Some(get_task_documents_route),
+            composite_embedders: Some(composite_embedders),
+        }
+    }
 }
 
 #[derive(Serialize)]
 pub struct PatchExperimentalFeatureAnalytics {
-    vector_store: bool,
     metrics: bool,
     logs_route: bool,
     edit_documents_by_function: bool,
     contains_filter: bool,
+    network: bool,
+    get_task_documents_route: bool,
+    composite_embedders: bool,
 }
 
 impl Aggregate for PatchExperimentalFeatureAnalytics {
@@ -66,11 +141,13 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
 
     fn aggregate(self: Box<Self>, new: Box<Self>) -> Box<Self> {
         Box::new(Self {
-            vector_store: new.vector_store,
             metrics: new.metrics,
             logs_route: new.logs_route,
             edit_documents_by_function: new.edit_documents_by_function,
             contains_filter: new.contains_filter,
+            network: new.network,
+            get_task_documents_route: new.get_task_documents_route,
+            composite_embedders: new.composite_embedders,
         })
     }
 
@@ -79,6 +156,34 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
     }
 }
 
+/// Configure experimental features
+///
+/// Activate or deactivate experimental features.
+#[utoipa::path(
+    patch,
+    path = "",
+    tag = "Experimental features",
+    security(("Bearer" = ["experimental_features.update", "experimental_features.*", "*"])),
+    responses(
+        (status = OK, description = "Experimental features are returned", body = RuntimeTogglableFeatures, content_type = "application/json", example = json!(RuntimeTogglableFeatures {
+            metrics: Some(true),
+            logs_route: Some(false),
+            edit_documents_by_function: Some(false),
+            contains_filter: Some(false),
+            network: Some(false),
+            get_task_documents_route: Some(false),
+            composite_embedders: Some(false),
+         })),
+        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+    )
+)]
 async fn patch_features(
     index_scheduler: GuardedData<
         ActionPolicy<{ actions::EXPERIMENTAL_FEATURES_UPDATE }>,
@@ -93,7 +198,6 @@ async fn patch_features(
 
     let old_features = features.runtime_features();
     let new_features = meilisearch_types::features::RuntimeTogglableFeatures {
-        vector_store: new_features.0.vector_store.unwrap_or(old_features.vector_store),
         metrics: new_features.0.metrics.unwrap_or(old_features.metrics),
         logs_route: new_features.0.logs_route.unwrap_or(old_features.logs_route),
         edit_documents_by_function: new_features
@@ -101,30 +205,44 @@ async fn patch_features(
             .edit_documents_by_function
             .unwrap_or(old_features.edit_documents_by_function),
         contains_filter: new_features.0.contains_filter.unwrap_or(old_features.contains_filter),
+        network: new_features.0.network.unwrap_or(old_features.network),
+        get_task_documents_route: new_features
+            .0
+            .get_task_documents_route
+            .unwrap_or(old_features.get_task_documents_route),
+        composite_embedders: new_features
+            .0
+            .composite_embedders
+            .unwrap_or(old_features.composite_embedders),
     };
 
     // explicitly destructure for analytics rather than using the `Serialize` implementation, because
-    // the it renames to camelCase, which we don't want for analytics.
+    // it renames to camelCase, which we don't want for analytics.
     // **Do not** ignore fields with `..` or `_` here, because we want to add them in the future.
     let meilisearch_types::features::RuntimeTogglableFeatures {
-        vector_store,
         metrics,
         logs_route,
         edit_documents_by_function,
         contains_filter,
+        network,
+        get_task_documents_route,
+        composite_embedders,
     } = new_features;
 
     analytics.publish(
         PatchExperimentalFeatureAnalytics {
-            vector_store,
             metrics,
             logs_route,
             edit_documents_by_function,
             contains_filter,
+            network,
+            get_task_documents_route,
+            composite_embedders,
         },
         &req,
     );
     index_scheduler.put_runtime_features(new_features)?;
+    let new_features: RuntimeTogglableFeatures = new_features.into();
     debug!(returns = ?new_features, "Patch features");
     Ok(HttpResponse::Ok().json(new_features))
 }

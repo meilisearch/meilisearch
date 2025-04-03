@@ -5,17 +5,20 @@ use bumpalo::Bump;
 use heed::EnvOpenOptions;
 use maplit::{btreemap, hashset};
 
+use crate::progress::Progress;
 use crate::update::new::indexer;
-use crate::update::{IndexDocumentsMethod, IndexerConfig, Settings};
+use crate::update::{IndexerConfig, Settings};
 use crate::vector::EmbeddingConfigs;
-use crate::{db_snap, Criterion, Index};
+use crate::{db_snap, Criterion, FilterableAttributesRule, Index};
 pub const CONTENT: &str = include_str!("../../../../tests/assets/test_set.ndjson");
+use crate::constants::RESERVED_GEO_FIELD_NAME;
 
 pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     let path = tempfile::tempdir().unwrap();
-    let mut options = EnvOpenOptions::new();
+    let options = EnvOpenOptions::new();
+    let mut options = options.read_txn_without_tls();
     options.map_size(10 * 1024 * 1024); // 10 MB
-    let index = Index::new(options, &path).unwrap();
+    let index = Index::new(options, &path, true).unwrap();
 
     let mut wtxn = index.write_txn().unwrap();
     let config = IndexerConfig::default();
@@ -23,14 +26,14 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     let mut builder = Settings::new(&mut wtxn, &index, &config);
 
     builder.set_criteria(criteria.to_vec());
-    builder.set_filterable_fields(hashset! {
-        S("tag"),
-        S("asc_desc_rank"),
-        S("_geo"),
-        S("opt1"),
-        S("opt1.opt2"),
-        S("tag_in")
-    });
+    builder.set_filterable_fields(vec![
+        FilterableAttributesRule::Field(S("tag")),
+        FilterableAttributesRule::Field(S("asc_desc_rank")),
+        FilterableAttributesRule::Field(S(RESERVED_GEO_FIELD_NAME)),
+        FilterableAttributesRule::Field(S("opt1")),
+        FilterableAttributesRule::Field(S("opt1.opt2")),
+        FilterableAttributesRule::Field(S("tag_in")),
+    ]);
     builder.set_sortable_fields(hashset! {
         S("tag"),
         S("asc_desc_rank"),
@@ -53,7 +56,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     let mut new_fields_ids_map = db_fields_ids_map.clone();
 
     let embedders = EmbeddingConfigs::default();
-    let mut indexer = indexer::DocumentOperation::new(IndexDocumentsMethod::ReplaceDocuments);
+    let mut indexer = indexer::DocumentOperation::new();
 
     let mut file = tempfile::tempfile().unwrap();
     file.write_all(CONTENT.as_bytes()).unwrap();
@@ -61,7 +64,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     let payload = unsafe { memmap2::Mmap::map(&file).unwrap() };
 
     // index documents
-    indexer.add_documents(&payload).unwrap();
+    indexer.replace_documents(&payload).unwrap();
 
     let indexer_alloc = Bump::new();
     let (document_changes, operation_stats, primary_key) = indexer
@@ -72,7 +75,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
             None,
             &mut new_fields_ids_map,
             &|| false,
-            &|_progress| (),
+            Progress::default(),
         )
         .unwrap();
 
@@ -83,6 +86,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     indexer::index(
         &mut wtxn,
         &index,
+        &crate::ThreadPoolNoAbortBuilder::new().build().unwrap(),
         config.grenad_parameters(),
         &db_fields_ids_map,
         new_fields_ids_map,
@@ -90,7 +94,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
         &document_changes,
         embedders,
         &|| false,
-        &|_| (),
+        &Progress::default(),
     )
     .unwrap();
 

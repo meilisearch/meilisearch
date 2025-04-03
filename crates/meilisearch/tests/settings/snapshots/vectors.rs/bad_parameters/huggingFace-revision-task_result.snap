@@ -1,0 +1,29 @@
+---
+source: crates/meilisearch/tests/settings/vectors.rs
+---
+{
+  "uid": "[uid]",
+  "batchUid": "[batchUid]",
+  "indexUid": "test",
+  "status": "failed",
+  "type": "settingsUpdate",
+  "canceledBy": null,
+  "details": {
+    "embedders": {
+      "test": {
+        "source": "huggingFace",
+        "revision": "e4ce9877abf3edfe10b0d82785e83bdcb973e22e"
+      }
+    }
+  },
+  "error": {
+    "message": "Index `test`: Error while generating embeddings: error: fetching file from HG_HUB failed:\n  - request error: https://huggingface.co/BAAI/bge-base-en-v1.5/resolve/e4ce9877abf3edfe10b0d82785e83bdcb973e22e/config.json: status code 404",
+    "code": "vector_embedding_error",
+    "type": "invalid_request",
+    "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+  },
+  "duration": "[duration]",
+  "enqueuedAt": "[enqueuedAt]",
+  "startedAt": "[startedAt]",
+  "finishedAt": "[finishedAt]"
+}

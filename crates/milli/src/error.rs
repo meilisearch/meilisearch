@@ -1,20 +1,25 @@
 use std::collections::BTreeSet;
+use std::collections::HashMap;
 use std::convert::Infallible;
 use std::fmt::Write;
 use std::{io, str};
 
+use bstr::BString;
 use heed::{Error as HeedError, MdbError};
 use rayon::ThreadPoolBuildError;
 use rhai::EvalAltResult;
 use serde_json::Value;
 use thiserror::Error;
 
+use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::documents::{self, DocumentsBatchCursorError};
 use crate::thread_pool_no_abort::PanicCatched;
+use crate::vector::settings::EmbeddingSettings;
 use crate::{CriterionError, DocumentId, FieldId, Object, SortError};
 
 pub fn is_reserved_keyword(keyword: &str) -> bool {
-    ["_geo", "_geoDistance", "_geoPoint", "_geoRadius", "_geoBoundingBox"].contains(&keyword)
+    [RESERVED_GEO_FIELD_NAME, "_geoDistance", "_geoPoint", "_geoRadius", "_geoBoundingBox"]
+        .contains(&keyword)
 }
 
 #[derive(Error, Debug)]
@@ -29,8 +34,6 @@ pub enum Error {
 
 #[derive(Error, Debug)]
 pub enum InternalError {
-    #[error("{}", HeedError::DatabaseClosing)]
-    DatabaseClosing,
     #[error("missing {} in the {db_name} database", key.unwrap_or("key"))]
     DatabaseMissingEntry { db_name: &'static str, key: Option<&'static str> },
     #[error("missing {key} in the fieldids weights mapping")]
@@ -61,12 +64,18 @@ pub enum InternalError {
     Serialization(#[from] SerializationError),
     #[error(transparent)]
     Store(#[from] MdbError),
+    #[error("Cannot delete {key:?} from database {database_name}: {error}")]
+    StoreDeletion { database_name: &'static str, key: BString, error: heed::Error },
+    #[error("Cannot insert {key:?} and value with length {value_length} into database {database_name}: {error}")]
+    StorePut { database_name: &'static str, key: BString, value_length: usize, error: heed::Error },
     #[error(transparent)]
     Utf8(#[from] str::Utf8Error),
     #[error("An indexation process was explicitly aborted")]
     AbortedIndexation,
     #[error("The matching words list contains at least one invalid member")]
     InvalidMatchingWords,
+    #[error("Cannot upgrade to the following version: v{0}.{1}.{2}.")]
+    CannotUpgradeToVersion(u32, u32, u32),
     #[error(transparent)]
     ArroyError(#[from] arroy::Error),
     #[error(transparent)]
@@ -109,16 +118,40 @@ pub enum UserError {
         "Document identifier `{}` is invalid. \
 A document identifier can be of type integer or string, \
 only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_), \
-and can not be more than 512 bytes.", .document_id.to_string()
+and can not be more than 511 bytes.", .document_id.to_string()
     )]
     InvalidDocumentId { document_id: Value },
-    #[error("Invalid facet distribution, {}", format_invalid_filter_distribution(.invalid_facets_name, .valid_facets_name))]
+    #[error("Invalid facet distribution: {}",
+        if .invalid_facets_name.len() == 1 {
+            let field = .invalid_facets_name.iter().next().unwrap();
+            match .matching_rule_indices.get(field) {
+                Some(rule_index) => format!("Attribute `{}` matched rule #{} in filterableAttributes, but this rule does not enable filtering.\nHint: enable filtering in rule #{} by modifying the features.filter object\nHint: prepend another rule matching `{}` with appropriate filter features before rule #{}",
+                    field, rule_index, rule_index, field, rule_index),
+                None => match .valid_patterns.is_empty() {
+                    true => format!("Attribute `{}` is not filterable. This index does not have configured filterable attributes.", field),
+                    false => format!("Attribute `{}` is not filterable. Available filterable attributes patterns are: `{}`.",
+                        field,
+                        .valid_patterns.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", ")),
+                }
+            }
+        } else {
+            format!("Attributes `{}` are not filterable. {}",
+                .invalid_facets_name.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", "),
+                match .valid_patterns.is_empty() {
+                    true => "This index does not have configured filterable attributes.".to_string(),
+                    false => format!("Available filterable attributes patterns are: `{}`.",
+                        .valid_patterns.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", ")),
+                }
+            )
+        }
+    )]
     InvalidFacetsDistribution {
         invalid_facets_name: BTreeSet<String>,
-        valid_facets_name: BTreeSet<String>,
+        valid_patterns: BTreeSet<String>,
+        matching_rule_indices: HashMap<String, usize>,
     },
     #[error(transparent)]
-    InvalidGeoField(#[from] GeoError),
+    InvalidGeoField(#[from] Box<GeoError>),
     #[error("Invalid vector dimensions: expected: `{}`, found: `{}`.", .expected, .found)]
     InvalidVectorDimensions { expected: usize, found: usize },
     #[error("The `_vectors` field in the document with id: `{document_id}` is not an object. Was expecting an object with a key for each embedder with manually provided vectors, but instead got `{value}`")]
@@ -127,8 +160,20 @@ and can not be more than 512 bytes.", .document_id.to_string()
     InvalidVectorsEmbedderConf { document_id: String, error: String },
     #[error("{0}")]
     InvalidFilter(String),
-    #[error("Invalid type for filter subexpression: expected: {}, found: {1}.", .0.join(", "))]
+    #[error("Invalid type for filter subexpression: expected: {}, found: {}.", .0.join(", "), .1)]
     InvalidFilterExpression(&'static [&'static str], Value),
+    #[error("Filter operator `{operator}` is not allowed for the attribute `{field}`.\n  - Note: allowed operators: {}.\n  - Note: field `{field}` matched rule #{rule_index} in `filterableAttributes`\n  - Hint: enable {} in rule #{rule_index} by modifying the features.filter object\n  - Hint: prepend another rule matching `{field}` with appropriate filter features before rule #{rule_index}",
+        allowed_operators.join(", "),
+        if operator == "=" || operator == "!=" || operator == "IN" {"equality"}
+        else if operator == "<" || operator == ">" || operator == "<=" || operator == ">=" || operator == "TO" {"comparison"}
+        else {"the appropriate filter operators"}
+    )]
+    FilterOperatorNotAllowed {
+        field: String,
+        allowed_operators: Vec<String>,
+        operator: String,
+        rule_index: usize,
+    },
     #[error("Attribute `{}` is not sortable. {}",
         .field,
         match .valid_fields.is_empty() {
@@ -142,29 +187,51 @@ and can not be more than 512 bytes.", .document_id.to_string()
     InvalidSortableAttribute { field: String, valid_fields: BTreeSet<String>, hidden_fields: bool },
     #[error("Attribute `{}` is not filterable and thus, cannot be used as distinct attribute. {}",
         .field,
-        match .valid_fields.is_empty() {
-            true => "This index does not have configured filterable attributes.".to_string(),
-            false => format!("Available filterable attributes are: `{}{}`.",
-                    valid_fields.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", "),
+        match (.valid_patterns.is_empty(), .matching_rule_index) {
+            // No rules match and no filterable attributes
+            (true, None) => "This index does not have configured filterable attributes.".to_string(),
+
+            // No rules match but there are some filterable attributes
+            (false, None) => format!("Available filterable attributes patterns are: `{}{}`.",
+                    valid_patterns.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", "),
                     .hidden_fields.then_some(", <..hidden-attributes>").unwrap_or(""),
+                ),
+
+            // A rule matched but filtering isn't enabled
+            (_, Some(rule_index)) => format!("Note: this attribute matches rule #{} in filterableAttributes, but this rule does not enable filtering.\nHint: enable filtering in rule #{} by adding appropriate filter features.\nHint: prepend another rule matching {} with filter features before rule #{}",
+                    rule_index, rule_index, .field, rule_index
                 ),
         }
     )]
-    InvalidDistinctAttribute { field: String, valid_fields: BTreeSet<String>, hidden_fields: bool },
+    InvalidDistinctAttribute {
+        field: String,
+        valid_patterns: BTreeSet<String>,
+        hidden_fields: bool,
+        matching_rule_index: Option<usize>,
+    },
     #[error("Attribute `{}` is not facet-searchable. {}",
         .field,
-        match .valid_fields.is_empty() {
-            true => "This index does not have configured facet-searchable attributes. To make it facet-searchable add it to the `filterableAttributes` index settings.".to_string(),
-            false => format!("Available facet-searchable attributes are: `{}{}`. To make it facet-searchable add it to the `filterableAttributes` index settings.",
-                    valid_fields.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", "),
+        match (.valid_patterns.is_empty(), .matching_rule_index) {
+            // No rules match and no facet searchable attributes
+            (true, None) => "This index does not have configured facet-searchable attributes. To make it facet-searchable add it to the `filterableAttributes` index settings.".to_string(),
+
+            // No rules match but there are some facet searchable attributes
+            (false, None) => format!("Available facet-searchable attributes patterns are: `{}{}`. To make it facet-searchable add it to the `filterableAttributes` index settings.",
+                    valid_patterns.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", "),
                     .hidden_fields.then_some(", <..hidden-attributes>").unwrap_or(""),
+                ),
+
+            // A rule matched but facet search isn't enabled
+            (_, Some(rule_index)) => format!("Note: this attribute matches rule #{} in filterableAttributes, but this rule does not enable facetSearch.\nHint: enable facetSearch in rule #{} by adding `\"facetSearch\": true` to the rule.\nHint: prepend another rule matching {} with facetSearch: true before rule #{}",
+                    rule_index, rule_index, .field, rule_index
                 ),
         }
     )]
     InvalidFacetSearchFacetName {
         field: String,
-        valid_fields: BTreeSet<String>,
+        valid_patterns: BTreeSet<String>,
         hidden_fields: bool,
+        matching_rule_index: Option<usize>,
     },
     #[error("Attribute `{}` is not searchable. Available searchable attributes are: `{}{}`.",
         .field,
@@ -176,8 +243,8 @@ and can not be more than 512 bytes.", .document_id.to_string()
         valid_fields: BTreeSet<String>,
         hidden_fields: bool,
     },
-    #[error("an environment is already opened with different options")]
-    InvalidLmdbOpenOptions,
+    #[error("An LMDB environment is already opened")]
+    EnvAlreadyOpened,
     #[error("You must specify where `sort` is listed in the rankingRules setting to use the sort parameter at search time.")]
     SortRankingRuleMissing,
     #[error("The database file is in an invalid state.")]
@@ -215,31 +282,57 @@ and can not be more than 512 bytes.", .document_id.to_string()
     #[error("Too many embedders in the configuration. Found {0}, but limited to 256.")]
     TooManyEmbedders(usize),
     #[error("Cannot find embedder with name `{0}`.")]
-    InvalidEmbedder(String),
+    InvalidSearchEmbedder(String),
+    #[error("Cannot find embedder with name `{0}`.")]
+    InvalidSimilarEmbedder(String),
     #[error("Too many vectors for document with id {0}: found {1}, but limited to 256.")]
     TooManyVectors(String, usize),
-    #[error("`.embedders.{embedder_name}`: Field `{field}` unavailable for source `{source_}` (only available for sources: {}). Available fields: {}",
-        allowed_sources_for_field
-         .iter()
-         .map(|accepted| format!("`{}`", accepted))
-         .collect::<Vec<String>>()
-         .join(", "),
-        allowed_fields_for_source
-         .iter()
-         .map(|accepted| format!("`{}`", accepted))
-         .collect::<Vec<String>>()
-         .join(", ")
+    #[error("`.embedders.{embedder_name}`: Field `{field}` unavailable for source `{source_}`{for_context}.{available_sources}{available_fields}{available_contexts}",
+    field=field.name(),
+        for_context={
+            context.in_context()
+        },
+        available_sources={
+            let allowed_sources_for_field = EmbeddingSettings::allowed_sources_for_field(*field, *context);
+            if allowed_sources_for_field.is_empty() {
+                String::new()
+            } else {
+                format!("\n  - note: `{}` is available for sources: {}",
+                field.name(),
+                allowed_sources_for_field
+                .iter()
+                .map(|accepted| format!("`{}`", accepted))
+                .collect::<Vec<String>>()
+                .join(", "),
+            )
+            }
+        },
+        available_fields={
+            let allowed_fields_for_source = EmbeddingSettings::allowed_fields_for_source(*source_, *context);
+            format!("\n  - note: available fields for source `{source_}`{}: {}",context.in_context(), allowed_fields_for_source
+            .iter()
+            .map(|accepted| format!("`{}`", accepted))
+            .collect::<Vec<String>>()
+            .join(", "),)
+        },
+        available_contexts={
+            let available_not_nested = !matches!(EmbeddingSettings::field_status(*source_, *field, crate::vector::settings::NestingContext::NotNested), crate::vector::settings::FieldStatus::Disallowed);
+            if available_not_nested {
+                format!("\n  - note: `{}` is available when source `{source_}` is not{}", field.name(), context.in_context())
+            } else {
+                String::new()
+            }
+        }
     )]
     InvalidFieldForSource {
         embedder_name: String,
         source_: crate::vector::settings::EmbedderSource,
-        field: &'static str,
-        allowed_fields_for_source: &'static [&'static str],
-        allowed_sources_for_field: &'static [crate::vector::settings::EmbedderSource],
+        context: crate::vector::settings::NestingContext,
+        field: crate::vector::settings::MetaEmbeddingSetting,
     },
     #[error("`.embedders.{embedder_name}.model`: Invalid model `{model}` for OpenAI. Supported models: {:?}", crate::vector::openai::EmbeddingModel::supported_models())]
     InvalidOpenAiModel { embedder_name: String, model: String },
-    #[error("`.embedders.{embedder_name}`: Missing field `{field}` (note: this field is mandatory for source {source_})")]
+    #[error("`.embedders.{embedder_name}`: Missing field `{field}` (note: this field is mandatory for source `{source_}`)")]
     MissingFieldForSource {
         field: &'static str,
         source_: crate::vector::settings::EmbedderSource,
@@ -259,6 +352,15 @@ and can not be more than 512 bytes.", .document_id.to_string()
         dimensions: usize,
         max_dimensions: usize,
     },
+    #[error("`.embedders.{embedder_name}.source`: Source `{source_}` is not available in a nested embedder")]
+    InvalidSourceForNested {
+        embedder_name: String,
+        source_: crate::vector::settings::EmbedderSource,
+    },
+    #[error("`.embedders.{embedder_name}`: Missing field `source`.\n  - note: this field is mandatory for nested embedders")]
+    MissingSourceForNested { embedder_name: String },
+    #[error("`.embedders.{embedder_name}`: {message}")]
+    InvalidSettingsEmbedder { embedder_name: String, message: String },
     #[error("`.embedders.{embedder_name}.dimensions`: `dimensions` cannot be zero")]
     InvalidSettingsDimensions { embedder_name: String },
     #[error(
@@ -306,7 +408,8 @@ impl From<arroy::Error> for Error {
             | arroy::Error::UnmatchingDistance { .. }
             | arroy::Error::NeedBuild(_)
             | arroy::Error::MissingKey { .. }
-            | arroy::Error::MissingMetadata(_) => {
+            | arroy::Error::MissingMetadata(_)
+            | arroy::Error::CannotDecodeKeyMode { .. } => {
                 Error::InternalError(InternalError::ArroyError(value))
             }
         }
@@ -333,45 +436,53 @@ pub enum GeoError {
     BadLongitude { document_id: Value, value: Value },
 }
 
+#[allow(dead_code)]
 fn format_invalid_filter_distribution(
     invalid_facets_name: &BTreeSet<String>,
-    valid_facets_name: &BTreeSet<String>,
+    valid_patterns: &BTreeSet<String>,
 ) -> String {
-    if valid_facets_name.is_empty() {
-        return "this index does not have configured filterable attributes.".into();
-    }
-
     let mut result = String::new();
 
-    match invalid_facets_name.len() {
-        0 => (),
-        1 => write!(
-            result,
-            "attribute `{}` is not filterable.",
-            invalid_facets_name.first().unwrap()
-        )
-        .unwrap(),
-        _ => write!(
-            result,
-            "attributes `{}` are not filterable.",
-            invalid_facets_name.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", ")
-        )
-        .unwrap(),
-    };
+    if invalid_facets_name.is_empty() {
+        if valid_patterns.is_empty() {
+            return "this index does not have configured filterable attributes.".into();
+        }
+    } else {
+        match invalid_facets_name.len() {
+            1 => write!(
+                result,
+                "Attribute `{}` is not filterable.",
+                invalid_facets_name.first().unwrap()
+            )
+            .unwrap(),
+            _ => write!(
+                result,
+                "Attributes `{}` are not filterable.",
+                invalid_facets_name.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", ")
+            )
+            .unwrap(),
+        };
+    }
 
-    match valid_facets_name.len() {
-        1 => write!(
-            result,
-            " The available filterable attribute is `{}`.",
-            valid_facets_name.first().unwrap()
-        )
-        .unwrap(),
-        _ => write!(
-            result,
-            " The available filterable attributes are `{}`.",
-            valid_facets_name.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", ")
-        )
-        .unwrap(),
+    if valid_patterns.is_empty() {
+        if !invalid_facets_name.is_empty() {
+            write!(result, " This index does not have configured filterable attributes.").unwrap();
+        }
+    } else {
+        match valid_patterns.len() {
+            1 => write!(
+                result,
+                " Available filterable attributes patterns are: `{}`.",
+                valid_patterns.first().unwrap()
+            )
+            .unwrap(),
+            _ => write!(
+                result,
+                " Available filterable attributes patterns are: `{}`.",
+                valid_patterns.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", ")
+            )
+            .unwrap(),
+        }
     }
 
     result
@@ -383,7 +494,7 @@ fn format_invalid_filter_distribution(
 /// ```ignore
 /// impl From<FieldIdMapMissingEntry> for Error {
 ///     fn from(error: FieldIdMapMissingEntry) -> Error {
-///         Error::from(InternalError::from(error))
+///         Error::from(<InternalError>::from(error))
 ///     }
 /// }
 /// ```
@@ -408,7 +519,7 @@ error_from_sub_error! {
     str::Utf8Error => InternalError,
     ThreadPoolBuildError => InternalError,
     SerializationError => InternalError,
-    GeoError => UserError,
+    Box<GeoError> => UserError,
     CriterionError => UserError,
 }
 
@@ -460,8 +571,7 @@ impl From<HeedError> for Error {
             // TODO use the encoding
             HeedError::Encoding(_) => InternalError(Serialization(Encoding { db_name: None })),
             HeedError::Decoding(_) => InternalError(Serialization(Decoding { db_name: None })),
-            HeedError::DatabaseClosing => InternalError(DatabaseClosing),
-            HeedError::BadOpenOptions { .. } => UserError(InvalidLmdbOpenOptions),
+            HeedError::EnvAlreadyOpened { .. } => UserError(EnvAlreadyOpened),
         }
     }
 }

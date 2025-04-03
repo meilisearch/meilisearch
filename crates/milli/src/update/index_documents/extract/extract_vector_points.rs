@@ -13,13 +13,15 @@ use roaring::RoaringBitmap;
 use serde_json::Value;
 
 use super::helpers::{create_writer, writer_into_reader, GrenadParameters};
+use crate::constants::RESERVED_VECTORS_FIELD_NAME;
 use crate::error::FaultSource;
+use crate::fields_ids_map::metadata::FieldIdMapWithMetadata;
 use crate::index::IndexEmbeddingConfig;
-use crate::prompt::{FieldsIdsMapWithMetadata, Prompt};
+use crate::prompt::Prompt;
 use crate::update::del_add::{DelAdd, KvReaderDelAdd, KvWriterDelAdd};
 use crate::update::settings::InnerIndexSettingsDiff;
 use crate::vector::error::{EmbedErrorKind, PossibleEmbeddingMistakes, UnusedVectorsDistribution};
-use crate::vector::parsed_vectors::{ParsedVectorsDiff, VectorState, RESERVED_VECTORS_FIELD_NAME};
+use crate::vector::parsed_vectors::{ParsedVectorsDiff, VectorState};
 use crate::vector::settings::ReindexAction;
 use crate::vector::{Embedder, Embedding};
 use crate::{try_split_array_at, DocumentId, FieldId, Result, ThreadPoolNoAbort};
@@ -189,12 +191,8 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
     let reindex_vectors = settings_diff.reindex_vectors();
 
     let old_fields_ids_map = &settings_diff.old.fields_ids_map;
-    let old_fields_ids_map =
-        FieldsIdsMapWithMetadata::new(old_fields_ids_map, &settings_diff.old.searchable_fields_ids);
 
     let new_fields_ids_map = &settings_diff.new.fields_ids_map;
-    let new_fields_ids_map =
-        FieldsIdsMapWithMetadata::new(new_fields_ids_map, &settings_diff.new.searchable_fields_ids);
 
     // the vector field id may have changed
     let old_vectors_fid = old_fields_ids_map.id(RESERVED_VECTORS_FIELD_NAME);
@@ -382,7 +380,7 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                             );
                             continue;
                         }
-                        regenerate_prompt(obkv, prompt, &new_fields_ids_map)?
+                        regenerate_prompt(obkv, prompt, new_fields_ids_map)?
                     }
                 },
                 // prompt regeneration is only triggered for existing embedders
@@ -399,7 +397,7 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                         regenerate_if_prompt_changed(
                             obkv,
                             (old_prompt, prompt),
-                            (&old_fields_ids_map, &new_fields_ids_map),
+                            (old_fields_ids_map, new_fields_ids_map),
                         )?
                     } else {
                         // we can simply ignore user provided vectors as they are not regenerated and are
@@ -415,7 +413,7 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                     prompt,
                     (add_to_user_provided, remove_from_user_provided),
                     (old, new),
-                    (&old_fields_ids_map, &new_fields_ids_map),
+                    (old_fields_ids_map, new_fields_ids_map),
                     document_id,
                     embedder_name,
                     embedder_is_manual,
@@ -485,10 +483,7 @@ fn extract_vector_document_diff(
     prompt: &Prompt,
     (add_to_user_provided, remove_from_user_provided): (&mut RoaringBitmap, &mut RoaringBitmap),
     (old, new): (VectorState, VectorState),
-    (old_fields_ids_map, new_fields_ids_map): (
-        &FieldsIdsMapWithMetadata,
-        &FieldsIdsMapWithMetadata,
-    ),
+    (old_fields_ids_map, new_fields_ids_map): (&FieldIdMapWithMetadata, &FieldIdMapWithMetadata),
     document_id: impl Fn() -> Value,
     embedder_name: &str,
     embedder_is_manual: bool,
@@ -610,10 +605,7 @@ fn extract_vector_document_diff(
 fn regenerate_if_prompt_changed(
     obkv: &obkv::KvReader<FieldId>,
     (old_prompt, new_prompt): (&Prompt, &Prompt),
-    (old_fields_ids_map, new_fields_ids_map): (
-        &FieldsIdsMapWithMetadata,
-        &FieldsIdsMapWithMetadata,
-    ),
+    (old_fields_ids_map, new_fields_ids_map): (&FieldIdMapWithMetadata, &FieldIdMapWithMetadata),
 ) -> Result<VectorStateDelta> {
     let old_prompt = old_prompt
         .render_kvdeladd(obkv, DelAdd::Deletion, old_fields_ids_map)
@@ -629,7 +621,7 @@ fn regenerate_if_prompt_changed(
 fn regenerate_prompt(
     obkv: &obkv::KvReader<FieldId>,
     prompt: &Prompt,
-    new_fields_ids_map: &FieldsIdsMapWithMetadata,
+    new_fields_ids_map: &FieldIdMapWithMetadata,
 ) -> Result<VectorStateDelta> {
     let prompt = prompt.render_kvdeladd(obkv, DelAdd::Addition, new_fields_ids_map)?;
 
@@ -794,7 +786,7 @@ fn embed_chunks(
     unused_vectors_distribution: &UnusedVectorsDistribution,
     request_threads: &ThreadPoolNoAbort,
 ) -> Result<Vec<Vec<Embedding>>> {
-    match embedder.embed_chunks(text_chunks, request_threads) {
+    match embedder.embed_index(text_chunks, request_threads) {
         Ok(chunks) => Ok(chunks),
         Err(error) => {
             if let FaultSource::Bug = error.fault {

@@ -64,8 +64,8 @@ async fn search_no_searchable_attribute_set() {
         )
         .await;
 
-    index.update_settings_searchable_attributes(json!(["*"])).await;
-    index.wait_task(1).await;
+    let (task, _status_code) = index.update_settings_searchable_attributes(json!(["*"])).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     index
         .search(
@@ -77,8 +77,8 @@ async fn search_no_searchable_attribute_set() {
         )
         .await;
 
-    index.update_settings_searchable_attributes(json!(["*"])).await;
-    index.wait_task(2).await;
+    let (task, _status_code) = index.update_settings_searchable_attributes(json!(["*"])).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     index
         .search(
@@ -108,8 +108,8 @@ async fn search_on_all_attributes() {
 async fn search_on_all_attributes_restricted_set() {
     let server = Server::new().await;
     let index = index_with_documents(&server, &SIMPLE_SEARCH_DOCUMENTS).await;
-    index.update_settings_searchable_attributes(json!(["title"])).await;
-    index.wait_task(1).await;
+    let (task, _status_code) = index.update_settings_searchable_attributes(json!(["title"])).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     index
         .search(json!({"q": "Captain Marvel", "attributesToSearchOn": ["*"]}), |response, code| {
@@ -191,8 +191,10 @@ async fn word_ranking_rule_order() {
 async fn word_ranking_rule_order_exact_words() {
     let server = Server::new().await;
     let index = index_with_documents(&server, &SIMPLE_SEARCH_DOCUMENTS).await;
-    index.update_settings_typo_tolerance(json!({"disableOnWords": ["Captain", "Marvel"]})).await;
-    index.wait_task(1).await;
+    let (task, _status_code) = index
+        .update_settings_typo_tolerance(json!({"disableOnWords": ["Captain", "Marvel"]}))
+        .await;
+    index.wait_task(task.uid()).await.succeeded();
 
     // simple search should return 2 documents (ids: 2 and 3).
     index
@@ -358,12 +360,59 @@ async fn search_on_exact_field() {
     let (response, code) =
         index.update_settings_typo_tolerance(json!({ "disableOnAttributes": ["exact"] })).await;
     assert_eq!(202, code, "{:?}", response);
-    index.wait_task(1).await;
+    index.wait_task(response.uid()).await.succeeded();
     // Searching on an exact attribute should only return the document matching without typo.
     index
         .search(json!({"q": "Marvel", "attributesToSearchOn": ["exact"]}), |response, code| {
             snapshot!(code, @"200 OK");
             snapshot!(response["hits"].as_array().unwrap().len(), @"1");
         })
+        .await;
+}
+
+#[actix_rt::test]
+async fn phrase_search_on_title() {
+    let server = Server::new().await;
+    let documents = json!([
+      { "id": 8, "desc": "Document Review", "title": "Document Review Specialist II" },
+      { "id": 5, "desc": "Document Review", "title": "Document Review Attorney" },
+      { "id": 4, "desc": "Document Review", "title": "Document Review Manager - Cyber Incident Response (Remote)" },
+      { "id": 3, "desc": "Document Review", "title": "Document Review Paralegal" },
+      { "id": 2, "desc": "Document Review", "title": "Document Controller (Saudi National)" },
+      { "id": 1, "desc": "Document Review", "title": "Document Reviewer" },
+      { "id": 7, "desc": "Document Review", "title": "Document Review Specialist II" },
+      { "id": 6, "desc": "Document Review", "title": "Document Review (Entry Level)" }
+    ]);
+    let index = index_with_documents(&server, &documents).await;
+
+    index
+        .search(
+            json!({"q": "\"Document Review\"", "attributesToSearchOn": ["title"], "attributesToRetrieve": ["title"]}),
+            |response, code| {
+                snapshot!(code, @"200 OK");
+                snapshot!(json_string!(response["hits"]), @r###"
+                [
+                  {
+                    "title": "Document Review Specialist II"
+                  },
+                  {
+                    "title": "Document Review Attorney"
+                  },
+                  {
+                    "title": "Document Review Manager - Cyber Incident Response (Remote)"
+                  },
+                  {
+                    "title": "Document Review Paralegal"
+                  },
+                  {
+                    "title": "Document Review Specialist II"
+                  },
+                  {
+                    "title": "Document Review (Entry Level)"
+                  }
+                ]
+                "###);
+            },
+        )
         .await;
 }

@@ -5,20 +5,19 @@ use std::ops::DerefMut as _;
 
 use bumpalo::collections::vec::Vec as BumpVec;
 use bumpalo::Bump;
-use heed::RoTxn;
 
+use super::match_searchable_field;
 use super::tokenize_document::{tokenizer_builder, DocumentTokenizer};
 use crate::update::new::extract::cache::BalancedCaches;
 use crate::update::new::extract::perm_json_p::contained_in;
 use crate::update::new::indexer::document_changes::{
-    extract, DocumentChangeContext, DocumentChanges, Extractor, IndexingContext, Progress,
+    extract, DocumentChangeContext, DocumentChanges, Extractor, IndexingContext,
 };
 use crate::update::new::ref_cell_ext::RefCellExt as _;
-use crate::update::new::steps::Step;
+use crate::update::new::steps::IndexingStep;
 use crate::update::new::thread_local::{FullySend, MostlySend, ThreadLocal};
 use crate::update::new::DocumentChange;
-use crate::update::GrenadParameters;
-use crate::{bucketed_position, DocumentId, FieldId, Index, Result, MAX_POSITION_PER_ATTRIBUTE};
+use crate::{bucketed_position, DocumentId, FieldId, Result, MAX_POSITION_PER_ATTRIBUTE};
 
 const MAX_COUNTED_WORDS: usize = 30;
 
@@ -28,11 +27,11 @@ pub struct WordDocidsBalancedCaches<'extractor> {
     exact_word_docids: BalancedCaches<'extractor>,
     word_position_docids: BalancedCaches<'extractor>,
     fid_word_count_docids: BalancedCaches<'extractor>,
-    fid_word_count: HashMap<FieldId, (usize, usize)>,
+    fid_word_count: HashMap<FieldId, (Option<usize>, Option<usize>)>,
     current_docid: Option<DocumentId>,
 }
 
-unsafe impl<'extractor> MostlySend for WordDocidsBalancedCaches<'extractor> {}
+unsafe impl MostlySend for WordDocidsBalancedCaches<'_> {}
 
 impl<'extractor> WordDocidsBalancedCaches<'extractor> {
     pub fn new_in(buckets: usize, max_memory: Option<usize>, alloc: &'extractor Bump) -> Self {
@@ -79,14 +78,14 @@ impl<'extractor> WordDocidsBalancedCaches<'extractor> {
         buffer.extend_from_slice(&position.to_be_bytes());
         self.word_position_docids.insert_add_u32(&buffer, docid)?;
 
-        if self.current_docid.map_or(false, |id| docid != id) {
+        if self.current_docid.is_some_and(|id| docid != id) {
             self.flush_fid_word_count(&mut buffer)?;
         }
 
         self.fid_word_count
             .entry(field_id)
-            .and_modify(|(_current_count, new_count)| *new_count += 1)
-            .or_insert((0, 1));
+            .and_modify(|(_current_count, new_count)| *new_count.get_or_insert(0) += 1)
+            .or_insert((None, Some(1)));
         self.current_docid = Some(docid);
 
         Ok(())
@@ -124,14 +123,14 @@ impl<'extractor> WordDocidsBalancedCaches<'extractor> {
         buffer.extend_from_slice(&position.to_be_bytes());
         self.word_position_docids.insert_del_u32(&buffer, docid)?;
 
-        if self.current_docid.map_or(false, |id| docid != id) {
+        if self.current_docid.is_some_and(|id| docid != id) {
             self.flush_fid_word_count(&mut buffer)?;
         }
 
         self.fid_word_count
             .entry(field_id)
-            .and_modify(|(current_count, _new_count)| *current_count += 1)
-            .or_insert((1, 0));
+            .and_modify(|(current_count, _new_count)| *current_count.get_or_insert(0) += 1)
+            .or_insert((Some(1), None));
 
         self.current_docid = Some(docid);
 
@@ -141,14 +140,18 @@ impl<'extractor> WordDocidsBalancedCaches<'extractor> {
     fn flush_fid_word_count(&mut self, buffer: &mut BumpVec<u8>) -> Result<()> {
         for (fid, (current_count, new_count)) in self.fid_word_count.drain() {
             if current_count != new_count {
-                if current_count <= MAX_COUNTED_WORDS {
+                if let Some(current_count) =
+                    current_count.filter(|current_count| *current_count <= MAX_COUNTED_WORDS)
+                {
                     buffer.clear();
                     buffer.extend_from_slice(&fid.to_be_bytes());
                     buffer.push(current_count as u8);
                     self.fid_word_count_docids
                         .insert_del_u32(buffer, self.current_docid.unwrap())?;
                 }
-                if new_count <= MAX_COUNTED_WORDS {
+                if let Some(new_count) =
+                    new_count.filter(|new_count| *new_count <= MAX_COUNTED_WORDS)
+                {
                     buffer.clear();
                     buffer.extend_from_slice(&fid.to_be_bytes());
                     buffer.push(new_count as u8);
@@ -203,18 +206,19 @@ impl<'extractor> WordDocidsCaches<'extractor> {
 }
 
 pub struct WordDocidsExtractorData<'a> {
-    tokenizer: &'a DocumentTokenizer<'a>,
-    grenad_parameters: GrenadParameters,
+    tokenizer: DocumentTokenizer<'a>,
+    max_memory_by_thread: Option<usize>,
     buckets: usize,
+    searchable_attributes: Option<Vec<&'a str>>,
 }
 
-impl<'a, 'extractor> Extractor<'extractor> for WordDocidsExtractorData<'a> {
+impl<'extractor> Extractor<'extractor> for WordDocidsExtractorData<'_> {
     type Data = RefCell<Option<WordDocidsBalancedCaches<'extractor>>>;
 
     fn init_data(&self, extractor_alloc: &'extractor Bump) -> Result<Self::Data> {
         Ok(RefCell::new(Some(WordDocidsBalancedCaches::new_in(
             self.buckets,
-            self.grenad_parameters.max_memory_by_thread(),
+            self.max_memory_by_thread,
             extractor_alloc,
         ))))
     }
@@ -226,7 +230,12 @@ impl<'a, 'extractor> Extractor<'extractor> for WordDocidsExtractorData<'a> {
     ) -> Result<()> {
         for change in changes {
             let change = change?;
-            WordDocidsExtractors::extract_document_change(context, self.tokenizer, change)?;
+            WordDocidsExtractors::extract_document_change(
+                context,
+                &self.tokenizer,
+                self.searchable_attributes.as_deref(),
+                change,
+            )?;
         }
         Ok(())
     }
@@ -235,72 +244,51 @@ impl<'a, 'extractor> Extractor<'extractor> for WordDocidsExtractorData<'a> {
 pub struct WordDocidsExtractors;
 
 impl WordDocidsExtractors {
-    pub fn run_extraction<
-        'pl,
-        'fid,
-        'indexer,
-        'index,
-        'extractor,
-        DC: DocumentChanges<'pl>,
-        MSP,
-        SP,
-    >(
-        grenad_parameters: GrenadParameters,
+    pub fn run_extraction<'pl, 'fid, 'indexer, 'index, 'extractor, DC: DocumentChanges<'pl>, MSP>(
         document_changes: &DC,
-        indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP, SP>,
+        indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP>,
         extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
-        step: Step,
+        step: IndexingStep,
     ) -> Result<WordDocidsCaches<'extractor>>
     where
         MSP: Fn() -> bool + Sync,
-        SP: Fn(Progress) + Sync,
     {
-        let index = indexing_context.index;
-        let rtxn = index.read_txn()?;
-
-        let stop_words = index.stop_words(&rtxn)?;
-        let allowed_separators = index.allowed_separators(&rtxn)?;
+        // Warning: this is duplicated code from extract_word_pair_proximity_docids.rs
+        let rtxn = indexing_context.index.read_txn()?;
+        let stop_words = indexing_context.index.stop_words(&rtxn)?;
+        let allowed_separators = indexing_context.index.allowed_separators(&rtxn)?;
         let allowed_separators: Option<Vec<_>> =
             allowed_separators.as_ref().map(|s| s.iter().map(String::as_str).collect());
-        let dictionary = index.dictionary(&rtxn)?;
+        let dictionary = indexing_context.index.dictionary(&rtxn)?;
         let dictionary: Option<Vec<_>> =
             dictionary.as_ref().map(|s| s.iter().map(String::as_str).collect());
-        let builder = tokenizer_builder(
+        let mut builder = tokenizer_builder(
             stop_words.as_ref(),
             allowed_separators.as_deref(),
             dictionary.as_deref(),
         );
-        let tokenizer = builder.into_tokenizer();
-
-        let attributes_to_extract = Self::attributes_to_extract(&rtxn, index)?;
-        let attributes_to_skip = Self::attributes_to_skip(&rtxn, index)?;
+        let tokenizer = builder.build();
         let localized_attributes_rules =
-            index.localized_attributes_rules(&rtxn)?.unwrap_or_default();
-
+            indexing_context.index.localized_attributes_rules(&rtxn)?.unwrap_or_default();
         let document_tokenizer = DocumentTokenizer {
             tokenizer: &tokenizer,
-            attribute_to_extract: attributes_to_extract.as_deref(),
-            attribute_to_skip: attributes_to_skip.as_slice(),
             localized_attributes_rules: &localized_attributes_rules,
             max_positions_per_attributes: MAX_POSITION_PER_ATTRIBUTE,
         };
-
+        let extractor_data = WordDocidsExtractorData {
+            tokenizer: document_tokenizer,
+            max_memory_by_thread: indexing_context.grenad_parameters.max_memory_by_thread(),
+            buckets: rayon::current_num_threads(),
+            searchable_attributes: indexing_context.index.user_defined_searchable_fields(&rtxn)?,
+        };
         let datastore = ThreadLocal::new();
-
         {
             let span =
                 tracing::trace_span!(target: "indexing::documents::extract", "docids_extraction");
             let _entered = span.enter();
-
-            let extractor = WordDocidsExtractorData {
-                tokenizer: &document_tokenizer,
-                grenad_parameters,
-                buckets: rayon::current_num_threads(),
-            };
-
             extract(
                 document_changes,
-                &extractor,
+                &extractor_data,
                 indexing_context,
                 extractor_allocs,
                 &datastore,
@@ -319,6 +307,7 @@ impl WordDocidsExtractors {
     fn extract_document_change(
         context: &DocumentChangeContext<RefCell<Option<WordDocidsBalancedCaches>>>,
         document_tokenizer: &DocumentTokenizer,
+        searchable_attributes: Option<&[&str]>,
         document_change: DocumentChange,
     ) -> Result<()> {
         let index = &context.index;
@@ -351,6 +340,17 @@ impl WordDocidsExtractors {
                 )?;
             }
             DocumentChange::Update(inner) => {
+                if !inner.has_changed_for_fields(
+                    &mut |field_name: &str| {
+                        match_searchable_field(field_name, searchable_attributes)
+                    },
+                    &context.rtxn,
+                    context.index,
+                    context.db_fields_ids_map,
+                )? {
+                    return Ok(());
+                }
+
                 let mut token_fn = |fname: &str, fid, pos, word: &str| {
                     cached_sorter.insert_del_u32(
                         fid,
@@ -405,16 +405,5 @@ impl WordDocidsExtractors {
         let buffer_size = size_of::<FieldId>();
         let mut buffer = BumpVec::with_capacity_in(buffer_size, &context.doc_alloc);
         cached_sorter.flush_fid_word_count(&mut buffer)
-    }
-
-    fn attributes_to_extract<'a>(
-        rtxn: &'a RoTxn,
-        index: &'a Index,
-    ) -> Result<Option<Vec<&'a str>>> {
-        index.user_defined_searchable_fields(rtxn).map_err(Into::into)
-    }
-
-    fn attributes_to_skip<'a>(_rtxn: &'a RoTxn, _index: &'a Index) -> Result<Vec<&'a str>> {
-        Ok(Vec::new())
     }
 }

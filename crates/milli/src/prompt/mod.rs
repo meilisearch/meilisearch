@@ -5,11 +5,9 @@ mod fields;
 mod template_checker;
 
 use std::cell::RefCell;
-use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::num::NonZeroUsize;
-use std::ops::Deref;
 
 use bumpalo::Bump;
 use document::ParseableDocument;
@@ -18,8 +16,9 @@ use fields::{BorrowedFields, OwnedFields};
 
 use self::context::Context;
 use self::document::Document;
+use crate::fields_ids_map::metadata::FieldIdMapWithMetadata;
 use crate::update::del_add::DelAdd;
-use crate::{FieldId, FieldsIdsMap, GlobalFieldsIdsMap};
+use crate::GlobalFieldsIdsMap;
 
 pub struct Prompt {
     template: liquid::Template,
@@ -119,6 +118,7 @@ impl Prompt {
         'doc: 'a, // lifetime of the allocator, will live for an entire chunk of documents
     >(
         &self,
+        external_docid: &str,
         document: impl crate::update::new::document::Document<'a> + Debug,
         field_id_map: &RefCell<GlobalFieldsIdsMap>,
         doc_alloc: &'doc Bump,
@@ -130,9 +130,12 @@ impl Prompt {
             self.max_bytes.unwrap_or_else(default_max_bytes).get(),
             doc_alloc,
         );
-        self.template
-            .render_to(&mut rendered, &context)
-            .map_err(RenderPromptError::missing_context)?;
+        self.template.render_to(&mut rendered, &context).map_err(|liquid_error| {
+            RenderPromptError::missing_context_with_external_docid(
+                external_docid.to_owned(),
+                liquid_error,
+            )
+        })?;
         Ok(std::str::from_utf8(rendered.into_bump_slice())
             .expect("render can only write UTF-8 because all inputs and processing preserve utf-8"))
     }
@@ -141,9 +144,9 @@ impl Prompt {
         &self,
         document: &obkv::KvReaderU16,
         side: DelAdd,
-        field_id_map: &FieldsIdsMapWithMetadata,
+        field_id_map: &FieldIdMapWithMetadata,
     ) -> Result<String, RenderPromptError> {
-        let document = Document::new(document, side, field_id_map);
+        let document = Document::new(document, side, field_id_map.as_fields_ids_map());
         let fields = OwnedFields::new(&document, field_id_map);
         let context = Context::new(&document, &fields);
 
@@ -166,40 +169,6 @@ fn truncate(s: &mut String, max_bytes: usize) {
             break;
         }
     }
-}
-
-pub struct FieldsIdsMapWithMetadata<'a> {
-    fields_ids_map: &'a FieldsIdsMap,
-    metadata: BTreeMap<FieldId, FieldMetadata>,
-}
-
-impl<'a> FieldsIdsMapWithMetadata<'a> {
-    pub fn new(fields_ids_map: &'a FieldsIdsMap, searchable_fields_ids: &'_ [FieldId]) -> Self {
-        let mut metadata: BTreeMap<FieldId, FieldMetadata> =
-            fields_ids_map.ids().map(|id| (id, Default::default())).collect();
-        for searchable_field_id in searchable_fields_ids {
-            let Some(metadata) = metadata.get_mut(searchable_field_id) else { continue };
-            metadata.searchable = true;
-        }
-        Self { fields_ids_map, metadata }
-    }
-
-    pub fn metadata(&self, field_id: FieldId) -> Option<FieldMetadata> {
-        self.metadata.get(&field_id).copied()
-    }
-}
-
-impl<'a> Deref for FieldsIdsMapWithMetadata<'a> {
-    type Target = FieldsIdsMap;
-
-    fn deref(&self) -> &Self::Target {
-        self.fields_ids_map
-    }
-}
-
-#[derive(Debug, Default, Clone, Copy)]
-pub struct FieldMetadata {
-    pub searchable: bool,
 }
 
 #[cfg(test)]

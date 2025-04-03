@@ -8,7 +8,6 @@ use crate::json;
 async fn similar_unexisting_index() {
     let server = Server::new().await;
     let index = server.index("test");
-    server.set_features(json!({"vectorStore": true})).await;
 
     let expected_response = json!({
         "message": "Index `test` not found.",
@@ -29,7 +28,6 @@ async fn similar_unexisting_index() {
 async fn similar_unexisting_parameter() {
     let server = Server::new().await;
     let index = server.index("test");
-    server.set_features(json!({"vectorStore": true})).await;
 
     index
         .similar(json!({"id": 287947, "marin": "hello"}), |response, code| {
@@ -40,27 +38,9 @@ async fn similar_unexisting_parameter() {
 }
 
 #[actix_rt::test]
-async fn similar_feature_not_enabled() {
-    let server = Server::new().await;
-    let index = server.index("test");
-
-    let (response, code) = index.similar_post(json!({"id": 287947, "embedder": "manual"})).await;
-    snapshot!(code, @"400 Bad Request");
-    snapshot!(json_string!(response), @r###"
-    {
-      "message": "Using the similar API requires enabling the `vector store` experimental feature. See https://github.com/meilisearch/product/discussions/677",
-      "code": "feature_not_enabled",
-      "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
-    }
-    "###);
-}
-
-#[actix_rt::test]
 async fn similar_bad_id() {
     let server = Server::new().await;
     let index = server.index("test");
-    server.set_features(json!({"vectorStore": true})).await;
 
     let (response, code) = index
         .update_settings(json!({
@@ -75,11 +55,11 @@ async fn similar_bad_id() {
     snapshot!(code, @"202 Accepted");
     server.wait_task(response.uid()).await;
 
-    let (response, code) = index.similar_post(json!({"id": ["doggo"]})).await;
+    let (response, code) = index.similar_post(json!({"id": ["doggo"], "embedder": "manual"})).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Invalid value at `.id`: the value of `id` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_), and can not be more than 512 bytes.",
+      "message": "Invalid value at `.id`: Document identifier `[\"doggo\"]` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_), and can not be more than 511 bytes.",
       "code": "invalid_similar_id",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_similar_id"
@@ -91,7 +71,6 @@ async fn similar_bad_id() {
 async fn similar_bad_ranking_score_threshold() {
     let server = Server::new().await;
     let index = server.index("test");
-    server.set_features(json!({"vectorStore": true})).await;
 
     let (response, code) = index
         .update_settings(json!({
@@ -122,7 +101,6 @@ async fn similar_bad_ranking_score_threshold() {
 async fn similar_invalid_ranking_score_threshold() {
     let server = Server::new().await;
     let index = server.index("test");
-    server.set_features(json!({"vectorStore": true})).await;
 
     let (response, code) = index
         .update_settings(json!({
@@ -153,7 +131,6 @@ async fn similar_invalid_ranking_score_threshold() {
 async fn similar_invalid_id() {
     let server = Server::new().await;
     let index = server.index("test");
-    server.set_features(json!({"vectorStore": true})).await;
 
     let (response, code) = index
         .update_settings(json!({
@@ -168,11 +145,12 @@ async fn similar_invalid_id() {
     snapshot!(code, @"202 Accepted");
     server.wait_task(response.uid()).await;
 
-    let (response, code) = index.similar_post(json!({"id": "http://invalid-docid/"})).await;
+    let (response, code) =
+        index.similar_post(json!({"id": "http://invalid-docid/", "embedder": "manual"})).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Invalid value at `.id`: the value of `id` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_), and can not be more than 512 bytes.",
+      "message": "Invalid value at `.id`: Document identifier `\"http://invalid-docid/\"` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_), and can not be more than 511 bytes.",
       "code": "invalid_similar_id",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_similar_id"
@@ -184,7 +162,6 @@ async fn similar_invalid_id() {
 async fn similar_not_found_id() {
     let server = Server::new().await;
     let index = server.index("test");
-    server.set_features(json!({"vectorStore": true})).await;
 
     let (response, code) = index
         .update_settings(json!({
@@ -216,7 +193,6 @@ async fn similar_not_found_id() {
 async fn similar_bad_offset() {
     let server = Server::new().await;
     let index = server.index("test");
-    server.set_features(json!({"vectorStore": true})).await;
 
     let (response, code) = index
         .update_settings(json!({
@@ -259,7 +235,6 @@ async fn similar_bad_offset() {
 async fn similar_bad_limit() {
     let server = Server::new().await;
     let index = server.index("test");
-    server.set_features(json!({"vectorStore": true})).await;
 
     let (response, code) = index
         .update_settings(json!({
@@ -304,7 +279,6 @@ async fn similar_bad_filter() {
     // Thus the error message is not generated by deserr but written by us.
     let server = Server::new().await;
     let index = server.index("test");
-    server.set_features(json!({"vectorStore": true})).await;
 
     let (response, code) = index
         .update_settings(json!({
@@ -324,7 +298,7 @@ async fn similar_bad_filter() {
     let documents = DOCUMENTS.clone();
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let (response, code) =
         index.similar_post(json!({ "id": 287947, "filter": true, "embedder": "manual" })).await;
@@ -344,7 +318,6 @@ async fn similar_bad_filter() {
 async fn filter_invalid_syntax_object() {
     let server = Server::new().await;
     let index = server.index("test");
-    server.set_features(json!({"vectorStore": true})).await;
 
     let (response, code) = index
         .update_settings(json!({
@@ -362,7 +335,7 @@ async fn filter_invalid_syntax_object() {
     let documents = DOCUMENTS.clone();
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     index
         .similar(json!({"id": 287947, "filter": "title & Glass", "embedder": "manual"}), |response, code| {
@@ -383,7 +356,6 @@ async fn filter_invalid_syntax_object() {
 async fn filter_invalid_syntax_array() {
     let server = Server::new().await;
     let index = server.index("test");
-    server.set_features(json!({"vectorStore": true})).await;
 
     let (response, code) = index
         .update_settings(json!({
@@ -401,7 +373,7 @@ async fn filter_invalid_syntax_array() {
     let documents = DOCUMENTS.clone();
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     index
         .similar(json!({"id": 287947, "filter": ["title & Glass"], "embedder": "manual"}), |response, code| {
@@ -422,7 +394,6 @@ async fn filter_invalid_syntax_array() {
 async fn filter_invalid_syntax_string() {
     let server = Server::new().await;
     let index = server.index("test");
-    server.set_features(json!({"vectorStore": true})).await;
 
     let (response, code) = index
         .update_settings(json!({
@@ -440,7 +411,7 @@ async fn filter_invalid_syntax_string() {
     let documents = DOCUMENTS.clone();
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let expected_response = json!({
         "message": "Found unexpected characters at the end of the filter: `XOR title = Glass`. You probably forgot an `OR` or an `AND` rule.\n15:32 title = Glass XOR title = Glass",
@@ -463,7 +434,6 @@ async fn filter_invalid_syntax_string() {
 async fn filter_invalid_attribute_array() {
     let server = Server::new().await;
     let index = server.index("test");
-    server.set_features(json!({"vectorStore": true})).await;
 
     let (response, code) = index
         .update_settings(json!({
@@ -481,20 +451,21 @@ async fn filter_invalid_attribute_array() {
     let documents = DOCUMENTS.clone();
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
-    let expected_response = json!({
-        "message": "Attribute `many` is not filterable. Available filterable attributes are: `title`.\n1:5 many = Glass",
-        "code": "invalid_similar_filter",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
-    });
     index
         .similar(
             json!({"id": 287947, "filter": ["many = Glass"], "embedder": "manual"}),
             |response, code| {
-                assert_eq!(response, expected_response);
-                assert_eq!(code, 400);
+                snapshot!(code, @"400 Bad Request");
+                snapshot!(response, @r###"
+                {
+                  "message": "Attribute `many` is not filterable. Available filterable attribute patterns are: `title`.\n1:5 many = Glass",
+                  "code": "invalid_similar_filter",
+                  "type": "invalid_request",
+                  "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
+                }
+                "###);
             },
         )
         .await;
@@ -504,7 +475,6 @@ async fn filter_invalid_attribute_array() {
 async fn filter_invalid_attribute_string() {
     let server = Server::new().await;
     let index = server.index("test");
-    server.set_features(json!({"vectorStore": true})).await;
 
     let (response, code) = index
         .update_settings(json!({
@@ -522,20 +492,21 @@ async fn filter_invalid_attribute_string() {
     let documents = DOCUMENTS.clone();
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
-    let expected_response = json!({
-        "message": "Attribute `many` is not filterable. Available filterable attributes are: `title`.\n1:5 many = Glass",
-        "code": "invalid_similar_filter",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
-    });
     index
         .similar(
             json!({"id": 287947, "filter": "many = Glass", "embedder": "manual"}),
             |response, code| {
-                assert_eq!(response, expected_response);
-                assert_eq!(code, 400);
+                snapshot!(code, @"400 Bad Request");
+                snapshot!(response, @r###"
+                {
+                  "message": "Attribute `many` is not filterable. Available filterable attribute patterns are: `title`.\n1:5 many = Glass",
+                  "code": "invalid_similar_filter",
+                  "type": "invalid_request",
+                  "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
+                }
+                "###);
             },
         )
         .await;
@@ -545,7 +516,6 @@ async fn filter_invalid_attribute_string() {
 async fn filter_reserved_geo_attribute_array() {
     let server = Server::new().await;
     let index = server.index("test");
-    server.set_features(json!({"vectorStore": true})).await;
 
     let (response, code) = index
         .update_settings(json!({
@@ -563,7 +533,7 @@ async fn filter_reserved_geo_attribute_array() {
     let documents = DOCUMENTS.clone();
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let expected_response = json!({
         "message": "`_geo` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:13 _geo = Glass",
@@ -586,7 +556,6 @@ async fn filter_reserved_geo_attribute_array() {
 async fn filter_reserved_geo_attribute_string() {
     let server = Server::new().await;
     let index = server.index("test");
-    server.set_features(json!({"vectorStore": true})).await;
 
     let (response, code) = index
         .update_settings(json!({
@@ -604,7 +573,7 @@ async fn filter_reserved_geo_attribute_string() {
     let documents = DOCUMENTS.clone();
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let expected_response = json!({
         "message": "`_geo` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:13 _geo = Glass",
@@ -627,7 +596,6 @@ async fn filter_reserved_geo_attribute_string() {
 async fn filter_reserved_attribute_array() {
     let server = Server::new().await;
     let index = server.index("test");
-    server.set_features(json!({"vectorStore": true})).await;
 
     let (response, code) = index
         .update_settings(json!({
@@ -645,7 +613,7 @@ async fn filter_reserved_attribute_array() {
     let documents = DOCUMENTS.clone();
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let expected_response = json!({
         "message": "`_geoDistance` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:21 _geoDistance = Glass",
@@ -668,7 +636,6 @@ async fn filter_reserved_attribute_array() {
 async fn filter_reserved_attribute_string() {
     let server = Server::new().await;
     let index = server.index("test");
-    server.set_features(json!({"vectorStore": true})).await;
 
     let (response, code) = index
         .update_settings(json!({
@@ -686,7 +653,7 @@ async fn filter_reserved_attribute_string() {
     let documents = DOCUMENTS.clone();
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let expected_response = json!({
        "message": "`_geoDistance` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:21 _geoDistance = Glass",
@@ -709,7 +676,6 @@ async fn filter_reserved_attribute_string() {
 async fn filter_reserved_geo_point_array() {
     let server = Server::new().await;
     let index = server.index("test");
-    server.set_features(json!({"vectorStore": true})).await;
 
     let (response, code) = index
         .update_settings(json!({
@@ -727,7 +693,7 @@ async fn filter_reserved_geo_point_array() {
     let documents = DOCUMENTS.clone();
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let expected_response = json!({
         "message": "`_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:18 _geoPoint = Glass",
@@ -750,7 +716,6 @@ async fn filter_reserved_geo_point_array() {
 async fn filter_reserved_geo_point_string() {
     let server = Server::new().await;
     let index = server.index("test");
-    server.set_features(json!({"vectorStore": true})).await;
 
     let (response, code) = index
         .update_settings(json!({
@@ -768,7 +733,7 @@ async fn filter_reserved_geo_point_string() {
     let documents = DOCUMENTS.clone();
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    index.wait_task(value.uid()).await;
+    index.wait_task(value.uid()).await.succeeded();
 
     let expected_response = json!({
        "message": "`_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:18 _geoPoint = Glass",
@@ -790,7 +755,6 @@ async fn filter_reserved_geo_point_string() {
 #[actix_rt::test]
 async fn similar_bad_retrieve_vectors() {
     let server = Server::new().await;
-    server.set_features(json!({"vectorStore": true})).await;
     let index = server.index("test");
 
     let (response, code) =
@@ -838,4 +802,87 @@ async fn similar_bad_retrieve_vectors() {
       "link": "https://docs.meilisearch.com/errors#invalid_similar_retrieve_vectors"
     }
     "###);
+}
+
+#[actix_rt::test]
+async fn similar_bad_embedder() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let (response, code) = index
+        .update_settings(json!({
+        "embedders": {
+            "manual": {
+                "source": "userProvided",
+                "dimensions": 3,
+            }
+        },
+        "filterableAttributes": ["title"]}))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(response.uid()).await;
+
+    let documents = DOCUMENTS.clone();
+    let (value, code) = index.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+    index.wait_task(value.uid()).await;
+
+    let expected_response = json!({
+    "message": "Cannot find embedder with name `auto`.",
+    "code": "invalid_similar_embedder",
+    "type": "invalid_request",
+    "link": "https://docs.meilisearch.com/errors#invalid_similar_embedder"
+    });
+
+    index
+        .similar(json!({"id": 287947, "embedder": "auto"}), |response, code| {
+            assert_eq!(response, expected_response);
+            assert_eq!(code, 400);
+        })
+        .await;
+
+    let expected_response = json!({
+        "message": "Invalid value type at `.embedder`: expected a string, but found a positive integer: `42`",
+        "code": "invalid_similar_embedder",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_similar_embedder"
+    });
+
+    let (response, code) = index.similar_post(json!({"id": 287947, "embedder": 42})).await;
+
+    assert_eq!(response, expected_response);
+    assert_eq!(code, 400);
+
+    let expected_response = json!({
+        "message": "Invalid value type at `.embedder`: expected a string, but found null",
+        "code": "invalid_similar_embedder",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_similar_embedder"
+    });
+
+    let (response, code) = index.similar_post(json!({"id": 287947, "embedder": null})).await;
+
+    assert_eq!(response, expected_response);
+    assert_eq!(code, 400);
+
+    let expected_response = json!({
+       "message": "Missing field `embedder`",
+        "code": "bad_request",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#bad_request"
+    });
+
+    let (response, code) = index.similar_post(json!({"id": 287947})).await;
+    assert_eq!(response, expected_response);
+    assert_eq!(code, 400);
+
+    let expected_response = json!({
+       "message": "Missing parameter `embedder`",
+        "code": "bad_request",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#bad_request"
+    });
+    let (response, code) = index.similar_get("?id=287947").await;
+    assert_eq!(response, expected_response);
+    assert_eq!(code, 400);
 }

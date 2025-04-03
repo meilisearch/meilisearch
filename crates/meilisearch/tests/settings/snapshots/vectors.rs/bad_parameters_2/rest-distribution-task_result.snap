@@ -1,0 +1,35 @@
+---
+source: crates/meilisearch/tests/settings/vectors.rs
+---
+{
+  "uid": "[uid]",
+  "batchUid": "[batchUid]",
+  "indexUid": "test",
+  "status": "succeeded",
+  "type": "settingsUpdate",
+  "canceledBy": null,
+  "details": {
+    "embedders": {
+      "test": {
+        "source": "rest",
+        "dimensions": 768,
+        "url": "http://rest.example/",
+        "request": {
+          "text": "{{text}}"
+        },
+        "response": {
+          "embedding": "{{embedding}}"
+        },
+        "distribution": {
+          "mean": 0.4,
+          "sigma": 0.1
+        }
+      }
+    }
+  },
+  "error": null,
+  "duration": "[duration]",
+  "enqueuedAt": "[enqueuedAt]",
+  "startedAt": "[startedAt]",
+  "finishedAt": "[finishedAt]"
+}

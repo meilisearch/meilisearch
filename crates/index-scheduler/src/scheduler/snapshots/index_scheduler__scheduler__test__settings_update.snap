@@ -1,0 +1,17 @@
+---
+source: crates/index-scheduler/src/scheduler/test.rs
+expression: task.details
+snapshot_kind: text
+---
+{
+  "embedders": {
+    "default": {
+      "source": "rest",
+      "apiKey": "MyXXXX...",
+      "dimensions": 4,
+      "url": "http://localhost:7777",
+      "request": "{{text}}",
+      "response": "{{embedding}}"
+    }
+  }
+}

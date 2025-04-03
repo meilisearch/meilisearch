@@ -13,6 +13,8 @@ pub struct MultiSearchAggregator {
 
     // sum of the number of distinct indexes in each single request, use with total_received to compute an avg
     total_distinct_index_count: usize,
+    // sum of the number of distinct remotes in each single request, use with total_received to compute an avg
+    total_distinct_remote_count: usize,
     // number of queries with a single index, use with total_received to compute a proportion
     total_single_index: usize,
 
@@ -31,46 +33,49 @@ impl MultiSearchAggregator {
     pub fn from_federated_search(federated_search: &FederatedSearch) -> Self {
         let use_federation = federated_search.federation.is_some();
 
-        let distinct_indexes: HashSet<_> = federated_search
-            .queries
-            .iter()
-            .map(|query| {
-                let query = &query;
-                // make sure we get a compilation error if a field gets added to / removed from SearchQueryWithIndex
-                let SearchQueryWithIndex {
-                    index_uid,
-                    federation_options: _,
-                    q: _,
-                    vector: _,
-                    offset: _,
-                    limit: _,
-                    page: _,
-                    hits_per_page: _,
-                    attributes_to_retrieve: _,
-                    retrieve_vectors: _,
-                    attributes_to_crop: _,
-                    crop_length: _,
-                    attributes_to_highlight: _,
-                    show_ranking_score: _,
-                    show_ranking_score_details: _,
-                    show_matches_position: _,
-                    filter: _,
-                    sort: _,
-                    distinct: _,
-                    facets: _,
-                    highlight_pre_tag: _,
-                    highlight_post_tag: _,
-                    crop_marker: _,
-                    matching_strategy: _,
-                    attributes_to_search_on: _,
-                    hybrid: _,
-                    ranking_score_threshold: _,
-                    locales: _,
-                } = query;
+        let mut distinct_indexes = HashSet::with_capacity(federated_search.queries.len());
+        let mut distinct_remotes = HashSet::with_capacity(federated_search.queries.len());
 
-                index_uid.as_str()
-            })
-            .collect();
+        // make sure we get a compilation error if a field gets added to / removed from SearchQueryWithIndex
+        for SearchQueryWithIndex {
+            index_uid,
+            federation_options,
+            q: _,
+            vector: _,
+            offset: _,
+            limit: _,
+            page: _,
+            hits_per_page: _,
+            attributes_to_retrieve: _,
+            retrieve_vectors: _,
+            attributes_to_crop: _,
+            crop_length: _,
+            attributes_to_highlight: _,
+            show_ranking_score: _,
+            show_ranking_score_details: _,
+            show_matches_position: _,
+            filter: _,
+            sort: _,
+            distinct: _,
+            facets: _,
+            highlight_pre_tag: _,
+            highlight_post_tag: _,
+            crop_marker: _,
+            matching_strategy: _,
+            attributes_to_search_on: _,
+            hybrid: _,
+            ranking_score_threshold: _,
+            locales: _,
+        } in &federated_search.queries
+        {
+            if let Some(federation_options) = federation_options {
+                if let Some(remote) = &federation_options.remote {
+                    distinct_remotes.insert(remote.as_str());
+                }
+            }
+
+            distinct_indexes.insert(index_uid.as_str());
+        }
 
         let show_ranking_score =
             federated_search.queries.iter().any(|query| query.show_ranking_score);
@@ -81,6 +86,7 @@ impl MultiSearchAggregator {
             total_received: 1,
             total_succeeded: 0,
             total_distinct_index_count: distinct_indexes.len(),
+            total_distinct_remote_count: distinct_remotes.len(),
             total_single_index: if distinct_indexes.len() == 1 { 1 } else { 0 },
             total_search_count: federated_search.queries.len(),
             show_ranking_score,
@@ -110,6 +116,8 @@ impl Aggregate for MultiSearchAggregator {
         let total_succeeded = this.total_succeeded.saturating_add(new.total_succeeded);
         let total_distinct_index_count =
             this.total_distinct_index_count.saturating_add(new.total_distinct_index_count);
+        let total_distinct_remote_count =
+            this.total_distinct_remote_count.saturating_add(new.total_distinct_remote_count);
         let total_single_index = this.total_single_index.saturating_add(new.total_single_index);
         let total_search_count = this.total_search_count.saturating_add(new.total_search_count);
         let show_ranking_score = this.show_ranking_score || new.show_ranking_score;
@@ -121,6 +129,7 @@ impl Aggregate for MultiSearchAggregator {
             total_received,
             total_succeeded,
             total_distinct_index_count,
+            total_distinct_remote_count,
             total_single_index,
             total_search_count,
             show_ranking_score,
@@ -134,6 +143,7 @@ impl Aggregate for MultiSearchAggregator {
             total_received,
             total_succeeded,
             total_distinct_index_count,
+            total_distinct_remote_count,
             total_single_index,
             total_search_count,
             show_ranking_score,
@@ -151,6 +161,10 @@ impl Aggregate for MultiSearchAggregator {
                 "total_single_index": total_single_index,
                 "total_distinct_index_count": total_distinct_index_count,
                 "avg_distinct_index_count": (total_distinct_index_count as f64) / (total_received as f64), // not 0 else returned early
+            },
+            "remotes": {
+                "total_distinct_remote_count": total_distinct_remote_count,
+                "avg_distinct_remote_count": (total_distinct_remote_count as f64) / (total_received as f64), // not 0 else returned early
             },
             "searches": {
                 "total_search_count": total_search_count,
