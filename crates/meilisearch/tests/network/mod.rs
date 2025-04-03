@@ -117,6 +117,25 @@ async fn errors_on_param() {
     }
     "###);
 
+    // remote with url not valid
+    let (response, code) = server
+        .set_network(json!({"remotes": {
+            "new": {
+                "url": "no-http-scheme"
+            }
+        }}))
+        .await;
+
+    meili_snap::snapshot!(code, @"400 Bad Request");
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    {
+      "message": "Invalid `.remotes.new.url` (`no-http-scheme`): relative URL without a base",
+      "code": "invalid_network_url",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_network_url"
+    }
+    "###);
+
     // remote with non-existing param
     let (response, code) = server
         .set_network(json!({"remotes": {
