@@ -118,7 +118,9 @@ fn compute_word_fst(
     }
 
     let (word_fst_mmap, prefix_data) = word_fst_builder.build(index, &rtxn)?;
-    index.main.remap_types::<Str, Bytes>().put(wtxn, WORDS_FST_KEY, &word_fst_mmap)?;
+    if let Some(word_fst_mmap) = word_fst_mmap {
+        index.main.remap_types::<Str, Bytes>().put(wtxn, WORDS_FST_KEY, &word_fst_mmap)?;
+    }
     if let Some(PrefixData { prefixes_fst_mmap, prefix_delta }) = prefix_data {
         index.main.remap_types::<Str, Bytes>().put(
             wtxn,

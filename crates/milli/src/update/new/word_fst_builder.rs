@@ -10,14 +10,14 @@ use crate::index::PrefixSettings;
 use crate::update::del_add::DelAdd;
 use crate::{InternalError, Prefix, Result};
 
-pub struct WordFstBuilder<'a> {
-    word_fst_builder: FstMergerBuilder<'a>,
+pub struct WordFstBuilder<'a, D: AsRef<[u8]>> {
+    word_fst_builder: FstMergerBuilder<'a, D>,
     prefix_fst_builder: Option<PrefixFstBuilder>,
     registered_words: usize,
 }
 
-impl<'a> WordFstBuilder<'a> {
-    pub fn new(words_fst: &'a Set<std::borrow::Cow<'a, [u8]>>) -> Result<Self> {
+impl<'a, D: AsRef<[u8]>> WordFstBuilder<'a, D> {
+    pub fn new(words_fst: &'a Set<D>) -> Result<Self> {
         Ok(Self {
             word_fst_builder: FstMergerBuilder::new(Some(words_fst))?,
             prefix_fst_builder: None,
@@ -50,7 +50,7 @@ impl<'a> WordFstBuilder<'a> {
         mut self,
         index: &crate::Index,
         rtxn: &heed::RoTxn,
-    ) -> Result<(Mmap, Option<PrefixData>)> {
+    ) -> Result<(Option<Mmap>, Option<PrefixData>)> {
         let words_fst_mmap = self.word_fst_builder.build(&mut |bytes, deladd, is_modified| {
             if let Some(prefix_fst_builder) = &mut self.prefix_fst_builder {
                 prefix_fst_builder.insert_word(bytes, deladd, is_modified)
