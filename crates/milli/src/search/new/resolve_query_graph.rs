@@ -194,7 +194,11 @@ pub fn compute_phrase_docids(
         return Ok(RoaringBitmap::new());
     }
     let mut candidates = None;
-    for word in words.iter().flatten().copied() {
+    for word in words.iter().copied() {
+        let Some(word) = word else {
+            continue;
+        };
+
         if let Some(word_docids) = ctx.word_docids(None, Word::Original(word))? {
             if let Some(candidates) = candidates.as_mut() {
                 *candidates &= word_docids;
