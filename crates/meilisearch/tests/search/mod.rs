@@ -1836,3 +1836,120 @@ async fn change_facet_casing() {
         })
         .await;
 }
+
+#[actix_rt::test]
+async fn phrase_search_containing_stop_word() {
+    let documents = json!([
+        {
+            "title": "How to Train Your Dragon: The Hidden World",
+            "id": "166428",
+            "color": ["green", "red"],
+        },
+        {
+            "title": "How Train Dragon",
+            "id": "166429",
+            "color": ["green", "red"],
+        },
+        {
+            "title": "How bad Train good Dragon",
+            "id": "166427",
+            "color": ["green", "red"],
+        },
+        {
+            "title": "How bad bad Train good good Dragon",
+            "id": "166425",
+            "color": ["green", "red"],
+        },
+        {
+            "title": "Gläss",
+            "id": "450465",
+            "color": ["blue", "red"],
+        }
+    ]);
+
+    // Test simple search with stop words
+    test_settings_documents_indexing_swapping_and_search(
+        &documents,
+        &json!({"stopWords": ["the", "to", "your", "Your"]}),
+        &json!({"q": "how to train your dragon"}),
+        |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            snapshot!(json_string!(response["hits"]), @r###"
+            [
+              {
+                "title": "How to Train Your Dragon: The Hidden World",
+                "id": "166428",
+                "color": [
+                  "green",
+                  "red"
+                ]
+              },
+              {
+                "title": "How bad Train good Dragon",
+                "id": "166427",
+                "color": [
+                  "green",
+                  "red"
+                ]
+              },
+              {
+                "title": "How Train Dragon",
+                "id": "166429",
+                "color": [
+                  "green",
+                  "red"
+                ]
+              },
+              {
+                "title": "How bad bad Train good good Dragon",
+                "id": "166425",
+                "color": [
+                  "green",
+                  "red"
+                ]
+              }
+            ]
+            "###);
+        },
+    )
+    .await;
+
+    // Test phrase search with stop words
+    test_settings_documents_indexing_swapping_and_search(
+        &documents,
+        &json!({"stopWords": ["the", "to", "your", "Your"]}),
+        &json!({"q": "\"how to train your dragon\""}),
+        |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            snapshot!(json_string!(response["hits"]), @r###"
+            [
+              {
+                "title": "How bad Train good Dragon",
+                "id": "166427",
+                "color": [
+                  "green",
+                  "red"
+                ]
+              },
+              {
+                "title": "How to Train Your Dragon: The Hidden World",
+                "id": "166428",
+                "color": [
+                  "green",
+                  "red"
+                ]
+              },
+              {
+                "title": "How Train Dragon",
+                "id": "166429",
+                "color": [
+                  "green",
+                  "red"
+                ]
+              }
+            ]
+            "###);
+        },
+    )
+    .await;
+}
