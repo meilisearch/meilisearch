@@ -78,6 +78,7 @@ pub mod main_key {
     pub const FACET_SEARCH: &str = "facet_search";
     pub const PREFIX_SEARCH: &str = "prefix_search";
     pub const DOCUMENTS_STATS: &str = "documents_stats";
+    pub const DISABLED_TYPOS_TERMS: &str = "disabled_typos_terms";
 }
 
 pub mod db_name {
