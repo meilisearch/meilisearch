@@ -116,9 +116,9 @@ impl Service {
         &self,
     ) -> impl actix_web::dev::Service<
         actix_http::Request,
-        Response = ServiceResponse<impl MessageBody>,
+        Response = ServiceResponse<impl MessageBody + use<>>,
         Error = actix_web::Error,
-    > {
+    > + use<> {
         let (_route_layer, route_layer_handle) =
             tracing_subscriber::reload::Layer::new(None.with_filter(
                 tracing_subscriber::filter::Targets::new().with_target("", LevelFilter::OFF),

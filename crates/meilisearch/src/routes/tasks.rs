@@ -638,12 +638,12 @@ async fn get_task(
     let filters = index_scheduler.filters();
     let (tasks, _) = index_scheduler.get_tasks_from_authorized_indexes(&query, filters)?;
 
-    if let Some(task) = tasks.first() {
+    match tasks.first() { Some(task) => {
         let task_view = TaskView::from_task(task);
         Ok(HttpResponse::Ok().json(task_view))
-    } else {
+    } _ => {
         Err(index_scheduler::Error::TaskNotFound(task_uid).into())
-    }
+    }}
 }
 
 /// Get a task's documents.
@@ -693,7 +693,7 @@ async fn get_task_documents_file(
     let filters = index_scheduler.filters();
     let (tasks, _) = index_scheduler.get_tasks_from_authorized_indexes(&query, filters)?;
 
-    if let Some(task) = tasks.first() {
+    match tasks.first() { Some(task) => {
         match task.content_uuid() {
             Some(uuid) => {
                 let mut tfile = match index_scheduler.queue.update_file(uuid) {
@@ -711,9 +711,9 @@ async fn get_task_documents_file(
             }
             None => Err(index_scheduler::Error::TaskFileNotFound(task_uid).into()),
         }
-    } else {
+    } _ => {
         Err(index_scheduler::Error::TaskNotFound(task_uid).into())
-    }
+    }}
 }
 
 pub enum DeserializeDateOption {

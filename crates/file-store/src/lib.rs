@@ -111,7 +111,7 @@ impl FileStore {
     }
 
     /// List the Uuids of the files in the FileStore
-    pub fn all_uuids(&self) -> Result<impl Iterator<Item = Result<Uuid>>> {
+    pub fn all_uuids(&self) -> Result<impl Iterator<Item = Result<Uuid>> + use<>> {
         Ok(self.path.read_dir()?.filter_map(|entry| {
             let file_name = match entry {
                 Ok(entry) => entry.file_name(),
@@ -158,19 +158,19 @@ impl File {
 
 impl Write for File {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        if let Some(file) = self.file.as_mut() {
+        match self.file.as_mut() { Some(file) => {
             file.write(buf)
-        } else {
+        } _ => {
             Ok(buf.len())
-        }
+        }}
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
-        if let Some(file) = self.file.as_mut() {
+        match self.file.as_mut() { Some(file) => {
             file.flush()
-        } else {
+        } _ => {
             Ok(())
-        }
+        }}
     }
 }
 

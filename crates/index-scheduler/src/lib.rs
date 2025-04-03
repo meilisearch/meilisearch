@@ -355,19 +355,19 @@ impl IndexScheduler {
     }
 
     fn is_good_heed(tasks_path: &Path, map_size: usize) -> bool {
-        if let Ok(env) = unsafe {
+        match unsafe {
             heed::EnvOpenOptions::new().map_size(clamp_to_page_size(map_size)).open(tasks_path)
-        } {
+        } { Ok(env) => {
             env.prepare_for_closing().wait();
             true
-        } else {
+        } _ => {
             // We're treating all errors equally here, not only allocation errors.
             // This means there's a possiblity for the budget to lower due to errors different from allocation errors.
             // For persistent errors, this is OK as long as the task db is then reopened normally without ignoring the error this time.
             // For transient errors, this could lead to an instance with too low a budget.
             // However transient errors are: 1) less likely than persistent errors 2) likely to cause other issues down the line anyway.
             false
-        }
+        }}
     }
 
     pub fn read_txn(&self) -> Result<RoTxn<WithoutTls>> {

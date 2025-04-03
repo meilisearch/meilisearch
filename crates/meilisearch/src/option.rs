@@ -918,7 +918,7 @@ fn load_private_key(
 fn load_ocsp(filename: &Option<PathBuf>) -> anyhow::Result<Vec<u8>> {
     let mut ret = Vec::new();
 
-    if let Some(ref name) = filename {
+    if let Some(name) = filename {
         fs::File::open(name)
             .map_err(|_| anyhow::anyhow!("cannot open ocsp file"))?
             .read_to_end(&mut ret)
@@ -935,7 +935,8 @@ where
     T: AsRef<OsStr>,
 {
     if let Err(VarError::NotPresent) = std::env::var(key) {
-        std::env::set_var(key, value);
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe { std::env::set_var(key, value) };
     }
 }
 

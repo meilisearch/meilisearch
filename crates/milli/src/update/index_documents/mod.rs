@@ -367,7 +367,7 @@ where
 
                     match lmdb_writer_rx.clone().recv_timeout(std::time::Duration::from_millis(500)) {
                         Err(status) => {
-                            if let Some(typed_chunks) = chunk_accumulator.pop_longest() {
+                            match chunk_accumulator.pop_longest() { Some(typed_chunks) => {
                                 let (docids, is_merged_database) =
                                     write_typed_chunk_into_index(self.wtxn, self.index, &settings_diff, typed_chunks, &mut modified_docids)?;
                                 if !docids.is_empty() {
@@ -387,11 +387,11 @@ where
                                     });
                                 }
                             // If no more chunk remains in the chunk accumulator and the channel is disconected, break.
-                            } else if status == crossbeam_channel::RecvTimeoutError::Disconnected {
+                            } _ => if status == crossbeam_channel::RecvTimeoutError::Disconnected {
                                 break;
                             } else {
                                 rayon::yield_now();
-                            }
+                            }}
                         }
                         Ok(result) => {
                             let typed_chunk = match result? {

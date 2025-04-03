@@ -111,9 +111,9 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
                         let prompt = chunks.prompt();
 
                         let old_vectors = old_vectors.vectors_for_key(embedder_name)?.unwrap();
-                        if let Some(new_vectors) = new_vectors.as_ref().and_then(|new_vectors| {
+                        match new_vectors.as_ref().and_then(|new_vectors| {
                             new_vectors.vectors_for_key(embedder_name).transpose()
-                        }) {
+                        }) { Some(new_vectors) => {
                             let new_vectors = new_vectors?;
                             if old_vectors.regenerate != new_vectors.regenerate {
                                 chunks.set_regenerate(update.docid(), new_vectors.regenerate);
@@ -159,7 +159,7 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
                                     )?;
                                 }
                             }
-                        } else if old_vectors.regenerate {
+                        } _ => if old_vectors.regenerate {
                             let old_rendered = prompt.render_document(
                                 update.external_document_id(),
                                 update.current(
@@ -188,7 +188,7 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
                                     &unused_vectors_distribution,
                                 )?;
                             }
-                        }
+                        }}
                     }
                 }
                 DocumentChange::Insertion(insertion) => {
@@ -202,9 +202,9 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
                         let embedder_name = chunks.embedder_name();
                         let prompt = chunks.prompt();
                         // if no inserted vectors, then regenerate: true + no embeddings => autogenerate
-                        if let Some(new_vectors) = new_vectors.as_ref().and_then(|new_vectors| {
+                        match new_vectors.as_ref().and_then(|new_vectors| {
                             new_vectors.vectors_for_key(embedder_name).transpose()
-                        }) {
+                        }) { Some(new_vectors) => {
                             let new_vectors = new_vectors?;
                             chunks.set_regenerate(insertion.docid(), new_vectors.regenerate);
                             if let Some(embeddings) = new_vectors.embeddings {
@@ -233,7 +233,7 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
                                     &unused_vectors_distribution,
                                 )?;
                             }
-                        } else {
+                        } _ => {
                             let rendered = prompt.render_document(
                                 insertion.external_document_id(),
                                 insertion.inserted(),
@@ -246,7 +246,7 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
                                 rendered,
                                 &unused_vectors_distribution,
                             )?;
-                        }
+                        }}
                     }
                 }
             }
@@ -424,11 +424,11 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                 Ok(())
             }
             Err(error) => {
-                if let FaultSource::Bug = error.fault {
+                match error.fault { FaultSource::Bug => {
                     Err(crate::Error::InternalError(crate::InternalError::VectorEmbeddingError(
                         error.into(),
                     )))
-                } else {
+                } _ => {
                     let mut msg = format!(
                         r"While embedding documents for embedder `{embedder_name}`: {error}"
                     );
@@ -463,7 +463,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                     }
 
                     Err(crate::Error::UserError(crate::UserError::DocumentEmbeddingError(msg)))
-                }
+                }}
             }
         };
         texts.clear();

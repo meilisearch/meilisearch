@@ -348,11 +348,11 @@ impl ArroyWrapper {
                 searcher.candidates(filter);
             }
 
-            if let Some(mut ret) = searcher.by_item(rtxn, item)? {
+            match searcher.by_item(rtxn, item)? { Some(mut ret) => {
                 results.append(&mut ret);
-            } else {
+            } _ => {
                 break;
-            }
+            }}
         }
         results.sort_unstable_by_key(|(_, distance)| OrderedFloat(*distance));
         Ok(results)
@@ -402,19 +402,19 @@ impl ArroyWrapper {
 
         if self.quantized {
             for reader in self.readers(rtxn, self.quantized_db()) {
-                if let Some(vec) = reader?.item_vector(rtxn, item_id)? {
+                match reader?.item_vector(rtxn, item_id)? { Some(vec) => {
                     vectors.push(vec);
-                } else {
+                } _ => {
                     break;
-                }
+                }}
             }
         } else {
             for reader in self.readers(rtxn, self.angular_db()) {
-                if let Some(vec) = reader?.item_vector(rtxn, item_id)? {
+                match reader?.item_vector(rtxn, item_id)? { Some(vec) => {
                     vectors.push(vec);
-                } else {
+                } _ => {
                     break;
-                }
+                }}
             }
         }
         Ok(vectors)

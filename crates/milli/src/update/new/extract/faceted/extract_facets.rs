@@ -365,11 +365,11 @@ impl<'doc> DelAddFacetValue<'doc> {
         match kind {
             FacetKind::Number => {
                 let key = (fid, value);
-                if let Some(DelAdd::Deletion) = self.f64s.get(&key) {
+                match self.f64s.get(&key) { Some(DelAdd::Deletion) => {
                     self.f64s.remove(&key);
-                } else {
+                } _ => {
                     self.f64s.insert(key, DelAdd::Addition);
-                }
+                }}
             }
             FacetKind::String => {
                 if let Ok(s) = std::str::from_utf8(&value) {
@@ -386,11 +386,11 @@ impl<'doc> DelAddFacetValue<'doc> {
         match kind {
             FacetKind::Number => {
                 let key = (fid, value);
-                if let Some(DelAdd::Addition) = self.f64s.get(&key) {
+                match self.f64s.get(&key) { Some(DelAdd::Addition) => {
                     self.f64s.remove(&key);
-                } else {
+                } _ => {
                     self.f64s.insert(key, DelAdd::Deletion);
-                }
+                }}
             }
             FacetKind::String => {
                 if let Ok(s) = std::str::from_utf8(&value) {

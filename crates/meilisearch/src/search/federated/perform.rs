@@ -740,7 +740,7 @@ impl SearchByIndex {
                     _ => ranking_rules::CanonicalizationKind::Placeholder,
                 };
 
-                let sort = if let Some(sort) = &query.sort {
+                let sort = match &query.sort { Some(sort) => {
                     let sorts: Vec<_> =
                         match sort.iter().map(|s| milli::AscDesc::from_str(s)).collect() {
                             Ok(sorts) => sorts,
@@ -752,9 +752,9 @@ impl SearchByIndex {
                             }
                         };
                     Some(sorts)
-                } else {
+                } _ => {
                     None
-                };
+                }};
 
                 let ranking_rules = ranking_rules::RankingRules::new(
                     criteria.clone(),

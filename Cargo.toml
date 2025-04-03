@@ -30,7 +30,7 @@ authors = [
 description = "Meilisearch HTTP server"
 homepage = "https://meilisearch.com"
 readme = "README.md"
-edition = "2021"
+edition = "2024"
 license = "MIT"
 
 [profile.release]

@@ -37,12 +37,12 @@ where
     let mut fd = LexicographicFacetDistribution { rtxn, db, field_id, callback };
     let highest_level = get_highest_level(rtxn, db, field_id)?;
 
-    if let Some(first_bound) = get_first_facet_value::<BytesRefCodec, _>(rtxn, db, field_id)? {
+    match get_first_facet_value::<BytesRefCodec, _>(rtxn, db, field_id)? { Some(first_bound) => {
         fd.iterate(candidates, highest_level, first_bound, usize::MAX)?;
         Ok(())
-    } else {
+    } _ => {
         Ok(())
-    }
+    }}
 }
 
 pub fn count_iterate_over_facet_distribution<'t, CB>(

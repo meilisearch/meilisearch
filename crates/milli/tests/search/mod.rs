@@ -220,11 +220,11 @@ fn execute_filter(filter: &str, document: &TestDocument) -> Option<String> {
             id = Some(document.id.clone())
         }
     } else if let Some(("asc_desc_rank", filter)) = filter.split_once('<') {
-        if document.asc_desc_rank < filter.parse().unwrap() {
+        if document.asc_desc_rank < filter.parse::<u32>().unwrap() {
             id = Some(document.id.clone())
         }
     } else if let Some(("asc_desc_rank", filter)) = filter.split_once('>') {
-        if document.asc_desc_rank > filter.parse().unwrap() {
+        if document.asc_desc_rank > filter.parse::<u32>().unwrap() {
             id = Some(document.id.clone())
         }
     } else if filter.starts_with("_geoRadius") {

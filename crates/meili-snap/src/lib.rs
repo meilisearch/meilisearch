@@ -77,7 +77,7 @@ snapshot_hash!("hello world", name: "snap_name", @"5f93f983524def3dca464469d2cf9
 */
 #[macro_export]
 macro_rules! snapshot_hash {
-    ($value:expr, @$inline:literal) => {
+    ($value:expr_2021, @$inline:literal) => {
         let test_name = {
             fn f() {}
             fn type_name_of_val<T>(_: T) -> &'static str {
@@ -99,7 +99,7 @@ macro_rules! snapshot_hash {
             }
         });
     };
-    ($value:expr, name: $name:expr, @$inline:literal) => {
+    ($value:expr_2021, name: $name:expr_2021, @$inline:literal) => {
         let test_name = {
             fn f() {}
             fn type_name_of_val<T>(_: T) -> &'static str {
@@ -151,7 +151,7 @@ snapshot!(format!("{:?}", vec![1, 2]), @"[1, 2]");
 */
 #[macro_export]
 macro_rules! snapshot {
-    ($value:expr, name: $name:expr) => {
+    ($value:expr_2021, name: $name:expr_2021) => {
         let test_name = {
             fn f() {}
             fn type_name_of_val<T>(_: T) -> &'static str {
@@ -172,7 +172,7 @@ macro_rules! snapshot {
             }
         });
     };
-    ($value:expr, @$inline:literal) => {
+    ($value:expr_2021, @$inline:literal) => {
         // Note that the name given as argument does not matter since it is only an inline snapshot
         // We don't pass None because otherwise `meili-snap` will try to assign it a unique identifier
         let (settings, _, _) = $crate::default_snapshot_settings_for_test("", Some("_dummy_argument"));
@@ -183,7 +183,7 @@ macro_rules! snapshot {
             }
         });
     };
-    ($value:expr) => {
+    ($value:expr_2021) => {
         let test_name = {
             fn f() {}
             fn type_name_of_val<T>(_: T) -> &'static str {
@@ -213,13 +213,13 @@ macro_rules! snapshot {
 /// refer to the redactions feature in the `insta` guide.
 #[macro_export]
 macro_rules! json_string {
-    ($value:expr, {$($k:expr => $v:expr),*$(,)?}) => {
+    ($value:expr_2021, {$($k:expr_2021 => $v:expr_2021),*$(,)?}) => {
         {
             let (_, snap) = meili_snap::insta::_prepare_snapshot_for_redaction!($value, {$($k => $v),*}, Json, File);
             snap
         }
     };
-    ($value:expr) => {{
+    ($value:expr_2021) => {{
         let value = meili_snap::insta::_macro_support::serialize_value(
             &$value,
             meili_snap::insta::_macro_support::SerializationFormat::Json,

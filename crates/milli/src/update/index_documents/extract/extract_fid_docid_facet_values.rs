@@ -143,11 +143,11 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
                     strings_key_buffer.extend_from_slice(docid_bytes);
 
                     // We insert the document id on the Del and the Add side if the field exists.
-                    let (ref mut del_exists, ref mut add_exists) =
+                    let (del_exists, add_exists) =
                         facet_exists_docids.entry(field_id).or_default();
-                    let (ref mut del_is_null, ref mut add_is_null) =
+                    let (del_is_null, add_is_null) =
                         facet_is_null_docids.entry(field_id).or_default();
-                    let (ref mut del_is_empty, ref mut add_is_empty) =
+                    let (del_is_empty, add_is_empty) =
                         facet_is_empty_docids.entry(field_id).or_default();
 
                     if del_value.is_some() {

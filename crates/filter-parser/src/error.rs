@@ -198,7 +198,7 @@ impl Display for Error<'_> {
                 f,
                 "Encountered an internal `{:?}` error while parsing your filter. Please fill an issue", kind
             )?,
-            ErrorKind::External(ref error) => writeln!(f, "{}", error)?,
+            ErrorKind::External(error) => writeln!(f, "{}", error)?,
         }
         let base_column = self.context.get_utf8_column();
         let size = self.context.fragment().chars().count();

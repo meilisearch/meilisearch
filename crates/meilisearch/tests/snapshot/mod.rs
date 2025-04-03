@@ -10,10 +10,10 @@ use crate::json;
 
 macro_rules! verify_snapshot {
     (
-        $orig:expr,
-        $snapshot: expr,
+        $orig:expr_2021,
+        $snapshot: expr_2021,
         |$server:ident| =>
-        $($e:expr,)+) => {
+        $($e:expr_2021,)+) => {
             use std::sync::Arc;
             let snapshot = Arc::new($snapshot);
             let orig = Arc::new($orig);

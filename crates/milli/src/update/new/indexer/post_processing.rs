@@ -95,16 +95,16 @@ fn compute_word_fst(index: &Index, wtxn: &mut RwTxn) -> Result<Option<PrefixDelt
 
     let (word_fst_mmap, prefix_data) = word_fst_builder.build(index, &rtxn)?;
     index.main.remap_types::<Str, Bytes>().put(wtxn, WORDS_FST_KEY, &word_fst_mmap)?;
-    if let Some(PrefixData { prefixes_fst_mmap, prefix_delta }) = prefix_data {
+    match prefix_data { Some(PrefixData { prefixes_fst_mmap, prefix_delta }) => {
         index.main.remap_types::<Str, Bytes>().put(
             wtxn,
             WORDS_PREFIXES_FST_KEY,
             &prefixes_fst_mmap,
         )?;
         Ok(Some(prefix_delta))
-    } else {
+    } _ => {
         Ok(None)
-    }
+    }}
 }
 
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::facet_search")]

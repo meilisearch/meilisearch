@@ -27,7 +27,7 @@ pub fn default_db_snapshot_settings_for_test(name: Option<&str>) -> (insta::Sett
 }
 #[macro_export]
 macro_rules! milli_snap {
-    ($value:expr, $name:expr) => {
+    ($value:expr_2021, $name:expr_2021) => {
         let (settings, _) = $crate::snapshot_tests::default_db_snapshot_settings_for_test(None);
         settings.bind(|| {
             let snap = $value;
@@ -37,7 +37,7 @@ macro_rules! milli_snap {
             }
         });
     };
-    ($value:expr) => {
+    ($value:expr_2021) => {
         let (settings, test_name) = $crate::snapshot_tests::default_db_snapshot_settings_for_test(None);
         settings.bind(|| {
             let snap = $value;
@@ -47,7 +47,7 @@ macro_rules! milli_snap {
             }
         });
     };
-    ($value:expr, @$inline:literal) => {
+    ($value:expr_2021, @$inline:literal) => {
         let (settings, test_name) = $crate::snapshot_tests::default_db_snapshot_settings_for_test(None);
         settings.bind(|| {
             let snap = $value;
@@ -61,7 +61,7 @@ macro_rules! milli_snap {
             }
         });
     };
-    ($value:expr, $name:expr, @$inline:literal) => {
+    ($value:expr_2021, $name:expr_2021, @$inline:literal) => {
         let (settings, _) = $crate::snapshot_tests::default_db_snapshot_settings_for_test(None);
         settings.bind(|| {
             let snap = $value;
@@ -142,7 +142,7 @@ db_snap!(index, word_docids, "some_identifier", @"");
 */
 #[macro_export]
 macro_rules! db_snap {
-    ($index:ident, $db_name:ident, $name:expr) => {
+    ($index:ident, $db_name:ident, $name:expr_2021) => {
         let (settings, _) = $crate::snapshot_tests::default_db_snapshot_settings_for_test(Some(
             &format!("{}", $name),
         ));
@@ -178,7 +178,7 @@ macro_rules! db_snap {
             }
         });
     };
-    ($index:ident, $db_name:ident, $name:expr, @$inline:literal) => {
+    ($index:ident, $db_name:ident, $name:expr_2021, @$inline:literal) => {
         let (settings, _) = $crate::snapshot_tests::default_db_snapshot_settings_for_test(Some(&format!("{}", $name)));
         settings.bind(|| {
             let snap = $crate::full_snap_of_db!($index, $db_name);

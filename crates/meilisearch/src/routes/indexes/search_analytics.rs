@@ -131,7 +131,7 @@ impl<Method: AggregateMethod> SearchAggregator<Method> {
 
         ret.total_received = 1;
 
-        if let Some(ref sort) = sort {
+        if let Some(sort) = sort {
             ret.sort_total_number_of_criteria = 1;
             ret.sort_with_geo_point = sort.iter().any(|s| s.contains("_geoPoint("));
             ret.sort_sum_of_criteria_terms = sort.len();
@@ -139,7 +139,7 @@ impl<Method: AggregateMethod> SearchAggregator<Method> {
 
         ret.distinct = distinct.is_some();
 
-        if let Some(ref filter) = filter {
+        if let Some(filter) = filter {
             static RE: Lazy<Regex> = Lazy::new(|| Regex::new("AND | OR").unwrap());
             ret.filter_total_number_of_criteria = 1;
 
@@ -168,11 +168,11 @@ impl<Method: AggregateMethod> SearchAggregator<Method> {
             ret.attributes_to_search_on_total_number_of_uses = 1;
         }
 
-        if let Some(ref q) = q {
+        if let Some(q) = q {
             ret.max_terms_number = q.split_whitespace().count();
         }
 
-        if let Some(ref vector) = vector {
+        if let Some(vector) = vector {
             ret.max_vector_size = vector.len();
         }
         ret.retrieve_vectors |= retrieve_vectors;

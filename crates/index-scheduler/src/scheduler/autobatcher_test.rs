@@ -10,7 +10,7 @@ use crate::TaskId;
 
 #[macro_export]
 macro_rules! debug_snapshot {
-        ($value:expr, @$snapshot:literal) => {{
+        ($value:expr_2021, @$snapshot:literal) => {{
             let value = format!("{:?}", $value);
             meili_snap::snapshot!(value, @$snapshot);
         }};

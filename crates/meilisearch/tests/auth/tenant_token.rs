@@ -94,7 +94,7 @@ static REFUSED_KEYS: Lazy<Vec<Value>> = Lazy::new(|| {
 });
 
 macro_rules! compute_authorized_search {
-    ($tenant_tokens:expr, $filter:expr, $expected_count:expr) => {
+    ($tenant_tokens:expr_2021, $filter:expr_2021, $expected_count:expr_2021) => {
         let mut server = Server::new_auth().await;
         server.use_admin_key("MASTER_KEY").await;
         let index = server.index("sales");
@@ -141,7 +141,7 @@ macro_rules! compute_authorized_search {
 }
 
 macro_rules! compute_forbidden_search {
-    ($tenant_tokens:expr, $parent_keys:expr) => {
+    ($tenant_tokens:expr_2021, $parent_keys:expr_2021) => {
         let mut server = Server::new_auth().await;
         server.use_admin_key("MASTER_KEY").await;
         let index = server.index("sales");

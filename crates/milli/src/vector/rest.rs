@@ -150,11 +150,11 @@ impl Embedder {
             headers: options.headers,
         };
 
-        let dimensions = if let Some(dimensions) = options.dimensions {
+        let dimensions = match options.dimensions { Some(dimensions) => {
             dimensions
-        } else {
+        } _ => {
             infer_dimensions(&data)?
-        };
+        }};
 
         Ok(Self {
             data,

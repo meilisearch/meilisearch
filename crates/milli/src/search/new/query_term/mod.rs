@@ -110,7 +110,7 @@ impl ExactTerm {
     pub fn interned_words<'ctx>(
         &self,
         ctx: &'ctx SearchContext<'ctx>,
-    ) -> impl Iterator<Item = Option<Interned<String>>> + 'ctx {
+    ) -> impl Iterator<Item = Option<Interned<String>>> + 'ctx + use<'ctx> {
         match *self {
             ExactTerm::Phrase(phrase) => {
                 let phrase = ctx.phrase_interner.get(phrase);

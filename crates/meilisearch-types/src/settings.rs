@@ -572,19 +572,19 @@ pub fn apply_settings_to_builder(
     } = settings;
 
     match searchable_attributes.deref() {
-        Setting::Set(ref names) => builder.set_searchable_fields(names.clone()),
+        Setting::Set(names) => builder.set_searchable_fields(names.clone()),
         Setting::Reset => builder.reset_searchable_fields(),
         Setting::NotSet => (),
     }
 
     match displayed_attributes.deref() {
-        Setting::Set(ref names) => builder.set_displayed_fields(names.clone()),
+        Setting::Set(names) => builder.set_displayed_fields(names.clone()),
         Setting::Reset => builder.reset_displayed_fields(),
         Setting::NotSet => (),
     }
 
     match filterable_attributes {
-        Setting::Set(ref facets) => {
+        Setting::Set(facets) => {
             builder.set_filterable_fields(facets.clone().into_iter().collect())
         }
         Setting::Reset => builder.reset_filterable_fields(),
@@ -592,13 +592,13 @@ pub fn apply_settings_to_builder(
     }
 
     match sortable_attributes {
-        Setting::Set(ref fields) => builder.set_sortable_fields(fields.iter().cloned().collect()),
+        Setting::Set(fields) => builder.set_sortable_fields(fields.iter().cloned().collect()),
         Setting::Reset => builder.reset_sortable_fields(),
         Setting::NotSet => (),
     }
 
     match ranking_rules {
-        Setting::Set(ref criteria) => {
+        Setting::Set(criteria) => {
             builder.set_criteria(criteria.iter().map(|c| c.clone().into()).collect())
         }
         Setting::Reset => builder.reset_criteria(),
@@ -606,13 +606,13 @@ pub fn apply_settings_to_builder(
     }
 
     match stop_words {
-        Setting::Set(ref stop_words) => builder.set_stop_words(stop_words.clone()),
+        Setting::Set(stop_words) => builder.set_stop_words(stop_words.clone()),
         Setting::Reset => builder.reset_stop_words(),
         Setting::NotSet => (),
     }
 
     match non_separator_tokens {
-        Setting::Set(ref non_separator_tokens) => {
+        Setting::Set(non_separator_tokens) => {
             builder.set_non_separator_tokens(non_separator_tokens.clone())
         }
         Setting::Reset => builder.reset_non_separator_tokens(),
@@ -620,7 +620,7 @@ pub fn apply_settings_to_builder(
     }
 
     match separator_tokens {
-        Setting::Set(ref separator_tokens) => {
+        Setting::Set(separator_tokens) => {
             builder.set_separator_tokens(separator_tokens.clone())
         }
         Setting::Reset => builder.reset_separator_tokens(),
@@ -628,38 +628,38 @@ pub fn apply_settings_to_builder(
     }
 
     match dictionary {
-        Setting::Set(ref dictionary) => builder.set_dictionary(dictionary.clone()),
+        Setting::Set(dictionary) => builder.set_dictionary(dictionary.clone()),
         Setting::Reset => builder.reset_dictionary(),
         Setting::NotSet => (),
     }
 
     match synonyms {
-        Setting::Set(ref synonyms) => builder.set_synonyms(synonyms.clone().into_iter().collect()),
+        Setting::Set(synonyms) => builder.set_synonyms(synonyms.clone().into_iter().collect()),
         Setting::Reset => builder.reset_synonyms(),
         Setting::NotSet => (),
     }
 
     match distinct_attribute {
-        Setting::Set(ref attr) => builder.set_distinct_field(attr.clone()),
+        Setting::Set(attr) => builder.set_distinct_field(attr.clone()),
         Setting::Reset => builder.reset_distinct_field(),
         Setting::NotSet => (),
     }
 
     match proximity_precision {
-        Setting::Set(ref precision) => builder.set_proximity_precision((*precision).into()),
+        Setting::Set(precision) => builder.set_proximity_precision((*precision).into()),
         Setting::Reset => builder.reset_proximity_precision(),
         Setting::NotSet => (),
     }
 
     match localized_attributes_rules {
-        Setting::Set(ref rules) => builder
+        Setting::Set(rules) => builder
             .set_localized_attributes_rules(rules.iter().cloned().map(|r| r.into()).collect()),
         Setting::Reset => builder.reset_localized_attributes_rules(),
         Setting::NotSet => (),
     }
 
     match typo_tolerance {
-        Setting::Set(ref value) => {
+        Setting::Set(value) => {
             match value.enabled {
                 Setting::Set(val) => builder.set_autorize_typos(val),
                 Setting::Reset => builder.reset_authorize_typos(),
@@ -736,7 +736,7 @@ pub fn apply_settings_to_builder(
     }
 
     match pagination {
-        Setting::Set(ref value) => match value.max_total_hits {
+        Setting::Set(value) => match value.max_total_hits {
             Setting::Set(val) => builder.set_pagination_max_total_hits(val),
             Setting::Reset => builder.reset_pagination_max_total_hits(),
             Setting::NotSet => (),

@@ -178,11 +178,11 @@ async fn run_http(
     .disable_signals()
     .keep_alive(KeepAlive::Os);
 
-    if let Some(config) = opt_clone.get_ssl_config()? {
+    match opt_clone.get_ssl_config()? { Some(config) => {
         http_server.bind_rustls_0_23(opt_clone.http_addr, config)?.run().await?;
-    } else {
+    } _ => {
         http_server.bind(&opt_clone.http_addr)?.run().await?;
-    }
+    }}
     Ok(())
 }
 

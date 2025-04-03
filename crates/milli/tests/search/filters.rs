@@ -5,7 +5,7 @@ use Criterion::*;
 use crate::search::{self, EXTERNAL_DOCUMENTS_IDS};
 
 macro_rules! test_filter {
-    ($func:ident, $filter:expr) => {
+    ($func:ident, $filter:expr_2021) => {
         #[test]
         fn $func() {
             let criteria = vec![Words, Typo, Proximity, Attribute, Exactness];

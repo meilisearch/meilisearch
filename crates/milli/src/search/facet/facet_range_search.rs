@@ -53,17 +53,16 @@ where
     let mut f = FacetRangeSearch { rtxn, db, field_id, left, right, universe, docids };
     let highest_level = get_highest_level(rtxn, db, field_id)?;
 
-    if let Some(starting_left_bound) =
-        get_first_facet_value::<BytesRefCodec, _>(rtxn, db, field_id)?
-    {
+    match get_first_facet_value::<BytesRefCodec, _>(rtxn, db, field_id)?
+    { Some(starting_left_bound) => {
         let rightmost_bound =
             Bound::Included(get_last_facet_value::<BytesRefCodec, _>(rtxn, db, field_id)?.unwrap()); // will not fail because get_first_facet_value succeeded
         let group_size = usize::MAX;
         f.run(highest_level, starting_left_bound, rightmost_bound, group_size)?;
         Ok(())
-    } else {
+    } _ => {
         Ok(())
-    }
+    }}
 }
 
 /// Fetch the document ids that have a facet with a value between the two given bounds

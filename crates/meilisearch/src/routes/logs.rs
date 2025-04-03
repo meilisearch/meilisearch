@@ -341,11 +341,11 @@ pub async fn get_logs(
     })
     .unwrap();
 
-    if let Some(stream) = stream {
+    match stream { Some(stream) => {
         Ok(HttpResponse::Ok().streaming(stream))
-    } else {
+    } _ => {
         Err(MeilisearchHttpError::AlreadyUsedLogRoute.into())
-    }
+    }}
 }
 
 /// Stop retrieving logs

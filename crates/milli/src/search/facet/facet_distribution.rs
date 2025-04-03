@@ -301,26 +301,26 @@ impl<'a> FacetDistribution<'a> {
         let mut distribution = BTreeMap::new();
         for (fid, name) in fields_ids_map.iter() {
             if self.select_field(name, &filterable_attributes_rules) {
-                let min_value = if let Some(min_value) = crate::search::facet::facet_min_value(
+                let min_value = match crate::search::facet::facet_min_value(
                     self.index,
                     self.rtxn,
                     fid,
                     candidates.clone(),
-                )? {
+                )? { Some(min_value) => {
                     min_value
-                } else {
+                } _ => {
                     continue;
-                };
-                let max_value = if let Some(max_value) = crate::search::facet::facet_max_value(
+                }};
+                let max_value = match crate::search::facet::facet_max_value(
                     self.index,
                     self.rtxn,
                     fid,
                     candidates.clone(),
-                )? {
+                )? { Some(max_value) => {
                     max_value
-                } else {
+                } _ => {
                     continue;
-                };
+                }};
 
                 distribution.insert(name.to_string(), (min_value, max_value));
             }

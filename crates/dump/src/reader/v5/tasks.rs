@@ -275,19 +275,19 @@ impl From<Task> for TaskView {
                 match (result, &mut details) {
                     (
                         TaskResult::DocumentAddition { indexed_documents: num, .. },
-                        Some(TaskDetails::DocumentAddition { ref mut indexed_documents, .. }),
+                        Some(TaskDetails::DocumentAddition { indexed_documents, .. }),
                     ) => {
                         indexed_documents.replace(*num);
                     }
                     (
                         TaskResult::DocumentDeletion { deleted_documents: docs, .. },
-                        Some(TaskDetails::DocumentDeletion { ref mut deleted_documents, .. }),
+                        Some(TaskDetails::DocumentDeletion { deleted_documents, .. }),
                     ) => {
                         deleted_documents.replace(*docs);
                     }
                     (
                         TaskResult::ClearAll { deleted_documents: docs },
-                        Some(TaskDetails::ClearAll { ref mut deleted_documents }),
+                        Some(TaskDetails::ClearAll { deleted_documents }),
                     ) => {
                         deleted_documents.replace(*docs);
                     }

@@ -20,7 +20,7 @@ const DISALLOW_OPTIONAL_WORDS: TermsMatchingStrategy = TermsMatchingStrategy::Al
 const ASC_DESC_CANDIDATES_THRESHOLD: usize = 1000;
 
 macro_rules! test_criterion {
-    ($func:ident, $optional_word:ident, $criteria:expr, $sort_criteria:expr) => {
+    ($func:ident, $optional_word:ident, $criteria:expr_2021, $sort_criteria:expr_2021) => {
         #[test]
         fn $func() {
             let criteria = $criteria;

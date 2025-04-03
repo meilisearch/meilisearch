@@ -577,14 +577,14 @@ fn export_documents(
                             return Err(meilisearch_types::milli::Error::UserError(
                                 meilisearch_types::milli::UserError::InvalidVectorsMapType {
                                     document_id: {
-                                        if let Ok(Some(Ok(index))) = index
+                                        match index
                                             .external_id_of(&rtxn, std::iter::once(id))
                                             .map(|it| it.into_iter().next())
-                                        {
+                                        { Ok(Some(Ok(index))) => {
                                             index
-                                        } else {
+                                        } _ => {
                                             format!("internal docid={id}")
-                                        }
+                                        }}
                                     },
                                     value: vectors.clone(),
                                 },

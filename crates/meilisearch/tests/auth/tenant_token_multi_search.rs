@@ -262,7 +262,7 @@ static BOTH_REFUSED_KEYS: Lazy<Vec<Value>> = Lazy::new(|| {
 });
 
 macro_rules! compute_authorized_single_search {
-    ($tenant_tokens:expr, $filter:expr, $expected_count:expr) => {
+    ($tenant_tokens:expr_2021, $filter:expr_2021, $expected_count:expr_2021) => {
         let mut server = Server::new_auth().await;
         server.use_admin_key("MASTER_KEY").await;
         let index = server.index("sales");
@@ -333,7 +333,7 @@ macro_rules! compute_authorized_single_search {
 }
 
 macro_rules! compute_authorized_multiple_search {
-    ($tenant_tokens:expr, $filter1:expr, $filter2:expr, $expected_count1:expr, $expected_count2:expr) => {
+    ($tenant_tokens:expr_2021, $filter1:expr_2021, $filter2:expr_2021, $expected_count1:expr_2021, $expected_count2:expr_2021) => {
         let mut server = Server::new_auth().await;
         server.use_admin_key("MASTER_KEY").await;
         let index = server.index("sales");
@@ -417,7 +417,7 @@ macro_rules! compute_authorized_multiple_search {
 }
 
 macro_rules! compute_forbidden_single_search {
-    ($tenant_tokens:expr, $parent_keys:expr, $failed_query_indexes:expr) => {
+    ($tenant_tokens:expr_2021, $parent_keys:expr_2021, $failed_query_indexes:expr_2021) => {
         let mut server = Server::new_auth().await;
         server.use_admin_key("MASTER_KEY").await;
         let index = server.index("sales");
@@ -493,7 +493,7 @@ macro_rules! compute_forbidden_single_search {
 }
 
 macro_rules! compute_forbidden_multiple_search {
-    ($tenant_tokens:expr, $parent_keys:expr, $failed_query_indexes:expr) => {
+    ($tenant_tokens:expr_2021, $parent_keys:expr_2021, $failed_query_indexes:expr_2021) => {
         let mut server = Server::new_auth().await;
         server.use_admin_key("MASTER_KEY").await;
         let index = server.index("sales");

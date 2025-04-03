@@ -853,7 +853,7 @@ fn check_sort_criteria(
     let sortable_fields = ctx.index.sortable_fields(ctx.txn)?;
     for asc_desc in sort_criteria {
         match asc_desc.member() {
-            Member::Field(ref field) if !crate::is_faceted(field, &sortable_fields) => {
+            Member::Field(field) if !crate::is_faceted(field, &sortable_fields) => {
                 let (valid_fields, hidden_fields) =
                     ctx.index.remove_hidden_fields(ctx.txn, sortable_fields)?;
 
