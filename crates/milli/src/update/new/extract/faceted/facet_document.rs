@@ -102,19 +102,30 @@ pub fn extract_document_facets<'doc>(
         }
     }
 
+    // extract geo data separately
     if is_geo_enabled {
-        if let Some(geo_value) = document.geo_field()? {
-            if let Some([lat, lng]) = extract_geo_coordinates(external_document_id, geo_value)? {
-                let ((lat_fid, lat_meta), (lng_fid, lng_meta)) = field_id_map
-                    .id_with_metadata_or_insert("_geo.lat")
-                    .zip(field_id_map.id_with_metadata_or_insert("_geo.lng"))
-                    .ok_or(UserError::AttributeLimitReached)?;
-
-                facet_fn(lat_fid, lat_meta, perm_json_p::Depth::OnBaseKey, &lat.into())?;
-                facet_fn(lng_fid, lng_meta, perm_json_p::Depth::OnBaseKey, &lng.into())?;
-            }
-        }
+        extract_geo_data(document, external_document_id, field_id_map, facet_fn)?;
     }
 
+    Ok(())
+}
+
+pub fn extract_geo_data<'doc>(
+    document: impl Document<'doc>,
+    external_document_id: &str,
+    field_id_map: &mut GlobalFieldsIdsMap,
+    facet_fn: &mut impl FnMut(FieldId, Metadata, perm_json_p::Depth, &Value) -> Result<()>,
+) -> Result<()> {
+    if let Some(geo_value) = document.geo_field()? {
+        if let Some([lat, lng]) = extract_geo_coordinates(external_document_id, geo_value)? {
+            let ((lat_fid, lat_meta), (lng_fid, lng_meta)) = field_id_map
+                .id_with_metadata_or_insert("_geo.lat")
+                .zip(field_id_map.id_with_metadata_or_insert("_geo.lng"))
+                .ok_or(UserError::AttributeLimitReached)?;
+
+            facet_fn(lat_fid, lat_meta, perm_json_p::Depth::OnBaseKey, &lat.into())?;
+            facet_fn(lng_fid, lng_meta, perm_json_p::Depth::OnBaseKey, &lng.into())?;
+        }
+    }
     Ok(())
 }
