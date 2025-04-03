@@ -21,6 +21,8 @@ pub struct BatchView {
     pub started_at: OffsetDateTime,
     #[serde(with = "time::serde::rfc3339::option", default)]
     pub finished_at: Option<OffsetDateTime>,
+    #[serde(default = "meilisearch_types::batches::default_stop_reason")]
+    pub batcher_stopped_because: String,
 }
 
 impl BatchView {
@@ -33,6 +35,7 @@ impl BatchView {
             duration: batch.finished_at.map(|finished_at| finished_at - batch.started_at),
             started_at: batch.started_at,
             finished_at: batch.finished_at,
+            batcher_stopped_because: batch.stop_reason.clone(),
         }
     }
 }

@@ -7,7 +7,9 @@ use meilisearch_types::batches::{Batch, BatchEnqueuedAt, BatchId, BatchStats};
 use meilisearch_types::heed::{Database, RoTxn, RwTxn};
 use meilisearch_types::milli::CboRoaringBitmapCodec;
 use meilisearch_types::task_view::DetailsView;
-use meilisearch_types::tasks::{Details, IndexSwap, Kind, KindWithContent, Status};
+use meilisearch_types::tasks::{
+    BatchStopReason, Details, IndexSwap, Kind, KindWithContent, Status,
+};
 use roaring::RoaringBitmap;
 use time::OffsetDateTime;
 
@@ -33,6 +35,7 @@ pub struct ProcessingBatch {
     pub enqueued_at: Option<BatchEnqueuedAt>,
     pub started_at: OffsetDateTime,
     pub finished_at: Option<OffsetDateTime>,
+    pub reason: BatchStopReason,
 }
 
 impl ProcessingBatch {
@@ -53,6 +56,7 @@ impl ProcessingBatch {
             enqueued_at: None,
             started_at: OffsetDateTime::now_utc(),
             finished_at: None,
+            reason: Default::default(),
         }
     }
 
@@ -91,6 +95,10 @@ impl ProcessingBatch {
                 }
             }
         }
+    }
+
+    pub fn reason(&mut self, reason: BatchStopReason) {
+        self.reason = reason;
     }
 
     /// Must be called once the batch has finished processing.
@@ -141,6 +149,7 @@ impl ProcessingBatch {
             started_at: self.started_at,
             finished_at: self.finished_at,
             enqueued_at: self.enqueued_at,
+            stop_reason: self.reason.to_string(),
         }
     }
 }
