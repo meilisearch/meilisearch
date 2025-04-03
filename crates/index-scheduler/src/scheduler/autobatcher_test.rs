@@ -287,25 +287,25 @@ fn clear_and_additions_and_settings() {
 #[test]
 fn anything_and_index_deletion() {
     // The `IndexDeletion` doesn't batch with anything that happens AFTER.
-    debug_snapshot!(autobatch_from(true, None, [idx_del(), doc_imp(ReplaceDocuments, true, None)]), @"Some((IndexDeletion { ids: [0] }, false, Some(TaskCannotBeBatched { kind: IndexDeletion, id: 0 })))");
-    debug_snapshot!(autobatch_from(true, None, [idx_del(), doc_imp(UpdateDocuments, true, None)]), @"Some((IndexDeletion { ids: [0] }, false, Some(TaskCannotBeBatched { kind: IndexDeletion, id: 0 })))");
-    debug_snapshot!(autobatch_from(true, None, [idx_del(), doc_imp(ReplaceDocuments, false, None)]), @"Some((IndexDeletion { ids: [0] }, false, Some(TaskCannotBeBatched { kind: IndexDeletion, id: 0 })))");
-    debug_snapshot!(autobatch_from(true, None, [idx_del(), doc_imp(UpdateDocuments, false, None)]), @"Some((IndexDeletion { ids: [0] }, false, Some(TaskCannotBeBatched { kind: IndexDeletion, id: 0 })))");
-    debug_snapshot!(autobatch_from(true, None, [idx_del(), doc_del()]), @"Some((IndexDeletion { ids: [0] }, false, Some(TaskCannotBeBatched { kind: IndexDeletion, id: 0 })))");
-    debug_snapshot!(autobatch_from(true, None, [idx_del(), doc_del_fil()]), @"Some((IndexDeletion { ids: [0] }, false, Some(TaskCannotBeBatched { kind: IndexDeletion, id: 0 })))");
-    debug_snapshot!(autobatch_from(true, None, [idx_del(), doc_clr()]), @"Some((IndexDeletion { ids: [0] }, false, Some(TaskCannotBeBatched { kind: IndexDeletion, id: 0 })))");
-    debug_snapshot!(autobatch_from(true, None, [idx_del(), settings(true)]), @"Some((IndexDeletion { ids: [0] }, false, Some(TaskCannotBeBatched { kind: IndexDeletion, id: 0 })))");
-    debug_snapshot!(autobatch_from(true, None, [idx_del(), settings(false)]), @"Some((IndexDeletion { ids: [0] }, false, Some(TaskCannotBeBatched { kind: IndexDeletion, id: 0 })))");
+    debug_snapshot!(autobatch_from(true, None, [idx_del(), doc_imp(ReplaceDocuments, true, None)]), @"Some((IndexDeletion { ids: [0] }, false, Some(IndexDeletion { id: 0 })))");
+    debug_snapshot!(autobatch_from(true, None, [idx_del(), doc_imp(UpdateDocuments, true, None)]), @"Some((IndexDeletion { ids: [0] }, false, Some(IndexDeletion { id: 0 })))");
+    debug_snapshot!(autobatch_from(true, None, [idx_del(), doc_imp(ReplaceDocuments, false, None)]), @"Some((IndexDeletion { ids: [0] }, false, Some(IndexDeletion { id: 0 })))");
+    debug_snapshot!(autobatch_from(true, None, [idx_del(), doc_imp(UpdateDocuments, false, None)]), @"Some((IndexDeletion { ids: [0] }, false, Some(IndexDeletion { id: 0 })))");
+    debug_snapshot!(autobatch_from(true, None, [idx_del(), doc_del()]), @"Some((IndexDeletion { ids: [0] }, false, Some(IndexDeletion { id: 0 })))");
+    debug_snapshot!(autobatch_from(true, None, [idx_del(), doc_del_fil()]), @"Some((IndexDeletion { ids: [0] }, false, Some(IndexDeletion { id: 0 })))");
+    debug_snapshot!(autobatch_from(true, None, [idx_del(), doc_clr()]), @"Some((IndexDeletion { ids: [0] }, false, Some(IndexDeletion { id: 0 })))");
+    debug_snapshot!(autobatch_from(true, None, [idx_del(), settings(true)]), @"Some((IndexDeletion { ids: [0] }, false, Some(IndexDeletion { id: 0 })))");
+    debug_snapshot!(autobatch_from(true, None, [idx_del(), settings(false)]), @"Some((IndexDeletion { ids: [0] }, false, Some(IndexDeletion { id: 0 })))");
 
-    debug_snapshot!(autobatch_from(false,None,  [idx_del(), doc_imp(ReplaceDocuments, true, None)]), @"Some((IndexDeletion { ids: [0] }, false, Some(TaskCannotBeBatched { kind: IndexDeletion, id: 0 })))");
-    debug_snapshot!(autobatch_from(false,None,  [idx_del(), doc_imp(UpdateDocuments, true, None)]), @"Some((IndexDeletion { ids: [0] }, false, Some(TaskCannotBeBatched { kind: IndexDeletion, id: 0 })))");
-    debug_snapshot!(autobatch_from(false,None,  [idx_del(), doc_imp(ReplaceDocuments, false, None)]), @"Some((IndexDeletion { ids: [0] }, false, Some(TaskCannotBeBatched { kind: IndexDeletion, id: 0 })))");
-    debug_snapshot!(autobatch_from(false,None,  [idx_del(), doc_imp(UpdateDocuments, false, None)]), @"Some((IndexDeletion { ids: [0] }, false, Some(TaskCannotBeBatched { kind: IndexDeletion, id: 0 })))");
-    debug_snapshot!(autobatch_from(false,None,  [idx_del(), doc_del()]), @"Some((IndexDeletion { ids: [0] }, false, Some(TaskCannotBeBatched { kind: IndexDeletion, id: 0 })))");
-    debug_snapshot!(autobatch_from(false,None,  [idx_del(), doc_del_fil()]), @"Some((IndexDeletion { ids: [0] }, false, Some(TaskCannotBeBatched { kind: IndexDeletion, id: 0 })))");
-    debug_snapshot!(autobatch_from(false,None,  [idx_del(), doc_clr()]), @"Some((IndexDeletion { ids: [0] }, false, Some(TaskCannotBeBatched { kind: IndexDeletion, id: 0 })))");
-    debug_snapshot!(autobatch_from(false,None,  [idx_del(), settings(true)]), @"Some((IndexDeletion { ids: [0] }, false, Some(TaskCannotBeBatched { kind: IndexDeletion, id: 0 })))");
-    debug_snapshot!(autobatch_from(false,None,  [idx_del(), settings(false)]), @"Some((IndexDeletion { ids: [0] }, false, Some(TaskCannotBeBatched { kind: IndexDeletion, id: 0 })))");
+    debug_snapshot!(autobatch_from(false,None,  [idx_del(), doc_imp(ReplaceDocuments, true, None)]), @"Some((IndexDeletion { ids: [0] }, false, Some(IndexDeletion { id: 0 })))");
+    debug_snapshot!(autobatch_from(false,None,  [idx_del(), doc_imp(UpdateDocuments, true, None)]), @"Some((IndexDeletion { ids: [0] }, false, Some(IndexDeletion { id: 0 })))");
+    debug_snapshot!(autobatch_from(false,None,  [idx_del(), doc_imp(ReplaceDocuments, false, None)]), @"Some((IndexDeletion { ids: [0] }, false, Some(IndexDeletion { id: 0 })))");
+    debug_snapshot!(autobatch_from(false,None,  [idx_del(), doc_imp(UpdateDocuments, false, None)]), @"Some((IndexDeletion { ids: [0] }, false, Some(IndexDeletion { id: 0 })))");
+    debug_snapshot!(autobatch_from(false,None,  [idx_del(), doc_del()]), @"Some((IndexDeletion { ids: [0] }, false, Some(IndexDeletion { id: 0 })))");
+    debug_snapshot!(autobatch_from(false,None,  [idx_del(), doc_del_fil()]), @"Some((IndexDeletion { ids: [0] }, false, Some(IndexDeletion { id: 0 })))");
+    debug_snapshot!(autobatch_from(false,None,  [idx_del(), doc_clr()]), @"Some((IndexDeletion { ids: [0] }, false, Some(IndexDeletion { id: 0 })))");
+    debug_snapshot!(autobatch_from(false,None,  [idx_del(), settings(true)]), @"Some((IndexDeletion { ids: [0] }, false, Some(IndexDeletion { id: 0 })))");
+    debug_snapshot!(autobatch_from(false,None,  [idx_del(), settings(false)]), @"Some((IndexDeletion { ids: [0] }, false, Some(IndexDeletion { id: 0 })))");
 
     // The index deletion can accept almost any type of `BatchKind` and transform it to an `IndexDeletion`.
     // First, the basic cases
