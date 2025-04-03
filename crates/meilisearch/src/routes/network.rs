@@ -119,10 +119,22 @@ pub struct Network {
 impl Remote {
     pub fn try_into_db_node(self, name: &str) -> Result<DbRemote, ResponseError> {
         Ok(DbRemote {
-            url: self.url.set().ok_or(ResponseError::from_msg(
-                format!("Missing field `.remotes.{name}.url`"),
-                meilisearch_types::error::Code::MissingNetworkUrl,
-            ))?,
+            url: self
+                .url
+                .set()
+                .ok_or(ResponseError::from_msg(
+                    format!("Missing field `.remotes.{name}.url`"),
+                    meilisearch_types::error::Code::MissingNetworkUrl,
+                ))
+                .and_then(|url| {
+                    if let Err(error) = url::Url::parse(&url) {
+                        return Err(ResponseError::from_msg(
+                            format!("Invalid `.remotes.{name}.url` (`{url}`): {error}"),
+                            meilisearch_types::error::Code::InvalidNetworkUrl,
+                        ));
+                    }
+                    Ok(url)
+                })?,
             search_api_key: self.search_api_key.set(),
         })
     }
@@ -211,7 +223,15 @@ async fn patch_network(
 
                         let merged = DbRemote {
                             url: match new_url {
-                                Setting::Set(new_url) => new_url,
+                                Setting::Set(new_url) => {
+                                    if let Err(error) = url::Url::parse(&new_url) {
+                                        return Err(ResponseError::from_msg(
+                                            format!("Invalid `.remotes.{key}.url` (`{new_url}`): {error}"),
+                                            meilisearch_types::error::Code::InvalidNetworkUrl,
+                                        ));
+                                    }
+                                    new_url
+                                }
                                 Setting::Reset => {
                                     return Err(ResponseError::from_msg(
                                         format!(
