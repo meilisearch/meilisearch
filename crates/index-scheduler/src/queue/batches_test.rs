@@ -106,7 +106,7 @@ fn query_batches_simple() {
     batches[0].enqueued_at = None;
     // Insta cannot snapshot our batches because the batch stats contains an enum as key: https://github.com/mitsuhiko/insta/issues/689
     let batch = serde_json::to_string_pretty(&batches[0]).unwrap();
-    snapshot!(batch, @r#"
+    snapshot!(batch, @r###"
     {
       "uid": 0,
       "details": {
@@ -126,9 +126,10 @@ fn query_batches_simple() {
       },
       "startedAt": "1970-01-01T00:00:00Z",
       "finishedAt": null,
-      "enqueuedAt": null
+      "enqueuedAt": null,
+      "stopReason": "task with id 0 of type `indexCreation` cannot be batched"
     }
-    "#);
+    "###);
 
     let query = Query { statuses: Some(vec![Status::Enqueued]), ..Default::default() };
     let (batches, _) = index_scheduler
