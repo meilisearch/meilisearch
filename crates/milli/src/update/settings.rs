@@ -17,6 +17,7 @@ use super::IndexerConfig;
 use crate::attribute_patterns::PatternMatch;
 use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::criterion::Criterion;
+use crate::disabled_typos_terms::DisabledTyposTerms;
 use crate::error::UserError;
 use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
 use crate::filterable_attributes_rules::match_faceted_field;
@@ -169,6 +170,7 @@ pub struct Settings<'a, 't, 'i> {
     synonyms: Setting<BTreeMap<String, Vec<String>>>,
     primary_key: Setting<String>,
     authorize_typos: Setting<bool>,
+    disabled_typos_terms: Setting<DisabledTyposTerms>,
     min_word_len_two_typos: Setting<u8>,
     min_word_len_one_typo: Setting<u8>,
     exact_words: Setting<BTreeSet<String>>,
@@ -207,6 +209,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             synonyms: Setting::NotSet,
             primary_key: Setting::NotSet,
             authorize_typos: Setting::NotSet,
+            disabled_typos_terms: Setting::NotSet,
             exact_words: Setting::NotSet,
             min_word_len_two_typos: Setting::NotSet,
             min_word_len_one_typo: Setting::NotSet,
@@ -352,6 +355,10 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
 
     pub fn reset_min_word_len_one_typo(&mut self) {
         self.min_word_len_one_typo = Setting::Reset;
+    }
+
+    pub fn set_disabled_typos_terms(&mut self, disabled_typos_terms: DisabledTyposTerms) {
+        self.disabled_typos_terms = Setting::Set(disabled_typos_terms);
     }
 
     pub fn set_exact_words(&mut self, words: BTreeSet<String>) {
@@ -866,6 +873,19 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         Ok(())
     }
 
+    fn update_disabled_typos_terms(&mut self) -> Result<()> {
+        match self.disabled_typos_terms {
+            Setting::Set(disabled_typos_terms) => {
+                self.index.put_disabled_typos_terms(self.wtxn, &disabled_typos_terms)?;
+            }
+            Setting::Reset => {
+                self.index.delete_disabled_typos_terms(self.wtxn)?;
+            }
+            Setting::NotSet => (),
+        }
+        Ok(())
+    }
+
     fn update_exact_words(&mut self) -> Result<()> {
         match self.exact_words {
             Setting::Set(ref mut words) => {
@@ -1246,6 +1266,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         self.update_prefix_search()?;
         self.update_facet_search()?;
         self.update_localized_attributes_rules()?;
+        self.update_disabled_typos_terms()?;
 
         let embedding_config_updates = self.update_embedding_configs()?;
 
@@ -1327,6 +1348,7 @@ impl InnerIndexSettingsDiff {
                 || old_settings.prefix_search != new_settings.prefix_search
                 || old_settings.localized_attributes_rules
                     != new_settings.localized_attributes_rules
+                || old_settings.disabled_typos_terms != new_settings.disabled_typos_terms
         };
 
         let cache_exact_attributes = old_settings.exact_attributes != new_settings.exact_attributes;
@@ -1526,6 +1548,7 @@ pub(crate) struct InnerIndexSettings {
     pub user_defined_searchable_attributes: Option<Vec<String>>,
     pub sortable_fields: HashSet<String>,
     pub exact_attributes: HashSet<FieldId>,
+    pub disabled_typos_terms: DisabledTyposTerms,
     pub proximity_precision: ProximityPrecision,
     pub embedding_configs: EmbeddingConfigs,
     pub geo_fields_ids: Option<(FieldId, FieldId)>,
@@ -1574,7 +1597,7 @@ impl InnerIndexSettings {
             .map(|fields| fields.into_iter().map(|f| f.to_string()).collect());
         let builder = MetadataBuilder::from_index(index, rtxn)?;
         let fields_ids_map = FieldIdMapWithMetadata::new(fields_ids_map, builder);
-
+        let disabled_typos_terms = index.disabled_typos_terms(rtxn)?;
         Ok(Self {
             stop_words,
             allowed_separators,
@@ -1592,6 +1615,7 @@ impl InnerIndexSettings {
             geo_fields_ids,
             prefix_search,
             facet_search,
+            disabled_typos_terms,
         })
     }
 
