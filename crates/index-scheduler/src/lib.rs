@@ -625,8 +625,8 @@ impl IndexScheduler {
         task_id: Option<TaskId>,
         dry_run: bool,
     ) -> Result<Task> {
-        // if the task doesn't delete anything and 50% of the task queue is full, we must refuse to enqueue the incomming task
-        if !matches!(&kind, KindWithContent::TaskDeletion { tasks, .. } if !tasks.is_empty())
+        // if the task doesn't delete or cancel anything and 40% of the task queue is full, we must refuse to enqueue the incoming task
+        if !matches!(&kind, KindWithContent::TaskDeletion { tasks, .. } | KindWithContent::TaskCancelation { tasks, .. } if !tasks.is_empty())
             && (self.env.non_free_pages_size()? * 100) / self.env.info().map_size as u64 > 40
         {
             return Err(Error::NoSpaceLeftInTaskQueue);
