@@ -4,7 +4,6 @@ use std::collections::HashSet;
 use std::path::Path;
 use std::result::Result as StdResult;
 use std::str;
-use std::str::FromStr;
 
 use hmac::{Hmac, Mac};
 use meilisearch_types::heed::{BoxedError, WithoutTls};
@@ -13,24 +12,25 @@ use meilisearch_types::keys::KeyId;
 use meilisearch_types::milli::heed;
 use meilisearch_types::milli::heed::types::{Bytes, DecodeIgnore, SerdeJson};
 use meilisearch_types::milli::heed::{Database, Env, EnvOpenOptions, RwTxn};
+use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use thiserror::Error;
 use time::OffsetDateTime;
 use uuid::fmt::Hyphenated;
 use uuid::Uuid;
 
-use super::error::{AuthControllerError, Result};
+use super::error::Result;
 use super::{Action, Key};
 
 const AUTH_STORE_SIZE: usize = 1_073_741_824; //1GiB
 const KEY_DB_NAME: &str = "api-keys";
-const KEY_ID_ACTION_INDEX_EXPIRATION_DB_NAME: &str = "keyid-action-index-expiration";
+const KEY_ACTIONS_DB_NAME: &str = "key-actions";
 
 #[derive(Clone)]
 pub struct HeedAuthStore {
     env: Env<WithoutTls>,
     keys: Database<Bytes, SerdeJson<Key>>,
-    action_keyid_index_expiration: Database<KeyIdActionCodec, SerdeJson<Option<OffsetDateTime>>>,
+    key_actions: Database<Bytes, SerdeJson<KeyActions>>,
 }
 
 pub fn open_auth_store_env(path: &Path) -> heed::Result<Env<WithoutTls>> {
@@ -45,10 +45,9 @@ impl HeedAuthStore {
     pub fn new(env: Env<WithoutTls>) -> Result<Self> {
         let mut wtxn = env.write_txn()?;
         let keys = env.create_database(&mut wtxn, Some(KEY_DB_NAME))?;
-        let action_keyid_index_expiration =
-            env.create_database(&mut wtxn, Some(KEY_ID_ACTION_INDEX_EXPIRATION_DB_NAME))?;
+        let key_actions = env.create_database(&mut wtxn, Some(KEY_ACTIONS_DB_NAME))?;
         wtxn.commit()?;
-        Ok(Self { env, keys, action_keyid_index_expiration })
+        Ok(Self { env, keys, key_actions })
     }
 
     /// Return `Ok(())` if the auth store is able to access one of its database.
@@ -80,14 +79,13 @@ impl HeedAuthStore {
 
         self.keys.put(&mut wtxn, uid.as_bytes(), &key)?;
 
-        // delete key from inverted database before refilling it.
+        // Delete existing actions
         self.delete_key_from_inverted_db(&mut wtxn, &uid)?;
-        // create inverted database.
-        let db = self.action_keyid_index_expiration;
 
+        // Create new actions with bitflags
         let mut actions = HashSet::new();
         for action in &key.actions {
-            match *action {
+            match action {
                 Action::All => actions.extend(enum_iterator::all::<Action>()),
                 Action::DocumentsAll => {
                     actions.extend(
@@ -119,25 +117,11 @@ impl HeedAuthStore {
             }
         }
 
-        let no_index_restriction = key.indexes.iter().any(|p| p.matches_all());
-        for action in actions {
-            if no_index_restriction {
-                // If there is no index restriction we put None.
-                db.put(&mut wtxn, &(&uid, &action, None), &key.expires_at)?;
-            } else {
-                // else we create a key for each index.
-                for index in key.indexes.iter() {
-                    db.put(
-                        &mut wtxn,
-                        &(&uid, &action, Some(index.to_string().as_bytes())),
-                        &key.expires_at,
-                    )?;
-                }
-            }
-        }
+        // Store the actions with bitflags
+        let key_actions = KeyActions::new(&actions, &key.indexes, key.expires_at);
+        self.key_actions.put(&mut wtxn, uid.as_bytes(), &key_actions)?;
 
         wtxn.commit()?;
-
         Ok(key)
     }
 
@@ -207,25 +191,31 @@ impl HeedAuthStore {
         index: Option<&str>,
     ) -> Result<Option<Option<OffsetDateTime>>> {
         let rtxn = self.env.read_txn()?;
-        let tuple = (&uid, &action, index.map(|s| s.as_bytes()));
-        match self.action_keyid_index_expiration.get(&rtxn, &tuple)? {
-            Some(expiration) => Ok(Some(expiration)),
-            None => {
-                let tuple = (&uid, &action, None);
-                for result in self.action_keyid_index_expiration.prefix_iter(&rtxn, &tuple)? {
-                    let ((_, _, index_uid_pattern), expiration) = result?;
-                    if let Some((pattern, index)) = index_uid_pattern.zip(index) {
-                        let index_uid_pattern = str::from_utf8(pattern)?;
-                        let pattern = IndexUidPattern::from_str(index_uid_pattern)
-                            .map_err(|e| AuthControllerError::Internal(Box::new(e)))?;
-                        if pattern.matches_str(index) {
-                            return Ok(Some(expiration));
-                        }
+        
+        // Get the key actions
+        if let Some(key_actions) = self.key_actions.get(&rtxn, uid.as_bytes())? {
+            // Check if the action is allowed
+            if !key_actions.has_action(action) {
+                return Ok(None);
+            }
+
+            // Check index restrictions
+            let no_index_restriction = key_actions.indexes.iter().any(|p| p.matches_all());
+            if no_index_restriction {
+                return Ok(Some(key_actions.expires_at));
+            }
+
+            // Check specific index
+            if let Some(index) = index {
+                for pattern in &key_actions.indexes {
+                    if pattern.matches_str(index) {
+                        return Ok(Some(key_actions.expires_at));
                     }
                 }
-                Ok(None)
             }
         }
+
+        Ok(None)
     }
 
     pub fn prefix_first_expiration_date(
@@ -234,27 +224,18 @@ impl HeedAuthStore {
         action: Action,
     ) -> Result<Option<Option<OffsetDateTime>>> {
         let rtxn = self.env.read_txn()?;
-        let tuple = (&uid, &action, None);
-        let exp = self
-            .action_keyid_index_expiration
-            .prefix_iter(&rtxn, &tuple)?
-            .next()
-            .transpose()?
-            .map(|(_, expiration)| expiration);
-
-        Ok(exp)
+        
+        if let Some(key_actions) = self.key_actions.get(&rtxn, uid.as_bytes())? {
+            if key_actions.has_action(action) {
+                return Ok(Some(key_actions.expires_at));
+            }
+        }
+        
+        Ok(None)
     }
 
     fn delete_key_from_inverted_db(&self, wtxn: &mut RwTxn, key: &KeyId) -> Result<()> {
-        let mut iter = self
-            .action_keyid_index_expiration
-            .remap_types::<Bytes, DecodeIgnore>()
-            .prefix_iter_mut(wtxn, key.as_bytes())?;
-        while iter.next().transpose()?.is_some() {
-            // safety: we don't keep references from inside the LMDB database.
-            unsafe { iter.del_current()? };
-        }
-
+        self.key_actions.delete(wtxn, key.as_bytes())?;
         Ok(())
     }
 }
@@ -344,4 +325,30 @@ where
     let (head, tail) = try_split_at(slice, N)?;
     let head = head.try_into().ok()?;
     Some((head, tail))
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct KeyActions {
+    actions: u64, // Bitflags for actions
+    indexes: Vec<IndexUidPattern>,
+    expires_at: Option<OffsetDateTime>,
+}
+
+impl KeyActions {
+    fn new(actions: &HashSet<Action>, indexes: &[IndexUidPattern], expires_at: Option<OffsetDateTime>) -> Self {
+        let mut bitflags = 0u64;
+        for action in actions {
+            bitflags |= 1 << (*action as u8);
+        }
+        Self {
+            actions: bitflags,
+            indexes: indexes.to_vec(),
+            expires_at,
+        }
+    }
+
+    fn has_action(&self, action: Action) -> bool {
+        let has = self.actions & (1 << (action as u8)) != 0;
+        has
+    }
 }
