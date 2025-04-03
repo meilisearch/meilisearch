@@ -364,7 +364,7 @@ fn test_task_queue_is_full() {
     // we won't be able to test this error in an integration test thus as a best effort test I still ensure the error return the expected error code
     snapshot!(format!("{:?}", result.error_code()), @"NoSpaceLeftOnDevice");
 
-    // Even the task deletion and cancelation that don't delete anything shouldn be refused
+    // Even the task deletion and cancelation that don't delete anything should be refused
     let result = index_scheduler
         .register(
             KindWithContent::TaskDeletion { query: S("test"), tasks: RoaringBitmap::new() },
@@ -385,7 +385,7 @@ fn test_task_queue_is_full() {
     // we won't be able to test this error in an integration test thus as a best effort test I still ensure the error return the expected error code
     snapshot!(format!("{:?}", result.error_code()), @"NoSpaceLeftOnDevice");
 
-    // But a task cancelation that cancel something should works
+    // But a task cancelation that cancel something should work
     index_scheduler
         .register(
             KindWithContent::TaskCancelation { query: S("test"), tasks: (0..100).collect() },
