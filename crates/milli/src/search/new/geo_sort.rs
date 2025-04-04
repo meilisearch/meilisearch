@@ -289,7 +289,7 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for GeoSort<Q> {
                 if geo_candidates.contains(id) {
                     let distance = distance_between_two_points(&self.point, &point);
                     if let Some((point0, bucket_distance)) = current_distance.as_ref() {
-                        if (bucket_distance - &distance).abs() > self.distance_error_margin {
+                        if (bucket_distance - distance).abs() > self.distance_error_margin {
                             // different distance, point belongs to next bucket
                             put_back(&mut self.cached_sorted_docids, (id, point));
                             return Ok(Some(RankingRuleOutput {
