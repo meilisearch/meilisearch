@@ -144,7 +144,7 @@ impl<'indexer> FacetSearchBuilder<'indexer> {
         let mut merger_iter = builder.build().into_stream_merger_iter()?;
         let mut current_field_id = None;
         let mut fst;
-        let mut fst_merger_builder: Option<FstMergerBuilder> = None;
+        let mut fst_merger_builder: Option<FstMergerBuilder<_>> = None;
         while let Some((key, deladd)) = merger_iter.next()? {
             let (field_id, normalized_facet_string) =
                 BEU16StrCodec::bytes_decode(key).map_err(heed::Error::Encoding)?;
@@ -153,12 +153,13 @@ impl<'indexer> FacetSearchBuilder<'indexer> {
                 if let (Some(current_field_id), Some(fst_merger_builder)) =
                     (current_field_id, fst_merger_builder)
                 {
-                    let mmap = fst_merger_builder.build(&mut callback)?;
-                    index.facet_id_string_fst.remap_data_type::<Bytes>().put(
-                        wtxn,
-                        &current_field_id,
-                        &mmap,
-                    )?;
+                    if let Some(mmap) = fst_merger_builder.build(&mut callback)? {
+                        index.facet_id_string_fst.remap_data_type::<Bytes>().put(
+                            wtxn,
+                            &current_field_id,
+                            &mmap,
+                        )?;
+                    }
                 }
 
                 fst = index.facet_id_string_fst.get(rtxn, &field_id)?;
@@ -209,8 +210,9 @@ impl<'indexer> FacetSearchBuilder<'indexer> {
         }
 
         if let (Some(field_id), Some(fst_merger_builder)) = (current_field_id, fst_merger_builder) {
-            let mmap = fst_merger_builder.build(&mut callback)?;
-            index.facet_id_string_fst.remap_data_type::<Bytes>().put(wtxn, &field_id, &mmap)?;
+            if let Some(mmap) = fst_merger_builder.build(&mut callback)? {
+                index.facet_id_string_fst.remap_data_type::<Bytes>().put(wtxn, &field_id, &mmap)?;
+            }
         }
 
         Ok(())

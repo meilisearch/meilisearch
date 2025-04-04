@@ -1,25 +1,27 @@
 use std::fs::File;
 use std::io::BufWriter;
 
-use fst::{Set, SetBuilder, Streamer};
+use fst::{IntoStreamer, Set, SetBuilder, Streamer};
 use memmap2::Mmap;
 use tempfile::tempfile;
 
 use crate::update::del_add::DelAdd;
 use crate::{InternalError, Result};
 
-pub struct FstMergerBuilder<'a> {
+pub struct FstMergerBuilder<'a, D: AsRef<[u8]>> {
+    fst: Option<&'a Set<D>>,
     stream: Option<fst::set::Stream<'a>>,
-    fst_builder: SetBuilder<BufWriter<File>>,
+    fst_builder: Option<SetBuilder<BufWriter<File>>>,
     last: Option<Vec<u8>>,
     inserted_words: usize,
 }
 
-impl<'a> FstMergerBuilder<'a> {
-    pub fn new<D: AsRef<[u8]>>(fst: Option<&'a Set<D>>) -> Result<Self> {
+impl<'a, D: AsRef<[u8]>> FstMergerBuilder<'a, D> {
+    pub fn new(fst: Option<&'a Set<D>>) -> Result<Self> {
         Ok(Self {
+            fst,
             stream: fst.map(|fst| fst.stream()),
-            fst_builder: SetBuilder::new(BufWriter::new(tempfile()?))?,
+            fst_builder: None,
             last: None,
             inserted_words: 0,
         })
@@ -110,14 +112,33 @@ impl<'a> FstMergerBuilder<'a> {
         is_modified: bool,
         insertion_callback: &mut impl FnMut(&[u8], DelAdd, bool) -> Result<()>,
     ) -> Result<()> {
-        // Addition: We insert the word
-        // Deletion: We delete the word by not inserting it
-        if deladd == DelAdd::Addition {
-            self.inserted_words += 1;
-            self.fst_builder.insert(bytes)?;
+        if is_modified && self.fst_builder.is_none() {
+            self.build_new_fst(bytes)?;
+        }
+
+        if let Some(fst_builder) = self.fst_builder.as_mut() {
+            // Addition: We insert the word
+            // Deletion: We delete the word by not inserting it
+            if deladd == DelAdd::Addition {
+                self.inserted_words += 1;
+                fst_builder.insert(bytes)?;
+            }
         }
 
         insertion_callback(bytes, deladd, is_modified)?;
+
+        Ok(())
+    }
+
+    // Lazily build the new fst
+    fn build_new_fst(&mut self, bytes: &[u8]) -> Result<()> {
+        let mut fst_builder = SetBuilder::new(BufWriter::new(tempfile()?))?;
+
+        if let Some(fst) = self.fst {
+            fst_builder.extend_stream(fst.range().lt(bytes).into_stream())?;
+        }
+
+        self.fst_builder = Some(fst_builder);
 
         Ok(())
     }
@@ -142,16 +163,20 @@ impl<'a> FstMergerBuilder<'a> {
     pub fn build(
         mut self,
         insertion_callback: &mut impl FnMut(&[u8], DelAdd, bool) -> Result<()>,
-    ) -> Result<Mmap> {
+    ) -> Result<Option<Mmap>> {
         self.drain_stream(insertion_callback)?;
 
-        let fst_file = self
-            .fst_builder
-            .into_inner()?
-            .into_inner()
-            .map_err(|_| InternalError::IndexingMergingKeys { process: "building-fst" })?;
-        let fst_mmap = unsafe { Mmap::map(&fst_file)? };
+        match self.fst_builder {
+            Some(fst_builder) => {
+                let fst_file = fst_builder
+                    .into_inner()?
+                    .into_inner()
+                    .map_err(|_| InternalError::IndexingMergingKeys { process: "building-fst" })?;
+                let fst_mmap = unsafe { Mmap::map(&fst_file)? };
 
-        Ok(fst_mmap)
+                Ok(Some(fst_mmap))
+            }
+            None => Ok(None),
+        }
     }
 }
