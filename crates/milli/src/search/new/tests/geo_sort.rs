@@ -119,12 +119,18 @@ fn test_geo_sort_with_following_ranking_rules() {
 
     let mut s = Search::new(&rtxn, &index);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
-    s.sort_criteria(vec![AscDesc::Asc(Member::Geo([0., 0.])), AscDesc::Desc(Member::Field("score".to_string()))]);
+    s.sort_criteria(vec![
+        AscDesc::Asc(Member::Geo([0., 0.])),
+        AscDesc::Desc(Member::Field("score".to_string())),
+    ]);
     let (ids, scores) = execute_iterative_and_rtree_returns_the_same(&rtxn, &index, &mut s);
     insta::assert_snapshot!(format!("{ids:?}"), @"[6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 1, 4, 3, 2, 5]");
     insta::assert_snapshot!(format!("{scores:#?}"));
 
-    s.sort_criteria(vec![AscDesc::Desc(Member::Geo([0., 0.])), AscDesc::Desc(Member::Field("score".to_string()))]);
+    s.sort_criteria(vec![
+        AscDesc::Desc(Member::Geo([0., 0.])),
+        AscDesc::Desc(Member::Field("score".to_string())),
+    ]);
     let (ids, scores) = execute_iterative_and_rtree_returns_the_same(&rtxn, &index, &mut s);
     insta::assert_snapshot!(format!("{ids:?}"), @"[12, 13, 14, 15, 6, 7, 8, 9, 10, 11, 1, 4, 3, 2, 5]");
     insta::assert_snapshot!(format!("{scores:#?}"));
