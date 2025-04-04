@@ -18,7 +18,7 @@ fn create_index() -> TempIndex {
     index
         .update_settings(|s| {
             s.set_primary_key("id".to_owned());
-            s.set_sortable_fields(hashset! { S(RESERVED_GEO_FIELD_NAME) });
+            s.set_sortable_fields(hashset! { S(RESERVED_GEO_FIELD_NAME), S("score") });
             s.set_criteria(vec![Criterion::Words, Criterion::Sort]);
         })
         .unwrap();
@@ -92,6 +92,41 @@ fn test_geo_sort() {
     s.sort_criteria(vec![AscDesc::Desc(Member::Geo([0., 0.]))]);
     let (ids, scores) = execute_iterative_and_rtree_returns_the_same(&rtxn, &index, &mut s);
     insta::assert_snapshot!(format!("{ids:?}"), @"[5, 4, 3, 2, 1, 0, 6, 8, 7, 10, 9]");
+    insta::assert_snapshot!(format!("{scores:#?}"));
+}
+
+#[test]
+fn test_geo_sort_with_following_ranking_rules() {
+    let index = create_index();
+
+    index
+        .add_documents(documents!([
+            { "id": 1 }, { "id": 4 }, { "id": 3 }, { "id": 2 }, { "id": 5 },
+            { "id": 6, RESERVED_GEO_FIELD_NAME: { "lat": 2, "lng": 2 }, "score": 10 },
+            { "id": 7, RESERVED_GEO_FIELD_NAME: { "lat": 2, "lng": 2 }, "score": 9 },
+            { "id": 8, RESERVED_GEO_FIELD_NAME: { "lat": 2, "lng": 2 }, "score": 8 },
+            { "id": 9, RESERVED_GEO_FIELD_NAME: { "lat": 2, "lng": 2 }, "score": 7 },
+            { "id": 10, RESERVED_GEO_FIELD_NAME: { "lat": 2, "lng": 2 }, "score":6 },
+            { "id": 11, RESERVED_GEO_FIELD_NAME: { "lat": 2, "lng": 2 }, "score": 5 },
+            { "id": 12, RESERVED_GEO_FIELD_NAME: { "lat": 5, "lng": 5 }, "score": 10 },
+            { "id": 13, RESERVED_GEO_FIELD_NAME: { "lat": 5, "lng": 5 }, "score": 9 },
+            { "id": 14, RESERVED_GEO_FIELD_NAME: { "lat": 5, "lng": 5 }, "score": 8 },
+            { "id": 15, RESERVED_GEO_FIELD_NAME: { "lat": 5, "lng": 5 }, "score": 7 },
+        ]))
+        .unwrap();
+
+    let rtxn = index.read_txn().unwrap();
+
+    let mut s = Search::new(&rtxn, &index);
+    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    s.sort_criteria(vec![AscDesc::Asc(Member::Geo([0., 0.])), AscDesc::Desc(Member::Field("score".to_string()))]);
+    let (ids, scores) = execute_iterative_and_rtree_returns_the_same(&rtxn, &index, &mut s);
+    insta::assert_snapshot!(format!("{ids:?}"), @"[6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 1, 4, 3, 2, 5]");
+    insta::assert_snapshot!(format!("{scores:#?}"));
+
+    s.sort_criteria(vec![AscDesc::Desc(Member::Geo([0., 0.])), AscDesc::Desc(Member::Field("score".to_string()))]);
+    let (ids, scores) = execute_iterative_and_rtree_returns_the_same(&rtxn, &index, &mut s);
+    insta::assert_snapshot!(format!("{ids:?}"), @"[12, 13, 14, 15, 6, 7, 8, 9, 10, 11, 1, 4, 3, 2, 5]");
     insta::assert_snapshot!(format!("{scores:#?}"));
 }
 
