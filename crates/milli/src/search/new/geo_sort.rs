@@ -82,6 +82,11 @@ pub struct GeoSort<Q: RankingRuleQueryTrait> {
 
     cached_sorted_docids: VecDeque<(u32, [f64; 2])>,
     geo_candidates: RoaringBitmap,
+
+    // Limit the number of docs in a single bucket to avoid unexpectedly large overhead
+    max_bucket_size: u64,
+    // Considering the errors of GPS and geographical calculations, distances less than distance_error_margin will be treated as equal
+    distance_error_margin: f64,
 }
 
 impl<Q: RankingRuleQueryTrait> GeoSort<Q> {
@@ -100,6 +105,8 @@ impl<Q: RankingRuleQueryTrait> GeoSort<Q> {
             field_ids: None,
             rtree: None,
             cached_sorted_docids: VecDeque::new(),
+            max_bucket_size: 1000,
+            distance_error_margin: 1.0,
         })
     }
 
@@ -275,15 +282,14 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for GeoSort<Q> {
 
         let mut current_bucket = RoaringBitmap::new();
         // current_distance stores the first point and distance in current bucket
-        // The farthest distance between two points on earth is about 2e7 meters, u32 is big enough to hold any distance.
-        let mut current_distance: Option<([f64; 2], u32)> = None;
+        let mut current_distance: Option<([f64; 2], f64)> = None;
         loop {
             // The loop will only exit when we have found all points with equal distance or have exhausted the candidates.
             if let Some((id, point)) = next(&mut self.cached_sorted_docids) {
                 if geo_candidates.contains(id) {
-                    let distance = distance_between_two_points(&self.point, &point).round() as u32;
+                    let distance = distance_between_two_points(&self.point, &point);
                     if let Some((point0, bucket_distance)) = current_distance.as_ref() {
-                        if bucket_distance != &distance {
+                        if (bucket_distance - &distance).abs() > self.distance_error_margin {
                             // different distance, point belongs to next bucket
                             put_back(&mut self.cached_sorted_docids, (id, point));
                             return Ok(Some(RankingRuleOutput {
@@ -297,15 +303,39 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for GeoSort<Q> {
                             }));
                         } else {
                             // same distance, point belongs to current bucket
-                            current_bucket.push(id);
+                            current_bucket.insert(id);
                             // remove from cadidates to prevent it from being added to the cache again
                             geo_candidates.remove(id);
+                            // current bucket size reaches limit, force return
+                            if current_bucket.len() == self.max_bucket_size {
+                                return Ok(Some(RankingRuleOutput {
+                                    query,
+                                    candidates: current_bucket,
+                                    score: ScoreDetails::GeoSort(score_details::GeoSort {
+                                        target_point: self.point,
+                                        ascending: self.ascending,
+                                        value: Some(point0.to_owned()),
+                                    }),
+                                }));
+                            }
                         }
                     } else {
                         // first doc in current bucket
                         current_distance = Some((point, distance));
-                        current_bucket.push(id);
+                        current_bucket.insert(id);
                         geo_candidates.remove(id);
+                        // current bucket size reaches limit, force return
+                        if current_bucket.len() == self.max_bucket_size {
+                            return Ok(Some(RankingRuleOutput {
+                                query,
+                                candidates: current_bucket,
+                                score: ScoreDetails::GeoSort(score_details::GeoSort {
+                                    target_point: self.point,
+                                    ascending: self.ascending,
+                                    value: Some(point.to_owned()),
+                                }),
+                            }));
+                        }
                     }
                 }
             } else {
