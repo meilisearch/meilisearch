@@ -191,7 +191,7 @@ impl HeedAuthStore {
         index: Option<&str>,
     ) -> Result<Option<Option<OffsetDateTime>>> {
         let rtxn = self.env.read_txn()?;
-        
+
         // Get the key actions
         if let Some(key_actions) = self.key_actions.get(&rtxn, uid.as_bytes())? {
             // Check if the action is allowed
@@ -224,13 +224,13 @@ impl HeedAuthStore {
         action: Action,
     ) -> Result<Option<Option<OffsetDateTime>>> {
         let rtxn = self.env.read_txn()?;
-        
+
         if let Some(key_actions) = self.key_actions.get(&rtxn, uid.as_bytes())? {
             if key_actions.has_action(action) {
                 return Ok(Some(key_actions.expires_at));
             }
         }
-        
+
         Ok(None)
     }
 
@@ -335,16 +335,16 @@ struct KeyActions {
 }
 
 impl KeyActions {
-    fn new(actions: &HashSet<Action>, indexes: &[IndexUidPattern], expires_at: Option<OffsetDateTime>) -> Self {
+    fn new(
+        actions: &HashSet<Action>,
+        indexes: &[IndexUidPattern],
+        expires_at: Option<OffsetDateTime>,
+    ) -> Self {
         let mut bitflags = 0u64;
         for action in actions {
             bitflags |= 1 << (*action as u8);
         }
-        Self {
-            actions: bitflags,
-            indexes: indexes.to_vec(),
-            expires_at,
-        }
+        Self { actions: bitflags, indexes: indexes.to_vec(), expires_at }
     }
 
     fn has_action(&self, action: Action) -> bool {
