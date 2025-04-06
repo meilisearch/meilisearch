@@ -348,6 +348,7 @@ impl KeyActions {
     }
 
     fn has_action(&self, action: Action) -> bool {
-        self.actions & (1 << (action as u8)) != 0;
+        let self.actions & (1 << (action as u8)) != 0;
+        has
     }
 }
