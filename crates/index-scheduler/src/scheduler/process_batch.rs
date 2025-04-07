@@ -117,9 +117,9 @@ impl IndexScheduler {
                 }
                 Ok((tasks, None))
             }
-            Batch::SnapshotCreation(tasks) => {
-                self.process_snapshot(progress, tasks).map(|tasks| (tasks, None))
-            }
+            Batch::SnapshotCreation { tasks, compression, compaction } => self
+                .process_snapshot(progress, tasks, compaction, compression)
+                .map(|tasks| (tasks, None)),
             Batch::Dump(task) => {
                 self.process_dump_creation(progress, task).map(|tasks| (tasks, None))
             }

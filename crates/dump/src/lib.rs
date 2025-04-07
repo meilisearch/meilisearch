@@ -213,6 +213,7 @@ impl From<KindWithContent> for KindDump {
                 KindDump::DumpCreation { keys, instance_uid }
             }
             KindWithContent::SnapshotCreation => KindDump::SnapshotCreation,
+            KindWithContent::SnapshotCreationWithParams { .. } => KindDump::SnapshotCreation,
             KindWithContent::UpgradeDatabase { from: version } => {
                 KindDump::UpgradeDatabase { from: version }
             }

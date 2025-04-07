@@ -328,6 +328,7 @@ InvalidSettingsDictionary             , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsSynonyms               , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsTypoTolerance          , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsLocalizedAttributes    , InvalidRequest       , BAD_REQUEST ;
+InvalidSnapshotOptions                , InvalidRequest       , BAD_REQUEST ;
 InvalidState                          , Internal             , INTERNAL_SERVER_ERROR ;
 InvalidStoreFile                      , Internal             , INTERNAL_SERVER_ERROR ;
 InvalidSwapDuplicateIndexFound        , InvalidRequest       , BAD_REQUEST ;

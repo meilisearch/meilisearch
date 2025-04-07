@@ -5,8 +5,9 @@ tasks affecting a single index into a [batch](crate::batch::Batch).
 The main function of the autobatcher is [`next_autobatch`].
 */
 
-use meilisearch_types::tasks::TaskId;
 use std::ops::ControlFlow::{self, Break, Continue};
+
+use meilisearch_types::tasks::TaskId;
 
 use crate::KindWithContent;
 
@@ -71,7 +72,8 @@ impl From<KindWithContent> for AutobatchKind {
             | KindWithContent::TaskDeletion { .. }
             | KindWithContent::DumpCreation { .. }
             | KindWithContent::UpgradeDatabase { .. }
-            | KindWithContent::SnapshotCreation => {
+            | KindWithContent::SnapshotCreation
+            | KindWithContent::SnapshotCreationWithParams { .. } => {
                 panic!("The autobatcher should never be called with tasks that don't apply to an index.")
             }
         }

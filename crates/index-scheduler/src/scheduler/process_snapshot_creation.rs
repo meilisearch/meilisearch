@@ -15,8 +15,13 @@ impl IndexScheduler {
         &self,
         progress: Progress,
         mut tasks: Vec<Task>,
+        compaction: bool,
+        compression: bool,
     ) -> Result<Vec<Task>> {
+        tracing::debug!(compaction, compression, "process snapshot");
         progress.update_progress(SnapshotCreationProgress::StartTheSnapshotCreation);
+        let compaction =
+            if compaction { CompactionOption::Enabled } else { CompactionOption::Disabled };
 
         fs::create_dir_all(&self.scheduler.snapshots_path)?;
         let temp_snapshot_dir = tempfile::tempdir()?;
@@ -41,7 +46,7 @@ impl IndexScheduler {
         progress.update_progress(SnapshotCreationProgress::SnapshotTheIndexScheduler);
         let dst = temp_snapshot_dir.path().join("tasks");
         fs::create_dir_all(&dst)?;
-        self.env.copy_to_path(dst.join("data.mdb"), CompactionOption::Enabled)?;
+        self.env.copy_to_path(dst.join("data.mdb"), compaction)?;
 
         // 2.2 Create a read transaction on the index-scheduler
         let rtxn = self.env.read_txn()?;
@@ -80,7 +85,7 @@ impl IndexScheduler {
             let dst = temp_snapshot_dir.path().join("indexes").join(uuid.to_string());
             fs::create_dir_all(&dst)?;
             index
-                .copy_to_path(dst.join("data.mdb"), CompactionOption::Enabled)
+                .copy_to_path(dst.join("data.mdb"), compaction)
                 .map_err(|e| Error::from_milli(e, Some(name.to_string())))?;
         }
 
@@ -103,7 +108,7 @@ impl IndexScheduler {
         // 5.2 Tarball the content of the snapshot in a tempfile with a .snapshot extension
         let snapshot_path = self.scheduler.snapshots_path.join(format!("{}.snapshot", db_name));
         let temp_snapshot_file = tempfile::NamedTempFile::new_in(&self.scheduler.snapshots_path)?;
-        compression::to_tar_gz(temp_snapshot_dir.path(), temp_snapshot_file.path())?;
+        compression::to_tar_gz(temp_snapshot_dir.path(), temp_snapshot_file.path(), compression)?;
         let file = temp_snapshot_file.persist(snapshot_path)?;
 
         // 5.3 Change the permission to make the snapshot readonly

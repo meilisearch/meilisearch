@@ -23,7 +23,11 @@ pub(crate) enum Batch {
         task: Task,
     },
     TaskDeletions(Vec<Task>),
-    SnapshotCreation(Vec<Task>),
+    SnapshotCreation {
+        tasks: Vec<Task>,
+        compression: bool,
+        compaction: bool,
+    },
     Dump(Task),
     IndexOperation {
         op: IndexOperation,
@@ -106,7 +110,7 @@ impl Batch {
             | Batch::IndexUpdate { task, .. } => {
                 RoaringBitmap::from_sorted_iter(std::iter::once(task.uid)).unwrap()
             }
-            Batch::SnapshotCreation(tasks)
+            Batch::SnapshotCreation { tasks, .. }
             | Batch::TaskDeletions(tasks)
             | Batch::UpgradeDatabase { tasks }
             | Batch::IndexDeletion { tasks, .. } => {
@@ -140,7 +144,7 @@ impl Batch {
         match self {
             TaskCancelation { .. }
             | TaskDeletions(_)
-            | SnapshotCreation(_)
+            | SnapshotCreation { .. }
             | Dump(_)
             | UpgradeDatabase { .. }
             | IndexSwap { .. } => None,
@@ -160,7 +164,7 @@ impl fmt::Display for Batch {
         match self {
             Batch::TaskCancelation { .. } => f.write_str("TaskCancelation")?,
             Batch::TaskDeletions(_) => f.write_str("TaskDeletion")?,
-            Batch::SnapshotCreation(_) => f.write_str("SnapshotCreation")?,
+            Batch::SnapshotCreation { .. } => f.write_str("SnapshotCreation")?,
             Batch::Dump(_) => f.write_str("Dump")?,
             Batch::IndexOperation { op, .. } => write!(f, "{op}")?,
             Batch::IndexCreation { .. } => f.write_str("IndexCreation")?,
@@ -478,7 +482,17 @@ impl IndexScheduler {
         if !to_snapshot.is_empty() {
             let mut tasks = self.queue.tasks.get_existing_tasks(rtxn, to_snapshot)?;
             current_batch.processing(&mut tasks);
-            return Ok(Some((Batch::SnapshotCreation(tasks), current_batch)));
+            let (compaction, compression) = match &tasks.last().unwrap().kind {
+                KindWithContent::SnapshotCreation => (false, true),
+                KindWithContent::SnapshotCreationWithParams { compaction, compression } => {
+                    (*compaction, *compression)
+                }
+                _ => unreachable!(),
+            };
+            return Ok(Some((
+                Batch::SnapshotCreation { compaction, compression, tasks },
+                current_batch,
+            )));
         }
 
         // 4. we batch the dumps.

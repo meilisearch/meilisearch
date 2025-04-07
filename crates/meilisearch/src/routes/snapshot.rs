@@ -1,6 +1,8 @@
 use actix_web::web::Data;
-use actix_web::{web, HttpRequest, HttpResponse};
+use actix_web::{web, FromRequest, HttpRequest, HttpResponse};
+use deserr::actix_web::AwebJson;
 use index_scheduler::IndexScheduler;
+use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::tasks::KindWithContent;
 use tracing::debug;
@@ -42,6 +44,7 @@ crate::empty_analytics!(SnapshotAnalytics, "Snapshot Created");
     path = "",
     tag = "Snapshots",
     security(("Bearer" = ["snapshots.create", "snapshots.*", "*"])),
+    request_body = SnapshotOptions,
     responses(
         (status = 202, description = "Snapshot is being created", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
@@ -64,13 +67,29 @@ crate::empty_analytics!(SnapshotAnalytics, "Snapshot Created");
 )]
 pub async fn create_snapshot(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SNAPSHOTS_CREATE }>, Data<IndexScheduler>>,
+    snapshot_options: Option<actix_web::web::Bytes>,
     req: HttpRequest,
     opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     analytics.publish(SnapshotAnalytics::default(), &req);
 
-    let task = KindWithContent::SnapshotCreation;
+    let task = match snapshot_options {
+        Some(snapshot_options) if !snapshot_options.is_empty() => {
+            let mut payload = actix_web::dev::Payload::from(snapshot_options);
+            let snapshot_options: AwebJson<SnapshotOptions, DeserrJsonError> =
+                match AwebJson::from_request(&req, &mut payload).await {
+                    Ok(snapshot_options) => snapshot_options,
+                    Err(error) => {
+                        return Err(ResponseError::from_msg(format!("{error}\n  - note: POST /snapshots without a body to use default parameters"), meilisearch_types::error::Code::InvalidSnapshotOptions));
+                    }
+                };
+            let SnapshotOptions { compaction, compression } = snapshot_options.into_inner();
+
+            KindWithContent::SnapshotCreationWithParams { compaction, compression }
+        }
+        _ => KindWithContent::SnapshotCreationWithParams { compaction: false, compression: true },
+    };
     let uid = get_task_id(&req, &opt)?;
     let dry_run = is_dry_run(&req, &opt)?;
     let task: SummarizedTaskView =
@@ -80,4 +99,13 @@ pub async fn create_snapshot(
 
     debug!(returns = ?task, "Create snapshot");
     Ok(HttpResponse::Accepted().json(task))
+}
+
+#[derive(Clone, Copy, deserr::Deserr, utoipa::ToSchema)]
+#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
+struct SnapshotOptions {
+    #[deserr(default)]
+    compaction: bool,
+    #[deserr(default)]
+    compression: bool,
 }

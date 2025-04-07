@@ -7,9 +7,14 @@ use flate2::write::GzEncoder;
 use flate2::Compression;
 use tar::{Archive, Builder};
 
-pub fn to_tar_gz(src: impl AsRef<Path>, dest: impl AsRef<Path>) -> anyhow::Result<()> {
+pub fn to_tar_gz(
+    src: impl AsRef<Path>,
+    dest: impl AsRef<Path>,
+    compression: bool,
+) -> anyhow::Result<()> {
+    let compression = if compression { Compression::default() } else { Compression::none() };
     let mut f = File::create(dest)?;
-    let gz_encoder = GzEncoder::new(&mut f, Compression::default());
+    let gz_encoder = GzEncoder::new(&mut f, compression);
     let mut tar_encoder = Builder::new(gz_encoder);
     tar_encoder.append_dir_all(".", src)?;
     let gz_encoder = tar_encoder.into_inner()?;

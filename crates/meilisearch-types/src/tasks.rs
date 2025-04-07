@@ -48,6 +48,7 @@ impl Task {
         match &self.kind {
             DumpCreation { .. }
             | SnapshotCreation
+            | SnapshotCreationWithParams { .. }
             | TaskCancelation { .. }
             | TaskDeletion { .. }
             | UpgradeDatabase { .. }
@@ -86,6 +87,7 @@ impl Task {
             | KindWithContent::TaskDeletion { .. }
             | KindWithContent::DumpCreation { .. }
             | KindWithContent::SnapshotCreation
+            | KindWithContent::SnapshotCreationWithParams { .. }
             | KindWithContent::UpgradeDatabase { .. } => None,
         }
     }
@@ -152,6 +154,10 @@ pub enum KindWithContent {
         instance_uid: Option<InstanceUid>,
     },
     SnapshotCreation,
+    SnapshotCreationWithParams {
+        compaction: bool,
+        compression: bool,
+    },
     UpgradeDatabase {
         from: (u32, u32, u32),
     },
@@ -180,6 +186,7 @@ impl KindWithContent {
             KindWithContent::TaskDeletion { .. } => Kind::TaskDeletion,
             KindWithContent::DumpCreation { .. } => Kind::DumpCreation,
             KindWithContent::SnapshotCreation => Kind::SnapshotCreation,
+            KindWithContent::SnapshotCreationWithParams { .. } => Kind::SnapshotCreation,
             KindWithContent::UpgradeDatabase { .. } => Kind::UpgradeDatabase,
         }
     }
@@ -190,6 +197,7 @@ impl KindWithContent {
         match self {
             DumpCreation { .. }
             | SnapshotCreation
+            | SnapshotCreationWithParams { .. }
             | TaskCancelation { .. }
             | TaskDeletion { .. }
             | UpgradeDatabase { .. } => vec![],
@@ -269,6 +277,7 @@ impl KindWithContent {
             }),
             KindWithContent::DumpCreation { .. } => Some(Details::Dump { dump_uid: None }),
             KindWithContent::SnapshotCreation => None,
+            KindWithContent::SnapshotCreationWithParams { .. } => None,
             KindWithContent::UpgradeDatabase { from } => Some(Details::UpgradeDatabase {
                 from: (from.0, from.1, from.2),
                 to: (
@@ -335,6 +344,7 @@ impl KindWithContent {
             }),
             KindWithContent::DumpCreation { .. } => Some(Details::Dump { dump_uid: None }),
             KindWithContent::SnapshotCreation => None,
+            KindWithContent::SnapshotCreationWithParams { .. } => None,
             KindWithContent::UpgradeDatabase { from } => Some(Details::UpgradeDatabase {
                 from: *from,
                 to: (
@@ -383,6 +393,7 @@ impl From<&KindWithContent> for Option<Details> {
             }),
             KindWithContent::DumpCreation { .. } => Some(Details::Dump { dump_uid: None }),
             KindWithContent::SnapshotCreation => None,
+            KindWithContent::SnapshotCreationWithParams { .. } => None,
             KindWithContent::UpgradeDatabase { from } => Some(Details::UpgradeDatabase {
                 from: *from,
                 to: (

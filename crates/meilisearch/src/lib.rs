@@ -315,9 +315,14 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Arc<
             .name(String::from("register-snapshot-tasks"))
             .spawn(move || loop {
                 thread::sleep(snapshot_delay);
-                if let Err(e) =
-                    index_scheduler.register(KindWithContent::SnapshotCreation, None, false)
-                {
+                if let Err(e) = index_scheduler.register(
+                    KindWithContent::SnapshotCreationWithParams {
+                        compaction: false,
+                        compression: true,
+                    },
+                    None,
+                    false,
+                ) {
                     error!("Error while registering snapshot: {}", e);
                 }
             })
