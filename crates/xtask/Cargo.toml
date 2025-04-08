@@ -31,7 +31,7 @@ time = { version = "0.3.37", features = [
     "serde-human-readable",
     "macros",
 ] }
-tokio = { version = "1.42.0", features = [
+tokio = { version = "1.43.1", features = [
     "rt",
     "net",
     "time",
