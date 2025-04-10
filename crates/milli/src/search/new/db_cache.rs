@@ -37,12 +37,12 @@ pub struct DatabaseCache<'ctx> {
 
     pub words_fst: Option<fst::Set<Cow<'ctx, [u8]>>>,
     pub word_position_docids: FxHashMap<(Interned<String>, u16), Option<Cow<'ctx, [u8]>>>,
-    pub word_prefix_position_docids: FxHashMap<(Interned<String>, u16), Option<Cow<'ctx, [u8]>>>,
+    pub word_prefix_position_docids: FxHashMap<(Interned<String>, u16), Option<RoaringBitmap>>,
     pub word_positions: FxHashMap<Interned<String>, Vec<u16>>,
     pub word_prefix_positions: FxHashMap<Interned<String>, Vec<u16>>,
 
     pub word_fid_docids: FxHashMap<(Interned<String>, u16), Option<Cow<'ctx, [u8]>>>,
-    pub word_prefix_fid_docids: FxHashMap<(Interned<String>, u16), Option<Cow<'ctx, [u8]>>>,
+    pub word_prefix_fid_docids: FxHashMap<(Interned<String>, u16), Option<RoaringBitmap>>,
     pub word_fids: FxHashMap<Interned<String>, Vec<u16>>,
     pub word_prefix_fids: FxHashMap<Interned<String>, Vec<u16>>,
 }
@@ -562,14 +562,46 @@ impl<'ctx> SearchContext<'ctx> {
             return Ok(None);
         }
 
-        DatabaseCache::get_value(
-            self.txn,
-            (word_prefix, fid),
-            &(self.word_interner.get(word_prefix).as_str(), fid),
-            &mut self.db_cache.word_prefix_fid_docids,
-            universe,
-            self.index.word_prefix_fid_docids.remap_data_type::<Bytes>(),
-        )
+        let cache = &mut self.db_cache.word_prefix_fid_docids;
+        let prefix_db = &self.index.word_prefix_fid_docids;
+        let db = &self.index.word_fid_docids;
+        if let Entry::Vacant(entry) = cache.entry((word_prefix, fid)) {
+            let word_prefix_bytes = self.word_interner.get(word_prefix).as_bytes().to_owned();
+            let word_prefix_str = std::str::from_utf8(&word_prefix_bytes).unwrap();
+            match prefix_db.get(self.txn, &(word_prefix_str, fid))? {
+                Some(mut bitmap) => {
+                    if let Some(universe) = universe {
+                        bitmap &= universe;
+                    }
+                    entry.insert(Some(bitmap));
+                }
+                None => {
+                    let mut key = word_prefix_bytes.clone();
+                    key.push(0);
+                    let remap_key_type = db
+                        .remap_key_type::<Bytes>()
+                        .prefix_iter(self.txn, &key)?
+                        .remap_key_type::<StrBEU16Codec>();
+
+                    let mut bitmap = RoaringBitmap::new();
+                    for result in remap_key_type {
+                        let ((_, pos), value) = result?;
+
+                        if pos == fid {
+                            if let Some(universe) = universe {
+                                bitmap |= value & universe;
+                            } else {
+                                bitmap |= value;
+                            }
+                        }
+                    }
+
+                    entry.insert(Some(bitmap));
+                }
+            }
+        }
+
+        Ok(cache.get(&(word_prefix, fid)).unwrap().clone())
     }
 
     pub fn get_db_word_fids(&mut self, word: Interned<String>) -> Result<Vec<u16>> {
@@ -605,6 +637,7 @@ impl<'ctx> SearchContext<'ctx> {
                 let mut key = self.word_interner.get(word_prefix).as_bytes().to_owned();
                 key.push(0);
                 let mut fids = vec![];
+                // TODO: This is no more exhaustive, we should iterate over all fids.
                 let remap_key_type = self
                     .index
                     .word_prefix_fid_docids
@@ -612,11 +645,7 @@ impl<'ctx> SearchContext<'ctx> {
                     .prefix_iter(self.txn, &key)?
                     .remap_key_type::<StrBEU16Codec>();
                 for result in remap_key_type {
-                    let ((_, fid), value) = result?;
-                    // filling other caches to avoid searching for them again
-                    self.db_cache
-                        .word_prefix_fid_docids
-                        .insert((word_prefix, fid), Some(Cow::Borrowed(value)));
+                    let ((_, fid), _value) = result?;
                     fids.push(fid);
                 }
                 entry.insert(fids.clone());
@@ -648,14 +677,46 @@ impl<'ctx> SearchContext<'ctx> {
         word_prefix: Interned<String>,
         position: u16,
     ) -> Result<Option<RoaringBitmap>> {
-        DatabaseCache::get_value(
-            self.txn,
-            (word_prefix, position),
-            &(self.word_interner.get(word_prefix).as_str(), position),
-            &mut self.db_cache.word_prefix_position_docids,
-            universe,
-            self.index.word_prefix_position_docids.remap_data_type::<Bytes>(),
-        )
+        let cache = &mut self.db_cache.word_prefix_position_docids;
+        let prefix_db = &self.index.word_prefix_position_docids;
+        let db = &self.index.word_position_docids;
+        if let Entry::Vacant(entry) = cache.entry((word_prefix, position)) {
+            let word_prefix_bytes = self.word_interner.get(word_prefix).as_bytes().to_owned();
+            let word_prefix_str = std::str::from_utf8(&word_prefix_bytes).unwrap();
+            match prefix_db.get(self.txn, &(word_prefix_str, position))? {
+                Some(mut bitmap) => {
+                    if let Some(universe) = universe {
+                        bitmap &= universe;
+                    }
+                    entry.insert(Some(bitmap));
+                }
+                None => {
+                    let mut key = word_prefix_bytes.clone();
+                    key.push(0);
+                    let remap_key_type = db
+                        .remap_key_type::<Bytes>()
+                        .prefix_iter(self.txn, &key)?
+                        .remap_key_type::<StrBEU16Codec>();
+
+                    let mut bitmap = RoaringBitmap::new();
+                    for result in remap_key_type {
+                        let ((_, pos), value) = result?;
+
+                        if pos == position {
+                            if let Some(universe) = universe {
+                                bitmap |= value & universe;
+                            } else {
+                                bitmap |= value;
+                            }
+                        }
+                    }
+
+                    entry.insert(Some(bitmap));
+                }
+            }
+        }
+
+        Ok(cache.get(&(word_prefix, position)).unwrap().clone())
     }
 
     pub fn get_db_word_positions(&mut self, word: Interned<String>) -> Result<Vec<u16>> {
@@ -696,6 +757,7 @@ impl<'ctx> SearchContext<'ctx> {
                 let mut key = self.word_interner.get(word_prefix).as_bytes().to_owned();
                 key.push(0);
                 let mut positions = vec![];
+                // TODO: This is no more exhaustive, we should iterate over all positions.
                 let remap_key_type = self
                     .index
                     .word_prefix_position_docids
@@ -703,11 +765,7 @@ impl<'ctx> SearchContext<'ctx> {
                     .prefix_iter(self.txn, &key)?
                     .remap_key_type::<StrBEU16Codec>();
                 for result in remap_key_type {
-                    let ((_, position), value) = result?;
-                    // filling other caches to avoid searching for them again
-                    self.db_cache
-                        .word_prefix_position_docids
-                        .insert((word_prefix, position), Some(Cow::Borrowed(value)));
+                    let ((_, position), _value) = result?;
                     positions.push(position);
                 }
                 entry.insert(positions.clone());
