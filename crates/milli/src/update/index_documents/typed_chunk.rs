@@ -13,7 +13,6 @@ use roaring::RoaringBitmap;
 use super::helpers::{
     self, merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap, valid_lmdb_key,
     CursorClonableMmap, KeepFirst, MergeDeladdBtreesetString, MergeDeladdCboRoaringBitmaps,
-    MergeIgnoreValues,
 };
 use crate::external_documents_ids::{DocumentOperation, DocumentOperationKind};
 use crate::facet::FacetType;
@@ -22,9 +21,7 @@ use crate::index::IndexEmbeddingConfig;
 use crate::proximity::MAX_DISTANCE;
 use crate::update::del_add::{deladd_serialize_add_side, DelAdd, KvReaderDelAdd};
 use crate::update::facet::FacetsUpdate;
-use crate::update::index_documents::helpers::{
-    as_cloneable_grenad, try_split_array_at, KeepLatestObkv,
-};
+use crate::update::index_documents::helpers::{try_split_array_at, KeepLatestObkv};
 use crate::update::settings::InnerIndexSettingsDiff;
 use crate::vector::ArroyWrapper;
 use crate::{
@@ -262,7 +259,6 @@ pub(crate) fn write_typed_chunk_into_index(
             let mut word_docids_builder = MergerBuilder::new(MergeDeladdCboRoaringBitmaps);
             let mut exact_word_docids_builder = MergerBuilder::new(MergeDeladdCboRoaringBitmaps);
             let mut word_fid_docids_builder = MergerBuilder::new(MergeDeladdCboRoaringBitmaps);
-            let mut fst_merger_builder = MergerBuilder::new(MergeIgnoreValues);
             for typed_chunk in typed_chunks {
                 let TypedChunk::WordDocids {
                     word_docids_reader,
@@ -272,12 +268,10 @@ pub(crate) fn write_typed_chunk_into_index(
                 else {
                     unreachable!();
                 };
-                let clonable_word_docids = unsafe { as_cloneable_grenad(&word_docids_reader) }?;
 
                 word_docids_builder.push(word_docids_reader.into_cursor()?);
                 exact_word_docids_builder.push(exact_word_docids_reader.into_cursor()?);
                 word_fid_docids_builder.push(word_fid_docids_reader.into_cursor()?);
-                fst_merger_builder.push(clonable_word_docids.into_cursor()?);
             }
 
             let word_docids_merger = word_docids_builder.build();
@@ -307,17 +301,6 @@ pub(crate) fn write_typed_chunk_into_index(
                 merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
             )?;
 
-            // create fst from word docids
-            let fst_merger = fst_merger_builder.build();
-            let fst = merge_word_docids_reader_into_fst(fst_merger)?;
-            let db_fst = index.words_fst(wtxn)?;
-
-            // merge new fst with database fst
-            let union_stream = fst.op().add(db_fst.stream()).union();
-            let mut builder = fst::SetBuilder::memory();
-            builder.extend_stream(union_stream)?;
-            let fst = builder.into_set();
-            index.put_words_fst(wtxn, &fst)?;
             is_merged_database = true;
         }
         TypedChunk::WordPositionDocids(_) => {
@@ -742,23 +725,6 @@ pub fn extract_geo_point(value: &[u8], docid: DocumentId) -> GeoPoint {
     let point = [f64::from_ne_bytes(lat), f64::from_ne_bytes(lng)];
     let xyz_point = lat_lng_to_xyz(&point);
     GeoPoint::new(xyz_point, (docid, point))
-}
-
-fn merge_word_docids_reader_into_fst<MF>(
-    merger: Merger<CursorClonableMmap, MF>,
-) -> Result<fst::Set<Vec<u8>>>
-where
-    MF: MergeFunction,
-    crate::Error: From<MF::Error>,
-{
-    let mut iter = merger.into_stream_merger_iter()?;
-    let mut builder = fst::SetBuilder::memory();
-
-    while let Some((k, _)) = iter.next()? {
-        builder.insert(k)?;
-    }
-
-    Ok(builder.into_set())
 }
 
 /// Write provided entries in database using serialize_value function.

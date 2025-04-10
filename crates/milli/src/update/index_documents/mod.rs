@@ -27,6 +27,7 @@ pub use self::enrich::{extract_finite_float_from_value, DocumentId};
 pub use self::helpers::*;
 pub use self::transform::{Transform, TransformOutput};
 use super::facet::clear_facet_levels_based_on_settings_diff;
+use super::new::indexer::post_processing::compute_word_fst_no_progress;
 use super::new::StdResult;
 use crate::database_stats::DatabaseStats;
 use crate::documents::{obkv_to_object, DocumentsBatchReader};
@@ -471,6 +472,9 @@ where
                 if settings_diff.settings_update_only() {
                     clear_facet_levels_based_on_settings_diff(self.wtxn, self.index, &settings_diff)?;
                 }
+
+                // compute the word fst
+                compute_word_fst_no_progress(self.index, self.wtxn)?;
 
                 Ok(())
             }).map_err(InternalError::from)??;
