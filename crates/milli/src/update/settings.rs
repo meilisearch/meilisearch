@@ -27,6 +27,7 @@ use crate::index::{
     DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS,
 };
 use crate::order_by_map::OrderByMap;
+use crate::progress::Progress;
 use crate::prompt::{default_max_bytes, default_template_text, PromptData};
 use crate::proximity::ProximityPrecision;
 use crate::update::index_documents::IndexDocumentsMethod;
@@ -1417,6 +1418,77 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         }
 
         Ok(())
+    }
+
+    pub fn new_execute<'indexer, MSP>(
+        mut self,
+        must_stop_processing: &'indexer MSP,
+        progress: &'indexer Progress,
+    ) -> Result<()>
+    where
+        MSP: Fn() -> bool + Sync,
+    {
+        // force the old indexer if the environment says so
+        if std::env::var_os("MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_SETTINGS").is_some() {
+            return self.execute(
+                |indexing_step| tracing::debug!("update: {:?}", indexing_step),
+                must_stop_processing,
+            );
+        }
+
+        // only use the new indexer when only the embedder possibly changed
+        if let Self {
+            searchable_fields: Setting::NotSet,
+            displayed_fields: Setting::NotSet,
+            filterable_fields: Setting::NotSet,
+            sortable_fields: Setting::NotSet,
+            criteria: Setting::NotSet,
+            stop_words: Setting::NotSet,
+            non_separator_tokens: Setting::NotSet,
+            separator_tokens: Setting::NotSet,
+            dictionary: Setting::NotSet,
+            distinct_field: Setting::NotSet,
+            synonyms: Setting::NotSet,
+            primary_key: Setting::NotSet,
+            authorize_typos: Setting::NotSet,
+            min_word_len_two_typos: Setting::NotSet,
+            min_word_len_one_typo: Setting::NotSet,
+            exact_words: Setting::NotSet,
+            exact_attributes: Setting::NotSet,
+            max_values_per_facet: Setting::NotSet,
+            sort_facet_values_by: Setting::NotSet,
+            pagination_max_total_hits: Setting::NotSet,
+            proximity_precision: Setting::NotSet,
+            embedder_settings: _,
+            search_cutoff: Setting::NotSet,
+            localized_attributes_rules: Setting::NotSet,
+            prefix_search: Setting::NotSet,
+            facet_search: Setting::NotSet,
+            wtxn: _,
+            index: _,
+            indexer_config: _,
+        } = &self
+        {
+            todo!()
+            // 1. First we want to update the database and compute the settings diff, we might reuse a bunch of existing functions here
+            // 2. Pick which pipelines we need to run.
+            // 3. Execute extraction pipelines
+            // 4. Wait for DB writes to complete
+            // 5. Perform post-processing operations that are necessary (FST, facets, arroy)
+
+            // need SettingsChange object + settings::Extractor trait with fn process(document: DocumentFromDb) + fn init_data function
+            // need settings::extract function that accepts an extractor and performs all support functions (cancelation, progress)
+            // as well as iterates on document calling the Extractor::process function
+
+            // we might encapsulate the `init_data` -> `process` -> `merge_data` loop even further
+        } else {
+            self.execute(
+                |indexing_step| tracing::debug!("update: {:?}", indexing_step),
+                must_stop_processing,
+            )
+        }
+
+        // create rtxn, populate FieldIdMapWithMetadata (old + new)
     }
 }
 
