@@ -373,6 +373,7 @@ impl<T> From<v5::Settings<T>> for v6::Settings<v6::Unchecked> {
                     },
                     disable_on_words: typo.disable_on_words.into(),
                     disable_on_attributes: typo.disable_on_attributes.into(),
+                    disable_on_numbers: v6::Setting::NotSet,
                 }),
                 v5::Setting::Reset => v6::Setting::Reset,
                 v5::Setting::NotSet => v6::Setting::NotSet,

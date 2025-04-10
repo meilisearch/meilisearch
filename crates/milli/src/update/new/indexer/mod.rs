@@ -30,7 +30,7 @@ mod document_operation;
 mod extract;
 mod guess_primary_key;
 mod partial_dump;
-mod post_processing;
+pub(crate) mod post_processing;
 mod update_by_function;
 mod write;
 

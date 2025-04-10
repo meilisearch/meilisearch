@@ -84,8 +84,20 @@ fn compute_word_fst(
     wtxn: &mut RwTxn,
     progress: &Progress,
 ) -> Result<Option<PrefixDelta>> {
-    let rtxn = index.read_txn()?;
     progress.update_progress(PostProcessingWords::WordFst);
+    compute_word_fst_no_progress(index, wtxn)
+}
+
+/// Compute the word fst without updating the progress.
+///
+/// This is used old indexer.
+///
+/// TODO: remove this function once the old indexer is removed.
+pub fn compute_word_fst_no_progress(
+    index: &Index,
+    wtxn: &mut RwTxn,
+) -> Result<Option<PrefixDelta>> {
+    let rtxn = index.read_txn()?;
 
     let words_fst = index.words_fst(&rtxn)?;
     let mut word_fst_builder = WordFstBuilder::new(&words_fst)?;
