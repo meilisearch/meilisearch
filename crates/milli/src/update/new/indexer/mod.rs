@@ -39,8 +39,6 @@ static LOG_MEMORY_METRICS_ONCE: Once = Once::new();
 /// This is the main function of this crate.
 ///
 /// Give it the output of the [`Indexer::document_changes`] method and it will execute it in the [`rayon::ThreadPool`].
-///
-/// TODO return stats
 #[allow(clippy::too_many_arguments)] // clippy: 😝
 pub fn index<'pl, 'indexer, 'index, DC, MSP>(
     wtxn: &mut RwTxn,
