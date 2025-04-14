@@ -30,11 +30,7 @@ actix-web = { version = "4.9.0", default-features = false, features = [
 anyhow = { version = "1.0.95", features = ["backtrace"] }
 async-trait = "0.1.85"
 bstr = "1.11.3"
-byte-unit = { version = "5.1.6", default-features = false, features = [
-    "std",
-    "byte",
-    "serde",
-] }
+byte-unit = { version = "5.1.6", features = ["serde"] }
 bytes = "1.9.0"
 clap = { version = "4.5.24", features = ["derive", "env"] }
 crossbeam-channel = "0.5.15"
@@ -140,7 +136,7 @@ reqwest = { version = "0.12.12", features = [
 sha-1 = { version = "0.10.1", optional = true }
 static-files = { version = "0.2.4", optional = true }
 tempfile = { version = "3.15.0", optional = true }
-zip = { version = "2.2.2", optional = true }
+zip = { version = "2.3.0", optional = true }
 
 [features]
 default = ["meilisearch-types/all-tokenizations", "mini-dashboard"]
@@ -170,5 +166,5 @@ german = ["meilisearch-types/german"]
 turkish = ["meilisearch-types/turkish"]
 
 [package.metadata.mini-dashboard]
-assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.2.18/build.zip"
-sha1 = "b408a30dcb6e20cddb0c153c23385bcac4c8e912"
+assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.2.19/build.zip"
+sha1 = "7974430d5277c97f67cf6e95eec6faaac2788834"

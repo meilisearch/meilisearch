@@ -82,14 +82,8 @@ where
         merge_caches_sorted(frozen, |key, DelAddRoaringBitmap { del, add }| {
             let current = database.get(&rtxn, key)?;
             match merge_cbo_bitmaps(current, del, add)? {
-                Operation::Write(bitmap) => {
-                    docids_sender.write(key, &bitmap)?;
-                    Ok(())
-                }
-                Operation::Delete => {
-                    docids_sender.delete(key)?;
-                    Ok(())
-                }
+                Operation::Write(bitmap) => docids_sender.write(key, &bitmap),
+                Operation::Delete => docids_sender.delete(key),
                 Operation::Ignore => Ok(()),
             }
         })
@@ -130,7 +124,6 @@ pub fn merge_and_send_facet_docids<'extractor>(
                     Operation::Ignore => Ok(()),
                 }
             })?;
-
             Ok(facet_field_ids_delta)
         })
         .reduce(

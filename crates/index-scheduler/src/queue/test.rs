@@ -364,7 +364,7 @@ fn test_task_queue_is_full() {
     // we won't be able to test this error in an integration test thus as a best effort test I still ensure the error return the expected error code
     snapshot!(format!("{:?}", result.error_code()), @"NoSpaceLeftOnDevice");
 
-    // Even the task deletion that doesn't delete anything shouldn't be accepted
+    // Even the task deletion and cancelation that don't delete anything should be refused
     let result = index_scheduler
         .register(
             KindWithContent::TaskDeletion { query: S("test"), tasks: RoaringBitmap::new() },
@@ -373,10 +373,39 @@ fn test_task_queue_is_full() {
         )
         .unwrap_err();
     snapshot!(result, @"Meilisearch cannot receive write operations because the limit of the task database has been reached. Please delete tasks to continue performing write operations.");
+    let result = index_scheduler
+        .register(
+            KindWithContent::TaskCancelation { query: S("test"), tasks: RoaringBitmap::new() },
+            None,
+            false,
+        )
+        .unwrap_err();
+    snapshot!(result, @"Meilisearch cannot receive write operations because the limit of the task database has been reached. Please delete tasks to continue performing write operations.");
+
     // we won't be able to test this error in an integration test thus as a best effort test I still ensure the error return the expected error code
     snapshot!(format!("{:?}", result.error_code()), @"NoSpaceLeftOnDevice");
 
-    // But a task deletion that delete something should works
+    // But a task cancelation that cancel something should work
+    index_scheduler
+        .register(
+            KindWithContent::TaskCancelation { query: S("test"), tasks: (0..100).collect() },
+            None,
+            false,
+        )
+        .unwrap();
+    handle.advance_one_successful_batch();
+
+    // But we should still be forbidden from enqueuing new tasks
+    let result = index_scheduler
+        .register(
+            KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None },
+            None,
+            false,
+        )
+        .unwrap_err();
+    snapshot!(result, @"Meilisearch cannot receive write operations because the limit of the task database has been reached. Please delete tasks to continue performing write operations.");
+
+    // And a task deletion that delete something should works
     index_scheduler
         .register(
             KindWithContent::TaskDeletion { query: S("test"), tasks: (0..100).collect() },
