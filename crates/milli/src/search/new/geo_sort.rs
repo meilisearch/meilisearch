@@ -71,6 +71,26 @@ impl Strategy {
     }
 }
 
+#[cfg(not(test))]
+fn default_max_bucket_size() -> u64 {
+    1000
+}
+
+#[cfg(test)]
+static DEFAULT_MAX_BUCKET_SIZE: std::sync::Mutex<u64> = std::sync::Mutex::new(1000);
+
+#[cfg(test)]
+pub fn set_default_max_bucket_size(n: u64) {
+    let mut size = DEFAULT_MAX_BUCKET_SIZE.lock().unwrap();
+    *size = n;
+}
+
+#[cfg(test)]
+fn default_max_bucket_size() -> u64 {
+    let max_size = *(DEFAULT_MAX_BUCKET_SIZE.lock().unwrap());
+    max_size
+}
+
 pub struct GeoSort<Q: RankingRuleQueryTrait> {
     query: Option<Q>,
 
@@ -105,7 +125,7 @@ impl<Q: RankingRuleQueryTrait> GeoSort<Q> {
             field_ids: None,
             rtree: None,
             cached_sorted_docids: VecDeque::new(),
-            max_bucket_size: 1000,
+            max_bucket_size: default_max_bucket_size(),
             distance_error_margin: 1.0,
         })
     }
