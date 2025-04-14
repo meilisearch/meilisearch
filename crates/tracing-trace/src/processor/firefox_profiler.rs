@@ -282,7 +282,7 @@ struct SpanMarker<'a> {
     memory_delta: Option<MemoryStats>,
 }
 
-impl<'a> ProfilerMarker for SpanMarker<'a> {
+impl ProfilerMarker for SpanMarker<'_> {
     const MARKER_TYPE_NAME: &'static str = "span";
 
     fn schema() -> MarkerSchema {
@@ -369,7 +369,7 @@ struct EventMarker<'a> {
     memory_delta: Option<MemoryStats>,
 }
 
-impl<'a> ProfilerMarker for EventMarker<'a> {
+impl ProfilerMarker for EventMarker<'_> {
     const MARKER_TYPE_NAME: &'static str = "tracing-event";
 
     fn schema() -> MarkerSchema {

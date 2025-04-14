@@ -101,8 +101,7 @@ impl FacetsUpdateIncremental {
             let key = FacetGroupKeyCodec::<BytesRefCodec>::bytes_decode(key)
                 .map_err(heed::Error::Encoding)?;
 
-            if facet_level_may_be_updated
-                && current_field_id.map_or(false, |fid| fid != key.field_id)
+            if facet_level_may_be_updated && current_field_id.is_some_and(|fid| fid != key.field_id)
             {
                 // Only add or remove a level after making all the field modifications.
                 self.inner.add_or_delete_level(wtxn, current_field_id.unwrap())?;
@@ -530,8 +529,8 @@ impl FacetsUpdateIncrementalInner {
         add_docids: Option<&RoaringBitmap>,
         del_docids: Option<&RoaringBitmap>,
     ) -> Result<bool> {
-        if add_docids.map_or(true, RoaringBitmap::is_empty)
-            && del_docids.map_or(true, RoaringBitmap::is_empty)
+        if add_docids.is_none_or(RoaringBitmap::is_empty)
+            && del_docids.is_none_or(RoaringBitmap::is_empty)
         {
             return Ok(false);
         }
@@ -670,7 +669,7 @@ impl FacetsUpdateIncrementalInner {
     }
 }
 
-impl<'a> FacetGroupKey<&'a [u8]> {
+impl FacetGroupKey<&[u8]> {
     pub fn into_owned(self) -> FacetGroupKey<Vec<u8>> {
         FacetGroupKey {
             field_id: self.field_id,

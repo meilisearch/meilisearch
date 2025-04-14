@@ -114,7 +114,7 @@ impl Task {
     /// Return true when a task is finished.
     /// A task is finished when its last state is either `Succeeded` or `Failed`.
     pub fn is_finished(&self) -> bool {
-        self.events.last().map_or(false, |event| {
+        self.events.last().is_some_and(|event| {
             matches!(event, TaskEvent::Succeeded { .. } | TaskEvent::Failed { .. })
         })
     }

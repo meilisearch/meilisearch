@@ -92,7 +92,7 @@ pub struct FrozenGeoExtractorData<'extractor> {
     pub spilled_inserted: Option<BufReader<File>>,
 }
 
-impl<'extractor> FrozenGeoExtractorData<'extractor> {
+impl FrozenGeoExtractorData<'_> {
     pub fn iter_and_clear_removed(
         &mut self,
     ) -> io::Result<impl IntoIterator<Item = io::Result<ExtractedGeoPoint>> + '_> {
@@ -160,7 +160,7 @@ impl<'extractor> Extractor<'extractor> for GeoExtractor {
 
         for change in changes {
             if data_ref.spilled_removed.is_none()
-                && max_memory.map_or(false, |mm| context.extractor_alloc.allocated_bytes() >= mm)
+                && max_memory.is_some_and(|mm| context.extractor_alloc.allocated_bytes() >= mm)
             {
                 // We must spill as we allocated too much memory
                 data_ref.spilled_removed = tempfile::tempfile().map(BufWriter::new).map(Some)?;
@@ -258,9 +258,11 @@ pub fn extract_geo_coordinates(
         Value::Null => return Ok(None),
         Value::Object(map) => map,
         value => {
-            return Err(
-                GeoError::NotAnObject { document_id: Value::from(external_id), value }.into()
-            )
+            return Err(Box::new(GeoError::NotAnObject {
+                document_id: Value::from(external_id),
+                value,
+            })
+            .into())
         }
     };
 
@@ -269,23 +271,29 @@ pub fn extract_geo_coordinates(
             if geo.is_empty() {
                 [lat, lng]
             } else {
-                return Err(GeoError::UnexpectedExtraFields {
+                return Err(Box::new(GeoError::UnexpectedExtraFields {
                     document_id: Value::from(external_id),
                     value: Value::from(geo),
-                }
+                })
                 .into());
             }
         }
         (Some(_), None) => {
-            return Err(GeoError::MissingLongitude { document_id: Value::from(external_id) }.into())
+            return Err(Box::new(GeoError::MissingLongitude {
+                document_id: Value::from(external_id),
+            })
+            .into())
         }
         (None, Some(_)) => {
-            return Err(GeoError::MissingLatitude { document_id: Value::from(external_id) }.into())
+            return Err(Box::new(GeoError::MissingLatitude {
+                document_id: Value::from(external_id),
+            })
+            .into())
         }
         (None, None) => {
-            return Err(GeoError::MissingLatitudeAndLongitude {
+            return Err(Box::new(GeoError::MissingLatitudeAndLongitude {
                 document_id: Value::from(external_id),
-            }
+            })
             .into())
         }
     };
@@ -293,16 +301,18 @@ pub fn extract_geo_coordinates(
     match (extract_finite_float_from_value(lat), extract_finite_float_from_value(lng)) {
         (Ok(lat), Ok(lng)) => Ok(Some([lat, lng])),
         (Ok(_), Err(value)) => {
-            Err(GeoError::BadLongitude { document_id: Value::from(external_id), value }.into())
+            Err(Box::new(GeoError::BadLongitude { document_id: Value::from(external_id), value })
+                .into())
         }
         (Err(value), Ok(_)) => {
-            Err(GeoError::BadLatitude { document_id: Value::from(external_id), value }.into())
+            Err(Box::new(GeoError::BadLatitude { document_id: Value::from(external_id), value })
+                .into())
         }
-        (Err(lat), Err(lng)) => Err(GeoError::BadLatitudeAndLongitude {
+        (Err(lat), Err(lng)) => Err(Box::new(GeoError::BadLatitudeAndLongitude {
             document_id: Value::from(external_id),
             lat,
             lng,
-        }
+        })
         .into()),
     }
 }

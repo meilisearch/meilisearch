@@ -79,7 +79,7 @@ struct FacetRangeSearch<'t, 'b, 'bitmap> {
     docids: &'bitmap mut RoaringBitmap,
 }
 
-impl<'t, 'b, 'bitmap> FacetRangeSearch<'t, 'b, 'bitmap> {
+impl<'t> FacetRangeSearch<'t, '_, '_> {
     fn run_level_0(&mut self, starting_left_bound: &'t [u8], group_size: usize) -> Result<()> {
         let left_key =
             FacetGroupKey { field_id: self.field_id, level: 0, left_bound: starting_left_bound };

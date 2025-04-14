@@ -149,7 +149,7 @@ impl<'a, 'rtxn> FrozenPrefixBitmaps<'a, 'rtxn> {
     }
 }
 
-unsafe impl<'a, 'rtxn> Sync for FrozenPrefixBitmaps<'a, 'rtxn> {}
+unsafe impl Sync for FrozenPrefixBitmaps<'_, '_> {}
 
 struct WordPrefixIntegerDocids {
     database: Database<Bytes, CboRoaringBitmapCodec>,
@@ -302,7 +302,7 @@ impl<'a, 'rtxn> FrozenPrefixIntegerBitmaps<'a, 'rtxn> {
     }
 }
 
-unsafe impl<'a, 'rtxn> Sync for FrozenPrefixIntegerBitmaps<'a, 'rtxn> {}
+unsafe impl Sync for FrozenPrefixIntegerBitmaps<'_, '_> {}
 
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::prefix")]
 fn delete_prefixes(

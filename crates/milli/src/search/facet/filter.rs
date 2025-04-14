@@ -66,15 +66,15 @@ enum FilterError<'a> {
     ParseGeoError(BadGeoError),
     TooDeep,
 }
-impl<'a> std::error::Error for FilterError<'a> {}
+impl std::error::Error for FilterError<'_> {}
 
-impl<'a> From<BadGeoError> for FilterError<'a> {
+impl From<BadGeoError> for FilterError<'_> {
     fn from(geo_error: BadGeoError) -> Self {
         FilterError::ParseGeoError(geo_error)
     }
 }
 
-impl<'a> Display for FilterError<'a> {
+impl Display for FilterError<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::AttributeNotFilterable { attribute, filterable_patterns } => {
@@ -237,7 +237,7 @@ impl<'a> Filter<'a> {
         for fid in self.condition.fids(MAX_FILTER_DEPTH) {
             let attribute = fid.value();
             if matching_features(attribute, &filterable_attributes_rules)
-                .map_or(false, |(_, features)| features.is_filterable())
+                .is_some_and(|(_, features)| features.is_filterable())
             {
                 continue;
             }
@@ -461,7 +461,7 @@ impl<'a> Filter<'a> {
         filterable_attribute_rules: &[FilterableAttributesRule],
         universe: Option<&RoaringBitmap>,
     ) -> Result<RoaringBitmap> {
-        if universe.map_or(false, |u| u.is_empty()) {
+        if universe.is_some_and(|u| u.is_empty()) {
             return Ok(RoaringBitmap::new());
         }
 

@@ -37,7 +37,7 @@ pub struct FacetedExtractorData<'a, 'b> {
     is_geo_enabled: bool,
 }
 
-impl<'a, 'b, 'extractor> Extractor<'extractor> for FacetedExtractorData<'a, 'b> {
+impl<'extractor> Extractor<'extractor> for FacetedExtractorData<'_, '_> {
     type Data = RefCell<BalancedCaches<'extractor>>;
 
     fn init_data(&self, extractor_alloc: &'extractor Bump) -> Result<Self::Data> {

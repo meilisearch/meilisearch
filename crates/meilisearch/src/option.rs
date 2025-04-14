@@ -16,7 +16,7 @@ use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::ThreadPoolNoAbortBuilder;
 use rustls::server::{ServerSessionMemoryCache, WebPkiClientVerifier};
 use rustls::RootCertStore;
-use rustls_pemfile::{certs, rsa_private_keys};
+use rustls_pemfile::{certs, ec_private_keys, rsa_private_keys};
 use serde::{Deserialize, Serialize};
 use sysinfo::{MemoryRefreshKind, RefreshKind, System};
 use url::Url;
@@ -874,7 +874,7 @@ fn load_private_key(
     filename: PathBuf,
 ) -> anyhow::Result<rustls::pki_types::PrivateKeyDer<'static>> {
     let rsa_keys = {
-        let keyfile = fs::File::open(filename.clone())
+        let keyfile = fs::File::open(&filename)
             .map_err(|_| anyhow::anyhow!("cannot open private key file"))?;
         let mut reader = BufReader::new(keyfile);
         rsa_private_keys(&mut reader)
@@ -883,7 +883,7 @@ fn load_private_key(
     };
 
     let pkcs8_keys = {
-        let keyfile = fs::File::open(filename)
+        let keyfile = fs::File::open(&filename)
             .map_err(|_| anyhow::anyhow!("cannot open private key file"))?;
         let mut reader = BufReader::new(keyfile);
         rustls_pemfile::pkcs8_private_keys(&mut reader).collect::<Result<Vec<_>, _>>().map_err(
@@ -895,12 +895,23 @@ fn load_private_key(
         )?
     };
 
+    let ec_keys = {
+        let keyfile = fs::File::open(&filename)
+            .map_err(|_| anyhow::anyhow!("cannot open private key file"))?;
+        let mut reader = BufReader::new(keyfile);
+        ec_private_keys(&mut reader)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|_| anyhow::anyhow!("file contains invalid ec private key"))?
+    };
+
     // prefer to load pkcs8 keys
     if !pkcs8_keys.is_empty() {
         Ok(rustls::pki_types::PrivateKeyDer::Pkcs8(pkcs8_keys[0].clone_key()))
-    } else {
-        assert!(!rsa_keys.is_empty());
+    } else if !rsa_keys.is_empty() {
         Ok(rustls::pki_types::PrivateKeyDer::Pkcs1(rsa_keys[0].clone_key()))
+    } else {
+        assert!(!ec_keys.is_empty());
+        Ok(rustls::pki_types::PrivateKeyDer::Sec1(ec_keys[0].clone_key()))
     }
 }
 
@@ -929,7 +940,6 @@ where
 }
 
 /// Functions used to get default value for `Opt` fields, needs to be function because of serde's default attribute.
-
 fn default_db_path() -> PathBuf {
     PathBuf::from(DEFAULT_DB_PATH)
 }
@@ -1037,7 +1047,7 @@ where
 {
     struct BoolOrInt;
 
-    impl<'de> serde::de::Visitor<'de> for BoolOrInt {
+    impl serde::de::Visitor<'_> for BoolOrInt {
         type Value = ScheduleSnapshot;
 
         fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {

@@ -346,7 +346,7 @@ fn open_or_create_database_unchecked(
     match (
         index_scheduler_builder(),
         auth_controller.map_err(anyhow::Error::from),
-        create_current_version_file(&opt.db_path).map_err(anyhow::Error::from),
+        create_current_version_file(&opt.db_path),
     ) {
         (Ok(i), Ok(a), Ok(())) => Ok((i, a)),
         (Err(e), _, _) | (_, Err(e), _) | (_, _, Err(e)) => {

@@ -203,7 +203,7 @@ pub fn number_of_typos_allowed<'ctx>(
     Ok(Box::new(move |word: &str| {
         if !authorize_typos
             || word.len() < min_len_one_typo as usize
-            || exact_words.as_ref().map_or(false, |fst| fst.contains(word))
+            || exact_words.as_ref().is_some_and(|fst| fst.contains(word))
         {
             0
         } else if word.len() < min_len_two_typos as usize {

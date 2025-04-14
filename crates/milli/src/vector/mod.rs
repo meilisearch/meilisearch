@@ -59,7 +59,7 @@ impl ArroyWrapper {
         &'a self,
         rtxn: &'a RoTxn<'a>,
         db: arroy::Database<D>,
-    ) -> impl Iterator<Item = Result<arroy::Reader<D>, arroy::Error>> + 'a {
+    ) -> impl Iterator<Item = Result<arroy::Reader<'a, D>, arroy::Error>> + 'a {
         arroy_db_range_for_embedder(self.embedder_index).map_while(move |index| {
             match arroy::Reader::open(rtxn, index, db) {
                 Ok(reader) => match reader.is_empty(rtxn) {

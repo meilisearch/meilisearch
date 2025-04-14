@@ -55,7 +55,7 @@ impl ChunkAccumulator {
         match self
             .inner
             .iter()
-            .position(|right| right.first().map_or(false, |right| chunk.mergeable_with(right)))
+            .position(|right| right.first().is_some_and(|right| chunk.mergeable_with(right)))
         {
             Some(position) => {
                 let v = self.inner.get_mut(position).unwrap();
@@ -664,11 +664,8 @@ pub(crate) fn write_typed_chunk_into_index(
             let embedder_index = index.embedder_category_id.get(wtxn, &embedder_name)?.ok_or(
                 InternalError::DatabaseMissingEntry { db_name: "embedder_category_id", key: None },
             )?;
-            let binary_quantized = settings_diff
-                .old
-                .embedding_configs
-                .get(&embedder_name)
-                .map_or(false, |conf| conf.2);
+            let binary_quantized =
+                settings_diff.old.embedding_configs.get(&embedder_name).is_some_and(|conf| conf.2);
             // FIXME: allow customizing distance
             let writer = ArroyWrapper::new(index.vector_arroy, embedder_index, binary_quantized);
 

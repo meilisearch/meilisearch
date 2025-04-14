@@ -46,7 +46,7 @@ pub fn extract_word_position_docids<R: io::Read + io::Seek>(
             .ok_or(SerializationError::Decoding { db_name: Some(DOCID_WORD_POSITIONS) })?;
         let document_id = DocumentId::from_be_bytes(document_id_bytes);
 
-        if current_document_id.map_or(false, |id| document_id != id) {
+        if current_document_id.is_some_and(|id| document_id != id) {
             words_position_into_sorter(
                 current_document_id.unwrap(),
                 &mut key_buffer,

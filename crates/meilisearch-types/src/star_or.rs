@@ -66,7 +66,7 @@ where
         /// not supported on untagged enums.
         struct StarOrVisitor<T>(PhantomData<T>);
 
-        impl<'de, T, FE> Visitor<'de> for StarOrVisitor<T>
+        impl<T, FE> Visitor<'_> for StarOrVisitor<T>
         where
             T: FromStr<Err = FE>,
             FE: fmt::Display,

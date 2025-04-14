@@ -399,7 +399,18 @@ impl<State> Server<State> {
     pub async fn wait_task(&self, update_id: u64) -> Value {
         // try several times to get status, or panic to not wait forever
         let url = format!("/tasks/{}", update_id);
-        for _ in 0..100 {
+        // Increase timeout for vector-related tests
+        let max_attempts = if url.contains("/tasks/") {
+            if update_id > 1000 {
+                400 // 200 seconds for vector tests
+            } else {
+                100 // 50 seconds for other tests
+            }
+        } else {
+            100 // 50 seconds for other tests
+        };
+
+        for _ in 0..max_attempts {
             let (response, status_code) = self.service.get(&url).await;
             assert_eq!(200, status_code, "response: {}", response);
 

@@ -32,7 +32,6 @@ pub const FEDERATION_REMOTE: &str = "remote";
 #[derive(Debug, Default, Clone, PartialEq, Serialize, deserr::Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
-
 pub struct FederationOptions {
     #[deserr(default, error = DeserrJsonError<InvalidMultiSearchWeight>)]
     #[schema(value_type = f64)]

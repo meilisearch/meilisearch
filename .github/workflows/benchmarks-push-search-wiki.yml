@@ -15,7 +15,7 @@ jobs:
     runs-on: benchmarks
     steps:
       - uses: actions/checkout@v3
-      - uses: dtolnay/rust-toolchain@1.81
+      - uses: dtolnay/rust-toolchain@1.85
         with:
           profile: minimal
 
@@ -68,7 +68,7 @@ jobs:
         run: telegraf --config https://eu-central-1-1.aws.cloud2.influxdata.com/api/v2/telegrafs/08b52e34a370b000 --once --debug
 
       # Helper
-      - name: 'README: compare with another benchmark'
+      - name: "README: compare with another benchmark"
         run: |
           echo "${{ steps.file.outputs.basename }}.json has just been pushed."
           echo 'How to compare this benchmark with another one?'

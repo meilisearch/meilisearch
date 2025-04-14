@@ -22,6 +22,10 @@ Related product discussion:
 
 <!---If necessary, create a list with technical/product steps-->
 
+### Are you modifying a database?
+- [ ] If not, add the `no db change` label to your PR, and you're good to merge.
+- [ ] If yes, add the `db change` label to your PR. You'll receive a message explaining you what to do.
+
 ### Reminders when modifying the API
 
 - [ ] Update the openAPI file with utoipa:

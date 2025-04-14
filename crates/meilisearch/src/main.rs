@@ -69,7 +69,7 @@ fn setup(opt: &Opt) -> anyhow::Result<(LogRouteHandle, LogStderrHandle)> {
     Ok((route_layer_handle, stderr_layer_handle))
 }
 
-fn on_panic(info: &std::panic::PanicInfo) {
+fn on_panic(info: &std::panic::PanicHookInfo) {
     let info = info.to_string().replace('\n', " ");
     tracing::error!(%info);
 }

@@ -64,6 +64,8 @@ mod open_api_utils;
 mod snapshot;
 mod swap_indexes;
 pub mod tasks;
+#[cfg(test)]
+mod tasks_test;
 
 #[derive(OpenApi)]
 #[openapi(
@@ -168,7 +170,7 @@ pub fn is_dry_run(req: &HttpRequest, opt: &Opt) -> Result<bool, ResponseError> {
             })
         })
         .transpose()?
-        .map_or(false, |s| s.to_lowercase() == "true"))
+        .is_some_and(|s| s.to_lowercase() == "true"))
 }
 
 #[derive(Debug, Serialize, ToSchema)]

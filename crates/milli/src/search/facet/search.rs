@@ -75,9 +75,11 @@ impl<'a> SearchForFacetValues<'a> {
         let rtxn = self.search_query.rtxn;
 
         let filterable_attributes_rules = index.filterable_attributes_rules(rtxn)?;
-        if !matching_features(&self.facet, &filterable_attributes_rules)
-            .map_or(false, |(_, features)| features.is_facet_searchable())
-        {
+        let matched_rule = matching_features(&self.facet, &filterable_attributes_rules);
+        let is_facet_searchable =
+            matched_rule.is_some_and(|(_, features)| features.is_facet_searchable());
+
+        if !is_facet_searchable {
             let matching_field_names =
                 filtered_matching_patterns(&filterable_attributes_rules, &|features| {
                     features.is_facet_searchable()
@@ -85,10 +87,14 @@ impl<'a> SearchForFacetValues<'a> {
             let (valid_patterns, hidden_fields) =
                 index.remove_hidden_fields(rtxn, matching_field_names)?;
 
+            // Get the matching rule index if any rule matched the attribute
+            let matching_rule_index = matched_rule.map(|(rule_index, _)| rule_index);
+
             return Err(UserError::InvalidFacetSearchFacetName {
                 field: self.facet.clone(),
                 valid_patterns,
                 hidden_fields,
+                matching_rule_index,
             }
             .into());
         };
@@ -129,7 +135,7 @@ impl<'a> SearchForFacetValues<'a> {
 
                 if authorize_typos && field_authorizes_typos {
                     let exact_words_fst = self.search_query.index.exact_words(rtxn)?;
-                    if exact_words_fst.map_or(false, |fst| fst.contains(query)) {
+                    if exact_words_fst.is_some_and(|fst| fst.contains(query)) {
                         if fst.contains(query) {
                             self.fetch_original_facets_using_normalized(
                                 fid,

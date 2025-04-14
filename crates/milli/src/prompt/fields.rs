@@ -17,7 +17,7 @@ pub struct FieldValue<'a, D: ObjectView> {
     metadata: Metadata,
 }
 
-impl<'a, D: ObjectView> ValueView for FieldValue<'a, D> {
+impl<D: ObjectView> ValueView for FieldValue<'_, D> {
     fn as_debug(&self) -> &dyn std::fmt::Debug {
         self
     }
@@ -78,7 +78,7 @@ impl<'a, D: ObjectView> FieldValue<'a, D> {
     }
 }
 
-impl<'a, D: ObjectView> ObjectView for FieldValue<'a, D> {
+impl<D: ObjectView> ObjectView for FieldValue<'_, D> {
     fn as_value(&self) -> &dyn ValueView {
         self
     }
@@ -148,7 +148,7 @@ impl<'a, 'map, D: ObjectView> BorrowedFields<'a, 'map, D> {
     }
 }
 
-impl<'a, D: ObjectView> ArrayView for OwnedFields<'a, D> {
+impl<D: ObjectView> ArrayView for OwnedFields<'_, D> {
     fn as_value(&self) -> &dyn ValueView {
         self.0.as_value()
     }
@@ -170,7 +170,7 @@ impl<'a, D: ObjectView> ArrayView for OwnedFields<'a, D> {
     }
 }
 
-impl<'a, 'map, D: ObjectView> ArrayView for BorrowedFields<'a, 'map, D> {
+impl<D: ObjectView> ArrayView for BorrowedFields<'_, '_, D> {
     fn as_value(&self) -> &dyn ValueView {
         self
     }
@@ -212,7 +212,7 @@ impl<'a, 'map, D: ObjectView> ArrayView for BorrowedFields<'a, 'map, D> {
     }
 }
 
-impl<'a, 'map, D: ObjectView> ValueView for BorrowedFields<'a, 'map, D> {
+impl<D: ObjectView> ValueView for BorrowedFields<'_, '_, D> {
     fn as_debug(&self) -> &dyn std::fmt::Debug {
         self
     }
@@ -254,7 +254,7 @@ impl<'a, 'map, D: ObjectView> ValueView for BorrowedFields<'a, 'map, D> {
     }
 }
 
-impl<'a, D: ObjectView> ValueView for OwnedFields<'a, D> {
+impl<D: ObjectView> ValueView for OwnedFields<'_, D> {
     fn as_debug(&self) -> &dyn std::fmt::Debug {
         self
     }
@@ -292,7 +292,7 @@ struct ArraySource<'a, 'map, D: ObjectView> {
     s: &'a BorrowedFields<'a, 'map, D>,
 }
 
-impl<'a, 'map, D: ObjectView> fmt::Display for ArraySource<'a, 'map, D> {
+impl<D: ObjectView> fmt::Display for ArraySource<'_, '_, D> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "[")?;
         for item in self.s.values() {
@@ -307,7 +307,7 @@ struct ArrayRender<'a, 'map, D: ObjectView> {
     s: &'a BorrowedFields<'a, 'map, D>,
 }
 
-impl<'a, 'map, D: ObjectView> fmt::Display for ArrayRender<'a, 'map, D> {
+impl<D: ObjectView> fmt::Display for ArrayRender<'_, '_, D> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for item in self.s.values() {
             write!(f, "{}", item.render())?;

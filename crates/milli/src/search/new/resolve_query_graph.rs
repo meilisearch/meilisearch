@@ -17,7 +17,7 @@ use crate::Result;
 pub struct PhraseDocIdsCache {
     pub cache: FxHashMap<Interned<Phrase>, RoaringBitmap>,
 }
-impl<'ctx> SearchContext<'ctx> {
+impl SearchContext<'_> {
     /// Get the document ids associated with the given phrase
     pub fn get_phrase_docids(&mut self, phrase: Interned<Phrase>) -> Result<&RoaringBitmap> {
         if self.phrase_docids.cache.contains_key(&phrase) {

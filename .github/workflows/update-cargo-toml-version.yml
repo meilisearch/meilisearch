@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       new_version:
-        description: 'The new version (vX.Y.Z)'
+        description: "The new version (vX.Y.Z)"
         required: true
 
 env:
@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: dtolnay/rust-toolchain@1.81
+      - uses: dtolnay/rust-toolchain@1.85
         with:
           profile: minimal
       - name: Install sd

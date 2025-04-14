@@ -25,7 +25,7 @@ pub struct WordPairProximityDocidsExtractorData<'a> {
     buckets: usize,
 }
 
-impl<'a, 'extractor> Extractor<'extractor> for WordPairProximityDocidsExtractorData<'a> {
+impl<'extractor> Extractor<'extractor> for WordPairProximityDocidsExtractorData<'_> {
     type Data = RefCell<BalancedCaches<'extractor>>;
 
     fn init_data(&self, extractor_alloc: &'extractor Bump) -> Result<Self::Data> {
@@ -270,7 +270,7 @@ fn process_document_tokens<'doc>(
         // drain the proximity window until the head word is considered close to the word we are inserting.
         while word_positions
             .front()
-            .map_or(false, |(_w, p)| index_proximity(*p as u32, pos as u32) >= MAX_DISTANCE)
+            .is_some_and(|(_w, p)| index_proximity(*p as u32, pos as u32) >= MAX_DISTANCE)
         {
             word_positions_into_word_pair_proximity(word_positions, word_pair_proximity);
         }

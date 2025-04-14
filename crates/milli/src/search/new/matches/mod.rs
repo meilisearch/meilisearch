@@ -8,6 +8,7 @@ use std::cmp::{max, min};
 
 use charabia::{Language, SeparatorKind, Token, Tokenizer};
 use either::Either;
+use itertools::Itertools;
 pub use matching_words::MatchingWords;
 use matching_words::{MatchType, PartialMatch};
 use r#match::{Match, MatchPosition};
@@ -122,7 +123,7 @@ pub struct Matcher<'t, 'tokenizer, 'b, 'lang> {
     matches: Option<(Vec<Token<'t>>, Vec<Match>)>,
 }
 
-impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
+impl<'t> Matcher<'t, '_, '_, '_> {
     /// Iterates over tokens and save any of them that matches the query.
     fn compute_matches(&mut self) -> &mut Self {
         /// some words are counted as matches only if they are close together and in the good order,
@@ -229,8 +230,7 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
                 .iter()
                 .map(|m| MatchBounds {
                     start: tokens[m.get_first_token_pos()].byte_start,
-                    // TODO: Why is this in chars, while start is in bytes?
-                    length: m.char_count,
+                    length: self.calc_byte_length(tokens, m),
                     indices: if array_indices.is_empty() {
                         None
                     } else {
@@ -239,6 +239,18 @@ impl<'t, 'tokenizer> Matcher<'t, 'tokenizer, '_, '_> {
                 })
                 .collect(),
         }
+    }
+
+    fn calc_byte_length(&self, tokens: &[Token<'t>], m: &Match) -> usize {
+        (m.get_first_token_pos()..=m.get_last_token_pos())
+            .flat_map(|i| match &tokens[i].char_map {
+                Some(char_map) => {
+                    char_map.iter().map(|(original, _)| *original as usize).collect_vec()
+                }
+                None => tokens[i].lemma().chars().map(|c| c.len_utf8()).collect_vec(),
+            })
+            .take(m.char_count)
+            .sum()
     }
 
     /// Returns the bounds in byte index of the crop window.

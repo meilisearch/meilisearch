@@ -67,7 +67,7 @@ impl<'a> Document<'a> {
     }
 }
 
-impl<'a> ObjectView for Document<'a> {
+impl ObjectView for Document<'_> {
     fn as_value(&self) -> &dyn ValueView {
         self
     }
@@ -98,7 +98,7 @@ impl<'a> ObjectView for Document<'a> {
     }
 }
 
-impl<'a> ValueView for Document<'a> {
+impl ValueView for Document<'_> {
     fn as_debug(&self) -> &dyn Debug {
         self
     }
@@ -283,7 +283,7 @@ impl<'doc> ParseableArray<'doc> {
     }
 }
 
-impl<'doc> ArrayView for ParseableArray<'doc> {
+impl ArrayView for ParseableArray<'_> {
     fn as_value(&self) -> &dyn ValueView {
         self
     }
@@ -311,7 +311,7 @@ impl<'doc> ArrayView for ParseableArray<'doc> {
     }
 }
 
-impl<'doc> ValueView for ParseableArray<'doc> {
+impl ValueView for ParseableArray<'_> {
     fn as_debug(&self) -> &dyn std::fmt::Debug {
         self
     }
@@ -353,7 +353,7 @@ impl<'doc> ValueView for ParseableArray<'doc> {
     }
 }
 
-impl<'doc> ObjectView for ParseableMap<'doc> {
+impl ObjectView for ParseableMap<'_> {
     fn as_value(&self) -> &dyn ValueView {
         self
     }
@@ -392,7 +392,7 @@ impl<'doc> ObjectView for ParseableMap<'doc> {
     }
 }
 
-impl<'doc> ValueView for ParseableMap<'doc> {
+impl ValueView for ParseableMap<'_> {
     fn as_debug(&self) -> &dyn std::fmt::Debug {
         self
     }
@@ -441,7 +441,7 @@ impl<'doc> ValueView for ParseableMap<'doc> {
     }
 }
 
-impl<'doc> ValueView for ParseableValue<'doc> {
+impl ValueView for ParseableValue<'_> {
     fn as_debug(&self) -> &dyn Debug {
         self
     }
@@ -622,7 +622,7 @@ struct ArraySource<'s, 'doc> {
     s: &'s RawVec<'doc>,
 }
 
-impl<'s, 'doc> fmt::Display for ArraySource<'s, 'doc> {
+impl fmt::Display for ArraySource<'_, '_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "[")?;
         for item in self.s {
@@ -638,7 +638,7 @@ struct ArrayRender<'s, 'doc> {
     s: &'s RawVec<'doc>,
 }
 
-impl<'s, 'doc> fmt::Display for ArrayRender<'s, 'doc> {
+impl fmt::Display for ArrayRender<'_, '_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for item in self.s {
             let v = ParseableValue::new(item, self.s.bump());

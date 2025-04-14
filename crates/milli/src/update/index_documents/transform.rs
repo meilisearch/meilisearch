@@ -197,7 +197,7 @@ impl<'a, 'i> Transform<'a, 'i> {
             // drop_and_reuse is called instead of .clear() to communicate to the compiler that field_buffer
             // does not keep references from the cursor between loop iterations
             let mut field_buffer_cache = drop_and_reuse(field_buffer);
-            if self.indexer_settings.log_every_n.map_or(false, |len| documents_count % len == 0) {
+            if self.indexer_settings.log_every_n.is_some_and(|len| documents_count % len == 0) {
                 progress_callback(UpdateIndexingStep::RemapDocumentAddition {
                     documents_seen: documents_count,
                 });

@@ -80,7 +80,7 @@ pub struct Token<'a> {
     value: Option<String>,
 }
 
-impl<'a> PartialEq for Token<'a> {
+impl PartialEq for Token<'_> {
     fn eq(&self, other: &Self) -> bool {
         self.span.fragment() == other.span.fragment()
     }
@@ -226,7 +226,7 @@ impl<'a> FilterCondition<'a> {
         }
     }
 
-    pub fn parse(input: &'a str) -> Result<Option<Self>, Error> {
+    pub fn parse(input: &'a str) -> Result<Option<Self>, Error<'a>> {
         if input.trim().is_empty() {
             return Ok(None);
         }
@@ -527,7 +527,7 @@ pub fn parse_filter(input: Span) -> IResult<FilterCondition> {
     terminated(|input| parse_expression(input, 0), eof)(input)
 }
 
-impl<'a> std::fmt::Display for FilterCondition<'a> {
+impl std::fmt::Display for FilterCondition<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             FilterCondition::Not(filter) => {
@@ -576,7 +576,8 @@ impl<'a> std::fmt::Display for FilterCondition<'a> {
         }
     }
 }
-impl<'a> std::fmt::Display for Condition<'a> {
+
+impl std::fmt::Display for Condition<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Condition::GreaterThan(token) => write!(f, "> {token}"),
@@ -594,7 +595,8 @@ impl<'a> std::fmt::Display for Condition<'a> {
         }
     }
 }
-impl<'a> std::fmt::Display for Token<'a> {
+
+impl std::fmt::Display for Token<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{{{}}}", self.value())
     }

@@ -1,82 +1,82 @@
 name: Bench (PR)
 on:
-    issue_comment:
-        types: [created]
+  issue_comment:
+    types: [created]
 
 permissions:
-    issues: write
+  issues: write
 
 env:
-    GH_TOKEN: ${{ secrets.MEILI_BOT_GH_PAT }}
+  GH_TOKEN: ${{ secrets.MEILI_BOT_GH_PAT }}
 
 jobs:
-    run-benchmarks-on-comment:
-      if: startsWith(github.event.comment.body, '/bench')
-      name: Run and upload benchmarks
-      runs-on: benchmarks
-      timeout-minutes: 180 # 3h
-      steps:
-        - name: Check permissions
-          id: permission
-          env:
-            PR_AUTHOR: ${{github.event.issue.user.login }}
-            COMMENT_AUTHOR: ${{github.event.comment.user.login }}
-            REPOSITORY: ${{github.repository}}
-            PR_ID: ${{github.event.issue.number}}
-          run: |
-            PR_REPOSITORY=$(gh api /repos/"$REPOSITORY"/pulls/"$PR_ID" --jq .head.repo.full_name)
-            if $(gh api /repos/"$REPOSITORY"/collaborators/"$PR_AUTHOR"/permission --jq .user.permissions.push)
-            then
-              echo "::notice title=Authentication success::PR author authenticated"
-            else
-              echo "::error title=Authentication error::PR author doesn't have push permission on this repository"
-              exit 1
-            fi
-            if $(gh api /repos/"$REPOSITORY"/collaborators/"$COMMENT_AUTHOR"/permission --jq .user.permissions.push)
-            then
-              echo "::notice title=Authentication success::Comment author authenticated"
-            else
-              echo "::error title=Authentication error::Comment author doesn't have push permission on this repository"
-              exit 1
-            fi
-            if [ "$PR_REPOSITORY" = "$REPOSITORY" ]
-            then
-              echo "::notice title=Authentication success::PR started from main repository"
-            else
-              echo "::error title=Authentication error::PR started from a fork"
-              exit 1
-            fi
+  run-benchmarks-on-comment:
+    if: startsWith(github.event.comment.body, '/bench')
+    name: Run and upload benchmarks
+    runs-on: benchmarks
+    timeout-minutes: 180 # 3h
+    steps:
+      - name: Check permissions
+        id: permission
+        env:
+          PR_AUTHOR: ${{github.event.issue.user.login }}
+          COMMENT_AUTHOR: ${{github.event.comment.user.login }}
+          REPOSITORY: ${{github.repository}}
+          PR_ID: ${{github.event.issue.number}}
+        run: |
+          PR_REPOSITORY=$(gh api /repos/"$REPOSITORY"/pulls/"$PR_ID" --jq .head.repo.full_name)
+          if $(gh api /repos/"$REPOSITORY"/collaborators/"$PR_AUTHOR"/permission --jq .user.permissions.push)
+          then
+            echo "::notice title=Authentication success::PR author authenticated"
+          else
+            echo "::error title=Authentication error::PR author doesn't have push permission on this repository"
+            exit 1
+          fi
+          if $(gh api /repos/"$REPOSITORY"/collaborators/"$COMMENT_AUTHOR"/permission --jq .user.permissions.push)
+          then
+            echo "::notice title=Authentication success::Comment author authenticated"
+          else
+            echo "::error title=Authentication error::Comment author doesn't have push permission on this repository"
+            exit 1
+          fi
+          if [ "$PR_REPOSITORY" = "$REPOSITORY" ]
+          then
+            echo "::notice title=Authentication success::PR started from main repository"
+          else
+            echo "::error title=Authentication error::PR started from a fork"
+            exit 1
+          fi
 
-        - name: Check for Command
-          id: command
-          uses: xt0rted/slash-command-action@v2
-          with:
-              command: bench
-              reaction-type: "rocket"
-              repo-token: ${{ env.GH_TOKEN }}
+      - name: Check for Command
+        id: command
+        uses: xt0rted/slash-command-action@v2
+        with:
+          command: bench
+          reaction-type: "rocket"
+          repo-token: ${{ env.GH_TOKEN }}
 
-        - uses: xt0rted/pull-request-comment-branch@v3
-          id: comment-branch
-          with:
-            repo_token: ${{ env.GH_TOKEN }}
+      - uses: xt0rted/pull-request-comment-branch@v3
+        id: comment-branch
+        with:
+          repo_token: ${{ env.GH_TOKEN }}
 
-        - uses: actions/checkout@v3
-          if: success()
-          with:
-            fetch-depth: 0 # fetch full history to be able to get main commit sha
-            ref: ${{ steps.comment-branch.outputs.head_ref }}
+      - uses: actions/checkout@v3
+        if: success()
+        with:
+          fetch-depth: 0 # fetch full history to be able to get main commit sha
+          ref: ${{ steps.comment-branch.outputs.head_ref }}
 
-        - uses: dtolnay/rust-toolchain@1.81
-          with:
-            profile: minimal
+      - uses: dtolnay/rust-toolchain@1.85
+        with:
+          profile: minimal
 
-        - name: Run benchmarks on PR ${{ github.event.issue.id }}
-          run: |
-            cargo xtask bench --api-key "${{ secrets.BENCHMARK_API_KEY }}" \
-               --dashboard-url "${{ vars.BENCHMARK_DASHBOARD_URL }}" \
-               --reason "[Comment](${{ github.event.comment.html_url }}) on [#${{ github.event.issue.number }}](${{ github.event.issue.html_url }})" \
-               -- ${{ steps.command.outputs.command-arguments }} > benchlinks.txt
+      - name: Run benchmarks on PR ${{ github.event.issue.id }}
+        run: |
+          cargo xtask bench --api-key "${{ secrets.BENCHMARK_API_KEY }}" \
+             --dashboard-url "${{ vars.BENCHMARK_DASHBOARD_URL }}" \
+             --reason "[Comment](${{ github.event.comment.html_url }}) on [#${{ github.event.issue.number }}](${{ github.event.issue.html_url }})" \
+             -- ${{ steps.command.outputs.command-arguments }} > benchlinks.txt
 
-        - name: Send comment in PR
-          run: |
-            gh pr comment ${{github.event.issue.number}} --body-file benchlinks.txt
+      - name: Send comment in PR
+        run: |
+          gh pr comment ${{github.event.issue.number}} --body-file benchlinks.txt

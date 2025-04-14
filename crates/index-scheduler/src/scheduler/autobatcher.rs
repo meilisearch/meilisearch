@@ -219,7 +219,7 @@ impl BatchKind {
                         primary_key.is_some() &&
                         // 2.1.1 If the task we're trying to accumulate have a pk it must be equal to our primary key
                         // 2.1.2 If the task don't have a primary-key -> we can continue
-                        kind.primary_key().map_or(true, |pk| pk == primary_key)
+                        kind.primary_key().is_none_or(|pk| pk == primary_key)
                     ) ||
                     // 2.2 If we don't have a primary-key ->
                     (
