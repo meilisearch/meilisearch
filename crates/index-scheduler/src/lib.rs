@@ -427,6 +427,11 @@ impl IndexScheduler {
         Ok(self.env.non_free_pages_size()?)
     }
 
+    /// Return the maximum possible database size
+    pub fn max_size(&self) -> Result<u64> {
+        Ok(self.env.info().map_size as u64)
+    }
+
     /// Return the max size of task allowed until the task queue stop receiving.
     pub fn remaining_size_until_task_queu_stop(&self) -> Result<u64> {
         Ok((self.env.info().map_size as u64 * TASK_SCHEDULER_SIZE_THRESHOLD_PERCENT_INT / 100)
