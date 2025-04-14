@@ -1777,7 +1777,7 @@ async fn add_documents_with_geo_field() {
         },
         {
             "id": "4",
-            "_geo": { "lat": "1", "lng": "1" },
+            "_geo": { "lat": "2", "lng": "2" },
         },
     ]);
 
@@ -1828,8 +1828,8 @@ async fn add_documents_with_geo_field() {
         {
           "id": "4",
           "_geo": {
-            "lat": "1",
-            "lng": "1"
+            "lat": "2",
+            "lng": "2"
           }
         }
       ],
@@ -1849,20 +1849,20 @@ async fn add_documents_with_geo_field() {
     {
       "hits": [
         {
-          "id": "4",
-          "_geo": {
-            "lat": "1",
-            "lng": "1"
-          },
-          "_geoDistance": 5522018
-        },
-        {
           "id": "3",
           "_geo": {
             "lat": 1,
             "lng": 1
           },
           "_geoDistance": 5522018
+        },
+        {
+          "id": "4",
+          "_geo": {
+            "lat": "2",
+            "lng": "2"
+          },
+          "_geoDistance": 5408322
         },
         {
           "id": "1"

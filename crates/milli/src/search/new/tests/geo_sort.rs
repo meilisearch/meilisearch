@@ -176,11 +176,11 @@ fn test_geo_sort_reached_max_bucket_size() {
     assert_eq!(iterative_ids.len(), 15);
     for id_str in &iterative_ids[0..6] {
         let id = id_str.parse::<u32>().unwrap();
-        assert!(id >= 6 && id <= 11)
+        assert!((6..=11).contains(&id))
     }
     for id_str in &iterative_ids[6..10] {
         let id = id_str.parse::<u32>().unwrap();
-        assert!(id >= 12 && id <= 15)
+        assert!((12..=15).contains(&id))
     }
     let no_geo_ids = iterative_ids[10..].iter().collect_vec();
     insta::assert_snapshot!(format!("{no_geo_ids:?}"), @r#"["1", "4", "3", "2", "5"]"#);
@@ -192,11 +192,11 @@ fn test_geo_sort_reached_max_bucket_size() {
     assert_eq!(rtree_ids.len(), 15);
     for id_str in &rtree_ids[0..6] {
         let id = id_str.parse::<u32>().unwrap();
-        assert!(id >= 6 && id <= 11)
+        assert!((6..=11).contains(&id))
     }
     for id_str in &rtree_ids[6..10] {
         let id = id_str.parse::<u32>().unwrap();
-        assert!(id >= 12 && id <= 15)
+        assert!((12..=15).contains(&id))
     }
     let no_geo_ids = rtree_ids[10..].iter().collect_vec();
     insta::assert_snapshot!(format!("{no_geo_ids:?}"), @r#"["1", "4", "3", "2", "5"]"#);
