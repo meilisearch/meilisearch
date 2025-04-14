@@ -73,4 +73,9 @@ lazy_static! {
         "Meilisearch Task Queue Total Size",
     ))
     .expect("Can't create a metric");
+    pub static ref MEILISEARCH_TASK_QUEUE_USED_SIZE: IntGauge = register_int_gauge!(opts!(
+        "meilisearch_task_queue_used_size",
+        "Meilisearch Task Queue Used Size"
+    ))
+    .expect("Can't create a metric");
 }

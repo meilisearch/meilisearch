@@ -170,6 +170,7 @@ pub async fn get_metrics(
         .unwrap_or(0.0);
     crate::metrics::MEILISEARCH_TASK_QUEUE_LATENCY_SECONDS.set(task_queue_latency_seconds);
     crate::metrics::MEILISEARCH_TASK_QUEUE_TOTAL_SIZE.set(index_scheduler.size()? as i64);
+    crate::metrics::MEILISEARCH_TASK_QUEUE_USED_SIZE.set(index_scheduler.used_size()? as i64);
 
     let encoder = TextEncoder::new();
     let mut buffer = vec![];
