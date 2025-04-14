@@ -172,6 +172,9 @@ pub async fn get_metrics(
     crate::metrics::MEILISEARCH_TASK_QUEUE_TOTAL_SIZE.set(index_scheduler.size()? as i64);
     crate::metrics::MEILISEARCH_TASK_QUEUE_USED_SIZE.set(index_scheduler.used_size()? as i64);
 
+    crate::metrics::MEILISEARCH_TASK_QUEUE_SIZE_UNTIL_STOP_REGISTERING
+        .set(index_scheduler.remaining_size_until_task_queu_stop()? as i64);
+
     let encoder = TextEncoder::new();
     let mut buffer = vec![];
     encoder.encode(&prometheus::gather(), &mut buffer).expect("Failed to encode metrics");
