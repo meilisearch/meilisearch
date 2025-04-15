@@ -1059,7 +1059,7 @@ fn test_document_addition_with_set_and_null_primary_key() {
     handle.advance_one_successful_batch();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "all_other_tasks_succeeds");
 
-    // The primary key should be set to `id` since this batch succeeded.
+    // The primary key should be set to `paw` since this batch succeeded.
     let index = index_scheduler.index("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let primary_key = index.primary_key(&rtxn).unwrap().unwrap();
