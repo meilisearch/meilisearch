@@ -683,6 +683,9 @@ pub enum BatchStopReason {
         kind: Kind,
         id: TaskId,
     },
+    TaskKindCannotBeBatched {
+        kind: Kind,
+    },
     ExhaustedEnqueuedTasks,
     ExhaustedEnqueuedTasksForIndex {
         index: String,
@@ -742,6 +745,9 @@ impl Display for BatchStopReason {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             BatchStopReason::Unspecified => f.write_str("unspecified"),
+            BatchStopReason::TaskKindCannotBeBatched { kind } => {
+                write!(f, "a batch of tasks of type `{kind}` cannot be batched with any other type of task")
+            }
             BatchStopReason::TaskCannotBeBatched { kind, id } => {
                 write!(f, "task with id {id} of type `{kind}` cannot be batched")
             }
