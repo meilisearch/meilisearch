@@ -45,7 +45,7 @@ pub struct Search<'a> {
     sort_criteria: Option<Vec<AscDesc>>,
     distinct: Option<String>,
     searchable_attributes: Option<&'a [String]>,
-    geo_strategy: new::GeoSortStrategy,
+    geo_param: new::GeoSortParameter,
     terms_matching_strategy: TermsMatchingStrategy,
     scoring_strategy: ScoringStrategy,
     words_limit: usize,
@@ -68,7 +68,7 @@ impl<'a> Search<'a> {
             sort_criteria: None,
             distinct: None,
             searchable_attributes: None,
-            geo_strategy: new::GeoSortStrategy::default(),
+            geo_param: new::GeoSortParameter::default(),
             terms_matching_strategy: TermsMatchingStrategy::default(),
             scoring_strategy: Default::default(),
             exhaustive_number_hits: false,
@@ -145,7 +145,13 @@ impl<'a> Search<'a> {
 
     #[cfg(test)]
     pub fn geo_sort_strategy(&mut self, strategy: new::GeoSortStrategy) -> &mut Search<'a> {
-        self.geo_strategy = strategy;
+        self.geo_param.strategy = strategy;
+        self
+    }
+
+    #[cfg(test)]
+    pub fn geo_max_bucket_size(&mut self, max_size: u64) -> &mut Search<'a> {
+        self.geo_param.max_bucket_size = max_size;
         self
     }
 
@@ -232,7 +238,7 @@ impl<'a> Search<'a> {
                     universe,
                     &self.sort_criteria,
                     &self.distinct,
-                    self.geo_strategy,
+                    self.geo_param,
                     self.offset,
                     self.limit,
                     embedder_name,
@@ -251,7 +257,7 @@ impl<'a> Search<'a> {
                 universe,
                 &self.sort_criteria,
                 &self.distinct,
-                self.geo_strategy,
+                self.geo_param,
                 self.offset,
                 self.limit,
                 Some(self.words_limit),
@@ -290,7 +296,7 @@ impl fmt::Debug for Search<'_> {
             sort_criteria,
             distinct,
             searchable_attributes,
-            geo_strategy: _,
+            geo_param: _,
             terms_matching_strategy,
             scoring_strategy,
             words_limit,

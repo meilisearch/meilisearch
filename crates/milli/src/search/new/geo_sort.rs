@@ -39,6 +39,22 @@ fn facet_number_values<'a>(
     Ok(iter)
 }
 
+#[derive(Debug, Clone, Copy)]
+
+pub struct Parameter {
+    // Define the strategy used by the geo sort
+    pub strategy: Strategy,
+    // Limit the number of docs in a single bucket to avoid unexpectedly large overhead
+    pub max_bucket_size: u64,
+    // Considering the errors of GPS and geographical calculations, distances less than distance_error_margin will be treated as equal
+    pub distance_error_margin: f64,
+}
+
+impl Default for Parameter {
+    fn default() -> Self {
+        Self { strategy: Strategy::default(), max_bucket_size: 1000, distance_error_margin: 1.0 }
+    }
+}
 /// Define the strategy used by the geo sort.
 /// The parameter represents the cache size, and, in the case of the Dynamic strategy,
 /// the point where we move from using the iterative strategy to the rtree.
@@ -71,26 +87,6 @@ impl Strategy {
     }
 }
 
-#[cfg(not(test))]
-fn default_max_bucket_size() -> u64 {
-    1000
-}
-
-#[cfg(test)]
-static DEFAULT_MAX_BUCKET_SIZE: std::sync::Mutex<u64> = std::sync::Mutex::new(1000);
-
-#[cfg(test)]
-pub fn set_default_max_bucket_size(n: u64) {
-    let mut size = DEFAULT_MAX_BUCKET_SIZE.lock().unwrap();
-    *size = n;
-}
-
-#[cfg(test)]
-fn default_max_bucket_size() -> u64 {
-    let max_size = *(DEFAULT_MAX_BUCKET_SIZE.lock().unwrap());
-    max_size
-}
-
 pub struct GeoSort<Q: RankingRuleQueryTrait> {
     query: Option<Q>,
 
@@ -111,22 +107,23 @@ pub struct GeoSort<Q: RankingRuleQueryTrait> {
 
 impl<Q: RankingRuleQueryTrait> GeoSort<Q> {
     pub fn new(
-        strategy: Strategy,
+        parameter: &Parameter,
         geo_faceted_docids: RoaringBitmap,
         point: [f64; 2],
         ascending: bool,
     ) -> Result<Self> {
+        let Parameter { strategy, max_bucket_size, distance_error_margin } = parameter;
         Ok(Self {
             query: None,
-            strategy,
+            strategy: *strategy,
             ascending,
             point,
             geo_candidates: geo_faceted_docids,
             field_ids: None,
             rtree: None,
             cached_sorted_docids: VecDeque::new(),
-            max_bucket_size: default_max_bucket_size(),
-            distance_error_margin: 1.0,
+            max_bucket_size: *max_bucket_size,
+            distance_error_margin: *distance_error_margin,
         })
     }
 
