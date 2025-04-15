@@ -1263,7 +1263,7 @@ async fn test_summarized_batch_deletion() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batcherStoppedBecause": "task with id 1 of type `taskDeletion` cannot be batched"
+      "batcherStoppedBecause": "a batch of tasks of type `taskDeletion` cannot be batched with any other type of task"
     }
     "###);
 }

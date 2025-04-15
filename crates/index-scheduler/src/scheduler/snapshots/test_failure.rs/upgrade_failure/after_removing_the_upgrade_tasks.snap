@@ -62,7 +62,7 @@ girafo: { number_of_documents: 0, field_distribution: {} }
 2 {uid: 2, details: {"primaryKey":"bone"}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"doggo":1}}, stop reason: "task with id 2 of type `indexCreation` cannot be batched", }
 3 {uid: 3, details: {"primaryKey":"bone"}, stats: {"totalNbTasks":1,"status":{"failed":1},"types":{"indexCreation":1},"indexUids":{"doggo":1}}, stop reason: "task with id 3 of type `indexCreation` cannot be batched", }
 4 {uid: 4, details: {"primaryKey":"leaves"}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"girafo":1}}, stop reason: "task with id 4 of type `indexCreation` cannot be batched", }
-5 {uid: 5, details: {"matchedTasks":1,"deletedTasks":1,"originalFilter":"types=upgradeDatabase"}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"taskDeletion":1},"indexUids":{}}, stop reason: "task with id 5 of type `taskDeletion` cannot be batched", }
+5 {uid: 5, details: {"matchedTasks":1,"deletedTasks":1,"originalFilter":"types=upgradeDatabase"}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"taskDeletion":1},"indexUids":{}}, stop reason: "a batch of tasks of type `taskDeletion` cannot be batched with any other type of task", }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:
 1 [1,]

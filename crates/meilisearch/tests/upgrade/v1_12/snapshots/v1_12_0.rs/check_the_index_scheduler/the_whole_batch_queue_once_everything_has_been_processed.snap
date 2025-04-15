@@ -24,7 +24,7 @@ source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batcherStoppedBecause": "task with id 25 of type `upgradeDatabase` cannot be batched"
+      "batcherStoppedBecause": "a batch of tasks of type `upgradeDatabase` cannot be batched with any other type of task"
     },
     {
       "uid": 23,
