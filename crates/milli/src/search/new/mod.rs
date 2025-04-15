@@ -300,7 +300,7 @@ fn get_ranking_rules_for_placeholder_search<'ctx>(
                     &mut ranking_rules,
                     &mut sorted_fields,
                     &mut geo_sorted,
-                    &geo_param,
+                    geo_param,
                 )?;
                 sort = true;
             }
@@ -376,7 +376,7 @@ fn get_ranking_rules_for_vector<'ctx>(
                     &mut ranking_rules,
                     &mut sorted_fields,
                     &mut geo_sorted,
-                    &geo_param,
+                    geo_param,
                 )?;
                 sort = true;
             }
@@ -478,7 +478,7 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
                     &mut ranking_rules,
                     &mut sorted_fields,
                     &mut geo_sorted,
-                    &geo_param,
+                    geo_param,
                 )?;
                 sort = true;
             }
@@ -515,7 +515,7 @@ fn resolve_sort_criteria<'ctx, Query: RankingRuleQueryTrait>(
     ranking_rules: &mut Vec<BoxRankingRule<'ctx, Query>>,
     sorted_fields: &mut HashSet<String>,
     geo_sorted: &mut bool,
-    geo_param: &geo_sort::Parameter,
+    geo_param: geo_sort::Parameter,
 ) -> Result<()> {
     let sort_criteria = sort_criteria.clone().unwrap_or_default();
     ranking_rules.reserve(sort_criteria.len());

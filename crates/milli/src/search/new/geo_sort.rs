@@ -40,7 +40,6 @@ fn facet_number_values<'a>(
 }
 
 #[derive(Debug, Clone, Copy)]
-
 pub struct Parameter {
     // Define the strategy used by the geo sort
     pub strategy: Strategy,
@@ -107,7 +106,7 @@ pub struct GeoSort<Q: RankingRuleQueryTrait> {
 
 impl<Q: RankingRuleQueryTrait> GeoSort<Q> {
     pub fn new(
-        parameter: &Parameter,
+        parameter: Parameter,
         geo_faceted_docids: RoaringBitmap,
         point: [f64; 2],
         ascending: bool,
@@ -115,15 +114,15 @@ impl<Q: RankingRuleQueryTrait> GeoSort<Q> {
         let Parameter { strategy, max_bucket_size, distance_error_margin } = parameter;
         Ok(Self {
             query: None,
-            strategy: *strategy,
+            strategy,
             ascending,
             point,
             geo_candidates: geo_faceted_docids,
             field_ids: None,
             rtree: None,
             cached_sorted_docids: VecDeque::new(),
-            max_bucket_size: *max_bucket_size,
-            distance_error_margin: *distance_error_margin,
+            max_bucket_size,
+            distance_error_margin,
         })
     }
 
