@@ -200,6 +200,9 @@ fn test_geo_sort_reached_max_bucket_size() {
     }
     let no_geo_ids = rtree_ids[10..].iter().collect_vec();
     insta::assert_snapshot!(format!("{no_geo_ids:?}"), @r#"["1", "4", "3", "2", "5"]"#);
+
+    // recover settings
+    crate::search::new::geo_sort::set_default_max_bucket_size(1000);
 }
 
 #[test]
