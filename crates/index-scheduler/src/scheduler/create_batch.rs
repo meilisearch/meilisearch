@@ -454,10 +454,8 @@ impl IndexScheduler {
                 current_batch.uid = batch_uid;
             }
             current_batch.processing(&mut tasks);
-            current_batch.reason(BatchStopReason::TaskCannotBeBatched {
-                kind: Kind::UpgradeDatabase,
-                id: tasks.first().unwrap().uid,
-            });
+            current_batch
+                .reason(BatchStopReason::TaskKindCannotBeBatched { kind: Kind::UpgradeDatabase });
             return Ok(Some((Batch::UpgradeDatabase { tasks }, current_batch)));
         }
 
@@ -479,10 +477,8 @@ impl IndexScheduler {
         if !to_delete.is_empty() {
             let mut tasks = self.queue.tasks.get_existing_tasks(rtxn, to_delete)?;
             current_batch.processing(&mut tasks);
-            current_batch.reason(BatchStopReason::TaskCannotBeBatched {
-                kind: Kind::TaskDeletion,
-                id: tasks.first().unwrap().uid,
-            });
+            current_batch
+                .reason(BatchStopReason::TaskKindCannotBeBatched { kind: Kind::TaskDeletion });
             return Ok(Some((Batch::TaskDeletions(tasks), current_batch)));
         }
 
@@ -491,10 +487,8 @@ impl IndexScheduler {
         if !to_snapshot.is_empty() {
             let mut tasks = self.queue.tasks.get_existing_tasks(rtxn, to_snapshot)?;
             current_batch.processing(&mut tasks);
-            current_batch.reason(BatchStopReason::TaskCannotBeBatched {
-                kind: Kind::SnapshotCreation,
-                id: tasks.first().unwrap().uid,
-            });
+            current_batch
+                .reason(BatchStopReason::TaskKindCannotBeBatched { kind: Kind::SnapshotCreation });
             return Ok(Some((Batch::SnapshotCreation(tasks), current_batch)));
         }
 
