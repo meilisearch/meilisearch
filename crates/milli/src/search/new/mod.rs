@@ -45,6 +45,7 @@ use sort::Sort;
 
 use self::distinct::facet_string_values;
 use self::geo_sort::GeoSort;
+pub use self::geo_sort::Parameter as GeoSortParameter;
 pub use self::geo_sort::Strategy as GeoSortStrategy;
 use self::graph_based_ranking_rule::Words;
 use self::interner::Interned;
@@ -274,7 +275,7 @@ fn resolve_negative_phrases(
 fn get_ranking_rules_for_placeholder_search<'ctx>(
     ctx: &SearchContext<'ctx>,
     sort_criteria: &Option<Vec<AscDesc>>,
-    geo_strategy: geo_sort::Strategy,
+    geo_param: geo_sort::Parameter,
 ) -> Result<Vec<BoxRankingRule<'ctx, PlaceholderQuery>>> {
     let mut sort = false;
     let mut sorted_fields = HashSet::new();
@@ -299,7 +300,7 @@ fn get_ranking_rules_for_placeholder_search<'ctx>(
                     &mut ranking_rules,
                     &mut sorted_fields,
                     &mut geo_sorted,
-                    geo_strategy,
+                    geo_param,
                 )?;
                 sort = true;
             }
@@ -326,7 +327,7 @@ fn get_ranking_rules_for_placeholder_search<'ctx>(
 fn get_ranking_rules_for_vector<'ctx>(
     ctx: &SearchContext<'ctx>,
     sort_criteria: &Option<Vec<AscDesc>>,
-    geo_strategy: geo_sort::Strategy,
+    geo_param: geo_sort::Parameter,
     limit_plus_offset: usize,
     target: &[f32],
     embedder_name: &str,
@@ -375,7 +376,7 @@ fn get_ranking_rules_for_vector<'ctx>(
                     &mut ranking_rules,
                     &mut sorted_fields,
                     &mut geo_sorted,
-                    geo_strategy,
+                    geo_param,
                 )?;
                 sort = true;
             }
@@ -403,7 +404,7 @@ fn get_ranking_rules_for_vector<'ctx>(
 fn get_ranking_rules_for_query_graph_search<'ctx>(
     ctx: &SearchContext<'ctx>,
     sort_criteria: &Option<Vec<AscDesc>>,
-    geo_strategy: geo_sort::Strategy,
+    geo_param: geo_sort::Parameter,
     terms_matching_strategy: TermsMatchingStrategy,
 ) -> Result<Vec<BoxRankingRule<'ctx, QueryGraph>>> {
     // query graph search
@@ -477,7 +478,7 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
                     &mut ranking_rules,
                     &mut sorted_fields,
                     &mut geo_sorted,
-                    geo_strategy,
+                    geo_param,
                 )?;
                 sort = true;
             }
@@ -514,7 +515,7 @@ fn resolve_sort_criteria<'ctx, Query: RankingRuleQueryTrait>(
     ranking_rules: &mut Vec<BoxRankingRule<'ctx, Query>>,
     sorted_fields: &mut HashSet<String>,
     geo_sorted: &mut bool,
-    geo_strategy: geo_sort::Strategy,
+    geo_param: geo_sort::Parameter,
 ) -> Result<()> {
     let sort_criteria = sort_criteria.clone().unwrap_or_default();
     ranking_rules.reserve(sort_criteria.len());
@@ -540,7 +541,7 @@ fn resolve_sort_criteria<'ctx, Query: RankingRuleQueryTrait>(
                 }
                 let geo_faceted_docids = ctx.index.geo_faceted_documents_ids(ctx.txn)?;
                 ranking_rules.push(Box::new(GeoSort::new(
-                    geo_strategy,
+                    geo_param,
                     geo_faceted_docids,
                     point,
                     true,
@@ -552,7 +553,7 @@ fn resolve_sort_criteria<'ctx, Query: RankingRuleQueryTrait>(
                 }
                 let geo_faceted_docids = ctx.index.geo_faceted_documents_ids(ctx.txn)?;
                 ranking_rules.push(Box::new(GeoSort::new(
-                    geo_strategy,
+                    geo_param,
                     geo_faceted_docids,
                     point,
                     false,
@@ -584,7 +585,7 @@ pub fn execute_vector_search(
     universe: RoaringBitmap,
     sort_criteria: &Option<Vec<AscDesc>>,
     distinct: &Option<String>,
-    geo_strategy: geo_sort::Strategy,
+    geo_param: geo_sort::Parameter,
     from: usize,
     length: usize,
     embedder_name: &str,
@@ -600,7 +601,7 @@ pub fn execute_vector_search(
     let ranking_rules = get_ranking_rules_for_vector(
         ctx,
         sort_criteria,
-        geo_strategy,
+        geo_param,
         from + length,
         vector,
         embedder_name,
@@ -647,7 +648,7 @@ pub fn execute_search(
     mut universe: RoaringBitmap,
     sort_criteria: &Option<Vec<AscDesc>>,
     distinct: &Option<String>,
-    geo_strategy: geo_sort::Strategy,
+    geo_param: geo_sort::Parameter,
     from: usize,
     length: usize,
     words_limit: Option<usize>,
@@ -761,7 +762,7 @@ pub fn execute_search(
         let ranking_rules = get_ranking_rules_for_query_graph_search(
             ctx,
             sort_criteria,
-            geo_strategy,
+            geo_param,
             terms_matching_strategy,
         )?;
 
@@ -783,7 +784,7 @@ pub fn execute_search(
         )?
     } else {
         let ranking_rules =
-            get_ranking_rules_for_placeholder_search(ctx, sort_criteria, geo_strategy)?;
+            get_ranking_rules_for_placeholder_search(ctx, sort_criteria, geo_param)?;
         bucket_sort(
             ctx,
             ranking_rules,
