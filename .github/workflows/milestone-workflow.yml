@@ -163,15 +163,18 @@ jobs:
           RULESET_ID: 4253297
           BRANCH_NAME: ${{ github.event.inputs.branch_name }}
         run: |
+          echo "RULESET_ID: ${{ env.RULESET_ID }}"
+          echo "BRANCH_NAME: ${{ env.BRANCH_NAME }}"
+
           # Get current ruleset conditions
-          CONDITIONS=$(gh api repos/meilisearch/meilisearch/rulesets/$RULESET_ID --jq '{ conditions: .conditions }')
+          CONDITIONS=$(gh api repos/meilisearch/meilisearch/rulesets/${{ env.RULESET_ID }} --jq '{ conditions: .conditions }')
 
           # Update the conditions by appending the milestone version
-          UPDATED_CONDITIONS=$(echo $CONDITIONS | jq '.conditions.ref_name.include += ["refs/heads/release-'$MILESTONE_VERSION'"]')
+          UPDATED_CONDITIONS=$(echo $CONDITIONS | jq '.conditions.ref_name.include += ["refs/heads/release-'${{ env.MILESTONE_VERSION }}'"]')
 
           # Update the ruleset from stdin (-)
           echo $UPDATED_CONDITIONS |
-            gh api repos/meilisearch/meilisearch/rulesets/$RULESET_ID \
+            gh api repos/meilisearch/meilisearch/rulesets/${{ env.RULESET_ID }} \
               --method PUT \
               -H "Accept: application/vnd.github+json" \
               -H "X-GitHub-Api-Version: 2022-11-28" \
