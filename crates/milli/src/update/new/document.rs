@@ -470,6 +470,60 @@ impl<'doc> Versions<'doc> {
         Ok(Some(Self::single(data)))
     }
 
+    pub fn multiple_with_edits(
+        doc: Option<rhai::Map>,
+        mut versions: impl Iterator<Item = Result<RawMap<'doc, FxBuildHasher>>>,
+        engine: &rhai::Engine,
+        edit_function: &rhai::AST,
+        doc_alloc: &'doc bumpalo::Bump,
+    ) -> Result<Option<Self>> {
+        let Some(data) = versions.next() else { return Ok(None) };
+
+        let mut doc = doc.unwrap_or_default();
+        let mut data = data?;
+        for version in versions {
+            let version = version?;
+            for (field, value) in version {
+                data.insert(field, value);
+            }
+
+            let mut scope = rhai::Scope::new();
+            data.iter().for_each(|(k, v)| {
+                doc.insert(k.into(), serde_json::from_str(v.get()).unwrap());
+            });
+            scope.push("doc", doc.clone());
+
+            let _ = engine.eval_ast_with_scope::<rhai::Dynamic>(&mut scope, edit_function).unwrap();
+            data = RawMap::with_hasher_in(FxBuildHasher, doc_alloc);
+            for (key, value) in scope.get_value::<rhai::Map>("doc").unwrap() {
+                let mut vec = bumpalo::collections::Vec::new_in(doc_alloc);
+                serde_json::to_writer(&mut vec, &value).unwrap();
+                let key = doc_alloc.alloc_str(key.as_str());
+                let raw_value = serde_json::from_slice(vec.into_bump_slice()).unwrap();
+                data.insert(key, raw_value);
+            }
+        }
+
+        // We must also run the code after the last change
+        let mut scope = rhai::Scope::new();
+        data.iter().for_each(|(k, v)| {
+            doc.insert(k.into(), serde_json::from_str(v.get()).unwrap());
+        });
+        scope.push("doc", doc);
+
+        let _ = engine.eval_ast_with_scope::<rhai::Dynamic>(&mut scope, edit_function).unwrap();
+        data = RawMap::with_hasher_in(FxBuildHasher, doc_alloc);
+        for (key, value) in scope.get_value::<rhai::Map>("doc").unwrap() {
+            let mut vec = bumpalo::collections::Vec::new_in(doc_alloc);
+            serde_json::to_writer(&mut vec, &value).unwrap();
+            let key = doc_alloc.alloc_str(key.as_str());
+            let raw_value = serde_json::from_slice(vec.into_bump_slice()).unwrap();
+            data.insert(key, raw_value);
+        }
+
+        Ok(Some(Self::single(data)))
+    }
+
     pub fn single(version: RawMap<'doc, FxBuildHasher>) -> Self {
         Self { data: version }
     }
