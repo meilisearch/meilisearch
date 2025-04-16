@@ -164,15 +164,8 @@ impl<'pl> DocumentOperation<'pl> {
 
         let docids_version_offsets = docids_version_offsets.into_bump_slice();
         let engine = rhai::Engine::new();
-        let ast = Some(
-            r#"
-            let incr = doc.remove("incr_likes");
-            if incr != () {
-                doc.likes = (doc.likes ?? 0) + incr;
-            }
-        "#,
-        )
-        .map(|f| engine.compile(f).unwrap());
+        // Make sure to correctly setup the engine and remove all settings
+        let ast = index.execute_after_update(rtxn)?.map(|f| engine.compile(f).unwrap());
         let fidmap = index.fields_ids_map(rtxn)?;
 
         Ok((
