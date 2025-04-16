@@ -433,7 +433,7 @@ impl IndexScheduler {
     }
 
     /// Return the max size of task allowed until the task queue stop receiving.
-    pub fn remaining_size_until_task_queu_stop(&self) -> Result<u64> {
+    pub fn remaining_size_until_task_queue_stop(&self) -> Result<u64> {
         Ok((self.env.info().map_size as u64 * TASK_SCHEDULER_SIZE_THRESHOLD_PERCENT_INT / 100)
             .saturating_sub(self.used_size()?))
     }
