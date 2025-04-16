@@ -77,7 +77,9 @@ where
             let res = fut.await?;
 
             crate::metrics::MEILISEARCH_HTTP_REQUESTS_TOTAL
-                .with_label_values(&[&request_method, &metric_path, res.status().as_str()])
+                .with_label_values(
+                    &[request_method, metric_path, res.status().as_str().to_string()][..],
+                )
                 .inc();
 
             if let Some(histogram_timer) = histogram_timer {
