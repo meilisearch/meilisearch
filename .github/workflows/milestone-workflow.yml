@@ -150,6 +150,7 @@ jobs:
 
   update-ruleset:
     runs-on: ubuntu-latest
+    if: github.event.action == 'created'
     steps:
       - uses: actions/checkout@v3
       - name: Install jq
