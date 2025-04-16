@@ -18,6 +18,7 @@ use crate::documents::PrimaryKey;
 use crate::progress::{AtomicPayloadStep, Progress};
 use crate::update::new::document::{DocumentContext, Versions};
 use crate::update::new::indexer::enterprise_edition::sharding::Shards;
+use crate::update::new::indexer::update_by_function::obkv_to_rhaimap;
 use crate::update::new::steps::IndexingStep;
 use crate::update::new::thread_local::MostlySend;
 use crate::update::new::{DocumentIdentifiers, Insertion, Update};
@@ -162,7 +163,23 @@ impl<'pl> DocumentOperation<'pl> {
             .sort_unstable_by_key(|(_, po)| first_update_pointer(&po.operations).unwrap_or(0));
 
         let docids_version_offsets = docids_version_offsets.into_bump_slice();
-        Ok((DocumentOperationChanges { docids_version_offsets }, operations_stats, primary_key))
+        let engine = rhai::Engine::new();
+        let ast = Some(
+            r#"
+            let incr = doc.remove("incr_likes");
+            if incr != () {
+                doc.likes = (doc.likes ?? 0) + incr;
+            }
+        "#,
+        )
+        .map(|f| engine.compile(f).unwrap());
+        let fidmap = index.fields_ids_map(rtxn)?;
+
+        Ok((
+            DocumentOperationChanges { docids_version_offsets, engine, ast, fidmap },
+            operations_stats,
+            primary_key,
+        ))
     }
 }
 
@@ -435,7 +452,15 @@ impl<'pl> DocumentChanges<'pl> for DocumentOperationChanges<'pl> {
         'pl: 'doc,
     {
         let (external_doc, payload_operations) = item;
-        payload_operations.merge(external_doc, &context.doc_alloc)
+        payload_operations.merge(
+            &context.rtxn,
+            context.index,
+            &self.fidmap,
+            &self.engine,
+            self.ast.as_ref(),
+            external_doc,
+            &context.doc_alloc,
+        )
     }
 
     fn len(&self) -> usize {
@@ -444,6 +469,9 @@ impl<'pl> DocumentChanges<'pl> for DocumentOperationChanges<'pl> {
 }
 
 pub struct DocumentOperationChanges<'pl> {
+    engine: rhai::Engine,
+    ast: Option<rhai::AST>,
+    fidmap: FieldsIdsMap,
     docids_version_offsets: &'pl [(&'pl str, PayloadOperations<'pl>)],
 }
 
@@ -506,10 +534,13 @@ impl<'pl> PayloadOperations<'pl> {
     }
 
     /// Returns only the most recent version of a document based on the updates from the payloads.
-    ///
-    /// This function is only meant to be used when doing a replacement and not an update.
     fn merge<'doc>(
         &self,
+        rtxn: &heed::RoTxn,
+        index: &Index,
+        fidmap: &FieldsIdsMap,
+        engine: &rhai::Engine,
+        ast: Option<&rhai::AST>,
         external_doc: &'doc str,
         doc_alloc: &'doc Bump,
     ) -> Result<Option<DocumentChange<'doc>>>
@@ -573,7 +604,21 @@ impl<'pl> PayloadOperations<'pl> {
                     Ok(document)
                 });
 
-                let Some(versions) = Versions::multiple(versions)? else { return Ok(None) };
+                let versions = match ast {
+                    Some(ast) => {
+                        let doc = index
+                            .documents
+                            .get(rtxn, &self.docid)?
+                            .map(|obkv| obkv_to_rhaimap(obkv, fidmap))
+                            .transpose()?;
+                        Versions::multiple_with_edits(doc, versions, engine, ast, doc_alloc)?
+                    }
+                    None => Versions::multiple(versions)?,
+                };
+
+                let Some(versions) = versions else {
+                    return Ok(None);
+                };
 
                 if self.is_new {
                     Ok(Some(DocumentChange::Insertion(Insertion::create(

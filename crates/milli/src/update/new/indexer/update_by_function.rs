@@ -187,7 +187,7 @@ impl<'index> DocumentChanges<'index> for UpdateByFunctionChanges<'index> {
     }
 }
 
-fn obkv_to_rhaimap(obkv: &KvReaderFieldId, fields_ids_map: &FieldsIdsMap) -> Result<rhai::Map> {
+pub fn obkv_to_rhaimap(obkv: &KvReaderFieldId, fields_ids_map: &FieldsIdsMap) -> Result<rhai::Map> {
     let all_keys = obkv.iter().map(|(k, _v)| k).collect::<Vec<_>>();
     let map: Result<rhai::Map> = all_keys
         .iter()
