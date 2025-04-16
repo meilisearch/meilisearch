@@ -326,6 +326,12 @@ pub struct Settings<T> {
     #[schema(value_type = Option<VectorStoreBackend>)]
     pub vector_store: Setting<VectorStoreBackend>,
 
+    /// Function to execute after an update
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[deserr(default, error = DeserrJsonError<InvalidSettingsexecuteAfterUpdate>)]
+    #[schema(value_type = Option<String>, example = json!("doc.likes += 1"))]
+    pub execute_after_update: Setting<String>,
+
     #[serde(skip)]
     #[deserr(skip)]
     pub _kind: PhantomData<T>,
@@ -393,6 +399,7 @@ impl Settings<Checked> {
             prefix_search: Setting::Reset,
             chat: Setting::Reset,
             vector_store: Setting::Reset,
+            execute_after_update: Setting::Reset,
             _kind: PhantomData,
         }
     }
@@ -421,6 +428,7 @@ impl Settings<Checked> {
             prefix_search,
             chat,
             vector_store,
+            execute_after_update,
             _kind,
         } = self;
 
@@ -447,6 +455,7 @@ impl Settings<Checked> {
             prefix_search,
             vector_store,
             chat,
+            execute_after_update,
             _kind: PhantomData,
         }
     }
@@ -499,6 +508,7 @@ impl Settings<Unchecked> {
             prefix_search: self.prefix_search,
             chat: self.chat,
             vector_store: self.vector_store,
+            execute_after_update: self.execute_after_update,
             _kind: PhantomData,
         }
     }
@@ -580,6 +590,10 @@ impl Settings<Unchecked> {
             prefix_search: other.prefix_search.or(self.prefix_search),
             chat: other.chat.clone().or(self.chat.clone()),
             vector_store: other.vector_store.or(self.vector_store),
+            execute_after_update: other
+                .execute_after_update
+                .clone()
+                .or(self.execute_after_update.clone()),
             _kind: PhantomData,
         }
     }
@@ -620,6 +634,7 @@ pub fn apply_settings_to_builder(
         prefix_search,
         chat,
         vector_store,
+        execute_after_update,
         _kind,
     } = settings;
 
@@ -843,6 +858,14 @@ pub fn apply_settings_to_builder(
         Setting::Reset => builder.reset_vector_store(),
         Setting::NotSet => (),
     }
+
+    match execute_after_update {
+        Setting::Set(execute_after_update) => {
+            builder.set_execute_after_update(execute_after_update.clone())
+        }
+        Setting::Reset => builder.reset_execute_after_update(),
+        Setting::NotSet => (),
+    }
 }
 
 pub enum SecretPolicy {
@@ -942,13 +965,13 @@ pub fn settings(
         .collect();
 
     let vector_store = index.get_vector_store(rtxn)?;
-
     let embedders = Setting::Set(embedders);
     let search_cutoff_ms = index.search_cutoff(rtxn)?;
     let localized_attributes_rules = index.localized_attributes_rules(rtxn)?;
     let prefix_search = index.prefix_search(rtxn)?.map(PrefixSearchSettings::from);
     let facet_search = index.facet_search(rtxn)?;
     let chat = index.chat_config(rtxn).map(ChatSettings::from)?;
+    let execute_after_update = index.execute_after_update(rtxn)?;
 
     let mut settings = Settings {
         displayed_attributes: match displayed_attributes {
@@ -992,6 +1015,10 @@ pub fn settings(
         vector_store: match vector_store {
             Some(vector_store) => Setting::Set(vector_store),
             None => Setting::Reset,
+        },
+        execute_after_update: match execute_after_update {
+            Some(function) => Setting::Set(function.to_string()),
+            None => Setting::NotSet,
         },
         _kind: PhantomData,
     };
@@ -1223,6 +1250,7 @@ pub(crate) mod test {
             prefix_search: Setting::NotSet,
             chat: Setting::NotSet,
             vector_store: Setting::NotSet,
+            execute_after_update: Setting::NotSet,
             _kind: PhantomData::<Unchecked>,
         };
 
@@ -1256,7 +1284,7 @@ pub(crate) mod test {
             prefix_search: Setting::NotSet,
             chat: Setting::NotSet,
             vector_store: Setting::NotSet,
-
+            execute_after_update: Setting::NotSet,
             _kind: PhantomData::<Unchecked>,
         };
 
