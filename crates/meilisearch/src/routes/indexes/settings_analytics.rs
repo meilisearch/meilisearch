@@ -42,6 +42,7 @@ pub struct SettingsAnalytics {
     pub prefix_search: PrefixSearchAnalytics,
     pub chat: ChatAnalytics,
     pub vector_store: VectorStoreAnalytics,
+    pub execute_after_update: ExecuteAfterUpdateAnalytics,
 }
 
 impl Aggregate for SettingsAnalytics {
@@ -196,6 +197,9 @@ impl Aggregate for SettingsAnalytics {
             facet_search: FacetSearchAnalytics {
                 set: new.facet_search.set | self.facet_search.set,
                 value: new.facet_search.value.or(self.facet_search.value),
+            },
+            execute_after_update: ExecuteAfterUpdateAnalytics {
+                set: new.execute_after_update.set | self.execute_after_update.set,
             },
             prefix_search: PrefixSearchAnalytics {
                 set: new.prefix_search.set | self.prefix_search.set,
@@ -666,6 +670,21 @@ impl FacetSearchAnalytics {
 
     pub fn into_settings(self) -> SettingsAnalytics {
         SettingsAnalytics { facet_search: self, ..Default::default() }
+    }
+}
+
+#[derive(Serialize, Default)]
+pub struct ExecuteAfterUpdateAnalytics {
+    pub set: bool,
+}
+
+impl ExecuteAfterUpdateAnalytics {
+    pub fn new(distinct: Option<&String>) -> Self {
+        Self { set: distinct.is_some() }
+    }
+
+    pub fn into_settings(self) -> SettingsAnalytics {
+        SettingsAnalytics { execute_after_update: self, ..Default::default() }
     }
 }
 
