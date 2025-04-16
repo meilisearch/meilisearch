@@ -678,7 +678,7 @@ impl<'pl> PayloadOperations<'pl> {
                     return Ok(None);
                 };
 
-                if self.is_new {
+                if self.is_new || ast.is_some() {
                     Ok(Some(DocumentChange::Insertion(Insertion::create(
                         self.docid,
                         external_doc,
