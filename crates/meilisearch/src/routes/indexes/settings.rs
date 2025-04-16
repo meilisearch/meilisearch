@@ -499,6 +499,17 @@ make_setting_routes!(
         analytics: FacetSearchAnalytics
     },
     {
+        route: "/execute-after-update",
+        update_verb: put,
+        value_type: String,
+        err_type: meilisearch_types::deserr::DeserrJsonError<
+            meilisearch_types::error::deserr_codes::InvalidSettingsexecuteAfterUpdate,
+        >,
+        attr: execute_after_update,
+        camelcase_attr: "executeAfterUpdate",
+        analytics: ExecuteAfterUpdateAnalytics
+    },
+    {
         route: "/prefix-search",
         update_verb: put,
         value_type: meilisearch_types::settings::PrefixSearchSettings,
@@ -619,6 +630,9 @@ pub async fn update_all(
                 new_settings.non_separator_tokens.as_ref().set(),
             ),
             facet_search: FacetSearchAnalytics::new(new_settings.facet_search.as_ref().set()),
+            execute_after_update: ExecuteAfterUpdateAnalytics::new(
+                new_settings.execute_after_update.as_ref().set(),
+            ),
             prefix_search: PrefixSearchAnalytics::new(new_settings.prefix_search.as_ref().set()),
             chat: ChatAnalytics::new(new_settings.chat.as_ref().set()),
             vector_store: VectorStoreAnalytics::new(new_settings.vector_store.as_ref().set()),

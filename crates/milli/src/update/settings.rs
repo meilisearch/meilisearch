@@ -202,6 +202,7 @@ pub struct Settings<'a, 't, 'i> {
     facet_search: Setting<bool>,
     chat: Setting<ChatSettings>,
     vector_store: Setting<VectorStoreBackend>,
+    execute_after_update: Setting<String>,
 }
 
 impl<'a, 't, 'i> Settings<'a, 't, 'i> {
@@ -242,6 +243,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             facet_search: Setting::NotSet,
             chat: Setting::NotSet,
             vector_store: Setting::NotSet,
+            execute_after_update: Setting::NotSet,
             indexer_config,
         }
     }
@@ -486,6 +488,14 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
 
     pub fn reset_vector_store(&mut self) {
         self.vector_store = Setting::Reset;
+    }
+
+    pub fn set_execute_after_update(&mut self, value: String) {
+        self.execute_after_update = Setting::Set(value);
+    }
+
+    pub fn reset_execute_after_update(&mut self) {
+        self.execute_after_update = Setting::Reset;
     }
 
     #[tracing::instrument(
@@ -1059,6 +1069,18 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         Ok(changed)
     }
 
+    fn update_execute_after_update(&mut self) -> Result<()> {
+        match self.execute_after_update.as_ref() {
+            Setting::Set(new) => {
+                self.index.put_execute_after_update(self.wtxn, &new).map_err(Into::into)
+            }
+            Setting::Reset => {
+                self.index.delete_execute_after_update(self.wtxn).map(drop).map_err(Into::into)
+            }
+            Setting::NotSet => Ok(()),
+        }
+    }
+
     fn update_embedding_configs(&mut self) -> Result<BTreeMap<String, EmbedderAction>> {
         match std::mem::take(&mut self.embedder_settings) {
             Setting::Set(configs) => self.update_embedding_configs_set(configs),
@@ -1469,6 +1491,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         self.update_proximity_precision()?;
         self.update_prefix_search()?;
         self.update_facet_search()?;
+        self.update_execute_after_update()?;
         self.update_localized_attributes_rules()?;
         self.update_disabled_typos_terms()?;
         self.update_chat_config()?;
