@@ -892,6 +892,7 @@ fn test_correct_settings_init() {
                 disable_on_numbers,
                 chat,
                 vector_store,
+                execute_after_update,
             } = settings;
             assert!(matches!(searchable_fields, Setting::NotSet));
             assert!(matches!(displayed_fields, Setting::NotSet));
@@ -922,6 +923,7 @@ fn test_correct_settings_init() {
             assert!(matches!(disable_on_numbers, Setting::NotSet));
             assert!(matches!(chat, Setting::NotSet));
             assert!(matches!(vector_store, Setting::NotSet));
+            assert!(matches!(execute_after_update, Setting::NotSet));
         })
         .unwrap();
 }

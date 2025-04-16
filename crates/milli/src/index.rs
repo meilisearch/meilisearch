@@ -84,6 +84,7 @@ pub mod main_key {
     pub const SEARCH_CUTOFF: &str = "search_cutoff";
     pub const LOCALIZED_ATTRIBUTES_RULES: &str = "localized_attributes_rules";
     pub const FACET_SEARCH: &str = "facet_search";
+    pub const EXECUTE_AFTER_UPDATE: &str = "execute-after-update";
     pub const PREFIX_SEARCH: &str = "prefix_search";
     pub const DOCUMENTS_STATS: &str = "documents_stats";
     pub const DISABLED_TYPOS_TERMS: &str = "disabled_typos_terms";
@@ -1766,6 +1767,22 @@ impl Index {
 
     pub(crate) fn delete_chat_config(&self, txn: &mut RwTxn<'_>) -> heed::Result<bool> {
         self.main.remap_key_type::<Str>().delete(txn, main_key::CHAT)
+    }
+
+    pub fn execute_after_update<'t>(&self, txn: &'t RoTxn<'_>) -> heed::Result<Option<&'t str>> {
+        self.main.remap_types::<Str, Str>().get(txn, main_key::EXECUTE_AFTER_UPDATE)
+    }
+
+    pub(crate) fn put_execute_after_update(
+        &self,
+        txn: &mut RwTxn<'_>,
+        val: &str,
+    ) -> heed::Result<()> {
+        self.main.remap_types::<Str, Str>().put(txn, main_key::EXECUTE_AFTER_UPDATE, &val)
+    }
+
+    pub(crate) fn delete_execute_after_update(&self, txn: &mut RwTxn<'_>) -> heed::Result<bool> {
+        self.main.remap_key_type::<Str>().delete(txn, main_key::EXECUTE_AFTER_UPDATE)
     }
 
     pub fn localized_attributes_rules(

@@ -346,6 +346,7 @@ pub(crate) mod test {
             prefix_search: Setting::NotSet,
             chat: Setting::NotSet,
             vector_store: Setting::NotSet,
+            execute_after_update: Setting::NotSet,
             _kind: std::marker::PhantomData,
         };
         settings.check()
