@@ -23,12 +23,6 @@
   <a href="https://github.com/meilisearch/meilisearch/queue"><img alt="Merge Queues enabled" src="https://img.shields.io/badge/Merge_Queues-enabled-%2357cf60?logo=github"></a>
 </p>
 
-<p align="center" name="ph-banner">
-  <a href="https://www.producthunt.com/posts/meilisearch-ai">
-    <img src="assets/ph-banner.png" alt="Meilisearch AI-powered search general availability announcement on ProductHunt">
-  </a>
-</p>
-
 <p align="center">⚡ A lightning-fast search engine that fits effortlessly into your apps, websites, and workflow 🔍</p>
 
 [Meilisearch](https://www.meilisearch.com?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=intro) helps you shape a delightful search experience in a snap, offering features that work out of the box to speed up your workflow.
