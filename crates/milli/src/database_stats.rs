@@ -1,7 +1,12 @@
-use heed::types::Bytes;
+use std::mem;
+
 use heed::Database;
+use heed::DatabaseStat;
 use heed::RoTxn;
+use heed::Unspecified;
 use serde::{Deserialize, Serialize};
+
+use crate::BEU32;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
@@ -20,58 +25,24 @@ impl DatabaseStats {
     ///
     /// This function iterates over the whole database and computes the stats.
     /// It is not efficient and should be cached somewhere.
-    pub(crate) fn new(database: Database<Bytes, Bytes>, rtxn: &RoTxn<'_>) -> heed::Result<Self> {
-        let mut database_stats =
-            Self { number_of_entries: 0, total_key_size: 0, total_value_size: 0 };
+    pub(crate) fn new(
+        database: Database<BEU32, Unspecified>,
+        rtxn: &RoTxn<'_>,
+    ) -> heed::Result<Self> {
+        let DatabaseStat { page_size, depth: _, branch_pages, leaf_pages, overflow_pages, entries } =
+            database.stat(rtxn)?;
 
-        let mut iter = database.iter(rtxn)?;
-        while let Some((key, value)) = iter.next().transpose()? {
-            let key_size = key.len() as u64;
-            let value_size = value.len() as u64;
-            database_stats.total_key_size += key_size;
-            database_stats.total_value_size += value_size;
-        }
+        // We first take the total size without overflow pages as the overflow pages contains the values and only that.
+        let total_size = (branch_pages + leaf_pages + overflow_pages) * page_size as usize;
+        // We compute an estimated size for the keys.
+        let total_key_size = entries * (mem::size_of::<u32>() + 4);
+        let total_value_size = total_size - total_key_size;
 
-        database_stats.number_of_entries = database.len(rtxn)?;
-
-        Ok(database_stats)
-    }
-
-    /// Recomputes the stats of the database and returns the new stats.
-    ///
-    /// This function is used to update the stats of the database when some keys are modified.
-    /// It is more efficient than the `new` function because it does not iterate over the whole database but only the modified keys comparing the before and after states.
-    pub(crate) fn recompute<I, K>(
-        mut stats: Self,
-        database: Database<Bytes, Bytes>,
-        before_rtxn: &RoTxn<'_>,
-        after_rtxn: &RoTxn<'_>,
-        modified_keys: I,
-    ) -> heed::Result<Self>
-    where
-        I: IntoIterator<Item = K>,
-        K: AsRef<[u8]>,
-    {
-        for key in modified_keys {
-            let key = key.as_ref();
-            if let Some(value) = database.get(after_rtxn, key)? {
-                let key_size = key.len() as u64;
-                let value_size = value.len() as u64;
-                stats.total_key_size = stats.total_key_size.saturating_add(key_size);
-                stats.total_value_size = stats.total_value_size.saturating_add(value_size);
-            }
-
-            if let Some(value) = database.get(before_rtxn, key)? {
-                let key_size = key.len() as u64;
-                let value_size = value.len() as u64;
-                stats.total_key_size = stats.total_key_size.saturating_sub(key_size);
-                stats.total_value_size = stats.total_value_size.saturating_sub(value_size);
-            }
-        }
-
-        stats.number_of_entries = database.len(after_rtxn)?;
-
-        Ok(stats)
+        Ok(Self {
+            number_of_entries: entries as u64,
+            total_key_size: total_key_size as u64,
+            total_value_size: total_value_size as u64,
+        })
     }
 
     pub fn average_key_size(&self) -> u64 {
@@ -84,6 +55,10 @@ impl DatabaseStats {
 
     pub fn number_of_entries(&self) -> u64 {
         self.number_of_entries
+    }
+
+    pub fn total_size(&self) -> u64 {
+        self.total_key_size + self.total_value_size
     }
 
     pub fn total_key_size(&self) -> u64 {

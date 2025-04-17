@@ -30,14 +30,10 @@ actix-web = { version = "4.9.0", default-features = false, features = [
 anyhow = { version = "1.0.95", features = ["backtrace"] }
 async-trait = "0.1.85"
 bstr = "1.11.3"
-byte-unit = { version = "5.1.6", default-features = false, features = [
-    "std",
-    "byte",
-    "serde",
-] }
+byte-unit = { version = "5.1.6", features = ["serde"] }
 bytes = "1.9.0"
 clap = { version = "4.5.24", features = ["derive", "env"] }
-crossbeam-channel = "0.5.14"
+crossbeam-channel = "0.5.15"
 deserr = { version = "0.6.3", features = ["actix-web"] }
 dump = { path = "../dump" }
 either = "1.13.0"
@@ -64,7 +60,7 @@ parking_lot = "0.12.3"
 permissive-json-pointer = { path = "../permissive-json-pointer" }
 pin-project-lite = "0.2.16"
 platform-dirs = "0.3.0"
-prometheus = { version = "0.13.4", features = ["process"] }
+prometheus = { version = "0.14.0", features = ["process"] }
 rand = "0.8.5"
 rayon = "1.10.0"
 regex = "1.11.1"
@@ -92,7 +88,7 @@ time = { version = "0.3.37", features = [
     "parsing",
     "macros",
 ] }
-tokio = { version = "1.42.0", features = ["full"] }
+tokio = { version = "1.43.1", features = ["full"] }
 toml = "0.8.19"
 uuid = { version = "1.11.0", features = ["serde", "v4"] }
 serde_urlencoded = "0.7.1"
@@ -140,7 +136,7 @@ reqwest = { version = "0.12.12", features = [
 sha-1 = { version = "0.10.1", optional = true }
 static-files = { version = "0.2.4", optional = true }
 tempfile = { version = "3.15.0", optional = true }
-zip = { version = "2.2.2", optional = true }
+zip = { version = "2.3.0", optional = true }
 
 [features]
 default = ["meilisearch-types/all-tokenizations", "mini-dashboard"]
@@ -170,5 +166,5 @@ german = ["meilisearch-types/german"]
 turkish = ["meilisearch-types/turkish"]
 
 [package.metadata.mini-dashboard]
-assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.2.18/build.zip"
-sha1 = "b408a30dcb6e20cddb0c153c23385bcac4c8e912"
+assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.2.19/build.zip"
+sha1 = "7974430d5277c97f67cf6e95eec6faaac2788834"

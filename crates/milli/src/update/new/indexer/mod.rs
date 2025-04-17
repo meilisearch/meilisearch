@@ -234,7 +234,6 @@ where
         embedders,
         field_distribution,
         document_ids,
-        modified_docids,
     )?;
 
     Ok(congestion)

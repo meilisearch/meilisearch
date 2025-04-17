@@ -28,6 +28,7 @@ pub use self::helpers::*;
 pub use self::transform::{Transform, TransformOutput};
 use super::facet::clear_facet_levels_based_on_settings_diff;
 use super::new::StdResult;
+use crate::database_stats::DatabaseStats;
 use crate::documents::{obkv_to_object, DocumentsBatchReader};
 use crate::error::{Error, InternalError};
 use crate::index::{PrefixSearch, PrefixSettings};
@@ -476,7 +477,8 @@ where
 
         if !settings_diff.settings_update_only {
             // Update the stats of the documents database when there is a document update.
-            self.index.update_documents_stats(self.wtxn, modified_docids)?;
+            let stats = DatabaseStats::new(self.index.documents.remap_data_type(), self.wtxn)?;
+            self.index.put_documents_stats(self.wtxn, stats)?;
         }
         // We write the field distribution into the main database
         self.index.put_field_distribution(self.wtxn, &field_distribution)?;

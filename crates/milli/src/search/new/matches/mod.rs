@@ -513,7 +513,7 @@ mod tests {
                 universe,
                 &None,
                 &None,
-                crate::search::new::GeoSortStrategy::default(),
+                crate::search::new::GeoSortParameter::default(),
                 0,
                 100,
                 Some(10),

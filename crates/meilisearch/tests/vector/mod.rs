@@ -188,7 +188,7 @@ async fn user_provide_mismatched_embedding_dimension() {
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
     let task = index.wait_task(value.uid()).await;
-    snapshot!(task, @r#"
+    snapshot!(task, @r###"
     {
       "uid": "[uid]",
       "batchUid": "[batch_uid]",
@@ -201,7 +201,7 @@ async fn user_provide_mismatched_embedding_dimension() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Index `doggo`: Invalid vector dimensions: expected: `3`, found: `2`.",
+        "message": "Index `doggo`: Invalid vector dimensions in document with id `0` in `._vectors.manual`.\n  - note: embedding #0 has dimensions 2\n  - note: embedder `manual` requires 3",
         "code": "invalid_vector_dimensions",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_vector_dimensions"
@@ -211,46 +211,36 @@ async fn user_provide_mismatched_embedding_dimension() {
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "#);
+    "###);
 
-    // FIXME: /!\ Case where number of embeddings is divisor of `dimensions` would still pass
     let new_document = json!([
       {"id": 0, "name": "kefir", "_vectors": { "manual": [[0, 0], [1, 1], [2, 2]] }},
     ]);
     let (response, code) = index.add_documents(new_document, None).await;
     snapshot!(code, @"202 Accepted");
-    index.wait_task(response.uid()).await.succeeded();
-    let (documents, _code) = index
-        .get_all_documents(GetAllDocumentsOptions { retrieve_vectors: true, ..Default::default() })
-        .await;
-    snapshot!(json_string!(documents), @r###"
+    let task = index.wait_task(response.uid()).await;
+    snapshot!(task, @r###"
     {
-      "results": [
-        {
-          "id": 0,
-          "name": "kefir",
-          "_vectors": {
-            "manual": {
-              "embeddings": [
-                [
-                  0.0,
-                  0.0,
-                  1.0
-                ],
-                [
-                  1.0,
-                  2.0,
-                  2.0
-                ]
-              ],
-              "regenerate": false
-            }
-          }
-        }
-      ],
-      "offset": 0,
-      "limit": 20,
-      "total": 1
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "doggo",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "error": {
+        "message": "Index `doggo`: Invalid vector dimensions in document with id `0` in `._vectors.manual`.\n  - note: embedding #0 has dimensions 2\n  - note: embedder `manual` requires 3",
+        "code": "invalid_vector_dimensions",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_vector_dimensions"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
     }
     "###);
 }

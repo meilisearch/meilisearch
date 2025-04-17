@@ -292,8 +292,6 @@ impl Queue {
             return Ok(task);
         }
 
-        // Get rid of the mutability.
-        let task = task;
         self.tasks.register(wtxn, &task)?;
 
         Ok(task)

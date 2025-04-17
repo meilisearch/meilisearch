@@ -518,7 +518,7 @@ impl From<index_scheduler::IndexStats> for IndexStats {
                 .inner_stats
                 .number_of_documents
                 .unwrap_or(stats.inner_stats.documents_database_stats.number_of_entries()),
-            raw_document_db_size: stats.inner_stats.documents_database_stats.total_value_size(),
+            raw_document_db_size: stats.inner_stats.documents_database_stats.total_size(),
             avg_document_size: stats.inner_stats.documents_database_stats.average_value_size(),
             is_indexing: stats.is_indexing,
             number_of_embeddings: stats.inner_stats.number_of_embeddings,

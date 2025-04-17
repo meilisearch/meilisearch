@@ -12,7 +12,7 @@ use roaring::RoaringBitmap;
 
 use super::create_batch::Batch;
 use crate::processing::{
-    AtomicBatchStep, AtomicTaskStep, CreateIndexProgress, DeleteIndexProgress,
+    AtomicBatchStep, AtomicTaskStep, CreateIndexProgress, DeleteIndexProgress, FinalizingIndexStep,
     InnerSwappingTwoIndexes, SwappingTheIndexes, TaskCancelationProgress, TaskDeletionProgress,
     UpdateIndexProgress,
 };
@@ -21,6 +21,16 @@ use crate::utils::{
     ProcessingBatch,
 };
 use crate::{Error, IndexScheduler, Result, TaskId};
+
+#[derive(Debug, Default)]
+pub struct ProcessBatchInfo {
+    /// The write channel congestion. None when unavailable: settings update.
+    pub congestion: Option<ChannelCongestion>,
+    /// The sizes of the different databases before starting the indexation.
+    pub pre_commit_dabases_sizes: indexmap::IndexMap<&'static str, usize>,
+    /// The sizes of the different databases after commiting the indexation.
+    pub post_commit_dabases_sizes: indexmap::IndexMap<&'static str, usize>,
+}
 
 impl IndexScheduler {
     /// Apply the operation associated with the given batch.
@@ -35,7 +45,7 @@ impl IndexScheduler {
         batch: Batch,
         current_batch: &mut ProcessingBatch,
         progress: Progress,
-    ) -> Result<(Vec<Task>, Option<ChannelCongestion>)> {
+    ) -> Result<(Vec<Task>, ProcessBatchInfo)> {
         #[cfg(test)]
         {
             self.maybe_fail(crate::test_utils::FailureLocation::InsideProcessBatch)?;
@@ -76,7 +86,7 @@ impl IndexScheduler {
 
                 canceled_tasks.push(task);
 
-                Ok((canceled_tasks, None))
+                Ok((canceled_tasks, ProcessBatchInfo::default()))
             }
             Batch::TaskDeletions(mut tasks) => {
                 // 1. Retrieve the tasks that matched the query at enqueue-time.
@@ -115,14 +125,14 @@ impl IndexScheduler {
                         _ => unreachable!(),
                     }
                 }
-                Ok((tasks, None))
+                Ok((tasks, ProcessBatchInfo::default()))
             }
-            Batch::SnapshotCreation(tasks) => {
-                self.process_snapshot(progress, tasks).map(|tasks| (tasks, None))
-            }
-            Batch::Dump(task) => {
-                self.process_dump_creation(progress, task).map(|tasks| (tasks, None))
-            }
+            Batch::SnapshotCreation(tasks) => self
+                .process_snapshot(progress, tasks)
+                .map(|tasks| (tasks, ProcessBatchInfo::default())),
+            Batch::Dump(task) => self
+                .process_dump_creation(progress, task)
+                .map(|tasks| (tasks, ProcessBatchInfo::default())),
             Batch::IndexOperation { op, must_create_index } => {
                 let index_uid = op.index_uid().to_string();
                 let index = if must_create_index {
@@ -139,10 +149,12 @@ impl IndexScheduler {
                     .set_currently_updating_index(Some((index_uid.clone(), index.clone())));
 
                 let mut index_wtxn = index.write_txn()?;
+                let pre_commit_dabases_sizes = index.database_sizes(&index_wtxn)?;
                 let (tasks, congestion) =
-                    self.apply_index_operation(&mut index_wtxn, &index, op, progress)?;
+                    self.apply_index_operation(&mut index_wtxn, &index, op, &progress)?;
 
                 {
+                    progress.update_progress(FinalizingIndexStep::Committing);
                     let span = tracing::trace_span!(target: "indexing::scheduler", "commit");
                     let _entered = span.enter();
 
@@ -153,12 +165,15 @@ impl IndexScheduler {
                 // stats of the index. Since the tasks have already been processed and
                 // this is a non-critical operation. If it fails, we should not fail
                 // the entire batch.
+                let mut post_commit_dabases_sizes = None;
                 let res = || -> Result<()> {
+                    progress.update_progress(FinalizingIndexStep::ComputingStats);
                     let index_rtxn = index.read_txn()?;
                     let stats = crate::index_mapper::IndexStats::new(&index, &index_rtxn)
                         .map_err(|e| Error::from_milli(e, Some(index_uid.to_string())))?;
                     let mut wtxn = self.env.write_txn()?;
                     self.index_mapper.store_stats_of(&mut wtxn, &index_uid, &stats)?;
+                    post_commit_dabases_sizes = Some(index.database_sizes(&index_rtxn)?);
                     wtxn.commit()?;
                     Ok(())
                 }();
@@ -171,7 +186,16 @@ impl IndexScheduler {
                     ),
                 }
 
-                Ok((tasks, congestion))
+                let info = ProcessBatchInfo {
+                    congestion,
+                    // In case we fail to the get post-commit sizes we decide
+                    // that nothing changed and use the pre-commit sizes.
+                    post_commit_dabases_sizes: post_commit_dabases_sizes
+                        .unwrap_or_else(|| pre_commit_dabases_sizes.clone()),
+                    pre_commit_dabases_sizes,
+                };
+
+                Ok((tasks, info))
             }
             Batch::IndexCreation { index_uid, primary_key, task } => {
                 progress.update_progress(CreateIndexProgress::CreatingTheIndex);
@@ -239,7 +263,7 @@ impl IndexScheduler {
                     ),
                 }
 
-                Ok((vec![task], None))
+                Ok((vec![task], ProcessBatchInfo::default()))
             }
             Batch::IndexDeletion { index_uid, index_has_been_created, mut tasks } => {
                 progress.update_progress(DeleteIndexProgress::DeletingTheIndex);
@@ -273,7 +297,9 @@ impl IndexScheduler {
                     };
                 }
 
-                Ok((tasks, None))
+                // Here we could also show that all the internal database sizes goes to 0
+                // but it would mean opening the index and that's costly.
+                Ok((tasks, ProcessBatchInfo::default()))
             }
             Batch::IndexSwap { mut task } => {
                 progress.update_progress(SwappingTheIndexes::EnsuringCorrectnessOfTheSwap);
@@ -321,7 +347,7 @@ impl IndexScheduler {
                 }
                 wtxn.commit()?;
                 task.status = Status::Succeeded;
-                Ok((vec![task], None))
+                Ok((vec![task], ProcessBatchInfo::default()))
             }
             Batch::UpgradeDatabase { mut tasks } => {
                 let KindWithContent::UpgradeDatabase { from } = tasks.last().unwrap().kind else {
@@ -351,7 +377,7 @@ impl IndexScheduler {
                     task.error = None;
                 }
 
-                Ok((tasks, None))
+                Ok((tasks, ProcessBatchInfo::default()))
             }
         }
     }

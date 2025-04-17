@@ -344,6 +344,7 @@ pub fn snapshot_batch(batch: &Batch) -> String {
     let Batch { uid, details, stats, started_at, finished_at, progress: _, enqueued_at } = batch;
     let stats = BatchStats {
         progress_trace: Default::default(),
+        internal_database_sizes: Default::default(),
         write_channel_congestion: None,
         ..stats.clone()
     };

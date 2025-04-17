@@ -110,11 +110,14 @@ async fn add_remove_embeddings() {
     index.wait_task(response.uid()).await.succeeded();
 
     let (stats, _code) = index.stats().await;
-    snapshot!(json_string!(stats), @r###"
+    snapshot!(json_string!(stats, {
+        ".rawDocumentDbSize" => "[size]",
+        ".avgDocumentSize" => "[size]",
+    }), @r###"
     {
       "numberOfDocuments": 2,
-      "rawDocumentDbSize": 27,
-      "avgDocumentSize": 13,
+      "rawDocumentDbSize": "[size]",
+      "avgDocumentSize": "[size]",
       "isIndexing": false,
       "numberOfEmbeddings": 5,
       "numberOfEmbeddedDocuments": 2,
@@ -135,11 +138,14 @@ async fn add_remove_embeddings() {
     index.wait_task(response.uid()).await.succeeded();
 
     let (stats, _code) = index.stats().await;
-    snapshot!(json_string!(stats), @r###"
+    snapshot!(json_string!(stats, {
+        ".rawDocumentDbSize" => "[size]",
+        ".avgDocumentSize" => "[size]",
+    }), @r###"
     {
       "numberOfDocuments": 2,
-      "rawDocumentDbSize": 27,
-      "avgDocumentSize": 13,
+      "rawDocumentDbSize": "[size]",
+      "avgDocumentSize": "[size]",
       "isIndexing": false,
       "numberOfEmbeddings": 3,
       "numberOfEmbeddedDocuments": 2,
@@ -160,11 +166,14 @@ async fn add_remove_embeddings() {
     index.wait_task(response.uid()).await.succeeded();
 
     let (stats, _code) = index.stats().await;
-    snapshot!(json_string!(stats), @r###"
+    snapshot!(json_string!(stats, {
+        ".rawDocumentDbSize" => "[size]",
+        ".avgDocumentSize" => "[size]",
+    }), @r###"
     {
       "numberOfDocuments": 2,
-      "rawDocumentDbSize": 27,
-      "avgDocumentSize": 13,
+      "rawDocumentDbSize": "[size]",
+      "avgDocumentSize": "[size]",
       "isIndexing": false,
       "numberOfEmbeddings": 2,
       "numberOfEmbeddedDocuments": 2,
@@ -186,11 +195,14 @@ async fn add_remove_embeddings() {
     index.wait_task(response.uid()).await.succeeded();
 
     let (stats, _code) = index.stats().await;
-    snapshot!(json_string!(stats), @r###"
+    snapshot!(json_string!(stats, {
+        ".rawDocumentDbSize" => "[size]",
+        ".avgDocumentSize" => "[size]",
+    }), @r###"
     {
       "numberOfDocuments": 2,
-      "rawDocumentDbSize": 27,
-      "avgDocumentSize": 13,
+      "rawDocumentDbSize": "[size]",
+      "avgDocumentSize": "[size]",
       "isIndexing": false,
       "numberOfEmbeddings": 2,
       "numberOfEmbeddedDocuments": 1,
@@ -236,11 +248,14 @@ async fn add_remove_embedded_documents() {
     index.wait_task(response.uid()).await.succeeded();
 
     let (stats, _code) = index.stats().await;
-    snapshot!(json_string!(stats), @r###"
+    snapshot!(json_string!(stats, {
+        ".rawDocumentDbSize" => "[size]",
+        ".avgDocumentSize" => "[size]",
+    }), @r###"
     {
       "numberOfDocuments": 2,
-      "rawDocumentDbSize": 27,
-      "avgDocumentSize": 13,
+      "rawDocumentDbSize": "[size]",
+      "avgDocumentSize": "[size]",
       "isIndexing": false,
       "numberOfEmbeddings": 5,
       "numberOfEmbeddedDocuments": 2,
@@ -257,11 +272,14 @@ async fn add_remove_embedded_documents() {
     index.wait_task(response.uid()).await.succeeded();
 
     let (stats, _code) = index.stats().await;
-    snapshot!(json_string!(stats), @r###"
+    snapshot!(json_string!(stats, {
+        ".rawDocumentDbSize" => "[size]",
+        ".avgDocumentSize" => "[size]",
+    }), @r###"
     {
       "numberOfDocuments": 1,
-      "rawDocumentDbSize": 13,
-      "avgDocumentSize": 13,
+      "rawDocumentDbSize": "[size]",
+      "avgDocumentSize": "[size]",
       "isIndexing": false,
       "numberOfEmbeddings": 3,
       "numberOfEmbeddedDocuments": 1,
@@ -290,11 +308,14 @@ async fn update_embedder_settings() {
     index.wait_task(response.uid()).await.succeeded();
 
     let (stats, _code) = index.stats().await;
-    snapshot!(json_string!(stats), @r###"
+    snapshot!(json_string!(stats, {
+        ".rawDocumentDbSize" => "[size]",
+        ".avgDocumentSize" => "[size]",
+    }), @r###"
     {
       "numberOfDocuments": 2,
-      "rawDocumentDbSize": 108,
-      "avgDocumentSize": 54,
+      "rawDocumentDbSize": "[size]",
+      "avgDocumentSize": "[size]",
       "isIndexing": false,
       "numberOfEmbeddings": 0,
       "numberOfEmbeddedDocuments": 0,
@@ -326,11 +347,14 @@ async fn update_embedder_settings() {
     server.wait_task(response.uid()).await.succeeded();
 
     let (stats, _code) = index.stats().await;
-    snapshot!(json_string!(stats), @r###"
+    snapshot!(json_string!(stats, {
+        ".rawDocumentDbSize" => "[size]",
+        ".avgDocumentSize" => "[size]",
+    }), @r###"
     {
       "numberOfDocuments": 2,
-      "rawDocumentDbSize": 108,
-      "avgDocumentSize": 54,
+      "rawDocumentDbSize": "[size]",
+      "avgDocumentSize": "[size]",
       "isIndexing": false,
       "numberOfEmbeddings": 3,
       "numberOfEmbeddedDocuments": 2,

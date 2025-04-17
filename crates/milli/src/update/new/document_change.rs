@@ -1,5 +1,6 @@
 use bumpalo::Bump;
 use heed::RoTxn;
+use serde_json::Value;
 
 use super::document::{
     Document as _, DocumentFromDb, DocumentFromVersions, MergedDocument, Versions,
@@ -10,7 +11,7 @@ use super::vector_document::{
 use crate::attribute_patterns::PatternMatch;
 use crate::documents::FieldIdMapper;
 use crate::vector::EmbeddingConfigs;
-use crate::{DocumentId, Index, Result};
+use crate::{DocumentId, Index, InternalError, Result};
 
 pub enum DocumentChange<'doc> {
     Deletion(Deletion<'doc>),
@@ -241,6 +242,29 @@ impl<'doc> Update<'doc> {
         };
 
         Ok(has_deleted_fields)
+    }
+
+    /// Returns `true` if the geo fields have changed.
+    pub fn has_changed_for_geo_fields<'t, Mapper: FieldIdMapper>(
+        &self,
+        rtxn: &'t RoTxn,
+        index: &'t Index,
+        mapper: &'t Mapper,
+    ) -> Result<bool> {
+        let current = self.current(rtxn, index, mapper)?;
+        let current_geo = current.geo_field()?;
+        let updated_geo = self.only_changed_fields().geo_field()?;
+        match (current_geo, updated_geo) {
+            (Some(current_geo), Some(updated_geo)) => {
+                let current: Value =
+                    serde_json::from_str(current_geo.get()).map_err(InternalError::SerdeJson)?;
+                let updated: Value =
+                    serde_json::from_str(updated_geo.get()).map_err(InternalError::SerdeJson)?;
+                Ok(current != updated)
+            }
+            (None, None) => Ok(false),
+            _ => Ok(true),
+        }
     }
 
     pub fn only_changed_vectors(

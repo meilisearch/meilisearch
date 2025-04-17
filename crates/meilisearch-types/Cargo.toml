@@ -39,7 +39,7 @@ time = { version = "0.3.37", features = [
     "parsing",
     "macros",
 ] }
-tokio = "1.42"
+tokio = "1.43"
 utoipa = { version = "5.3.1", features = ["macros"] }
 uuid = { version = "1.11.0", features = ["serde", "v4"] }
 

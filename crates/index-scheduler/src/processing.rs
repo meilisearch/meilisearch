@@ -65,6 +65,13 @@ make_enum_progress! {
 }
 
 make_enum_progress! {
+    pub enum FinalizingIndexStep {
+        Committing,
+        ComputingStats,
+    }
+}
+
+make_enum_progress! {
     pub enum TaskCancelationProgress {
         RetrievingTasks,
         UpdatingTasks,

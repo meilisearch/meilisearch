@@ -164,7 +164,7 @@ impl Search<'_> {
             sort_criteria: self.sort_criteria.clone(),
             distinct: self.distinct.clone(),
             searchable_attributes: self.searchable_attributes,
-            geo_strategy: self.geo_strategy,
+            geo_param: self.geo_param,
             terms_matching_strategy: self.terms_matching_strategy,
             scoring_strategy: ScoringStrategy::Detailed,
             words_limit: self.words_limit,

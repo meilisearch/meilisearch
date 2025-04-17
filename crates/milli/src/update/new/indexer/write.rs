@@ -7,6 +7,7 @@ use rand::SeedableRng as _;
 use time::OffsetDateTime;
 
 use super::super::channel::*;
+use crate::database_stats::DatabaseStats;
 use crate::documents::PrimaryKey;
 use crate::fields_ids_map::metadata::FieldIdMapWithMetadata;
 use crate::index::IndexEmbeddingConfig;
@@ -142,7 +143,6 @@ pub(super) fn update_index(
     embedders: EmbeddingConfigs,
     field_distribution: std::collections::BTreeMap<String, u64>,
     document_ids: roaring::RoaringBitmap,
-    modified_docids: roaring::RoaringBitmap,
 ) -> Result<()> {
     index.put_fields_ids_map(wtxn, new_fields_ids_map.as_fields_ids_map())?;
     if let Some(new_primary_key) = new_primary_key {
@@ -153,7 +153,8 @@ pub(super) fn update_index(
     index.put_field_distribution(wtxn, &field_distribution)?;
     index.put_documents_ids(wtxn, &document_ids)?;
     index.set_updated_at(wtxn, &OffsetDateTime::now_utc())?;
-    index.update_documents_stats(wtxn, modified_docids)?;
+    let stats = DatabaseStats::new(index.documents.remap_data_type(), wtxn)?;
+    index.put_documents_stats(wtxn, stats)?;
     Ok(())
 }
 

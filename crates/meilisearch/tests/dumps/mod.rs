@@ -28,12 +28,15 @@ async fn import_dump_v1_movie_raw() {
     let (stats, code) = index.stats().await;
     snapshot!(code, @"200 OK");
     snapshot!(
-      json_string!(stats),
+      json_string!(stats, {
+          ".rawDocumentDbSize" => "[size]",
+          ".avgDocumentSize" => "[size]",
+      }),
       @r###"
     {
       "numberOfDocuments": 53,
-      "rawDocumentDbSize": 21965,
-      "avgDocumentSize": 414,
+      "rawDocumentDbSize": "[size]",
+      "avgDocumentSize": "[size]",
       "isIndexing": false,
       "numberOfEmbeddings": 0,
       "numberOfEmbeddedDocuments": 0,
@@ -185,12 +188,15 @@ async fn import_dump_v1_movie_with_settings() {
     let (stats, code) = index.stats().await;
     snapshot!(code, @"200 OK");
     snapshot!(
-        json_string!(stats),
+        json_string!(stats, {
+            ".rawDocumentDbSize" => "[size]",
+            ".avgDocumentSize" => "[size]",
+        }),
         @r###"
     {
       "numberOfDocuments": 53,
-      "rawDocumentDbSize": 21965,
-      "avgDocumentSize": 414,
+      "rawDocumentDbSize": "[size]",
+      "avgDocumentSize": "[size]",
       "isIndexing": false,
       "numberOfEmbeddings": 0,
       "numberOfEmbeddedDocuments": 0,
@@ -355,12 +361,15 @@ async fn import_dump_v1_rubygems_with_settings() {
     let (stats, code) = index.stats().await;
     snapshot!(code, @"200 OK");
     snapshot!(
-      json_string!(stats),
+      json_string!(stats, {
+          ".rawDocumentDbSize" => "[size]",
+          ".avgDocumentSize" => "[size]",
+      }),
       @r###"
     {
       "numberOfDocuments": 53,
-      "rawDocumentDbSize": 8606,
-      "avgDocumentSize": 162,
+      "rawDocumentDbSize": "[size]",
+      "avgDocumentSize": "[size]",
       "isIndexing": false,
       "numberOfEmbeddings": 0,
       "numberOfEmbeddedDocuments": 0,
@@ -522,12 +531,15 @@ async fn import_dump_v2_movie_raw() {
     let (stats, code) = index.stats().await;
     snapshot!(code, @"200 OK");
     snapshot!(
-      json_string!(stats),
+      json_string!(stats, {
+          ".rawDocumentDbSize" => "[size]",
+          ".avgDocumentSize" => "[size]",
+      }),
       @r###"
     {
       "numberOfDocuments": 53,
-      "rawDocumentDbSize": 21965,
-      "avgDocumentSize": 414,
+      "rawDocumentDbSize": "[size]",
+      "avgDocumentSize": "[size]",
       "isIndexing": false,
       "numberOfEmbeddings": 0,
       "numberOfEmbeddedDocuments": 0,
@@ -679,12 +691,15 @@ async fn import_dump_v2_movie_with_settings() {
     let (stats, code) = index.stats().await;
     snapshot!(code, @"200 OK");
     snapshot!(
-      json_string!(stats),
+      json_string!(stats, {
+          ".rawDocumentDbSize" => "[size]",
+          ".avgDocumentSize" => "[size]",
+      }),
       @r###"
     {
       "numberOfDocuments": 53,
-      "rawDocumentDbSize": 21965,
-      "avgDocumentSize": 414,
+      "rawDocumentDbSize": "[size]",
+      "avgDocumentSize": "[size]",
       "isIndexing": false,
       "numberOfEmbeddings": 0,
       "numberOfEmbeddedDocuments": 0,
@@ -846,12 +861,15 @@ async fn import_dump_v2_rubygems_with_settings() {
     let (stats, code) = index.stats().await;
     snapshot!(code, @"200 OK");
     snapshot!(
-      json_string!(stats),
+      json_string!(stats, {
+          ".rawDocumentDbSize" => "[size]",
+          ".avgDocumentSize" => "[size]",
+      }),
       @r###"
     {
       "numberOfDocuments": 53,
-      "rawDocumentDbSize": 8606,
-      "avgDocumentSize": 162,
+      "rawDocumentDbSize": "[size]",
+      "avgDocumentSize": "[size]",
       "isIndexing": false,
       "numberOfEmbeddings": 0,
       "numberOfEmbeddedDocuments": 0,
@@ -1010,12 +1028,15 @@ async fn import_dump_v3_movie_raw() {
     let (stats, code) = index.stats().await;
     snapshot!(code, @"200 OK");
     snapshot!(
-      json_string!(stats),
+      json_string!(stats, {
+          ".rawDocumentDbSize" => "[size]",
+          ".avgDocumentSize" => "[size]",
+      }),
       @r###"
     {
       "numberOfDocuments": 53,
-      "rawDocumentDbSize": 21965,
-      "avgDocumentSize": 414,
+      "rawDocumentDbSize": "[size]",
+      "avgDocumentSize": "[size]",
       "isIndexing": false,
       "numberOfEmbeddings": 0,
       "numberOfEmbeddedDocuments": 0,
@@ -1167,12 +1188,15 @@ async fn import_dump_v3_movie_with_settings() {
     let (stats, code) = index.stats().await;
     snapshot!(code, @"200 OK");
     snapshot!(
-      json_string!(stats),
+      json_string!(stats, {
+          ".rawDocumentDbSize" => "[size]",
+          ".avgDocumentSize" => "[size]",
+      }),
       @r###"
     {
       "numberOfDocuments": 53,
-      "rawDocumentDbSize": 21965,
-      "avgDocumentSize": 414,
+      "rawDocumentDbSize": "[size]",
+      "avgDocumentSize": "[size]",
       "isIndexing": false,
       "numberOfEmbeddings": 0,
       "numberOfEmbeddedDocuments": 0,
@@ -1334,12 +1358,15 @@ async fn import_dump_v3_rubygems_with_settings() {
     let (stats, code) = index.stats().await;
     snapshot!(code, @"200 OK");
     snapshot!(
-      json_string!(stats),
+      json_string!(stats, {
+          ".rawDocumentDbSize" => "[size]",
+          ".avgDocumentSize" => "[size]",
+      }),
       @r###"
     {
       "numberOfDocuments": 53,
-      "rawDocumentDbSize": 8606,
-      "avgDocumentSize": 162,
+      "rawDocumentDbSize": "[size]",
+      "avgDocumentSize": "[size]",
       "isIndexing": false,
       "numberOfEmbeddings": 0,
       "numberOfEmbeddedDocuments": 0,
@@ -1498,12 +1525,15 @@ async fn import_dump_v4_movie_raw() {
     let (stats, code) = index.stats().await;
     snapshot!(code, @"200 OK");
     snapshot!(
-      json_string!(stats),
+      json_string!(stats, {
+          ".rawDocumentDbSize" => "[size]",
+          ".avgDocumentSize" => "[size]",
+      }),
       @r###"
     {
       "numberOfDocuments": 53,
-      "rawDocumentDbSize": 21965,
-      "avgDocumentSize": 414,
+      "rawDocumentDbSize": "[size]",
+      "avgDocumentSize": "[size]",
       "isIndexing": false,
       "numberOfEmbeddings": 0,
       "numberOfEmbeddedDocuments": 0,
@@ -1655,12 +1685,15 @@ async fn import_dump_v4_movie_with_settings() {
     let (stats, code) = index.stats().await;
     snapshot!(code, @"200 OK");
     snapshot!(
-      json_string!(stats),
+      json_string!(stats, {
+          ".rawDocumentDbSize" => "[size]",
+          ".avgDocumentSize" => "[size]",
+      }),
       @r###"
     {
       "numberOfDocuments": 53,
-      "rawDocumentDbSize": 21965,
-      "avgDocumentSize": 414,
+      "rawDocumentDbSize": "[size]",
+      "avgDocumentSize": "[size]",
       "isIndexing": false,
       "numberOfEmbeddings": 0,
       "numberOfEmbeddedDocuments": 0,
@@ -1822,12 +1855,15 @@ async fn import_dump_v4_rubygems_with_settings() {
     let (stats, code) = index.stats().await;
     snapshot!(code, @"200 OK");
     snapshot!(
-      json_string!(stats),
+      json_string!(stats, {
+          ".rawDocumentDbSize" => "[size]",
+          ".avgDocumentSize" => "[size]",
+      }),
       @r###"
     {
       "numberOfDocuments": 53,
-      "rawDocumentDbSize": 8606,
-      "avgDocumentSize": 162,
+      "rawDocumentDbSize": "[size]",
+      "avgDocumentSize": "[size]",
       "isIndexing": false,
       "numberOfEmbeddings": 0,
       "numberOfEmbeddedDocuments": 0,
@@ -1994,11 +2030,14 @@ async fn import_dump_v5() {
 
     let (stats, code) = index1.stats().await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(stats), @r###"
+    snapshot!(json_string!(stats, {
+        ".rawDocumentDbSize" => "[size]",
+        ".avgDocumentSize" => "[size]",
+    }), @r###"
     {
       "numberOfDocuments": 10,
-      "rawDocumentDbSize": 6782,
-      "avgDocumentSize": 678,
+      "rawDocumentDbSize": "[size]",
+      "avgDocumentSize": "[size]",
       "isIndexing": false,
       "numberOfEmbeddings": 0,
       "numberOfEmbeddedDocuments": 0,
@@ -2031,12 +2070,15 @@ async fn import_dump_v5() {
     let (stats, code) = index2.stats().await;
     snapshot!(code, @"200 OK");
     snapshot!(
-      json_string!(stats),
+      json_string!(stats, {
+          ".rawDocumentDbSize" => "[size]",
+          ".avgDocumentSize" => "[size]",
+      }),
       @r###"
     {
       "numberOfDocuments": 10,
-      "rawDocumentDbSize": 6782,
-      "avgDocumentSize": 678,
+      "rawDocumentDbSize": "[size]",
+      "avgDocumentSize": "[size]",
       "isIndexing": false,
       "numberOfEmbeddings": 0,
       "numberOfEmbeddedDocuments": 0,
@@ -2237,6 +2279,7 @@ async fn import_dump_v6_containing_batches_and_enqueued_tasks() {
         ".results[0].duration" => "[date]",
         ".results[0].stats.progressTrace" => "[progressTrace]",
         ".results[0].stats.writeChannelCongestion" => "[writeChannelCongestion]",
+        ".results[0].stats.internalDatabaseSizes" => "[internalDatabaseSizes]",
     }), name: "batches");
 
     let (indexes, code) = server.list_indexes(None, None).await;

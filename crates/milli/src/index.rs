@@ -3,8 +3,9 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs::File;
 use std::path::Path;
 
-use heed::{types::*, WithoutTls};
+use heed::{types::*, DatabaseStat, WithoutTls};
 use heed::{CompactionOption, Database, RoTxn, RwTxn, Unspecified};
+use indexmap::IndexMap;
 use roaring::RoaringBitmap;
 use rstar::RTree;
 use serde::{Deserialize, Serialize};
@@ -408,38 +409,6 @@ impl Index {
             .remap_types::<Str, RoaringBitmapLenCodec>()
             .get(rtxn, main_key::DOCUMENTS_IDS_KEY)?;
         Ok(count.unwrap_or_default())
-    }
-
-    /// Updates the stats of the documents database based on the previous stats and the modified docids.
-    pub fn update_documents_stats(
-        &self,
-        wtxn: &mut RwTxn<'_>,
-        modified_docids: roaring::RoaringBitmap,
-    ) -> Result<()> {
-        let before_rtxn = self.read_txn()?;
-        let document_stats = match self.documents_stats(&before_rtxn)? {
-            Some(before_stats) => DatabaseStats::recompute(
-                before_stats,
-                self.documents.remap_types(),
-                &before_rtxn,
-                wtxn,
-                modified_docids.iter().map(|docid| docid.to_be_bytes()),
-            )?,
-            None => {
-                // This should never happen when there are already documents in the index, the documents stats should be present.
-                // If it happens, it means that the index was not properly initialized/upgraded.
-                debug_assert_eq!(
-                    self.documents.len(&before_rtxn)?,
-                    0,
-                    "The documents stats should be present when there are documents in the index"
-                );
-                tracing::warn!("No documents stats found, creating new ones");
-                DatabaseStats::new(self.documents.remap_types(), &*wtxn)?
-            }
-        };
-
-        self.put_documents_stats(wtxn, document_stats)?;
-        Ok(())
     }
 
     /// Writes the stats of the documents database.
@@ -1754,6 +1723,122 @@ impl Index {
             reader.aggregate_stats(rtxn, &mut stats)?;
         }
         Ok(stats)
+    }
+
+    /// Check if the word is indexed in the index.
+    ///
+    /// This function checks if the word is indexed in the index by looking at the word_docids and exact_word_docids.
+    ///
+    /// # Arguments
+    ///
+    /// * `rtxn`: The read transaction.
+    /// * `word`: The word to check.
+    pub fn contains_word(&self, rtxn: &RoTxn<'_>, word: &str) -> Result<bool> {
+        Ok(self.word_docids.remap_data_type::<DecodeIgnore>().get(rtxn, word)?.is_some()
+            || self.exact_word_docids.remap_data_type::<DecodeIgnore>().get(rtxn, word)?.is_some())
+    }
+
+    /// Returns the sizes in bytes of each of the index database at the given rtxn.
+    pub fn database_sizes(&self, rtxn: &RoTxn<'_>) -> heed::Result<IndexMap<&'static str, usize>> {
+        let Self {
+            env: _,
+            main,
+            external_documents_ids,
+            word_docids,
+            exact_word_docids,
+            word_prefix_docids,
+            exact_word_prefix_docids,
+            word_pair_proximity_docids,
+            word_position_docids,
+            word_fid_docids,
+            word_prefix_position_docids,
+            word_prefix_fid_docids,
+            field_id_word_count_docids,
+            facet_id_f64_docids,
+            facet_id_string_docids,
+            facet_id_normalized_string_strings,
+            facet_id_string_fst,
+            facet_id_exists_docids,
+            facet_id_is_null_docids,
+            facet_id_is_empty_docids,
+            field_id_docid_facet_f64s,
+            field_id_docid_facet_strings,
+            vector_arroy,
+            embedder_category_id,
+            documents,
+        } = self;
+
+        fn compute_size(stats: DatabaseStat) -> usize {
+            let DatabaseStat {
+                page_size,
+                depth: _,
+                branch_pages,
+                leaf_pages,
+                overflow_pages,
+                entries: _,
+            } = stats;
+
+            (branch_pages + leaf_pages + overflow_pages) * page_size as usize
+        }
+
+        let mut sizes = IndexMap::new();
+        sizes.insert("main", main.stat(rtxn).map(compute_size)?);
+        sizes
+            .insert("external_documents_ids", external_documents_ids.stat(rtxn).map(compute_size)?);
+        sizes.insert("word_docids", word_docids.stat(rtxn).map(compute_size)?);
+        sizes.insert("exact_word_docids", exact_word_docids.stat(rtxn).map(compute_size)?);
+        sizes.insert("word_prefix_docids", word_prefix_docids.stat(rtxn).map(compute_size)?);
+        sizes.insert(
+            "exact_word_prefix_docids",
+            exact_word_prefix_docids.stat(rtxn).map(compute_size)?,
+        );
+        sizes.insert(
+            "word_pair_proximity_docids",
+            word_pair_proximity_docids.stat(rtxn).map(compute_size)?,
+        );
+        sizes.insert("word_position_docids", word_position_docids.stat(rtxn).map(compute_size)?);
+        sizes.insert("word_fid_docids", word_fid_docids.stat(rtxn).map(compute_size)?);
+        sizes.insert(
+            "word_prefix_position_docids",
+            word_prefix_position_docids.stat(rtxn).map(compute_size)?,
+        );
+        sizes
+            .insert("word_prefix_fid_docids", word_prefix_fid_docids.stat(rtxn).map(compute_size)?);
+        sizes.insert(
+            "field_id_word_count_docids",
+            field_id_word_count_docids.stat(rtxn).map(compute_size)?,
+        );
+        sizes.insert("facet_id_f64_docids", facet_id_f64_docids.stat(rtxn).map(compute_size)?);
+        sizes
+            .insert("facet_id_string_docids", facet_id_string_docids.stat(rtxn).map(compute_size)?);
+        sizes.insert(
+            "facet_id_normalized_string_strings",
+            facet_id_normalized_string_strings.stat(rtxn).map(compute_size)?,
+        );
+        sizes.insert("facet_id_string_fst", facet_id_string_fst.stat(rtxn).map(compute_size)?);
+        sizes
+            .insert("facet_id_exists_docids", facet_id_exists_docids.stat(rtxn).map(compute_size)?);
+        sizes.insert(
+            "facet_id_is_null_docids",
+            facet_id_is_null_docids.stat(rtxn).map(compute_size)?,
+        );
+        sizes.insert(
+            "facet_id_is_empty_docids",
+            facet_id_is_empty_docids.stat(rtxn).map(compute_size)?,
+        );
+        sizes.insert(
+            "field_id_docid_facet_f64s",
+            field_id_docid_facet_f64s.stat(rtxn).map(compute_size)?,
+        );
+        sizes.insert(
+            "field_id_docid_facet_strings",
+            field_id_docid_facet_strings.stat(rtxn).map(compute_size)?,
+        );
+        sizes.insert("vector_arroy", vector_arroy.stat(rtxn).map(compute_size)?);
+        sizes.insert("embedder_category_id", embedder_category_id.stat(rtxn).map(compute_size)?);
+        sizes.insert("documents", documents.stat(rtxn).map(compute_size)?);
+
+        Ok(sizes)
     }
 }
 

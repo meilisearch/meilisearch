@@ -64,4 +64,6 @@ pub struct BatchStats {
     pub progress_trace: serde_json::Map<String, serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub write_channel_congestion: Option<serde_json::Map<String, serde_json::Value>>,
+    #[serde(default, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub internal_database_sizes: serde_json::Map<String, serde_json::Value>,
 }

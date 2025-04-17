@@ -1777,7 +1777,7 @@ async fn add_documents_with_geo_field() {
         },
         {
             "id": "4",
-            "_geo": { "lat": "1", "lng": "1" },
+            "_geo": { "lat": "2", "lng": "2" },
         },
     ]);
 
@@ -1828,8 +1828,8 @@ async fn add_documents_with_geo_field() {
         {
           "id": "4",
           "_geo": {
-            "lat": "1",
-            "lng": "1"
+            "lat": "2",
+            "lng": "2"
           }
         }
       ],
@@ -1849,20 +1849,20 @@ async fn add_documents_with_geo_field() {
     {
       "hits": [
         {
-          "id": "4",
-          "_geo": {
-            "lat": "1",
-            "lng": "1"
-          },
-          "_geoDistance": 5522018
-        },
-        {
           "id": "3",
           "_geo": {
             "lat": 1,
             "lng": 1
           },
           "_geoDistance": 5522018
+        },
+        {
+          "id": "4",
+          "_geo": {
+            "lat": "2",
+            "lng": "2"
+          },
+          "_geoDistance": 5408322
         },
         {
           "id": "1"
@@ -1897,11 +1897,11 @@ async fn update_documents_with_geo_field() {
         },
         {
             "id": "3",
-            "_geo": { "lat": 1, "lng": 1 },
+            "_geo": { "lat": 3, "lng": 0 },
         },
         {
             "id": "4",
-            "_geo": { "lat": "1", "lng": "1" },
+            "_geo": { "lat": "4", "lng": "0" },
         },
     ]);
 
@@ -1928,9 +1928,7 @@ async fn update_documents_with_geo_field() {
     }
     "###);
 
-    let (response, code) = index
-        .search_post(json!({"sort": ["_geoPoint(50.629973371633746,3.0569447399419567):desc"]}))
-        .await;
+    let (response, code) = index.search_post(json!({"sort": ["_geoPoint(10,0):asc"]})).await;
     snapshot!(code, @"200 OK");
     // we are expecting docs 4 and 3 first as they have geo
     snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }),
@@ -1940,18 +1938,18 @@ async fn update_documents_with_geo_field() {
         {
           "id": "4",
           "_geo": {
-            "lat": "1",
-            "lng": "1"
+            "lat": "4",
+            "lng": "0"
           },
-          "_geoDistance": 5522018
+          "_geoDistance": 667170
         },
         {
           "id": "3",
           "_geo": {
-            "lat": 1,
-            "lng": 1
+            "lat": 3,
+            "lng": 0
           },
-          "_geoDistance": 5522018
+          "_geoDistance": 778364
         },
         {
           "id": "1"
@@ -1969,10 +1967,13 @@ async fn update_documents_with_geo_field() {
     }
     "###);
 
-    let updated_documents = json!([{
-      "id": "3",
-      "doggo": "kefir",
-    }]);
+    let updated_documents = json!([
+        {
+          "id": "3",
+          "doggo": "kefir",
+          "_geo": { "lat": 5, "lng": 0 },
+        }
+    ]);
     let (task, _status_code) = index.update_documents(updated_documents, None).await;
     let response = index.wait_task(task.uid()).await;
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
@@ -2012,16 +2013,16 @@ async fn update_documents_with_geo_field() {
         {
           "id": "3",
           "_geo": {
-            "lat": 1,
-            "lng": 1
+            "lat": 5,
+            "lng": 0
           },
           "doggo": "kefir"
         },
         {
           "id": "4",
           "_geo": {
-            "lat": "1",
-            "lng": "1"
+            "lat": "4",
+            "lng": "0"
           }
         }
       ],
@@ -2031,9 +2032,7 @@ async fn update_documents_with_geo_field() {
     }
     "###);
 
-    let (response, code) = index
-        .search_post(json!({"sort": ["_geoPoint(50.629973371633746,3.0569447399419567):desc"]}))
-        .await;
+    let (response, code) = index.search_post(json!({"sort": ["_geoPoint(10,0):asc"]})).await;
     snapshot!(code, @"200 OK");
     // the search response should not have changed: we are expecting docs 4 and 3 first as they have geo
     snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }),
@@ -2041,21 +2040,21 @@ async fn update_documents_with_geo_field() {
     {
       "hits": [
         {
-          "id": "4",
-          "_geo": {
-            "lat": "1",
-            "lng": "1"
-          },
-          "_geoDistance": 5522018
-        },
-        {
           "id": "3",
           "_geo": {
-            "lat": 1,
-            "lng": 1
+            "lat": 5,
+            "lng": 0
           },
           "doggo": "kefir",
-          "_geoDistance": 5522018
+          "_geoDistance": 555975
+        },
+        {
+          "id": "4",
+          "_geo": {
+            "lat": "4",
+            "lng": "0"
+          },
+          "_geoDistance": 667170
         },
         {
           "id": "1"
