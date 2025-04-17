@@ -1,6 +1,5 @@
 ---
 source: crates/index-scheduler/src/scheduler/test_document_addition.rs
-snapshot_kind: text
 ---
 ### Autobatching Enabled = true
 ### Processing batch None:
@@ -39,7 +38,7 @@ doggos: { number_of_documents: 1, field_distribution: {"doggo": 1, "id": 1} }
 [timestamp] [0,1,]
 ----------------------------------------------------------------------
 ### All Batches:
-0 {uid: 0, details: {"receivedDocuments":3,"indexedDocuments":3,"providedIds":2,"deletedDocuments":2}, stats: {"totalNbTasks":2,"status":{"succeeded":2},"types":{"documentAdditionOrUpdate":1,"documentDeletion":1},"indexUids":{"doggos":2}}, }
+0 {uid: 0, details: {"receivedDocuments":3,"indexedDocuments":3,"providedIds":2,"deletedDocuments":2}, stats: {"totalNbTasks":2,"status":{"succeeded":2},"types":{"documentAdditionOrUpdate":1,"documentDeletion":1},"indexUids":{"doggos":2}}, stop reason: "batched all enqueued tasks", }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:
 0 [0,1,]

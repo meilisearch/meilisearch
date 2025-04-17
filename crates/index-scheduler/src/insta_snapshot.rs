@@ -341,7 +341,16 @@ pub fn snapshot_canceled_by(rtxn: &RoTxn, db: Database<BEU32, RoaringBitmapCodec
 
 pub fn snapshot_batch(batch: &Batch) -> String {
     let mut snap = String::new();
-    let Batch { uid, details, stats, started_at, finished_at, progress: _, enqueued_at } = batch;
+    let Batch {
+        uid,
+        details,
+        stats,
+        started_at,
+        finished_at,
+        progress: _,
+        enqueued_at,
+        stop_reason,
+    } = batch;
     let stats = BatchStats {
         progress_trace: Default::default(),
         internal_database_sizes: Default::default(),
@@ -359,6 +368,7 @@ pub fn snapshot_batch(batch: &Batch) -> String {
     snap.push_str(&format!("uid: {uid}, "));
     snap.push_str(&format!("details: {}, ", serde_json::to_string(details).unwrap()));
     snap.push_str(&format!("stats: {}, ", serde_json::to_string(&stats).unwrap()));
+    snap.push_str(&format!("stop reason: {}, ", serde_json::to_string(&stop_reason).unwrap()));
     snap.push('}');
     snap
 }
