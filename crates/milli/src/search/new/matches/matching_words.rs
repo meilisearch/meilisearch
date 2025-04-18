@@ -174,7 +174,7 @@ impl<'a> PartialMatch<'a> {
         let is_matching = match matching_words.first()? {
             Some(word) => &token.lemma() == word,
             // a None value in the phrase corresponds to a stop word,
-            // the walue is considered a match if the current token is categorized as a stop word.
+            // the value is considered a match if the current token is categorized as a stop word.
             None => token.is_stopword(),
         };
 
