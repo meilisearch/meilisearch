@@ -592,6 +592,7 @@ impl<'pl> PayloadOperations<'pl> {
     }
 
     /// Returns only the most recent version of a document based on the updates from the payloads.
+    #[allow(clippy::too_many_arguments)]
     fn merge<'doc>(
         &self,
         rtxn: &heed::RoTxn,
@@ -669,7 +670,18 @@ impl<'pl> PayloadOperations<'pl> {
                             .get(rtxn, &self.docid)?
                             .map(|obkv| obkv_to_rhaimap(obkv, fidmap))
                             .transpose()?;
-                        Versions::multiple_with_edits(doc, versions, engine, ast, doc_alloc)?
+                        match Versions::multiple_with_edits(doc, versions, engine, ast, doc_alloc)?
+                        {
+                            Some(Some(versions)) => Some(versions),
+                            Some(None) if self.is_new => return Ok(None),
+                            Some(None) => {
+                                return Ok(Some(DocumentChange::Deletion(Deletion::create(
+                                    self.docid,
+                                    external_doc,
+                                ))));
+                            }
+                            None => None,
+                        }
                     }
                     None => Versions::multiple(versions)?,
                 };
