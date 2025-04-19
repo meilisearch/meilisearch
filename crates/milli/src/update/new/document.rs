@@ -476,7 +476,7 @@ impl<'doc> Versions<'doc> {
         engine: &rhai::Engine,
         edit_function: &rhai::AST,
         doc_alloc: &'doc bumpalo::Bump,
-    ) -> Result<Option<Self>> {
+    ) -> Result<Option<Option<Self>>> {
         let Some(data) = versions.next() else { return Ok(None) };
 
         let mut doc = doc.unwrap_or_default();
@@ -495,12 +495,19 @@ impl<'doc> Versions<'doc> {
 
             let _ = engine.eval_ast_with_scope::<rhai::Dynamic>(&mut scope, edit_function).unwrap();
             data = RawMap::with_hasher_in(FxBuildHasher, doc_alloc);
-            for (key, value) in scope.get_value::<rhai::Map>("doc").unwrap() {
-                let mut vec = bumpalo::collections::Vec::new_in(doc_alloc);
-                serde_json::to_writer(&mut vec, &value).unwrap();
-                let key = doc_alloc.alloc_str(key.as_str());
-                let raw_value = serde_json::from_slice(vec.into_bump_slice()).unwrap();
-                data.insert(key, raw_value);
+            match scope.get_value::<Option<rhai::Map>>("doc").unwrap() {
+                Some(map) => {
+                    for (key, value) in map {
+                        let mut vec = bumpalo::collections::Vec::new_in(doc_alloc);
+                        serde_json::to_writer(&mut vec, &value).unwrap();
+                        let key = doc_alloc.alloc_str(key.as_str());
+                        let raw_value = serde_json::from_slice(vec.into_bump_slice()).unwrap();
+                        data.insert(key, raw_value);
+                    }
+                }
+                // In case the deletes the document and it's not the last change
+                // we simply set the document to an empty one and await the next change.
+                None => (),
             }
         }
 
@@ -513,15 +520,19 @@ impl<'doc> Versions<'doc> {
 
         let _ = engine.eval_ast_with_scope::<rhai::Dynamic>(&mut scope, edit_function).unwrap();
         data = RawMap::with_hasher_in(FxBuildHasher, doc_alloc);
-        for (key, value) in scope.get_value::<rhai::Map>("doc").unwrap() {
-            let mut vec = bumpalo::collections::Vec::new_in(doc_alloc);
-            serde_json::to_writer(&mut vec, &value).unwrap();
-            let key = doc_alloc.alloc_str(key.as_str());
-            let raw_value = serde_json::from_slice(vec.into_bump_slice()).unwrap();
-            data.insert(key, raw_value);
+        match scope.get_value::<Option<rhai::Map>>("doc").unwrap() {
+            Some(map) => {
+                for (key, value) in map {
+                    let mut vec = bumpalo::collections::Vec::new_in(doc_alloc);
+                    serde_json::to_writer(&mut vec, &value).unwrap();
+                    let key = doc_alloc.alloc_str(key.as_str());
+                    let raw_value = serde_json::from_slice(vec.into_bump_slice()).unwrap();
+                    data.insert(key, raw_value);
+                }
+                Ok(Some(Some(Self::single(data))))
+            }
+            None => Ok(Some(None)),
         }
-
-        Ok(Some(Self::single(data)))
     }
 
     pub fn single(version: RawMap<'doc, FxBuildHasher>) -> Self {
