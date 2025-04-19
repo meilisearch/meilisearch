@@ -108,7 +108,7 @@ pub enum FieldIdMapMissingEntry {
 
 #[derive(Error, Debug)]
 pub enum UserError {
-    #[error("A document cannot contain more than 65,535 fields.")]
+    #[error("A single index cannot have more than 65,535 unique fields across all documents.")]
     AttributeLimitReached,
     #[error(transparent)]
     CriterionError(#[from] CriterionError),
