@@ -74,6 +74,8 @@ use crate::utils::clamp_to_page_size;
 
 pub(crate) type BEI128 = I128<BE>;
 
+const TASK_SCHEDULER_SIZE_THRESHOLD_PERCENT_INT: u64 = 40;
+
 #[derive(Debug)]
 pub struct IndexSchedulerOptions {
     /// The path to the version file of Meilisearch.
@@ -425,6 +427,17 @@ impl IndexScheduler {
         Ok(self.env.non_free_pages_size()?)
     }
 
+    /// Return the maximum possible database size
+    pub fn max_size(&self) -> Result<u64> {
+        Ok(self.env.info().map_size as u64)
+    }
+
+    /// Return the max size of task allowed until the task queue stop receiving.
+    pub fn remaining_size_until_task_queue_stop(&self) -> Result<u64> {
+        Ok((self.env.info().map_size as u64 * TASK_SCHEDULER_SIZE_THRESHOLD_PERCENT_INT / 100)
+            .saturating_sub(self.used_size()?))
+    }
+
     /// Return the index corresponding to the name.
     ///
     /// * If the index wasn't opened before, the index will be opened.
@@ -627,7 +640,8 @@ impl IndexScheduler {
     ) -> Result<Task> {
         // if the task doesn't delete or cancel anything and 40% of the task queue is full, we must refuse to enqueue the incoming task
         if !matches!(&kind, KindWithContent::TaskDeletion { tasks, .. } | KindWithContent::TaskCancelation { tasks, .. } if !tasks.is_empty())
-            && (self.env.non_free_pages_size()? * 100) / self.env.info().map_size as u64 > 40
+            && (self.env.non_free_pages_size()? * 100) / self.env.info().map_size as u64
+                > TASK_SCHEDULER_SIZE_THRESHOLD_PERCENT_INT
         {
             return Err(Error::NoSpaceLeftInTaskQueue);
         }
