@@ -495,7 +495,7 @@ impl<'doc> Versions<'doc> {
 
             let _ = engine.eval_ast_with_scope::<rhai::Dynamic>(&mut scope, edit_function).unwrap();
             data = RawMap::with_hasher_in(FxBuildHasher, doc_alloc);
-            match scope.get_value::<Option<rhai::Map>>("doc").unwrap() {
+            match scope.get_value::<rhai::Map>("doc") {
                 Some(map) => {
                     for (key, value) in map {
                         let mut vec = bumpalo::collections::Vec::new_in(doc_alloc);
@@ -520,7 +520,7 @@ impl<'doc> Versions<'doc> {
 
         let _ = engine.eval_ast_with_scope::<rhai::Dynamic>(&mut scope, edit_function).unwrap();
         data = RawMap::with_hasher_in(FxBuildHasher, doc_alloc);
-        match scope.get_value::<Option<rhai::Map>>("doc").unwrap() {
+        match scope.get_value::<rhai::Map>("doc") {
             Some(map) => {
                 for (key, value) in map {
                     let mut vec = bumpalo::collections::Vec::new_in(doc_alloc);
