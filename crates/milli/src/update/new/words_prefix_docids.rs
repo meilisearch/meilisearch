@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::io::{BufReader, BufWriter, Read, Seek, Write};
+use std::num::NonZeroUsize;
 use std::iter;
 
 use hashbrown::HashMap;
@@ -426,7 +427,7 @@ impl<'i> WordPrefixIntegerDocids<'i> {
                     index.push(PrefixIntegerEntry {
                         prefix,
                         pos,
-                        serialized_length: Some(buffer.len()),
+                        serialized_length: NonZeroUsize::new(buffer.len()),
                     });
                     file.write_all(buffer)?;
                 }
@@ -452,7 +453,7 @@ impl<'i> WordPrefixIntegerDocids<'i> {
                 key_buffer.extend_from_slice(&pos.to_be_bytes());
                 match serialized_length {
                     Some(serialized_length) => {
-                        buffer.resize(serialized_length, 0);
+                        buffer.resize(serialized_length.get(), 0);
                         file.read_exact(&mut buffer)?;
                         self.prefix_database.remap_data_type::<Bytes>().put(
                             wtxn,
@@ -475,7 +476,7 @@ impl<'i> WordPrefixIntegerDocids<'i> {
 struct PrefixIntegerEntry<'a> {
     prefix: &'a str,
     pos: u16,
-    serialized_length: Option<usize>,
+    serialized_length: Option<NonZeroUsize>,
 }
 
 /// TODO doc
