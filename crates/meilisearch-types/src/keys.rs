@@ -327,40 +327,53 @@ pub mod actions {
     use super::Action as A;
 
     pub const SEARCH: u32 = A::Search.bits();
+
     pub const DOCUMENTS_ADD: u32 = A::DocumentsAdd.bits();
     pub const DOCUMENTS_GET: u32 = A::DocumentsGet.bits();
     pub const DOCUMENTS_DELETE: u32 = A::DocumentsDelete.bits();
     pub const DOCUMENTS_ALL: u32 = A::DocumentsAll.bits();
+
     pub const INDEXES_CREATE: u32 = A::IndexesAdd.bits();
     pub const INDEXES_GET: u32 = A::IndexesGet.bits();
     pub const INDEXES_UPDATE: u32 = A::IndexesUpdate.bits();
     pub const INDEXES_DELETE: u32 = A::IndexesDelete.bits();
     pub const INDEXES_SWAP: u32 = A::IndexesSwap.bits();
     pub const INDEXES_ALL: u32 = A::IndexesAll.bits();
+
     pub const TASKS_CANCEL: u32 = A::TasksCancel.bits();
     pub const TASKS_DELETE: u32 = A::TasksDelete.bits();
     pub const TASKS_GET: u32 = A::TasksGet.bits();
     pub const TASKS_ALL: u32 = A::TasksAll.bits();
+
     pub const SETTINGS_GET: u32 = A::SettingsGet.bits();
     pub const SETTINGS_UPDATE: u32 = A::SettingsUpdate.bits();
     pub const SETTINGS_ALL: u32 = A::SettingsAll.bits();
+
     pub const STATS_GET: u32 = A::StatsGet.bits();
     pub const STATS_ALL: u32 = A::StatsAll.bits();
+
     pub const METRICS_GET: u32 = A::MetricsGet.bits();
     pub const METRICS_ALL: u32 = A::MetricsAll.bits();
+
     pub const DUMPS_CREATE: u32 = A::DumpsCreate.bits();
     pub const DUMPS_ALL: u32 = A::DumpsAll.bits();
+
     pub const SNAPSHOTS_CREATE: u32 = A::SnapshotsCreate.bits();
     pub const SNAPSHOTS_ALL: u32 = A::SnapshotsAll.bits();
+
     pub const VERSION: u32 = A::Version.bits();
+
     pub const KEYS_CREATE: u32 = A::KeysAdd.bits();
     pub const KEYS_GET: u32 = A::KeysGet.bits();
     pub const KEYS_UPDATE: u32 = A::KeysUpdate.bits();
     pub const KEYS_DELETE: u32 = A::KeysDelete.bits();
+
     pub const EXPERIMENTAL_FEATURES_GET: u32 = A::ExperimentalFeaturesGet.bits();
     pub const EXPERIMENTAL_FEATURES_UPDATE: u32 = A::ExperimentalFeaturesUpdate.bits();
+
     pub const NETWORK_GET: u32 = A::NetworkGet.bits();
     pub const NETWORK_UPDATE: u32 = A::NetworkUpdate.bits();
+
     pub const ALL: u32 = A::All.bits();
 }
 
