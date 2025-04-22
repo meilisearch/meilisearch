@@ -85,12 +85,12 @@ impl HeedAuthStore {
         // Create new actions with bitflags
         let mut actions = HashSet::new();
         for action in &key.actions {
-            match action {
+            match *action {
                 Action::All => actions.extend(enum_iterator::all::<Action>()),
                 Action::DocumentsAll => {
                     actions.extend(
                         [Action::DocumentsGet, Action::DocumentsDelete, Action::DocumentsAdd]
-                            .iter(),
+                            .iter().copied(),
                     );
                 }
                 Action::IndexesAll => {
@@ -102,14 +102,14 @@ impl HeedAuthStore {
                             Action::IndexesUpdate,
                             Action::IndexesSwap,
                         ]
-                        .iter(),
+                        .iter().copied(),
                     );
                 }
                 Action::SettingsAll => {
-                    actions.extend([Action::SettingsGet, Action::SettingsUpdate].iter());
+                    actions.extend([Action::SettingsGet, Action::SettingsUpdate].iter().copied());
                 }
                 Action::TasksAll => {
-                    actions.extend([Action::TasksGet, Action::TasksDelete, Action::TasksCancel]);
+                    actions.extend([Action::TasksGet, Action::TasksDelete, Action::TasksCancel].iter().copied());
                 }
                 other => {
                     actions.insert(other);
@@ -341,14 +341,20 @@ impl KeyActions {
         expires_at: Option<OffsetDateTime>,
     ) -> Self {
         let mut bitflags = 0u64;
-        for action in actions {
-            bitflags |= 1 << (*action as u8);
+        for (index, action_flag) in enum_iterator::all::<Action>().enumerate() {
+            if actions.contains(&action_flag) {
+                bitflags |= 1 << index;
+            }
         }
         Self { actions: bitflags, indexes: indexes.to_vec(), expires_at }
     }
 
     fn has_action(&self, action: Action) -> bool {
-        let has = self.actions & (1 << (action as u8)) != 0;
-        has
+        for (index, action_flag) in enum_iterator::all::<Action>().enumerate() {
+            if action_flag == action && (self.actions & (1 << index) != 0) {
+                return true;
+            }
+        }
+        false
     }
 }
