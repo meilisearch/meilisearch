@@ -473,17 +473,21 @@ impl IndexScheduler {
             return Ok(Some((Batch::UpgradeDatabase { tasks }, current_batch)));
         }
 
-        // 1. we get the last task to cancel.
-        let to_cancel = self.queue.tasks.get_kind(rtxn, Kind::TaskCancelation)? & enqueued;
-        if let Some(task_id) = to_cancel.max() {
-            let mut task =
-                self.queue.tasks.get_task(rtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
-            current_batch.processing(Some(&mut task));
-            current_batch.reason(BatchStopReason::TaskCannotBeBatched {
-                kind: Kind::TaskCancelation,
-                id: task_id,
-            });
-            return Ok(Some((Batch::TaskCancelation { task }, current_batch)));
+        // check the version of the scheduler here.
+        // if the version is not the current, refuse to batch any additional task.
+        let version = self.version.get_version(rtxn)?;
+        let package_version = (
+            meilisearch_types::versioning::VERSION_MAJOR,
+            meilisearch_types::versioning::VERSION_MINOR,
+            meilisearch_types::versioning::VERSION_PATCH,
+        );
+        if version != Some(package_version) {
+            return Err(Error::UnrecoverableError(Box::new(
+                Error::IndexSchedulerVersionMismatch {
+                    index_scheduler_version: version.unwrap_or((1, 12, 0)),
+                    package_version,
+                },
+            )));
         }
 
         // 2. we get the next task to delete
