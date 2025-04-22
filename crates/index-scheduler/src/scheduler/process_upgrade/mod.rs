@@ -1,5 +1,5 @@
-use meilisearch_types::milli;
 use meilisearch_types::milli::progress::{Progress, VariableNameStep};
+use meilisearch_types::milli::{self};
 
 use crate::{Error, IndexScheduler, Result};
 
@@ -16,6 +16,11 @@ impl IndexScheduler {
         let indexes = self.index_names()?;
 
         for (i, uid) in indexes.iter().enumerate() {
+            let must_stop_processing = self.scheduler.must_stop_processing.clone();
+
+            if must_stop_processing.get() {
+                return Err(Error::AbortedTask);
+            }
             progress.update_progress(VariableNameStep::<UpgradeIndex>::new(
                 format!("Upgrading index `{uid}`"),
                 i as u32,
@@ -27,6 +32,7 @@ impl IndexScheduler {
                 &mut index_wtxn,
                 &index,
                 db_version,
+                || must_stop_processing.get(),
                 progress.clone(),
             )
             .map_err(|e| Error::from_milli(e, Some(uid.to_string())))?;

@@ -23,12 +23,16 @@ trait UpgradeIndex {
 }
 
 /// Return true if the cached stats of the index must be regenerated
-pub fn upgrade(
+pub fn upgrade<MSP>(
     wtxn: &mut RwTxn,
     index: &Index,
     db_version: (u32, u32, u32),
+    must_stop_processing: MSP,
     progress: Progress,
-) -> Result<bool> {
+) -> Result<bool>
+where
+    MSP: Fn() -> bool + Sync,
+{
     let from = index.get_version(wtxn)?.unwrap_or(db_version);
     let upgrade_functions: &[&dyn UpgradeIndex] = &[
         &V1_12_To_V1_12_3 {},
@@ -56,6 +60,9 @@ pub fn upgrade(
     let mut current_version = from;
     let mut regenerate_stats = false;
     for (i, upgrade) in upgrade_path.iter().enumerate() {
+        if (must_stop_processing)() {
+            return Err(crate::Error::InternalError(InternalError::AbortedIndexation));
+        }
         let target = upgrade.target_version();
         progress.update_progress(VariableNameStep::<UpgradeVersion>::new(
             format!(
