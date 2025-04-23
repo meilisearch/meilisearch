@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 use std::cmp::Reverse;
-use std::collections::HashSet;
 use std::path::Path;
 use std::result::Result as StdResult;
 use std::str;
@@ -30,7 +29,7 @@ const KEY_ACTIONS_DB_NAME: &str = "key-actions";
 pub struct HeedAuthStore {
     env: Env<WithoutTls>,
     keys: Database<Bytes, SerdeJson<Key>>,
-    key_actions: Database<Bytes, SerdeJson<KeyActions>>,
+    key_actions: Database<Bytes, SerdeJson<KeyMasks>>,
 }
 
 pub fn open_auth_store_env(path: &Path) -> heed::Result<Env<WithoutTls>> {
@@ -82,45 +81,15 @@ impl HeedAuthStore {
         // Delete existing actions
         self.delete_key_from_inverted_db(&mut wtxn, &uid)?;
 
-        // Create new actions with bitflags
-        let mut actions = HashSet::new();
-        for action in &key.actions {
-            match *action {
-                Action::All => actions.extend(enum_iterator::all::<Action>()),
-                Action::DocumentsAll => {
-                    actions.extend(
-                        [Action::DocumentsGet, Action::DocumentsDelete, Action::DocumentsAdd]
-                            .iter().copied(),
-                    );
-                }
-                Action::IndexesAll => {
-                    actions.extend(
-                        [
-                            Action::IndexesAdd,
-                            Action::IndexesDelete,
-                            Action::IndexesGet,
-                            Action::IndexesUpdate,
-                            Action::IndexesSwap,
-                        ]
-                        .iter().copied(),
-                    );
-                }
-                Action::SettingsAll => {
-                    actions.extend([Action::SettingsGet, Action::SettingsUpdate].iter().copied());
-                }
-                Action::TasksAll => {
-                    actions.extend([Action::TasksGet, Action::TasksDelete, Action::TasksCancel].iter().copied());
-                }
-                other => {
-                    actions.insert(other);
-                }
-            }
-        }
+        //Create a new Bit Mask
 
         // Store the actions with bitflags
-        let key_actions = KeyActions::new(&actions, &key.indexes, key.expires_at);
-        self.key_actions.put(&mut wtxn, uid.as_bytes(), &key_actions)?;
-
+        let mut bit_mask = 0;
+        for action in &key.actions {
+            bit_mask |= action.bits();
+        }
+        let key_masks = KeyMasks::new(bit_mask, &key.indexes, key.expires_at);
+        self.key_actions.put(&mut wtxn, uid.as_bytes(), &key_masks);
         wtxn.commit()?;
         Ok(key)
     }
@@ -328,30 +297,24 @@ where
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct KeyActions {
-    actions: u64, // Bitflags for actions
+struct KeyMasks {
+    bit_mask: u32, // Bitflags for bit_maks
     indexes: Vec<IndexUidPattern>,
     expires_at: Option<OffsetDateTime>,
 }
 
-impl KeyActions {
-    fn new(
-        actions: &HashSet<Action>,
-        indexes: &[IndexUidPattern],
-        expires_at: Option<OffsetDateTime>,
-    ) -> Self {
-        let mut bitflags = 0u64;
-        for (index, action_flag) in enum_iterator::all::<Action>().enumerate() {
-            if actions.contains(&action_flag) {
-                bitflags |= 1 << index;
-            }
+impl KeyMasks {
+    fn new(bit_mask: u32, indexes: &[IndexUidPattern], expires_at: Option<OffsetDateTime>) -> Self {
+        let mut bitflags = 0u32;
+        for action in bit_mask {
+            bitflags |= action.bits();
         }
-        Self { actions: bitflags, indexes: indexes.to_vec(), expires_at }
+        Self { bit_mask: bitflags, indexes: indexes.to_vec(), expires_at }
     }
 
     fn has_action(&self, action: Action) -> bool {
         for (index, action_flag) in enum_iterator::all::<Action>().enumerate() {
-            if action_flag == action && (self.actions & (1 << index) != 0) {
+            if action_flag == action && (self.bit_mask & (1 << index) != 0) {
                 return true;
             }
         }
