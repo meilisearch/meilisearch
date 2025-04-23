@@ -1,8 +1,10 @@
 use std::iter::FromIterator;
+use std::time::Instant;
 
 use roaring::RoaringBitmap;
 
 use super::ranking_rules::{RankingRule, RankingRuleOutput, RankingRuleQueryTrait};
+use super::VectorStoreStats;
 use crate::score_details::{self, ScoreDetails};
 use crate::vector::{ArroyWrapper, DistributionShift, Embedder};
 use crate::{DocumentId, Result, SearchContext, SearchLogger};
@@ -53,9 +55,15 @@ impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
     ) -> Result<()> {
         let target = &self.target;
 
+        let before = Instant::now();
         let reader = ArroyWrapper::new(ctx.index.vector_arroy, self.embedder_index, self.quantized);
         let results = reader.nns_by_vector(ctx.txn, target, self.limit, Some(vector_candidates))?;
         self.cached_sorted_docids = results.into_iter();
+        *ctx.vector_store_stats.get_or_insert_default() += VectorStoreStats {
+            total_time: before.elapsed(),
+            total_queries: 1,
+            total_results: self.cached_sorted_docids.len(),
+        };
 
         Ok(())
     }

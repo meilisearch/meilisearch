@@ -8,7 +8,7 @@ use roaring::bitmap::RoaringBitmap;
 
 pub use self::facet::{FacetDistribution, Filter, OrderBy, DEFAULT_VALUES_PER_FACET};
 pub use self::new::matches::{FormatOptions, MatchBounds, MatcherBuilder, MatchingWords};
-use self::new::{execute_vector_search, PartialSearchResult};
+use self::new::{execute_vector_search, PartialSearchResult, VectorStoreStats};
 use crate::filterable_attributes_rules::{filtered_matching_patterns, matching_features};
 use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::vector::Embedder;
@@ -268,6 +268,12 @@ impl<'a> Search<'a> {
                 self.locales.as_ref(),
             )?,
         };
+
+        if let Some(VectorStoreStats { total_time, total_queries, total_results }) =
+            ctx.vector_store_stats
+        {
+            tracing::debug!("Vector store stats: total_time={total_time:.02?}, total_queries={total_queries}, total_results={total_results}");
+        }
 
         // consume context and located_query_terms to build MatchingWords.
         let matching_words = match located_query_terms {
