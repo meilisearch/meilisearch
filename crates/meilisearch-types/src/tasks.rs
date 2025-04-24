@@ -272,9 +272,9 @@ impl KindWithContent {
             KindWithContent::UpgradeDatabase { from } => Some(Details::UpgradeDatabase {
                 from: (from.0, from.1, from.2),
                 to: (
-                    versioning::VERSION_MAJOR.parse().unwrap(),
-                    versioning::VERSION_MINOR.parse().unwrap(),
-                    versioning::VERSION_PATCH.parse().unwrap(),
+                    versioning::VERSION_MAJOR,
+                    versioning::VERSION_MINOR,
+                    versioning::VERSION_PATCH,
                 ),
             }),
         }
@@ -338,9 +338,9 @@ impl KindWithContent {
             KindWithContent::UpgradeDatabase { from } => Some(Details::UpgradeDatabase {
                 from: *from,
                 to: (
-                    versioning::VERSION_MAJOR.parse().unwrap(),
-                    versioning::VERSION_MINOR.parse().unwrap(),
-                    versioning::VERSION_PATCH.parse().unwrap(),
+                    versioning::VERSION_MAJOR,
+                    versioning::VERSION_MINOR,
+                    versioning::VERSION_PATCH,
                 ),
             }),
         }
@@ -386,9 +386,9 @@ impl From<&KindWithContent> for Option<Details> {
             KindWithContent::UpgradeDatabase { from } => Some(Details::UpgradeDatabase {
                 from: *from,
                 to: (
-                    versioning::VERSION_MAJOR.parse().unwrap(),
-                    versioning::VERSION_MINOR.parse().unwrap(),
-                    versioning::VERSION_PATCH.parse().unwrap(),
+                    versioning::VERSION_MAJOR,
+                    versioning::VERSION_MINOR,
+                    versioning::VERSION_PATCH,
                 ),
             }),
         }

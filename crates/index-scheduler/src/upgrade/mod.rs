@@ -104,10 +104,6 @@ impl UpgradeIndexScheduler for ToCurrentNoOp {
     }
 
     fn target_version(&self) -> (u32, u32, u32) {
-        (
-            VERSION_MAJOR.parse().unwrap(),
-            VERSION_MINOR.parse().unwrap(),
-            VERSION_PATCH.parse().unwrap(),
-        )
+        (VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH)
     }
 }

@@ -262,9 +262,9 @@ impl Index {
             this.put_version(
                 &mut wtxn,
                 (
-                    constants::VERSION_MAJOR.parse().unwrap(),
-                    constants::VERSION_MINOR.parse().unwrap(),
-                    constants::VERSION_PATCH.parse().unwrap(),
+                    constants::VERSION_MAJOR,
+                    constants::VERSION_MINOR,
+                    constants::VERSION_PATCH,
                 ),
             )?;
         }
