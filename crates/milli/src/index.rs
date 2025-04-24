@@ -374,7 +374,7 @@ impl Index {
     }
 
     /// Get the version of the database. `None` if it was never set.
-    pub(crate) fn get_version(&self, rtxn: &RoTxn<'_>) -> heed::Result<Option<(u32, u32, u32)>> {
+    pub fn get_version(&self, rtxn: &RoTxn<'_>) -> heed::Result<Option<(u32, u32, u32)>> {
         self.main.remap_types::<Str, VersionCodec>().get(rtxn, main_key::VERSION_KEY)
     }
 
