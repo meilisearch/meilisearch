@@ -38,6 +38,7 @@ use meilisearch_auth::{open_auth_store_env, AuthController};
 use meilisearch_types::milli::constants::VERSION_MAJOR;
 use meilisearch_types::milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
 use meilisearch_types::milli::update::{IndexDocumentsConfig, IndexDocumentsMethod};
+use meilisearch_types::milli::ThreadPoolNoAbortBuilder;
 use meilisearch_types::settings::apply_settings_to_builder;
 use meilisearch_types::tasks::KindWithContent;
 use meilisearch_types::versioning::{
@@ -505,6 +506,18 @@ fn import_dump(
 
     let indexer_config = index_scheduler.indexer_config();
 
+    // Use all cpus to index a dump
+    let pool_before = {
+        let all_cpus = num_cpus::get();
+
+        let temp_pool = ThreadPoolNoAbortBuilder::new()
+            .thread_name(|index| format!("indexing-thread:{index}"))
+            .num_threads(all_cpus)
+            .build()?;
+
+        indexer_config.thread_pool.write().unwrap().replace(temp_pool)
+    };
+
     // /!\ The tasks must be imported AFTER importing the indexes or else the scheduler might
     // try to process tasks while we're trying to import the indexes.
 
@@ -574,6 +587,12 @@ fn import_dump(
         tracing::info!("All documents successfully imported.");
 
         index_scheduler.refresh_index_stats(&uid)?;
+    }
+
+    // Restore original thread pool after dump
+    {
+        let mut guard = indexer_config.thread_pool.write().unwrap();
+        *guard = pool_before;
     }
 
     // 5. Import the queue

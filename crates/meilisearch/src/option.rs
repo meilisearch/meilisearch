@@ -6,7 +6,7 @@ use std::num::{NonZeroUsize, ParseIntError};
 use std::ops::Deref;
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::{env, fmt, fs};
 
 use byte_unit::{Byte, ParseError, UnitType};
@@ -765,7 +765,7 @@ impl TryFrom<&IndexerOpts> for IndexerConfig {
         Ok(Self {
             log_every_n: Some(DEFAULT_LOG_EVERY_N),
             max_memory: other.max_indexing_memory.map(|b| b.as_u64() as usize),
-            thread_pool: Some(thread_pool),
+            thread_pool: RwLock::new(Some(thread_pool)),
             max_positions_per_attributes: None,
             skip_index_budget: other.skip_index_budget,
             ..Default::default()
