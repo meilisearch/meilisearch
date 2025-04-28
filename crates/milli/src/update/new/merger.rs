@@ -185,10 +185,7 @@ impl FacetFieldIdDelta {
         };
         *self = match (std::mem::replace(self, Self::Bulk), rhs) {
             (Self::Bulk, _) | (_, Self::Bulk) => Self::Bulk,
-            (
-                Self::Incremental(mut left),
-                Self::Incremental(mut right),
-            ) => {
+            (Self::Incremental(mut left), Self::Incremental(mut right)) => {
                 if left.len() + right.len() >= max_count {
                     Self::Bulk
                 } else {

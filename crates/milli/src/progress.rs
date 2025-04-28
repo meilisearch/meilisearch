@@ -262,9 +262,7 @@ impl Step for arroy::MainStep {
     fn name(&self) -> Cow<'static, str> {
         match self {
             Self::PreProcessingTheItems => "pre processing the items",
-            Self::WritingTheDescendantsAndMetadata => {
-                "writing the descendants and metadata"
-            }
+            Self::WritingTheDescendantsAndMetadata => "writing the descendants and metadata",
             Self::RetrieveTheUpdatedItems => "retrieve the updated items",
             Self::RetrievingTheTreeAndItemNodes => "retrieving the tree and item nodes",
             Self::UpdatingTheTrees => "updating the trees",

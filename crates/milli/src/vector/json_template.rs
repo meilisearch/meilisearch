@@ -120,11 +120,7 @@ impl TemplateParsingError {
             Self::MissingPlaceholderString => {
                 format!(r#"in `{root}`: "{placeholder}" not found"#)
             }
-            Self::BothArrayAndSingle {
-                single_path,
-                path_to_array,
-                array_to_placeholder,
-            } => {
+            Self::BothArrayAndSingle { single_path, path_to_array, array_to_placeholder } => {
                 let path_to_first_repeated = path_to_array
                     .iter()
                     .chain(std::iter::once(&PathComponent::ArrayIndex(0)))
@@ -166,19 +162,10 @@ impl TemplateParsingError {
                 let older_prepended_path =
                     prepended_path.iter().cloned().chain(older_path).collect();
                 prepended_path.append(&mut path);
-                Self::MultiplePlaceholderString(
-                    prepended_path,
-                    older_prepended_path,
-                )
+                Self::MultiplePlaceholderString(prepended_path, older_prepended_path)
             }
-            Self::MissingPlaceholderString => {
-                Self::MissingPlaceholderString
-            }
-            Self::BothArrayAndSingle {
-                single_path,
-                mut path_to_array,
-                array_to_placeholder,
-            } => {
+            Self::MissingPlaceholderString => Self::MissingPlaceholderString,
+            Self::BothArrayAndSingle { single_path, mut path_to_array, array_to_placeholder } => {
                 // note, this case is not super logical, but is also likely to be dead code
                 let single_prepended_path =
                     prepended_path.iter().cloned().chain(single_path).collect();

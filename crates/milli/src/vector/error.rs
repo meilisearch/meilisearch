@@ -176,10 +176,7 @@ impl EmbedError {
         }
     }
 
-    pub(crate) fn rest_internal_server_error(
-        code: u16,
-        error_response: Option<String>,
-    ) -> Self {
+    pub(crate) fn rest_internal_server_error(code: u16, error_response: Option<String>) -> Self {
         Self {
             kind: EmbedErrorKind::RestInternalServerError(code, error_response),
             fault: FaultSource::Runtime,
@@ -263,10 +260,7 @@ impl NewEmbedderError {
         }
     }
 
-    pub fn open_pooling_config(
-        pooling_config_filename: PathBuf,
-        inner: std::io::Error,
-    ) -> Self {
+    pub fn open_pooling_config(pooling_config_filename: PathBuf, inner: std::io::Error) -> Self {
         let open_config = OpenPoolingConfig { filename: pooling_config_filename, inner };
 
         Self {

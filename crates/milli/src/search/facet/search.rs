@@ -28,11 +28,7 @@ pub struct SearchForFacetValues<'a> {
 }
 
 impl<'a> SearchForFacetValues<'a> {
-    pub fn new(
-        facet: String,
-        search_query: Search<'a>,
-        is_hybrid: bool,
-    ) -> Self {
+    pub fn new(facet: String, search_query: Search<'a>, is_hybrid: bool) -> Self {
         SearchForFacetValues {
             query: None,
             facet,

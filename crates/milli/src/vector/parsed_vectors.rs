@@ -267,11 +267,9 @@ impl<E: DeserializeError> Deserr<E> for Vectors {
         location: deserr::ValuePointerRef<'_>,
     ) -> Result<Self, E> {
         match value {
-            deserr::Value::Sequence(_) | deserr::Value::Null => {
-                Ok(Self::ImplicitlyUserProvided(VectorOrArrayOfVectors::deserialize_from_value(
-                    value, location,
-                )?))
-            }
+            deserr::Value::Sequence(_) | deserr::Value::Null => Ok(Self::ImplicitlyUserProvided(
+                VectorOrArrayOfVectors::deserialize_from_value(value, location)?,
+            )),
             deserr::Value::Map(_) => {
                 Ok(Self::Explicit(ExplicitVectors::deserialize_from_value(value, location)?))
             }

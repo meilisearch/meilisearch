@@ -30,11 +30,7 @@ impl<R: io::Read + io::Seek> EnrichedDocumentsBatchReader<R> {
         external_ids: grenad::Reader<BufReader<File>>,
     ) -> Result<Self, Error> {
         if documents.documents_count() as u64 == external_ids.len() {
-            Ok(Self {
-                documents,
-                primary_key,
-                external_ids: external_ids.into_cursor()?,
-            })
+            Ok(Self { documents, primary_key, external_ids: external_ids.into_cursor()? })
         } else {
             Err(Error::InvalidEnrichedData)
         }

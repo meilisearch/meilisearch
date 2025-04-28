@@ -824,10 +824,7 @@ impl Embedder {
 
     pub fn uses_document_template(&self) -> bool {
         match self {
-            Self::HuggingFace(_)
-            | Self::OpenAi(_)
-            | Self::Ollama(_)
-            | Self::Rest(_) => true,
+            Self::HuggingFace(_) | Self::OpenAi(_) | Self::Ollama(_) | Self::Rest(_) => true,
             Self::UserProvided(_) => false,
             Self::Composite(embedder) => embedder.index.uses_document_template(),
         }

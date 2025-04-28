@@ -1098,12 +1098,8 @@ impl NestingContext {
     pub fn nesting_embedders(&self) -> &'static str {
         match self {
             Self::NotNested => "",
-            Self::Search => {
-                "\n  - note: nesting embedders in `searchEmbedder` is not allowed"
-            }
-            Self::Indexing => {
-                "\n  - note: nesting embedders in `indexingEmbedder` is not allowed"
-            }
+            Self::Search => "\n  - note: nesting embedders in `searchEmbedder` is not allowed",
+            Self::Indexing => "\n  - note: nesting embedders in `indexingEmbedder` is not allowed",
         }
     }
 }
@@ -1416,10 +1412,8 @@ impl EmbeddingSettings {
     }
 
     pub(crate) fn apply_default_source(setting: &mut Setting<Self>) {
-        if let Setting::Set(Self {
-            source: source @ (Setting::NotSet | Setting::Reset),
-            ..
-        }) = setting
+        if let Setting::Set(Self { source: source @ (Setting::NotSet | Setting::Reset), .. }) =
+            setting
         {
             *source = Setting::Set(EmbedderSource::default())
         }
