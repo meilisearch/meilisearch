@@ -173,12 +173,9 @@ impl From<KindWithContent> for KindDump {
                 documents_count,
                 allow_index_creation,
                 ..
-            } => Self::DocumentImport {
-                primary_key,
-                method,
-                documents_count,
-                allow_index_creation,
-            },
+            } => {
+                Self::DocumentImport { primary_key, method, documents_count, allow_index_creation }
+            }
             KindWithContent::DocumentDeletion { documents_ids, .. } => {
                 Self::DocumentDeletion { documents_ids }
             }
@@ -199,16 +196,12 @@ impl From<KindWithContent> for KindDump {
             KindWithContent::IndexCreation { primary_key, .. } => {
                 Self::IndexCreation { primary_key }
             }
-            KindWithContent::IndexUpdate { primary_key, .. } => {
-                Self::IndexUpdate { primary_key }
-            }
+            KindWithContent::IndexUpdate { primary_key, .. } => Self::IndexUpdate { primary_key },
             KindWithContent::IndexSwap { swaps } => Self::IndexSwap { swaps },
             KindWithContent::TaskCancelation { query, tasks } => {
                 Self::TaskCancelation { query, tasks }
             }
-            KindWithContent::TaskDeletion { query, tasks } => {
-                Self::TasksDeletion { query, tasks }
-            }
+            KindWithContent::TaskDeletion { query, tasks } => Self::TasksDeletion { query, tasks },
             KindWithContent::DumpCreation { keys, instance_uid } => {
                 Self::DumpCreation { keys, instance_uid }
             }

@@ -37,10 +37,8 @@ impl CompatV5ToV6 {
 
     pub fn indexes(&self) -> Result<Box<dyn Iterator<Item = Result<CompatIndexV5ToV6>> + '_>> {
         let indexes = match self {
-            Self::V5(v5) => {
-                Box::new(v5.indexes()?.map(|index| index.map(CompatIndexV5ToV6::from)))
-                    as Box<dyn Iterator<Item = Result<CompatIndexV5ToV6>> + '_>
-            }
+            Self::V5(v5) => Box::new(v5.indexes()?.map(|index| index.map(CompatIndexV5ToV6::from)))
+                as Box<dyn Iterator<Item = Result<CompatIndexV5ToV6>> + '_>,
 
             Self::Compat(compat) => {
                 Box::new(compat.indexes()?.map(|index| index.map(CompatIndexV5ToV6::from)))

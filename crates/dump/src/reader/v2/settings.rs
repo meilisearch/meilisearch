@@ -238,9 +238,7 @@ impl FromStr for AscDesc {
                 _ => Err(()),
             }
         } else if text.starts_with("asc(") && text.ends_with(')') {
-            Ok(Self::Asc(
-                text.strip_prefix("asc(").unwrap().strip_suffix(')').unwrap().to_string(),
-            ))
+            Ok(Self::Asc(text.strip_prefix("asc(").unwrap().strip_suffix(')').unwrap().to_string()))
         } else if text.starts_with("desc(") && text.ends_with(')') {
             Ok(Self::Desc(
                 text.strip_prefix("desc(").unwrap().strip_suffix(')').unwrap().to_string(),

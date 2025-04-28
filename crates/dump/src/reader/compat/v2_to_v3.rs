@@ -260,12 +260,8 @@ impl TryFrom<(v2::updates::UpdateMeta, Option<Uuid>)> for v3::updates::Update {
                 return Err(crate::Error::MalformedTask)
             }
             v2::updates::UpdateMeta::ClearDocuments => Self::ClearDocuments,
-            v2::updates::UpdateMeta::DeleteDocuments { ids } => {
-                Self::DeleteDocuments(ids)
-            }
-            v2::updates::UpdateMeta::Settings(settings) => {
-                Self::Settings(settings.into())
-            }
+            v2::updates::UpdateMeta::DeleteDocuments { ids } => Self::DeleteDocuments(ids),
+            v2::updates::UpdateMeta::Settings(settings) => Self::Settings(settings.into()),
         })
     }
 }

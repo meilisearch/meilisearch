@@ -63,9 +63,7 @@ impl DescribeResult {
     pub fn as_prototype(&self) -> Option<&'static str> {
         match self {
             Self::Prototype { name } => Some(name),
-            Self::Release { .. }
-            | Self::Prerelease { .. }
-            | Self::NotATag { .. } => None,
+            Self::Release { .. } | Self::Prerelease { .. } | Self::NotATag { .. } => None,
         }
     }
 }

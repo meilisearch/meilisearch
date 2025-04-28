@@ -257,13 +257,11 @@ impl DetailsView {
 impl From<Details> for DetailsView {
     fn from(details: Details) -> Self {
         match details {
-            Details::DocumentAdditionOrUpdate { received_documents, indexed_documents } => {
-                Self {
-                    received_documents: Some(received_documents),
-                    indexed_documents: Some(indexed_documents),
-                    ..Self::default()
-                }
-            }
+            Details::DocumentAdditionOrUpdate { received_documents, indexed_documents } => Self {
+                received_documents: Some(received_documents),
+                indexed_documents: Some(indexed_documents),
+                ..Self::default()
+            },
             Details::DocumentEdition {
                 deleted_documents,
                 edited_documents,
@@ -294,39 +292,29 @@ impl From<Details> for DetailsView {
                 original_filter: Some(None),
                 ..Self::default()
             },
-            Details::DocumentDeletionByFilter { original_filter, deleted_documents } => {
-                Self {
-                    provided_ids: Some(0),
-                    original_filter: Some(Some(original_filter)),
-                    deleted_documents: Some(deleted_documents),
-                    ..Self::default()
-                }
-            }
+            Details::DocumentDeletionByFilter { original_filter, deleted_documents } => Self {
+                provided_ids: Some(0),
+                original_filter: Some(Some(original_filter)),
+                deleted_documents: Some(deleted_documents),
+                ..Self::default()
+            },
             Details::ClearAll { deleted_documents } => {
                 Self { deleted_documents: Some(deleted_documents), ..Self::default() }
             }
-            Details::TaskCancelation { matched_tasks, canceled_tasks, original_filter } => {
-                Self {
-                    matched_tasks: Some(matched_tasks),
-                    canceled_tasks: Some(canceled_tasks),
-                    original_filter: Some(Some(original_filter)),
-                    ..Self::default()
-                }
-            }
-            Details::TaskDeletion { matched_tasks, deleted_tasks, original_filter } => {
-                Self {
-                    matched_tasks: Some(matched_tasks),
-                    deleted_tasks: Some(deleted_tasks),
-                    original_filter: Some(Some(original_filter)),
-                    ..Self::default()
-                }
-            }
-            Details::Dump { dump_uid } => {
-                Self { dump_uid: Some(dump_uid), ..Self::default() }
-            }
-            Details::IndexSwap { swaps } => {
-                Self { swaps: Some(swaps), ..Default::default() }
-            }
+            Details::TaskCancelation { matched_tasks, canceled_tasks, original_filter } => Self {
+                matched_tasks: Some(matched_tasks),
+                canceled_tasks: Some(canceled_tasks),
+                original_filter: Some(Some(original_filter)),
+                ..Self::default()
+            },
+            Details::TaskDeletion { matched_tasks, deleted_tasks, original_filter } => Self {
+                matched_tasks: Some(matched_tasks),
+                deleted_tasks: Some(deleted_tasks),
+                original_filter: Some(Some(original_filter)),
+                ..Self::default()
+            },
+            Details::Dump { dump_uid } => Self { dump_uid: Some(dump_uid), ..Self::default() },
+            Details::IndexSwap { swaps } => Self { swaps: Some(swaps), ..Default::default() },
             Details::UpgradeDatabase { from, to } => Self {
                 upgrade_from: Some(format!("v{}.{}.{}", from.0, from.1, from.2)),
                 upgrade_to: Some(format!("v{}.{}.{}", to.0, to.1, to.2)),

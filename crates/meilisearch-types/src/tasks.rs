@@ -250,13 +250,10 @@ impl KindWithContent {
             Self::SettingsUpdate { new_settings, .. } => {
                 Some(Details::SettingsUpdate { settings: new_settings.clone() })
             }
-            Self::IndexCreation { primary_key, .. }
-            | Self::IndexUpdate { primary_key, .. } => {
+            Self::IndexCreation { primary_key, .. } | Self::IndexUpdate { primary_key, .. } => {
                 Some(Details::IndexInfo { primary_key: primary_key.clone() })
             }
-            Self::IndexSwap { swaps } => {
-                Some(Details::IndexSwap { swaps: swaps.clone() })
-            }
+            Self::IndexSwap { swaps } => Some(Details::IndexSwap { swaps: swaps.clone() }),
             Self::TaskCancelation { query, tasks } => Some(Details::TaskCancelation {
                 matched_tasks: tasks.len(),
                 canceled_tasks: None,
@@ -309,15 +306,12 @@ impl KindWithContent {
                     deleted_documents: Some(0),
                 })
             }
-            Self::DocumentClear { .. } => {
-                Some(Details::ClearAll { deleted_documents: None })
-            }
+            Self::DocumentClear { .. } => Some(Details::ClearAll { deleted_documents: None }),
             Self::SettingsUpdate { new_settings, .. } => {
                 Some(Details::SettingsUpdate { settings: new_settings.clone() })
             }
             Self::IndexDeletion { .. } => None,
-            Self::IndexCreation { primary_key, .. }
-            | Self::IndexUpdate { primary_key, .. } => {
+            Self::IndexCreation { primary_key, .. } | Self::IndexUpdate { primary_key, .. } => {
                 Some(Details::IndexInfo { primary_key: primary_key.clone() })
             }
             Self::IndexSwap { .. } => {

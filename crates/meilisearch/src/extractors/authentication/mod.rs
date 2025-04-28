@@ -239,20 +239,18 @@ pub mod policies {
                 return Ok(AuthFilter::default());
             }
 
-            let (key_uuid, search_rules) =
-                match Self::authenticate_tenant_token(&auth, token) {
-                    Ok(TenantTokenOutcome::Valid(key_uuid, search_rules)) => {
-                        (key_uuid, Some(search_rules))
-                    }
-                    Ok(TenantTokenOutcome::NotATenantToken)
-                    | Err(AuthError::InvalidTenantToken) => (
-                        auth.get_optional_uid_from_encoded_key(token.as_bytes())
-                            .map_err(|_e| AuthError::InvalidApiKey)?
-                            .ok_or(AuthError::InvalidApiKey)?,
-                        None,
-                    ),
-                    Err(e) => return Err(e),
-                };
+            let (key_uuid, search_rules) = match Self::authenticate_tenant_token(&auth, token) {
+                Ok(TenantTokenOutcome::Valid(key_uuid, search_rules)) => {
+                    (key_uuid, Some(search_rules))
+                }
+                Ok(TenantTokenOutcome::NotATenantToken) | Err(AuthError::InvalidTenantToken) => (
+                    auth.get_optional_uid_from_encoded_key(token.as_bytes())
+                        .map_err(|_e| AuthError::InvalidApiKey)?
+                        .ok_or(AuthError::InvalidApiKey)?,
+                    None,
+                ),
+                Err(e) => return Err(e),
+            };
 
             // check that the indexes are allowed
             let action = Action::from_repr(A).ok_or(AuthError::InternalInvalidAction(A))?;

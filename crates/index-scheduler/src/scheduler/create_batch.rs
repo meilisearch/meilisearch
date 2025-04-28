@@ -192,15 +192,9 @@ impl IndexOperation {
 impl fmt::Display for IndexOperation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::DocumentOperation { .. } => {
-                f.write_str("IndexOperation::DocumentOperation")
-            }
-            Self::DocumentEdition { .. } => {
-                f.write_str("IndexOperation::DocumentEdition")
-            }
-            Self::DocumentDeletion { .. } => {
-                f.write_str("IndexOperation::DocumentDeletion")
-            }
+            Self::DocumentOperation { .. } => f.write_str("IndexOperation::DocumentOperation"),
+            Self::DocumentEdition { .. } => f.write_str("IndexOperation::DocumentEdition"),
+            Self::DocumentDeletion { .. } => f.write_str("IndexOperation::DocumentDeletion"),
             Self::DocumentClear { .. } => f.write_str("IndexOperation::DocumentClear"),
             Self::Settings { .. } => f.write_str("IndexOperation::Settings"),
             Self::DocumentClearAndSetting { .. } => {

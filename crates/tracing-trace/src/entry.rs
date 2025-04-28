@@ -114,9 +114,7 @@ impl MemoryStats {
         use libproc::libproc::pid_rusage::{pidrusage, RUsageInfoV0};
 
         match pidrusage(std::process::id() as i32) {
-            Ok(RUsageInfoV0 { ri_resident_size, .. }) => {
-                Some(Self { resident: ri_resident_size })
-            }
+            Ok(RUsageInfoV0 { ri_resident_size, .. }) => Some(Self { resident: ri_resident_size }),
             Err(_) => None, /* ignoring error to avoid spamming */
         }
     }

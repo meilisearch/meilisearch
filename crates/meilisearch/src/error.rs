@@ -114,13 +114,9 @@ impl ErrorCode for MeilisearchHttpError {
             Self::FederationOptionsInNonFederatedRequest(_) => {
                 Code::InvalidMultiSearchFederationOptions
             }
-            Self::PaginationInFederatedQuery(_, _) => {
-                Code::InvalidMultiSearchQueryPagination
-            }
+            Self::PaginationInFederatedQuery(_, _) => Code::InvalidMultiSearchQueryPagination,
             Self::FacetsInFederatedQuery(..) => Code::InvalidMultiSearchQueryFacets,
-            Self::InconsistentFacetOrder { .. } => {
-                Code::InvalidMultiSearchFacetOrder
-            }
+            Self::InconsistentFacetOrder { .. } => Code::InvalidMultiSearchFacetOrder,
         }
     }
 }
@@ -134,12 +130,10 @@ impl From<MeilisearchHttpError> for aweb::Error {
 impl From<aweb::error::PayloadError> for MeilisearchHttpError {
     fn from(error: aweb::error::PayloadError) -> Self {
         match error {
-            aweb::error::PayloadError::Incomplete(_) => Self::Payload(
-                PayloadError::Payload(ActixPayloadError::IncompleteError),
-            ),
-            _ => Self::Payload(PayloadError::Payload(
-                ActixPayloadError::OtherError(error),
-            )),
+            aweb::error::PayloadError::Incomplete(_) => {
+                Self::Payload(PayloadError::Payload(ActixPayloadError::IncompleteError))
+            }
+            _ => Self::Payload(PayloadError::Payload(ActixPayloadError::OtherError(error))),
         }
     }
 }

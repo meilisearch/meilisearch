@@ -37,10 +37,8 @@ impl CompatV3ToV4 {
 
     pub fn indexes(&self) -> Result<impl Iterator<Item = Result<CompatIndexV3ToV4>> + '_> {
         Ok(match self {
-            Self::V3(v3) => {
-                Box::new(v3.indexes()?.map(|index| index.map(CompatIndexV3ToV4::from)))
-                    as Box<dyn Iterator<Item = Result<CompatIndexV3ToV4>> + '_>
-            }
+            Self::V3(v3) => Box::new(v3.indexes()?.map(|index| index.map(CompatIndexV3ToV4::from)))
+                as Box<dyn Iterator<Item = Result<CompatIndexV3ToV4>> + '_>,
 
             Self::Compat(compat) => {
                 Box::new(compat.indexes()?.map(|index| index.map(CompatIndexV3ToV4::from)))
@@ -254,12 +252,8 @@ impl CompatIndexV3ToV4 {
 
     pub fn settings(&mut self) -> Result<v4::Settings<v4::Checked>> {
         Ok(match self {
-            Self::V3(v3) => {
-                v4::Settings::<v4::Unchecked>::from(v3.settings()?).check()
-            }
-            Self::Compat(compat) => {
-                v4::Settings::<v4::Unchecked>::from(compat.settings()?).check()
-            }
+            Self::V3(v3) => v4::Settings::<v4::Unchecked>::from(v3.settings()?).check(),
+            Self::Compat(compat) => v4::Settings::<v4::Unchecked>::from(compat.settings()?).check(),
         })
     }
 }

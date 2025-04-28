@@ -66,9 +66,7 @@ impl UpdateStatus {
     pub fn enqueued_at(&self) -> &OffsetDateTime {
         match self {
             Self::Enqueued { content } => &content.enqueued_at,
-            Self::Failed { content } | Self::Processed { content } => {
-                &content.enqueued_at
-            }
+            Self::Failed { content } | Self::Processed { content } => &content.enqueued_at,
         }
     }
 }

@@ -504,10 +504,9 @@ impl ErrorCode for HeedError {
             Self::Mdb(MdbError::MapFull) => Code::DatabaseSizeLimitReached,
             Self::Mdb(MdbError::Invalid) => Code::InvalidStoreFile,
             Self::Io(e) => e.error_code(),
-            Self::Mdb(_)
-            | Self::Encoding(_)
-            | Self::Decoding(_)
-            | Self::EnvAlreadyOpened => Code::Internal,
+            Self::Mdb(_) | Self::Encoding(_) | Self::Decoding(_) | Self::EnvAlreadyOpened => {
+                Code::Internal
+            }
         }
     }
 }

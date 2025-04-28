@@ -52,17 +52,13 @@ impl From<KindWithContent> for AutobatchKind {
                 allow_index_creation, primary_key, ..
             } => Self::DocumentImport { allow_index_creation, primary_key },
             KindWithContent::DocumentEdition { .. } => Self::DocumentEdition,
-            KindWithContent::DocumentDeletion { .. } => {
-                Self::DocumentDeletion { by_filter: false }
-            }
+            KindWithContent::DocumentDeletion { .. } => Self::DocumentDeletion { by_filter: false },
             KindWithContent::DocumentClear { .. } => Self::DocumentClear,
             KindWithContent::DocumentDeletionByFilter { .. } => {
                 Self::DocumentDeletion { by_filter: true }
             }
             KindWithContent::SettingsUpdate { allow_index_creation, is_deletion, .. } => {
-                Self::Settings {
-                    allow_index_creation: allow_index_creation && !is_deletion,
-                }
+                Self::Settings { allow_index_creation: allow_index_creation && !is_deletion }
             }
             KindWithContent::IndexDeletion { .. } => Self::IndexDeletion,
             KindWithContent::IndexCreation { .. } => Self::IndexCreation,
