@@ -94,7 +94,7 @@ fn openai_responses() -> &'static OpenAiResponses {
         // decompress with `gzip --keep -d openai_responses.json.gz`
         // recompress with `gzip --keep -c openai_responses.json > openai_responses.json.gz`
         let compressed_responses = include_bytes!("openai_responses.json.gz");
-        let mut responses = Vec::new();
+        let mut responses = vec![];
         let mut decoder = flate2::write::GzDecoder::new(&mut responses);
 
         decoder.write_all(compressed_responses).unwrap();
@@ -110,7 +110,7 @@ fn openai_tokenized_responses() -> &'static OpenAiTokenizedResponses {
         // decompress with `gzip --keep -d openai_tokenized_responses.json.gz`
         // recompress with `gzip --keep -c openai_tokenized_responses.json > openai_tokenized_responses.json.gz`
         let compressed_responses = include_bytes!("openai_tokenized_responses.json.gz");
-        let mut responses = Vec::new();
+        let mut responses = vec![];
         let mut decoder = flate2::write::GzDecoder::new(&mut responses);
 
         decoder.write_all(compressed_responses).unwrap();
@@ -125,7 +125,7 @@ fn long_text() -> &'static str {
         // decompress with `gzip --keep -d intel_gen.txt.gz`
         // recompress with `gzip --keep -c intel_gen.txt > intel_gen.txt.gz`
         let compressed_long_text = include_bytes!("intel_gen.txt.gz");
-        let mut long_text = Vec::new();
+        let mut long_text = vec![];
         let mut decoder = flate2::write::GzDecoder::new(&mut long_text);
 
         decoder.write_all(compressed_long_text).unwrap();
@@ -237,7 +237,7 @@ async fn create_mock_with_template(
             let embeddings = if inputs == openai_tokenized_responses.tokens.as_slice() {
                 vec![openai_tokenized_responses.embedding.clone()]
             } else {
-                let mut embeddings = Vec::new();
+                let mut embeddings = vec![];
                 for input in inputs {
                     let serde_json::Value::String(input) = input else {
                         return ResponseTemplate::new(400).set_body_json(json!({

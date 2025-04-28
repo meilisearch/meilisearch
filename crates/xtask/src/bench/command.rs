@@ -48,7 +48,7 @@ impl Body {
                 let context = || format!("while getting body from asset '{name}'");
                 let (mut file, format) =
                     fetch_asset(&name, assets, asset_folder).with_context(context)?;
-                let mut buf = Vec::new();
+                let mut buf = vec![];
                 file.read_to_end(&mut buf).with_context(context)?;
                 (buf, format.to_content_type(&name))
             }),

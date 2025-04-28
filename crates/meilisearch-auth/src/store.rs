@@ -202,7 +202,7 @@ impl HeedAuthStore {
     }
 
     pub fn list_api_keys(&self) -> Result<Vec<Key>> {
-        let mut list = Vec::new();
+        let mut list = vec![];
         let rtxn = self.env.read_txn()?;
         for result in self.keys.remap_key_type::<DecodeIgnore>().iter(&rtxn)? {
             let (_, content) = result?;
@@ -296,7 +296,7 @@ impl<'a> heed::BytesEncode<'a> for KeyIdActionCodec {
     type EItem = (&'a KeyId, &'a Action, Option<&'a [u8]>);
 
     fn bytes_encode((key_id, action, index): &Self::EItem) -> StdResult<Cow<[u8]>, BoxedError> {
-        let mut bytes = Vec::new();
+        let mut bytes = vec![];
 
         bytes.extend_from_slice(key_id.as_bytes());
         let action_bytes = u8::to_be_bytes(action.repr());

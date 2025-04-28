@@ -38,8 +38,8 @@ pub fn extract_fid_word_count_docids<R: io::Read + io::Seek>(
         true,
     );
 
-    let mut key_buffer = Vec::new();
-    let mut value_buffer = Vec::new();
+    let mut key_buffer = vec![];
+    let mut value_buffer = vec![];
     let mut cursor = docid_word_positions.into_cursor()?;
     while let Some((key, value)) = cursor.move_on_next()? {
         let (document_id_bytes, fid_bytes) = try_split_array_at(key)

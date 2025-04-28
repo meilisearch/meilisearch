@@ -46,7 +46,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
         max_memory.map(|m| m / 3),
         true,
     );
-    let mut key_buffer = Vec::new();
+    let mut key_buffer = vec![];
     let mut del_words = BTreeSet::new();
     let mut add_words = BTreeSet::new();
     let mut cursor = docid_word_positions.into_cursor()?;
@@ -113,7 +113,7 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
     );
 
     let mut iter = word_fid_docids_sorter.into_stream_merger_iter()?;
-    let mut buffer = Vec::new();
+    let mut buffer = vec![];
     // NOTE: replacing sorters by bitmap merging is less efficient, so, use sorters.
     while let Some((key, value)) = iter.next()? {
         // only keep the value if their is a change to apply in the DB.
@@ -170,7 +170,7 @@ fn words_into_sorter(
     use itertools::merge_join_by;
     use itertools::EitherOrBoth::{Both, Left, Right};
 
-    let mut buffer = Vec::new();
+    let mut buffer = vec![];
     for eob in merge_join_by(del_words.iter(), add_words.iter(), |d, a| d.cmp(a)) {
         buffer.clear();
         let mut value_writer = KvWriterDelAdd::new(&mut buffer);

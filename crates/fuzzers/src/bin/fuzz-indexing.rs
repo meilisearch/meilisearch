@@ -92,7 +92,7 @@ fn main() {
                             let embedders = EmbeddingConfigs::default();
                             let mut indexer = indexer::DocumentOperation::new();
 
-                            let mut operations = Vec::new();
+                            let mut operations = vec![];
                             for op in batch.0 {
                                 match op {
                                     Operation::AddDoc(doc) => {

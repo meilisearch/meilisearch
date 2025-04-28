@@ -82,8 +82,8 @@ impl<'ctx> SearchContext<'ctx> {
         let searchable_fids = index.searchable_fields_and_weights(txn)?;
         let exact_attributes_ids = index.exact_attributes_ids(txn)?;
 
-        let mut exact = Vec::new();
-        let mut tolerant = Vec::new();
+        let mut exact = vec![];
+        let mut tolerant = vec![];
         for (_name, fid, weight) in searchable_fids {
             if exact_attributes_ids.contains(&fid) {
                 exact.push((fid, weight));

@@ -203,8 +203,8 @@ fn document_word_positions_into_sorter(
     use itertools::merge_join_by;
     use itertools::EitherOrBoth::{Both, Left, Right};
 
-    let mut buffer = Vec::new();
-    let mut key_buffer = Vec::new();
+    let mut buffer = vec![];
+    let mut key_buffer = vec![];
     for eob in
         merge_join_by(del_word_pair_proximity.iter(), add_word_pair_proximity.iter(), |d, a| {
             d.cmp(a)

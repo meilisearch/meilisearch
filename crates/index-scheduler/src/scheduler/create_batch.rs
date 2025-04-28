@@ -266,7 +266,7 @@ impl IndexScheduler {
                     })
                     .flatten();
 
-                let mut operations = Vec::new();
+                let mut operations = vec![];
 
                 for task in tasks.iter() {
                     match task.kind {
@@ -317,7 +317,7 @@ impl IndexScheduler {
                     settings_ids,
                 )?;
 
-                let mut settings = Vec::new();
+                let mut settings = vec![];
                 for task in &tasks {
                     match task.kind {
                         KindWithContent::SettingsUpdate {
@@ -539,7 +539,7 @@ impl IndexScheduler {
         };
 
         let mut stop_reason = BatchStopReason::default();
-        let mut enqueued = Vec::new();
+        let mut enqueued = vec![];
         let mut total_size: u64 = 0;
         for task_id in index_tasks.into_iter() {
             if enqueued.len() >= tasks_limit {

@@ -46,7 +46,7 @@ async fn loop_delete_add_documents() {
     let server = Server::new_shared();
     let index = server.unique_index();
     let documents = json!([{"id": 1, "field1": "hello"}]);
-    let mut tasks = Vec::new();
+    let mut tasks = vec![];
     for _ in 0..50 {
         let (response, code) = index.add_documents(documents.clone(), None).await;
         tasks.push(response["taskUid"].as_u64().unwrap());

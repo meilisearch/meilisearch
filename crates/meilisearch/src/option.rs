@@ -916,7 +916,7 @@ fn load_private_key(
 }
 
 fn load_ocsp(filename: &Option<PathBuf>) -> anyhow::Result<Vec<u8>> {
-    let mut ret = Vec::new();
+    let mut ret = vec![];
 
     if let Some(ref name) = filename {
         fs::File::open(name)

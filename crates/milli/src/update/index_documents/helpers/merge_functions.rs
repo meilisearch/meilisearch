@@ -37,7 +37,7 @@ impl MergeFunction for MergeRoaringBitmaps {
                 .map(StdResult::unwrap)
                 .reduce(|a, b| a | b)
                 .unwrap();
-            let mut buffer = Vec::new();
+            let mut buffer = vec![];
             serialize_roaring_bitmap(&merged, &mut buffer)?;
             Ok(Cow::Owned(buffer))
         }
@@ -77,7 +77,7 @@ pub fn merge_two_del_add_obkvs(
     buffer.clear();
 
     let mut writer = obkv::KvWriter::new(buffer);
-    let mut value_buffer = Vec::new();
+    let mut value_buffer = vec![];
     for eob in merge_join_by(base.iter(), update.iter(), |(b, _), (u, _)| b.cmp(u)) {
         match eob {
             Left((k, v)) => {
@@ -143,7 +143,7 @@ fn inner_merge_del_add_obkvs<'a>(
     // treat the newest obkv as the starting point of the merge.
     let mut acc_operation_type = newest_operation_type;
     let mut acc = newest[1..].to_vec();
-    let mut buffer = Vec::new();
+    let mut buffer = vec![];
     // reverse iter from the most recent to the oldest.
     for current in obkvs.iter().rev() {
         // if in the previous iteration there was a complete deletion,
@@ -199,7 +199,7 @@ impl MergeFunction for MergeCboRoaringBitmaps {
         if values.len() == 1 {
             Ok(values[0].clone())
         } else {
-            let mut vec = Vec::new();
+            let mut vec = vec![];
             CboRoaringBitmapCodec::merge_into(values, &mut vec)?;
             Ok(Cow::from(vec))
         }
@@ -218,8 +218,8 @@ impl MergeFunction for MergeDeladdCboRoaringBitmaps {
             Ok(values[0].clone())
         } else {
             // Retrieve the bitmaps from both sides
-            let mut del_bitmaps_bytes = Vec::new();
-            let mut add_bitmaps_bytes = Vec::new();
+            let mut del_bitmaps_bytes = vec![];
+            let mut add_bitmaps_bytes = vec![];
             for value in values {
                 let obkv = KvReaderDelAdd::from_slice(value);
                 if let Some(bitmap_bytes) = obkv.get(DelAdd::Deletion) {
@@ -231,7 +231,7 @@ impl MergeFunction for MergeDeladdCboRoaringBitmaps {
             }
 
             let mut output_deladd_obkv = KvWriterDelAdd::memory();
-            let mut buffer = Vec::new();
+            let mut buffer = vec![];
             CboRoaringBitmapCodec::merge_into(del_bitmaps_bytes, &mut buffer)?;
             output_deladd_obkv.insert(DelAdd::Deletion, &buffer)?;
             buffer.clear();

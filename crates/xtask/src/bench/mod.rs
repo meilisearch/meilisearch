@@ -156,7 +156,7 @@ pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
         let workload_runs = tokio::spawn(
             {
                 let dashboard_client = dashboard_client.clone();
-                let mut dashboard_urls = Vec::new();
+                let mut dashboard_urls = vec![];
                 async move {
             for workload_file in args.workload_file.iter() {
                 let workload: Workload = serde_json::from_reader(

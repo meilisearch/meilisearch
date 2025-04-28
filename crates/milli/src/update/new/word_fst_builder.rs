@@ -99,7 +99,7 @@ impl PrefixFstBuilder {
             return None;
         }
 
-        let mut prefix_fst_builders = Vec::new();
+        let mut prefix_fst_builders = vec![];
         for _ in 0..max_prefix_length {
             prefix_fst_builders.push(SetBuilder::memory());
         }
@@ -166,7 +166,7 @@ impl PrefixFstBuilder {
 
     fn build(self, index: &crate::Index, rtxn: &heed::RoTxn) -> Result<PrefixData> {
         // We merge all of the previously computed prefixes into on final set.
-        let mut prefix_fsts = Vec::new();
+        let mut prefix_fsts = vec![];
         for builder in self.prefix_fst_builders.into_iter() {
             let prefix_fst = builder.into_set();
             prefix_fsts.push(prefix_fst);

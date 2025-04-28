@@ -72,8 +72,8 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
     let mut facet_is_empty_docids = BTreeMap::<FieldId, (RoaringBitmap, RoaringBitmap)>::new();
 
     // We create two buffers for mutable ref issues with closures.
-    let mut numbers_key_buffer = Vec::new();
-    let mut strings_key_buffer = Vec::new();
+    let mut numbers_key_buffer = vec![];
+    let mut strings_key_buffer = vec![];
 
     let old_faceted_fids: BTreeSet<_> =
         settings_diff.list_faceted_fields_from_fid_map(DelAdd::Deletion);
@@ -260,7 +260,7 @@ pub fn extract_fid_docid_facet_values<R: io::Read + io::Seek>(
         }
     }
 
-    let mut buffer = Vec::new();
+    let mut buffer = vec![];
     let mut facet_exists_docids_writer = create_writer(
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
@@ -567,8 +567,8 @@ fn extract_facet_values(value: &Value, geo_field: bool) -> FilterableValues {
         Value::Array(a) if a.is_empty() => FilterableValues::Empty,
         Value::Object(o) if o.is_empty() => FilterableValues::Empty,
         otherwise => {
-            let mut numbers = Vec::new();
-            let mut strings = Vec::new();
+            let mut numbers = vec![];
+            let mut strings = vec![];
             inner_extract_facet_values(otherwise, true, &mut numbers, &mut strings, geo_field);
             FilterableValues::Values { numbers, strings }
         }

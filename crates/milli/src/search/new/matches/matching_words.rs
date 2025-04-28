@@ -33,8 +33,8 @@ pub struct MatchingWords {
 
 impl MatchingWords {
     pub fn new(ctx: SearchContext<'_>, located_terms: Vec<LocatedQueryTerm>) -> Self {
-        let mut phrases = Vec::new();
-        let mut words = Vec::new();
+        let mut phrases = vec![];
+        let mut words = vec![];
 
         // Extract and centralize the different phrases and words to match stored in a QueryTerm
         // and wrap them in dedicated structures.

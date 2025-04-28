@@ -238,7 +238,7 @@ impl TryFrom<SearchQueryGet> for SearchQuery {
 
 /// Transform the sort query parameter into something that matches the post expected format.
 pub fn fix_sort_query_parameters(sort_query: &str) -> Vec<String> {
-    let mut sort_parameters = Vec::new();
+    let mut sort_parameters = vec![];
     let mut merge = false;
     for current_sort in sort_query.trim_matches('"').split(',').map(|s| s.trim()) {
         if current_sort.starts_with("_geoPoint(") {

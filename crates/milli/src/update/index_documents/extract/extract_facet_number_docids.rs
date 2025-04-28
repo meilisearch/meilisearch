@@ -35,7 +35,7 @@ pub fn extract_facet_number_docids<R: io::Read + io::Seek>(
         true,
     );
 
-    let mut buffer = Vec::new();
+    let mut buffer = vec![];
     let mut cursor = fid_docid_facet_number.into_cursor()?;
     while let Some((key_bytes, deladd_obkv_bytes)) = cursor.move_on_next()? {
         let (field_id, document_id, number) =

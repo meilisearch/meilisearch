@@ -43,7 +43,7 @@ impl heed::BytesEncode<'_> for BoRoaringBitmapCodec {
     type EItem = RoaringBitmap;
 
     fn bytes_encode(item: &Self::EItem) -> Result<Cow<'_, [u8]>, BoxedError> {
-        let mut out = Vec::new();
+        let mut out = vec![];
         Self::serialize_into(item, &mut out);
         Ok(Cow::Owned(out))
     }

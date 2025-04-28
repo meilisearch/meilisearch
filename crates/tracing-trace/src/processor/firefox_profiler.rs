@@ -247,7 +247,7 @@ fn make_frames(
     calls: &HashMap<ResourceId, (NewCallsite, StringHandle)>,
     subcategory: CategoryPairHandle,
 ) -> Vec<FrameInfo> {
-    let mut frames = Vec::new();
+    let mut frames = vec![];
     let mut current_span = span;
     loop {
         let frame = make_frame(current_span, calls, subcategory);

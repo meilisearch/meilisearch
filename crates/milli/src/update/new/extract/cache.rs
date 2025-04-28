@@ -482,7 +482,7 @@ pub fn merge_caches_sorted<F>(frozen: Vec<FrozenCache>, mut f: F) -> Result<()>
 where
     F: for<'a> FnMut(&'a [u8], DelAddRoaringBitmap) -> Result<()>,
 {
-    let mut maps = Vec::new();
+    let mut maps = vec![];
     let mut heap = BinaryHeap::new();
     let mut current_bucket = None;
     for FrozenCache { source_id, bucket_id, cache, spilled } in frozen {

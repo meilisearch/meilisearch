@@ -414,7 +414,7 @@ impl ValueTemplate {
     ) -> Result<Self, TemplateParsingError> {
         let mut value_path = None;
         let mut array_path = None;
-        let mut current_path = Vec::new();
+        let mut current_path = vec![];
         Self::parse_value(
             &template,
             placeholder_string,
@@ -464,7 +464,7 @@ impl ValueTemplate {
             }
             ValueKind::Array(ArrayPath { repeated_value, path_to_array, value_path_in_array }) => {
                 // 1. build the array of repeated values
-                let mut array = Vec::new();
+                let mut array = vec![];
                 for injected_value in values {
                     let mut repeated_value = repeated_value.clone();
                     inject_value(&mut repeated_value, value_path_in_array, injected_value);
@@ -581,7 +581,7 @@ impl ValueTemplate {
 
                 let value_path_in_array = {
                     let mut value_path = None;
-                    let mut current_path_in_array = Vec::new();
+                    let mut current_path_in_array = vec![];
 
                     Self::parse_value(
                         first,

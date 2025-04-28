@@ -66,7 +66,7 @@ impl IndexScheduler {
                 // TODO: at some point, for better efficiency we might want to reuse the bumpalo for successive batches.
                 // this is made difficult by the fact we're doing private clones of the index scheduler and sending it
                 // to a fresh thread.
-                let mut content_files = Vec::new();
+                let mut content_files = vec![];
                 for operation in &operations {
                     match operation {
                         DocumentOperation::Replace(content_uuid)

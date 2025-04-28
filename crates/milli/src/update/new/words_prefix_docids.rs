@@ -133,7 +133,7 @@ impl<'a, 'rtxn> FrozenPrefixBitmaps<'a, 'rtxn> {
 
         let mut prefixes_bitmaps = HashMap::new();
         for prefix in prefixes {
-            let mut bitmap_bytes = Vec::new();
+            let mut bitmap_bytes = vec![];
             for result in database.prefix_iter(rtxn, prefix.as_bytes())? {
                 let (_word, bytes) = result?;
                 bitmap_bytes.push(bytes);
@@ -230,7 +230,7 @@ impl WordPrefixIntegerDocids {
 
         // We iterate over all the collected and serialized bitmaps through
         // the files and entries to eventually put them in the final database.
-        let mut key_buffer = Vec::new();
+        let mut key_buffer = vec![];
         for refcell in local_entries {
             let (index, file, mut buffer) = refcell.into_inner();
             let mut file = file.into_inner().map_err(|e| e.into_error())?;

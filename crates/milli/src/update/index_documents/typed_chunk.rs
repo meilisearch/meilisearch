@@ -159,7 +159,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 .into_iter()
                 .map(|IndexEmbeddingConfig { name, .. }| name)
                 .collect();
-            let mut vectors_buffer = Vec::new();
+            let mut vectors_buffer = vec![];
             while let Some((key, reader)) = iter.next()? {
                 let mut writer: KvWriter<_, FieldId> = KvWriter::memory();
                 let reader: &KvReader<FieldId> = reader.into();
@@ -778,7 +778,7 @@ where
     MF: MergeFunction,
     crate::Error: From<MF::Error>,
 {
-    let mut buffer = Vec::new();
+    let mut buffer = vec![];
     let database = database.remap_types::<Bytes, Bytes>();
 
     let mut iter = merger.into_stream_merger_iter()?;

@@ -167,7 +167,7 @@ impl<'t> Matcher<'t, '_, '_, '_> {
 
         let tokens: Vec<_> =
             self.tokenizer.tokenize_with_allow_list(self.text, self.locales).collect();
-        let mut matches = Vec::new();
+        let mut matches = vec![];
 
         let mut words_positions = tokens
             .iter()
@@ -408,7 +408,7 @@ impl<'t> Matcher<'t, '_, '_, '_> {
                         _ => [0, self.text.len()],
                     };
 
-                    let mut formatted = Vec::new();
+                    let mut formatted = vec![];
 
                     // push crop marker if it's not the start of the text.
                     if crop_byte_start > 0 && !self.crop_marker.is_empty() {

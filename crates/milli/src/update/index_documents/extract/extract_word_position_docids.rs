@@ -39,7 +39,7 @@ pub fn extract_word_position_docids<R: io::Read + io::Seek>(
     let mut del_word_positions: BTreeSet<(u16, Vec<u8>)> = BTreeSet::new();
     let mut add_word_positions: BTreeSet<(u16, Vec<u8>)> = BTreeSet::new();
     let mut current_document_id: Option<u32> = None;
-    let mut key_buffer = Vec::new();
+    let mut key_buffer = vec![];
     let mut cursor = docid_word_positions.into_cursor()?;
     while let Some((key, value)) = cursor.move_on_next()? {
         let (document_id_bytes, _fid_bytes) = try_split_array_at(key)
@@ -105,7 +105,7 @@ fn words_position_into_sorter(
     use itertools::merge_join_by;
     use itertools::EitherOrBoth::{Both, Left, Right};
 
-    let mut buffer = Vec::new();
+    let mut buffer = vec![];
     for eob in merge_join_by(del_word_positions.iter(), add_word_positions.iter(), |d, a| d.cmp(a))
     {
         buffer.clear();

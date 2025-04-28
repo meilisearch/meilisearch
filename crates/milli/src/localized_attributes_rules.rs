@@ -56,7 +56,7 @@ impl LocalizedFieldIds {
             });
 
             for (field_id, field_name) in fields {
-                let mut locales = Vec::new();
+                let mut locales = vec![];
                 for rule in rules {
                     if rule.match_str(field_name) == PatternMatch::Match {
                         locales.extend(rule.locales.iter());
@@ -77,7 +77,7 @@ impl LocalizedFieldIds {
     }
 
     pub fn all_locales(&self) -> Vec<Language> {
-        let mut locales = Vec::new();
+        let mut locales = vec![];
         for field_locales in self.field_id_to_locales.values() {
             if !field_locales.is_empty() {
                 locales.extend(field_locales);

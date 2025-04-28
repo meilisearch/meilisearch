@@ -199,7 +199,7 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
 
     let new_vectors_fid = new_fields_ids_map.id(RESERVED_VECTORS_FIELD_NAME);
 
-    let mut extractors = Vec::new();
+    let mut extractors = vec![];
 
     let mut configs = settings_diff.new.embedding_configs.clone().into_inner();
     let old_configs = &settings_diff.old.embedding_configs;
@@ -301,7 +301,7 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
         }
     }
 
-    let mut key_buffer = Vec::new();
+    let mut key_buffer = vec![];
     let mut cursor = obkv_documents.into_cursor()?;
     while let Some((key, value)) = cursor.move_on_next()? {
         // this must always be serialized as (docid, external_docid);
@@ -439,7 +439,7 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
         &unused_vectors_distribution,
     )?;
 
-    let mut results = Vec::new();
+    let mut results = vec![];
 
     for EmbedderVectorExtractor {
         embedder_name,

@@ -86,7 +86,7 @@ impl V1Reader {
         let meta_file = fs::read(dump.path().join("metadata.json"))?;
         let metadata: Metadata = serde_json::from_reader(&*meta_file)?;
 
-        let mut indexes = Vec::new();
+        let mut indexes = vec![];
 
         for index in metadata.indexes.into_iter() {
             let index_path = dump.path().join(&index.uid);

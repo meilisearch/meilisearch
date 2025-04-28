@@ -118,7 +118,7 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
             None => return Ok(()),
         };
         if self.db.is_empty(wtxn)? {
-            let mut buffer = Vec::new();
+            let mut buffer = vec![];
             let mut database = self.db.iter_mut(wtxn)?.remap_types::<Bytes, Bytes>();
             let mut iter = delta_data.into_stream_merger_iter()?;
             while let Some((key, value)) = iter.next()? {
@@ -142,7 +142,7 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
                 };
             }
         } else {
-            let mut buffer = Vec::new();
+            let mut buffer = vec![];
             let database = self.db.remap_types::<Bytes, Bytes>();
 
             let mut iter = delta_data.into_stream_merger_iter()?;

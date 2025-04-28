@@ -55,7 +55,7 @@ where
     F: Fn(K) -> DelAddOperation,
 {
     let mut writer = obkv::KvWriter::new(buffer);
-    let mut value_buffer = Vec::new();
+    let mut value_buffer = vec![];
     for (key, value) in reader.iter() {
         value_buffer.clear();
         let mut value_writer = KvWriterDelAdd::new(&mut value_buffer);
@@ -105,7 +105,7 @@ pub fn del_add_from_two_obkvs<K: obkv::Key + PartialOrd + Ord>(
     use itertools::EitherOrBoth::{Both, Left, Right};
 
     let mut writer = obkv::KvWriter::new(buffer);
-    let mut value_buffer = Vec::new();
+    let mut value_buffer = vec![];
 
     for eob in merge_join_by(deletion.iter(), addition.iter(), |(b, _), (u, _)| b.cmp(u)) {
         value_buffer.clear();

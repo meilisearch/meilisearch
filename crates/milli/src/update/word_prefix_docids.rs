@@ -98,7 +98,7 @@ impl<'t, 'i> WordPrefixDocids<'t, 'i> {
 
         // We fetch the docids associated to the newly added word prefix fst only.
         let db = self.word_docids.remap_data_type::<Bytes>();
-        let mut buffer = Vec::new();
+        let mut buffer = vec![];
         for prefix in new_prefix_fst_words {
             let prefix = std::str::from_utf8(prefix.as_bytes())?;
             for result in db.prefix_iter(self.wtxn, prefix)? {

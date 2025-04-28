@@ -143,7 +143,7 @@ pub fn expected_order(
     let mut groups: Vec<Vec<TestDocument>> = vec![dataset];
 
     for criterion in criteria {
-        let mut new_groups = Vec::new();
+        let mut new_groups = vec![];
         for group in groups.iter_mut() {
             match criterion {
                 Criterion::Attribute => {

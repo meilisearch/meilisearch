@@ -30,14 +30,14 @@ pub fn located_query_terms_from_tokens(
     let nbr_typos = number_of_typos_allowed(ctx)?;
     let allow_prefix_search = ctx.is_prefix_search_allowed();
 
-    let mut query_terms = Vec::new();
+    let mut query_terms = vec![];
 
     let mut negative_phrase = false;
     let mut phrase: Option<PhraseBuilder> = None;
     let mut encountered_whitespace = true;
     let mut negative_next_token = false;
-    let mut negative_words = Vec::new();
-    let mut negative_phrases = Vec::new();
+    let mut negative_words = vec![];
+    let mut negative_phrases = vec![];
 
     let parts_limit = words_limit.unwrap_or(usize::MAX);
 

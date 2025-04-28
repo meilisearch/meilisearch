@@ -132,7 +132,7 @@ impl<'de> Deserialize<'de> for LegacyDateTime {
             where
                 A: serde::de::SeqAccess<'de>,
             {
-                let mut vec = Vec::new();
+                let mut vec = vec![];
                 // We must deserialize the value as `i64` because the largest values are `u32` and `i32`
                 while let Some(el) = seq.next_element::<i64>()? {
                     vec.push(el);

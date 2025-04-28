@@ -143,7 +143,7 @@ pub async fn fetch_assets(
 }
 
 fn check_sha256(name: &str, asset: &Asset, mut file: std::fs::File) -> anyhow::Result<bool> {
-    let mut bytes = Vec::new();
+    let mut bytes = vec![];
     file.read_to_end(&mut bytes).with_context(|| format!("hashing file for asset {name}"))?;
     let mut file_hash = sha2::Sha256::new();
     file_hash.update(&bytes);

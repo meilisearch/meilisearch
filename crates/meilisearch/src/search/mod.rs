@@ -1489,7 +1489,7 @@ fn make_hits<'a>(
     matching_words: milli::MatchingWords,
     documents_ids_scores: impl Iterator<Item = (u32, &'a Vec<ScoreDetails>)> + 'a,
 ) -> milli::Result<Vec<SearchHit>> {
-    let mut documents = Vec::new();
+    let mut documents = vec![];
 
     let dictionary = index.dictionary(rtxn)?;
     let dictionary: Option<Vec<_>> =
@@ -1885,7 +1885,7 @@ fn format_fields(
                 })
                 .map(|(_, option)| **option)
                 .reduce(|acc, option| acc.merge(option));
-            let mut infos = Vec::new();
+            let mut infos = vec![];
 
             // if no locales has been provided, we try to find the locales in the localized_attributes.
             let locales = locales.or_else(|| {
@@ -2002,12 +2002,12 @@ pub(crate) fn parse_filter(
 }
 
 fn parse_filter_array(arr: &[Value]) -> Result<Option<Filter>, MeilisearchHttpError> {
-    let mut ands = Vec::new();
+    let mut ands = vec![];
     for value in arr {
         match value {
             Value::String(s) => ands.push(Either::Right(s.as_str())),
             Value::Array(arr) => {
-                let mut ors = Vec::new();
+                let mut ors = vec![];
                 for value in arr {
                     match value {
                         Value::String(s) => ors.push(s.as_str()),

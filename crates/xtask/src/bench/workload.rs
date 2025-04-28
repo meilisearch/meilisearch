@@ -92,7 +92,7 @@ pub async fn execute(
 
     let workload_uuid = dashboard_client.create_workload(invocation_uuid, &workload).await?;
 
-    let mut tasks = Vec::new();
+    let mut tasks = vec![];
     for i in 0..workload.run_count {
         tasks.push(
             execute_run(

@@ -133,12 +133,12 @@ impl<'a> Filter<'a> {
     }
 
     fn parse_filter_array(arr: &'a [Value]) -> Result<Option<Self>> {
-        let mut ands = Vec::new();
+        let mut ands = vec![];
         for value in arr {
             match value {
                 Value::String(s) => ands.push(Either::Right(s.as_str())),
                 Value::Array(arr) => {
-                    let mut ors = Vec::new();
+                    let mut ors = vec![];
                     for value in arr {
                         match value {
                             Value::String(s) => ors.push(s.as_str()),

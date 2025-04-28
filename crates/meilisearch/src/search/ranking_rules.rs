@@ -199,8 +199,8 @@ impl RankingRules {
         let mut sort = None;
 
         let mut sorted_fields = HashMap::new();
-        let mut canonicalization_actions = Vec::new();
-        let mut canonical_criteria = Vec::new();
+        let mut canonicalization_actions = vec![];
+        let mut canonical_criteria = vec![];
         let mut canonical_sort = None;
 
         for (criterion_index, criterion) in criteria.iter().enumerate() {
@@ -260,8 +260,8 @@ impl RankingRules {
         let mut sort = None;
 
         let mut sorted_fields = HashMap::new();
-        let mut canonicalization_actions = Vec::new();
-        let mut canonical_criteria = Vec::new();
+        let mut canonicalization_actions = vec![];
+        let mut canonical_criteria = vec![];
         let mut canonical_sort = None;
 
         let mut vector = None;
@@ -346,10 +346,10 @@ impl RankingRules {
         let mut exactness = None;
         let mut sorted_fields = HashMap::new();
 
-        let mut canonical_criteria = Vec::new();
+        let mut canonical_criteria = vec![];
         let mut canonical_sort = None;
 
-        let mut canonicalization_actions = Vec::new();
+        let mut canonicalization_actions = vec![];
 
         for (criterion_index, criterion) in criteria.iter().enumerate() {
             let criterion = criterion.clone();
@@ -573,7 +573,7 @@ fn canonicalize_sort(
     canonicalization_actions: &mut Vec<CanonicalizationAction>,
 ) -> Vec<AscDesc> {
     let mut geo_sorted = None;
-    let mut canonical_sort = Vec::new();
+    let mut canonical_sort = vec![];
     for (sort_index, asc_desc) in sort_query.iter().enumerate() {
         let source = RankingRuleSource::Sort { criterion_index, sort_index };
         let asc_desc = asc_desc.clone();

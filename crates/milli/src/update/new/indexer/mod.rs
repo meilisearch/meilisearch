@@ -59,7 +59,7 @@ where
     DC: DocumentChanges<'pl>,
     MSP: Fn() -> bool + Sync,
 {
-    let mut bbbuffers = Vec::new();
+    let mut bbbuffers = vec![];
     let finished_extraction = AtomicBool::new(false);
 
     let arroy_memory = grenad_parameters.max_memory;

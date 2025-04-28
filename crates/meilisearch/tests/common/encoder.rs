@@ -38,7 +38,7 @@ impl Encoder {
     }
 
     pub fn decode(&self, bytes: impl Into<Bytes>) -> impl Into<Bytes> {
-        let mut buffer = Vec::new();
+        let mut buffer = vec![];
         let input = bytes.into();
         match self {
             Self::Gzip => {

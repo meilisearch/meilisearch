@@ -219,7 +219,7 @@ fn create_value(value: &Document, mut selectors: HashSet<&str>) -> Document {
 }
 
 fn create_array(array: &[Value], selectors: &HashSet<&str>) -> Vec<Value> {
-    let mut res = Vec::new();
+    let mut res = vec![];
 
     for value in array {
         match value {

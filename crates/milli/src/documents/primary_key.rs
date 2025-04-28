@@ -103,7 +103,7 @@ impl<'a> PrimaryKey<'a> {
                 None => Ok(Err(DocumentIdExtractionError::MissingDocumentId)),
             },
             nested @ PrimaryKey::Nested { .. } => {
-                let mut matching_documents_ids = Vec::new();
+                let mut matching_documents_ids = vec![];
                 for (first_level_name, right) in nested.possible_level_names() {
                     if let Some(field_id) = fields.id(first_level_name) {
                         if let Some(value_bytes) = document.get(field_id) {

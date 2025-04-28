@@ -144,7 +144,7 @@ fn print_backtrace(
     calls: &HashMap<ResourceId, NewCallsite>,
     span: &NewSpan,
 ) -> String {
-    let mut parents = Vec::new();
+    let mut parents = vec![];
     let mut current = span.parent_id;
     while let Some(current_id) = &current {
         let (span, _) = spans.get(current_id).unwrap();

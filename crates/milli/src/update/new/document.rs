@@ -319,7 +319,7 @@ where
     let vectors_value: Box<RawValue>;
 
     document_buffer.clear();
-    let mut unordered_field_buffer = Vec::new();
+    let mut unordered_field_buffer = vec![];
     unordered_field_buffer.clear();
 
     let mut writer = KvWriterFieldId::new(&mut document_buffer);

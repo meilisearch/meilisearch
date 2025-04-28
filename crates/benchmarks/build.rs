@@ -107,7 +107,7 @@ fn download_dataset<U: IntoUrl>(url: U) -> anyhow::Result<Cursor<Bytes>> {
 fn uncompress_in_file<R: Read + Seek, P: AsRef<Path>>(bytes: R, path: P) -> anyhow::Result<()> {
     let path = path.as_ref();
     let mut gz = GzDecoder::new(bytes);
-    let mut dataset = Vec::new();
+    let mut dataset = vec![];
     gz.read_to_end(&mut dataset)?;
 
     fs::write(path, dataset)?;

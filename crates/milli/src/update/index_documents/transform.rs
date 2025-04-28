@@ -181,12 +181,12 @@ impl<'a, 'i> Transform<'a, 'i> {
         let primary_key_id =
             self.fields_ids_map.insert(&primary_key).ok_or(UserError::AttributeLimitReached)?;
 
-        let mut obkv_buffer = Vec::new();
-        let mut document_sorter_value_buffer = Vec::new();
-        let mut document_sorter_key_buffer = Vec::new();
+        let mut obkv_buffer = vec![];
+        let mut document_sorter_value_buffer = vec![];
+        let mut document_sorter_key_buffer = vec![];
         let mut documents_count = 0;
-        let mut docid_buffer: Vec<u8> = Vec::new();
-        let mut field_buffer: Vec<(u16, Cow<'_, [u8]>)> = Vec::new();
+        let mut docid_buffer: Vec<u8> = vec![];
+        let mut field_buffer: Vec<(u16, Cow<'_, [u8]>)> = vec![];
         while let Some(enriched_document) = cursor.next_enriched_document()? {
             let EnrichedDocument { document, document_id } = enriched_document;
 
@@ -387,7 +387,7 @@ impl<'a, 'i> Transform<'a, 'i> {
         // We first extract all the key+value out of the obkv. If a value is not nested
         // we keep a reference on its value. If the value is nested we'll get its value
         // as an owned `Vec<u8>` after flattening it.
-        let mut key_value: Vec<(FieldId, Cow<'_, [u8]>)> = Vec::new();
+        let mut key_value: Vec<(FieldId, Cow<'_, [u8]>)> = vec![];
 
         // the object we're going to use to store the fields that need to be flattened.
         let mut doc = serde_json::Map::new();
@@ -423,7 +423,7 @@ impl<'a, 'i> Transform<'a, 'i> {
         // keys will be consecutive.
         key_value.sort_unstable_by_key(|(key, _)| *key);
 
-        let mut buffer = Vec::new();
+        let mut buffer = vec![];
         Self::create_obkv_from_key_value(&mut key_value, &mut buffer)?;
         Ok(Some(buffer))
     }
@@ -873,9 +873,9 @@ impl<'a, 'i> Transform<'a, 'i> {
             };
 
         if original_sorter.is_some() || flattened_sorter.is_some() {
-            let mut original_obkv_buffer = Vec::new();
-            let mut flattened_obkv_buffer = Vec::new();
-            let mut document_sorter_key_buffer = Vec::new();
+            let mut original_obkv_buffer = vec![];
+            let mut flattened_obkv_buffer = vec![];
+            let mut document_sorter_key_buffer = vec![];
             for result in self.index.external_documents_ids().iter(wtxn)? {
                 let (external_id, docid) = result?;
                 let old_obkv = self.index.documents.get(wtxn, &docid)?.ok_or(
@@ -985,9 +985,9 @@ mod test {
 
     #[test]
     fn merge_obkvs() {
-        let mut additive_doc_0 = Vec::new();
-        let mut deletive_doc_0 = Vec::new();
-        let mut del_add_doc_0 = Vec::new();
+        let mut additive_doc_0 = vec![];
+        let mut deletive_doc_0 = vec![];
+        let mut del_add_doc_0 = vec![];
         let mut kv_writer = KvWriter::memory();
         kv_writer.insert(0_u8, [0]).unwrap();
         let buffer = kv_writer.into_inner().unwrap();
@@ -1013,7 +1013,7 @@ mod test {
         .unwrap();
         del_add_doc_0.insert(0, Operation::Addition as u8);
 
-        let mut additive_doc_1 = Vec::new();
+        let mut additive_doc_1 = vec![];
         let mut kv_writer = KvWriter::memory();
         kv_writer.insert(1_u8, [1]).unwrap();
         let buffer = kv_writer.into_inner().unwrap();
@@ -1025,7 +1025,7 @@ mod test {
         .unwrap();
         additive_doc_1.insert(0, Operation::Addition as u8);
 
-        let mut additive_doc_0_1 = Vec::new();
+        let mut additive_doc_0_1 = vec![];
         let mut kv_writer = KvWriter::memory();
         kv_writer.insert(0_u8, [0]).unwrap();
         kv_writer.insert(1_u8, [1]).unwrap();

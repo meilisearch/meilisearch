@@ -488,7 +488,7 @@ fn import_dump(
     };
 
     // 2. Import the `Key`s.
-    let mut keys = Vec::new();
+    let mut keys = vec![];
     auth.raw_delete_all_keys()?;
     for key in dump_reader.keys()? {
         let key = key?;

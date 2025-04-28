@@ -2906,7 +2906,7 @@ async fn batch_several_documents_addition() {
     documents[100] = json!({"title": "error", "desc": "error"});
 
     // enqueue batch of documents
-    let mut waiter = Vec::new();
+    let mut waiter = vec![];
     for chunk in documents.chunks(30) {
         waiter.push(index.add_documents(json!(chunk), Some("id")));
     }
@@ -2919,7 +2919,7 @@ async fn batch_several_documents_addition() {
     documents[40] = json!({"title": "error", "desc": "error"});
     documents[70] = json!({"title": "error", "desc": "error"});
     documents[130] = json!({"title": "error", "desc": "error"});
-    let mut waiter = Vec::new();
+    let mut waiter = vec![];
     for chunk in documents.chunks(30) {
         waiter.push(index.add_documents(json!(chunk), Some("id")));
     }

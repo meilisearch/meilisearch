@@ -95,7 +95,7 @@ impl CboRoaringBitmapCodec {
         A: AsRef<[u8]>,
     {
         let mut roaring = RoaringBitmap::new();
-        let mut vec = Vec::new();
+        let mut vec = vec![];
 
         for bytes in slices {
             if bytes.as_ref().len() <= THRESHOLD * size_of::<u32>() {
@@ -204,12 +204,12 @@ mod tests {
         let input = RoaringBitmap::from_iter(0..THRESHOLD as u32);
 
         // use roaring bitmap
-        let mut bytes = Vec::new();
+        let mut bytes = vec![];
         input.serialize_into(&mut bytes).unwrap();
         let roaring_size = bytes.len();
 
         // use byteorder directly
-        let mut bytes = Vec::new();
+        let mut bytes = vec![];
         for integer in input {
             bytes.write_u32::<NativeEndian>(integer).unwrap();
         }
@@ -220,7 +220,7 @@ mod tests {
 
     #[test]
     fn merge_cbo_roaring_bitmaps() {
-        let mut buffer = Vec::new();
+        let mut buffer = vec![];
 
         let small_data = [
             RoaringBitmap::from_sorted_iter(1..4).unwrap(),

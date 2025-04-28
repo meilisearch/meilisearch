@@ -70,7 +70,7 @@ impl<'t, 'i> WordPrefixIntegerDocids<'t, 'i> {
 
         if !common_prefix_fst_words.is_empty() {
             // We fetch all the new common prefixes between the previous and new prefix fst.
-            let mut buffer = Vec::new();
+            let mut buffer = vec![];
             let mut current_prefixes: Option<&&[String]> = None;
             let mut prefixes_cache = HashMap::new();
             let mut new_word_integer_docids_iter =
@@ -115,7 +115,7 @@ impl<'t, 'i> WordPrefixIntegerDocids<'t, 'i> {
 
         // We fetch the docids associated to the newly added word prefix fst only.
         let db = self.word_database.remap_data_type::<Bytes>();
-        let mut buffer = Vec::new();
+        let mut buffer = vec![];
         for prefix_bytes in new_prefix_fst_words {
             let prefix = str::from_utf8(prefix_bytes.as_bytes()).map_err(|_| {
                 SerializationError::Decoding { db_name: Some(WORDS_PREFIXES_FST_KEY) }

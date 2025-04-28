@@ -226,12 +226,12 @@ fn entry_stream(
     guard: HandleGuard,
 ) -> impl Stream<Item = Result<Bytes, ResponseError>> {
     let receiver = trace.into_receiver();
-    let entry_buf = Vec::new();
+    let entry_buf = vec![];
 
     futures_util::stream::unfold(
         (receiver, entry_buf, guard),
         move |(mut receiver, mut entry_buf, guard)| async move {
-            let mut bytes = Vec::new();
+            let mut bytes = vec![];
 
             while bytes.len() < 8192 {
                 entry_buf.clear();

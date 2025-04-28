@@ -72,7 +72,7 @@ fn extract_facet_string_docids_document_update<R: io::Read + io::Seek>(
         true,
     );
 
-    let mut buffer = Vec::new();
+    let mut buffer = vec![];
     let mut cursor = docid_fid_facet_string.into_cursor()?;
     while let Some((key, deladd_original_value_bytes)) = cursor.move_on_next()? {
         let deladd_reader = KvReaderDelAdd::from_slice(deladd_original_value_bytes);
@@ -172,7 +172,7 @@ fn extract_facet_string_docids_settings<R: io::Read + io::Seek>(
         true,
     );
 
-    let mut buffer = Vec::new();
+    let mut buffer = vec![];
     let mut cursor = docid_fid_facet_string.into_cursor()?;
     while let Some((key, deladd_original_value_bytes)) = cursor.move_on_next()? {
         let deladd_reader = KvReaderDelAdd::from_slice(deladd_original_value_bytes);

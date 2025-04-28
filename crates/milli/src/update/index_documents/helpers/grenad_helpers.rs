@@ -185,7 +185,7 @@ where
     MF: MergeFunction,
     crate::Error: From<MF::Error>,
 {
-    let mut buffer = Vec::new();
+    let mut buffer = vec![];
     let database = database.remap_types::<Bytes, Bytes>();
 
     let mut merger_iter = sorter.into_stream_merger_iter()?;

@@ -694,7 +694,7 @@ impl Index {
         match self.displayed_fields(rtxn)? {
             Some(fields) => {
                 let fields_ids_map = self.fields_ids_map(rtxn)?;
-                let mut fields_ids = Vec::new();
+                let mut fields_ids = vec![];
                 for name in fields.into_iter() {
                     if let Some(field_id) = fields_ids_map.id(name) {
                         fields_ids.push(field_id);
@@ -741,7 +741,7 @@ impl Index {
         let mut weights = FieldidsWeightsMap::default();
 
         // Now we generate the real searchable fields:
-        let mut real_fields = Vec::new();
+        let mut real_fields = vec![];
         for (id, field_from_map, metadata) in fields_ids_map.iter() {
             if let Some(weight) = metadata.searchable_weight() {
                 real_fields.push(field_from_map);
@@ -796,7 +796,7 @@ impl Index {
     pub fn searchable_fields_ids(&self, rtxn: &RoTxn<'_>) -> Result<Vec<FieldId>> {
         let fields = self.searchable_fields(rtxn)?;
         let fields_ids_map = self.fields_ids_map(rtxn)?;
-        let mut fields_ids = Vec::new();
+        let mut fields_ids = vec![];
         for name in fields {
             if let Some(field_id) = fields_ids_map.id(&name) {
                 fields_ids.push(field_id);
@@ -844,7 +844,7 @@ impl Index {
         match self.user_defined_searchable_fields(rtxn)? {
             Some(fields) => {
                 let fields_ids_map = self.fields_ids_map(rtxn)?;
-                let mut fields_ids = Vec::new();
+                let mut fields_ids = vec![];
                 for name in fields {
                     if let Some(field_id) = fields_ids_map.id(name) {
                         fields_ids.push(field_id);

@@ -132,7 +132,7 @@ impl<'a> From<Span<'a>> for Token<'a> {
 /// Allow [Token] to be constructed from &[str]
 impl<'a> From<&'a str> for Token<'a> {
     fn from(s: &'a str) -> Self {
-        Token::from(Span::new_extra(s, s))
+        Self::from(Span::new_extra(s, s))
     }
 }
 

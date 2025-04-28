@@ -38,7 +38,7 @@ impl Environment {
             None => (unknown_string.clone(), 0),
         };
 
-        let mut software = Vec::new();
+        let mut software = vec![];
         if let Some(distribution) = System::name() {
             software
                 .push(VersionInfo { name: distribution, version: String::from("distribution") });

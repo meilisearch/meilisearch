@@ -60,7 +60,7 @@ where
     I: for<'a> IntoStreamer<'a, Into = S, Item = &'a [u8]>,
     S: 'f + for<'a> Streamer<'a, Item = &'a [u8]>,
 {
-    let mut strings = Vec::new();
+    let mut strings = vec![];
     let mut stream = stream.into_stream();
     while let Some(word) = stream.next() {
         let s = std::str::from_utf8(word).unwrap();

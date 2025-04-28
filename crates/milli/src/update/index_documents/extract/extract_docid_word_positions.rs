@@ -46,8 +46,8 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
     // initialize buffers.
     let mut del_buffers = Buffers::default();
     let mut add_buffers = Buffers::default();
-    let mut key_buffer = Vec::new();
-    let mut value_buffer = Vec::new();
+    let mut key_buffer = vec![];
+    let mut value_buffer = vec![];
 
     // initialize tokenizer.
     let old_stop_words = settings_diff.old.stop_words.as_ref();

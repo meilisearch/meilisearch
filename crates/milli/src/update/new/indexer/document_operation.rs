@@ -79,7 +79,7 @@ impl<'pl> DocumentOperation<'pl> {
         let Self { operations } = self;
 
         let documents_ids = index.documents_ids(rtxn)?;
-        let mut operations_stats = Vec::new();
+        let mut operations_stats = vec![];
         let mut available_docids = AvailableIds::new(&documents_ids);
         let mut docids_version_offsets = hashbrown::HashMap::new();
         let mut primary_key = None;

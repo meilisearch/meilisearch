@@ -339,7 +339,7 @@ impl ArroyWrapper {
         limit: usize,
         filter: Option<&RoaringBitmap>,
     ) -> Result<Vec<(ItemId, f32)>, arroy::Error> {
-        let mut results = Vec::new();
+        let mut results = vec![];
 
         for reader in self.readers(rtxn, db) {
             let reader = reader?;
@@ -380,7 +380,7 @@ impl ArroyWrapper {
         limit: usize,
         filter: Option<&RoaringBitmap>,
     ) -> Result<Vec<(ItemId, f32)>, arroy::Error> {
-        let mut results = Vec::new();
+        let mut results = vec![];
 
         for reader in self.readers(rtxn, db) {
             let reader = reader?;
@@ -398,7 +398,7 @@ impl ArroyWrapper {
     }
 
     pub fn item_vectors(&self, rtxn: &RoTxn, item_id: u32) -> Result<Vec<Vec<f32>>, arroy::Error> {
-        let mut vectors = Vec::new();
+        let mut vectors = vec![];
 
         if self.quantized {
             for reader in self.readers(rtxn, self.quantized_db()) {

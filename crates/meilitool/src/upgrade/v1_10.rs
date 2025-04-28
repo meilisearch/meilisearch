@@ -192,9 +192,9 @@ pub fn v1_9_to_v1_10(
         .map(|res| res.map(|(uid, uuid)| (uid.to_owned(), uuid)))
         .collect();
 
-    let mut rest_embedders = Vec::new();
+    let mut rest_embedders = vec![];
 
-    let mut unwrapped_indexes = Vec::new();
+    let mut unwrapped_indexes = vec![];
 
     // check that update can take place
     for (index_index, result) in indexes.into_iter().enumerate() {

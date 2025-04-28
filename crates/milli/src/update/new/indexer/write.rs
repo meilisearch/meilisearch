@@ -25,7 +25,7 @@ pub fn write_to_db(
 ) -> Result<ChannelCongestion> {
     // Used by by the ArroySetVector to copy the embedding into an
     // aligned memory area, required by arroy to accept a new vector.
-    let mut aligned_embedding = Vec::new();
+    let mut aligned_embedding = vec![];
     let span = tracing::trace_span!(target: "indexing::write_db", "all");
     let _entered = span.enter();
     let span = tracing::trace_span!(target: "indexing::write_db", "post_merge");
