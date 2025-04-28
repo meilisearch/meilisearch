@@ -38,13 +38,13 @@ impl Body {
         asset_folder: &str,
     ) -> anyhow::Result<Option<(Vec<u8>, &'static str)>> {
         Ok(match self {
-            Body::Inline { inline: body } => Some((
+            Self::Inline { inline: body } => Some((
                 serde_json::to_vec(&body)
                     .context("serializing to bytes")
                     .context("while getting inline body")?,
                 "application/json",
             )),
-            Body::Asset { asset: name } => Some({
+            Self::Asset { asset: name } => Some({
                 let context = || format!("while getting body from asset '{name}'");
                 let (mut file, format) =
                     fetch_asset(&name, assets, asset_folder).with_context(context)?;
@@ -52,7 +52,7 @@ impl Body {
                 file.read_to_end(&mut buf).with_context(context)?;
                 (buf, format.to_content_type(&name))
             }),
-            Body::Empty => None,
+            Self::Empty => None,
         })
     }
 }

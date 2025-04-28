@@ -154,7 +154,7 @@ impl DashboardClient {
     }
 
     pub async fn mark_as_failed(&self, invocation_uuid: Uuid, failure_reason: Option<String>) {
-        if let DashboardClient::Client(client) = self {
+        if let Self::Client(client) = self {
             let response = client
                 .post("/api/v1/cancel-invocation")
                 .json(&json!({

@@ -29,10 +29,10 @@ pub enum AssetFormat {
 impl AssetFormat {
     pub fn to_content_type(self, filename: &str) -> &'static str {
         match self {
-            AssetFormat::Auto => Self::auto_detect(filename).to_content_type(filename),
-            AssetFormat::Json => "application/json",
-            AssetFormat::NdJson => "application/x-ndjson",
-            AssetFormat::Raw => "application/octet-stream",
+            Self::Auto => Self::auto_detect(filename).to_content_type(filename),
+            Self::Json => "application/json",
+            Self::NdJson => "application/x-ndjson",
+            Self::Raw => "application/octet-stream",
         }
     }
 
@@ -43,7 +43,7 @@ impl AssetFormat {
             Some(extension) if extension.eq_ignore_ascii_case("ndjson") => Self::NdJson,
             extension => {
                 tracing::warn!(asset = filename, ?extension, "asset has format `Auto`, but extension was not recognized. Specify `Raw` format to suppress this warning.");
-                AssetFormat::Raw
+                Self::Raw
             }
         }
     }
