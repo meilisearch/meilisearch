@@ -191,7 +191,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         index: &'i Index,
         indexer_config: &'a IndexerConfig,
     ) -> Self {
-        Settings {
+        Self {
             wtxn,
             index,
             searchable_fields: Setting::NotSet,

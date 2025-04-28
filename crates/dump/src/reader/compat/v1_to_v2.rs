@@ -290,23 +290,21 @@ impl From<v1::settings::SettingsUpdate> for v2::Settings<v2::Unchecked> {
 
 impl From<v1::settings::RankingRule> for Option<v2::settings::Criterion> {
     fn from(source: v1::settings::RankingRule) -> Self {
-        match source {
-            v1::settings::RankingRule::Typo => Some(v2::settings::Criterion::Typo),
-            v1::settings::RankingRule::Words => Some(v2::settings::Criterion::Words),
-            v1::settings::RankingRule::Proximity => Some(v2::settings::Criterion::Proximity),
-            v1::settings::RankingRule::Attribute => Some(v2::settings::Criterion::Attribute),
+        Some(match source {
+            v1::settings::RankingRule::Typo => v2::settings::Criterion::Typo,
+            v1::settings::RankingRule::Words => v2::settings::Criterion::Words,
+            v1::settings::RankingRule::Proximity => v2::settings::Criterion::Proximity,
+            v1::settings::RankingRule::Attribute => v2::settings::Criterion::Attribute,
             v1::settings::RankingRule::WordsPosition => {
                 tracing::warn!("Removing the 'WordsPosition' ranking rule that is no longer supported, please check the resulting ranking rules of your indexes");
-                None
+                return None;
             }
-            v1::settings::RankingRule::Exactness => Some(v2::settings::Criterion::Exactness),
-            v1::settings::RankingRule::Asc(field_name) => {
-                Some(v2::settings::Criterion::Asc(field_name))
-            }
+            v1::settings::RankingRule::Exactness => v2::settings::Criterion::Exactness,
+            v1::settings::RankingRule::Asc(field_name) => v2::settings::Criterion::Asc(field_name),
             v1::settings::RankingRule::Desc(field_name) => {
-                Some(v2::settings::Criterion::Desc(field_name))
+                v2::settings::Criterion::Desc(field_name)
             }
-        }
+        })
     }
 }
 
