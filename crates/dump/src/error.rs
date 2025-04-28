@@ -23,11 +23,11 @@ impl ErrorCode for Error {
 
             // These errors either happen when creating a dump and don't need any error code,
             // or come from an internal bad deserialization.
-            Self::Serde(_) => Code::Internal,
-            Self::Uuid(_) => Code::Internal,
+            Self::Serde(_) |
+            Self::Uuid(_) |
 
             // all these errors should never be raised when creating a dump, thus no error code should be associated.
-            Self::BadIndexName => Code::Internal,
+            Self::BadIndexName |
             Self::MalformedTask => Code::Internal,
         }
     }
