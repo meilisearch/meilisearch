@@ -28,10 +28,10 @@ pub struct FileStore {
 }
 
 impl FileStore {
-    pub fn new(path: impl AsRef<Path>) -> Result<FileStore> {
+    pub fn new(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref().to_path_buf();
         std::fs::create_dir_all(&path)?;
-        Ok(FileStore { path })
+        Ok(Self { path })
     }
 }
 
