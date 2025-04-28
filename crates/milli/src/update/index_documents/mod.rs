@@ -228,10 +228,8 @@ where
         let possible_embedding_mistakes =
             crate::vector::error::PossibleEmbeddingMistakes::new(&field_distribution);
 
-        let pool_guard = self.indexer_config.thread_pool.read().unwrap();
-
         let backup_pool;
-        let pool = match &*pool_guard {
+        let pool = match self.indexer_config.thread_pool {
             Some(ref pool) => pool,
             None => {
                 // We initialize a backup pool with the default

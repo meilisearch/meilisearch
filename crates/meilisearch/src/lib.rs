@@ -37,7 +37,7 @@ use index_scheduler::{IndexScheduler, IndexSchedulerOptions};
 use meilisearch_auth::{open_auth_store_env, AuthController};
 use meilisearch_types::milli::constants::VERSION_MAJOR;
 use meilisearch_types::milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
-use meilisearch_types::milli::update::{IndexDocumentsConfig, IndexDocumentsMethod};
+use meilisearch_types::milli::update::{IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig};
 use meilisearch_types::milli::ThreadPoolNoAbortBuilder;
 use meilisearch_types::settings::apply_settings_to_builder;
 use meilisearch_types::tasks::KindWithContent;
@@ -504,10 +504,10 @@ fn import_dump(
     let network = dump_reader.network()?.cloned().unwrap_or_default();
     index_scheduler.put_network(network)?;
 
-    let indexer_config = index_scheduler.indexer_config();
+    let mut indexer_config = IndexerConfig::clone_no_threadpool(index_scheduler.indexer_config());
 
-    // Use all cpus to index a dump
-    let pool_before = {
+    // 3.1 Use all cpus to index the import dump
+    indexer_config.thread_pool = {
         let all_cpus = num_cpus::get();
 
         let temp_pool = ThreadPoolNoAbortBuilder::new()
@@ -515,7 +515,7 @@ fn import_dump(
             .num_threads(all_cpus)
             .build()?;
 
-        indexer_config.thread_pool.write().unwrap().replace(temp_pool)
+        Some(temp_pool)
     };
 
     // /!\ The tasks must be imported AFTER importing the indexes or else the scheduler might
@@ -533,7 +533,7 @@ fn import_dump(
 
         let mut wtxn = index.write_txn()?;
 
-        let mut builder = milli::update::Settings::new(&mut wtxn, &index, indexer_config);
+        let mut builder = milli::update::Settings::new(&mut wtxn, &index, &indexer_config);
         // 4.1 Import the primary key if there is one.
         if let Some(ref primary_key) = metadata.primary_key {
             builder.set_primary_key(primary_key.to_string());
@@ -568,7 +568,7 @@ fn import_dump(
         let builder = milli::update::IndexDocuments::new(
             &mut wtxn,
             &index,
-            indexer_config,
+            &indexer_config,
             IndexDocumentsConfig {
                 update_method: IndexDocumentsMethod::ReplaceDocuments,
                 ..Default::default()
@@ -587,12 +587,6 @@ fn import_dump(
         tracing::info!("All documents successfully imported.");
 
         index_scheduler.refresh_index_stats(&uid)?;
-    }
-
-    // Restore original thread pool after dump
-    {
-        let mut guard = indexer_config.thread_pool.write().unwrap();
-        *guard = pool_before;
     }
 
     // 5. Import the queue

@@ -1936,8 +1936,7 @@ pub(crate) mod tests {
         ) -> Result<(), crate::error::Error> {
             let local_pool;
             let indexer_config = &self.indexer_config;
-            let pool_guard = indexer_config.thread_pool.read().unwrap();
-            let pool = match &*pool_guard {
+            let pool = match &indexer_config.thread_pool {
                 Some(pool) => pool,
                 None => {
                     local_pool = ThreadPoolNoAbortBuilder::new().build().unwrap();
@@ -2031,8 +2030,7 @@ pub(crate) mod tests {
         ) -> Result<(), crate::error::Error> {
             let local_pool;
             let indexer_config = &self.indexer_config;
-            let pool_guard = indexer_config.thread_pool.read().unwrap();
-            let pool = match &*pool_guard {
+            let pool = match &indexer_config.thread_pool {
                 Some(pool) => pool,
                 None => {
                     local_pool = ThreadPoolNoAbortBuilder::new().build().unwrap();
@@ -2111,8 +2109,7 @@ pub(crate) mod tests {
 
         let local_pool;
         let indexer_config = &index.indexer_config;
-        let pool_guard = indexer_config.thread_pool.read().unwrap();
-        let pool = match &*pool_guard {
+        let pool = match &indexer_config.thread_pool {
             Some(pool) => pool,
             None => {
                 local_pool = ThreadPoolNoAbortBuilder::new().build().unwrap();
