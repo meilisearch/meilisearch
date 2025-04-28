@@ -48,9 +48,9 @@ impl<'doc> DocumentChange<'doc> {
 
     pub fn external_docid(&self) -> &'doc str {
         match self {
-            DocumentChange::Deletion(deletion) => deletion.external_document_id(),
-            DocumentChange::Update(update) => update.external_document_id(),
-            DocumentChange::Insertion(insertion) => insertion.external_document_id(),
+            Self::Deletion(deletion) => deletion.external_document_id(),
+            Self::Update(update) => update.external_document_id(),
+            Self::Insertion(insertion) => insertion.external_document_id(),
         }
     }
 }

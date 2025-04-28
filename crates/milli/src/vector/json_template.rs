@@ -301,11 +301,11 @@ fn last_named_object<'a>(
 impl std::fmt::Display for LastNamedObject<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LastNamedObject::Object { name } => write!(f, "`{name}`"),
-            LastNamedObject::ArrayInsideObject { object_name, index } => {
+            Self::Object { name } => write!(f, "`{name}`"),
+            Self::ArrayInsideObject { object_name, index } => {
                 write!(f, "item #{index} inside `{object_name}`")
             }
-            LastNamedObject::NestedArrayInsideObject { object_name, index, nesting_level } => {
+            Self::NestedArrayInsideObject { object_name, index, nesting_level } => {
                 if *nesting_level == 0 {
                     write!(f, "item #{index} inside nested array in `{object_name}`")
                 } else {

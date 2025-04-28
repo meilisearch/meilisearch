@@ -138,8 +138,8 @@ impl<'de, 'bump: 'de> DeOrBumpStr<'de, 'bump> {
     /// Returns a `&'bump str`, possibly allocating to extend its lifetime.
     pub fn to_bump(&self, bump: &'bump Bump) -> &'bump str {
         match self {
-            DeOrBumpStr::De(de) => bump.alloc_str(de),
-            DeOrBumpStr::Bump(bump) => bump,
+            Self::De(de) => bump.alloc_str(de),
+            Self::Bump(bump) => bump,
         }
     }
 
@@ -148,8 +148,8 @@ impl<'de, 'bump: 'de> DeOrBumpStr<'de, 'bump> {
     /// This function never allocates because `'bump: 'de`.
     pub fn to_de(&self) -> &'de str {
         match self {
-            DeOrBumpStr::De(de) => de,
-            DeOrBumpStr::Bump(bump) => bump,
+            Self::De(de) => de,
+            Self::Bump(bump) => bump,
         }
     }
 }

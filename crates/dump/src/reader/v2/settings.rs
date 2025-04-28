@@ -189,7 +189,7 @@ impl Criterion {
     pub fn field_name(&self) -> Option<&str> {
         match self {
             Self::Asc(name) | Self::Desc(name) => Some(name),
-            _otherwise => None,
+            _ => None,
         }
     }
 }

@@ -386,7 +386,7 @@ impl Iterator for SmallBitmapInternalIter<'_> {
 
     fn next(&mut self) -> Option<Self::Item> {
         match self {
-            SmallBitmapInternalIter::Tiny(set) => {
+            Self::Tiny(set) => {
                 if *set > 0 {
                     let idx = set.trailing_zeros() as u16;
                     *set &= *set - 1;
@@ -395,7 +395,7 @@ impl Iterator for SmallBitmapInternalIter<'_> {
                     None
                 }
             }
-            SmallBitmapInternalIter::Small { cur, next, base } => {
+            Self::Small { cur, next, base } => {
                 if *cur > 0 {
                     let idx = cur.trailing_zeros() as u16;
                     *cur &= *cur - 1;

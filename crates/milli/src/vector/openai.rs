@@ -92,8 +92,8 @@ impl EmbeddingModel {
 
     pub fn max_token(&self) -> usize {
         match self {
-            Self::TextEmbeddingAda002 => 8191,
-            Self::TextEmbedding3Large => 8191,
+            Self::TextEmbeddingAda002 |
+            Self::TextEmbedding3Large |
             Self::TextEmbedding3Small => 8191,
         }
     }
@@ -143,7 +143,7 @@ impl EmbeddingModel {
     pub fn supports_overriding_dimensions(&self) -> bool {
         match self {
             Self::TextEmbeddingAda002 => false,
-            Self::TextEmbedding3Large => true,
+            Self::TextEmbedding3Large |
             Self::TextEmbedding3Small => true,
         }
     }

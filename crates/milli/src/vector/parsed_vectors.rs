@@ -313,14 +313,14 @@ impl Vectors {
 impl<'doc> RawVectors<'doc> {
     pub fn must_regenerate(&self) -> bool {
         match self {
-            RawVectors::ImplicitlyUserProvided(_) => false,
-            RawVectors::Explicit(RawExplicitVectors { regenerate, .. }) => *regenerate,
+            Self::ImplicitlyUserProvided(_) => false,
+            Self::Explicit(RawExplicitVectors { regenerate, .. }) => *regenerate,
         }
     }
     pub fn embeddings(&self) -> Option<&'doc RawValue> {
         match self {
-            RawVectors::ImplicitlyUserProvided(embeddings) => *embeddings,
-            RawVectors::Explicit(RawExplicitVectors { embeddings, regenerate: _ }) => *embeddings,
+            Self::ImplicitlyUserProvided(embeddings) => *embeddings,
+            Self::Explicit(RawExplicitVectors { embeddings, regenerate: _ }) => *embeddings,
         }
     }
 }

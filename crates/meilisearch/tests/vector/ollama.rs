@@ -18,8 +18,8 @@ pub enum Endpoint {
 impl Endpoint {
     fn suffix(&self) -> &'static str {
         match self {
-            Endpoint::Embeddings => "/api/embeddings",
-            Endpoint::Embed => "/api/embed",
+            Self::Embeddings => "/api/embeddings",
+            Self::Embed => "/api/embed",
         }
     }
 }
@@ -32,8 +32,8 @@ pub enum Model {
 impl Model {
     fn name(&self) -> &'static str {
         match self {
-            Model::Nomic => "nomic-embed-text",
-            Model::AllMinilm => "all-minilm",
+            Self::Nomic => "nomic-embed-text",
+            Self::AllMinilm => "all-minilm",
         }
     }
 }

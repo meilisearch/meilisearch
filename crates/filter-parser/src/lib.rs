@@ -155,7 +155,7 @@ pub enum TraversedElement<'a> {
 impl<'a> FilterCondition<'a> {
     pub fn use_contains_operator(&self) -> Option<&Token> {
         match self {
-            FilterCondition::Condition { fid: _, op } => match op {
+            Self::Condition { fid: _, op } => match op {
                 Condition::GreaterThan(_)
                 | Condition::GreaterThanOrEqual(_)
                 | Condition::Equal(_)
@@ -169,13 +169,13 @@ impl<'a> FilterCondition<'a> {
                 Condition::Contains { keyword, word: _ }
                 | Condition::StartsWith { keyword, word: _ } => Some(keyword),
             },
-            FilterCondition::Not(this) => this.use_contains_operator(),
-            FilterCondition::Or(seq) | FilterCondition::And(seq) => {
+            Self::Not(this) => this.use_contains_operator(),
+            Self::Or(seq) | Self::And(seq) => {
                 seq.iter().find_map(|filter| filter.use_contains_operator())
             }
-            FilterCondition::GeoLowerThan { .. }
-            | FilterCondition::GeoBoundingBox { .. }
-            | FilterCondition::In { .. } => None,
+            Self::GeoLowerThan { .. }
+            | Self::GeoBoundingBox { .. }
+            | Self::In { .. } => None,
         }
     }
 
@@ -184,14 +184,14 @@ impl<'a> FilterCondition<'a> {
             return Box::new(std::iter::empty());
         }
         match self {
-            FilterCondition::Condition { fid, .. } | FilterCondition::In { fid, .. } => {
+            Self::Condition { fid, .. } | Self::In { fid, .. } => {
                 Box::new(std::iter::once(fid))
             }
-            FilterCondition::Not(filter) => {
+            Self::Not(filter) => {
                 let depth = depth.saturating_sub(1);
                 filter.fids(depth)
             }
-            FilterCondition::And(subfilters) | FilterCondition::Or(subfilters) => {
+            Self::And(subfilters) | Self::Or(subfilters) => {
                 let depth = depth.saturating_sub(1);
                 Box::new(subfilters.iter().flat_map(move |f| f.fids(depth)))
             }
@@ -202,8 +202,8 @@ impl<'a> FilterCondition<'a> {
     /// Returns the first token found at the specified depth, `None` if no token at this depth.
     pub fn token_at_depth(&self, depth: usize) -> Option<&Token> {
         match self {
-            FilterCondition::Condition { fid, .. } if depth == 0 => Some(fid),
-            FilterCondition::Or(subfilters) => {
+            Self::Condition { fid, .. } if depth == 0 => Some(fid),
+            Self::Or(subfilters) => {
                 let depth = depth.saturating_sub(1);
                 for f in subfilters.iter() {
                     if let Some(t) = f.token_at_depth(depth) {
@@ -212,7 +212,7 @@ impl<'a> FilterCondition<'a> {
                 }
                 None
             }
-            FilterCondition::And(subfilters) => {
+            Self::And(subfilters) => {
                 let depth = depth.saturating_sub(1);
                 for f in subfilters.iter() {
                     if let Some(t) = f.token_at_depth(depth) {
@@ -221,7 +221,7 @@ impl<'a> FilterCondition<'a> {
                 }
                 None
             }
-            FilterCondition::GeoLowerThan { point: [point, _], .. } if depth == 0 => Some(point),
+            Self::GeoLowerThan { point: [point, _], .. } if depth == 0 => Some(point),
             _ => None,
         }
     }
@@ -530,37 +530,37 @@ pub fn parse_filter(input: Span) -> IResult<FilterCondition> {
 impl std::fmt::Display for FilterCondition<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            FilterCondition::Not(filter) => {
+            Self::Not(filter) => {
                 write!(f, "NOT ({filter})")
             }
-            FilterCondition::Condition { fid, op } => {
+            Self::Condition { fid, op } => {
                 write!(f, "{fid} {op}")
             }
-            FilterCondition::In { fid, els } => {
+            Self::In { fid, els } => {
                 write!(f, "{fid} IN[")?;
                 for el in els {
                     write!(f, "{el}, ")?;
                 }
                 write!(f, "]")
             }
-            FilterCondition::Or(els) => {
+            Self::Or(els) => {
                 write!(f, "OR[")?;
                 for el in els {
                     write!(f, "{el}, ")?;
                 }
                 write!(f, "]")
             }
-            FilterCondition::And(els) => {
+            Self::And(els) => {
                 write!(f, "AND[")?;
                 for el in els {
                     write!(f, "{el}, ")?;
                 }
                 write!(f, "]")
             }
-            FilterCondition::GeoLowerThan { point, radius } => {
+            Self::GeoLowerThan { point, radius } => {
                 write!(f, "_geoRadius({}, {}, {})", point[0], point[1], radius)
             }
-            FilterCondition::GeoBoundingBox {
+            Self::GeoBoundingBox {
                 top_right_point: top_left_point,
                 bottom_left_point: bottom_right_point,
             } => {
@@ -580,18 +580,18 @@ impl std::fmt::Display for FilterCondition<'_> {
 impl std::fmt::Display for Condition<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Condition::GreaterThan(token) => write!(f, "> {token}"),
-            Condition::GreaterThanOrEqual(token) => write!(f, ">= {token}"),
-            Condition::Equal(token) => write!(f, "= {token}"),
-            Condition::NotEqual(token) => write!(f, "!= {token}"),
-            Condition::Null => write!(f, "IS NULL"),
-            Condition::Empty => write!(f, "IS EMPTY"),
-            Condition::Exists => write!(f, "EXISTS"),
-            Condition::LowerThan(token) => write!(f, "< {token}"),
-            Condition::LowerThanOrEqual(token) => write!(f, "<= {token}"),
-            Condition::Between { from, to } => write!(f, "{from} TO {to}"),
-            Condition::Contains { word, keyword: _ } => write!(f, "CONTAINS {word}"),
-            Condition::StartsWith { word, keyword: _ } => write!(f, "STARTS WITH {word}"),
+            Self::GreaterThan(token) => write!(f, "> {token}"),
+            Self::GreaterThanOrEqual(token) => write!(f, ">= {token}"),
+            Self::Equal(token) => write!(f, "= {token}"),
+            Self::NotEqual(token) => write!(f, "!= {token}"),
+            Self::Null => write!(f, "IS NULL"),
+            Self::Empty => write!(f, "IS EMPTY"),
+            Self::Exists => write!(f, "EXISTS"),
+            Self::LowerThan(token) => write!(f, "< {token}"),
+            Self::LowerThanOrEqual(token) => write!(f, "<= {token}"),
+            Self::Between { from, to } => write!(f, "{from} TO {to}"),
+            Self::Contains { word, keyword: _ } => write!(f, "CONTAINS {word}"),
+            Self::StartsWith { word, keyword: _ } => write!(f, "STARTS WITH {word}"),
         }
     }
 }

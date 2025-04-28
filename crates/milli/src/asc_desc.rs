@@ -127,7 +127,7 @@ pub enum AscDesc {
 impl AscDesc {
     pub fn member(&self) -> &Member {
         match self {
-            Self::Asc(member) => member,
+            Self::Asc(member) |
             Self::Desc(member) => member,
         }
     }

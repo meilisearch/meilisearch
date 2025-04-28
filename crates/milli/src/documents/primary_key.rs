@@ -78,8 +78,8 @@ impl<'a> PrimaryKey<'a> {
 
     pub fn name(&self) -> &'a str {
         match self {
-            PrimaryKey::Flat { name, .. } => name,
-            PrimaryKey::Nested { name } => name,
+            Self::Flat { name, .. } |
+            Self::Nested { name } => name,
         }
     }
 
@@ -89,7 +89,7 @@ impl<'a> PrimaryKey<'a> {
         fields: &impl FieldIdMapper,
     ) -> Result<StdResult<String, DocumentIdExtractionError>> {
         match self {
-            PrimaryKey::Flat { name: _, field_id } => match document.get(*field_id) {
+            Self::Flat { name: _, field_id } => match document.get(*field_id) {
                 Some(document_id_bytes) => {
                     let document_id = serde_json::from_slice(document_id_bytes)
                         .map_err(InternalError::SerdeJson)?;
@@ -102,7 +102,7 @@ impl<'a> PrimaryKey<'a> {
                 }
                 None => Ok(Err(DocumentIdExtractionError::MissingDocumentId)),
             },
-            nested @ PrimaryKey::Nested { .. } => {
+            nested @ Self::Nested { .. } => {
                 let mut matching_documents_ids = vec![];
                 for (first_level_name, right) in nested.possible_level_names() {
                     if let Some(field_id) = fields.id(first_level_name) {
@@ -142,7 +142,7 @@ impl<'a> PrimaryKey<'a> {
         use serde::Deserializer as _;
 
         match self {
-            PrimaryKey::Flat { name: _, field_id } => {
+            Self::Flat { name: _, field_id } => {
                 let Some(document_id) = document.get(*field_id) else {
                     return Err(InternalError::DocumentsError(
                         crate::documents::Error::InvalidDocumentFormat,
@@ -166,7 +166,7 @@ impl<'a> PrimaryKey<'a> {
 
                 Ok(external_document_id)
             }
-            nested @ PrimaryKey::Nested { name: _ } => {
+            nested @ Self::Nested { name: _ } => {
                 let mut docid = None;
                 for (first_level, right) in nested.possible_level_names() {
                     let Some(fid) = db_fields_ids_map.id(first_level) else { continue };

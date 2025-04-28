@@ -119,7 +119,7 @@ impl error::Error for DocumentsBatchCursorError {}
 impl fmt::Display for DocumentsBatchCursorError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Grenad(e) => e.fmt(f),
+            Self::Grenad(e) |
             Self::SerdeJson(e) => e.fmt(f),
         }
     }

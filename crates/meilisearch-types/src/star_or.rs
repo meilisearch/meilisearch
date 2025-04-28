@@ -159,7 +159,7 @@ pub enum OptionStarOr<T> {
 impl<T> OptionStarOr<T> {
     pub fn is_some(&self) -> bool {
         match self {
-            Self::None => false,
+            Self::None |
             Self::Star => false,
             Self::Other(_) => true,
         }
@@ -233,7 +233,7 @@ pub enum OptionStarOrList<T> {
 impl<T: PartialSchema> OptionStarOrList<T> {
     pub fn is_some(&self) -> bool {
         match self {
-            Self::None => false,
+            Self::None |
             Self::Star => false,
             Self::List(_) => true,
         }

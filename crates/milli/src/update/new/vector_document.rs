@@ -31,7 +31,7 @@ impl<'doc> Embeddings<'doc> {
         embedder_name: &str,
     ) -> std::result::Result<Vec<Embedding>, deserr::errors::JsonError> {
         match self {
-            Embeddings::FromJsonExplicit(value) => {
+            Self::FromJsonExplicit(value) => {
                 let vectors_ref = deserr::ValuePointerRef::Key {
                     key: RESERVED_VECTORS_FIELD_NAME,
                     prev: &deserr::ValuePointerRef::Origin,
@@ -48,7 +48,7 @@ impl<'doc> Embeddings<'doc> {
                 )?;
                 Ok(v.into_array_of_vectors().unwrap_or_default())
             }
-            Embeddings::FromJsonImplicityUserProvided(value) => {
+            Self::FromJsonImplicityUserProvided(value) => {
                 let vectors_ref = deserr::ValuePointerRef::Key {
                     key: RESERVED_VECTORS_FIELD_NAME,
                     prev: &deserr::ValuePointerRef::Origin,
@@ -62,7 +62,7 @@ impl<'doc> Embeddings<'doc> {
                 )?;
                 Ok(v.into_array_of_vectors().unwrap_or_default())
             }
-            Embeddings::FromDb(vec) => Ok(vec),
+            Self::FromDb(vec) => Ok(vec),
         }
     }
 }
