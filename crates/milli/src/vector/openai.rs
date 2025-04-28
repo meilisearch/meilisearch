@@ -92,48 +92,48 @@ impl EmbeddingModel {
 
     pub fn max_token(&self) -> usize {
         match self {
-            EmbeddingModel::TextEmbeddingAda002 => 8191,
-            EmbeddingModel::TextEmbedding3Large => 8191,
-            EmbeddingModel::TextEmbedding3Small => 8191,
+            Self::TextEmbeddingAda002 => 8191,
+            Self::TextEmbedding3Large => 8191,
+            Self::TextEmbedding3Small => 8191,
         }
     }
 
     pub fn default_dimensions(&self) -> usize {
         match self {
-            EmbeddingModel::TextEmbeddingAda002 => 1536,
-            EmbeddingModel::TextEmbedding3Large => 3072,
-            EmbeddingModel::TextEmbedding3Small => 1536,
+            Self::TextEmbeddingAda002 => 1536,
+            Self::TextEmbedding3Large => 3072,
+            Self::TextEmbedding3Small => 1536,
         }
     }
 
     pub fn name(&self) -> &'static str {
         match self {
-            EmbeddingModel::TextEmbeddingAda002 => "text-embedding-ada-002",
-            EmbeddingModel::TextEmbedding3Large => "text-embedding-3-large",
-            EmbeddingModel::TextEmbedding3Small => "text-embedding-3-small",
+            Self::TextEmbeddingAda002 => "text-embedding-ada-002",
+            Self::TextEmbedding3Large => "text-embedding-3-large",
+            Self::TextEmbedding3Small => "text-embedding-3-small",
         }
     }
 
     pub fn from_name(name: &str) -> Option<Self> {
         match name {
-            "text-embedding-ada-002" => Some(EmbeddingModel::TextEmbeddingAda002),
-            "text-embedding-3-large" => Some(EmbeddingModel::TextEmbedding3Large),
-            "text-embedding-3-small" => Some(EmbeddingModel::TextEmbedding3Small),
+            "text-embedding-ada-002" => Some(Self::TextEmbeddingAda002),
+            "text-embedding-3-large" => Some(Self::TextEmbedding3Large),
+            "text-embedding-3-small" => Some(Self::TextEmbedding3Small),
             _ => None,
         }
     }
 
     fn distribution(&self) -> Option<DistributionShift> {
         match self {
-            EmbeddingModel::TextEmbeddingAda002 => Some(DistributionShift {
+            Self::TextEmbeddingAda002 => Some(DistributionShift {
                 current_mean: OrderedFloat(0.90),
                 current_sigma: OrderedFloat(0.08),
             }),
-            EmbeddingModel::TextEmbedding3Large => Some(DistributionShift {
+            Self::TextEmbedding3Large => Some(DistributionShift {
                 current_mean: OrderedFloat(0.70),
                 current_sigma: OrderedFloat(0.1),
             }),
-            EmbeddingModel::TextEmbedding3Small => Some(DistributionShift {
+            Self::TextEmbedding3Small => Some(DistributionShift {
                 current_mean: OrderedFloat(0.75),
                 current_sigma: OrderedFloat(0.1),
             }),
@@ -142,9 +142,9 @@ impl EmbeddingModel {
 
     pub fn supports_overriding_dimensions(&self) -> bool {
         match self {
-            EmbeddingModel::TextEmbeddingAda002 => false,
-            EmbeddingModel::TextEmbedding3Large => true,
-            EmbeddingModel::TextEmbedding3Small => true,
+            Self::TextEmbeddingAda002 => false,
+            Self::TextEmbedding3Large => true,
+            Self::TextEmbedding3Small => true,
         }
     }
 }

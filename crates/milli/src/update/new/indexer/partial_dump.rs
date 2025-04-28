@@ -20,7 +20,7 @@ pub struct PartialDump<I> {
 
 impl<I> PartialDump<I> {
     pub fn new_from_jsonlines(iter: I) -> Self {
-        PartialDump { iter }
+        Self { iter }
     }
 
     pub fn into_changes<'index>(

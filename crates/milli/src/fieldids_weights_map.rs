@@ -24,7 +24,7 @@ impl FieldidsWeightsMap {
     /// Should only be called in the case there are NO searchable attributes.
     /// All the fields will be inserted in the order of the fields ids map with a weight of 0.
     pub fn from_field_id_map_without_searchable(fid_map: &FieldsIdsMap) -> Self {
-        FieldidsWeightsMap {
+        Self {
             map: fid_map
                 .iter()
                 .filter(|(_fid, name)| !crate::is_faceted_by(name, RESERVED_VECTORS_FIELD_NAME))

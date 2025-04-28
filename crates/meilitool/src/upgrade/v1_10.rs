@@ -50,7 +50,7 @@ impl From<v1_9::IndexStats> for IndexStats {
             updated_at,
         }: v1_9::IndexStats,
     ) -> Self {
-        IndexStats {
+        Self {
             number_of_documents,
             database_size,
             used_database_size,

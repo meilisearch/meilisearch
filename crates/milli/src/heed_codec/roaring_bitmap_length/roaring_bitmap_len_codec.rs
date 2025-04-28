@@ -58,7 +58,7 @@ impl heed::BytesDecode<'_> for RoaringBitmapLenCodec {
     type DItem = u64;
 
     fn bytes_decode(bytes: &[u8]) -> Result<Self::DItem, BoxedError> {
-        RoaringBitmapLenCodec::deserialize_from_slice(bytes).map_err(Into::into)
+        Self::deserialize_from_slice(bytes).map_err(Into::into)
     }
 }
 
@@ -66,7 +66,7 @@ impl BytesDecodeOwned for RoaringBitmapLenCodec {
     type DItem = u64;
 
     fn bytes_decode_owned(bytes: &[u8]) -> Result<Self::DItem, BoxedError> {
-        RoaringBitmapLenCodec::deserialize_from_slice(bytes).map_err(Into::into)
+        Self::deserialize_from_slice(bytes).map_err(Into::into)
     }
 }
 

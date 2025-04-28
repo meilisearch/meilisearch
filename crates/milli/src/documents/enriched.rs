@@ -30,7 +30,7 @@ impl<R: io::Read + io::Seek> EnrichedDocumentsBatchReader<R> {
         external_ids: grenad::Reader<BufReader<File>>,
     ) -> Result<Self, Error> {
         if documents.documents_count() as u64 == external_ids.len() {
-            Ok(EnrichedDocumentsBatchReader {
+            Ok(Self {
                 documents,
                 primary_key,
                 external_ids: external_ids.into_cursor()?,
@@ -60,7 +60,7 @@ impl<R: io::Read + io::Seek> EnrichedDocumentsBatchReader<R> {
     pub fn into_cursor_and_fields_index(
         self,
     ) -> (EnrichedDocumentsBatchCursor<R>, DocumentsBatchIndex) {
-        let EnrichedDocumentsBatchReader { documents, primary_key, mut external_ids } = self;
+        let Self { documents, primary_key, mut external_ids } = self;
         let (documents, fields_index) = documents.into_cursor_and_fields_index();
         external_ids.reset();
         (EnrichedDocumentsBatchCursor { documents, primary_key, external_ids }, fields_index)

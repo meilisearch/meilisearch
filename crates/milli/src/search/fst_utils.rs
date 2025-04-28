@@ -30,8 +30,8 @@ where
 {
     fn clone(&self) -> Self {
         match self {
-            StartsWithStateKind::Done => StartsWithStateKind::Done,
-            StartsWithStateKind::Running(inner) => StartsWithStateKind::Running(inner.clone()),
+            Self::Done => Self::Done,
+            Self::Running(inner) => Self::Running(inner.clone()),
         }
     }
 }

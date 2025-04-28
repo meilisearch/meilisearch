@@ -718,19 +718,19 @@ impl Embedder {
             }
         }
         let embedding = match self {
-            Embedder::HuggingFace(embedder) => embedder.embed_one(text),
-            Embedder::OpenAi(embedder) => {
+            Self::HuggingFace(embedder) => embedder.embed_one(text),
+            Self::OpenAi(embedder) => {
                 embedder.embed(&[text], deadline)?.pop().ok_or_else(EmbedError::missing_embedding)
             }
-            Embedder::Ollama(embedder) => {
+            Self::Ollama(embedder) => {
                 embedder.embed(&[text], deadline)?.pop().ok_or_else(EmbedError::missing_embedding)
             }
-            Embedder::UserProvided(embedder) => embedder.embed_one(text),
-            Embedder::Rest(embedder) => embedder
+            Self::UserProvided(embedder) => embedder.embed_one(text),
+            Self::Rest(embedder) => embedder
                 .embed_ref(&[text], deadline)?
                 .pop()
                 .ok_or_else(EmbedError::missing_embedding),
-            Embedder::Composite(embedder) => embedder.search.embed_one(text, deadline),
+            Self::Composite(embedder) => embedder.search.embed_one(text, deadline),
         }?;
 
         if let Some(cache) = self.cache() {
@@ -749,12 +749,12 @@ impl Embedder {
         threads: &ThreadPoolNoAbort,
     ) -> std::result::Result<Vec<Vec<Embedding>>, EmbedError> {
         match self {
-            Embedder::HuggingFace(embedder) => embedder.embed_index(text_chunks),
-            Embedder::OpenAi(embedder) => embedder.embed_index(text_chunks, threads),
-            Embedder::Ollama(embedder) => embedder.embed_index(text_chunks, threads),
-            Embedder::UserProvided(embedder) => embedder.embed_index(text_chunks),
-            Embedder::Rest(embedder) => embedder.embed_index(text_chunks, threads),
-            Embedder::Composite(embedder) => embedder.index.embed_index(text_chunks, threads),
+            Self::HuggingFace(embedder) => embedder.embed_index(text_chunks),
+            Self::OpenAi(embedder) => embedder.embed_index(text_chunks, threads),
+            Self::Ollama(embedder) => embedder.embed_index(text_chunks, threads),
+            Self::UserProvided(embedder) => embedder.embed_index(text_chunks),
+            Self::Rest(embedder) => embedder.embed_index(text_chunks, threads),
+            Self::Composite(embedder) => embedder.index.embed_index(text_chunks, threads),
         }
     }
 
@@ -765,82 +765,82 @@ impl Embedder {
         threads: &ThreadPoolNoAbort,
     ) -> std::result::Result<Vec<Embedding>, EmbedError> {
         match self {
-            Embedder::HuggingFace(embedder) => embedder.embed_index_ref(texts),
-            Embedder::OpenAi(embedder) => embedder.embed_index_ref(texts, threads),
-            Embedder::Ollama(embedder) => embedder.embed_index_ref(texts, threads),
-            Embedder::UserProvided(embedder) => embedder.embed_index_ref(texts),
-            Embedder::Rest(embedder) => embedder.embed_index_ref(texts, threads),
-            Embedder::Composite(embedder) => embedder.index.embed_index_ref(texts, threads),
+            Self::HuggingFace(embedder) => embedder.embed_index_ref(texts),
+            Self::OpenAi(embedder) => embedder.embed_index_ref(texts, threads),
+            Self::Ollama(embedder) => embedder.embed_index_ref(texts, threads),
+            Self::UserProvided(embedder) => embedder.embed_index_ref(texts),
+            Self::Rest(embedder) => embedder.embed_index_ref(texts, threads),
+            Self::Composite(embedder) => embedder.index.embed_index_ref(texts, threads),
         }
     }
 
     /// Indicates the preferred number of chunks to pass to [`Self::embed_chunks`]
     pub fn chunk_count_hint(&self) -> usize {
         match self {
-            Embedder::HuggingFace(embedder) => embedder.chunk_count_hint(),
-            Embedder::OpenAi(embedder) => embedder.chunk_count_hint(),
-            Embedder::Ollama(embedder) => embedder.chunk_count_hint(),
-            Embedder::UserProvided(_) => 100,
-            Embedder::Rest(embedder) => embedder.chunk_count_hint(),
-            Embedder::Composite(embedder) => embedder.index.chunk_count_hint(),
+            Self::HuggingFace(embedder) => embedder.chunk_count_hint(),
+            Self::OpenAi(embedder) => embedder.chunk_count_hint(),
+            Self::Ollama(embedder) => embedder.chunk_count_hint(),
+            Self::UserProvided(_) => 100,
+            Self::Rest(embedder) => embedder.chunk_count_hint(),
+            Self::Composite(embedder) => embedder.index.chunk_count_hint(),
         }
     }
 
     /// Indicates the preferred number of texts in a single chunk passed to [`Self::embed`]
     pub fn prompt_count_in_chunk_hint(&self) -> usize {
         match self {
-            Embedder::HuggingFace(embedder) => embedder.prompt_count_in_chunk_hint(),
-            Embedder::OpenAi(embedder) => embedder.prompt_count_in_chunk_hint(),
-            Embedder::Ollama(embedder) => embedder.prompt_count_in_chunk_hint(),
-            Embedder::UserProvided(_) => 1,
-            Embedder::Rest(embedder) => embedder.prompt_count_in_chunk_hint(),
-            Embedder::Composite(embedder) => embedder.index.prompt_count_in_chunk_hint(),
+            Self::HuggingFace(embedder) => embedder.prompt_count_in_chunk_hint(),
+            Self::OpenAi(embedder) => embedder.prompt_count_in_chunk_hint(),
+            Self::Ollama(embedder) => embedder.prompt_count_in_chunk_hint(),
+            Self::UserProvided(_) => 1,
+            Self::Rest(embedder) => embedder.prompt_count_in_chunk_hint(),
+            Self::Composite(embedder) => embedder.index.prompt_count_in_chunk_hint(),
         }
     }
 
     /// Indicates the dimensions of a single embedding produced by the embedder.
     pub fn dimensions(&self) -> usize {
         match self {
-            Embedder::HuggingFace(embedder) => embedder.dimensions(),
-            Embedder::OpenAi(embedder) => embedder.dimensions(),
-            Embedder::Ollama(embedder) => embedder.dimensions(),
-            Embedder::UserProvided(embedder) => embedder.dimensions(),
-            Embedder::Rest(embedder) => embedder.dimensions(),
-            Embedder::Composite(embedder) => embedder.dimensions(),
+            Self::HuggingFace(embedder) => embedder.dimensions(),
+            Self::OpenAi(embedder) => embedder.dimensions(),
+            Self::Ollama(embedder) => embedder.dimensions(),
+            Self::UserProvided(embedder) => embedder.dimensions(),
+            Self::Rest(embedder) => embedder.dimensions(),
+            Self::Composite(embedder) => embedder.dimensions(),
         }
     }
 
     /// An optional distribution used to apply an affine transformation to the similarity score of a document.
     pub fn distribution(&self) -> Option<DistributionShift> {
         match self {
-            Embedder::HuggingFace(embedder) => embedder.distribution(),
-            Embedder::OpenAi(embedder) => embedder.distribution(),
-            Embedder::Ollama(embedder) => embedder.distribution(),
-            Embedder::UserProvided(embedder) => embedder.distribution(),
-            Embedder::Rest(embedder) => embedder.distribution(),
-            Embedder::Composite(embedder) => embedder.distribution(),
+            Self::HuggingFace(embedder) => embedder.distribution(),
+            Self::OpenAi(embedder) => embedder.distribution(),
+            Self::Ollama(embedder) => embedder.distribution(),
+            Self::UserProvided(embedder) => embedder.distribution(),
+            Self::Rest(embedder) => embedder.distribution(),
+            Self::Composite(embedder) => embedder.distribution(),
         }
     }
 
     pub fn uses_document_template(&self) -> bool {
         match self {
-            Embedder::HuggingFace(_)
-            | Embedder::OpenAi(_)
-            | Embedder::Ollama(_)
-            | Embedder::Rest(_) => true,
-            Embedder::UserProvided(_) => false,
-            Embedder::Composite(embedder) => embedder.index.uses_document_template(),
+            Self::HuggingFace(_)
+            | Self::OpenAi(_)
+            | Self::Ollama(_)
+            | Self::Rest(_) => true,
+            Self::UserProvided(_) => false,
+            Self::Composite(embedder) => embedder.index.uses_document_template(),
         }
     }
 
     fn cache(&self) -> Option<&EmbeddingCache> {
         match self {
-            Embedder::HuggingFace(embedder) => Some(embedder.cache()),
-            Embedder::OpenAi(embedder) => Some(embedder.cache()),
-            Embedder::UserProvided(_) => None,
-            Embedder::Ollama(embedder) => Some(embedder.cache()),
-            Embedder::Rest(embedder) => Some(embedder.cache()),
-            Embedder::Composite(embedder) => embedder.search.cache(),
+            Self::HuggingFace(embedder) => Some(embedder.cache()),
+            Self::OpenAi(embedder) => Some(embedder.cache()),
+            Self::UserProvided(_) => None,
+            Self::Ollama(embedder) => Some(embedder.cache()),
+            Self::Rest(embedder) => Some(embedder.cache()),
+            Self::Composite(embedder) => embedder.search.cache(),
         }
     }
 }

@@ -26,8 +26,8 @@ impl WordPrefixDocids {
         database: Database<Bytes, CboRoaringBitmapCodec>,
         prefix_database: Database<Bytes, CboRoaringBitmapCodec>,
         grenad_parameters: &GrenadParameters,
-    ) -> WordPrefixDocids {
-        WordPrefixDocids {
+    ) -> Self {
+        Self {
             database,
             prefix_database,
             max_memory_by_thread: grenad_parameters.max_memory_by_thread(),
@@ -162,8 +162,8 @@ impl WordPrefixIntegerDocids {
         database: Database<Bytes, CboRoaringBitmapCodec>,
         prefix_database: Database<Bytes, CboRoaringBitmapCodec>,
         grenad_parameters: &GrenadParameters,
-    ) -> WordPrefixIntegerDocids {
-        WordPrefixIntegerDocids {
+    ) -> Self {
+        Self {
             database,
             prefix_database,
             max_memory_by_thread: grenad_parameters.max_memory_by_thread(),

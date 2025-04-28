@@ -26,7 +26,7 @@ impl<'t, 'i> WordPrefixDocids<'t, 'i> {
         wtxn: &'t mut heed::RwTxn<'i>,
         word_docids: Database<Str, CboRoaringBitmapCodec>,
         word_prefix_docids: Database<Str, CboRoaringBitmapCodec>,
-    ) -> WordPrefixDocids<'t, 'i> {
+    ) -> Self {
         WordPrefixDocids {
             wtxn,
             word_docids,

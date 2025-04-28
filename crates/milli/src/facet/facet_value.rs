@@ -8,32 +8,32 @@ pub enum FacetValue {
 }
 
 impl From<String> for FacetValue {
-    fn from(string: String) -> FacetValue {
-        FacetValue::String(string)
+    fn from(string: String) -> Self {
+        Self::String(string)
     }
 }
 
 impl From<&str> for FacetValue {
-    fn from(string: &str) -> FacetValue {
-        FacetValue::String(string.to_owned())
+    fn from(string: &str) -> Self {
+        Self::String(string.to_owned())
     }
 }
 
 impl From<f64> for FacetValue {
-    fn from(float: f64) -> FacetValue {
-        FacetValue::Number(OrderedFloat(float))
+    fn from(float: f64) -> Self {
+        Self::Number(OrderedFloat(float))
     }
 }
 
 impl From<OrderedFloat<f64>> for FacetValue {
-    fn from(float: OrderedFloat<f64>) -> FacetValue {
-        FacetValue::Number(float)
+    fn from(float: OrderedFloat<f64>) -> Self {
+        Self::Number(float)
     }
 }
 
 impl From<i64> for FacetValue {
-    fn from(integer: i64) -> FacetValue {
-        FacetValue::Number(OrderedFloat(integer as f64))
+    fn from(integer: i64) -> Self {
+        Self::Number(OrderedFloat(integer as f64))
     }
 }
 
@@ -46,8 +46,8 @@ impl Serialize for FacetValue {
         S: Serializer,
     {
         match self {
-            FacetValue::String(string) => serializer.serialize_str(string),
-            FacetValue::Number(number) => {
+            Self::String(string) => serializer.serialize_str(string),
+            Self::Number(number) => {
                 let string = number.to_string();
                 serializer.serialize_str(&string)
             }

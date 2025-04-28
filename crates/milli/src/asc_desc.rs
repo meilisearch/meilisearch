@@ -25,7 +25,7 @@ pub enum AscDescError {
 
 impl From<BadGeoError> for AscDescError {
     fn from(geo_error: BadGeoError) -> Self {
-        AscDescError::GeoError(geo_error)
+        Self::GeoError(geo_error)
     }
 }
 
@@ -33,19 +33,19 @@ impl From<AscDescError> for CriterionError {
     fn from(error: AscDescError) -> Self {
         match error {
             AscDescError::GeoError(_) => {
-                CriterionError::ReservedNameForSort { name: "_geoPoint".to_string() }
+                Self::ReservedNameForSort { name: "_geoPoint".to_string() }
             }
-            AscDescError::InvalidSyntax { name } => CriterionError::InvalidName { name },
+            AscDescError::InvalidSyntax { name } => Self::InvalidName { name },
             AscDescError::ReservedKeyword { name } if name.starts_with("_geoPoint") => {
-                CriterionError::ReservedNameForSort { name: "_geoPoint".to_string() }
+                Self::ReservedNameForSort { name: "_geoPoint".to_string() }
             }
             AscDescError::ReservedKeyword { name } if name.starts_with("_geoRadius") => {
-                CriterionError::ReservedNameForFilter { name: "_geoRadius".to_string() }
+                Self::ReservedNameForFilter { name: "_geoRadius".to_string() }
             }
             AscDescError::ReservedKeyword { name } if name.starts_with("_geoBoundingBox") => {
-                CriterionError::ReservedNameForFilter { name: "_geoBoundingBox".to_string() }
+                Self::ReservedNameForFilter { name: "_geoBoundingBox".to_string() }
             }
-            AscDescError::ReservedKeyword { name } => CriterionError::ReservedName { name },
+            AscDescError::ReservedKeyword { name } => Self::ReservedName { name },
         }
     }
 }
@@ -59,7 +59,7 @@ pub enum Member {
 impl FromStr for Member {
     type Err = AscDescError;
 
-    fn from_str(text: &str) -> Result<Member, Self::Err> {
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
         match text.strip_prefix("_geoPoint(").and_then(|text| text.strip_suffix(')')) {
             Some(point) => {
                 let (lat, lng) = point
@@ -76,7 +76,7 @@ impl FromStr for Member {
                 } else if !(-180.0..=180.0).contains(&lng) {
                     return Err(BadGeoError::Lng(lng))?;
                 }
-                Ok(Member::Geo([lat, lng]))
+                Ok(Self::Geo([lat, lng]))
             }
             None => {
                 if is_reserved_keyword(text)
@@ -87,7 +87,7 @@ impl FromStr for Member {
                 {
                     return Err(AscDescError::ReservedKeyword { name: text.to_string() })?;
                 }
-                Ok(Member::Field(text.to_string()))
+                Ok(Self::Field(text.to_string()))
             }
         }
     }
@@ -96,8 +96,8 @@ impl FromStr for Member {
 impl fmt::Display for Member {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Member::Field(name) => f.write_str(name),
-            Member::Geo([lat, lng]) => write!(f, "_geoPoint({}, {})", lat, lng),
+            Self::Field(name) => f.write_str(name),
+            Self::Geo([lat, lng]) => write!(f, "_geoPoint({}, {})", lat, lng),
         }
     }
 }
@@ -105,15 +105,15 @@ impl fmt::Display for Member {
 impl Member {
     pub fn field(&self) -> Option<&str> {
         match self {
-            Member::Field(field) => Some(field),
-            Member::Geo(_) => None,
+            Self::Field(field) => Some(field),
+            Self::Geo(_) => None,
         }
     }
 
     pub fn geo_point(&self) -> Option<&[f64; 2]> {
         match self {
-            Member::Geo(point) => Some(point),
-            Member::Field(_) => None,
+            Self::Geo(point) => Some(point),
+            Self::Field(_) => None,
         }
     }
 }
@@ -127,8 +127,8 @@ pub enum AscDesc {
 impl AscDesc {
     pub fn member(&self) -> &Member {
         match self {
-            AscDesc::Asc(member) => member,
-            AscDesc::Desc(member) => member,
+            Self::Asc(member) => member,
+            Self::Desc(member) => member,
         }
     }
 
@@ -140,10 +140,10 @@ impl AscDesc {
 impl FromStr for AscDesc {
     type Err = AscDescError;
 
-    fn from_str(text: &str) -> Result<AscDesc, Self::Err> {
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
         match text.rsplit_once(':') {
-            Some((left, "asc")) => Ok(AscDesc::Asc(left.parse()?)),
-            Some((left, "desc")) => Ok(AscDesc::Desc(left.parse()?)),
+            Some((left, "asc")) => Ok(Self::Asc(left.parse()?)),
+            Some((left, "desc")) => Ok(Self::Desc(left.parse()?)),
             _ => Err(AscDescError::InvalidSyntax { name: text.to_string() }),
         }
     }
@@ -171,21 +171,21 @@ pub enum SortError {
 impl From<AscDescError> for SortError {
     fn from(error: AscDescError) -> Self {
         match error {
-            AscDescError::GeoError(error) => SortError::ParseGeoError { error },
-            AscDescError::InvalidSyntax { name } => SortError::InvalidName { name },
+            AscDescError::GeoError(error) => Self::ParseGeoError { error },
+            AscDescError::InvalidSyntax { name } => Self::InvalidName { name },
             AscDescError::ReservedKeyword { name } if name.starts_with("_geoPoint") => {
-                SortError::BadGeoPointUsage { name }
+                Self::BadGeoPointUsage { name }
             }
             AscDescError::ReservedKeyword { name } if name == RESERVED_GEO_FIELD_NAME => {
-                SortError::ReservedNameForSettings { name }
+                Self::ReservedNameForSettings { name }
             }
             AscDescError::ReservedKeyword { name } if name.starts_with("_geoRadius") => {
-                SortError::ReservedNameForFilter { name: String::from("_geoRadius") }
+                Self::ReservedNameForFilter { name: String::from("_geoRadius") }
             }
             AscDescError::ReservedKeyword { name } if name.starts_with("_geoBoundingBox") => {
-                SortError::ReservedNameForFilter { name: String::from("_geoBoundingBox") }
+                Self::ReservedNameForFilter { name: String::from("_geoBoundingBox") }
             }
-            AscDescError::ReservedKeyword { name } => SortError::ReservedName { name },
+            AscDescError::ReservedKeyword { name } => Self::ReservedName { name },
         }
     }
 }

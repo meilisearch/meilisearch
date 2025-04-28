@@ -335,7 +335,7 @@ impl<'extractor> SpillingCaches<'extractor> {
                 &'extractor Bump,
             >,
         >,
-    ) -> SpillingCaches<'extractor> {
+    ) -> Self {
         SpillingCaches {
             spilled_entries: iter::repeat_with(|| {
                 let mut builder = grenad::SorterBuilder::new(MergeDeladdCboRoaringBitmaps);
@@ -578,7 +578,7 @@ struct Entry<R> {
 }
 
 impl<R> Ord for Entry<R> {
-    fn cmp(&self, other: &Entry<R>) -> Ordering {
+    fn cmp(&self, other: &Self) -> Ordering {
         let skey = self.cursor.current().map(|(k, _)| k);
         let okey = other.cursor.current().map(|(k, _)| k);
         skey.cmp(&okey).then(self.source_id.cmp(&other.source_id)).reverse()
@@ -588,13 +588,13 @@ impl<R> Ord for Entry<R> {
 impl<R> Eq for Entry<R> {}
 
 impl<R> PartialEq for Entry<R> {
-    fn eq(&self, other: &Entry<R>) -> bool {
+    fn eq(&self, other: &Self) -> bool {
         self.cmp(other) == Ordering::Equal
     }
 }
 
 impl<R> PartialOrd for Entry<R> {
-    fn partial_cmp(&self, other: &Entry<R>) -> Option<Ordering> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
@@ -636,7 +636,7 @@ pub struct DelAddRoaringBitmap {
 }
 
 impl DelAddRoaringBitmap {
-    fn from_bytes(bytes: &[u8]) -> io::Result<DelAddRoaringBitmap> {
+    fn from_bytes(bytes: &[u8]) -> io::Result<Self> {
         let reader = KvReaderDelAdd::from_slice(bytes);
 
         let del = match reader.get(DelAdd::Deletion) {
@@ -649,11 +649,11 @@ impl DelAddRoaringBitmap {
             None => None,
         };
 
-        Ok(DelAddRoaringBitmap { del, add })
+        Ok(Self { del, add })
     }
 
-    pub fn empty() -> DelAddRoaringBitmap {
-        DelAddRoaringBitmap { del: None, add: None }
+    pub fn empty() -> Self {
+        Self { del: None, add: None }
     }
 
     pub fn insert_del_u32(&mut self, n: u32) {
@@ -665,11 +665,11 @@ impl DelAddRoaringBitmap {
     }
 
     pub fn new_del_u32(n: u32) -> Self {
-        DelAddRoaringBitmap { del: Some(RoaringBitmap::from([n])), add: None }
+        Self { del: Some(RoaringBitmap::from([n])), add: None }
     }
 
     pub fn new_add_u32(n: u32) -> Self {
-        DelAddRoaringBitmap { del: None, add: Some(RoaringBitmap::from([n])) }
+        Self { del: None, add: Some(RoaringBitmap::from([n])) }
     }
 
     pub fn union_and_clear_bbbul<B: BitPacker>(&mut self, bbbul: &mut FrozenDelAddBbbul<'_, B>) {
@@ -692,9 +692,9 @@ impl DelAddRoaringBitmap {
         }
     }
 
-    pub fn merge(self, rhs: DelAddRoaringBitmap) -> DelAddRoaringBitmap {
-        let DelAddRoaringBitmap { del, add } = self;
-        let DelAddRoaringBitmap { del: ndel, add: nadd } = rhs;
+    pub fn merge(self, rhs: Self) -> Self {
+        let Self { del, add } = self;
+        let Self { del: ndel, add: nadd } = rhs;
 
         let del = match (del, ndel) {
             (None, None) => None,
@@ -708,11 +708,11 @@ impl DelAddRoaringBitmap {
             (Some(add), Some(nadd)) => Some(add | nadd),
         };
 
-        DelAddRoaringBitmap { del, add }
+        Self { del, add }
     }
 
     pub fn apply_to(&self, documents_ids: &mut RoaringBitmap, modified_docids: &mut RoaringBitmap) {
-        let DelAddRoaringBitmap { del, add } = self;
+        let Self { del, add } = self;
 
         if let Some(del) = del {
             *documents_ids -= del;

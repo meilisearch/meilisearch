@@ -60,11 +60,11 @@ enum VectorStateDelta {
 impl VectorStateDelta {
     fn into_values(self) -> (bool, String, Vec<Vec<f32>>) {
         match self {
-            VectorStateDelta::NoChange => Default::default(),
-            VectorStateDelta::NowRemoved => (true, Default::default(), Default::default()),
+            Self::NoChange => Default::default(),
+            Self::NowRemoved => (true, Default::default(), Default::default()),
             // We always delete the previous vectors
-            VectorStateDelta::NowManual(add) => (true, Default::default(), add),
-            VectorStateDelta::NowGenerated(prompt) => (true, prompt, Default::default()),
+            Self::NowManual(add) => (true, Default::default(), add),
+            Self::NowGenerated(prompt) => (true, prompt, Default::default()),
         }
     }
 }
@@ -105,7 +105,7 @@ struct ManualEmbedderErrors {
 
 impl ManualEmbedderErrors {
     pub fn push_error(
-        errors: &mut Option<ManualEmbedderErrors>,
+        errors: &mut Option<Self>,
         embedder_name: &str,
         document_id: impl Fn() -> Value,
     ) {
@@ -126,7 +126,7 @@ impl ManualEmbedderErrors {
     }
 
     pub fn to_result(
-        errors: Option<ManualEmbedderErrors>,
+        errors: Option<Self>,
         possible_embedding_mistakes: &PossibleEmbeddingMistakes,
         unused_vectors_distribution: &UnusedVectorsDistribution,
     ) -> Result<()> {

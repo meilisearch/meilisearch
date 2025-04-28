@@ -198,8 +198,8 @@ pub enum Word {
 impl Word {
     pub fn interned(&self) -> Interned<String> {
         match self {
-            Word::Original(word) => *word,
-            Word::Derived(word) => *word,
+            Self::Original(word) => *word,
+            Self::Derived(word) => *word,
         }
     }
 }

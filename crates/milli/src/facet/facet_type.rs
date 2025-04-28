@@ -13,8 +13,8 @@ pub enum FacetType {
 impl fmt::Display for FacetType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            FacetType::String => f.write_str("string"),
-            FacetType::Number => f.write_str("number"),
+            Self::String => f.write_str("string"),
+            Self::Number => f.write_str("number"),
         }
     }
 }
@@ -24,9 +24,9 @@ impl FromStr for FacetType {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.trim().eq_ignore_ascii_case("string") {
-            Ok(FacetType::String)
+            Ok(Self::String)
         } else if s.trim().eq_ignore_ascii_case("number") {
-            Ok(FacetType::Number)
+            Ok(Self::Number)
         } else {
             Err(InvalidFacetType)
         }

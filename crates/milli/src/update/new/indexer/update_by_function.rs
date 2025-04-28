@@ -34,7 +34,7 @@ pub struct UpdateByFunctionChanges<'doc> {
 
 impl UpdateByFunction {
     pub fn new(documents: RoaringBitmap, context: Option<Object>, code: String) -> Self {
-        UpdateByFunction { documents, context, code }
+        Self { documents, context, code }
     }
 
     pub fn into_changes<'index>(

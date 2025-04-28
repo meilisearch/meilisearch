@@ -187,8 +187,8 @@ impl SmallBitmapInternal {
     }
     pub fn is_empty(&self) -> bool {
         match self {
-            SmallBitmapInternal::Tiny(set) => *set == 0,
-            SmallBitmapInternal::Small(sets) => {
+            Self::Tiny(set) => *set == 0,
+            Self::Small(sets) => {
                 for set in sets.iter() {
                     if *set != 0 {
                         return false;
@@ -200,8 +200,8 @@ impl SmallBitmapInternal {
     }
     pub fn clear(&mut self) {
         match self {
-            SmallBitmapInternal::Tiny(set) => *set = 0,
-            SmallBitmapInternal::Small(sets) => {
+            Self::Tiny(set) => *set = 0,
+            Self::Small(sets) => {
                 for set in sets.iter_mut() {
                     *set = 0;
                 }
@@ -210,14 +210,14 @@ impl SmallBitmapInternal {
     }
     pub fn universe_length(&self) -> u16 {
         match &self {
-            SmallBitmapInternal::Tiny(_) => 64,
-            SmallBitmapInternal::Small(xs) => 64 * xs.len() as u16,
+            Self::Tiny(_) => 64,
+            Self::Small(xs) => 64 * xs.len() as u16,
         }
     }
 
     fn get_set_index(&self, x: u16) -> (u64, u16) {
         match self {
-            SmallBitmapInternal::Tiny(set) => {
+            Self::Tiny(set) => {
                 assert!(
                     x < 64,
                     "index out of bounds: the universe length is 64 but the index is {}",
@@ -225,7 +225,7 @@ impl SmallBitmapInternal {
                 );
                 (*set, x)
             }
-            SmallBitmapInternal::Small(set) => {
+            Self::Small(set) => {
                 let idx = (x as usize) / 64;
                 assert!(
                     idx < set.len(),
@@ -240,7 +240,7 @@ impl SmallBitmapInternal {
 
     fn get_set_index_mut(&mut self, x: u16) -> (&mut u64, u16) {
         match self {
-            SmallBitmapInternal::Tiny(set) => {
+            Self::Tiny(set) => {
                 assert!(
                     x < 64,
                     "index out of bounds: the universe length is 64 but the index is {}",
@@ -248,7 +248,7 @@ impl SmallBitmapInternal {
                 );
                 (set, x)
             }
-            SmallBitmapInternal::Small(set) => {
+            Self::Small(set) => {
                 let idx = (x as usize) / 64;
                 assert!(
                     idx < set.len(),
@@ -276,20 +276,20 @@ impl SmallBitmapInternal {
         *set &= !(0b1 << x);
     }
 
-    pub fn intersection(&mut self, other: &SmallBitmapInternal) {
+    pub fn intersection(&mut self, other: &Self) {
         self.apply_op(other, |a, b| *a &= b);
     }
-    pub fn union(&mut self, other: &SmallBitmapInternal) {
+    pub fn union(&mut self, other: &Self) {
         self.apply_op(other, |a, b| *a |= b);
     }
-    pub fn subtract(&mut self, other: &SmallBitmapInternal) {
+    pub fn subtract(&mut self, other: &Self) {
         self.apply_op(other, |a, b| *a &= !b);
     }
 
-    pub fn apply_op(&mut self, other: &SmallBitmapInternal, op: impl Fn(&mut u64, u64)) {
+    pub fn apply_op(&mut self, other: &Self, op: impl Fn(&mut u64, u64)) {
         match (self, other) {
-            (SmallBitmapInternal::Tiny(a), SmallBitmapInternal::Tiny(b)) => op(a, *b),
-            (SmallBitmapInternal::Small(a), SmallBitmapInternal::Small(b)) => {
+            (Self::Tiny(a), Self::Tiny(b)) => op(a, *b),
+            (Self::Small(a), Self::Small(b)) => {
                 assert!(
                     a.len() == b.len(),
                     "universe length mismatch: left is {}, but right is {}",
@@ -309,10 +309,10 @@ impl SmallBitmapInternal {
             }
         }
     }
-    fn all_satisfy_op(&self, other: &SmallBitmapInternal, op: impl Fn(u64, u64) -> bool) -> bool {
+    fn all_satisfy_op(&self, other: &Self, op: impl Fn(u64, u64) -> bool) -> bool {
         match (self, other) {
-            (SmallBitmapInternal::Tiny(a), SmallBitmapInternal::Tiny(b)) => op(*a, *b),
-            (SmallBitmapInternal::Small(a), SmallBitmapInternal::Small(b)) => {
+            (Self::Tiny(a), Self::Tiny(b)) => op(*a, *b),
+            (Self::Small(a), Self::Small(b)) => {
                 assert!(
                     a.len() == b.len(),
                     "universe length mismatch: left is {}, but right is {}",
@@ -335,10 +335,10 @@ impl SmallBitmapInternal {
             }
         }
     }
-    fn any_satisfy_op(&self, other: &SmallBitmapInternal, op: impl Fn(u64, u64) -> bool) -> bool {
+    fn any_satisfy_op(&self, other: &Self, op: impl Fn(u64, u64) -> bool) -> bool {
         match (self, other) {
-            (SmallBitmapInternal::Tiny(a), SmallBitmapInternal::Tiny(b)) => op(*a, *b),
-            (SmallBitmapInternal::Small(a), SmallBitmapInternal::Small(b)) => {
+            (Self::Tiny(a), Self::Tiny(b)) => op(*a, *b),
+            (Self::Small(a), Self::Small(b)) => {
                 assert!(
                     a.len() == b.len(),
                     "universe length mismatch: left is {}, but right is {}",
@@ -361,16 +361,16 @@ impl SmallBitmapInternal {
             }
         }
     }
-    pub fn is_subset(&self, other: &SmallBitmapInternal) -> bool {
+    pub fn is_subset(&self, other: &Self) -> bool {
         self.all_satisfy_op(other, |a, b| a & !b == 0)
     }
-    pub fn intersects(&self, other: &SmallBitmapInternal) -> bool {
+    pub fn intersects(&self, other: &Self) -> bool {
         self.any_satisfy_op(other, |a, b| a & b != 0)
     }
     pub fn iter(&self) -> SmallBitmapInternalIter<'_> {
         match self {
-            SmallBitmapInternal::Tiny(x) => SmallBitmapInternalIter::Tiny(*x),
-            SmallBitmapInternal::Small(xs) => {
+            Self::Tiny(x) => SmallBitmapInternalIter::Tiny(*x),
+            Self::Small(xs) => {
                 SmallBitmapInternalIter::Small { cur: xs[0], next: &xs[1..], base: 0 }
             }
         }

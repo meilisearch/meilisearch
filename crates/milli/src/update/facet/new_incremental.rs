@@ -36,7 +36,7 @@ impl FacetsUpdateIncremental {
         min_level_size: u8,
         max_group_size: u8,
     ) -> Self {
-        FacetsUpdateIncremental {
+        Self {
             inner: FacetsUpdateIncrementalInner {
                 db: match facet_type {
                     FacetType::String => index

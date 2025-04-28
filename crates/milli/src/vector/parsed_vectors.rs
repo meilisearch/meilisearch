@@ -31,30 +31,30 @@ pub enum RawVectorsError {
 impl RawVectorsError {
     pub fn msg(self, embedder_name: &str) -> String {
         match self {
-            RawVectorsError::DeserializeSeq { index, error } => format!(
+            Self::DeserializeSeq { index, error } => format!(
                 "Could not parse `._vectors.{embedder_name}[{index}]`: {error}"
             ),
-            RawVectorsError::DeserializeKey { error } => format!(
+            Self::DeserializeKey { error } => format!(
                 "Could not parse a field at `._vectors.{embedder_name}`: {error}"
             ),
-            RawVectorsError::DeserializeRegenerate { error } => format!(
+            Self::DeserializeRegenerate { error } => format!(
                 "Could not parse `._vectors.{embedder_name}.regenerate`: {error}"
             ),
-            RawVectorsError::DeserializeEmbeddings { error } => format!(
+            Self::DeserializeEmbeddings { error } => format!(
                 "Could not parse `._vectors.{embedder_name}.embeddings`: {error}"
             ),
-            RawVectorsError::UnknownField { field } => format!(
+            Self::UnknownField { field } => format!(
                 "Unexpected field `._vectors.{embedder_name}.{field}`\n  \
                   - note: the allowed fields are `regenerate` and `embeddings`"
             ),
-            RawVectorsError::MissingRegenerate => format!(
+            Self::MissingRegenerate => format!(
                 "Missing field `._vectors.{embedder_name}.regenerate`\n  \
                 - note: `._vectors.{embedder_name}` must be an array of floats, an array of arrays of floats, or an object with field `regenerate`"
             ),
-            RawVectorsError::WrongKind { kind, value } => format!(
+            Self::WrongKind { kind, value } => format!(
                 "Expected `._vectors.{embedder_name}` to be an array of floats, an array of arrays of floats, or an object with at least the field `regenerate`, but got the {kind} `{value}`"
             ),
-            RawVectorsError::Parsing(error) => format!(
+            Self::Parsing(error) => format!(
                 "Could not parse `._vectors.{embedder_name}`: {error}"
             ),
         }
@@ -268,12 +268,12 @@ impl<E: DeserializeError> Deserr<E> for Vectors {
     ) -> Result<Self, E> {
         match value {
             deserr::Value::Sequence(_) | deserr::Value::Null => {
-                Ok(Vectors::ImplicitlyUserProvided(VectorOrArrayOfVectors::deserialize_from_value(
+                Ok(Self::ImplicitlyUserProvided(VectorOrArrayOfVectors::deserialize_from_value(
                     value, location,
                 )?))
             }
             deserr::Value::Map(_) => {
-                Ok(Vectors::Explicit(ExplicitVectors::deserialize_from_value(value, location)?))
+                Ok(Self::Explicit(ExplicitVectors::deserialize_from_value(value, location)?))
             }
 
             value => Err(take_cf_content(E::error(
@@ -295,17 +295,17 @@ impl<E: DeserializeError> Deserr<E> for Vectors {
 impl Vectors {
     pub fn must_regenerate(&self) -> bool {
         match self {
-            Vectors::ImplicitlyUserProvided(_) => false,
-            Vectors::Explicit(ExplicitVectors { regenerate, .. }) => *regenerate,
+            Self::ImplicitlyUserProvided(_) => false,
+            Self::Explicit(ExplicitVectors { regenerate, .. }) => *regenerate,
         }
     }
 
     pub fn into_array_of_vectors(self) -> Option<Vec<Embedding>> {
         match self {
-            Vectors::ImplicitlyUserProvided(embeddings) => {
+            Self::ImplicitlyUserProvided(embeddings) => {
                 Some(embeddings.into_array_of_vectors().unwrap_or_default())
             }
-            Vectors::Explicit(ExplicitVectors { embeddings, regenerate: _ }) => {
+            Self::Explicit(ExplicitVectors { embeddings, regenerate: _ }) => {
                 embeddings.map(|embeddings| embeddings.into_array_of_vectors().unwrap_or_default())
             }
         }
@@ -354,9 +354,9 @@ pub enum VectorState {
 impl VectorState {
     pub fn must_regenerate(&self) -> bool {
         match self {
-            VectorState::Inline(vectors) => vectors.must_regenerate(),
-            VectorState::Manual => false,
-            VectorState::Generated => true,
+            Self::Inline(vectors) => vectors.must_regenerate(),
+            Self::Manual => false,
+            Self::Generated => true,
         }
     }
 }
@@ -463,7 +463,7 @@ impl<E: DeserializeError> Deserr<E> for ParsedVectors {
         location: deserr::ValuePointerRef<'_>,
     ) -> Result<Self, E> {
         let value = <BTreeMap<String, Vectors>>::deserialize_from_value(value, location)?;
-        Ok(ParsedVectors(value))
+        Ok(Self(value))
     }
 }
 
@@ -487,16 +487,16 @@ pub enum Error {
 impl Error {
     pub fn to_crate_error(self, document_id: String) -> crate::Error {
         match self {
-            Error::InvalidMap(value) => {
+            Self::InvalidMap(value) => {
                 crate::Error::UserError(UserError::InvalidVectorsMapType { document_id, value })
             }
-            Error::InvalidEmbedderConf { error } => {
+            Self::InvalidEmbedderConf { error } => {
                 crate::Error::UserError(UserError::InvalidVectorsEmbedderConf {
                     document_id,
                     error: error.to_string(),
                 })
             }
-            Error::InternalSerdeJson(error) => {
+            Self::InternalSerdeJson(error) => {
                 crate::Error::InternalError(InternalError::SerdeJson(error))
             }
         }
@@ -529,14 +529,14 @@ impl<E: DeserializeError> Deserr<E> for VectorOrArrayOfVectors {
         location: deserr::ValuePointerRef<'_>,
     ) -> Result<Self, E> {
         match value {
-            deserr::Value::Null => Ok(VectorOrArrayOfVectors { inner: None }),
+            deserr::Value::Null => Ok(Self { inner: None }),
             deserr::Value::Sequence(seq) => {
                 let mut iter = seq.into_iter();
                 match iter.next().map(|v| v.into_value()) {
                     None => {
                         // With the strange way serde serialize the `Either`, we must send the left part
                         // otherwise it'll consider we returned [[]]
-                        Ok(VectorOrArrayOfVectors { inner: Some(either::Either::Left(Vec::new())) })
+                        Ok(Self { inner: Some(either::Either::Left(Vec::new())) })
                     }
                     Some(val @ deserr::Value::Sequence(_)) => {
                         let first = Embedding::deserialize_from_value(val, location.push_index(0))?;
@@ -552,7 +552,7 @@ impl<E: DeserializeError> Deserr<E> for VectorOrArrayOfVectors {
                             .collect::<Result<Vec<_>, _>>()?;
                         collect.append(&mut tail);
 
-                        Ok(VectorOrArrayOfVectors { inner: Some(either::Either::Left(collect)) })
+                        Ok(Self { inner: Some(either::Either::Left(collect)) })
                     }
                     Some(
                         val @ deserr::Value::Integer(_)
@@ -570,7 +570,7 @@ impl<E: DeserializeError> Deserr<E> for VectorOrArrayOfVectors {
                             })
                             .collect::<Result<Vec<_>, _>>()?;
                         embedding.insert(0, first);
-                        Ok(VectorOrArrayOfVectors { inner: Some(either::Either::Right(embedding)) })
+                        Ok(Self { inner: Some(either::Either::Right(embedding)) })
                     }
                     Some(value) => Err(take_cf_content(E::error(
                         None,

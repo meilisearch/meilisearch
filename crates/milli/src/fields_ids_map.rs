@@ -16,8 +16,8 @@ pub struct FieldsIdsMap {
 }
 
 impl FieldsIdsMap {
-    pub fn new() -> FieldsIdsMap {
-        FieldsIdsMap { names_ids: BTreeMap::new(), ids_names: BTreeMap::new(), next_id: Some(0) }
+    pub fn new() -> Self {
+        Self { names_ids: BTreeMap::new(), ids_names: BTreeMap::new(), next_id: Some(0) }
     }
 
     /// Returns the number of fields ids in the map.
@@ -90,8 +90,8 @@ impl FieldsIdsMap {
 }
 
 impl Default for FieldsIdsMap {
-    fn default() -> FieldsIdsMap {
-        FieldsIdsMap::new()
+    fn default() -> Self {
+        Self::new()
     }
 }
 

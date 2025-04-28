@@ -31,7 +31,7 @@ impl<'t, 'i> WordPrefixIntegerDocids<'t, 'i> {
         wtxn: &'t mut heed::RwTxn<'i>,
         prefix_database: Database<StrBEU16Codec, CboRoaringBitmapCodec>,
         word_database: Database<StrBEU16Codec, CboRoaringBitmapCodec>,
-    ) -> WordPrefixIntegerDocids<'t, 'i> {
+    ) -> Self {
         WordPrefixIntegerDocids {
             wtxn,
             prefix_database,

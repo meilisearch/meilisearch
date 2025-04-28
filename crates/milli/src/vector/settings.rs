@@ -961,9 +961,9 @@ impl SettingsDiff {
 impl ReindexAction {
     fn push_action(this: &mut Option<Self>, other: Self) {
         *this = match (*this, other) {
-            (_, ReindexAction::FullReindex) => Some(ReindexAction::FullReindex),
-            (Some(ReindexAction::FullReindex), _) => Some(ReindexAction::FullReindex),
-            (_, ReindexAction::RegeneratePrompts) => Some(ReindexAction::RegeneratePrompts),
+            (_, Self::FullReindex) => Some(Self::FullReindex),
+            (Some(Self::FullReindex), _) => Some(Self::FullReindex),
+            (_, Self::RegeneratePrompts) => Some(Self::RegeneratePrompts),
         }
     }
 }
@@ -1081,27 +1081,27 @@ pub enum NestingContext {
 impl NestingContext {
     pub fn embedder_name_with_context(&self, embedder_name: &str) -> String {
         match self {
-            NestingContext::NotNested => embedder_name.to_string(),
-            NestingContext::Search => format!("{embedder_name}.searchEmbedder"),
-            NestingContext::Indexing => format!("{embedder_name}.indexingEmbedder",),
+            Self::NotNested => embedder_name.to_string(),
+            Self::Search => format!("{embedder_name}.searchEmbedder"),
+            Self::Indexing => format!("{embedder_name}.indexingEmbedder",),
         }
     }
 
     pub fn in_context(&self) -> &'static str {
         match self {
-            NestingContext::NotNested => "",
-            NestingContext::Search => " for the search embedder",
-            NestingContext::Indexing => " for the indexing embedder",
+            Self::NotNested => "",
+            Self::Search => " for the search embedder",
+            Self::Indexing => " for the indexing embedder",
         }
     }
 
     pub fn nesting_embedders(&self) -> &'static str {
         match self {
-            NestingContext::NotNested => "",
-            NestingContext::Search => {
+            Self::NotNested => "",
+            Self::Search => {
                 "\n  - note: nesting embedders in `searchEmbedder` is not allowed"
             }
-            NestingContext::Indexing => {
+            Self::Indexing => {
                 "\n  - note: nesting embedders in `indexingEmbedder` is not allowed"
             }
         }
@@ -1415,8 +1415,8 @@ impl EmbeddingSettings {
         }
     }
 
-    pub(crate) fn apply_default_source(setting: &mut Setting<EmbeddingSettings>) {
-        if let Setting::Set(EmbeddingSettings {
+    pub(crate) fn apply_default_source(setting: &mut Setting<Self>) {
+        if let Setting::Set(Self {
             source: source @ (Setting::NotSet | Setting::Reset),
             ..
         }) = setting
@@ -1425,8 +1425,8 @@ impl EmbeddingSettings {
         }
     }
 
-    pub(crate) fn apply_default_openai_model(setting: &mut Setting<EmbeddingSettings>) {
-        if let Setting::Set(EmbeddingSettings {
+    pub(crate) fn apply_default_openai_model(setting: &mut Setting<Self>) {
+        if let Setting::Set(Self {
             source: Setting::Set(EmbedderSource::OpenAi),
             model: model @ (Setting::NotSet | Setting::Reset),
             ..
@@ -1489,12 +1489,12 @@ pub enum EmbedderSource {
 impl std::fmt::Display for EmbedderSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = match self {
-            EmbedderSource::OpenAi => "openAi",
-            EmbedderSource::HuggingFace => "huggingFace",
-            EmbedderSource::UserProvided => "userProvided",
-            EmbedderSource::Ollama => "ollama",
-            EmbedderSource::Rest => "rest",
-            EmbedderSource::Composite => "composite",
+            Self::OpenAi => "openAi",
+            Self::HuggingFace => "huggingFace",
+            Self::UserProvided => "userProvided",
+            Self::Ollama => "ollama",
+            Self::Rest => "rest",
+            Self::Composite => "composite",
         };
         f.write_str(s)
     }
@@ -1965,7 +1965,7 @@ impl SubEmbedderOptions {
             options.dimensions = Some(dimensions);
         }
         options.distribution = distribution.set();
-        SubEmbedderOptions::OpenAi(options)
+        Self::OpenAi(options)
     }
     fn hugging_face(
         model: Setting<String>,
@@ -1990,7 +1990,7 @@ impl SubEmbedderOptions {
             options.pooling = pooling;
         }
         options.distribution = distribution.set();
-        SubEmbedderOptions::HuggingFace(options)
+        Self::HuggingFace(options)
     }
     fn user_provided(dimensions: usize, distribution: Setting<DistributionShift>) -> Self {
         Self::UserProvided(super::manual::EmbedderOptions {
@@ -2035,7 +2035,7 @@ impl SubEmbedderOptions {
         }
 
         options.distribution = distribution.set();
-        SubEmbedderOptions::Ollama(options)
+        Self::Ollama(options)
     }
 }
 

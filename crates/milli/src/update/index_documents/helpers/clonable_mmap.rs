@@ -16,8 +16,8 @@ impl AsRef<[u8]> for ClonableMmap {
 }
 
 impl From<Mmap> for ClonableMmap {
-    fn from(inner: Mmap) -> ClonableMmap {
-        ClonableMmap { inner: Arc::new(inner) }
+    fn from(inner: Mmap) -> Self {
+        Self { inner: Arc::new(inner) }
     }
 }
 

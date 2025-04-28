@@ -51,7 +51,7 @@ impl Criterion {
     /// Returns the field name parameter of this criterion.
     pub fn field_name(&self) -> Option<&str> {
         match self {
-            Criterion::Asc(name) | Criterion::Desc(name) => Some(name),
+            Self::Asc(name) | Self::Desc(name) => Some(name),
             _otherwise => None,
         }
     }
@@ -60,17 +60,17 @@ impl Criterion {
 impl FromStr for Criterion {
     type Err = CriterionError;
 
-    fn from_str(text: &str) -> Result<Criterion, Self::Err> {
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
         match text {
-            "words" => Ok(Criterion::Words),
-            "typo" => Ok(Criterion::Typo),
-            "proximity" => Ok(Criterion::Proximity),
-            "attribute" => Ok(Criterion::Attribute),
-            "sort" => Ok(Criterion::Sort),
-            "exactness" => Ok(Criterion::Exactness),
+            "words" => Ok(Self::Words),
+            "typo" => Ok(Self::Typo),
+            "proximity" => Ok(Self::Proximity),
+            "attribute" => Ok(Self::Attribute),
+            "sort" => Ok(Self::Sort),
+            "exactness" => Ok(Self::Exactness),
             text => match AscDesc::from_str(text)? {
-                AscDesc::Asc(Member::Field(field)) => Ok(Criterion::Asc(field)),
-                AscDesc::Desc(Member::Field(field)) => Ok(Criterion::Desc(field)),
+                AscDesc::Asc(Member::Field(field)) => Ok(Self::Asc(field)),
+                AscDesc::Desc(Member::Field(field)) => Ok(Self::Desc(field)),
                 AscDesc::Asc(Member::Geo(_)) | AscDesc::Desc(Member::Geo(_)) => {
                     Err(CriterionError::ReservedNameForSort { name: "_geoPoint".to_string() })?
                 }

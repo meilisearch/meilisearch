@@ -22,8 +22,8 @@ pub struct Document<'a>(BTreeMap<&'a str, (&'a [u8], ParsedValue)>);
 struct ParsedValue(std::cell::OnceCell<LiquidValue>);
 
 impl ParsedValue {
-    fn empty() -> ParsedValue {
-        ParsedValue(OnceCell::new())
+    fn empty() -> Self {
+        Self(OnceCell::new())
     }
 
     fn get(&self, raw: &[u8]) -> &LiquidValue {
@@ -270,14 +270,14 @@ struct ParseableMap<'doc>(RawMap<'doc, FxBuildHasher>);
 struct ParseableArray<'doc>(RawVec<'doc>);
 
 impl<'doc> ParseableMap<'doc> {
-    pub fn as_parseable<'a>(map: &'a RawMap<'doc, FxBuildHasher>) -> &'a ParseableMap<'doc> {
+    pub fn as_parseable<'a>(map: &'a RawMap<'doc, FxBuildHasher>) -> &'a Self {
         // SAFETY: repr(transparent)
         unsafe { &*(map as *const RawMap<FxBuildHasher> as *const Self) }
     }
 }
 
 impl<'doc> ParseableArray<'doc> {
-    pub fn as_parseable<'a>(array: &'a RawVec<'doc>) -> &'a ParseableArray<'doc> {
+    pub fn as_parseable<'a>(array: &'a RawVec<'doc>) -> &'a Self {
         // SAFETY: repr(transparent)
         unsafe { &*(array as *const RawVec as *const Self) }
     }

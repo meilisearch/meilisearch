@@ -40,7 +40,7 @@ impl<'i> FacetsUpdateBulk<'i> {
         delta_data: Merger<BufReader<File>, MergeDeladdCboRoaringBitmaps>,
         group_size: u8,
         min_level_size: u8,
-    ) -> FacetsUpdateBulk<'i> {
+    ) -> Self {
         FacetsUpdateBulk {
             index,
             field_ids,
@@ -55,7 +55,7 @@ impl<'i> FacetsUpdateBulk<'i> {
         index: &'i Index,
         field_ids: Vec<FieldId>,
         facet_type: FacetType,
-    ) -> FacetsUpdateBulk<'i> {
+    ) -> Self {
         FacetsUpdateBulk {
             index,
             field_ids,

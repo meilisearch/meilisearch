@@ -52,17 +52,17 @@ impl ScoreDetails {
 
     pub fn rank(&self) -> Option<Rank> {
         match self {
-            ScoreDetails::Words(details) => Some(details.rank()),
-            ScoreDetails::Typo(details) => Some(details.rank()),
-            ScoreDetails::Proximity(details) => Some(*details),
-            ScoreDetails::Fid(details) => Some(*details),
-            ScoreDetails::Position(details) => Some(*details),
-            ScoreDetails::ExactAttribute(details) => Some(details.rank()),
-            ScoreDetails::ExactWords(details) => Some(details.rank()),
-            ScoreDetails::Sort(_) => None,
-            ScoreDetails::GeoSort(_) => None,
-            ScoreDetails::Vector(_) => None,
-            ScoreDetails::Skipped => Some(Rank { rank: 0, max_rank: 1 }),
+            Self::Words(details) => Some(details.rank()),
+            Self::Typo(details) => Some(details.rank()),
+            Self::Proximity(details) => Some(*details),
+            Self::Fid(details) => Some(*details),
+            Self::Position(details) => Some(*details),
+            Self::ExactAttribute(details) => Some(details.rank()),
+            Self::ExactWords(details) => Some(details.rank()),
+            Self::Sort(_) => None,
+            Self::GeoSort(_) => None,
+            Self::Vector(_) => None,
+            Self::Skipped => Some(Rank { rank: 0, max_rank: 1 }),
         }
     }
 
@@ -81,7 +81,7 @@ impl ScoreDetails {
         details: impl Iterator<Item = &'a Self> + 'a,
     ) -> impl Iterator<Item = ScoreValue<'a>> + 'a {
         details
-            .map(ScoreDetails::rank_or_value)
+            .map(Self::rank_or_value)
             .coalesce(|left, right| match (left, right) {
                 (RankOrValue::Rank(left), RankOrValue::Rank(right)) => {
                     Ok(RankOrValue::Rank(Rank::merge(left, right)))
@@ -101,7 +101,7 @@ impl ScoreDetails {
         weight: f64,
     ) -> impl Iterator<Item = WeightedScoreValue> + 'a {
         details
-            .map(ScoreDetails::rank_or_value)
+            .map(Self::rank_or_value)
             .coalesce(|left, right| match (left, right) {
                 (RankOrValue::Rank(left), RankOrValue::Rank(right)) => {
                     Ok(RankOrValue::Rank(Rank::merge(left, right)))
@@ -122,19 +122,19 @@ impl ScoreDetails {
 
     fn rank_or_value(&self) -> RankOrValue<'_> {
         match self {
-            ScoreDetails::Words(w) => RankOrValue::Rank(w.rank()),
-            ScoreDetails::Typo(t) => RankOrValue::Rank(t.rank()),
-            ScoreDetails::Proximity(p) => RankOrValue::Rank(*p),
-            ScoreDetails::Fid(f) => RankOrValue::Rank(*f),
-            ScoreDetails::Position(p) => RankOrValue::Rank(*p),
-            ScoreDetails::ExactAttribute(e) => RankOrValue::Rank(e.rank()),
-            ScoreDetails::ExactWords(e) => RankOrValue::Rank(e.rank()),
-            ScoreDetails::Sort(sort) => RankOrValue::Sort(sort),
-            ScoreDetails::GeoSort(geosort) => RankOrValue::GeoSort(geosort),
-            ScoreDetails::Vector(vector) => {
+            Self::Words(w) => RankOrValue::Rank(w.rank()),
+            Self::Typo(t) => RankOrValue::Rank(t.rank()),
+            Self::Proximity(p) => RankOrValue::Rank(*p),
+            Self::Fid(f) => RankOrValue::Rank(*f),
+            Self::Position(p) => RankOrValue::Rank(*p),
+            Self::ExactAttribute(e) => RankOrValue::Rank(e.rank()),
+            Self::ExactWords(e) => RankOrValue::Rank(e.rank()),
+            Self::Sort(sort) => RankOrValue::Sort(sort),
+            Self::GeoSort(geosort) => RankOrValue::GeoSort(geosort),
+            Self::Vector(vector) => {
                 RankOrValue::Score(vector.similarity.as_ref().map(|s| *s as f64).unwrap_or(0.0f64))
             }
-            ScoreDetails::Skipped => RankOrValue::Rank(Rank { rank: 0, max_rank: 1 }),
+            Self::Skipped => RankOrValue::Rank(Rank { rank: 0, max_rank: 1 }),
         }
     }
 
@@ -150,7 +150,7 @@ impl ScoreDetails {
         let mut details_map = serde_json::Map::default();
         for details in details {
             match details {
-                ScoreDetails::Words(words) => {
+                Self::Words(words) => {
                     let words_details = serde_json::json!({
                             "order": order,
                             "matchingWords": words.matching_words,
@@ -160,7 +160,7 @@ impl ScoreDetails {
                     details_map.insert("words".into(), words_details);
                     order += 1;
                 }
-                ScoreDetails::Typo(typo) => {
+                Self::Typo(typo) => {
                     let typo_details = serde_json::json!({
                         "order": order,
                         "typoCount": typo.typo_count,
@@ -170,7 +170,7 @@ impl ScoreDetails {
                     details_map.insert("typo".into(), typo_details);
                     order += 1;
                 }
-                ScoreDetails::Proximity(proximity) => {
+                Self::Proximity(proximity) => {
                     let proximity_details = serde_json::json!({
                         "order": order,
                         "score": proximity.local_score(),
@@ -178,7 +178,7 @@ impl ScoreDetails {
                     details_map.insert("proximity".into(), proximity_details);
                     order += 1;
                 }
-                ScoreDetails::Fid(fid) => {
+                Self::Fid(fid) => {
                     // copy the rank for future use in Position.
                     fid_details = Some(*fid);
                     // For now, fid is a virtual rule always followed by the "position" rule
@@ -189,7 +189,7 @@ impl ScoreDetails {
                     details_map.insert("attribute".into(), fid_details);
                     order += 1;
                 }
-                ScoreDetails::Position(position) => {
+                Self::Position(position) => {
                     // For now, position is a virtual rule always preceded by the "fid" rule
                     let attribute_details = details_map
                         .get_mut("attribute")
@@ -208,7 +208,7 @@ impl ScoreDetails {
 
                     // do not update the order since this was already done by fid
                 }
-                ScoreDetails::ExactAttribute(exact_attribute) => {
+                Self::ExactAttribute(exact_attribute) => {
                     let exactness_details = serde_json::json!({
                         "order": order,
                         "matchType": exact_attribute,
@@ -217,7 +217,7 @@ impl ScoreDetails {
                     details_map.insert("exactness".into(), exactness_details);
                     order += 1;
                 }
-                ScoreDetails::ExactWords(details) => {
+                Self::ExactWords(details) => {
                     // For now, exactness is a virtual rule always preceded by the "ExactAttribute" rule
                     let exactness_details = details_map
                         .get_mut("exactness")
@@ -242,7 +242,7 @@ impl ScoreDetails {
                     }
                     // do not update the order since this was already done by exactAttribute
                 }
-                ScoreDetails::Sort(details) => {
+                Self::Sort(details) => {
                     let sort = if details.redacted {
                         format!("<hidden-rule-{order}>")
                     } else {
@@ -261,7 +261,7 @@ impl ScoreDetails {
                     details_map.insert(sort, sort_details);
                     order += 1;
                 }
-                ScoreDetails::GeoSort(details) => {
+                Self::GeoSort(details) => {
                     let sort = format!(
                         "_geoPoint({}, {}):{}",
                         details.target_point[0],
@@ -281,7 +281,7 @@ impl ScoreDetails {
                     details_map.insert(sort, sort_details);
                     order += 1;
                 }
-                ScoreDetails::Vector(s) => {
+                Self::Vector(s) => {
                     let similarity = s.similarity.as_ref();
 
                     let details = serde_json::json!({
@@ -291,7 +291,7 @@ impl ScoreDetails {
                     details_map.insert("vectorSort".into(), details);
                     order += 1;
                 }
-                ScoreDetails::Skipped => {
+                Self::Skipped => {
                     details_map
                         .insert("skipped".to_string(), serde_json::json!({ "order": order }));
                     order += 1;
@@ -383,8 +383,8 @@ impl Typo {
     // rank = max_rank - 1 - typo + 1
     // rank + typo = max_rank
     // typo = max_rank - rank
-    pub fn from_rank(rank: Rank) -> Typo {
-        Typo {
+    pub fn from_rank(rank: Rank) -> Self {
+        Self {
             typo_count: rank.max_rank.saturating_sub(rank.rank),
             max_typo_count: rank.max_rank.saturating_sub(1),
         }
@@ -410,14 +410,14 @@ impl Rank {
     }
 
     pub fn global_score(details: impl Iterator<Item = Self>) -> f64 {
-        let mut rank = Rank { rank: 1, max_rank: 1 };
+        let mut rank = Self { rank: 1, max_rank: 1 };
         for inner_rank in details {
-            rank = Rank::merge(rank, inner_rank);
+            rank = Self::merge(rank, inner_rank);
         }
         rank.local_score()
     }
 
-    pub fn merge(mut outer: Rank, inner: Rank) -> Rank {
+    pub fn merge(mut outer: Self, inner: Self) -> Self {
         outer.rank = outer.rank.saturating_sub(1);
 
         outer.rank *= inner.max_rank;
@@ -440,9 +440,9 @@ pub enum ExactAttribute {
 impl ExactAttribute {
     pub fn rank(&self) -> Rank {
         let rank = match self {
-            ExactAttribute::ExactMatch => 3,
-            ExactAttribute::MatchesStart => 2,
-            ExactAttribute::NoExactMatch => 1,
+            Self::ExactMatch => 3,
+            Self::MatchesStart => 2,
+            Self::NoExactMatch => 1,
         };
         Rank { rank, max_rank: 3 }
     }

@@ -125,8 +125,8 @@ impl Pooling {
     fn override_with(&mut self, pooling: OverridePooling) {
         match pooling {
             OverridePooling::UseModel => {}
-            OverridePooling::ForceCls => *self = Pooling::Cls,
-            OverridePooling::ForceMean => *self = Pooling::Mean,
+            OverridePooling::ForceCls => *self = Self::Cls,
+            OverridePooling::ForceMean => *self = Self::Mean,
         }
     }
 }

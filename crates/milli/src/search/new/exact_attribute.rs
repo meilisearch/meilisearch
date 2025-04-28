@@ -130,15 +130,15 @@ impl State {
         // bail if there is a "hole" (missing word) in remaining query graph
         if let Some(e) = exact_terms.first() {
             if e.start_term_id != 0 {
-                return Ok(State::Empty(query_graph.clone()));
+                return Ok(Self::Empty(query_graph.clone()));
             }
         } else {
-            return Ok(State::Empty(query_graph.clone()));
+            return Ok(Self::Empty(query_graph.clone()));
         }
         let mut previous_id = 0;
         for e in exact_terms.iter() {
             if e.start_term_id < previous_id || e.start_term_id - previous_id > 1 {
-                return Ok(State::Empty(query_graph.clone()));
+                return Ok(Self::Empty(query_graph.clone()));
             } else {
                 previous_id = e.start_term_id;
             }
@@ -159,7 +159,7 @@ impl State {
             .collect();
         for (words, position) in &words_positions {
             if candidates.is_empty() {
-                return Ok(State::Empty(query_graph.clone()));
+                return Ok(Self::Empty(query_graph.clone()));
             }
 
             'words: for (offset, word) in words.iter().enumerate() {
@@ -177,7 +177,7 @@ impl State {
                     .unwrap_or_default();
                 candidates &= word_position_docids;
                 if candidates.is_empty() {
-                    return Ok(State::Empty(query_graph.clone()));
+                    return Ok(Self::Empty(query_graph.clone()));
                 }
             }
         }
@@ -185,7 +185,7 @@ impl State {
         let candidates = candidates;
 
         if candidates.is_empty() {
-            return Ok(State::Empty(query_graph.clone()));
+            return Ok(Self::Empty(query_graph.clone()));
         }
 
         let searchable_fields_ids = ctx.index.searchable_fields_ids(ctx.txn)?;
@@ -233,16 +233,16 @@ impl State {
         // note we could have "false positives" where there both exist different attributes that collectively
         // have the terms in the correct order and a single attribute that have all the terms, but in the incorrect order.
 
-        Ok(State::ExactAttribute(query_graph.clone(), candidates_per_attribute))
+        Ok(Self::ExactAttribute(query_graph.clone(), candidates_per_attribute))
     }
 
     fn next(
-        state: State,
+        state: Self,
         universe: &RoaringBitmap,
-    ) -> (State, Option<RankingRuleOutput<QueryGraph>>) {
+    ) -> (Self, Option<RankingRuleOutput<QueryGraph>>) {
         let (state, output) = match state {
-            State::Uninitialized => (state, None),
-            State::ExactAttribute(query_graph, candidates_per_attribute) => {
+            Self::Uninitialized => (state, None),
+            Self::ExactAttribute(query_graph, candidates_per_attribute) => {
                 // TODO it can be much faster to do the intersections before the unions...
                 //      or maybe the candidates_per_attribute are not containing anything outside universe
                 let mut candidates = MultiOps::union(candidates_per_attribute.iter().map(
@@ -252,7 +252,7 @@ impl State {
                 ));
                 candidates &= universe;
                 (
-                    State::AttributeStarts(query_graph.clone(), candidates_per_attribute),
+                    Self::AttributeStarts(query_graph.clone(), candidates_per_attribute),
                     Some(RankingRuleOutput {
                         query: query_graph,
                         candidates,
@@ -262,7 +262,7 @@ impl State {
                     }),
                 )
             }
-            State::AttributeStarts(query_graph, candidates_per_attribute) => {
+            Self::AttributeStarts(query_graph, candidates_per_attribute) => {
                 // TODO it can be much faster to do the intersections before the unions...
                 //      or maybe the candidates_per_attribute are not containing anything outside universe
                 let mut candidates = MultiOps::union(candidates_per_attribute.into_iter().map(
@@ -273,7 +273,7 @@ impl State {
                 ));
                 candidates &= universe;
                 (
-                    State::Empty(query_graph.clone()),
+                    Self::Empty(query_graph.clone()),
                     Some(RankingRuleOutput {
                         query: query_graph,
                         candidates,
@@ -283,8 +283,8 @@ impl State {
                     }),
                 )
             }
-            State::Empty(query_graph) => (
-                State::Empty(query_graph.clone()),
+            Self::Empty(query_graph) => (
+                Self::Empty(query_graph.clone()),
                 Some(RankingRuleOutput {
                     query: query_graph,
                     candidates: universe.clone(),

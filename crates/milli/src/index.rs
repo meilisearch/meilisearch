@@ -183,7 +183,7 @@ impl Index {
         created_at: time::OffsetDateTime,
         updated_at: time::OffsetDateTime,
         creation: bool,
-    ) -> Result<Index> {
+    ) -> Result<Self> {
         use db_name::*;
 
         options.max_dbs(25);
@@ -231,7 +231,7 @@ impl Index {
 
         let documents = env.create_database(&mut wtxn, Some(DOCUMENTS))?;
 
-        let this = Index {
+        let this = Self {
             env: env.clone(),
             main,
             external_documents_ids,
@@ -270,7 +270,7 @@ impl Index {
         }
         wtxn.commit()?;
 
-        Index::set_creation_dates(&this.env, this.main, created_at, updated_at)?;
+        Self::set_creation_dates(&this.env, this.main, created_at, updated_at)?;
 
         Ok(this)
     }
@@ -279,7 +279,7 @@ impl Index {
         options: heed::EnvOpenOptions<WithoutTls>,
         path: P,
         creation: bool,
-    ) -> Result<Index> {
+    ) -> Result<Self> {
         let now = time::OffsetDateTime::now_utc();
         Self::new_with_creation_dates(options, path, now, now, creation)
     }

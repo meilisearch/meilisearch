@@ -25,13 +25,13 @@ impl Default for OrderByMap {
     fn default() -> Self {
         let mut map = HashMap::new();
         map.insert("*".to_string(), OrderBy::Lexicographic);
-        OrderByMap(map)
+        Self(map)
     }
 }
 
 impl FromIterator<(String, OrderBy)> for OrderByMap {
     fn from_iter<T: IntoIterator<Item = (String, OrderBy)>>(iter: T) -> Self {
-        OrderByMap(iter.into_iter().collect())
+        Self(iter.into_iter().collect())
     }
 }
 

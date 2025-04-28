@@ -184,13 +184,13 @@ impl DocumentId {
     }
 
     pub fn is_generated(&self) -> bool {
-        matches!(self, DocumentId::Generated { .. })
+        matches!(self, Self::Generated { .. })
     }
 
     pub fn value(&self) -> &str {
         match self {
-            DocumentId::Retrieved { value } => value,
-            DocumentId::Generated { value, .. } => value,
+            Self::Retrieved { value } => value,
+            Self::Generated { value, .. } => value,
         }
     }
 }
@@ -198,8 +198,8 @@ impl DocumentId {
 impl fmt::Debug for DocumentId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            DocumentId::Retrieved { value } => write!(f, "{:?}", value),
-            DocumentId::Generated { value, document_nth } => {
+            Self::Retrieved { value } => write!(f, "{:?}", value),
+            Self::Generated { value, document_nth } => {
                 write!(f, "{{{:?}}} of the {}nth document", value, document_nth)
             }
         }

@@ -53,7 +53,7 @@ where
         location: deserr::ValuePointerRef<'_>,
     ) -> std::result::Result<Self, E> {
         match value {
-            deserr::Value::Null => Ok(Setting::Reset),
+            deserr::Value::Null => Ok(Self::Reset),
             _ => T::deserialize_from_value(value, location).map(Setting::Set),
         }
     }
@@ -75,8 +75,8 @@ impl<T> Setting<T> {
 
     pub fn some_or_not_set(option: Option<T>) -> Self {
         match option {
-            Some(value) => Setting::Set(value),
-            None => Setting::NotSet,
+            Some(value) => Self::Set(value),
+            None => Self::NotSet,
         }
     }
 
@@ -103,8 +103,8 @@ impl<T> Setting<T> {
     /// Returns other if self is not set.
     pub fn or(self, other: Self) -> Self {
         match self {
-            Setting::Set(_) | Setting::Reset => self,
-            Setting::NotSet => other,
+            Self::Set(_) | Self::Reset => self,
+            Self::NotSet => other,
         }
     }
 
@@ -113,7 +113,7 @@ impl<T> Setting<T> {
     where
         T: PartialEq + Eq,
     {
-        if let Setting::NotSet = new {
+        if let Self::NotSet = new {
             return false;
         }
         if self == &new {
@@ -190,7 +190,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         wtxn: &'t mut heed::RwTxn<'i>,
         index: &'i Index,
         indexer_config: &'a IndexerConfig,
-    ) -> Settings<'a, 't, 'i> {
+    ) -> Self {
         Settings {
             wtxn,
             index,
@@ -1380,7 +1380,7 @@ impl InnerIndexSettingsDiff {
             }
         }
 
-        InnerIndexSettingsDiff {
+        Self {
             old: old_settings,
             new: new_settings,
             primary_key_id,

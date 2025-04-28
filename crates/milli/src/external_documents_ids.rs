@@ -19,8 +19,8 @@ pub struct DocumentOperation {
 pub struct ExternalDocumentsIds(Database<Str, BEU32>);
 
 impl ExternalDocumentsIds {
-    pub fn new(db: Database<Str, BEU32>) -> ExternalDocumentsIds {
-        ExternalDocumentsIds(db)
+    pub fn new(db: Database<Str, BEU32>) -> Self {
+        Self(db)
     }
 
     /// Returns `true` if hard and soft external documents lists are empty.

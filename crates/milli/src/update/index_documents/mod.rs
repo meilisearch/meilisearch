@@ -104,7 +104,7 @@ where
         config: IndexDocumentsConfig,
         progress: FP,
         should_abort: FA,
-    ) -> Result<IndexDocuments<'t, 'i, 'a, FP, FA>> {
+    ) -> Result<Self> {
         let transform = Some(Transform::new(
             wtxn,
             index,

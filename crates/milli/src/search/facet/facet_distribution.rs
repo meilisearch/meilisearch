@@ -42,8 +42,8 @@ pub enum OrderBy {
 impl Display for OrderBy {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            OrderBy::Lexicographic => f.write_str("alphabetically"),
-            OrderBy::Count => f.write_str("by count"),
+            Self::Lexicographic => f.write_str("alphabetically"),
+            Self::Count => f.write_str("by count"),
         }
     }
 }
@@ -58,7 +58,7 @@ pub struct FacetDistribution<'a> {
 }
 
 impl<'a> FacetDistribution<'a> {
-    pub fn new(rtxn: &'a heed::RoTxn<'a>, index: &'a Index) -> FacetDistribution<'a> {
+    pub fn new(rtxn: &'a heed::RoTxn<'a>, index: &'a Index) -> Self {
         FacetDistribution {
             facets: None,
             candidates: None,

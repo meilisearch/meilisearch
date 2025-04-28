@@ -89,38 +89,38 @@ impl TemplateParsingError {
     /// Produce an error message from the error kind, the name of the root object, the placeholder string and the repeat string
     pub fn error_message(&self, root: &str, placeholder: &str, repeat: &str) -> String {
         match self {
-            TemplateParsingError::NestedRepeatString(path) => {
+            Self::NestedRepeatString(path) => {
                 format!(
                     r#"in {}: "{repeat}" appears nested inside of a value that is itself repeated"#,
                     path_with_root(root, path)
                 )
             }
-            TemplateParsingError::RepeatStringNotInArray(path) => format!(
+            Self::RepeatStringNotInArray(path) => format!(
                 r#"in {}: "{repeat}" appears outside of an array"#,
                 path_with_root(root, path)
             ),
-            TemplateParsingError::BadIndexForRepeatString(path, index) => format!(
+            Self::BadIndexForRepeatString(path, index) => format!(
                 r#"in {}: "{repeat}" expected at position #1, but found at position #{index}"#,
                 path_with_root(root, path)
             ),
-            TemplateParsingError::MissingPlaceholderInRepeatedValue(path) => format!(
+            Self::MissingPlaceholderInRepeatedValue(path) => format!(
                 r#"in {}: Expected "{placeholder}" inside of the repeated value"#,
                 path_with_root(root, path)
             ),
-            TemplateParsingError::MultipleRepeatString(current, previous) => format!(
+            Self::MultipleRepeatString(current, previous) => format!(
                 r#"in {}: Found "{repeat}", but it was already present in {}"#,
                 path_with_root(root, current),
                 path_with_root(root, previous)
             ),
-            TemplateParsingError::MultiplePlaceholderString(current, previous) => format!(
+            Self::MultiplePlaceholderString(current, previous) => format!(
                 r#"in {}: Found "{placeholder}", but it was already present in {}"#,
                 path_with_root(root, current),
                 path_with_root(root, previous)
             ),
-            TemplateParsingError::MissingPlaceholderString => {
+            Self::MissingPlaceholderString => {
                 format!(r#"in `{root}`: "{placeholder}" not found"#)
             }
-            TemplateParsingError::BothArrayAndSingle {
+            Self::BothArrayAndSingle {
                 single_path,
                 path_to_array,
                 array_to_placeholder,
@@ -140,41 +140,41 @@ impl TemplateParsingError {
 
     fn prepend_path(self, mut prepended_path: ValuePath) -> Self {
         match self {
-            TemplateParsingError::NestedRepeatString(mut path) => {
+            Self::NestedRepeatString(mut path) => {
                 prepended_path.append(&mut path);
-                TemplateParsingError::NestedRepeatString(prepended_path)
+                Self::NestedRepeatString(prepended_path)
             }
-            TemplateParsingError::RepeatStringNotInArray(mut path) => {
+            Self::RepeatStringNotInArray(mut path) => {
                 prepended_path.append(&mut path);
-                TemplateParsingError::RepeatStringNotInArray(prepended_path)
+                Self::RepeatStringNotInArray(prepended_path)
             }
-            TemplateParsingError::BadIndexForRepeatString(mut path, index) => {
+            Self::BadIndexForRepeatString(mut path, index) => {
                 prepended_path.append(&mut path);
-                TemplateParsingError::BadIndexForRepeatString(prepended_path, index)
+                Self::BadIndexForRepeatString(prepended_path, index)
             }
-            TemplateParsingError::MissingPlaceholderInRepeatedValue(mut path) => {
+            Self::MissingPlaceholderInRepeatedValue(mut path) => {
                 prepended_path.append(&mut path);
-                TemplateParsingError::MissingPlaceholderInRepeatedValue(prepended_path)
+                Self::MissingPlaceholderInRepeatedValue(prepended_path)
             }
-            TemplateParsingError::MultipleRepeatString(mut path, older_path) => {
+            Self::MultipleRepeatString(mut path, older_path) => {
                 let older_prepended_path =
                     prepended_path.iter().cloned().chain(older_path).collect();
                 prepended_path.append(&mut path);
-                TemplateParsingError::MultipleRepeatString(prepended_path, older_prepended_path)
+                Self::MultipleRepeatString(prepended_path, older_prepended_path)
             }
-            TemplateParsingError::MultiplePlaceholderString(mut path, older_path) => {
+            Self::MultiplePlaceholderString(mut path, older_path) => {
                 let older_prepended_path =
                     prepended_path.iter().cloned().chain(older_path).collect();
                 prepended_path.append(&mut path);
-                TemplateParsingError::MultiplePlaceholderString(
+                Self::MultiplePlaceholderString(
                     prepended_path,
                     older_prepended_path,
                 )
             }
-            TemplateParsingError::MissingPlaceholderString => {
-                TemplateParsingError::MissingPlaceholderString
+            Self::MissingPlaceholderString => {
+                Self::MissingPlaceholderString
             }
-            TemplateParsingError::BothArrayAndSingle {
+            Self::BothArrayAndSingle {
                 single_path,
                 mut path_to_array,
                 array_to_placeholder,
@@ -184,7 +184,7 @@ impl TemplateParsingError {
                     prepended_path.iter().cloned().chain(single_path).collect();
                 prepended_path.append(&mut path_to_array);
                 // we don't prepend the array_to_placeholder path as it is the array path that is prepended
-                TemplateParsingError::BothArrayAndSingle {
+                Self::BothArrayAndSingle {
                     single_path: single_prepended_path,
                     path_to_array: prepended_path,
                     array_to_placeholder,

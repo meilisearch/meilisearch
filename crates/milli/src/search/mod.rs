@@ -59,7 +59,7 @@ pub struct Search<'a> {
 }
 
 impl<'a> Search<'a> {
-    pub fn new(rtxn: &'a heed::RoTxn<'a>, index: &'a Index) -> Search<'a> {
+    pub fn new(rtxn: &'a heed::RoTxn<'a>, index: &'a Index) -> Self {
         Search {
             query: None,
             filter: None,
@@ -82,7 +82,7 @@ impl<'a> Search<'a> {
         }
     }
 
-    pub fn query(&mut self, query: impl Into<String>) -> &mut Search<'a> {
+    pub fn query(&mut self, query: impl Into<String>) -> &mut Self {
         self.query = Some(query.into());
         self
     }
@@ -93,86 +93,86 @@ impl<'a> Search<'a> {
         embedder: Arc<Embedder>,
         quantized: bool,
         vector: Option<Vec<f32>>,
-    ) -> &mut Search<'a> {
+    ) -> &mut Self {
         self.semantic = Some(SemanticSearch { embedder_name, embedder, quantized, vector });
         self
     }
 
-    pub fn offset(&mut self, offset: usize) -> &mut Search<'a> {
+    pub fn offset(&mut self, offset: usize) -> &mut Self {
         self.offset = offset;
         self
     }
 
-    pub fn limit(&mut self, limit: usize) -> &mut Search<'a> {
+    pub fn limit(&mut self, limit: usize) -> &mut Self {
         self.limit = limit;
         self
     }
 
-    pub fn sort_criteria(&mut self, criteria: Vec<AscDesc>) -> &mut Search<'a> {
+    pub fn sort_criteria(&mut self, criteria: Vec<AscDesc>) -> &mut Self {
         self.sort_criteria = Some(criteria);
         self
     }
 
-    pub fn distinct(&mut self, distinct: String) -> &mut Search<'a> {
+    pub fn distinct(&mut self, distinct: String) -> &mut Self {
         self.distinct = Some(distinct);
         self
     }
 
-    pub fn searchable_attributes(&mut self, searchable: &'a [String]) -> &mut Search<'a> {
+    pub fn searchable_attributes(&mut self, searchable: &'a [String]) -> &mut Self {
         self.searchable_attributes = Some(searchable);
         self
     }
 
-    pub fn terms_matching_strategy(&mut self, value: TermsMatchingStrategy) -> &mut Search<'a> {
+    pub fn terms_matching_strategy(&mut self, value: TermsMatchingStrategy) -> &mut Self {
         self.terms_matching_strategy = value;
         self
     }
 
-    pub fn scoring_strategy(&mut self, value: ScoringStrategy) -> &mut Search<'a> {
+    pub fn scoring_strategy(&mut self, value: ScoringStrategy) -> &mut Self {
         self.scoring_strategy = value;
         self
     }
 
-    pub fn words_limit(&mut self, value: usize) -> &mut Search<'a> {
+    pub fn words_limit(&mut self, value: usize) -> &mut Self {
         self.words_limit = value;
         self
     }
 
-    pub fn filter(&mut self, condition: Filter<'a>) -> &mut Search<'a> {
+    pub fn filter(&mut self, condition: Filter<'a>) -> &mut Self {
         self.filter = Some(condition);
         self
     }
 
     #[cfg(test)]
-    pub fn geo_sort_strategy(&mut self, strategy: new::GeoSortStrategy) -> &mut Search<'a> {
+    pub fn geo_sort_strategy(&mut self, strategy: new::GeoSortStrategy) -> &mut Self {
         self.geo_param.strategy = strategy;
         self
     }
 
     #[cfg(test)]
-    pub fn geo_max_bucket_size(&mut self, max_size: u64) -> &mut Search<'a> {
+    pub fn geo_max_bucket_size(&mut self, max_size: u64) -> &mut Self {
         self.geo_param.max_bucket_size = max_size;
         self
     }
 
     /// Forces the search to exhaustively compute the number of candidates,
     /// this will increase the search time but allows finite pagination.
-    pub fn exhaustive_number_hits(&mut self, exhaustive_number_hits: bool) -> &mut Search<'a> {
+    pub fn exhaustive_number_hits(&mut self, exhaustive_number_hits: bool) -> &mut Self {
         self.exhaustive_number_hits = exhaustive_number_hits;
         self
     }
 
-    pub fn time_budget(&mut self, time_budget: TimeBudget) -> &mut Search<'a> {
+    pub fn time_budget(&mut self, time_budget: TimeBudget) -> &mut Self {
         self.time_budget = time_budget;
         self
     }
 
-    pub fn ranking_score_threshold(&mut self, ranking_score_threshold: f64) -> &mut Search<'a> {
+    pub fn ranking_score_threshold(&mut self, ranking_score_threshold: f64) -> &mut Self {
         self.ranking_score_threshold = Some(ranking_score_threshold);
         self
     }
 
-    pub fn locales(&mut self, locales: Vec<Language>) -> &mut Search<'a> {
+    pub fn locales(&mut self, locales: Vec<Language>) -> &mut Self {
         self.locales = Some(locales);
         self
     }

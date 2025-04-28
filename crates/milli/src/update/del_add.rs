@@ -14,7 +14,7 @@ pub enum DelAdd {
 }
 
 impl Key for DelAdd {
-    const BYTES_SIZE: usize = std::mem::size_of::<DelAdd>();
+    const BYTES_SIZE: usize = std::mem::size_of::<Self>();
     type BYTES = [u8; Self::BYTES_SIZE];
 
     fn to_be_bytes(&self) -> Self::BYTES {

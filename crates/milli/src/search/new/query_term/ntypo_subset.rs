@@ -17,23 +17,23 @@ pub enum NTypoTermSubset {
 impl NTypoTermSubset {
     pub fn contains_word(&self, word: Interned<String>) -> bool {
         match self {
-            NTypoTermSubset::All => true,
-            NTypoTermSubset::Subset { words, phrases: _ } => words.contains(&word),
-            NTypoTermSubset::Nothing => false,
+            Self::All => true,
+            Self::Subset { words, phrases: _ } => words.contains(&word),
+            Self::Nothing => false,
         }
     }
     pub fn contains_phrase(&self, phrase: Interned<Phrase>) -> bool {
         match self {
-            NTypoTermSubset::All => true,
-            NTypoTermSubset::Subset { words: _, phrases } => phrases.contains(&phrase),
-            NTypoTermSubset::Nothing => false,
+            Self::All => true,
+            Self::Subset { words: _, phrases } => phrases.contains(&phrase),
+            Self::Nothing => false,
         }
     }
     pub fn is_empty(&self) -> bool {
         match self {
-            NTypoTermSubset::All => false,
-            NTypoTermSubset::Subset { words, phrases } => words.is_empty() && phrases.is_empty(),
-            NTypoTermSubset::Nothing => true,
+            Self::All => false,
+            Self::Subset { words, phrases } => words.is_empty() && phrases.is_empty(),
+            Self::Nothing => true,
         }
     }
     pub fn union(&mut self, other: &Self) {

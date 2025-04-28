@@ -394,10 +394,10 @@ and can not be more than 511 bytes.", .document_id.to_string()
 impl From<crate::vector::Error> for Error {
     fn from(value: crate::vector::Error) -> Self {
         match value.fault() {
-            FaultSource::User => Error::UserError(value.into()),
-            FaultSource::Runtime => Error::UserError(value.into()),
-            FaultSource::Bug => Error::InternalError(value.into()),
-            FaultSource::Undecided => Error::UserError(value.into()),
+            FaultSource::User => Self::UserError(value.into()),
+            FaultSource::Runtime => Self::UserError(value.into()),
+            FaultSource::Bug => Self::InternalError(value.into()),
+            FaultSource::Undecided => Self::UserError(value.into()),
         }
     }
 }
@@ -408,9 +408,9 @@ impl From<arroy::Error> for Error {
             arroy::Error::Heed(heed) => heed.into(),
             arroy::Error::Io(io) => io.into(),
             arroy::Error::InvalidVecDimension { expected, received } => {
-                Error::UserError(UserError::InvalidVectorDimensions { expected, found: received })
+                Self::UserError(UserError::InvalidVectorDimensions { expected, found: received })
             }
-            arroy::Error::BuildCancelled => Error::InternalError(InternalError::AbortedIndexation),
+            arroy::Error::BuildCancelled => Self::InternalError(InternalError::AbortedIndexation),
             arroy::Error::DatabaseFull
             | arroy::Error::InvalidItemAppend
             | arroy::Error::UnmatchingDistance { .. }
@@ -418,7 +418,7 @@ impl From<arroy::Error> for Error {
             | arroy::Error::MissingKey { .. }
             | arroy::Error::MissingMetadata(_)
             | arroy::Error::CannotDecodeKeyMode { .. } => {
-                Error::InternalError(InternalError::ArroyError(value))
+                Self::InternalError(InternalError::ArroyError(value))
             }
         }
     }
@@ -533,46 +533,46 @@ error_from_sub_error! {
 
 impl<E> From<grenad::Error<E>> for Error
 where
-    Error: From<E>,
+    Self: From<E>,
 {
-    fn from(error: grenad::Error<E>) -> Error {
+    fn from(error: grenad::Error<E>) -> Self {
         match error {
-            grenad::Error::Io(error) => Error::IoError(error),
-            grenad::Error::Merge(error) => Error::from(error),
+            grenad::Error::Io(error) => Self::IoError(error),
+            grenad::Error::Merge(error) => Self::from(error),
             grenad::Error::InvalidCompressionType => {
-                Error::InternalError(InternalError::GrenadInvalidCompressionType)
+                Self::InternalError(InternalError::GrenadInvalidCompressionType)
             }
             grenad::Error::InvalidFormatVersion => {
-                Error::InternalError(InternalError::GrenadInvalidFormatVersion)
+                Self::InternalError(InternalError::GrenadInvalidFormatVersion)
             }
         }
     }
 }
 
 impl From<DocumentsBatchCursorError> for Error {
-    fn from(error: DocumentsBatchCursorError) -> Error {
+    fn from(error: DocumentsBatchCursorError) -> Self {
         match error {
-            DocumentsBatchCursorError::Grenad(e) => Error::from(e),
-            DocumentsBatchCursorError::SerdeJson(e) => Error::from(InternalError::from(e)),
+            DocumentsBatchCursorError::Grenad(e) => Self::from(e),
+            DocumentsBatchCursorError::SerdeJson(e) => Self::from(InternalError::from(e)),
         }
     }
 }
 
 impl From<Infallible> for Error {
-    fn from(_error: Infallible) -> Error {
+    fn from(_error: Infallible) -> Self {
         unreachable!()
     }
 }
 
 impl From<HeedError> for Error {
-    fn from(error: HeedError) -> Error {
+    fn from(error: HeedError) -> Self {
         use self::Error::*;
         use self::InternalError::*;
         use self::SerializationError::*;
         use self::UserError::*;
 
         match error {
-            HeedError::Io(error) => Error::from(error),
+            HeedError::Io(error) => Self::from(error),
             HeedError::Mdb(MdbError::MapFull) => UserError(MaxDatabaseSizeReached),
             HeedError::Mdb(MdbError::Invalid) => UserError(InvalidStoreFile),
             HeedError::Mdb(error) => InternalError(Store(error)),
@@ -595,10 +595,10 @@ pub enum FaultSource {
 impl std::fmt::Display for FaultSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = match self {
-            FaultSource::User => "user error",
-            FaultSource::Runtime => "runtime error",
-            FaultSource::Bug => "coding error",
-            FaultSource::Undecided => "error",
+            Self::User => "user error",
+            Self::Runtime => "runtime error",
+            Self::Bug => "coding error",
+            Self::Undecided => "error",
         };
         f.write_str(s)
     }

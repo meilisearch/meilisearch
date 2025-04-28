@@ -8,7 +8,7 @@ pub struct AvailableIds {
 }
 
 impl AvailableIds {
-    pub fn new(docids: &RoaringBitmap) -> AvailableIds {
+    pub fn new(docids: &RoaringBitmap) -> Self {
         match docids.max() {
             Some(last_id) => {
                 let mut available = RoaringBitmap::from_iter(0..last_id);
@@ -20,11 +20,11 @@ impl AvailableIds {
                     None => 1..=0, // empty range iterator
                 };
 
-                AvailableIds { iter: available.into_iter().chain(iter) }
+                Self { iter: available.into_iter().chain(iter) }
             }
             None => {
                 let empty = RoaringBitmap::new().into_iter();
-                AvailableIds { iter: empty.chain(0..=u32::MAX) }
+                Self { iter: empty.chain(0..=u32::MAX) }
             }
         }
     }

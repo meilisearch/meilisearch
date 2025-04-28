@@ -42,8 +42,8 @@ pub struct DocumentsBatchBuilder<W> {
 }
 
 impl<W: Write> DocumentsBatchBuilder<W> {
-    pub fn new(writer: W) -> DocumentsBatchBuilder<W> {
-        DocumentsBatchBuilder {
+    pub fn new(writer: W) -> Self {
+        Self {
             writer: WriterBuilder::new().compression_type(CompressionType::None).build(writer),
             fields_index: DocumentsBatchIndex::default(),
             documents_count: 0,
@@ -89,7 +89,7 @@ impl<W: Write> DocumentsBatchBuilder<W> {
 
     /// Flushes the content on disk and stores the final version of the `DocumentsBatchIndex`.
     pub fn into_inner(mut self) -> io::Result<W> {
-        let DocumentsBatchBuilder { mut writer, fields_index, .. } = self;
+        let Self { mut writer, fields_index, .. } = self;
 
         // We serialize and insert the `DocumentsBatchIndex` as the last key of the grenad writer.
         self.value_buffer.clear();

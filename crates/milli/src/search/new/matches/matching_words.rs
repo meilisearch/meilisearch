@@ -200,7 +200,7 @@ impl<'a> PartialMatch<'a> {
 
 impl fmt::Debug for MatchingWords {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let MatchingWords { word_interner, phrase_interner, phrases, words } = self;
+        let Self { word_interner, phrase_interner, phrases, words } = self;
 
         let phrases: Vec<_> = phrases
             .iter()

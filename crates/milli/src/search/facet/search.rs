@@ -32,7 +32,7 @@ impl<'a> SearchForFacetValues<'a> {
         facet: String,
         search_query: Search<'a>,
         is_hybrid: bool,
-    ) -> SearchForFacetValues<'a> {
+    ) -> Self {
         SearchForFacetValues {
             query: None,
             facet,
@@ -296,16 +296,16 @@ enum ValuesCollection {
 
 impl ValuesCollection {
     pub fn by_lexicographic(max: usize) -> Self {
-        ValuesCollection::Lexicographic { max, content: Vec::new() }
+        Self::Lexicographic { max, content: Vec::new() }
     }
 
     pub fn by_count(max: usize) -> Self {
-        ValuesCollection::Count { max, content: BinaryHeap::new() }
+        Self::Count { max, content: BinaryHeap::new() }
     }
 
     pub fn insert(&mut self, value: FacetValueHit) -> ControlFlow<()> {
         match self {
-            ValuesCollection::Lexicographic { max, content } => {
+            Self::Lexicographic { max, content } => {
                 if content.len() < *max {
                     content.push(value);
                     if content.len() < *max {
@@ -314,7 +314,7 @@ impl ValuesCollection {
                 }
                 ControlFlow::Break(())
             }
-            ValuesCollection::Count { max, content } => {
+            Self::Count { max, content } => {
                 if content.len() == *max {
                     // Peeking gives us the worst value in the list as
                     // this is a max-heap and we reversed it.
@@ -336,8 +336,8 @@ impl ValuesCollection {
     /// count or lexicographic order of the value depending on the type.
     pub fn into_sorted_vec(self) -> Vec<FacetValueHit> {
         match self {
-            ValuesCollection::Lexicographic { content, .. } => content.into_iter().collect(),
-            ValuesCollection::Count { content, .. } => {
+            Self::Lexicographic { content, .. } => content.into_iter().collect(),
+            Self::Count { content, .. } => {
                 // Convert the heap into a vec of hits by removing the Reverse wrapper.
                 // Hits are already in the right order as they were reversed and there
                 // are output in ascending order.

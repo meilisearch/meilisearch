@@ -10,7 +10,7 @@ pub struct ClearDocuments<'t, 'i> {
 }
 
 impl<'t, 'i> ClearDocuments<'t, 'i> {
-    pub fn new(wtxn: &'t mut RwTxn<'i>, index: &'i Index) -> ClearDocuments<'t, 'i> {
+    pub fn new(wtxn: &'t mut RwTxn<'i>, index: &'i Index) -> Self {
         ClearDocuments { wtxn, index }
     }
 

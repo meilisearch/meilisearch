@@ -35,7 +35,7 @@ impl<R: io::Read + io::Seek> DocumentsBatchReader<R> {
             None => return Err(Error::InvalidDocumentFormat),
         };
 
-        Ok(DocumentsBatchReader { cursor, fields_index })
+        Ok(Self { cursor, fields_index })
     }
 
     pub fn documents_count(&self) -> u32 {
@@ -52,7 +52,7 @@ impl<R: io::Read + io::Seek> DocumentsBatchReader<R> {
 
     /// This method returns a forward cursor over the documents.
     pub fn into_cursor_and_fields_index(self) -> (DocumentsBatchCursor<R>, DocumentsBatchIndex) {
-        let DocumentsBatchReader { cursor, fields_index } = self;
+        let Self { cursor, fields_index } = self;
         let mut cursor = DocumentsBatchCursor { cursor };
         cursor.reset();
         (cursor, fields_index)
@@ -103,14 +103,14 @@ pub enum DocumentsBatchCursorError {
 }
 
 impl From<grenad::Error> for DocumentsBatchCursorError {
-    fn from(error: grenad::Error) -> DocumentsBatchCursorError {
-        DocumentsBatchCursorError::Grenad(error)
+    fn from(error: grenad::Error) -> Self {
+        Self::Grenad(error)
     }
 }
 
 impl From<serde_json::Error> for DocumentsBatchCursorError {
-    fn from(error: serde_json::Error) -> DocumentsBatchCursorError {
-        DocumentsBatchCursorError::SerdeJson(error)
+    fn from(error: serde_json::Error) -> Self {
+        Self::SerdeJson(error)
     }
 }
 
@@ -119,8 +119,8 @@ impl error::Error for DocumentsBatchCursorError {}
 impl fmt::Display for DocumentsBatchCursorError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            DocumentsBatchCursorError::Grenad(e) => e.fmt(f),
-            DocumentsBatchCursorError::SerdeJson(e) => e.fmt(f),
+            Self::Grenad(e) => e.fmt(f),
+            Self::SerdeJson(e) => e.fmt(f),
         }
     }
 }

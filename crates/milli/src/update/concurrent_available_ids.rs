@@ -20,12 +20,12 @@ pub struct ConcurrentAvailableIds {
 
 impl ConcurrentAvailableIds {
     /// Creates an ID generator returning unique IDs, avoiding the specified used IDs.
-    pub fn new(used: RoaringBitmap) -> ConcurrentAvailableIds {
+    pub fn new(used: RoaringBitmap) -> Self {
         let last_id = used.max().map_or(0, |id| id + 1);
         let used_ids = used.len();
         let available = RoaringBitmap::from_sorted_iter(0..last_id).unwrap() - used;
 
-        ConcurrentAvailableIds {
+        Self {
             current: AtomicU32::new(last_id),
             used: AtomicU64::new(used_ids),
             select_in_bitmap: AtomicU32::new(0),

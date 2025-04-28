@@ -247,9 +247,9 @@ impl EntryHeader {
 
     const fn variant_id(&self) -> u8 {
         match self {
-            EntryHeader::DbOperation(_) => 0,
-            EntryHeader::ArroyDeleteVector(_) => 1,
-            EntryHeader::ArroySetVectors(_) => 2,
+            Self::DbOperation(_) => 0,
+            Self::ArroyDeleteVector(_) => 1,
+            Self::ArroySetVectors(_) => 2,
         }
     }
 
@@ -276,30 +276,30 @@ impl EntryHeader {
 
     fn header_size(&self) -> usize {
         let payload_size = match self {
-            EntryHeader::DbOperation(op) => mem::size_of_val(op),
-            EntryHeader::ArroyDeleteVector(adv) => mem::size_of_val(adv),
-            EntryHeader::ArroySetVectors(asvs) => mem::size_of_val(asvs),
+            Self::DbOperation(op) => mem::size_of_val(op),
+            Self::ArroyDeleteVector(adv) => mem::size_of_val(adv),
+            Self::ArroySetVectors(asvs) => mem::size_of_val(asvs),
         };
         Self::variant_size() + payload_size
     }
 
-    fn from_slice(slice: &[u8]) -> EntryHeader {
+    fn from_slice(slice: &[u8]) -> Self {
         let (variant_id, remaining) = slice.split_first().unwrap();
         match variant_id {
             0 => {
                 let header_bytes = &remaining[..mem::size_of::<DbOperation>()];
                 let header = checked::pod_read_unaligned(header_bytes);
-                EntryHeader::DbOperation(header)
+                Self::DbOperation(header)
             }
             1 => {
                 let header_bytes = &remaining[..mem::size_of::<ArroyDeleteVector>()];
                 let header = checked::pod_read_unaligned(header_bytes);
-                EntryHeader::ArroyDeleteVector(header)
+                Self::ArroyDeleteVector(header)
             }
             2 => {
                 let header_bytes = &remaining[..mem::size_of::<ArroySetVectors>()];
                 let header = checked::pod_read_unaligned(header_bytes);
-                EntryHeader::ArroySetVectors(header)
+                Self::ArroySetVectors(header)
             }
             id => panic!("invalid variant id: {id}"),
         }
@@ -308,9 +308,9 @@ impl EntryHeader {
     fn serialize_into(&self, header_bytes: &mut [u8]) {
         let (first, remaining) = header_bytes.split_first_mut().unwrap();
         let payload_bytes = match self {
-            EntryHeader::DbOperation(op) => bytemuck::bytes_of(op),
-            EntryHeader::ArroyDeleteVector(adv) => bytemuck::bytes_of(adv),
-            EntryHeader::ArroySetVectors(asvs) => bytemuck::bytes_of(asvs),
+            Self::DbOperation(op) => bytemuck::bytes_of(op),
+            Self::ArroyDeleteVector(adv) => bytemuck::bytes_of(adv),
+            Self::ArroySetVectors(asvs) => bytemuck::bytes_of(asvs),
         };
         *first = self.variant_id();
         remaining.copy_from_slice(payload_bytes);
@@ -403,43 +403,43 @@ pub enum Database {
 impl Database {
     pub fn database(&self, index: &Index) -> heed::Database<Bytes, Bytes> {
         match self {
-            Database::Main => index.main.remap_types(),
-            Database::Documents => index.documents.remap_types(),
-            Database::ExternalDocumentsIds => index.external_documents_ids.remap_types(),
-            Database::ExactWordDocids => index.exact_word_docids.remap_types(),
-            Database::WordDocids => index.word_docids.remap_types(),
-            Database::WordFidDocids => index.word_fid_docids.remap_types(),
-            Database::WordPositionDocids => index.word_position_docids.remap_types(),
-            Database::FidWordCountDocids => index.field_id_word_count_docids.remap_types(),
-            Database::WordPairProximityDocids => index.word_pair_proximity_docids.remap_types(),
-            Database::FacetIdIsNullDocids => index.facet_id_is_null_docids.remap_types(),
-            Database::FacetIdIsEmptyDocids => index.facet_id_is_empty_docids.remap_types(),
-            Database::FacetIdExistsDocids => index.facet_id_exists_docids.remap_types(),
-            Database::FacetIdF64Docids => index.facet_id_f64_docids.remap_types(),
-            Database::FacetIdStringDocids => index.facet_id_string_docids.remap_types(),
-            Database::FieldIdDocidFacetStrings => index.field_id_docid_facet_strings.remap_types(),
-            Database::FieldIdDocidFacetF64s => index.field_id_docid_facet_f64s.remap_types(),
+            Self::Main => index.main.remap_types(),
+            Self::Documents => index.documents.remap_types(),
+            Self::ExternalDocumentsIds => index.external_documents_ids.remap_types(),
+            Self::ExactWordDocids => index.exact_word_docids.remap_types(),
+            Self::WordDocids => index.word_docids.remap_types(),
+            Self::WordFidDocids => index.word_fid_docids.remap_types(),
+            Self::WordPositionDocids => index.word_position_docids.remap_types(),
+            Self::FidWordCountDocids => index.field_id_word_count_docids.remap_types(),
+            Self::WordPairProximityDocids => index.word_pair_proximity_docids.remap_types(),
+            Self::FacetIdIsNullDocids => index.facet_id_is_null_docids.remap_types(),
+            Self::FacetIdIsEmptyDocids => index.facet_id_is_empty_docids.remap_types(),
+            Self::FacetIdExistsDocids => index.facet_id_exists_docids.remap_types(),
+            Self::FacetIdF64Docids => index.facet_id_f64_docids.remap_types(),
+            Self::FacetIdStringDocids => index.facet_id_string_docids.remap_types(),
+            Self::FieldIdDocidFacetStrings => index.field_id_docid_facet_strings.remap_types(),
+            Self::FieldIdDocidFacetF64s => index.field_id_docid_facet_f64s.remap_types(),
         }
     }
 
     pub fn database_name(&self) -> &'static str {
         match self {
-            Database::Main => db_name::MAIN,
-            Database::Documents => db_name::DOCUMENTS,
-            Database::ExternalDocumentsIds => db_name::EXTERNAL_DOCUMENTS_IDS,
-            Database::ExactWordDocids => db_name::EXACT_WORD_DOCIDS,
-            Database::WordDocids => db_name::WORD_DOCIDS,
-            Database::WordFidDocids => db_name::WORD_FIELD_ID_DOCIDS,
-            Database::WordPositionDocids => db_name::WORD_POSITION_DOCIDS,
-            Database::FidWordCountDocids => db_name::FIELD_ID_WORD_COUNT_DOCIDS,
-            Database::WordPairProximityDocids => db_name::WORD_PAIR_PROXIMITY_DOCIDS,
-            Database::FacetIdIsNullDocids => db_name::FACET_ID_IS_NULL_DOCIDS,
-            Database::FacetIdIsEmptyDocids => db_name::FACET_ID_IS_EMPTY_DOCIDS,
-            Database::FacetIdExistsDocids => db_name::FACET_ID_EXISTS_DOCIDS,
-            Database::FacetIdF64Docids => db_name::FACET_ID_F64_DOCIDS,
-            Database::FacetIdStringDocids => db_name::FACET_ID_STRING_DOCIDS,
-            Database::FieldIdDocidFacetStrings => db_name::FIELD_ID_DOCID_FACET_STRINGS,
-            Database::FieldIdDocidFacetF64s => db_name::FIELD_ID_DOCID_FACET_F64S,
+            Self::Main => db_name::MAIN,
+            Self::Documents => db_name::DOCUMENTS,
+            Self::ExternalDocumentsIds => db_name::EXTERNAL_DOCUMENTS_IDS,
+            Self::ExactWordDocids => db_name::EXACT_WORD_DOCIDS,
+            Self::WordDocids => db_name::WORD_DOCIDS,
+            Self::WordFidDocids => db_name::WORD_FIELD_ID_DOCIDS,
+            Self::WordPositionDocids => db_name::WORD_POSITION_DOCIDS,
+            Self::FidWordCountDocids => db_name::FIELD_ID_WORD_COUNT_DOCIDS,
+            Self::WordPairProximityDocids => db_name::WORD_PAIR_PROXIMITY_DOCIDS,
+            Self::FacetIdIsNullDocids => db_name::FACET_ID_IS_NULL_DOCIDS,
+            Self::FacetIdIsEmptyDocids => db_name::FACET_ID_IS_EMPTY_DOCIDS,
+            Self::FacetIdExistsDocids => db_name::FACET_ID_EXISTS_DOCIDS,
+            Self::FacetIdF64Docids => db_name::FACET_ID_F64_DOCIDS,
+            Self::FacetIdStringDocids => db_name::FACET_ID_STRING_DOCIDS,
+            Self::FieldIdDocidFacetStrings => db_name::FIELD_ID_DOCID_FACET_STRINGS,
+            Self::FieldIdDocidFacetF64s => db_name::FIELD_ID_DOCID_FACET_F64S,
         }
     }
 }
@@ -447,11 +447,11 @@ impl Database {
 impl From<FacetKind> for Database {
     fn from(value: FacetKind) -> Self {
         match value {
-            FacetKind::Number => Database::FacetIdF64Docids,
-            FacetKind::String => Database::FacetIdStringDocids,
-            FacetKind::Null => Database::FacetIdIsNullDocids,
-            FacetKind::Empty => Database::FacetIdIsEmptyDocids,
-            FacetKind::Exists => Database::FacetIdExistsDocids,
+            FacetKind::Number => Self::FacetIdF64Docids,
+            FacetKind::String => Self::FacetIdStringDocids,
+            FacetKind::Null => Self::FacetIdIsNullDocids,
+            FacetKind::Empty => Self::FacetIdIsEmptyDocids,
+            FacetKind::Exists => Self::FacetIdExistsDocids,
         }
     }
 }

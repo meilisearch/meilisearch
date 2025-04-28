@@ -21,9 +21,9 @@ impl FilterableAttributesRule {
     pub fn match_str(&self, field: &str) -> PatternMatch {
         match self {
             // If the rule is a field, match the field against the pattern using the legacy behavior
-            FilterableAttributesRule::Field(pattern) => match_field_legacy(pattern, field),
+            Self::Field(pattern) => match_field_legacy(pattern, field),
             // If the rule is a pattern, match the field against the pattern using the new behavior
-            FilterableAttributesRule::Pattern(patterns) => patterns.match_str(field),
+            Self::Pattern(patterns) => patterns.match_str(field),
         }
     }
 
@@ -32,16 +32,16 @@ impl FilterableAttributesRule {
     /// prefer using `index.is_geo_enabled`, `index.is_geo_filtering_enabled` or `index.is_geo_sorting_enabled`
     /// to check if the geo feature is enabled.
     pub fn has_geo(&self) -> bool {
-        matches!(self, FilterableAttributesRule::Field(field_name) if field_name == RESERVED_GEO_FIELD_NAME)
+        matches!(self, Self::Field(field_name) if field_name == RESERVED_GEO_FIELD_NAME)
     }
 
     /// Get the features of the rule.
     pub fn features(&self) -> FilterableAttributesFeatures {
         match self {
             // If the rule is a field, return the legacy default features
-            FilterableAttributesRule::Field(_) => FilterableAttributesFeatures::legacy_default(),
+            Self::Field(_) => FilterableAttributesFeatures::legacy_default(),
             // If the rule is a pattern, return the features of the pattern
-            FilterableAttributesRule::Pattern(patterns) => patterns.features(),
+            Self::Pattern(patterns) => patterns.features(),
         }
     }
 }

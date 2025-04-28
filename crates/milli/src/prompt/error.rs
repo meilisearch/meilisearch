@@ -9,16 +9,16 @@ pub struct NewPromptError {
 
 impl From<NewPromptError> for crate::Error {
     fn from(value: NewPromptError) -> Self {
-        crate::Error::UserError(crate::UserError::InvalidPrompt(value))
+        Self::UserError(crate::UserError::InvalidPrompt(value))
     }
 }
 
 impl NewPromptError {
-    pub(crate) fn cannot_parse_template(inner: liquid::Error) -> NewPromptError {
+    pub(crate) fn cannot_parse_template(inner: liquid::Error) -> Self {
         Self { kind: NewPromptErrorKind::CannotParseTemplate(inner), fault: FaultSource::User }
     }
 
-    pub(crate) fn invalid_fields_in_template(inner: liquid::Error) -> NewPromptError {
+    pub(crate) fn invalid_fields_in_template(inner: liquid::Error) -> Self {
         Self { kind: NewPromptErrorKind::InvalidFieldsInTemplate(inner), fault: FaultSource::User }
     }
 }
@@ -41,14 +41,14 @@ impl RenderPromptError {
     pub(crate) fn missing_context_with_external_docid(
         external_docid: String,
         inner: liquid::Error,
-    ) -> RenderPromptError {
+    ) -> Self {
         Self {
             kind: RenderPromptErrorKind::MissingContextWithExternalDocid(external_docid, inner),
             fault: FaultSource::User,
         }
     }
 
-    pub(crate) fn missing_context(inner: liquid::Error) -> RenderPromptError {
+    pub(crate) fn missing_context(inner: liquid::Error) -> Self {
         Self { kind: RenderPromptErrorKind::MissingContext(inner), fault: FaultSource::User }
     }
 }
@@ -63,6 +63,6 @@ pub enum RenderPromptErrorKind {
 
 impl From<RenderPromptError> for crate::Error {
     fn from(value: RenderPromptError) -> Self {
-        crate::Error::UserError(crate::UserError::MissingDocumentField(value))
+        Self::UserError(crate::UserError::MissingDocumentField(value))
     }
 }

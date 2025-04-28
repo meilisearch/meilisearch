@@ -87,6 +87,6 @@ impl<G: RankingRuleGraphTrait> RankingRuleGraph<G> {
 
         let conditions_interner = conditions_interner.freeze();
 
-        Ok(RankingRuleGraph { query_graph, edges_store, edges_of_node, conditions_interner })
+        Ok(Self { query_graph, edges_store, edges_of_node, conditions_interner })
     }
 }

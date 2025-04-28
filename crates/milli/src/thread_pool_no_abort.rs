@@ -50,8 +50,8 @@ pub struct PanicCatched;
 pub struct ThreadPoolNoAbortBuilder(ThreadPoolBuilder);
 
 impl ThreadPoolNoAbortBuilder {
-    pub fn new() -> ThreadPoolNoAbortBuilder {
-        ThreadPoolNoAbortBuilder::default()
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn thread_name<F>(mut self, closure: F) -> Self
@@ -62,7 +62,7 @@ impl ThreadPoolNoAbortBuilder {
         self
     }
 
-    pub fn num_threads(mut self, num_threads: usize) -> ThreadPoolNoAbortBuilder {
+    pub fn num_threads(mut self, num_threads: usize) -> Self {
         self.0 = self.0.num_threads(num_threads);
         self
     }

@@ -261,17 +261,17 @@ impl<U: Send + Sync + 'static> Step for VariableNameStep<U> {
 impl Step for arroy::MainStep {
     fn name(&self) -> Cow<'static, str> {
         match self {
-            arroy::MainStep::PreProcessingTheItems => "pre processing the items",
-            arroy::MainStep::WritingTheDescendantsAndMetadata => {
+            Self::PreProcessingTheItems => "pre processing the items",
+            Self::WritingTheDescendantsAndMetadata => {
                 "writing the descendants and metadata"
             }
-            arroy::MainStep::RetrieveTheUpdatedItems => "retrieve the updated items",
-            arroy::MainStep::RetrievingTheTreeAndItemNodes => "retrieving the tree and item nodes",
-            arroy::MainStep::UpdatingTheTrees => "updating the trees",
-            arroy::MainStep::CreateNewTrees => "create new trees",
-            arroy::MainStep::WritingNodesToDatabase => "writing nodes to database",
-            arroy::MainStep::DeleteExtraneousTrees => "delete extraneous trees",
-            arroy::MainStep::WriteTheMetadata => "write the metadata",
+            Self::RetrieveTheUpdatedItems => "retrieve the updated items",
+            Self::RetrievingTheTreeAndItemNodes => "retrieving the tree and item nodes",
+            Self::UpdatingTheTrees => "updating the trees",
+            Self::CreateNewTrees => "create new trees",
+            Self::WritingNodesToDatabase => "writing nodes to database",
+            Self::DeleteExtraneousTrees => "delete extraneous trees",
+            Self::WriteTheMetadata => "write the metadata",
         }
         .into()
     }

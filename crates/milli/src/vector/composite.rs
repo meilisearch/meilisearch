@@ -35,11 +35,11 @@ pub enum SubEmbedderOptions {
 impl SubEmbedderOptions {
     pub fn distribution(&self) -> Option<DistributionShift> {
         match self {
-            SubEmbedderOptions::HuggingFace(embedder_options) => embedder_options.distribution,
-            SubEmbedderOptions::OpenAi(embedder_options) => embedder_options.distribution,
-            SubEmbedderOptions::Ollama(embedder_options) => embedder_options.distribution,
-            SubEmbedderOptions::UserProvided(embedder_options) => embedder_options.distribution,
-            SubEmbedderOptions::Rest(embedder_options) => embedder_options.distribution,
+            Self::HuggingFace(embedder_options) => embedder_options.distribution,
+            Self::OpenAi(embedder_options) => embedder_options.distribution,
+            Self::Ollama(embedder_options) => embedder_options.distribution,
+            Self::UserProvided(embedder_options) => embedder_options.distribution,
+            Self::Rest(embedder_options) => embedder_options.distribution,
         }
     }
 }
@@ -152,11 +152,11 @@ impl SubEmbedder {
         deadline: Option<Instant>,
     ) -> std::result::Result<Vec<Embedding>, EmbedError> {
         match self {
-            SubEmbedder::HuggingFace(embedder) => embedder.embed(texts),
-            SubEmbedder::OpenAi(embedder) => embedder.embed(&texts, deadline),
-            SubEmbedder::Ollama(embedder) => embedder.embed(&texts, deadline),
-            SubEmbedder::UserProvided(embedder) => embedder.embed(&texts),
-            SubEmbedder::Rest(embedder) => embedder.embed(texts, deadline),
+            Self::HuggingFace(embedder) => embedder.embed(texts),
+            Self::OpenAi(embedder) => embedder.embed(&texts, deadline),
+            Self::Ollama(embedder) => embedder.embed(&texts, deadline),
+            Self::UserProvided(embedder) => embedder.embed(&texts),
+            Self::Rest(embedder) => embedder.embed(texts, deadline),
         }
     }
 
@@ -166,15 +166,15 @@ impl SubEmbedder {
         deadline: Option<Instant>,
     ) -> std::result::Result<Embedding, EmbedError> {
         match self {
-            SubEmbedder::HuggingFace(embedder) => embedder.embed_one(text),
-            SubEmbedder::OpenAi(embedder) => {
+            Self::HuggingFace(embedder) => embedder.embed_one(text),
+            Self::OpenAi(embedder) => {
                 embedder.embed(&[text], deadline)?.pop().ok_or_else(EmbedError::missing_embedding)
             }
-            SubEmbedder::Ollama(embedder) => {
+            Self::Ollama(embedder) => {
                 embedder.embed(&[text], deadline)?.pop().ok_or_else(EmbedError::missing_embedding)
             }
-            SubEmbedder::UserProvided(embedder) => embedder.embed_one(text),
-            SubEmbedder::Rest(embedder) => embedder
+            Self::UserProvided(embedder) => embedder.embed_one(text),
+            Self::Rest(embedder) => embedder
                 .embed_ref(&[text], deadline)?
                 .pop()
                 .ok_or_else(EmbedError::missing_embedding),
@@ -190,11 +190,11 @@ impl SubEmbedder {
         threads: &ThreadPoolNoAbort,
     ) -> std::result::Result<Vec<Vec<Embedding>>, EmbedError> {
         match self {
-            SubEmbedder::HuggingFace(embedder) => embedder.embed_index(text_chunks),
-            SubEmbedder::OpenAi(embedder) => embedder.embed_index(text_chunks, threads),
-            SubEmbedder::Ollama(embedder) => embedder.embed_index(text_chunks, threads),
-            SubEmbedder::UserProvided(embedder) => embedder.embed_index(text_chunks),
-            SubEmbedder::Rest(embedder) => embedder.embed_index(text_chunks, threads),
+            Self::HuggingFace(embedder) => embedder.embed_index(text_chunks),
+            Self::OpenAi(embedder) => embedder.embed_index(text_chunks, threads),
+            Self::Ollama(embedder) => embedder.embed_index(text_chunks, threads),
+            Self::UserProvided(embedder) => embedder.embed_index(text_chunks),
+            Self::Rest(embedder) => embedder.embed_index(text_chunks, threads),
         }
     }
 
@@ -205,75 +205,75 @@ impl SubEmbedder {
         threads: &ThreadPoolNoAbort,
     ) -> std::result::Result<Vec<Embedding>, EmbedError> {
         match self {
-            SubEmbedder::HuggingFace(embedder) => embedder.embed_index_ref(texts),
-            SubEmbedder::OpenAi(embedder) => embedder.embed_index_ref(texts, threads),
-            SubEmbedder::Ollama(embedder) => embedder.embed_index_ref(texts, threads),
-            SubEmbedder::UserProvided(embedder) => embedder.embed_index_ref(texts),
-            SubEmbedder::Rest(embedder) => embedder.embed_index_ref(texts, threads),
+            Self::HuggingFace(embedder) => embedder.embed_index_ref(texts),
+            Self::OpenAi(embedder) => embedder.embed_index_ref(texts, threads),
+            Self::Ollama(embedder) => embedder.embed_index_ref(texts, threads),
+            Self::UserProvided(embedder) => embedder.embed_index_ref(texts),
+            Self::Rest(embedder) => embedder.embed_index_ref(texts, threads),
         }
     }
 
     /// Indicates the preferred number of chunks to pass to [`Self::embed_chunks`]
     pub fn chunk_count_hint(&self) -> usize {
         match self {
-            SubEmbedder::HuggingFace(embedder) => embedder.chunk_count_hint(),
-            SubEmbedder::OpenAi(embedder) => embedder.chunk_count_hint(),
-            SubEmbedder::Ollama(embedder) => embedder.chunk_count_hint(),
-            SubEmbedder::UserProvided(_) => 100,
-            SubEmbedder::Rest(embedder) => embedder.chunk_count_hint(),
+            Self::HuggingFace(embedder) => embedder.chunk_count_hint(),
+            Self::OpenAi(embedder) => embedder.chunk_count_hint(),
+            Self::Ollama(embedder) => embedder.chunk_count_hint(),
+            Self::UserProvided(_) => 100,
+            Self::Rest(embedder) => embedder.chunk_count_hint(),
         }
     }
 
     /// Indicates the preferred number of texts in a single chunk passed to [`Self::embed`]
     pub fn prompt_count_in_chunk_hint(&self) -> usize {
         match self {
-            SubEmbedder::HuggingFace(embedder) => embedder.prompt_count_in_chunk_hint(),
-            SubEmbedder::OpenAi(embedder) => embedder.prompt_count_in_chunk_hint(),
-            SubEmbedder::Ollama(embedder) => embedder.prompt_count_in_chunk_hint(),
-            SubEmbedder::UserProvided(_) => 1,
-            SubEmbedder::Rest(embedder) => embedder.prompt_count_in_chunk_hint(),
+            Self::HuggingFace(embedder) => embedder.prompt_count_in_chunk_hint(),
+            Self::OpenAi(embedder) => embedder.prompt_count_in_chunk_hint(),
+            Self::Ollama(embedder) => embedder.prompt_count_in_chunk_hint(),
+            Self::UserProvided(_) => 1,
+            Self::Rest(embedder) => embedder.prompt_count_in_chunk_hint(),
         }
     }
 
     pub fn uses_document_template(&self) -> bool {
         match self {
-            SubEmbedder::HuggingFace(_)
-            | SubEmbedder::OpenAi(_)
-            | SubEmbedder::Ollama(_)
-            | SubEmbedder::Rest(_) => true,
-            SubEmbedder::UserProvided(_) => false,
+            Self::HuggingFace(_)
+            | Self::OpenAi(_)
+            | Self::Ollama(_)
+            | Self::Rest(_) => true,
+            Self::UserProvided(_) => false,
         }
     }
 
     /// Indicates the dimensions of a single embedding produced by the embedder.
     pub fn dimensions(&self) -> usize {
         match self {
-            SubEmbedder::HuggingFace(embedder) => embedder.dimensions(),
-            SubEmbedder::OpenAi(embedder) => embedder.dimensions(),
-            SubEmbedder::Ollama(embedder) => embedder.dimensions(),
-            SubEmbedder::UserProvided(embedder) => embedder.dimensions(),
-            SubEmbedder::Rest(embedder) => embedder.dimensions(),
+            Self::HuggingFace(embedder) => embedder.dimensions(),
+            Self::OpenAi(embedder) => embedder.dimensions(),
+            Self::Ollama(embedder) => embedder.dimensions(),
+            Self::UserProvided(embedder) => embedder.dimensions(),
+            Self::Rest(embedder) => embedder.dimensions(),
         }
     }
 
     /// An optional distribution used to apply an affine transformation to the similarity score of a document.
     pub fn distribution(&self) -> Option<DistributionShift> {
         match self {
-            SubEmbedder::HuggingFace(embedder) => embedder.distribution(),
-            SubEmbedder::OpenAi(embedder) => embedder.distribution(),
-            SubEmbedder::Ollama(embedder) => embedder.distribution(),
-            SubEmbedder::UserProvided(embedder) => embedder.distribution(),
-            SubEmbedder::Rest(embedder) => embedder.distribution(),
+            Self::HuggingFace(embedder) => embedder.distribution(),
+            Self::OpenAi(embedder) => embedder.distribution(),
+            Self::Ollama(embedder) => embedder.distribution(),
+            Self::UserProvided(embedder) => embedder.distribution(),
+            Self::Rest(embedder) => embedder.distribution(),
         }
     }
 
     pub(super) fn cache(&self) -> Option<&EmbeddingCache> {
         match self {
-            SubEmbedder::HuggingFace(embedder) => Some(embedder.cache()),
-            SubEmbedder::OpenAi(embedder) => Some(embedder.cache()),
-            SubEmbedder::UserProvided(_) => None,
-            SubEmbedder::Ollama(embedder) => Some(embedder.cache()),
-            SubEmbedder::Rest(embedder) => Some(embedder.cache()),
+            Self::HuggingFace(embedder) => Some(embedder.cache()),
+            Self::OpenAi(embedder) => Some(embedder.cache()),
+            Self::UserProvided(_) => None,
+            Self::Ollama(embedder) => Some(embedder.cache()),
+            Self::Rest(embedder) => Some(embedder.cache()),
         }
     }
 }

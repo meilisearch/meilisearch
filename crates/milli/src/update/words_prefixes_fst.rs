@@ -14,7 +14,7 @@ pub struct WordsPrefixesFst<'t, 'i> {
 }
 
 impl<'t, 'i> WordsPrefixesFst<'t, 'i> {
-    pub fn new(wtxn: &'t mut RwTxn<'i>, index: &'i Index) -> WordsPrefixesFst<'t, 'i> {
+    pub fn new(wtxn: &'t mut RwTxn<'i>, index: &'i Index) -> Self {
         WordsPrefixesFst { wtxn, index, threshold: 100, max_prefix_length: 4 }
     }
 

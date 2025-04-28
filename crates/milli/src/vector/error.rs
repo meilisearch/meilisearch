@@ -127,22 +127,22 @@ impl EmbedError {
         Self { kind: EmbedErrorKind::ModelForward(inner), fault: FaultSource::Runtime }
     }
 
-    pub(crate) fn embed_on_manual_embedder(texts: String) -> EmbedError {
+    pub(crate) fn embed_on_manual_embedder(texts: String) -> Self {
         Self { kind: EmbedErrorKind::ManualEmbed(texts), fault: FaultSource::User }
     }
 
-    pub(crate) fn ollama_model_not_found(inner: Option<String>) -> EmbedError {
+    pub(crate) fn ollama_model_not_found(inner: Option<String>) -> Self {
         Self { kind: EmbedErrorKind::OllamaModelNotFoundError(inner), fault: FaultSource::User }
     }
 
-    pub(crate) fn rest_response_deserialization(error: std::io::Error) -> EmbedError {
+    pub(crate) fn rest_response_deserialization(error: std::io::Error) -> Self {
         Self {
             kind: EmbedErrorKind::RestResponseDeserialization(error),
             fault: FaultSource::Runtime,
         }
     }
 
-    pub(crate) fn rest_response_embedding_count(expected: usize, got: usize) -> EmbedError {
+    pub(crate) fn rest_response_embedding_count(expected: usize, got: usize) -> Self {
         Self {
             kind: EmbedErrorKind::RestResponseEmbeddingCount(expected, got),
             fault: FaultSource::Runtime,
@@ -152,14 +152,14 @@ impl EmbedError {
     pub(crate) fn rest_unauthorized(
         error_response: Option<String>,
         configuration_source: ConfigurationSource,
-    ) -> EmbedError {
+    ) -> Self {
         Self {
             kind: EmbedErrorKind::RestUnauthorized(error_response, configuration_source),
             fault: FaultSource::User,
         }
     }
 
-    pub(crate) fn rest_too_many_requests(error_response: Option<String>) -> EmbedError {
+    pub(crate) fn rest_too_many_requests(error_response: Option<String>) -> Self {
         Self {
             kind: EmbedErrorKind::RestTooManyRequests(error_response),
             fault: FaultSource::Runtime,
@@ -169,7 +169,7 @@ impl EmbedError {
     pub(crate) fn rest_bad_request(
         error_response: Option<String>,
         configuration_source: ConfigurationSource,
-    ) -> EmbedError {
+    ) -> Self {
         Self {
             kind: EmbedErrorKind::RestBadRequest(error_response, configuration_source),
             fault: FaultSource::User,
@@ -179,35 +179,35 @@ impl EmbedError {
     pub(crate) fn rest_internal_server_error(
         code: u16,
         error_response: Option<String>,
-    ) -> EmbedError {
+    ) -> Self {
         Self {
             kind: EmbedErrorKind::RestInternalServerError(code, error_response),
             fault: FaultSource::Runtime,
         }
     }
 
-    pub(crate) fn rest_other_status_code(code: u16, error_response: Option<String>) -> EmbedError {
+    pub(crate) fn rest_other_status_code(code: u16, error_response: Option<String>) -> Self {
         Self {
             kind: EmbedErrorKind::RestOtherStatusCode(code, error_response),
             fault: FaultSource::Undecided,
         }
     }
 
-    pub(crate) fn rest_network(transport: ureq::Transport) -> EmbedError {
+    pub(crate) fn rest_network(transport: ureq::Transport) -> Self {
         Self { kind: EmbedErrorKind::RestNetwork(transport), fault: FaultSource::Runtime }
     }
 
-    pub(crate) fn rest_unexpected_dimension(expected: usize, got: usize) -> EmbedError {
+    pub(crate) fn rest_unexpected_dimension(expected: usize, got: usize) -> Self {
         Self {
             kind: EmbedErrorKind::UnexpectedDimension(expected, got),
             fault: FaultSource::Runtime,
         }
     }
-    pub(crate) fn missing_embedding() -> EmbedError {
+    pub(crate) fn missing_embedding() -> Self {
         Self { kind: EmbedErrorKind::MissingEmbedding, fault: FaultSource::Undecided }
     }
 
-    pub(crate) fn rest_extraction_error(error: String) -> EmbedError {
+    pub(crate) fn rest_extraction_error(error: String) -> Self {
         Self { kind: EmbedErrorKind::RestExtractionError(error), fault: FaultSource::Runtime }
     }
 }
@@ -220,7 +220,7 @@ pub struct NewEmbedderError {
 }
 
 impl NewEmbedderError {
-    pub fn open_config(config_filename: PathBuf, inner: std::io::Error) -> NewEmbedderError {
+    pub fn open_config(config_filename: PathBuf, inner: std::io::Error) -> Self {
         let open_config = OpenConfig { filename: config_filename, inner };
 
         Self { kind: NewEmbedderErrorKind::OpenConfig(open_config), fault: FaultSource::Runtime }
@@ -231,7 +231,7 @@ impl NewEmbedderError {
         config: String,
         config_filename: PathBuf,
         inner: serde_json::Error,
-    ) -> NewEmbedderError {
+    ) -> Self {
         match serde_json::from_str(&config) {
             Ok(value) => {
                 let value: serde_json::Value = value;
@@ -266,7 +266,7 @@ impl NewEmbedderError {
     pub fn open_pooling_config(
         pooling_config_filename: PathBuf,
         inner: std::io::Error,
-    ) -> NewEmbedderError {
+    ) -> Self {
         let open_config = OpenPoolingConfig { filename: pooling_config_filename, inner };
 
         Self {
@@ -279,7 +279,7 @@ impl NewEmbedderError {
         model_name: String,
         pooling_config_filename: PathBuf,
         inner: serde_json::Error,
-    ) -> NewEmbedderError {
+    ) -> Self {
         let deserialize_pooling_config =
             DeserializePoolingConfig { model_name, filename: pooling_config_filename, inner };
         Self {
@@ -291,7 +291,7 @@ impl NewEmbedderError {
     pub fn open_tokenizer(
         tokenizer_filename: PathBuf,
         inner: Box<dyn std::error::Error + Send + Sync>,
-    ) -> NewEmbedderError {
+    ) -> Self {
         let open_tokenizer = OpenTokenizer { filename: tokenizer_filename, inner };
         Self {
             kind: NewEmbedderErrorKind::OpenTokenizer(open_tokenizer),
@@ -319,28 +319,28 @@ impl NewEmbedderError {
         Self { kind: NewEmbedderErrorKind::LoadModel(inner), fault: FaultSource::Runtime }
     }
 
-    pub fn could_not_determine_dimension(inner: EmbedError) -> NewEmbedderError {
+    pub fn could_not_determine_dimension(inner: EmbedError) -> Self {
         Self {
             kind: NewEmbedderErrorKind::CouldNotDetermineDimension(inner),
             fault: FaultSource::Runtime,
         }
     }
 
-    pub(crate) fn rest_could_not_parse_template(message: String) -> NewEmbedderError {
+    pub(crate) fn rest_could_not_parse_template(message: String) -> Self {
         Self {
             kind: NewEmbedderErrorKind::CouldNotParseTemplate(message),
             fault: FaultSource::User,
         }
     }
 
-    pub(crate) fn ollama_unsupported_url(url: String) -> NewEmbedderError {
+    pub(crate) fn ollama_unsupported_url(url: String) -> Self {
         Self { kind: NewEmbedderErrorKind::OllamaUnsupportedUrl(url), fault: FaultSource::User }
     }
 
     pub(crate) fn composite_dimensions_mismatch(
         search_dimensions: usize,
         index_dimensions: usize,
-    ) -> NewEmbedderError {
+    ) -> Self {
         Self {
             kind: NewEmbedderErrorKind::CompositeDimensionsMismatch {
                 search_dimensions,
@@ -353,7 +353,7 @@ impl NewEmbedderError {
     pub(crate) fn composite_test_embedding_failed(
         inner: EmbedError,
         failing_embedder: &'static str,
-    ) -> NewEmbedderError {
+    ) -> Self {
         Self {
             kind: NewEmbedderErrorKind::CompositeTestEmbeddingFailed { inner, failing_embedder },
             fault: FaultSource::Runtime,
@@ -363,7 +363,7 @@ impl NewEmbedderError {
     pub(crate) fn composite_embedding_count_mismatch(
         search_count: usize,
         index_count: usize,
-    ) -> NewEmbedderError {
+    ) -> Self {
         Self {
             kind: NewEmbedderErrorKind::CompositeEmbeddingCountMismatch {
                 search_count,
@@ -376,7 +376,7 @@ impl NewEmbedderError {
     pub(crate) fn composite_embedding_value_mismatch(
         distance: f32,
         hint: CompositeEmbedderContainsHuggingFace,
-    ) -> NewEmbedderError {
+    ) -> Self {
         Self {
             kind: NewEmbedderErrorKind::CompositeEmbeddingValueMismatch { distance, hint },
             fault: FaultSource::User,
@@ -395,16 +395,16 @@ pub enum CompositeEmbedderContainsHuggingFace {
 impl std::fmt::Display for CompositeEmbedderContainsHuggingFace {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            CompositeEmbedderContainsHuggingFace::Both => f.write_str(
+            Self::Both => f.write_str(
                 "\n  - Make sure the `model`, `revision` and `pooling` of both embedders match.",
             ),
-            CompositeEmbedderContainsHuggingFace::Search => f.write_str(
+            Self::Search => f.write_str(
                 "\n  - Consider trying a different `pooling` method for the search embedder.",
             ),
-            CompositeEmbedderContainsHuggingFace::Indexing => f.write_str(
+            Self::Indexing => f.write_str(
                 "\n  - Consider trying a different `pooling` method for the indexing embedder.",
             ),
-            CompositeEmbedderContainsHuggingFace::None => Ok(()),
+            Self::None => Ok(()),
         }
     }
 }

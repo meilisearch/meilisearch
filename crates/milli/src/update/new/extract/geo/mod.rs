@@ -29,7 +29,7 @@ impl GeoExtractor {
         grenad_parameters: GrenadParameters,
     ) -> Result<Option<Self>> {
         if index.is_geo_enabled(rtxn)? {
-            Ok(Some(GeoExtractor { grenad_parameters }))
+            Ok(Some(Self { grenad_parameters }))
         } else {
             Ok(None)
         }
@@ -49,7 +49,7 @@ impl From<ExtractedGeoPoint> for GeoPoint {
         let [lat, lng] = value.lat_lng;
         let point = [lat, lng];
         let xyz_point = lat_lng_to_xyz(&point);
-        GeoPoint::new(xyz_point, (value.docid, point))
+        Self::new(xyz_point, (value.docid, point))
     }
 }
 

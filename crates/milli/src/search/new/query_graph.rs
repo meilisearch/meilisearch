@@ -96,7 +96,7 @@ impl QueryGraph {
         ctx: &mut SearchContext<'_>,
         // The terms here must be consecutive
         terms: &[LocatedQueryTerm],
-    ) -> Result<(QueryGraph, Vec<LocatedQueryTerm>)> {
+    ) -> Result<(Self, Vec<LocatedQueryTerm>)> {
         let mut new_located_query_terms = terms.to_vec();
 
         let nbr_typos = number_of_typos_allowed(ctx)?;
@@ -172,7 +172,7 @@ impl QueryGraph {
             let node = nodes.get_mut(Interned::from_raw(node_idx as u16));
             node.data = node_data;
         }
-        let mut graph = QueryGraph { root_node, end_node, nodes };
+        let mut graph = Self { root_node, end_node, nodes };
         graph.build_initial_edges();
 
         Ok((graph, new_located_query_terms))
@@ -531,6 +531,6 @@ impl QueryGraph {
             node.predecessors.insert(prev_node_id);
         }
 
-        QueryGraph { root_node, end_node, nodes }
+        Self { root_node, end_node, nodes }
     }
 }

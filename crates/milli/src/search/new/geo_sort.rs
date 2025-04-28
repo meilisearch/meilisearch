@@ -66,22 +66,22 @@ pub enum Strategy {
 
 impl Default for Strategy {
     fn default() -> Self {
-        Strategy::Dynamic(1000)
+        Self::Dynamic(1000)
     }
 }
 
 impl Strategy {
     pub fn use_rtree(&self, candidates: usize) -> bool {
         match self {
-            Strategy::AlwaysIterative(_) => false,
-            Strategy::AlwaysRtree(_) => true,
-            Strategy::Dynamic(i) => candidates >= *i,
+            Self::AlwaysIterative(_) => false,
+            Self::AlwaysRtree(_) => true,
+            Self::Dynamic(i) => candidates >= *i,
         }
     }
 
     pub fn cache_size(&self) -> usize {
         match self {
-            Strategy::AlwaysIterative(i) | Strategy::AlwaysRtree(i) | Strategy::Dynamic(i) => *i,
+            Self::AlwaysIterative(i) | Self::AlwaysRtree(i) | Self::Dynamic(i) => *i,
         }
     }
 }

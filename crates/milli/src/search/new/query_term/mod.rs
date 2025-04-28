@@ -88,14 +88,14 @@ pub enum Lazy<T> {
 impl<T> Lazy<T> {
     pub fn is_init(&self) -> bool {
         match self {
-            Lazy::Uninit => false,
-            Lazy::Init(_) => true,
+            Self::Uninit => false,
+            Self::Init(_) => true,
         }
     }
     pub fn is_uninit(&self) -> bool {
         match self {
-            Lazy::Uninit => true,
-            Lazy::Init(_) => false,
+            Self::Uninit => true,
+            Self::Init(_) => false,
         }
     }
 }
@@ -112,11 +112,11 @@ impl ExactTerm {
         ctx: &'ctx SearchContext<'ctx>,
     ) -> impl Iterator<Item = Option<Interned<String>>> + 'ctx {
         match *self {
-            ExactTerm::Phrase(phrase) => {
+            Self::Phrase(phrase) => {
                 let phrase = ctx.phrase_interner.get(phrase);
                 Either::Left(phrase.words.iter().copied())
             }
-            ExactTerm::Word(word) => Either::Right(std::iter::once(Some(word))),
+            Self::Word(word) => Either::Right(std::iter::once(Some(word))),
         }
     }
 }
@@ -407,7 +407,7 @@ impl QueryTermSubset {
 
 impl ZeroTypoTerm {
     fn is_empty(&self) -> bool {
-        let ZeroTypoTerm { phrase, exact: zero_typo, prefix_of, synonyms, use_prefix_db } = self;
+        let Self { phrase, exact: zero_typo, prefix_of, synonyms, use_prefix_db } = self;
         phrase.is_none()
             && zero_typo.is_none()
             && prefix_of.is_empty()
@@ -417,13 +417,13 @@ impl ZeroTypoTerm {
 }
 impl OneTypoTerm {
     fn is_empty(&self) -> bool {
-        let OneTypoTerm { split_words, one_typo } = self;
+        let Self { split_words, one_typo } = self;
         one_typo.is_empty() && split_words.is_none()
     }
 }
 impl TwoTypoTerm {
     fn is_empty(&self) -> bool {
-        let TwoTypoTerm { two_typos } = self;
+        let Self { two_typos } = self;
         two_typos.is_empty()
     }
 }

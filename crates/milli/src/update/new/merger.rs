@@ -166,14 +166,14 @@ pub enum FacetFieldIdDelta {
 
 impl FacetFieldIdDelta {
     fn push(&mut self, facet_value: &[u8], max_count: usize) {
-        *self = match std::mem::replace(self, FacetFieldIdDelta::Bulk) {
-            FacetFieldIdDelta::Bulk => FacetFieldIdDelta::Bulk,
-            FacetFieldIdDelta::Incremental(mut v) => {
+        *self = match std::mem::replace(self, Self::Bulk) {
+            Self::Bulk => Self::Bulk,
+            Self::Incremental(mut v) => {
                 if v.len() >= max_count {
-                    FacetFieldIdDelta::Bulk
+                    Self::Bulk
                 } else {
                     v.push(FacetFieldIdChange { facet_value: facet_value.into() });
-                    FacetFieldIdDelta::Incremental(v)
+                    Self::Incremental(v)
                 }
             }
         }
@@ -183,17 +183,17 @@ impl FacetFieldIdDelta {
         let Some(rhs) = rhs else {
             return;
         };
-        *self = match (std::mem::replace(self, FacetFieldIdDelta::Bulk), rhs) {
-            (FacetFieldIdDelta::Bulk, _) | (_, FacetFieldIdDelta::Bulk) => FacetFieldIdDelta::Bulk,
+        *self = match (std::mem::replace(self, Self::Bulk), rhs) {
+            (Self::Bulk, _) | (_, Self::Bulk) => Self::Bulk,
             (
-                FacetFieldIdDelta::Incremental(mut left),
-                FacetFieldIdDelta::Incremental(mut right),
+                Self::Incremental(mut left),
+                Self::Incremental(mut right),
             ) => {
                 if left.len() + right.len() >= max_count {
-                    FacetFieldIdDelta::Bulk
+                    Self::Bulk
                 } else {
                     left.append(&mut right);
-                    FacetFieldIdDelta::Incremental(left)
+                    Self::Incremental(left)
                 }
             }
         };

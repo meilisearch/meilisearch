@@ -408,7 +408,7 @@ pub(crate) mod test_helpers {
             group_size: u8,
             max_group_size: u8,
             min_level_size: u8,
-        ) -> FacetIndex<BoundCodec> {
+        ) -> Self {
             let group_size = group_size.clamp(2, 127);
             let max_group_size = std::cmp::min(127, std::cmp::max(group_size * 2, max_group_size)); // 2*group_size <= x <= 127
             let min_level_size = std::cmp::max(1, min_level_size); // 1 <= x <= inf
@@ -421,7 +421,7 @@ pub(crate) mod test_helpers {
             let content = env.create_database(&mut wtxn, None).unwrap();
             wtxn.commit().unwrap();
 
-            FacetIndex {
+            Self {
                 content,
                 group_size: Cell::new(group_size),
                 max_group_size: Cell::new(max_group_size),

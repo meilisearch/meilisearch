@@ -78,7 +78,7 @@ impl<T> DeadEndsCache<T> {
                 if let Some(idx) = self.conditions.iter().position(|c| *c == first_condition) {
                     return self.next[idx].forbid_condition_after_prefix(prefix, forbidden);
                 }
-                let mut rest = DeadEndsCache {
+                let mut rest = Self {
                     conditions: vec![],
                     next: vec![],
                     forbidden: SmallBitmap::new(self.forbidden.universe_length()),

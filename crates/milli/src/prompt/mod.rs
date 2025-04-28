@@ -42,7 +42,7 @@ impl TryFrom<PromptData> for Prompt {
     type Error = NewPromptError;
 
     fn try_from(value: PromptData) -> Result<Self, Self::Error> {
-        Prompt::new(value.template, value.max_bytes)
+        Self::new(value.template, value.max_bytes)
     }
 }
 

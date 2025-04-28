@@ -290,7 +290,7 @@ impl IndexStats {
     ///
     /// - rtxn: a RO transaction for the index, obtained from `Index::read_txn()`.
     pub fn new(index: &Index, rtxn: &RoTxn) -> meilisearch_types::milli::Result<Self> {
-        Ok(IndexStats {
+        Ok(Self {
             number_of_documents: index.number_of_documents(rtxn)?,
             database_size: index.on_disk_size()?,
             used_database_size: index.used_size()?,
