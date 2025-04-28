@@ -313,7 +313,7 @@ impl From<v4::ResponseError> for v5::ResponseError {
 
 impl<T> From<v4::Settings<T>> for v5::Settings<v5::Unchecked> {
     fn from(settings: v4::Settings<T>) -> Self {
-        v5::Settings {
+        Self {
             displayed_attributes: settings.displayed_attributes.into(),
             searchable_attributes: settings.searchable_attributes.into(),
             filterable_attributes: settings.filterable_attributes.into(),
@@ -348,24 +348,24 @@ impl<T> From<v4::Settings<T>> for v5::Settings<v5::Unchecked> {
 
 impl From<v4::Action> for Option<v5::Action> {
     fn from(key: v4::Action) -> Self {
-        match key {
-            v4::Action::All => Some(v5::Action::All),
-            v4::Action::Search => Some(v5::Action::Search),
-            v4::Action::DocumentsAdd => Some(v5::Action::DocumentsAdd),
-            v4::Action::DocumentsGet => Some(v5::Action::DocumentsGet),
-            v4::Action::DocumentsDelete => Some(v5::Action::DocumentsDelete),
-            v4::Action::IndexesAdd => Some(v5::Action::IndexesAdd),
-            v4::Action::IndexesGet => Some(v5::Action::IndexesGet),
-            v4::Action::IndexesUpdate => Some(v5::Action::IndexesUpdate),
-            v4::Action::IndexesDelete => Some(v5::Action::IndexesDelete),
-            v4::Action::TasksGet => Some(v5::Action::TasksGet),
-            v4::Action::SettingsGet => Some(v5::Action::SettingsGet),
-            v4::Action::SettingsUpdate => Some(v5::Action::SettingsUpdate),
-            v4::Action::StatsGet => Some(v5::Action::StatsGet),
-            v4::Action::DumpsCreate => Some(v5::Action::DumpsCreate),
-            v4::Action::DumpsGet => None,
-            v4::Action::Version => Some(v5::Action::Version),
-        }
+        Some(match key {
+            v4::Action::All => v5::Action::All,
+            v4::Action::Search => v5::Action::Search,
+            v4::Action::DocumentsAdd => v5::Action::DocumentsAdd,
+            v4::Action::DocumentsGet => v5::Action::DocumentsGet,
+            v4::Action::DocumentsDelete => v5::Action::DocumentsDelete,
+            v4::Action::IndexesAdd => v5::Action::IndexesAdd,
+            v4::Action::IndexesGet => v5::Action::IndexesGet,
+            v4::Action::IndexesUpdate => v5::Action::IndexesUpdate,
+            v4::Action::IndexesDelete => v5::Action::IndexesDelete,
+            v4::Action::TasksGet => v5::Action::TasksGet,
+            v4::Action::SettingsGet => v5::Action::SettingsGet,
+            v4::Action::SettingsUpdate => v5::Action::SettingsUpdate,
+            v4::Action::StatsGet => v5::Action::StatsGet,
+            v4::Action::DumpsCreate => v5::Action::DumpsCreate,
+            v4::Action::DumpsGet => return None,
+            v4::Action::Version => v5::Action::Version,
+        })
     }
 }
 

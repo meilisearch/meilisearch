@@ -367,7 +367,7 @@ impl<A> From<v2::Setting<A>> for v3::Setting<A> {
 
 impl<T> From<v2::Settings<T>> for v3::Settings<v3::Unchecked> {
     fn from(settings: v2::Settings<T>) -> Self {
-        v3::Settings {
+        Self {
             displayed_attributes: settings.displayed_attributes.into(),
             searchable_attributes: settings.searchable_attributes.into(),
             filterable_attributes: settings.filterable_attributes.into(),

@@ -317,7 +317,7 @@ impl From<v5::ResponseError> for v6::ResponseError {
 
 impl<T> From<v5::Settings<T>> for v6::Settings<v6::Unchecked> {
     fn from(settings: v5::Settings<T>) -> Self {
-        v6::Settings {
+        Self {
             displayed_attributes: v6::Setting::from(settings.displayed_attributes).into(),
             searchable_attributes: v6::Setting::from(settings.searchable_attributes).into(),
             filterable_attributes: match settings.filterable_attributes {

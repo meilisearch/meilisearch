@@ -142,10 +142,12 @@ impl Analytics {
         index_scheduler: Arc<IndexScheduler>,
         auth_controller: Arc<AuthController>,
     ) -> Self {
-        if opt.no_analytics {
-            Self { segment: None }
-        } else {
-            Self { segment: SegmentAnalytics::new(opt, index_scheduler, auth_controller).await }
+        Self {
+            segment: if opt.no_analytics {
+                None
+            } else {
+                SegmentAnalytics::new(opt, index_scheduler, auth_controller).await
+            },
         }
     }
 

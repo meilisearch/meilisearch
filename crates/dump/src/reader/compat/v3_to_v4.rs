@@ -314,7 +314,7 @@ impl From<v3::Code> for v4::Code {
 
 impl<T> From<v3::Settings<T>> for v4::Settings<v4::Unchecked> {
     fn from(settings: v3::Settings<T>) -> Self {
-        v4::Settings {
+        Self {
             displayed_attributes: settings.displayed_attributes.into(),
             searchable_attributes: settings.searchable_attributes.into(),
             filterable_attributes: settings.filterable_attributes.into(),
