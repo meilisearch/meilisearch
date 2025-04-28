@@ -189,12 +189,7 @@ impl SmallBitmapInternal {
         match self {
             Self::Tiny(set) => *set == 0,
             Self::Small(sets) => {
-                for set in sets.iter() {
-                    if *set != 0 {
-                        return false;
-                    }
-                }
-                true
+                sets.iter().all(|x| *x == 0)
             }
         }
     }
