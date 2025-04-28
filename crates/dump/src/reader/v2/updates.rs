@@ -230,8 +230,7 @@ impl UpdateStatus {
 
     pub fn finished_at(&self) -> Option<OffsetDateTime> {
         match self {
-            Self::Processing(_) |
-            Self::Enqueued(_) => None,
+            Self::Processing(_) | Self::Enqueued(_) => None,
             Self::Processed(u) => Some(u.processed_at),
             Self::Aborted(_) => None,
             Self::Failed(u) => Some(u.failed_at),

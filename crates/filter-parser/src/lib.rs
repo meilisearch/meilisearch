@@ -173,9 +173,7 @@ impl<'a> FilterCondition<'a> {
             Self::Or(seq) | Self::And(seq) => {
                 seq.iter().find_map(|filter| filter.use_contains_operator())
             }
-            Self::GeoLowerThan { .. }
-            | Self::GeoBoundingBox { .. }
-            | Self::In { .. } => None,
+            Self::GeoLowerThan { .. } | Self::GeoBoundingBox { .. } | Self::In { .. } => None,
         }
     }
 
@@ -184,9 +182,7 @@ impl<'a> FilterCondition<'a> {
             return Box::new(std::iter::empty());
         }
         match self {
-            Self::Condition { fid, .. } | Self::In { fid, .. } => {
-                Box::new(std::iter::once(fid))
-            }
+            Self::Condition { fid, .. } | Self::In { fid, .. } => Box::new(std::iter::once(fid)),
             Self::Not(filter) => {
                 let depth = depth.saturating_sub(1);
                 filter.fids(depth)

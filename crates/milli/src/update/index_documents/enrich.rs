@@ -189,8 +189,7 @@ impl DocumentId {
 
     pub fn value(&self) -> &str {
         match self {
-            Self::Retrieved { value } |
-            Self::Generated { value, .. } => value,
+            Self::Retrieved { value } | Self::Generated { value, .. } => value,
         }
     }
 }

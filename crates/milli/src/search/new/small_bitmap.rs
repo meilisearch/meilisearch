@@ -188,9 +188,7 @@ impl SmallBitmapInternal {
     pub fn is_empty(&self) -> bool {
         match self {
             Self::Tiny(set) => *set == 0,
-            Self::Small(sets) => {
-                sets.iter().all(|x| *x == 0)
-            }
+            Self::Small(sets) => sets.iter().all(|x| *x == 0),
         }
     }
     pub fn clear(&mut self) {

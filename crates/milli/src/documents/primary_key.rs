@@ -78,8 +78,7 @@ impl<'a> PrimaryKey<'a> {
 
     pub fn name(&self) -> &'a str {
         match self {
-            Self::Flat { name, .. } |
-            Self::Nested { name } => name,
+            Self::Flat { name, .. } | Self::Nested { name } => name,
         }
     }
 
