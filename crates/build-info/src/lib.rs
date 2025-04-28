@@ -53,19 +53,19 @@ impl DescribeResult {
 
     pub fn as_tag(&self) -> Option<&'static str> {
         match self {
-            DescribeResult::Prototype { name } => Some(name),
-            DescribeResult::Release { version, .. } => Some(version),
-            DescribeResult::Prerelease { version, .. } => Some(version),
-            DescribeResult::NotATag { describe: _ } => None,
+            Self::Prototype { name } => Some(name),
+            Self::Release { version, .. } => Some(version),
+            Self::Prerelease { version, .. } => Some(version),
+            Self::NotATag { describe: _ } => None,
         }
     }
 
     pub fn as_prototype(&self) -> Option<&'static str> {
         match self {
-            DescribeResult::Prototype { name } => Some(name),
-            DescribeResult::Release { .. }
-            | DescribeResult::Prerelease { .. }
-            | DescribeResult::NotATag { .. } => None,
+            Self::Prototype { name } => Some(name),
+            Self::Release { .. }
+            | Self::Prerelease { .. }
+            | Self::NotATag { .. } => None,
         }
     }
 }

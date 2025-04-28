@@ -166,21 +166,21 @@ pub struct IndexSwap {
 impl KindWithContent {
     pub fn as_kind(&self) -> Kind {
         match self {
-            KindWithContent::DocumentAdditionOrUpdate { .. } => Kind::DocumentAdditionOrUpdate,
-            KindWithContent::DocumentEdition { .. } => Kind::DocumentEdition,
-            KindWithContent::DocumentDeletion { .. } => Kind::DocumentDeletion,
-            KindWithContent::DocumentDeletionByFilter { .. } => Kind::DocumentDeletion,
-            KindWithContent::DocumentClear { .. } => Kind::DocumentDeletion,
-            KindWithContent::SettingsUpdate { .. } => Kind::SettingsUpdate,
-            KindWithContent::IndexCreation { .. } => Kind::IndexCreation,
-            KindWithContent::IndexDeletion { .. } => Kind::IndexDeletion,
-            KindWithContent::IndexUpdate { .. } => Kind::IndexUpdate,
-            KindWithContent::IndexSwap { .. } => Kind::IndexSwap,
-            KindWithContent::TaskCancelation { .. } => Kind::TaskCancelation,
-            KindWithContent::TaskDeletion { .. } => Kind::TaskDeletion,
-            KindWithContent::DumpCreation { .. } => Kind::DumpCreation,
-            KindWithContent::SnapshotCreation => Kind::SnapshotCreation,
-            KindWithContent::UpgradeDatabase { .. } => Kind::UpgradeDatabase,
+            Self::DocumentAdditionOrUpdate { .. } => Kind::DocumentAdditionOrUpdate,
+            Self::DocumentEdition { .. } => Kind::DocumentEdition,
+            Self::DocumentDeletion { .. } => Kind::DocumentDeletion,
+            Self::DocumentDeletionByFilter { .. } => Kind::DocumentDeletion,
+            Self::DocumentClear { .. } => Kind::DocumentDeletion,
+            Self::SettingsUpdate { .. } => Kind::SettingsUpdate,
+            Self::IndexCreation { .. } => Kind::IndexCreation,
+            Self::IndexDeletion { .. } => Kind::IndexDeletion,
+            Self::IndexUpdate { .. } => Kind::IndexUpdate,
+            Self::IndexSwap { .. } => Kind::IndexSwap,
+            Self::TaskCancelation { .. } => Kind::TaskCancelation,
+            Self::TaskDeletion { .. } => Kind::TaskDeletion,
+            Self::DumpCreation { .. } => Kind::DumpCreation,
+            Self::SnapshotCreation => Kind::SnapshotCreation,
+            Self::UpgradeDatabase { .. } => Kind::UpgradeDatabase,
         }
     }
 
@@ -217,13 +217,13 @@ impl KindWithContent {
     /// `None` if it cannot be generated.
     pub fn default_details(&self) -> Option<Details> {
         match self {
-            KindWithContent::DocumentAdditionOrUpdate { documents_count, .. } => {
+            Self::DocumentAdditionOrUpdate { documents_count, .. } => {
                 Some(Details::DocumentAdditionOrUpdate {
                     received_documents: *documents_count,
                     indexed_documents: None,
                 })
             }
-            KindWithContent::DocumentEdition { index_uid: _, filter_expr, context, function } => {
+            Self::DocumentEdition { index_uid: _, filter_expr, context, function } => {
                 Some(Details::DocumentEdition {
                     deleted_documents: None,
                     edited_documents: None,
@@ -232,44 +232,44 @@ impl KindWithContent {
                     function: function.clone(),
                 })
             }
-            KindWithContent::DocumentDeletion { index_uid: _, documents_ids } => {
+            Self::DocumentDeletion { index_uid: _, documents_ids } => {
                 Some(Details::DocumentDeletion {
                     provided_ids: documents_ids.len(),
                     deleted_documents: None,
                 })
             }
-            KindWithContent::DocumentDeletionByFilter { index_uid: _, filter_expr } => {
+            Self::DocumentDeletionByFilter { index_uid: _, filter_expr } => {
                 Some(Details::DocumentDeletionByFilter {
                     original_filter: filter_expr.to_string(),
                     deleted_documents: None,
                 })
             }
-            KindWithContent::DocumentClear { .. } | KindWithContent::IndexDeletion { .. } => {
+            Self::DocumentClear { .. } | Self::IndexDeletion { .. } => {
                 Some(Details::ClearAll { deleted_documents: None })
             }
-            KindWithContent::SettingsUpdate { new_settings, .. } => {
+            Self::SettingsUpdate { new_settings, .. } => {
                 Some(Details::SettingsUpdate { settings: new_settings.clone() })
             }
-            KindWithContent::IndexCreation { primary_key, .. }
-            | KindWithContent::IndexUpdate { primary_key, .. } => {
+            Self::IndexCreation { primary_key, .. }
+            | Self::IndexUpdate { primary_key, .. } => {
                 Some(Details::IndexInfo { primary_key: primary_key.clone() })
             }
-            KindWithContent::IndexSwap { swaps } => {
+            Self::IndexSwap { swaps } => {
                 Some(Details::IndexSwap { swaps: swaps.clone() })
             }
-            KindWithContent::TaskCancelation { query, tasks } => Some(Details::TaskCancelation {
+            Self::TaskCancelation { query, tasks } => Some(Details::TaskCancelation {
                 matched_tasks: tasks.len(),
                 canceled_tasks: None,
                 original_filter: query.clone(),
             }),
-            KindWithContent::TaskDeletion { query, tasks } => Some(Details::TaskDeletion {
+            Self::TaskDeletion { query, tasks } => Some(Details::TaskDeletion {
                 matched_tasks: tasks.len(),
                 deleted_tasks: None,
                 original_filter: query.clone(),
             }),
-            KindWithContent::DumpCreation { .. } => Some(Details::Dump { dump_uid: None }),
-            KindWithContent::SnapshotCreation => None,
-            KindWithContent::UpgradeDatabase { from } => Some(Details::UpgradeDatabase {
+            Self::DumpCreation { .. } => Some(Details::Dump { dump_uid: None }),
+            Self::SnapshotCreation => None,
+            Self::UpgradeDatabase { from } => Some(Details::UpgradeDatabase {
                 from: (from.0, from.1, from.2),
                 to: (
                     versioning::VERSION_MAJOR.parse().unwrap(),
@@ -282,13 +282,13 @@ impl KindWithContent {
 
     pub fn default_finished_details(&self) -> Option<Details> {
         match self {
-            KindWithContent::DocumentAdditionOrUpdate { documents_count, .. } => {
+            Self::DocumentAdditionOrUpdate { documents_count, .. } => {
                 Some(Details::DocumentAdditionOrUpdate {
                     received_documents: *documents_count,
                     indexed_documents: Some(0),
                 })
             }
-            KindWithContent::DocumentEdition { index_uid: _, filter_expr, context, function } => {
+            Self::DocumentEdition { index_uid: _, filter_expr, context, function } => {
                 Some(Details::DocumentEdition {
                     deleted_documents: Some(0),
                     edited_documents: Some(0),
@@ -297,45 +297,45 @@ impl KindWithContent {
                     function: function.clone(),
                 })
             }
-            KindWithContent::DocumentDeletion { index_uid: _, documents_ids } => {
+            Self::DocumentDeletion { index_uid: _, documents_ids } => {
                 Some(Details::DocumentDeletion {
                     provided_ids: documents_ids.len(),
                     deleted_documents: Some(0),
                 })
             }
-            KindWithContent::DocumentDeletionByFilter { index_uid: _, filter_expr } => {
+            Self::DocumentDeletionByFilter { index_uid: _, filter_expr } => {
                 Some(Details::DocumentDeletionByFilter {
                     original_filter: filter_expr.to_string(),
                     deleted_documents: Some(0),
                 })
             }
-            KindWithContent::DocumentClear { .. } => {
+            Self::DocumentClear { .. } => {
                 Some(Details::ClearAll { deleted_documents: None })
             }
-            KindWithContent::SettingsUpdate { new_settings, .. } => {
+            Self::SettingsUpdate { new_settings, .. } => {
                 Some(Details::SettingsUpdate { settings: new_settings.clone() })
             }
-            KindWithContent::IndexDeletion { .. } => None,
-            KindWithContent::IndexCreation { primary_key, .. }
-            | KindWithContent::IndexUpdate { primary_key, .. } => {
+            Self::IndexDeletion { .. } => None,
+            Self::IndexCreation { primary_key, .. }
+            | Self::IndexUpdate { primary_key, .. } => {
                 Some(Details::IndexInfo { primary_key: primary_key.clone() })
             }
-            KindWithContent::IndexSwap { .. } => {
+            Self::IndexSwap { .. } => {
                 todo!()
             }
-            KindWithContent::TaskCancelation { query, tasks } => Some(Details::TaskCancelation {
+            Self::TaskCancelation { query, tasks } => Some(Details::TaskCancelation {
                 matched_tasks: tasks.len(),
                 canceled_tasks: Some(0),
                 original_filter: query.clone(),
             }),
-            KindWithContent::TaskDeletion { query, tasks } => Some(Details::TaskDeletion {
+            Self::TaskDeletion { query, tasks } => Some(Details::TaskDeletion {
                 matched_tasks: tasks.len(),
                 deleted_tasks: Some(0),
                 original_filter: query.clone(),
             }),
-            KindWithContent::DumpCreation { .. } => Some(Details::Dump { dump_uid: None }),
-            KindWithContent::SnapshotCreation => None,
-            KindWithContent::UpgradeDatabase { from } => Some(Details::UpgradeDatabase {
+            Self::DumpCreation { .. } => Some(Details::Dump { dump_uid: None }),
+            Self::SnapshotCreation => None,
+            Self::UpgradeDatabase { from } => Some(Details::UpgradeDatabase {
                 from: *from,
                 to: (
                     versioning::VERSION_MAJOR.parse().unwrap(),
@@ -423,11 +423,11 @@ pub enum Status {
 impl Display for Status {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Status::Enqueued => write!(f, "enqueued"),
-            Status::Processing => write!(f, "processing"),
-            Status::Succeeded => write!(f, "succeeded"),
-            Status::Failed => write!(f, "failed"),
-            Status::Canceled => write!(f, "canceled"),
+            Self::Enqueued => write!(f, "enqueued"),
+            Self::Processing => write!(f, "processing"),
+            Self::Succeeded => write!(f, "succeeded"),
+            Self::Failed => write!(f, "failed"),
+            Self::Canceled => write!(f, "canceled"),
         }
     }
 }
@@ -437,15 +437,15 @@ impl FromStr for Status {
 
     fn from_str(status: &str) -> Result<Self, Self::Err> {
         if status.eq_ignore_ascii_case("enqueued") {
-            Ok(Status::Enqueued)
+            Ok(Self::Enqueued)
         } else if status.eq_ignore_ascii_case("processing") {
-            Ok(Status::Processing)
+            Ok(Self::Processing)
         } else if status.eq_ignore_ascii_case("succeeded") {
-            Ok(Status::Succeeded)
+            Ok(Self::Succeeded)
         } else if status.eq_ignore_ascii_case("failed") {
-            Ok(Status::Failed)
+            Ok(Self::Failed)
         } else if status.eq_ignore_ascii_case("canceled") {
-            Ok(Status::Canceled)
+            Ok(Self::Canceled)
         } else {
             Err(ParseTaskStatusError(status.to_owned()))
         }
@@ -505,38 +505,38 @@ pub enum Kind {
 impl Kind {
     pub fn related_to_one_index(&self) -> bool {
         match self {
-            Kind::DocumentAdditionOrUpdate
-            | Kind::DocumentEdition
-            | Kind::DocumentDeletion
-            | Kind::SettingsUpdate
-            | Kind::IndexCreation
-            | Kind::IndexDeletion
-            | Kind::IndexUpdate => true,
-            Kind::IndexSwap
-            | Kind::TaskCancelation
-            | Kind::TaskDeletion
-            | Kind::DumpCreation
-            | Kind::UpgradeDatabase
-            | Kind::SnapshotCreation => false,
+            Self::DocumentAdditionOrUpdate
+            | Self::DocumentEdition
+            | Self::DocumentDeletion
+            | Self::SettingsUpdate
+            | Self::IndexCreation
+            | Self::IndexDeletion
+            | Self::IndexUpdate => true,
+            Self::IndexSwap
+            | Self::TaskCancelation
+            | Self::TaskDeletion
+            | Self::DumpCreation
+            | Self::UpgradeDatabase
+            | Self::SnapshotCreation => false,
         }
     }
 }
 impl Display for Kind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Kind::DocumentAdditionOrUpdate => write!(f, "documentAdditionOrUpdate"),
-            Kind::DocumentEdition => write!(f, "documentEdition"),
-            Kind::DocumentDeletion => write!(f, "documentDeletion"),
-            Kind::SettingsUpdate => write!(f, "settingsUpdate"),
-            Kind::IndexCreation => write!(f, "indexCreation"),
-            Kind::IndexDeletion => write!(f, "indexDeletion"),
-            Kind::IndexUpdate => write!(f, "indexUpdate"),
-            Kind::IndexSwap => write!(f, "indexSwap"),
-            Kind::TaskCancelation => write!(f, "taskCancelation"),
-            Kind::TaskDeletion => write!(f, "taskDeletion"),
-            Kind::DumpCreation => write!(f, "dumpCreation"),
-            Kind::SnapshotCreation => write!(f, "snapshotCreation"),
-            Kind::UpgradeDatabase => write!(f, "upgradeDatabase"),
+            Self::DocumentAdditionOrUpdate => write!(f, "documentAdditionOrUpdate"),
+            Self::DocumentEdition => write!(f, "documentEdition"),
+            Self::DocumentDeletion => write!(f, "documentDeletion"),
+            Self::SettingsUpdate => write!(f, "settingsUpdate"),
+            Self::IndexCreation => write!(f, "indexCreation"),
+            Self::IndexDeletion => write!(f, "indexDeletion"),
+            Self::IndexUpdate => write!(f, "indexUpdate"),
+            Self::IndexSwap => write!(f, "indexSwap"),
+            Self::TaskCancelation => write!(f, "taskCancelation"),
+            Self::TaskDeletion => write!(f, "taskDeletion"),
+            Self::DumpCreation => write!(f, "dumpCreation"),
+            Self::SnapshotCreation => write!(f, "snapshotCreation"),
+            Self::UpgradeDatabase => write!(f, "upgradeDatabase"),
         }
     }
 }
@@ -545,31 +545,31 @@ impl FromStr for Kind {
 
     fn from_str(kind: &str) -> Result<Self, Self::Err> {
         if kind.eq_ignore_ascii_case("indexCreation") {
-            Ok(Kind::IndexCreation)
+            Ok(Self::IndexCreation)
         } else if kind.eq_ignore_ascii_case("indexUpdate") {
-            Ok(Kind::IndexUpdate)
+            Ok(Self::IndexUpdate)
         } else if kind.eq_ignore_ascii_case("indexSwap") {
-            Ok(Kind::IndexSwap)
+            Ok(Self::IndexSwap)
         } else if kind.eq_ignore_ascii_case("indexDeletion") {
-            Ok(Kind::IndexDeletion)
+            Ok(Self::IndexDeletion)
         } else if kind.eq_ignore_ascii_case("documentAdditionOrUpdate") {
-            Ok(Kind::DocumentAdditionOrUpdate)
+            Ok(Self::DocumentAdditionOrUpdate)
         } else if kind.eq_ignore_ascii_case("documentEdition") {
-            Ok(Kind::DocumentEdition)
+            Ok(Self::DocumentEdition)
         } else if kind.eq_ignore_ascii_case("documentDeletion") {
-            Ok(Kind::DocumentDeletion)
+            Ok(Self::DocumentDeletion)
         } else if kind.eq_ignore_ascii_case("settingsUpdate") {
-            Ok(Kind::SettingsUpdate)
+            Ok(Self::SettingsUpdate)
         } else if kind.eq_ignore_ascii_case("taskCancelation") {
-            Ok(Kind::TaskCancelation)
+            Ok(Self::TaskCancelation)
         } else if kind.eq_ignore_ascii_case("taskDeletion") {
-            Ok(Kind::TaskDeletion)
+            Ok(Self::TaskDeletion)
         } else if kind.eq_ignore_ascii_case("dumpCreation") {
-            Ok(Kind::DumpCreation)
+            Ok(Self::DumpCreation)
         } else if kind.eq_ignore_ascii_case("snapshotCreation") {
-            Ok(Kind::SnapshotCreation)
+            Ok(Self::SnapshotCreation)
         } else if kind.eq_ignore_ascii_case("upgradeDatabase") {
-            Ok(Kind::UpgradeDatabase)
+            Ok(Self::UpgradeDatabase)
         } else {
             Err(ParseTaskKindError(kind.to_owned()))
         }
@@ -727,8 +727,8 @@ pub enum BatchStopReason {
 }
 
 impl BatchStopReason {
-    pub fn replace_unspecified(&mut self, new: BatchStopReason) {
-        if let BatchStopReason::Unspecified = self {
+    pub fn replace_unspecified(&mut self, new: Self) {
+        if let Self::Unspecified = self {
             *self = new;
         }
     }
@@ -744,31 +744,31 @@ pub enum PrimaryKeyMismatchReason {
 impl Display for BatchStopReason {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            BatchStopReason::Unspecified => f.write_str("unspecified"),
-            BatchStopReason::TaskKindCannotBeBatched { kind } => {
+            Self::Unspecified => f.write_str("unspecified"),
+            Self::TaskKindCannotBeBatched { kind } => {
                 write!(f, "a batch of tasks of type `{kind}` cannot be batched with any other type of task")
             }
-            BatchStopReason::TaskCannotBeBatched { kind, id } => {
+            Self::TaskCannotBeBatched { kind, id } => {
                 write!(f, "task with id {id} of type `{kind}` cannot be batched")
             }
-            BatchStopReason::ExhaustedEnqueuedTasks => f.write_str("batched all enqueued tasks"),
-            BatchStopReason::ExhaustedEnqueuedTasksForIndex { index } => {
+            Self::ExhaustedEnqueuedTasks => f.write_str("batched all enqueued tasks"),
+            Self::ExhaustedEnqueuedTasksForIndex { index } => {
                 write!(f, "batched all enqueued tasks for index `{index}`")
             }
-            BatchStopReason::ReachedTaskLimit { task_limit } => {
+            Self::ReachedTaskLimit { task_limit } => {
                 write!(f, "reached configured batch limit of {task_limit} tasks")
             }
-            BatchStopReason::ReachedSizeLimit { size_limit, size } => write!(
+            Self::ReachedSizeLimit { size_limit, size } => write!(
                 f,
                 "reached configured batch size limit of {size_limit}B with a total of {size}B"
             ),
-            BatchStopReason::PrimaryKeyIndexMismatch { id, in_index, in_task } => {
+            Self::PrimaryKeyIndexMismatch { id, in_index, in_task } => {
                 write!(f, "primary key `{in_task}` in task with id {id} is different from the primary key of the index `{in_index}`")
             }
-            BatchStopReason::IndexCreationMismatch { id } => {
+            Self::IndexCreationMismatch { id } => {
                 write!(f, "task with id {id} has different index creation rules as in the batch")
             }
-            BatchStopReason::PrimaryKeyMismatch { reason, id } => match reason {
+            Self::PrimaryKeyMismatch { reason, id } => match reason {
                 PrimaryKeyMismatchReason::TaskPrimaryKeyDifferFromIndexPrimaryKey {
                     task_pk,
                     index_pk,
@@ -785,28 +785,28 @@ impl Display for BatchStopReason {
                     write!(f, "task with id {id} is setting the `{task_pk}` primary key but cannot interfere with primary key guessing of the batch")
                 }
             },
-            BatchStopReason::IndexDeletion { id } => {
+            Self::IndexDeletion { id } => {
                 write!(f, "task with id {id} deletes the index")
             }
-            BatchStopReason::DocumentOperationWithSettings { id } => {
+            Self::DocumentOperationWithSettings { id } => {
                 write!(
                     f,
                     "task with id {id} is a settings change in a batch of document operations"
                 )
             }
-            BatchStopReason::DocumentOperationWithDeletionByFilter { id } => {
+            Self::DocumentOperationWithDeletionByFilter { id } => {
                 write!(
                     f,
                     "task with id {id} is a deletion by filter in a batch of document operations"
                 )
             }
-            BatchStopReason::DeletionByFilterWithDocumentOperation { id } => {
+            Self::DeletionByFilterWithDocumentOperation { id } => {
                 write!(
                     f,
                     "task with id {id} is a document operation in a batch of deletions by filter"
                 )
             }
-            BatchStopReason::SettingsWithDocumentOperation { id } => {
+            Self::SettingsWithDocumentOperation { id } => {
                 write!(
                     f,
                     "task with id {id} is a document operation in a batch of settings changes"

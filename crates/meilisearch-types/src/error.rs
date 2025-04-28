@@ -398,12 +398,12 @@ impl ErrorCode for JoinError {
 
 impl ErrorCode for milli::Error {
     fn error_code(&self) -> Code {
-        use milli::{Error, UserError};
+        use milli::UserError;
 
         match self {
-            Error::InternalError(_) => Code::Internal,
-            Error::IoError(e) => e.error_code(),
-            Error::UserError(ref error) => {
+            Self::InternalError(_) => Code::Internal,
+            Self::IoError(e) => e.error_code(),
+            Self::UserError(ref error) => {
                 match error {
                     // TODO: wait for spec for new error codes.
                     UserError::SerdeJson(_)
@@ -501,13 +501,13 @@ impl ErrorCode for tempfile::PersistError {
 impl ErrorCode for HeedError {
     fn error_code(&self) -> Code {
         match self {
-            HeedError::Mdb(MdbError::MapFull) => Code::DatabaseSizeLimitReached,
-            HeedError::Mdb(MdbError::Invalid) => Code::InvalidStoreFile,
-            HeedError::Io(e) => e.error_code(),
-            HeedError::Mdb(_)
-            | HeedError::Encoding(_)
-            | HeedError::Decoding(_)
-            | HeedError::EnvAlreadyOpened => Code::Internal,
+            Self::Mdb(MdbError::MapFull) => Code::DatabaseSizeLimitReached,
+            Self::Mdb(MdbError::Invalid) => Code::InvalidStoreFile,
+            Self::Io(e) => e.error_code(),
+            Self::Mdb(_)
+            | Self::Encoding(_)
+            | Self::Decoding(_)
+            | Self::EnvAlreadyOpened => Code::Internal,
         }
     }
 }

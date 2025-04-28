@@ -143,7 +143,7 @@ impl IndexStats {
     /// - rtxn: a RO transaction for the index, obtained from `Index::read_txn()`.
     pub fn new(index: &Index, rtxn: &RoTxn) -> milli::Result<Self> {
         let arroy_stats = index.arroy_stats(rtxn)?;
-        Ok(IndexStats {
+        Ok(Self {
             number_of_embeddings: Some(arroy_stats.number_of_embeddings),
             number_of_embedded_documents: Some(arroy_stats.documents.len()),
             documents_database_stats: index.documents_stats(rtxn)?.unwrap_or_default(),

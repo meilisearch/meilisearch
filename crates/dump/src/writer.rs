@@ -21,7 +21,7 @@ pub struct DumpWriter {
 }
 
 impl DumpWriter {
-    pub fn new(instance_uuid: Option<Uuid>) -> Result<DumpWriter> {
+    pub fn new(instance_uuid: Option<Uuid>) -> Result<Self> {
         let dir = TempDir::new()?;
 
         if let Some(instance_uuid) = instance_uuid {
@@ -40,7 +40,7 @@ impl DumpWriter {
 
         std::fs::create_dir(dir.path().join("indexes"))?;
 
-        Ok(DumpWriter { dir })
+        Ok(Self { dir })
     }
 
     pub fn create_index(&self, index_name: &str, metadata: &IndexMetadata) -> Result<IndexWriter> {
@@ -89,7 +89,7 @@ pub struct KeyWriter {
 impl KeyWriter {
     pub(crate) fn new(path: PathBuf) -> Result<Self> {
         let keys = File::create(path.join("keys.jsonl"))?;
-        Ok(KeyWriter { keys: BufWriter::new(keys) })
+        Ok(Self { keys: BufWriter::new(keys) })
     }
 
     pub fn push_key(&mut self, key: &Key) -> Result<()> {
@@ -117,7 +117,7 @@ impl TaskWriter {
         let update_files = path.join("update_files");
         std::fs::create_dir(&update_files)?;
 
-        Ok(TaskWriter { queue: BufWriter::new(queue), update_files })
+        Ok(Self { queue: BufWriter::new(queue), update_files })
     }
 
     /// Pushes tasks in the dump.
@@ -143,7 +143,7 @@ impl BatchWriter {
     pub(crate) fn new(path: PathBuf) -> Result<Self> {
         std::fs::create_dir(&path)?;
         let queue = File::create(path.join("queue.jsonl"))?;
-        Ok(BatchWriter { queue: BufWriter::new(queue) })
+        Ok(Self { queue: BufWriter::new(queue) })
     }
 
     /// Pushes batches in the dump.
@@ -165,8 +165,8 @@ pub struct UpdateFile {
 }
 
 impl UpdateFile {
-    pub(crate) fn new(path: PathBuf) -> UpdateFile {
-        UpdateFile { path, writer: None }
+    pub(crate) fn new(path: PathBuf) -> Self {
+        Self { path, writer: None }
     }
 
     pub fn push_document(&mut self, document: &Document) -> Result<()> {
@@ -204,7 +204,7 @@ impl IndexWriter {
         let documents = File::create(path.join("documents.jsonl"))?;
         let settings = File::create(path.join("settings.json"))?;
 
-        Ok(IndexWriter { documents: BufWriter::new(documents), settings })
+        Ok(Self { documents: BufWriter::new(documents), settings })
     }
 
     pub fn push_document(&mut self, document: &Map<String, Value>) -> Result<()> {

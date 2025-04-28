@@ -65,8 +65,8 @@ pub enum UpdateStatus {
 impl UpdateStatus {
     pub fn enqueued_at(&self) -> &OffsetDateTime {
         match self {
-            UpdateStatus::Enqueued { content } => &content.enqueued_at,
-            UpdateStatus::Failed { content } | UpdateStatus::Processed { content } => {
+            Self::Enqueued { content } => &content.enqueued_at,
+            Self::Failed { content } | Self::Processed { content } => {
                 &content.enqueued_at
             }
         }

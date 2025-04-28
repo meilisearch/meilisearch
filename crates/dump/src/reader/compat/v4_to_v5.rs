@@ -9,8 +9,8 @@ pub enum CompatV4ToV5 {
 }
 
 impl CompatV4ToV5 {
-    pub fn new(v4: v4::V4Reader) -> CompatV4ToV5 {
-        CompatV4ToV5::V4(v4)
+    pub fn new(v4: v4::V4Reader) -> Self {
+        Self::V4(v4)
     }
 
     pub fn to_v6(self) -> CompatV5ToV6 {
@@ -19,33 +19,33 @@ impl CompatV4ToV5 {
 
     pub fn version(&self) -> crate::Version {
         match self {
-            CompatV4ToV5::V4(v4) => v4.version(),
-            CompatV4ToV5::Compat(compat) => compat.version(),
+            Self::V4(v4) => v4.version(),
+            Self::Compat(compat) => compat.version(),
         }
     }
 
     pub fn date(&self) -> Option<time::OffsetDateTime> {
         match self {
-            CompatV4ToV5::V4(v4) => v4.date(),
-            CompatV4ToV5::Compat(compat) => compat.date(),
+            Self::V4(v4) => v4.date(),
+            Self::Compat(compat) => compat.date(),
         }
     }
 
     pub fn instance_uid(&self) -> Result<Option<uuid::Uuid>> {
         match self {
-            CompatV4ToV5::V4(v4) => v4.instance_uid(),
-            CompatV4ToV5::Compat(compat) => compat.instance_uid(),
+            Self::V4(v4) => v4.instance_uid(),
+            Self::Compat(compat) => compat.instance_uid(),
         }
     }
 
     pub fn indexes(&self) -> Result<Box<dyn Iterator<Item = Result<CompatIndexV4ToV5>> + '_>> {
         Ok(match self {
-            CompatV4ToV5::V4(v4) => {
+            Self::V4(v4) => {
                 Box::new(v4.indexes()?.map(|index| index.map(CompatIndexV4ToV5::from)))
                     as Box<dyn Iterator<Item = Result<CompatIndexV4ToV5>> + '_>
             }
 
-            CompatV4ToV5::Compat(compat) => {
+            Self::Compat(compat) => {
                 Box::new(compat.indexes()?.map(|index| index.map(CompatIndexV4ToV5::from)))
                     as Box<dyn Iterator<Item = Result<CompatIndexV4ToV5>> + '_>
             }
@@ -57,8 +57,8 @@ impl CompatV4ToV5 {
     ) -> Box<dyn Iterator<Item = Result<(v5::Task, Option<Box<crate::reader::UpdateFile>>)>> + '_>
     {
         let tasks = match self {
-            CompatV4ToV5::V4(v4) => v4.tasks(),
-            CompatV4ToV5::Compat(compat) => compat.tasks(),
+            Self::V4(v4) => v4.tasks(),
+            Self::Compat(compat) => compat.tasks(),
         };
         Box::new(tasks.map(|task| {
             task.map(|(task, content_file)| {
@@ -180,8 +180,8 @@ impl CompatV4ToV5 {
 
     pub fn keys(&mut self) -> Box<dyn Iterator<Item = Result<v5::Key>> + '_> {
         let keys = match self {
-            CompatV4ToV5::V4(v4) => v4.keys(),
-            CompatV4ToV5::Compat(compat) => compat.keys(),
+            Self::V4(v4) => v4.keys(),
+            Self::Compat(compat) => compat.keys(),
         };
         Box::new(keys.map(|key| {
             key.map(|key| v5::Key {
@@ -225,17 +225,17 @@ impl From<CompatIndexV3ToV4> for CompatIndexV4ToV5 {
 impl CompatIndexV4ToV5 {
     pub fn metadata(&self) -> &crate::IndexMetadata {
         match self {
-            CompatIndexV4ToV5::V4(v4) => v4.metadata(),
-            CompatIndexV4ToV5::Compat(compat) => compat.metadata(),
+            Self::V4(v4) => v4.metadata(),
+            Self::Compat(compat) => compat.metadata(),
         }
     }
 
     pub fn documents(&mut self) -> Result<Box<dyn Iterator<Item = Result<Document>> + '_>> {
         match self {
-            CompatIndexV4ToV5::V4(v4) => v4
+            Self::V4(v4) => v4
                 .documents()
                 .map(|iter| Box::new(iter) as Box<dyn Iterator<Item = Result<Document>> + '_>),
-            CompatIndexV4ToV5::Compat(compat) => compat
+            Self::Compat(compat) => compat
                 .documents()
                 .map(|iter| Box::new(iter) as Box<dyn Iterator<Item = Result<Document>> + '_>),
         }
@@ -243,8 +243,8 @@ impl CompatIndexV4ToV5 {
 
     pub fn settings(&mut self) -> Result<v5::Settings<v5::Checked>> {
         match self {
-            CompatIndexV4ToV5::V4(v4) => Ok(v5::Settings::from(v4.settings()?).check()),
-            CompatIndexV4ToV5::Compat(compat) => Ok(v5::Settings::from(compat.settings()?).check()),
+            Self::V4(v4) => Ok(v5::Settings::from(v4.settings()?).check()),
+            Self::Compat(compat) => Ok(v5::Settings::from(compat.settings()?).check()),
         }
     }
 }
@@ -252,9 +252,9 @@ impl CompatIndexV4ToV5 {
 impl<T> From<v4::Setting<T>> for v5::Setting<T> {
     fn from(setting: v4::Setting<T>) -> Self {
         match setting {
-            v4::Setting::Set(t) => v5::Setting::Set(t),
-            v4::Setting::Reset => v5::Setting::Reset,
-            v4::Setting::NotSet => v5::Setting::NotSet,
+            v4::Setting::Set(t) => Self::Set(t),
+            v4::Setting::Reset => Self::Reset,
+            v4::Setting::NotSet => Self::NotSet,
         }
     }
 }
@@ -309,7 +309,7 @@ impl From<v4::ResponseError> for v5::ResponseError {
                 v5::Code::UnretrievableErrorCode
             }
         };
-        v5::ResponseError::from_msg(error.message, code)
+        Self::from_msg(error.message, code)
     }
 }
 

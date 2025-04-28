@@ -51,16 +51,16 @@ enum ModelDimensions {
 impl ModelDimensions {
     fn add_to_settings(&self, settings: &mut Value) {
         settings["model"] = serde_json::json!(self.model());
-        if let ModelDimensions::Large512 = self {
+        if let Self::Large512 = self {
             settings["dimensions"] = serde_json::json!(512);
         }
     }
 
     fn model(&self) -> &'static str {
         match self {
-            ModelDimensions::Large | ModelDimensions::Large512 => "text-embedding-3-large",
-            ModelDimensions::Small => "text-embedding-3-small",
-            ModelDimensions::Ada => "text-embedding-ada-002",
+            Self::Large | Self::Large512 => "text-embedding-3-large",
+            Self::Small => "text-embedding-3-small",
+            Self::Ada => "text-embedding-ada-002",
         }
     }
 

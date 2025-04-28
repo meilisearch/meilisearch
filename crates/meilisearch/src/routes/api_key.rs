@@ -411,7 +411,7 @@ impl KeyView {
     fn from_key(key: Key, auth: &AuthController) -> Self {
         let generated_key = auth.generate_key(key.uid).unwrap_or_default();
 
-        KeyView {
+        Self {
             name: key.name,
             description: key.description,
             key: generated_key,

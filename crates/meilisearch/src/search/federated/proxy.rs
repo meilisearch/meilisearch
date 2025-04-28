@@ -50,15 +50,15 @@ mod error {
             use meilisearch_types::error::Code;
             let message = self.to_string();
             let code = match self {
-                ProxySearchError::CouldNotSendRequest(_) => Code::RemoteCouldNotSendRequest,
-                ProxySearchError::AuthenticationError => Code::RemoteInvalidApiKey,
-                ProxySearchError::BadRequest { .. } => Code::RemoteBadRequest,
-                ProxySearchError::Timeout => Code::RemoteTimeout,
-                ProxySearchError::RemoteError { .. } => Code::RemoteRemoteError,
-                ProxySearchError::CouldNotParseResponse { .. }
-                | ProxySearchError::MissingPathInResponse(_)
-                | ProxySearchError::UnexpectedValueInPath { .. }
-                | ProxySearchError::CouldNotParseWeightedScoreValues(_) => Code::RemoteBadResponse,
+                Self::CouldNotSendRequest(_) => Code::RemoteCouldNotSendRequest,
+                Self::AuthenticationError => Code::RemoteInvalidApiKey,
+                Self::BadRequest { .. } => Code::RemoteBadRequest,
+                Self::Timeout => Code::RemoteTimeout,
+                Self::RemoteError { .. } => Code::RemoteRemoteError,
+                Self::CouldNotParseResponse { .. }
+                | Self::MissingPathInResponse(_)
+                | Self::UnexpectedValueInPath { .. }
+                | Self::CouldNotParseWeightedScoreValues(_) => Code::RemoteBadResponse,
             };
             ResponseError::from_msg(message, code)
         }

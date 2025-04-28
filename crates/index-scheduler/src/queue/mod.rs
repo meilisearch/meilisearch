@@ -89,7 +89,7 @@ impl Query {
     pub fn is_empty(&self) -> bool {
         matches!(
             self,
-            Query {
+            Self {
                 limit: None,
                 from: None,
                 reverse: None,
@@ -119,7 +119,7 @@ impl Query {
     // Removes the `from` and `limit` restrictions from the query.
     // Useful to get the total number of tasks matching a filter.
     pub fn without_limits(self) -> Self {
-        Query { limit: None, from: None, ..self }
+        Self { limit: None, from: None, ..self }
     }
 }
 
@@ -141,8 +141,8 @@ pub struct Queue {
 }
 
 impl Queue {
-    pub(crate) fn private_clone(&self) -> Queue {
-        Queue {
+    pub(crate) fn private_clone(&self) -> Self {
+        Self {
             tasks: self.tasks.private_clone(),
             batches: self.batches.private_clone(),
             batch_to_tasks_mapping: self.batch_to_tasks_mapping,

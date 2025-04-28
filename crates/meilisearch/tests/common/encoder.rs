@@ -15,7 +15,7 @@ pub enum Encoder {
 }
 
 impl Encoder {
-    pub fn encode(self: &Encoder, body: impl Into<Bytes>) -> impl Into<Bytes> {
+    pub fn encode(&self, body: impl Into<Bytes>) -> impl Into<Bytes> {
         match self {
             Self::Gzip => {
                 let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
@@ -37,7 +37,7 @@ impl Encoder {
         }
     }
 
-    pub fn decode(self: &Encoder, bytes: impl Into<Bytes>) -> impl Into<Bytes> {
+    pub fn decode(&self, bytes: impl Into<Bytes>) -> impl Into<Bytes> {
         let mut buffer = Vec::new();
         let input = bytes.into();
         match self {
@@ -63,7 +63,7 @@ impl Encoder {
         buffer
     }
 
-    pub fn header(self: &Encoder) -> Option<impl TryIntoHeaderPair> {
+    pub fn header(&self) -> Option<impl TryIntoHeaderPair> {
         match self {
             Self::Plain => None,
             Self::Gzip => Some(("Content-Encoding", "gzip")),

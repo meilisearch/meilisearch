@@ -143,7 +143,7 @@ impl std::convert::TryFrom<String> for RankingScoreThresholdGet {
 
     fn try_from(s: String) -> Result<Self, Self::Error> {
         let f: f64 = s.parse().map_err(|_| InvalidSearchRankingScoreThreshold)?;
-        Ok(RankingScoreThresholdGet(RankingScoreThreshold::try_from(f)?))
+        Ok(Self(RankingScoreThreshold::try_from(f)?))
     }
 }
 
@@ -156,7 +156,7 @@ impl std::convert::TryFrom<String> for SemanticRatioGet {
 
     fn try_from(s: String) -> Result<Self, Self::Error> {
         let f: f32 = s.parse().map_err(|_| InvalidSearchSemanticRatio)?;
-        Ok(SemanticRatioGet(SemanticRatio::try_from(f)?))
+        Ok(Self(SemanticRatio::try_from(f)?))
     }
 }
 

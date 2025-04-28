@@ -33,7 +33,7 @@ impl Default for PayloadConfig {
 impl FromRequest for Payload {
     type Error = MeilisearchHttpError;
 
-    type Future = Ready<Result<Payload, Self::Error>>;
+    type Future = Ready<Result<Self, Self::Error>>;
 
     #[inline]
     fn from_request(req: &HttpRequest, payload: &mut dev::Payload) -> Self::Future {
@@ -41,7 +41,7 @@ impl FromRequest for Payload {
             .app_data::<PayloadConfig>()
             .map(|c| c.limit)
             .unwrap_or(PayloadConfig::default().limit);
-        ready(Ok(Payload {
+        ready(Ok(Self {
             payload: Decompress::from_headers(payload.take(), req.headers()),
             limit,
             remaining: limit,

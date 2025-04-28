@@ -79,7 +79,7 @@ impl V2Reader {
             .map(|line| -> Result<_> { Ok(serde_json::from_str(&line?)?) })
             .collect::<Result<Vec<_>>>()?;
 
-        Ok(V2Reader {
+        Ok(Self {
             metadata,
             tasks: BufReader::new(
                 File::open(dump.path().join("updates").join("data.jsonl")).unwrap(),
@@ -184,7 +184,7 @@ impl V2IndexReader {
             updated_at: updated_at.unwrap_or(current_time),
         };
 
-        let ret = V2IndexReader {
+        let ret = Self {
             metadata,
             settings: meta.settings.check(),
             documents: BufReader::new(File::open(path.join("documents.jsonl"))?),
@@ -216,7 +216,7 @@ pub struct UpdateFile {
 impl UpdateFile {
     fn new(path: &Path) -> Result<Self> {
         let reader = BufReader::new(File::open(path)?);
-        Ok(UpdateFile { documents: serde_json::from_reader(reader)?, index: 0 })
+        Ok(Self { documents: serde_json::from_reader(reader)?, index: 0 })
     }
 }
 

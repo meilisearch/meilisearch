@@ -97,11 +97,11 @@ pub struct IndexView {
 }
 
 impl IndexView {
-    fn new(uid: String, index: &Index) -> Result<IndexView, milli::Error> {
+    fn new(uid: String, index: &Index) -> Result<Self, milli::Error> {
         // It is important that this function does not keep the Index handle or a clone of it, because
         // `list_indexes` relies on this property to avoid opening all indexes at once.
         let rtxn = index.read_txn()?;
-        Ok(IndexView {
+        Ok(Self {
             uid,
             created_at: index.created_at(&rtxn)?,
             updated_at: index.updated_at(&rtxn)?,
@@ -513,7 +513,7 @@ pub struct IndexStats {
 
 impl From<index_scheduler::IndexStats> for IndexStats {
     fn from(stats: index_scheduler::IndexStats) -> Self {
-        IndexStats {
+        Self {
             number_of_documents: stats
                 .inner_stats
                 .number_of_documents

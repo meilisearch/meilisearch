@@ -105,7 +105,7 @@ impl V5Reader {
             .map(|line| -> Result<_> { Ok(serde_json::from_str(&line?)?) })
             .collect::<Result<Vec<_>>>()?;
 
-        Ok(V5Reader {
+        Ok(Self {
             metadata,
             tasks: BufReader::new(
                 File::open(dump.path().join("updates").join("data.jsonl")).unwrap(),
@@ -228,7 +228,7 @@ impl V5IndexReader {
             updated_at: updated_at.unwrap_or_else(OffsetDateTime::now_utc),
         };
 
-        let ret = V5IndexReader {
+        let ret = Self {
             metadata,
             settings: meta.settings.check(),
             documents: BufReader::new(File::open(path.join("documents.jsonl"))?),
@@ -258,7 +258,7 @@ pub struct UpdateFile {
 
 impl UpdateFile {
     fn new(path: &Path) -> Result<Self> {
-        Ok(UpdateFile { reader: BufReader::new(File::open(path)?) })
+        Ok(Self { reader: BufReader::new(File::open(path)?) })
     }
 }
 

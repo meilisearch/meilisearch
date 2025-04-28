@@ -127,9 +127,9 @@ impl<T> Setting<T> {
 
     pub fn map<A>(self, f: fn(T) -> A) -> Setting<A> {
         match self {
-            Setting::Set(a) => Setting::Set(f(a)),
-            Setting::Reset => Setting::Reset,
-            Setting::NotSet => Setting::NotSet,
+            Self::Set(a) => Setting::Set(f(a)),
+            Self::Reset => Setting::Reset,
+            Self::NotSet => Setting::NotSet,
         }
     }
 }
@@ -188,7 +188,7 @@ impl Criterion {
     /// Returns the field name parameter of this criterion.
     pub fn field_name(&self) -> Option<&str> {
         match self {
-            Criterion::Asc(name) | Criterion::Desc(name) => Some(name),
+            Self::Asc(name) | Self::Desc(name) => Some(name),
             _otherwise => None,
         }
     }
@@ -199,17 +199,17 @@ impl FromStr for Criterion {
     // error type.
     type Err = ();
 
-    fn from_str(text: &str) -> Result<Criterion, Self::Err> {
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
         match text {
-            "words" => Ok(Criterion::Words),
-            "typo" => Ok(Criterion::Typo),
-            "proximity" => Ok(Criterion::Proximity),
-            "attribute" => Ok(Criterion::Attribute),
-            "sort" => Ok(Criterion::Sort),
-            "exactness" => Ok(Criterion::Exactness),
+            "words" => Ok(Self::Words),
+            "typo" => Ok(Self::Typo),
+            "proximity" => Ok(Self::Proximity),
+            "attribute" => Ok(Self::Attribute),
+            "sort" => Ok(Self::Sort),
+            "exactness" => Ok(Self::Exactness),
             text => match AscDesc::from_str(text) {
-                Ok(AscDesc::Asc(field)) => Ok(Criterion::Asc(field)),
-                Ok(AscDesc::Desc(field)) => Ok(Criterion::Desc(field)),
+                Ok(AscDesc::Asc(field)) => Ok(Self::Asc(field)),
+                Ok(AscDesc::Desc(field)) => Ok(Self::Desc(field)),
                 Err(_) => Err(()),
             },
         }
@@ -230,19 +230,19 @@ impl FromStr for AscDesc {
     // WARN: this code doesn't come from the original meilisearch v0.22.0 but was
     // written specifically to be able to import the dump of meilisearch v0.21.0 AND
     // meilisearch v0.22.0.
-    fn from_str(text: &str) -> Result<AscDesc, Self::Err> {
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
         if let Some((field_name, asc_desc)) = text.rsplit_once(':') {
             match asc_desc {
-                "asc" => Ok(AscDesc::Asc(field_name.to_string())),
-                "desc" => Ok(AscDesc::Desc(field_name.to_string())),
+                "asc" => Ok(Self::Asc(field_name.to_string())),
+                "desc" => Ok(Self::Desc(field_name.to_string())),
                 _ => Err(()),
             }
         } else if text.starts_with("asc(") && text.ends_with(')') {
-            Ok(AscDesc::Asc(
+            Ok(Self::Asc(
                 text.strip_prefix("asc(").unwrap().strip_suffix(')').unwrap().to_string(),
             ))
         } else if text.starts_with("desc(") && text.ends_with(')') {
-            Ok(AscDesc::Desc(
+            Ok(Self::Desc(
                 text.strip_prefix("desc(").unwrap().strip_suffix(')').unwrap().to_string(),
             ))
         } else {

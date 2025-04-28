@@ -318,8 +318,8 @@ impl SearchRules {
 
     fn all_indexes_authorized(&self) -> bool {
         match self {
-            SearchRules::Set(set) => set.contains("*"),
-            SearchRules::Map(map) => map.contains_key("*"),
+            Self::Set(set) => set.contains("*"),
+            Self::Map(map) => map.contains_key("*"),
         }
     }
 }

@@ -89,36 +89,36 @@ impl MeilisearchHttpError {
 impl ErrorCode for MeilisearchHttpError {
     fn error_code(&self) -> Code {
         match self {
-            MeilisearchHttpError::MissingContentType(_) => Code::MissingContentType,
-            MeilisearchHttpError::AlreadyUsedLogRoute => Code::BadRequest,
-            MeilisearchHttpError::CsvDelimiterWithWrongContentType(_) => Code::InvalidContentType,
-            MeilisearchHttpError::MissingPayload(_) => Code::MissingPayload,
-            MeilisearchHttpError::InvalidContentType(_, _) => Code::InvalidContentType,
-            MeilisearchHttpError::DocumentNotFound(_) => Code::DocumentNotFound,
-            MeilisearchHttpError::EmptyFilter => Code::InvalidDocumentFilter,
-            MeilisearchHttpError::InvalidExpression(_, _) => Code::InvalidSearchFilter,
-            MeilisearchHttpError::PayloadTooLarge(_) => Code::PayloadTooLarge,
-            MeilisearchHttpError::TooManySearchRequests(_) => Code::TooManySearchRequests,
-            MeilisearchHttpError::SearchLimiterIsDown => Code::Internal,
-            MeilisearchHttpError::SwapIndexPayloadWrongLength(_) => Code::InvalidSwapIndexes,
-            MeilisearchHttpError::IndexUid(e) => e.error_code(),
-            MeilisearchHttpError::SerdeJson(_) => Code::Internal,
-            MeilisearchHttpError::HeedError(_) => Code::Internal,
-            MeilisearchHttpError::IndexScheduler(e) => e.error_code(),
-            MeilisearchHttpError::Milli { error, .. } => error.error_code(),
-            MeilisearchHttpError::Payload(e) => e.error_code(),
-            MeilisearchHttpError::FileStore(_) => Code::Internal,
-            MeilisearchHttpError::DocumentFormat(e) => e.error_code(),
-            MeilisearchHttpError::Join(_) => Code::Internal,
-            MeilisearchHttpError::MissingSearchHybrid => Code::MissingSearchHybrid,
-            MeilisearchHttpError::FederationOptionsInNonFederatedRequest(_) => {
+            Self::MissingContentType(_) => Code::MissingContentType,
+            Self::AlreadyUsedLogRoute => Code::BadRequest,
+            Self::CsvDelimiterWithWrongContentType(_) => Code::InvalidContentType,
+            Self::MissingPayload(_) => Code::MissingPayload,
+            Self::InvalidContentType(_, _) => Code::InvalidContentType,
+            Self::DocumentNotFound(_) => Code::DocumentNotFound,
+            Self::EmptyFilter => Code::InvalidDocumentFilter,
+            Self::InvalidExpression(_, _) => Code::InvalidSearchFilter,
+            Self::PayloadTooLarge(_) => Code::PayloadTooLarge,
+            Self::TooManySearchRequests(_) => Code::TooManySearchRequests,
+            Self::SearchLimiterIsDown => Code::Internal,
+            Self::SwapIndexPayloadWrongLength(_) => Code::InvalidSwapIndexes,
+            Self::IndexUid(e) => e.error_code(),
+            Self::SerdeJson(_) => Code::Internal,
+            Self::HeedError(_) => Code::Internal,
+            Self::IndexScheduler(e) => e.error_code(),
+            Self::Milli { error, .. } => error.error_code(),
+            Self::Payload(e) => e.error_code(),
+            Self::FileStore(_) => Code::Internal,
+            Self::DocumentFormat(e) => e.error_code(),
+            Self::Join(_) => Code::Internal,
+            Self::MissingSearchHybrid => Code::MissingSearchHybrid,
+            Self::FederationOptionsInNonFederatedRequest(_) => {
                 Code::InvalidMultiSearchFederationOptions
             }
-            MeilisearchHttpError::PaginationInFederatedQuery(_, _) => {
+            Self::PaginationInFederatedQuery(_, _) => {
                 Code::InvalidMultiSearchQueryPagination
             }
-            MeilisearchHttpError::FacetsInFederatedQuery(..) => Code::InvalidMultiSearchQueryFacets,
-            MeilisearchHttpError::InconsistentFacetOrder { .. } => {
+            Self::FacetsInFederatedQuery(..) => Code::InvalidMultiSearchQueryFacets,
+            Self::InconsistentFacetOrder { .. } => {
                 Code::InvalidMultiSearchFacetOrder
             }
         }
@@ -127,17 +127,17 @@ impl ErrorCode for MeilisearchHttpError {
 
 impl From<MeilisearchHttpError> for aweb::Error {
     fn from(other: MeilisearchHttpError) -> Self {
-        aweb::Error::from(ResponseError::from(other))
+        Self::from(ResponseError::from(other))
     }
 }
 
 impl From<aweb::error::PayloadError> for MeilisearchHttpError {
     fn from(error: aweb::error::PayloadError) -> Self {
         match error {
-            aweb::error::PayloadError::Incomplete(_) => MeilisearchHttpError::Payload(
+            aweb::error::PayloadError::Incomplete(_) => Self::Payload(
                 PayloadError::Payload(ActixPayloadError::IncompleteError),
             ),
-            _ => MeilisearchHttpError::Payload(PayloadError::Payload(
+            _ => Self::Payload(PayloadError::Payload(
                 ActixPayloadError::OtherError(error),
             )),
         }
@@ -171,7 +171,7 @@ pub enum PayloadError {
 impl ErrorCode for PayloadError {
     fn error_code(&self) -> Code {
         match self {
-            PayloadError::Payload(e) => match e {
+            Self::Payload(e) => match e {
                 ActixPayloadError::IncompleteError => Code::BadRequest,
                 ActixPayloadError::OtherError(error) => match error {
                     aweb::error::PayloadError::EncodingCorrupted => Code::Internal,
@@ -182,7 +182,7 @@ impl ErrorCode for PayloadError {
                     _ => todo!(),
                 },
             },
-            PayloadError::Json(err) => match err {
+            Self::Json(err) => match err {
                 JsonPayloadError::Overflow { .. } => Code::PayloadTooLarge,
                 JsonPayloadError::ContentType => Code::UnsupportedMediaType,
                 JsonPayloadError::Payload(aweb::error::PayloadError::Overflow) => {
@@ -193,13 +193,13 @@ impl ErrorCode for PayloadError {
                 JsonPayloadError::Serialize(_) => Code::Internal,
                 _ => Code::Internal,
             },
-            PayloadError::Query(err) => match err {
+            Self::Query(err) => match err {
                 QueryPayloadError::Deserialize(_) => Code::BadRequest,
                 _ => Code::Internal,
             },
-            PayloadError::MissingPayload => Code::MissingPayload,
-            PayloadError::MalformedPayload(_) => Code::MalformedPayload,
-            PayloadError::ReceivePayload(_) => Code::Internal,
+            Self::MissingPayload => Code::MissingPayload,
+            Self::MalformedPayload(_) => Code::MalformedPayload,
+            Self::ReceivePayload(_) => Code::Internal,
         }
     }
 }
@@ -232,6 +232,6 @@ impl From<QueryPayloadError> for PayloadError {
 
 impl From<PayloadError> for aweb::Error {
     fn from(other: PayloadError) -> Self {
-        aweb::Error::from(ResponseError::from(other))
+        Self::from(ResponseError::from(other))
     }
 }

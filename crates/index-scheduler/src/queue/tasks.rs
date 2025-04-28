@@ -51,8 +51,8 @@ pub struct TaskQueue {
 }
 
 impl TaskQueue {
-    pub(crate) fn private_clone(&self) -> TaskQueue {
-        TaskQueue {
+    pub(crate) fn private_clone(&self) -> Self {
+        Self {
             all_tasks: self.all_tasks,
             status: self.status,
             kind: self.kind,

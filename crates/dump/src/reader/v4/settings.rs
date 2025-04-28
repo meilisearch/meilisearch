@@ -99,8 +99,8 @@ pub struct Settings<T> {
 }
 
 impl Settings<Checked> {
-    pub fn cleared() -> Settings<Checked> {
-        Settings {
+    pub fn cleared() -> Self {
+        Self {
             displayed_attributes: Setting::Reset,
             searchable_attributes: Setting::Reset,
             filterable_attributes: Setting::Reset,

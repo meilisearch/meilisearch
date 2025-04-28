@@ -79,7 +79,7 @@ impl Value {
 
 impl From<serde_json::Value> for Value {
     fn from(value: serde_json::Value) -> Self {
-        Value(value)
+        Self(value)
     }
 }
 
@@ -134,8 +134,8 @@ impl Display for Value {
     }
 }
 
-impl From<Vec<Value>> for Value {
-    fn from(value: Vec<Value>) -> Self {
+impl From<Vec<Self>> for Value {
+    fn from(value: Vec<Self>) -> Self {
         Self(value.into_iter().map(|value| value.0).collect::<serde_json::Value>())
     }
 }

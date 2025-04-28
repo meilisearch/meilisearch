@@ -18,8 +18,8 @@ pub enum FacetValuesSort {
 impl From<FacetValuesSort> for OrderBy {
     fn from(val: FacetValuesSort) -> Self {
         match val {
-            FacetValuesSort::Alpha => OrderBy::Lexicographic,
-            FacetValuesSort::Count => OrderBy::Count,
+            FacetValuesSort::Alpha => Self::Lexicographic,
+            FacetValuesSort::Count => Self::Count,
         }
     }
 }
@@ -27,8 +27,8 @@ impl From<FacetValuesSort> for OrderBy {
 impl From<OrderBy> for FacetValuesSort {
     fn from(val: OrderBy) -> Self {
         match val {
-            OrderBy::Lexicographic => FacetValuesSort::Alpha,
-            OrderBy::Count => FacetValuesSort::Count,
+            OrderBy::Lexicographic => Self::Alpha,
+            OrderBy::Count => Self::Count,
         }
     }
 }

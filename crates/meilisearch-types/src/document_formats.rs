@@ -29,9 +29,9 @@ pub enum PayloadType {
 impl fmt::Display for PayloadType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            PayloadType::Ndjson => f.write_str("ndjson"),
-            PayloadType::Json => f.write_str("json"),
-            PayloadType::Csv { .. } => f.write_str("csv"),
+            Self::Ndjson => f.write_str("ndjson"),
+            Self::Json => f.write_str("json"),
+            Self::Csv { .. } => f.write_str("csv"),
         }
     }
 }
@@ -122,8 +122,8 @@ impl From<io::Error> for DocumentFormatError {
 impl ErrorCode for DocumentFormatError {
     fn error_code(&self) -> Code {
         match self {
-            DocumentFormatError::Io(e) => e.error_code(),
-            DocumentFormatError::MalformedPayload(_, _) => Code::MalformedPayload,
+            Self::Io(e) => e.error_code(),
+            Self::MalformedPayload(_, _) => Code::MalformedPayload,
         }
     }
 }

@@ -9,7 +9,7 @@ impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("error de/serializing trace entry:")?;
         match self {
-            Error::Json(error) => std::fmt::Display::fmt(&error, f),
+            Self::Json(error) => std::fmt::Display::fmt(&error, f),
         }
     }
 }

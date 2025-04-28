@@ -50,7 +50,7 @@ pub struct Weight(f64);
 
 impl Default for Weight {
     fn default() -> Self {
-        Weight(DEFAULT_FEDERATED_WEIGHT)
+        Self(DEFAULT_FEDERATED_WEIGHT)
     }
 }
 
@@ -61,7 +61,7 @@ impl std::convert::TryFrom<f64> for Weight {
         if f < 0.0 {
             Err(InvalidMultiSearchWeight)
         } else {
-            Ok(Weight(f))
+            Ok(Self(f))
         }
     }
 }
@@ -140,7 +140,7 @@ pub struct FederatedSearchResult {
 
 impl fmt::Debug for FederatedSearchResult {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let FederatedSearchResult {
+        let Self {
             hits,
             processing_time_ms,
             hits_info,
@@ -269,7 +269,7 @@ impl FederatedFacets {
         Some(ComputedFacets { distribution, stats })
     }
 
-    pub(crate) fn append(&mut self, FederatedFacets(remote_facets_by_index): FederatedFacets) {
+    pub(crate) fn append(&mut self, Self(remote_facets_by_index): Self) {
         for (index, remote_facets) in remote_facets_by_index {
             let merged_facets = self.0.entry(index).or_default();
 

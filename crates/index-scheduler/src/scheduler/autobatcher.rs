@@ -31,15 +31,15 @@ impl AutobatchKind {
     #[rustfmt::skip]
     fn allow_index_creation(&self) -> Option<bool> {
         match self {
-            AutobatchKind::DocumentImport { allow_index_creation, .. }
-            | AutobatchKind::Settings { allow_index_creation, .. } => Some(*allow_index_creation),
+            Self::DocumentImport { allow_index_creation, .. }
+            | Self::Settings { allow_index_creation, .. } => Some(*allow_index_creation),
             _ => None,
         }
     }
 
     fn primary_key(&self) -> Option<Option<&str>> {
         match self {
-            AutobatchKind::DocumentImport { primary_key, .. } => Some(primary_key.as_deref()),
+            Self::DocumentImport { primary_key, .. } => Some(primary_key.as_deref()),
             _ => None,
         }
     }
@@ -50,24 +50,24 @@ impl From<KindWithContent> for AutobatchKind {
         match kind {
             KindWithContent::DocumentAdditionOrUpdate {
                 allow_index_creation, primary_key, ..
-            } => AutobatchKind::DocumentImport { allow_index_creation, primary_key },
-            KindWithContent::DocumentEdition { .. } => AutobatchKind::DocumentEdition,
+            } => Self::DocumentImport { allow_index_creation, primary_key },
+            KindWithContent::DocumentEdition { .. } => Self::DocumentEdition,
             KindWithContent::DocumentDeletion { .. } => {
-                AutobatchKind::DocumentDeletion { by_filter: false }
+                Self::DocumentDeletion { by_filter: false }
             }
-            KindWithContent::DocumentClear { .. } => AutobatchKind::DocumentClear,
+            KindWithContent::DocumentClear { .. } => Self::DocumentClear,
             KindWithContent::DocumentDeletionByFilter { .. } => {
-                AutobatchKind::DocumentDeletion { by_filter: true }
+                Self::DocumentDeletion { by_filter: true }
             }
             KindWithContent::SettingsUpdate { allow_index_creation, is_deletion, .. } => {
-                AutobatchKind::Settings {
+                Self::Settings {
                     allow_index_creation: allow_index_creation && !is_deletion,
                 }
             }
-            KindWithContent::IndexDeletion { .. } => AutobatchKind::IndexDeletion,
-            KindWithContent::IndexCreation { .. } => AutobatchKind::IndexCreation,
-            KindWithContent::IndexUpdate { .. } => AutobatchKind::IndexUpdate,
-            KindWithContent::IndexSwap { .. } => AutobatchKind::IndexSwap,
+            KindWithContent::IndexDeletion { .. } => Self::IndexDeletion,
+            KindWithContent::IndexCreation { .. } => Self::IndexCreation,
+            KindWithContent::IndexUpdate { .. } => Self::IndexUpdate,
+            KindWithContent::IndexSwap { .. } => Self::IndexSwap,
             KindWithContent::TaskCancelation { .. }
             | KindWithContent::TaskDeletion { .. }
             | KindWithContent::DumpCreation { .. }
@@ -123,16 +123,16 @@ impl BatchKind {
     #[rustfmt::skip]
     fn allow_index_creation(&self) -> Option<bool> {
         match self {
-            BatchKind::DocumentOperation { allow_index_creation, .. }
-            | BatchKind::ClearAndSettings { allow_index_creation, .. }
-            | BatchKind::Settings { allow_index_creation, .. } => Some(*allow_index_creation),
+            Self::DocumentOperation { allow_index_creation, .. }
+            | Self::ClearAndSettings { allow_index_creation, .. }
+            | Self::Settings { allow_index_creation, .. } => Some(*allow_index_creation),
             _ => None,
         }
     }
 
     fn primary_key(&self) -> Option<Option<&str>> {
         match self {
-            BatchKind::DocumentOperation { primary_key, .. } => Some(primary_key.as_deref()),
+            Self::DocumentOperation { primary_key, .. } => Some(primary_key.as_deref()),
             _ => None,
         }
     }
@@ -148,7 +148,7 @@ impl BatchKind {
         task_id: TaskId,
         kind_with_content: KindWithContent,
         primary_key: Option<&str>,
-    ) -> (ControlFlow<(BatchKind, BatchStopReason), BatchKind>, bool) {
+    ) -> (ControlFlow<(Self, BatchStopReason), Self>, bool) {
         use AutobatchKind as K;
 
         let kind = kind_with_content.as_kind();
@@ -156,38 +156,38 @@ impl BatchKind {
         match AutobatchKind::from(kind_with_content) {
             K::IndexCreation => (
                 Break((
-                    BatchKind::IndexCreation { id: task_id },
+                    Self::IndexCreation { id: task_id },
                     BatchStopReason::TaskCannotBeBatched { kind, id: task_id },
                 )),
                 true,
             ),
             K::IndexDeletion => (
                 Break((
-                    BatchKind::IndexDeletion { ids: vec![task_id] },
+                    Self::IndexDeletion { ids: vec![task_id] },
                     BatchStopReason::IndexDeletion { id: task_id },
                 )),
                 false,
             ),
             K::IndexUpdate => (
                 Break((
-                    BatchKind::IndexUpdate { id: task_id },
+                    Self::IndexUpdate { id: task_id },
                     BatchStopReason::TaskCannotBeBatched { kind, id: task_id },
                 )),
                 false,
             ),
             K::IndexSwap => (
                 Break((
-                    BatchKind::IndexSwap { id: task_id },
+                    Self::IndexSwap { id: task_id },
                     BatchStopReason::TaskCannotBeBatched { kind, id: task_id },
                 )),
                 false,
             ),
-            K::DocumentClear => (Continue(BatchKind::DocumentClear { ids: vec![task_id] }), false),
+            K::DocumentClear => (Continue(Self::DocumentClear { ids: vec![task_id] }), false),
             K::DocumentImport { allow_index_creation, primary_key: pk }
                 if primary_key.is_none() || pk.is_none() || primary_key == pk.as_deref() =>
             {
                 (
-                    Continue(BatchKind::DocumentOperation {
+                    Continue(Self::DocumentOperation {
                         allow_index_creation,
                         primary_key: pk,
                         operation_ids: vec![task_id],
@@ -198,7 +198,7 @@ impl BatchKind {
             // if the primary key set in the task was different than ours we should stop and make this batch fail asap.
             K::DocumentImport { allow_index_creation, primary_key: pk } => (
                 Break((
-                    BatchKind::DocumentOperation {
+                    Self::DocumentOperation {
                         allow_index_creation,
                         primary_key: pk.clone(),
                         operation_ids: vec![task_id],
@@ -213,20 +213,20 @@ impl BatchKind {
             ),
             K::DocumentEdition => (
                 Break((
-                    BatchKind::DocumentEdition { id: task_id },
+                    Self::DocumentEdition { id: task_id },
                     BatchStopReason::TaskCannotBeBatched { kind, id: task_id },
                 )),
                 false,
             ),
             K::DocumentDeletion { by_filter: includes_by_filter } => (
-                Continue(BatchKind::DocumentDeletion {
+                Continue(Self::DocumentDeletion {
                     deletion_ids: vec![task_id],
                     includes_by_filter,
                 }),
                 false,
             ),
             K::Settings { allow_index_creation } => (
-                Continue(BatchKind::Settings { allow_index_creation, settings_ids: vec![task_id] }),
+                Continue(Self::Settings { allow_index_creation, settings_ids: vec![task_id] }),
                 allow_index_creation,
             ),
         }
@@ -237,7 +237,7 @@ impl BatchKind {
     /// To ease the writing of the code. `true` can be returned when you don't need to create an index
     /// but false can't be returned if you needs to create an index.
     #[rustfmt::skip]
-    fn accumulate(self, id: TaskId, kind_with_content: KindWithContent, index_already_exists: bool, primary_key: Option<&str>) -> ControlFlow<(BatchKind, BatchStopReason), BatchKind> {
+    fn accumulate(self, id: TaskId, kind_with_content: KindWithContent, index_already_exists: bool, primary_key: Option<&str>) -> ControlFlow<(Self, BatchStopReason), Self> {
         use AutobatchKind as K;
 
         let kind = kind_with_content.as_kind();
@@ -294,62 +294,62 @@ impl BatchKind {
             },
             // The index deletion can batch with everything but must stop after
             (
-                BatchKind::DocumentClear { mut ids }
-                | BatchKind::DocumentDeletion { deletion_ids: mut ids, includes_by_filter: _ }
-                | BatchKind::DocumentOperation { allow_index_creation: _, primary_key: _, operation_ids: mut ids }
-                | BatchKind::Settings { allow_index_creation: _, settings_ids: mut ids },
+                Self::DocumentClear { mut ids }
+                | Self::DocumentDeletion { deletion_ids: mut ids, includes_by_filter: _ }
+                | Self::DocumentOperation { allow_index_creation: _, primary_key: _, operation_ids: mut ids }
+                | Self::Settings { allow_index_creation: _, settings_ids: mut ids },
                 K::IndexDeletion,
             ) => {
                 ids.push(id);
-                Break((BatchKind::IndexDeletion { ids }, BatchStopReason::IndexDeletion { id }))
+                Break((Self::IndexDeletion { ids }, BatchStopReason::IndexDeletion { id }))
             }
             (
-                BatchKind::ClearAndSettings { settings_ids: mut ids, allow_index_creation: _, mut other },
+                Self::ClearAndSettings { settings_ids: mut ids, allow_index_creation: _, mut other },
                 K::IndexDeletion,
             ) => {
                 ids.push(id);
                 ids.append(&mut other);
-                Break((BatchKind::IndexDeletion { ids }, BatchStopReason::IndexDeletion { id }))
+                Break((Self::IndexDeletion { ids }, BatchStopReason::IndexDeletion { id }))
             }
 
             (
-                BatchKind::DocumentClear { mut ids },
+                Self::DocumentClear { mut ids },
                 K::DocumentClear | K::DocumentDeletion { by_filter: _ },
             ) => {
                 ids.push(id);
-                Continue(BatchKind::DocumentClear { ids })
+                Continue(Self::DocumentClear { ids })
             }
             (
-                this @ BatchKind::DocumentClear { .. },
+                this @ Self::DocumentClear { .. },
                 K::DocumentImport { .. } | K::Settings { .. },
             ) => Break((this, BatchStopReason::DocumentOperationWithSettings { id })),
             (
-                BatchKind::DocumentOperation { allow_index_creation: _, primary_key: _, mut operation_ids },
+                Self::DocumentOperation { allow_index_creation: _, primary_key: _, mut operation_ids },
                 K::DocumentClear,
             ) => {
                 operation_ids.push(id);
-                Continue(BatchKind::DocumentClear { ids: operation_ids })
+                Continue(Self::DocumentClear { ids: operation_ids })
             }
 
             // we can autobatch different kind of document operations and mix replacements with updates
             (
-                BatchKind::DocumentOperation { allow_index_creation, primary_key: _, mut operation_ids },
+                Self::DocumentOperation { allow_index_creation, primary_key: _, mut operation_ids },
                 K::DocumentImport { primary_key: _, .. },
             ) => {
                 operation_ids.push(id);
-                Continue(BatchKind::DocumentOperation {
+                Continue(Self::DocumentOperation {
                     allow_index_creation,
                     operation_ids,
                     primary_key: pk,
                 })
             }
             (
-                BatchKind::DocumentOperation { allow_index_creation, primary_key: _, mut operation_ids },
+                Self::DocumentOperation { allow_index_creation, primary_key: _, mut operation_ids },
                 K::DocumentDeletion { by_filter: false },
             ) => {
                 operation_ids.push(id);
 
-                Continue(BatchKind::DocumentOperation {
+                Continue(Self::DocumentOperation {
                     allow_index_creation,
                     operation_ids,
                     primary_key: pk,
@@ -357,33 +357,33 @@ impl BatchKind {
             }
             // We can't batch a document operation with a delete by filter
             (
-                this @ BatchKind::DocumentOperation { .. },
+                this @ Self::DocumentOperation { .. },
                 K::DocumentDeletion { by_filter: true },
             ) => {
                 Break((this, BatchStopReason::DocumentOperationWithDeletionByFilter { id }))
             }
             (
-                this @ BatchKind::DocumentOperation { .. },
+                this @ Self::DocumentOperation { .. },
                 K::Settings { .. },
             ) => Break((this, BatchStopReason::DocumentOperationWithSettings { id })),
 
-            (BatchKind::DocumentDeletion { mut deletion_ids, includes_by_filter: _ }, K::DocumentClear) => {
+            (Self::DocumentDeletion { mut deletion_ids, includes_by_filter: _ }, K::DocumentClear) => {
                 deletion_ids.push(id);
-                Continue(BatchKind::DocumentClear { ids: deletion_ids })
+                Continue(Self::DocumentClear { ids: deletion_ids })
             }
             // we can't autobatch the deletion and import if the document deletion contained a filter
             (
-                this @ BatchKind::DocumentDeletion { deletion_ids: _, includes_by_filter: true },
+                this @ Self::DocumentDeletion { deletion_ids: _, includes_by_filter: true },
                 K::DocumentImport { .. }
             ) => Break((this, BatchStopReason::DeletionByFilterWithDocumentOperation { id })),
             // we can autobatch the deletion and import if the index already exists
             (
-                BatchKind::DocumentDeletion { mut deletion_ids, includes_by_filter: false },
+                Self::DocumentDeletion { mut deletion_ids, includes_by_filter: false },
                 K::DocumentImport { allow_index_creation, primary_key }
             ) if index_already_exists => {
                 deletion_ids.push(id);
 
-                Continue(BatchKind::DocumentOperation {
+                Continue(Self::DocumentOperation {
                     allow_index_creation,
                     primary_key,
                     operation_ids: deletion_ids,
@@ -391,12 +391,12 @@ impl BatchKind {
             }
             // we can autobatch the deletion and import if both can't create an index
             (
-                BatchKind::DocumentDeletion { mut deletion_ids, includes_by_filter: false },
+                Self::DocumentDeletion { mut deletion_ids, includes_by_filter: false },
                 K::DocumentImport { allow_index_creation, primary_key }
             ) if !allow_index_creation => {
                 deletion_ids.push(id);
 
-                Continue(BatchKind::DocumentOperation {
+                Continue(Self::DocumentOperation {
                     allow_index_creation,
                     primary_key,
                     operation_ids: deletion_ids,
@@ -404,54 +404,54 @@ impl BatchKind {
             }
             // we can't autobatch a deletion and an import if the index does not exist but would be created by an addition
             (
-                this @ BatchKind::DocumentDeletion { .. },
+                this @ Self::DocumentDeletion { .. },
                 K::DocumentImport { .. }
             ) => {
                 Break((this, BatchStopReason::IndexCreationMismatch { id }))
             }
-            (BatchKind::DocumentDeletion { mut deletion_ids, includes_by_filter }, K::DocumentDeletion { by_filter }) => {
+            (Self::DocumentDeletion { mut deletion_ids, includes_by_filter }, K::DocumentDeletion { by_filter }) => {
                 deletion_ids.push(id);
-                Continue(BatchKind::DocumentDeletion { deletion_ids, includes_by_filter: includes_by_filter | by_filter })
+                Continue(Self::DocumentDeletion { deletion_ids, includes_by_filter: includes_by_filter | by_filter })
             }
-            (this @ BatchKind::DocumentDeletion { .. }, K::Settings { .. }) => Break((this, BatchStopReason::DocumentOperationWithSettings { id })),
+            (this @ Self::DocumentDeletion { .. }, K::Settings { .. }) => Break((this, BatchStopReason::DocumentOperationWithSettings { id })),
 
             (
-                BatchKind::Settings { settings_ids, allow_index_creation },
+                Self::Settings { settings_ids, allow_index_creation },
                 K::DocumentClear,
-            ) => Continue(BatchKind::ClearAndSettings {
+            ) => Continue(Self::ClearAndSettings {
                 settings_ids,
                 allow_index_creation,
                 other: vec![id],
             }),
             (
-                this @ BatchKind::Settings { .. },
+                this @ Self::Settings { .. },
                 K::DocumentImport { .. } | K::DocumentDeletion { .. },
             ) => Break((this, BatchStopReason::SettingsWithDocumentOperation { id })),
             (
-                BatchKind::Settings { mut settings_ids, allow_index_creation },
+                Self::Settings { mut settings_ids, allow_index_creation },
                 K::Settings { .. },
             ) => {
                 settings_ids.push(id);
-                Continue(BatchKind::Settings {
+                Continue(Self::Settings {
                     allow_index_creation,
                     settings_ids,
                 })
             }
 
             (
-                BatchKind::ClearAndSettings { mut other, settings_ids, allow_index_creation },
+                Self::ClearAndSettings { mut other, settings_ids, allow_index_creation },
                 K::DocumentClear,
             ) => {
                 other.push(id);
-                Continue(BatchKind::ClearAndSettings {
+                Continue(Self::ClearAndSettings {
                     other,
                     settings_ids,
                     allow_index_creation,
                 })
             }
-            (this @ BatchKind::ClearAndSettings { .. }, K::DocumentImport { .. }) => Break((this, BatchStopReason::SettingsWithDocumentOperation { id })),
+            (this @ Self::ClearAndSettings { .. }, K::DocumentImport { .. }) => Break((this, BatchStopReason::SettingsWithDocumentOperation { id })),
             (
-                BatchKind::ClearAndSettings {
+                Self::ClearAndSettings {
                     mut other,
                     settings_ids,
                     allow_index_creation,
@@ -459,18 +459,18 @@ impl BatchKind {
                 K::DocumentDeletion { .. },
             ) => {
                 other.push(id);
-                Continue(BatchKind::ClearAndSettings {
+                Continue(Self::ClearAndSettings {
                     other,
                     settings_ids,
                     allow_index_creation,
                 })
             }
             (
-                BatchKind::ClearAndSettings { mut settings_ids, other, allow_index_creation },
+                Self::ClearAndSettings { mut settings_ids, other, allow_index_creation },
                 K::Settings { .. },
             ) => {
                 settings_ids.push(id);
-                Continue(BatchKind::ClearAndSettings {
+                Continue(Self::ClearAndSettings {
                     other,
                     settings_ids,
                     allow_index_creation,
@@ -478,11 +478,11 @@ impl BatchKind {
             }
 
             (
-                BatchKind::IndexCreation { .. }
-                | BatchKind::IndexDeletion { .. }
-                | BatchKind::IndexUpdate { .. }
-                | BatchKind::IndexSwap { .. }
-                | BatchKind::DocumentEdition { .. },
+                Self::IndexCreation { .. }
+                | Self::IndexDeletion { .. }
+                | Self::IndexUpdate { .. }
+                | Self::IndexSwap { .. }
+                | Self::DocumentEdition { .. },
                 _,
             ) => {
                 unreachable!()

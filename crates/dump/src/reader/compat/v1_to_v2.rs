@@ -313,9 +313,9 @@ impl From<v1::settings::RankingRule> for Option<v2::settings::Criterion> {
 impl<T> From<v1::settings::UpdateState<T>> for v2::Setting<T> {
     fn from(source: v1::settings::UpdateState<T>) -> Self {
         match source {
-            v1::settings::UpdateState::Update(new_value) => v2::Setting::Set(new_value),
-            v1::settings::UpdateState::Clear => v2::Setting::Reset,
-            v1::settings::UpdateState::Nothing => v2::Setting::NotSet,
+            v1::settings::UpdateState::Update(new_value) => Self::Set(new_value),
+            v1::settings::UpdateState::Clear => Self::Reset,
+            v1::settings::UpdateState::Nothing => Self::NotSet,
         }
     }
 }

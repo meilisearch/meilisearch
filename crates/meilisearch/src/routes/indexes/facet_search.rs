@@ -310,7 +310,7 @@ impl From<FacetSearchQuery> for SearchQuery {
             None
         };
 
-        SearchQuery {
+        Self {
             q,
             offset: DEFAULT_SEARCH_OFFSET(),
             limit: DEFAULT_SEARCH_LIMIT(),

@@ -108,7 +108,7 @@ impl V6Reader {
             None
         };
 
-        Ok(V6Reader {
+        Ok(Self {
             metadata: serde_json::from_reader(&*meta_file)?,
             instance_uid,
             tasks: BufReader::new(File::open(dump.path().join("tasks").join("queue.jsonl"))?),
@@ -207,7 +207,7 @@ pub struct UpdateFile {
 
 impl UpdateFile {
     fn new(path: &Path) -> Result<Self> {
-        Ok(UpdateFile { reader: BufReader::new(File::open(path)?) })
+        Ok(Self { reader: BufReader::new(File::open(path)?) })
     }
 }
 
@@ -235,7 +235,7 @@ impl V6IndexReader {
     pub fn new(_name: String, path: &Path) -> Result<Self> {
         let metadata = File::open(path.join("metadata.json"))?;
 
-        let ret = V6IndexReader {
+        let ret = Self {
             metadata: serde_json::from_reader(metadata)?,
             documents: BufReader::new(File::open(path.join("documents.jsonl"))?),
             settings: BufReader::new(File::open(path.join("settings.json"))?),

@@ -203,38 +203,38 @@ pub enum UpdateStatus {
 impl UpdateStatus {
     pub fn id(&self) -> u64 {
         match self {
-            UpdateStatus::Processing(u) => u.id(),
-            UpdateStatus::Enqueued(u) => u.id(),
-            UpdateStatus::Processed(u) => u.id(),
-            UpdateStatus::Aborted(u) => u.id(),
-            UpdateStatus::Failed(u) => u.id(),
+            Self::Processing(u) => u.id(),
+            Self::Enqueued(u) => u.id(),
+            Self::Processed(u) => u.id(),
+            Self::Aborted(u) => u.id(),
+            Self::Failed(u) => u.id(),
         }
     }
 
     pub fn meta(&self) -> &UpdateMeta {
         match self {
-            UpdateStatus::Processing(u) => u.meta(),
-            UpdateStatus::Enqueued(u) => u.meta(),
-            UpdateStatus::Processed(u) => u.meta(),
-            UpdateStatus::Aborted(u) => u.meta(),
-            UpdateStatus::Failed(u) => u.meta(),
+            Self::Processing(u) => u.meta(),
+            Self::Enqueued(u) => u.meta(),
+            Self::Processed(u) => u.meta(),
+            Self::Aborted(u) => u.meta(),
+            Self::Failed(u) => u.meta(),
         }
     }
 
     pub fn processed(&self) -> Option<&Processed> {
         match self {
-            UpdateStatus::Processed(p) => Some(p),
+            Self::Processed(p) => Some(p),
             _ => None,
         }
     }
 
     pub fn finished_at(&self) -> Option<OffsetDateTime> {
         match self {
-            UpdateStatus::Processing(_) => None,
-            UpdateStatus::Enqueued(_) => None,
-            UpdateStatus::Processed(u) => Some(u.processed_at),
-            UpdateStatus::Aborted(_) => None,
-            UpdateStatus::Failed(u) => Some(u.failed_at),
+            Self::Processing(_) => None,
+            Self::Enqueued(_) => None,
+            Self::Processed(u) => Some(u.processed_at),
+            Self::Aborted(_) => None,
+            Self::Failed(u) => Some(u.failed_at),
         }
     }
 }

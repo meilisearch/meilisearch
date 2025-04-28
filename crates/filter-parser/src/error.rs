@@ -16,14 +16,14 @@ impl<E> NomErrorExt<E> for nom::Err<E> {
         matches!(self, Self::Failure(_))
     }
 
-    fn map_err<O: FnOnce(E) -> E>(self, op: O) -> nom::Err<E> {
+    fn map_err<O: FnOnce(E) -> E>(self, op: O) -> Self {
         match self {
             e @ Self::Failure(_) => e,
             e => e.map(op),
         }
     }
 
-    fn map_fail<O: FnOnce(E) -> E>(self, op: O) -> nom::Err<E> {
+    fn map_fail<O: FnOnce(E) -> E>(self, op: O) -> Self {
         match self {
             e @ Self::Error(_) => e,
             e => e.map(op),

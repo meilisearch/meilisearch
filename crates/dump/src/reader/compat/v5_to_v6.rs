@@ -10,39 +10,39 @@ pub enum CompatV5ToV6 {
 }
 
 impl CompatV5ToV6 {
-    pub fn new_v5(v5: v5::V5Reader) -> CompatV5ToV6 {
-        CompatV5ToV6::V5(v5)
+    pub fn new_v5(v5: v5::V5Reader) -> Self {
+        Self::V5(v5)
     }
 
     pub fn version(&self) -> crate::Version {
         match self {
-            CompatV5ToV6::V5(v5) => v5.version(),
-            CompatV5ToV6::Compat(compat) => compat.version(),
+            Self::V5(v5) => v5.version(),
+            Self::Compat(compat) => compat.version(),
         }
     }
 
     pub fn date(&self) -> Option<time::OffsetDateTime> {
         match self {
-            CompatV5ToV6::V5(v5) => v5.date(),
-            CompatV5ToV6::Compat(compat) => compat.date(),
+            Self::V5(v5) => v5.date(),
+            Self::Compat(compat) => compat.date(),
         }
     }
 
     pub fn instance_uid(&self) -> Result<Option<uuid::Uuid>> {
         match self {
-            CompatV5ToV6::V5(v5) => v5.instance_uid(),
-            CompatV5ToV6::Compat(compat) => compat.instance_uid(),
+            Self::V5(v5) => v5.instance_uid(),
+            Self::Compat(compat) => compat.instance_uid(),
         }
     }
 
     pub fn indexes(&self) -> Result<Box<dyn Iterator<Item = Result<CompatIndexV5ToV6>> + '_>> {
         let indexes = match self {
-            CompatV5ToV6::V5(v5) => {
+            Self::V5(v5) => {
                 Box::new(v5.indexes()?.map(|index| index.map(CompatIndexV5ToV6::from)))
                     as Box<dyn Iterator<Item = Result<CompatIndexV5ToV6>> + '_>
             }
 
-            CompatV5ToV6::Compat(compat) => {
+            Self::Compat(compat) => {
                 Box::new(compat.indexes()?.map(|index| index.map(CompatIndexV5ToV6::from)))
                     as Box<dyn Iterator<Item = Result<CompatIndexV5ToV6>> + '_>
             }
@@ -57,8 +57,8 @@ impl CompatV5ToV6 {
         let keys = self.keys()?.collect::<Result<Vec<_>>>()?;
 
         let tasks = match self {
-            CompatV5ToV6::V5(v5) => v5.tasks(),
-            CompatV5ToV6::Compat(compat) => compat.tasks(),
+            Self::V5(v5) => v5.tasks(),
+            Self::Compat(compat) => compat.tasks(),
         };
         Ok(Box::new(tasks.map(move |task| {
             task.map(|(task, content_file)| {
@@ -168,8 +168,8 @@ impl CompatV5ToV6 {
 
     pub fn keys(&mut self) -> Result<Box<dyn Iterator<Item = Result<v6::Key>> + '_>> {
         let keys = match self {
-            CompatV5ToV6::V5(v5) => v5.keys()?,
-            CompatV5ToV6::Compat(compat) => compat.keys(),
+            Self::V5(v5) => v5.keys()?,
+            Self::Compat(compat) => compat.keys(),
         };
 
         Ok(Box::new(keys.map(|key| {
@@ -220,23 +220,23 @@ impl From<CompatIndexV4ToV5> for CompatIndexV5ToV6 {
 }
 
 impl CompatIndexV5ToV6 {
-    pub fn new_v5(v5: v5::V5IndexReader) -> CompatIndexV5ToV6 {
-        CompatIndexV5ToV6::V5(v5)
+    pub fn new_v5(v5: v5::V5IndexReader) -> Self {
+        Self::V5(v5)
     }
 
     pub fn metadata(&self) -> &crate::IndexMetadata {
         match self {
-            CompatIndexV5ToV6::V5(v5) => v5.metadata(),
-            CompatIndexV5ToV6::Compat(compat) => compat.metadata(),
+            Self::V5(v5) => v5.metadata(),
+            Self::Compat(compat) => compat.metadata(),
         }
     }
 
     pub fn documents(&mut self) -> Result<Box<dyn Iterator<Item = Result<Document>> + '_>> {
         match self {
-            CompatIndexV5ToV6::V5(v5) => v5
+            Self::V5(v5) => v5
                 .documents()
                 .map(|iter| Box::new(iter) as Box<dyn Iterator<Item = Result<Document>> + '_>),
-            CompatIndexV5ToV6::Compat(compat) => compat
+            Self::Compat(compat) => compat
                 .documents()
                 .map(|iter| Box::new(iter) as Box<dyn Iterator<Item = Result<Document>> + '_>),
         }
@@ -244,8 +244,8 @@ impl CompatIndexV5ToV6 {
 
     pub fn settings(&mut self) -> Result<v6::Settings<v6::Checked>> {
         match self {
-            CompatIndexV5ToV6::V5(v5) => Ok(v6::Settings::from(v5.settings()?).check()),
-            CompatIndexV5ToV6::Compat(compat) => Ok(v6::Settings::from(compat.settings()?).check()),
+            Self::V5(v5) => Ok(v6::Settings::from(v5.settings()?).check()),
+            Self::Compat(compat) => Ok(v6::Settings::from(compat.settings()?).check()),
         }
     }
 }
@@ -253,9 +253,9 @@ impl CompatIndexV5ToV6 {
 impl<T> From<v5::Setting<T>> for v6::Setting<T> {
     fn from(setting: v5::Setting<T>) -> Self {
         match setting {
-            v5::Setting::Set(t) => v6::Setting::Set(t),
-            v5::Setting::Reset => v6::Setting::Reset,
-            v5::Setting::NotSet => v6::Setting::NotSet,
+            v5::Setting::Set(t) => Self::Set(t),
+            v5::Setting::Reset => Self::Reset,
+            v5::Setting::NotSet => Self::NotSet,
         }
     }
 }
@@ -313,7 +313,7 @@ impl From<v5::ResponseError> for v6::ResponseError {
                 v6::Code::UnretrievableErrorCode
             }
         };
-        v6::ResponseError::from_msg(error.message, code)
+        Self::from_msg(error.message, code)
     }
 }
 
@@ -405,33 +405,33 @@ impl<T> From<v5::Settings<T>> for v6::Settings<v6::Unchecked> {
 impl From<v5::Action> for v6::Action {
     fn from(key: v5::Action) -> Self {
         match key {
-            v5::Action::All => v6::Action::All,
-            v5::Action::Search => v6::Action::Search,
-            v5::Action::DocumentsAll => v6::Action::DocumentsAll,
-            v5::Action::DocumentsAdd => v6::Action::DocumentsAdd,
-            v5::Action::DocumentsGet => v6::Action::DocumentsGet,
-            v5::Action::DocumentsDelete => v6::Action::DocumentsDelete,
-            v5::Action::IndexesAll => v6::Action::IndexesAll,
-            v5::Action::IndexesAdd => v6::Action::IndexesAdd,
-            v5::Action::IndexesGet => v6::Action::IndexesGet,
-            v5::Action::IndexesUpdate => v6::Action::IndexesUpdate,
-            v5::Action::IndexesDelete => v6::Action::IndexesDelete,
-            v5::Action::TasksAll => v6::Action::TasksAll,
-            v5::Action::TasksGet => v6::Action::TasksGet,
-            v5::Action::SettingsAll => v6::Action::SettingsAll,
-            v5::Action::SettingsGet => v6::Action::SettingsGet,
-            v5::Action::SettingsUpdate => v6::Action::SettingsUpdate,
-            v5::Action::StatsAll => v6::Action::StatsAll,
-            v5::Action::StatsGet => v6::Action::StatsGet,
-            v5::Action::MetricsAll => v6::Action::MetricsAll,
-            v5::Action::MetricsGet => v6::Action::MetricsGet,
-            v5::Action::DumpsAll => v6::Action::DumpsAll,
-            v5::Action::DumpsCreate => v6::Action::DumpsCreate,
-            v5::Action::Version => v6::Action::Version,
-            v5::Action::KeysAdd => v6::Action::KeysAdd,
-            v5::Action::KeysGet => v6::Action::KeysGet,
-            v5::Action::KeysUpdate => v6::Action::KeysUpdate,
-            v5::Action::KeysDelete => v6::Action::KeysDelete,
+            v5::Action::All => Self::All,
+            v5::Action::Search => Self::Search,
+            v5::Action::DocumentsAll => Self::DocumentsAll,
+            v5::Action::DocumentsAdd => Self::DocumentsAdd,
+            v5::Action::DocumentsGet => Self::DocumentsGet,
+            v5::Action::DocumentsDelete => Self::DocumentsDelete,
+            v5::Action::IndexesAll => Self::IndexesAll,
+            v5::Action::IndexesAdd => Self::IndexesAdd,
+            v5::Action::IndexesGet => Self::IndexesGet,
+            v5::Action::IndexesUpdate => Self::IndexesUpdate,
+            v5::Action::IndexesDelete => Self::IndexesDelete,
+            v5::Action::TasksAll => Self::TasksAll,
+            v5::Action::TasksGet => Self::TasksGet,
+            v5::Action::SettingsAll => Self::SettingsAll,
+            v5::Action::SettingsGet => Self::SettingsGet,
+            v5::Action::SettingsUpdate => Self::SettingsUpdate,
+            v5::Action::StatsAll => Self::StatsAll,
+            v5::Action::StatsGet => Self::StatsGet,
+            v5::Action::MetricsAll => Self::MetricsAll,
+            v5::Action::MetricsGet => Self::MetricsGet,
+            v5::Action::DumpsAll => Self::DumpsAll,
+            v5::Action::DumpsCreate => Self::DumpsCreate,
+            v5::Action::Version => Self::Version,
+            v5::Action::KeysAdd => Self::KeysAdd,
+            v5::Action::KeysGet => Self::KeysGet,
+            v5::Action::KeysUpdate => Self::KeysUpdate,
+            v5::Action::KeysDelete => Self::KeysDelete,
         }
     }
 }

@@ -189,8 +189,8 @@ pub struct IndexScheduler {
 }
 
 impl IndexScheduler {
-    fn private_clone(&self) -> IndexScheduler {
-        IndexScheduler {
+    fn private_clone(&self) -> Self {
+        Self {
             env: self.env.clone(),
             processing_tasks: self.processing_tasks.clone(),
             version: self.version.clone(),

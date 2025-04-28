@@ -148,7 +148,7 @@ pub enum KindDump {
 
 impl From<Task> for TaskDump {
     fn from(task: Task) -> Self {
-        TaskDump {
+        Self {
             uid: task.uid,
             batch_uid: task.batch_uid,
             index_uid: task.index_uid().map(|uid| uid.to_string()),
@@ -173,48 +173,48 @@ impl From<KindWithContent> for KindDump {
                 documents_count,
                 allow_index_creation,
                 ..
-            } => KindDump::DocumentImport {
+            } => Self::DocumentImport {
                 primary_key,
                 method,
                 documents_count,
                 allow_index_creation,
             },
             KindWithContent::DocumentDeletion { documents_ids, .. } => {
-                KindDump::DocumentDeletion { documents_ids }
+                Self::DocumentDeletion { documents_ids }
             }
             KindWithContent::DocumentDeletionByFilter { filter_expr, .. } => {
-                KindDump::DocumentDeletionByFilter { filter: filter_expr }
+                Self::DocumentDeletionByFilter { filter: filter_expr }
             }
             KindWithContent::DocumentEdition { filter_expr, context, function, .. } => {
-                KindDump::DocumentEdition { filter: filter_expr, context, function }
+                Self::DocumentEdition { filter: filter_expr, context, function }
             }
-            KindWithContent::DocumentClear { .. } => KindDump::DocumentClear,
+            KindWithContent::DocumentClear { .. } => Self::DocumentClear,
             KindWithContent::SettingsUpdate {
                 new_settings,
                 is_deletion,
                 allow_index_creation,
                 ..
-            } => KindDump::Settings { settings: new_settings, is_deletion, allow_index_creation },
-            KindWithContent::IndexDeletion { .. } => KindDump::IndexDeletion,
+            } => Self::Settings { settings: new_settings, is_deletion, allow_index_creation },
+            KindWithContent::IndexDeletion { .. } => Self::IndexDeletion,
             KindWithContent::IndexCreation { primary_key, .. } => {
-                KindDump::IndexCreation { primary_key }
+                Self::IndexCreation { primary_key }
             }
             KindWithContent::IndexUpdate { primary_key, .. } => {
-                KindDump::IndexUpdate { primary_key }
+                Self::IndexUpdate { primary_key }
             }
-            KindWithContent::IndexSwap { swaps } => KindDump::IndexSwap { swaps },
+            KindWithContent::IndexSwap { swaps } => Self::IndexSwap { swaps },
             KindWithContent::TaskCancelation { query, tasks } => {
-                KindDump::TaskCancelation { query, tasks }
+                Self::TaskCancelation { query, tasks }
             }
             KindWithContent::TaskDeletion { query, tasks } => {
-                KindDump::TasksDeletion { query, tasks }
+                Self::TasksDeletion { query, tasks }
             }
             KindWithContent::DumpCreation { keys, instance_uid } => {
-                KindDump::DumpCreation { keys, instance_uid }
+                Self::DumpCreation { keys, instance_uid }
             }
-            KindWithContent::SnapshotCreation => KindDump::SnapshotCreation,
+            KindWithContent::SnapshotCreation => Self::SnapshotCreation,
             KindWithContent::UpgradeDatabase { from: version } => {
-                KindDump::UpgradeDatabase { from: version }
+                Self::UpgradeDatabase { from: version }
             }
         }
     }

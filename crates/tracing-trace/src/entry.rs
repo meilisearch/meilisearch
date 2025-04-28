@@ -115,7 +115,7 @@ impl MemoryStats {
 
         match pidrusage(std::process::id() as i32) {
             Ok(RUsageInfoV0 { ri_resident_size, .. }) => {
-                Some(MemoryStats { resident: ri_resident_size })
+                Some(Self { resident: ri_resident_size })
             }
             Err(_) => None, /* ignoring error to avoid spamming */
         }

@@ -16,10 +16,10 @@ pub enum AuthenticationError {
 impl ErrorCode for AuthenticationError {
     fn error_code(&self) -> Code {
         match self {
-            AuthenticationError::MissingAuthorizationHeader => Code::MissingAuthorizationHeader,
-            AuthenticationError::InvalidToken => Code::InvalidApiKey,
-            AuthenticationError::IrretrievableState => Code::Internal,
-            AuthenticationError::MissingMasterKey => Code::MissingMasterKey,
+            Self::MissingAuthorizationHeader => Code::MissingAuthorizationHeader,
+            Self::InvalidToken => Code::InvalidApiKey,
+            Self::IrretrievableState => Code::Internal,
+            Self::MissingMasterKey => Code::MissingMasterKey,
         }
     }
 }

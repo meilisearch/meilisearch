@@ -17,8 +17,8 @@ pub struct ProcessingTasks {
 
 impl ProcessingTasks {
     /// Creates an empty `ProcessingAt` struct.
-    pub fn new() -> ProcessingTasks {
-        ProcessingTasks::default()
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn get_progress_view(&self) -> Option<ProgressView> {

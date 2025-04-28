@@ -49,8 +49,8 @@ pub struct TaskView {
 }
 
 impl TaskView {
-    pub fn from_task(task: &Task) -> TaskView {
-        TaskView {
+    pub fn from_task(task: &Task) -> Self {
+        Self {
             uid: task.uid,
             batch_uid: task.batch_uid,
             index_uid: task.index_uid().map(ToOwned::to_owned),
@@ -258,10 +258,10 @@ impl From<Details> for DetailsView {
     fn from(details: Details) -> Self {
         match details {
             Details::DocumentAdditionOrUpdate { received_documents, indexed_documents } => {
-                DetailsView {
+                Self {
                     received_documents: Some(received_documents),
                     indexed_documents: Some(indexed_documents),
-                    ..DetailsView::default()
+                    ..Self::default()
                 }
             }
             Details::DocumentEdition {
@@ -270,64 +270,64 @@ impl From<Details> for DetailsView {
                 original_filter,
                 context,
                 function,
-            } => DetailsView {
+            } => Self {
                 deleted_documents: Some(deleted_documents),
                 edited_documents: Some(edited_documents),
                 original_filter: Some(original_filter),
                 context: Some(context),
                 function: Some(function),
-                ..DetailsView::default()
+                ..Self::default()
             },
             Details::SettingsUpdate { mut settings } => {
                 settings.hide_secrets();
-                DetailsView { settings: Some(settings), ..DetailsView::default() }
+                Self { settings: Some(settings), ..Self::default() }
             }
             Details::IndexInfo { primary_key } => {
-                DetailsView { primary_key: Some(primary_key), ..DetailsView::default() }
+                Self { primary_key: Some(primary_key), ..Self::default() }
             }
             Details::DocumentDeletion {
                 provided_ids: received_document_ids,
                 deleted_documents,
-            } => DetailsView {
+            } => Self {
                 provided_ids: Some(received_document_ids),
                 deleted_documents: Some(deleted_documents),
                 original_filter: Some(None),
-                ..DetailsView::default()
+                ..Self::default()
             },
             Details::DocumentDeletionByFilter { original_filter, deleted_documents } => {
-                DetailsView {
+                Self {
                     provided_ids: Some(0),
                     original_filter: Some(Some(original_filter)),
                     deleted_documents: Some(deleted_documents),
-                    ..DetailsView::default()
+                    ..Self::default()
                 }
             }
             Details::ClearAll { deleted_documents } => {
-                DetailsView { deleted_documents: Some(deleted_documents), ..DetailsView::default() }
+                Self { deleted_documents: Some(deleted_documents), ..Self::default() }
             }
             Details::TaskCancelation { matched_tasks, canceled_tasks, original_filter } => {
-                DetailsView {
+                Self {
                     matched_tasks: Some(matched_tasks),
                     canceled_tasks: Some(canceled_tasks),
                     original_filter: Some(Some(original_filter)),
-                    ..DetailsView::default()
+                    ..Self::default()
                 }
             }
             Details::TaskDeletion { matched_tasks, deleted_tasks, original_filter } => {
-                DetailsView {
+                Self {
                     matched_tasks: Some(matched_tasks),
                     deleted_tasks: Some(deleted_tasks),
                     original_filter: Some(Some(original_filter)),
-                    ..DetailsView::default()
+                    ..Self::default()
                 }
             }
             Details::Dump { dump_uid } => {
-                DetailsView { dump_uid: Some(dump_uid), ..DetailsView::default() }
+                Self { dump_uid: Some(dump_uid), ..Self::default() }
             }
             Details::IndexSwap { swaps } => {
-                DetailsView { swaps: Some(swaps), ..Default::default() }
+                Self { swaps: Some(swaps), ..Default::default() }
             }
-            Details::UpgradeDatabase { from, to } => DetailsView {
+            Details::UpgradeDatabase { from, to } => Self {
                 upgrade_from: Some(format!("v{}.{}.{}", from.0, from.1, from.2)),
                 upgrade_to: Some(format!("v{}.{}.{}", to.0, to.1, to.2)),
                 ..Default::default()

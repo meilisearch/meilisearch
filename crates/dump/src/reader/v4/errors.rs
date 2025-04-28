@@ -296,15 +296,15 @@ struct ErrCode {
 }
 
 impl ErrCode {
-    fn authentication(error_name: &'static str, status_code: StatusCode) -> ErrCode {
-        ErrCode { status_code, error_name, error_type: ErrorType::AuthenticationError }
+    fn authentication(error_name: &'static str, status_code: StatusCode) -> Self {
+        Self { status_code, error_name, error_type: ErrorType::AuthenticationError }
     }
 
-    fn internal(error_name: &'static str, status_code: StatusCode) -> ErrCode {
-        ErrCode { status_code, error_name, error_type: ErrorType::InternalError }
+    fn internal(error_name: &'static str, status_code: StatusCode) -> Self {
+        Self { status_code, error_name, error_type: ErrorType::InternalError }
     }
 
-    fn invalid(error_name: &'static str, status_code: StatusCode) -> ErrCode {
-        ErrCode { status_code, error_name, error_type: ErrorType::InvalidRequestError }
+    fn invalid(error_name: &'static str, status_code: StatusCode) -> Self {
+        Self { status_code, error_name, error_type: ErrorType::InvalidRequestError }
     }
 }

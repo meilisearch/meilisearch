@@ -82,7 +82,7 @@ impl FromStr for MyTargets {
         if s.is_empty() {
             Err(MyParseError::Example)
         } else {
-            Ok(MyTargets(Targets::from_str(s).map_err(MyParseError::ParseError)?))
+            Ok(Self(Targets::from_str(s).map_err(MyParseError::ParseError)?))
         }
     }
 }

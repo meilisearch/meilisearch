@@ -308,14 +308,14 @@ impl MergedSearchHit {
 
     fn hit(self) -> SearchHit {
         match self {
-            MergedSearchHit::Local(search_hit_by_index) => search_hit_by_index.hit,
-            MergedSearchHit::Remote { hit, .. } => hit,
+            Self::Local(search_hit_by_index) => search_hit_by_index.hit,
+            Self::Remote { hit, .. } => hit,
         }
     }
 
     fn to_score(&self) -> (impl Iterator<Item = WeightedScoreValue> + '_, f64, usize) {
         match self {
-            MergedSearchHit::Local(search_hit_by_index) => (
+            Self::Local(search_hit_by_index) => (
                 either::Left(ScoreDetails::weighted_score_values(
                     search_hit_by_index.score.iter(),
                     *search_hit_by_index.weight,
@@ -324,7 +324,7 @@ impl MergedSearchHit {
                     * *search_hit_by_index.weight,
                 search_hit_by_index.query_index,
             ),
-            MergedSearchHit::Remote { hit: _, score, global_weighted_score, query_index } => {
+            Self::Remote { hit: _, score, global_weighted_score, query_index } => {
                 let global_weighted_score = *global_weighted_score;
                 let query_index = *query_index;
                 (either::Right(score.iter().cloned()), global_weighted_score, query_index)
@@ -441,8 +441,8 @@ struct PartitionedQueries {
 }
 
 impl PartitionedQueries {
-    fn new() -> PartitionedQueries {
-        PartitionedQueries {
+    fn new() -> Self {
+        Self {
             local_queries_by_index: Default::default(),
             remote_queries_by_host: Default::default(),
             has_remote: false,
@@ -665,7 +665,7 @@ struct SearchByIndex {
 
 impl SearchByIndex {
     fn new(federation: Federation, index_count: usize, has_remote: bool) -> Self {
-        SearchByIndex {
+        Self {
             facet_order: match (federation.merge_facets, has_remote) {
                 (None, true) => FacetOrder::ByIndex(Default::default()),
                 (None, false) => FacetOrder::None,
@@ -1039,7 +1039,7 @@ impl FacetOrder {
         rtxn: &milli::heed::RoTxn<'_>,
     ) -> Result<(), ResponseError> {
         match self {
-            FacetOrder::ByFacet(facet_order) => {
+            Self::ByFacet(facet_order) => {
                 if let Some(facets_by_index) = facets_by_index {
                     let index_facet_order = index.sort_facet_values_by(rtxn)?;
                     for facet in facets_by_index {
@@ -1060,7 +1060,7 @@ impl FacetOrder {
                     }
                 }
             }
-            FacetOrder::ByIndex(order_by_index) => {
+            Self::ByIndex(order_by_index) => {
                 let max_values_per_facet = index
                     .max_values_per_facet(rtxn)?
                     .map(|x| x as usize)
@@ -1070,7 +1070,7 @@ impl FacetOrder {
                     (index.sort_facet_values_by(rtxn)?, max_values_per_facet),
                 );
             }
-            FacetOrder::None => {}
+            Self::None => {}
         }
         Ok(())
     }
@@ -1082,7 +1082,7 @@ impl FacetOrder {
         mut facets: FederatedFacets,
     ) -> (Option<FacetDistributions>, Option<FacetStats>, FederatedFacets) {
         let (facet_distribution, facet_stats, facets_by_index) = match (self, merge_facets) {
-            (FacetOrder::ByFacet(facet_order), Some(merge_facets)) => {
+            (Self::ByFacet(facet_order), Some(merge_facets)) => {
                 for remote_facets_by_index in
                     remote_results.into_iter().map(|result| result.facets_by_index)
                 {
@@ -1096,7 +1096,7 @@ impl FacetOrder {
 
                 (facet_distribution, facet_stats, FederatedFacets::default())
             }
-            (FacetOrder::ByIndex(facet_order), _) => {
+            (Self::ByIndex(facet_order), _) => {
                 for remote_facets_by_index in
                     remote_results.into_iter().map(|result| result.facets_by_index)
                 {

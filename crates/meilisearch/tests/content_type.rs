@@ -18,11 +18,11 @@ enum HttpVerb {
 impl HttpVerb {
     fn test_request(&self) -> test::TestRequest {
         match self {
-            HttpVerb::Put => test::TestRequest::put(),
-            HttpVerb::Patch => test::TestRequest::patch(),
-            HttpVerb::Post => test::TestRequest::post(),
-            HttpVerb::Get => test::TestRequest::get(),
-            HttpVerb::Delete => test::TestRequest::delete(),
+            Self::Put => test::TestRequest::put(),
+            Self::Patch => test::TestRequest::patch(),
+            Self::Post => test::TestRequest::post(),
+            Self::Get => test::TestRequest::get(),
+            Self::Delete => test::TestRequest::delete(),
         }
     }
 }

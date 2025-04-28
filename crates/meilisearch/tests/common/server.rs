@@ -53,7 +53,7 @@ impl Server<Owned> {
         let (index_scheduler, auth) = setup_meilisearch(&options).unwrap();
         let service = Service { index_scheduler, auth, options, api_key: None };
 
-        Server { service, _dir: Some(dir), _marker: PhantomData }
+        Self { service, _dir: Some(dir), _marker: PhantomData }
     }
 
     pub async fn new_auth_with_options(mut options: Opt, dir: TempDir) -> Self {
@@ -68,7 +68,7 @@ impl Server<Owned> {
         let (index_scheduler, auth) = setup_meilisearch(&options).unwrap();
         let service = Service { index_scheduler, auth, options, api_key: None };
 
-        Server { service, _dir: Some(dir), _marker: PhantomData }
+        Self { service, _dir: Some(dir), _marker: PhantomData }
     }
 
     pub async fn new_auth() -> Self {
@@ -81,7 +81,7 @@ impl Server<Owned> {
         let (index_scheduler, auth) = setup_meilisearch(&options)?;
         let service = Service { index_scheduler, auth, options, api_key: None };
 
-        Ok(Server { service, _dir: None, _marker: PhantomData })
+        Ok(Self { service, _dir: None, _marker: PhantomData })
     }
 
     pub fn use_api_key(&mut self, api_key: impl AsRef<str>) {
@@ -187,7 +187,7 @@ impl Server<Owned> {
 }
 
 impl Server<Shared> {
-    fn init_new_shared_instance() -> Server<Shared> {
+    fn init_new_shared_instance() -> Self {
         let dir = TempDir::new().unwrap();
 
         if cfg!(windows) {
@@ -201,15 +201,15 @@ impl Server<Shared> {
         let (index_scheduler, auth) = setup_meilisearch(&options).unwrap();
         let service = Service { index_scheduler, auth, api_key: None, options };
 
-        Server { service, _dir: Some(dir), _marker: PhantomData }
+        Self { service, _dir: Some(dir), _marker: PhantomData }
     }
 
-    pub fn new_shared() -> &'static Server<Shared> {
+    pub fn new_shared() -> &'static Self {
         static SERVER: Lazy<Server<Shared>> = Lazy::new(Server::init_new_shared_instance);
         &SERVER
     }
 
-    pub async fn new_shared_with_admin_key() -> &'static Server<Shared> {
+    pub async fn new_shared_with_admin_key() -> &'static Self {
         static SERVER: OnceCell<Server<Shared>> = OnceCell::const_new();
         SERVER
             .get_or_init(|| async {

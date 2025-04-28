@@ -49,8 +49,8 @@ pub enum RemoveWords {
 impl std::fmt::Display for RemoveWords {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let reason = match self {
-            RemoveWords::WasPrepended => "it was previously prepended",
-            RemoveWords::MatchingStrategyAll => "`query.matchingWords` is set to `all`",
+            Self::WasPrepended => "it was previously prepended",
+            Self::MatchingStrategyAll => "`query.matchingWords` is set to `all`",
         };
         f.write_str(reason)
     }
@@ -668,11 +668,11 @@ pub enum RankingRuleSource {
 impl RankingRuleSource {
     fn rule_name(&self, criteria: &[Criterion], sort: &Option<Vec<AscDesc>>) -> String {
         match self {
-            RankingRuleSource::Criterion(criterion_index) => criteria
+            Self::Criterion(criterion_index) => criteria
                 .get(*criterion_index)
                 .map(|c| c.to_string())
                 .unwrap_or_else(|| "unknown".into()),
-            RankingRuleSource::CoalescedCriteria(begin, end) => {
+            Self::CoalescedCriteria(begin, end) => {
                 let rules: Vec<_> = criteria
                     .get(*begin..=*end)
                     .iter()
@@ -681,7 +681,7 @@ impl RankingRuleSource {
                     .collect();
                 rules.join(", ")
             }
-            RankingRuleSource::Sort { criterion_index: _, sort_index } => {
+            Self::Sort { criterion_index: _, sort_index } => {
                 match sort.as_deref().and_then(|sort| sort.get(*sort_index)) {
                     Some(sort) => match sort {
                         AscDesc::Asc(Member::Field(field_name)) => format!("{field_name}:asc"),
@@ -699,13 +699,13 @@ impl RankingRuleSource {
 
     fn rule_position(&self) -> String {
         match self {
-            RankingRuleSource::Criterion(criterion_index) => {
+            Self::Criterion(criterion_index) => {
                 format!("#{criterion_index} in ranking rules")
             }
-            RankingRuleSource::CoalescedCriteria(begin, end) => {
+            Self::CoalescedCriteria(begin, end) => {
                 format!("#{begin} to #{end} in ranking rules")
             }
-            RankingRuleSource::Sort { criterion_index, sort_index } => format!(
+            Self::Sort { criterion_index, sort_index } => format!(
                 "#{sort_index} in `query.sort` (as `sort` is #{criterion_index} in ranking rules)"
             ),
         }

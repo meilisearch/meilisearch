@@ -50,8 +50,8 @@ pub struct BatchQueue {
 }
 
 impl BatchQueue {
-    pub(crate) fn private_clone(&self) -> BatchQueue {
-        BatchQueue {
+    pub(crate) fn private_clone(&self) -> Self {
+        Self {
             all_batches: self.all_batches,
             status: self.status,
             kind: self.kind,

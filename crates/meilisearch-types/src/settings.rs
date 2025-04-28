@@ -332,8 +332,8 @@ impl<T> Settings<T> {
 }
 
 impl Settings<Checked> {
-    pub fn cleared() -> Settings<Checked> {
-        Settings {
+    pub fn cleared() -> Self {
+        Self {
             displayed_attributes: Setting::Reset.into(),
             searchable_attributes: Setting::Reset.into(),
             filterable_attributes: Setting::Reset,
@@ -982,7 +982,7 @@ impl FromStr for RankingRuleView {
     type Err = <Criterion as FromStr>::Err;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(RankingRuleView::from(Criterion::from_str(s)?))
+        Ok(Self::from(Criterion::from_str(s)?))
     }
 }
 impl fmt::Display for RankingRuleView {
@@ -993,28 +993,28 @@ impl fmt::Display for RankingRuleView {
 impl From<Criterion> for RankingRuleView {
     fn from(value: Criterion) -> Self {
         match value {
-            Criterion::Words => RankingRuleView::Words,
-            Criterion::Typo => RankingRuleView::Typo,
-            Criterion::Proximity => RankingRuleView::Proximity,
-            Criterion::Attribute => RankingRuleView::Attribute,
-            Criterion::Sort => RankingRuleView::Sort,
-            Criterion::Exactness => RankingRuleView::Exactness,
-            Criterion::Asc(x) => RankingRuleView::Asc(x),
-            Criterion::Desc(x) => RankingRuleView::Desc(x),
+            Criterion::Words => Self::Words,
+            Criterion::Typo => Self::Typo,
+            Criterion::Proximity => Self::Proximity,
+            Criterion::Attribute => Self::Attribute,
+            Criterion::Sort => Self::Sort,
+            Criterion::Exactness => Self::Exactness,
+            Criterion::Asc(x) => Self::Asc(x),
+            Criterion::Desc(x) => Self::Desc(x),
         }
     }
 }
 impl From<RankingRuleView> for Criterion {
     fn from(value: RankingRuleView) -> Self {
         match value {
-            RankingRuleView::Words => Criterion::Words,
-            RankingRuleView::Typo => Criterion::Typo,
-            RankingRuleView::Proximity => Criterion::Proximity,
-            RankingRuleView::Attribute => Criterion::Attribute,
-            RankingRuleView::Sort => Criterion::Sort,
-            RankingRuleView::Exactness => Criterion::Exactness,
-            RankingRuleView::Asc(x) => Criterion::Asc(x),
-            RankingRuleView::Desc(x) => Criterion::Desc(x),
+            RankingRuleView::Words => Self::Words,
+            RankingRuleView::Typo => Self::Typo,
+            RankingRuleView::Proximity => Self::Proximity,
+            RankingRuleView::Attribute => Self::Attribute,
+            RankingRuleView::Sort => Self::Sort,
+            RankingRuleView::Exactness => Self::Exactness,
+            RankingRuleView::Asc(x) => Self::Asc(x),
+            RankingRuleView::Desc(x) => Self::Desc(x),
         }
     }
 }
@@ -1031,16 +1031,16 @@ pub enum ProximityPrecisionView {
 impl From<ProximityPrecision> for ProximityPrecisionView {
     fn from(value: ProximityPrecision) -> Self {
         match value {
-            ProximityPrecision::ByWord => ProximityPrecisionView::ByWord,
-            ProximityPrecision::ByAttribute => ProximityPrecisionView::ByAttribute,
+            ProximityPrecision::ByWord => Self::ByWord,
+            ProximityPrecision::ByAttribute => Self::ByAttribute,
         }
     }
 }
 impl From<ProximityPrecisionView> for ProximityPrecision {
     fn from(value: ProximityPrecisionView) -> Self {
         match value {
-            ProximityPrecisionView::ByWord => ProximityPrecision::ByWord,
-            ProximityPrecisionView::ByAttribute => ProximityPrecision::ByAttribute,
+            ProximityPrecisionView::ByWord => Self::ByWord,
+            ProximityPrecisionView::ByAttribute => Self::ByAttribute,
         }
     }
 }
@@ -1099,16 +1099,16 @@ pub enum PrefixSearchSettings {
 impl From<PrefixSearch> for PrefixSearchSettings {
     fn from(value: PrefixSearch) -> Self {
         match value {
-            PrefixSearch::IndexingTime => PrefixSearchSettings::IndexingTime,
-            PrefixSearch::Disabled => PrefixSearchSettings::Disabled,
+            PrefixSearch::IndexingTime => Self::IndexingTime,
+            PrefixSearch::Disabled => Self::Disabled,
         }
     }
 }
 impl From<PrefixSearchSettings> for PrefixSearch {
     fn from(value: PrefixSearchSettings) -> Self {
         match value {
-            PrefixSearchSettings::IndexingTime => PrefixSearch::IndexingTime,
-            PrefixSearchSettings::Disabled => PrefixSearch::Disabled,
+            PrefixSearchSettings::IndexingTime => Self::IndexingTime,
+            PrefixSearchSettings::Disabled => Self::Disabled,
         }
     }
 }

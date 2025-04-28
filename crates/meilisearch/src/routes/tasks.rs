@@ -149,7 +149,7 @@ impl TaskDeletionOrCancelationQuery {
     pub fn is_empty(&self) -> bool {
         matches!(
             self,
-            TaskDeletionOrCancelationQuery {
+            Self {
                 uids: OptionStarOrList::None,
                 batch_uids: OptionStarOrList::None,
                 canceled_by: OptionStarOrList::None,

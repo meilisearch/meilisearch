@@ -77,7 +77,7 @@ impl<Format, C1: Default + ErrorCode, C2: Default + ErrorCode>
         other: DeserrError<Format, C2>,
         _merge_location: ValuePointerRef,
     ) -> ControlFlow<Self, Self> {
-        ControlFlow::Break(DeserrError { msg: other.msg, code: other.code, _phantom: PhantomData })
+        ControlFlow::Break(Self { msg: other.msg, code: other.code, _phantom: PhantomData })
     }
 }
 
@@ -97,7 +97,7 @@ impl<C: Default + ErrorCode> DeserializeError for DeserrJsonError<C> {
         error: deserr::ErrorKind<V>,
         location: ValuePointerRef,
     ) -> ControlFlow<Self, Self> {
-        ControlFlow::Break(DeserrJsonError::new(
+        ControlFlow::Break(Self::new(
             take_cf_content(JsonError::error(None, error, location)).to_string(),
             C::default().error_code(),
         ))
@@ -110,7 +110,7 @@ impl<C: Default + ErrorCode> DeserializeError for DeserrQueryParamError<C> {
         error: deserr::ErrorKind<V>,
         location: ValuePointerRef,
     ) -> ControlFlow<Self, Self> {
-        ControlFlow::Break(DeserrQueryParamError::new(
+        ControlFlow::Break(Self::new(
             take_cf_content(QueryParamError::error(None, error, location)).to_string(),
             C::default().error_code(),
         ))

@@ -219,7 +219,7 @@ pub struct RankingRulesAnalytics {
 
 impl RankingRulesAnalytics {
     pub fn new(rr: Option<&Vec<RankingRuleView>>) -> Self {
-        RankingRulesAnalytics {
+        Self {
             words_position: rr.as_ref().and_then(|rr| {
                 rr.iter()
                     .position(|s| matches!(s, meilisearch_types::settings::RankingRuleView::Words))
@@ -579,7 +579,7 @@ pub struct LocalesAnalytics {
 
 impl LocalesAnalytics {
     pub fn new(rules: Option<&Vec<LocalizedAttributesRuleView>>) -> Self {
-        LocalesAnalytics {
+        Self {
             locales: rules.as_ref().map(|rules| {
                 rules
                     .iter()

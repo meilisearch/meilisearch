@@ -133,7 +133,7 @@ impl ReopenableIndex {
 }
 
 impl IndexMap {
-    pub fn new(cap: usize) -> IndexMap {
+    pub fn new(cap: usize) -> Self {
         Self { unavailable: Default::default(), available: LruMap::new(cap), generation: 0 }
     }
 

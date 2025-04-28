@@ -54,7 +54,7 @@ pub struct V1IndexReader {
 
 impl V1IndexReader {
     pub fn new(path: &Path, metadata: IndexMetadataV1) -> Result<Self> {
-        Ok(V1IndexReader {
+        Ok(Self {
             metadata,
             documents: BufReader::new(File::open(path.join("documents.jsonl"))?),
             settings: BufReader::new(File::open(path.join("settings.json"))?),
@@ -93,7 +93,7 @@ impl V1Reader {
             indexes.push(V1Index::new(index_path, index));
         }
 
-        Ok(V1Reader {
+        Ok(Self {
             dump,
             indexes,
             db_version: metadata.db_version,
@@ -148,7 +148,7 @@ pub struct IndexMetadataV1 {
 
 impl From<Index> for IndexMetadataV1 {
     fn from(index: Index) -> Self {
-        IndexMetadataV1 {
+        Self {
             name: index.name,
             metadata: crate::IndexMetadata {
                 uid: index.uid,

@@ -48,7 +48,7 @@ where
     ) -> Result<Self, E> {
         match value {
             deserr::Value::String(s) => match T::from_query_param(&s) {
-                Ok(x) => Ok(Param(x)),
+                Ok(x) => Ok(Self(x)),
                 Err(e) => Err(deserr::take_cf_content(E::merge(None, e, location))),
             },
             _ => Err(deserr::take_cf_content(E::error(

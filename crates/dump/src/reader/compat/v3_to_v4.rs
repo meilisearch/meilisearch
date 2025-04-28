@@ -9,8 +9,8 @@ pub enum CompatV3ToV4 {
 }
 
 impl CompatV3ToV4 {
-    pub fn new(v3: v3::V3Reader) -> CompatV3ToV4 {
-        CompatV3ToV4::V3(v3)
+    pub fn new(v3: v3::V3Reader) -> Self {
+        Self::V3(v3)
     }
 
     pub fn to_v5(self) -> CompatV4ToV5 {
@@ -19,15 +19,15 @@ impl CompatV3ToV4 {
 
     pub fn version(&self) -> crate::Version {
         match self {
-            CompatV3ToV4::V3(v3) => v3.version(),
-            CompatV3ToV4::Compat(compat) => compat.version(),
+            Self::V3(v3) => v3.version(),
+            Self::Compat(compat) => compat.version(),
         }
     }
 
     pub fn date(&self) -> Option<time::OffsetDateTime> {
         match self {
-            CompatV3ToV4::V3(v3) => v3.date(),
-            CompatV3ToV4::Compat(compat) => compat.date(),
+            Self::V3(v3) => v3.date(),
+            Self::Compat(compat) => compat.date(),
         }
     }
 
@@ -37,12 +37,12 @@ impl CompatV3ToV4 {
 
     pub fn indexes(&self) -> Result<impl Iterator<Item = Result<CompatIndexV3ToV4>> + '_> {
         Ok(match self {
-            CompatV3ToV4::V3(v3) => {
+            Self::V3(v3) => {
                 Box::new(v3.indexes()?.map(|index| index.map(CompatIndexV3ToV4::from)))
                     as Box<dyn Iterator<Item = Result<CompatIndexV3ToV4>> + '_>
             }
 
-            CompatV3ToV4::Compat(compat) => {
+            Self::Compat(compat) => {
                 Box::new(compat.indexes()?.map(|index| index.map(CompatIndexV3ToV4::from)))
                     as Box<dyn Iterator<Item = Result<CompatIndexV3ToV4>> + '_>
             }
@@ -53,12 +53,12 @@ impl CompatV3ToV4 {
         &mut self,
     ) -> Box<dyn Iterator<Item = Result<(v4::Task, Option<Box<UpdateFile>>)>> + '_> {
         let indexes = match self {
-            CompatV3ToV4::V3(v3) => v3.index_uuid(),
-            CompatV3ToV4::Compat(compat) => compat.index_uuid(),
+            Self::V3(v3) => v3.index_uuid(),
+            Self::Compat(compat) => compat.index_uuid(),
         };
         let tasks = match self {
-            CompatV3ToV4::V3(v3) => v3.tasks(),
-            CompatV3ToV4::Compat(compat) => compat.tasks(),
+            Self::V3(v3) => v3.tasks(),
+            Self::Compat(compat) => compat.tasks(),
         };
 
         Box::new(
@@ -229,24 +229,24 @@ impl From<CompatIndexV2ToV3> for CompatIndexV3ToV4 {
 }
 
 impl CompatIndexV3ToV4 {
-    pub fn new(v3: v3::V3IndexReader) -> CompatIndexV3ToV4 {
-        CompatIndexV3ToV4::V3(v3)
+    pub fn new(v3: v3::V3IndexReader) -> Self {
+        Self::V3(v3)
     }
 
     pub fn metadata(&self) -> &crate::IndexMetadata {
         match self {
-            CompatIndexV3ToV4::V3(v3) => v3.metadata(),
-            CompatIndexV3ToV4::Compat(compat) => compat.metadata(),
+            Self::V3(v3) => v3.metadata(),
+            Self::Compat(compat) => compat.metadata(),
         }
     }
 
     pub fn documents(&mut self) -> Result<Box<dyn Iterator<Item = Result<v4::Document>> + '_>> {
         match self {
-            CompatIndexV3ToV4::V3(v3) => v3
+            Self::V3(v3) => v3
                 .documents()
                 .map(|iter| Box::new(iter) as Box<dyn Iterator<Item = Result<v4::Document>> + '_>),
 
-            CompatIndexV3ToV4::Compat(compat) => compat
+            Self::Compat(compat) => compat
                 .documents()
                 .map(|iter| Box::new(iter) as Box<dyn Iterator<Item = Result<v4::Document>> + '_>),
         }
@@ -254,10 +254,10 @@ impl CompatIndexV3ToV4 {
 
     pub fn settings(&mut self) -> Result<v4::Settings<v4::Checked>> {
         Ok(match self {
-            CompatIndexV3ToV4::V3(v3) => {
+            Self::V3(v3) => {
                 v4::Settings::<v4::Unchecked>::from(v3.settings()?).check()
             }
-            CompatIndexV3ToV4::Compat(compat) => {
+            Self::Compat(compat) => {
                 v4::Settings::<v4::Unchecked>::from(compat.settings()?).check()
             }
         })
@@ -267,9 +267,9 @@ impl CompatIndexV3ToV4 {
 impl<T> From<v3::Setting<T>> for v4::Setting<T> {
     fn from(setting: v3::Setting<T>) -> Self {
         match setting {
-            v3::Setting::Set(t) => v4::Setting::Set(t),
-            v3::Setting::Reset => v4::Setting::Reset,
-            v3::Setting::NotSet => v4::Setting::NotSet,
+            v3::Setting::Set(t) => Self::Set(t),
+            v3::Setting::Reset => Self::Reset,
+            v3::Setting::NotSet => Self::NotSet,
         }
     }
 }
@@ -277,43 +277,43 @@ impl<T> From<v3::Setting<T>> for v4::Setting<T> {
 impl From<v3::Code> for v4::Code {
     fn from(code: v3::Code) -> Self {
         match code {
-            v3::Code::CreateIndex => v4::Code::CreateIndex,
-            v3::Code::IndexAlreadyExists => v4::Code::IndexAlreadyExists,
-            v3::Code::IndexNotFound => v4::Code::IndexNotFound,
-            v3::Code::InvalidIndexUid => v4::Code::InvalidIndexUid,
-            v3::Code::InvalidState => v4::Code::InvalidState,
-            v3::Code::MissingPrimaryKey => v4::Code::MissingPrimaryKey,
-            v3::Code::PrimaryKeyAlreadyPresent => v4::Code::PrimaryKeyAlreadyPresent,
-            v3::Code::MaxFieldsLimitExceeded => v4::Code::MaxFieldsLimitExceeded,
-            v3::Code::MissingDocumentId => v4::Code::MissingDocumentId,
-            v3::Code::InvalidDocumentId => v4::Code::InvalidDocumentId,
-            v3::Code::Filter => v4::Code::Filter,
-            v3::Code::Sort => v4::Code::Sort,
-            v3::Code::BadParameter => v4::Code::BadParameter,
-            v3::Code::BadRequest => v4::Code::BadRequest,
-            v3::Code::DatabaseSizeLimitReached => v4::Code::DatabaseSizeLimitReached,
-            v3::Code::DocumentNotFound => v4::Code::DocumentNotFound,
-            v3::Code::Internal => v4::Code::Internal,
-            v3::Code::InvalidGeoField => v4::Code::InvalidGeoField,
-            v3::Code::InvalidRankingRule => v4::Code::InvalidRankingRule,
-            v3::Code::InvalidStore => v4::Code::InvalidStore,
-            v3::Code::InvalidToken => v4::Code::InvalidToken,
-            v3::Code::MissingAuthorizationHeader => v4::Code::MissingAuthorizationHeader,
-            v3::Code::NoSpaceLeftOnDevice => v4::Code::NoSpaceLeftOnDevice,
-            v3::Code::DumpNotFound => v4::Code::DumpNotFound,
-            v3::Code::TaskNotFound => v4::Code::TaskNotFound,
-            v3::Code::PayloadTooLarge => v4::Code::PayloadTooLarge,
-            v3::Code::RetrieveDocument => v4::Code::RetrieveDocument,
-            v3::Code::SearchDocuments => v4::Code::SearchDocuments,
-            v3::Code::UnsupportedMediaType => v4::Code::UnsupportedMediaType,
-            v3::Code::DumpAlreadyInProgress => v4::Code::DumpAlreadyInProgress,
-            v3::Code::DumpProcessFailed => v4::Code::DumpProcessFailed,
-            v3::Code::InvalidContentType => v4::Code::InvalidContentType,
-            v3::Code::MissingContentType => v4::Code::MissingContentType,
-            v3::Code::MalformedPayload => v4::Code::MalformedPayload,
-            v3::Code::MissingPayload => v4::Code::MissingPayload,
-            v3::Code::UnretrievableErrorCode => v4::Code::UnretrievableErrorCode,
-            v3::Code::MalformedDump => v4::Code::MalformedDump,
+            v3::Code::CreateIndex => Self::CreateIndex,
+            v3::Code::IndexAlreadyExists => Self::IndexAlreadyExists,
+            v3::Code::IndexNotFound => Self::IndexNotFound,
+            v3::Code::InvalidIndexUid => Self::InvalidIndexUid,
+            v3::Code::InvalidState => Self::InvalidState,
+            v3::Code::MissingPrimaryKey => Self::MissingPrimaryKey,
+            v3::Code::PrimaryKeyAlreadyPresent => Self::PrimaryKeyAlreadyPresent,
+            v3::Code::MaxFieldsLimitExceeded => Self::MaxFieldsLimitExceeded,
+            v3::Code::MissingDocumentId => Self::MissingDocumentId,
+            v3::Code::InvalidDocumentId => Self::InvalidDocumentId,
+            v3::Code::Filter => Self::Filter,
+            v3::Code::Sort => Self::Sort,
+            v3::Code::BadParameter => Self::BadParameter,
+            v3::Code::BadRequest => Self::BadRequest,
+            v3::Code::DatabaseSizeLimitReached => Self::DatabaseSizeLimitReached,
+            v3::Code::DocumentNotFound => Self::DocumentNotFound,
+            v3::Code::Internal => Self::Internal,
+            v3::Code::InvalidGeoField => Self::InvalidGeoField,
+            v3::Code::InvalidRankingRule => Self::InvalidRankingRule,
+            v3::Code::InvalidStore => Self::InvalidStore,
+            v3::Code::InvalidToken => Self::InvalidToken,
+            v3::Code::MissingAuthorizationHeader => Self::MissingAuthorizationHeader,
+            v3::Code::NoSpaceLeftOnDevice => Self::NoSpaceLeftOnDevice,
+            v3::Code::DumpNotFound => Self::DumpNotFound,
+            v3::Code::TaskNotFound => Self::TaskNotFound,
+            v3::Code::PayloadTooLarge => Self::PayloadTooLarge,
+            v3::Code::RetrieveDocument => Self::RetrieveDocument,
+            v3::Code::SearchDocuments => Self::SearchDocuments,
+            v3::Code::UnsupportedMediaType => Self::UnsupportedMediaType,
+            v3::Code::DumpAlreadyInProgress => Self::DumpAlreadyInProgress,
+            v3::Code::DumpProcessFailed => Self::DumpProcessFailed,
+            v3::Code::InvalidContentType => Self::InvalidContentType,
+            v3::Code::MissingContentType => Self::MissingContentType,
+            v3::Code::MalformedPayload => Self::MalformedPayload,
+            v3::Code::MissingPayload => Self::MissingPayload,
+            v3::Code::UnretrievableErrorCode => Self::UnretrievableErrorCode,
+            v3::Code::MalformedDump => Self::MalformedDump,
         }
     }
 }

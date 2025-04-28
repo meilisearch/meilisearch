@@ -86,8 +86,8 @@ pub struct Scheduler {
 }
 
 impl Scheduler {
-    pub(crate) fn private_clone(&self) -> Scheduler {
-        Scheduler {
+    pub(crate) fn private_clone(&self) -> Self {
+        Self {
             must_stop_processing: self.must_stop_processing.clone(),
             wake_up: self.wake_up.clone(),
             autobatching_enabled: self.autobatching_enabled,
@@ -101,8 +101,8 @@ impl Scheduler {
         }
     }
 
-    pub fn new(options: &IndexSchedulerOptions, auth_env: Env<WithoutTls>) -> Scheduler {
-        Scheduler {
+    pub fn new(options: &IndexSchedulerOptions, auth_env: Env<WithoutTls>) -> Self {
+        Self {
             must_stop_processing: MustStopProcessing::default(),
             // we want to start the loop right away in case meilisearch was ctrl+Ced while processing things
             wake_up: Arc::new(SignalEvent::auto(true)),

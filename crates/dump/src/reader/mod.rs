@@ -30,7 +30,7 @@ pub enum DumpReader {
 }
 
 impl DumpReader {
-    pub fn open(dump: impl Read) -> Result<DumpReader> {
+    pub fn open(dump: impl Read) -> Result<Self> {
         let path = TempDir::new()?;
         let mut dump = BufReader::new(dump);
         let gz = GzDecoder::new(&mut dump);
@@ -59,33 +59,33 @@ impl DumpReader {
 
     pub fn version(&self) -> crate::Version {
         match self {
-            DumpReader::Current(current) => current.version(),
-            DumpReader::Compat(compat) => compat.version(),
+            Self::Current(current) => current.version(),
+            Self::Compat(compat) => compat.version(),
         }
     }
 
     pub fn date(&self) -> Option<time::OffsetDateTime> {
         match self {
-            DumpReader::Current(current) => current.date(),
-            DumpReader::Compat(compat) => compat.date(),
+            Self::Current(current) => current.date(),
+            Self::Compat(compat) => compat.date(),
         }
     }
 
     pub fn instance_uid(&self) -> Result<Option<uuid::Uuid>> {
         match self {
-            DumpReader::Current(current) => current.instance_uid(),
-            DumpReader::Compat(compat) => compat.instance_uid(),
+            Self::Current(current) => current.instance_uid(),
+            Self::Compat(compat) => compat.instance_uid(),
         }
     }
 
     pub fn indexes(&self) -> Result<Box<dyn Iterator<Item = Result<DumpIndexReader>> + '_>> {
         match self {
-            DumpReader::Current(current) => {
+            Self::Current(current) => {
                 let indexes = Box::new(current.indexes()?.map(|res| res.map(DumpIndexReader::from)))
                     as Box<dyn Iterator<Item = Result<DumpIndexReader>> + '_>;
                 Ok(indexes)
             }
-            DumpReader::Compat(compat) => {
+            Self::Compat(compat) => {
                 let indexes = Box::new(compat.indexes()?.map(|res| res.map(DumpIndexReader::from)))
                     as Box<dyn Iterator<Item = Result<DumpIndexReader>> + '_>;
                 Ok(indexes)
@@ -97,61 +97,61 @@ impl DumpReader {
         &mut self,
     ) -> Result<Box<dyn Iterator<Item = Result<(v6::Task, Option<Box<UpdateFile>>)>> + '_>> {
         match self {
-            DumpReader::Current(current) => Ok(current.tasks()),
-            DumpReader::Compat(compat) => compat.tasks(),
+            Self::Current(current) => Ok(current.tasks()),
+            Self::Compat(compat) => compat.tasks(),
         }
     }
 
     pub fn batches(&mut self) -> Result<Box<dyn Iterator<Item = Result<v6::Batch>> + '_>> {
         match self {
-            DumpReader::Current(current) => Ok(current.batches()),
-            DumpReader::Compat(_compat) => Ok(Box::new(std::iter::empty())),
+            Self::Current(current) => Ok(current.batches()),
+            Self::Compat(_compat) => Ok(Box::new(std::iter::empty())),
         }
     }
 
     pub fn keys(&mut self) -> Result<Box<dyn Iterator<Item = Result<v6::Key>> + '_>> {
         match self {
-            DumpReader::Current(current) => Ok(current.keys()),
-            DumpReader::Compat(compat) => compat.keys(),
+            Self::Current(current) => Ok(current.keys()),
+            Self::Compat(compat) => compat.keys(),
         }
     }
 
     pub fn features(&self) -> Result<Option<v6::RuntimeTogglableFeatures>> {
         match self {
-            DumpReader::Current(current) => Ok(current.features()),
-            DumpReader::Compat(compat) => compat.features(),
+            Self::Current(current) => Ok(current.features()),
+            Self::Compat(compat) => compat.features(),
         }
     }
 
     pub fn network(&self) -> Result<Option<&v6::Network>> {
         match self {
-            DumpReader::Current(current) => Ok(current.network()),
-            DumpReader::Compat(compat) => compat.network(),
+            Self::Current(current) => Ok(current.network()),
+            Self::Compat(compat) => compat.network(),
         }
     }
 }
 
 impl From<V6Reader> for DumpReader {
     fn from(value: V6Reader) -> Self {
-        DumpReader::Current(value)
+        Self::Current(value)
     }
 }
 
 impl From<CompatV5ToV6> for DumpReader {
     fn from(value: CompatV5ToV6) -> Self {
-        DumpReader::Compat(value)
+        Self::Compat(value)
     }
 }
 
 impl From<V5Reader> for DumpReader {
     fn from(value: V5Reader) -> Self {
-        DumpReader::Compat(value.to_v6())
+        Self::Compat(value.to_v6())
     }
 }
 
 impl From<CompatV4ToV5> for DumpReader {
     fn from(value: CompatV4ToV5) -> Self {
-        DumpReader::Compat(value.to_v6())
+        Self::Compat(value.to_v6())
     }
 }
 
@@ -161,23 +161,23 @@ pub enum DumpIndexReader {
 }
 
 impl DumpIndexReader {
-    pub fn new_v6(v6: v6::V6IndexReader) -> DumpIndexReader {
-        DumpIndexReader::Current(v6)
+    pub fn new_v6(v6: v6::V6IndexReader) -> Self {
+        Self::Current(v6)
     }
 
     pub fn metadata(&self) -> &crate::IndexMetadata {
         match self {
-            DumpIndexReader::Current(v6) => v6.metadata(),
-            DumpIndexReader::Compat(compat) => compat.metadata(),
+            Self::Current(v6) => v6.metadata(),
+            Self::Compat(compat) => compat.metadata(),
         }
     }
 
     pub fn documents(&mut self) -> Result<Box<dyn Iterator<Item = Result<Document>> + '_>> {
         match self {
-            DumpIndexReader::Current(v6) => v6
+            Self::Current(v6) => v6
                 .documents()
                 .map(|iter| Box::new(iter) as Box<dyn Iterator<Item = Result<Document>> + '_>),
-            DumpIndexReader::Compat(compat) => compat
+            Self::Compat(compat) => compat
                 .documents()
                 .map(|iter| Box::new(iter) as Box<dyn Iterator<Item = Result<Document>> + '_>),
         }
@@ -185,21 +185,21 @@ impl DumpIndexReader {
 
     pub fn settings(&mut self) -> Result<v6::Settings<v6::Checked>> {
         match self {
-            DumpIndexReader::Current(v6) => v6.settings(),
-            DumpIndexReader::Compat(compat) => compat.settings(),
+            Self::Current(v6) => v6.settings(),
+            Self::Compat(compat) => compat.settings(),
         }
     }
 }
 
 impl From<V6IndexReader> for DumpIndexReader {
     fn from(value: V6IndexReader) -> Self {
-        DumpIndexReader::Current(value)
+        Self::Current(value)
     }
 }
 
 impl From<CompatIndexV5ToV6> for DumpIndexReader {
     fn from(value: CompatIndexV5ToV6) -> Self {
-        DumpIndexReader::Compat(Box::new(value))
+        Self::Compat(Box::new(value))
     }
 }
 

@@ -23,7 +23,7 @@ impl<T: FromStr> FromStr for StarOr<T> {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.trim() == "*" {
-            Ok(StarOr::Star)
+            Ok(Self::Star)
         } else {
             T::from_str(s).map(StarOr::Other)
         }
@@ -32,8 +32,8 @@ impl<T: FromStr> FromStr for StarOr<T> {
 impl<T: fmt::Display> fmt::Display for StarOr<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            StarOr::Star => write!(f, "*"),
-            StarOr::Other(x) => fmt::Display::fmt(x, f),
+            Self::Star => write!(f, "*"),
+            Self::Other(x) => fmt::Display::fmt(x, f),
         }
     }
 }
@@ -106,8 +106,8 @@ where
         S: Serializer,
     {
         match self {
-            StarOr::Star => serializer.serialize_str("*"),
-            StarOr::Other(other) => serializer.serialize_str(&other.to_string()),
+            Self::Star => serializer.serialize_str("*"),
+            Self::Other(other) => serializer.serialize_str(&other.to_string()),
         }
     }
 }
@@ -124,10 +124,10 @@ where
         match value {
             deserr::Value::String(v) => {
                 if v == "*" {
-                    Ok(StarOr::Star)
+                    Ok(Self::Star)
                 } else {
                     match T::from_str(&v) {
-                        Ok(parsed) => Ok(StarOr::Other(parsed)),
+                        Ok(parsed) => Ok(Self::Other(parsed)),
                         Err(e) => Err(deserr::take_cf_content(E::merge(None, e, location))),
                     }
                 }
@@ -172,9 +172,9 @@ impl<T> OptionStarOr<T> {
     }
     pub fn try_map<U, E, F: Fn(T) -> Result<U, E>>(self, map_f: F) -> Result<OptionStarOr<U>, E> {
         match self {
-            OptionStarOr::None => Ok(OptionStarOr::None),
-            OptionStarOr::Star => Ok(OptionStarOr::Star),
-            OptionStarOr::Other(x) => map_f(x).map(OptionStarOr::Other),
+            Self::None => Ok(OptionStarOr::None),
+            Self::Star => Ok(OptionStarOr::Star),
+            Self::Other(x) => map_f(x).map(OptionStarOr::Other),
         }
     }
 }
@@ -186,7 +186,7 @@ where
     type Err = T::Err;
     fn from_query_param(p: &str) -> Result<Self, Self::Err> {
         match p {
-            "*" => Ok(OptionStarOr::Star),
+            "*" => Ok(Self::Star),
             s => T::from_query_param(s).map(OptionStarOr::Other),
         }
     }
@@ -203,9 +203,9 @@ where
     ) -> Result<Self, E> {
         match value {
             deserr::Value::String(s) => match s.as_str() {
-                "*" => Ok(OptionStarOr::Star),
+                "*" => Ok(Self::Star),
                 s => match T::from_query_param(s) {
-                    Ok(x) => Ok(OptionStarOr::Other(x)),
+                    Ok(x) => Ok(Self::Other(x)),
                     Err(e) => Err(deserr::take_cf_content(E::merge(None, e, location))),
                 },
             },
@@ -313,9 +313,9 @@ where
                 }
 
                 if is_star {
-                    Ok(OptionStarOrList::Star)
+                    Ok(Self::Star)
                 } else {
-                    Ok(OptionStarOrList::List(els))
+                    Ok(Self::List(els))
                 }
             }
             _ => Err(deserr::take_cf_content(E::error::<V>(

@@ -21,12 +21,12 @@ pub enum DateField {
 impl Display for DateField {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            DateField::BeforeEnqueuedAt => write!(f, "beforeEnqueuedAt"),
-            DateField::AfterEnqueuedAt => write!(f, "afterEnqueuedAt"),
-            DateField::BeforeStartedAt => write!(f, "beforeStartedAt"),
-            DateField::AfterStartedAt => write!(f, "afterStartedAt"),
-            DateField::BeforeFinishedAt => write!(f, "beforeFinishedAt"),
-            DateField::AfterFinishedAt => write!(f, "afterFinishedAt"),
+            Self::BeforeEnqueuedAt => write!(f, "beforeEnqueuedAt"),
+            Self::AfterEnqueuedAt => write!(f, "afterEnqueuedAt"),
+            Self::BeforeStartedAt => write!(f, "beforeStartedAt"),
+            Self::AfterStartedAt => write!(f, "afterStartedAt"),
+            Self::BeforeFinishedAt => write!(f, "beforeFinishedAt"),
+            Self::AfterFinishedAt => write!(f, "afterFinishedAt"),
         }
     }
 }
@@ -34,12 +34,12 @@ impl Display for DateField {
 impl From<DateField> for Code {
     fn from(date: DateField) -> Self {
         match date {
-            DateField::BeforeEnqueuedAt => Code::InvalidTaskBeforeEnqueuedAt,
-            DateField::AfterEnqueuedAt => Code::InvalidTaskAfterEnqueuedAt,
-            DateField::BeforeStartedAt => Code::InvalidTaskBeforeStartedAt,
-            DateField::AfterStartedAt => Code::InvalidTaskAfterStartedAt,
-            DateField::BeforeFinishedAt => Code::InvalidTaskBeforeFinishedAt,
-            DateField::AfterFinishedAt => Code::InvalidTaskAfterFinishedAt,
+            DateField::BeforeEnqueuedAt => Self::InvalidTaskBeforeEnqueuedAt,
+            DateField::AfterEnqueuedAt => Self::InvalidTaskAfterEnqueuedAt,
+            DateField::BeforeStartedAt => Self::InvalidTaskBeforeStartedAt,
+            DateField::AfterStartedAt => Self::InvalidTaskAfterStartedAt,
+            DateField::BeforeFinishedAt => Self::InvalidTaskBeforeFinishedAt,
+            DateField::AfterFinishedAt => Self::InvalidTaskAfterFinishedAt,
         }
     }
 }
@@ -173,45 +173,45 @@ pub struct FeatureNotEnabledError {
 impl Error {
     pub fn is_recoverable(&self) -> bool {
         match self {
-            Error::IndexNotFound(_)
-            | Error::WithCustomErrorCode(_, _)
-            | Error::BadTaskId { .. }
-            | Error::IndexAlreadyExists(_)
-            | Error::SwapDuplicateIndexFound(_)
-            | Error::SwapDuplicateIndexesFound(_)
-            | Error::SwapIndexNotFound(_)
-            | Error::NoSpaceLeftInTaskQueue
-            | Error::SwapIndexesNotFound(_)
-            | Error::CorruptedDump
-            | Error::InvalidTaskDate { .. }
-            | Error::InvalidTaskUid { .. }
-            | Error::InvalidBatchUid { .. }
-            | Error::InvalidTaskStatuses { .. }
-            | Error::InvalidTaskTypes { .. }
-            | Error::InvalidTaskCanceledBy { .. }
-            | Error::InvalidIndexUid { .. }
-            | Error::TaskNotFound(_)
-            | Error::TaskFileNotFound(_)
-            | Error::BatchNotFound(_)
-            | Error::TaskDeletionWithEmptyQuery
-            | Error::TaskCancelationWithEmptyQuery
-            | Error::AbortedTask
-            | Error::Dump(_)
-            | Error::Heed(_)
-            | Error::Milli { .. }
-            | Error::ProcessBatchPanicked(_)
-            | Error::FileStore(_)
-            | Error::IoError(_)
-            | Error::Persist(_)
-            | Error::FeatureNotEnabled(_)
-            | Error::Anyhow(_) => true,
-            Error::CreateBatch(_)
-            | Error::CorruptedTaskQueue
-            | Error::DatabaseUpgrade(_)
-            | Error::UnrecoverableError(_)
-            | Error::HeedTransaction(_) => false,
+            Self::IndexNotFound(_)
+            | Self::WithCustomErrorCode(_, _)
+            | Self::BadTaskId { .. }
+            | Self::IndexAlreadyExists(_)
+            | Self::SwapDuplicateIndexFound(_)
+            | Self::SwapDuplicateIndexesFound(_)
+            | Self::SwapIndexNotFound(_)
+            | Self::NoSpaceLeftInTaskQueue
+            | Self::SwapIndexesNotFound(_)
+            | Self::CorruptedDump
+            | Self::InvalidTaskDate { .. }
+            | Self::InvalidTaskUid { .. }
+            | Self::InvalidBatchUid { .. }
+            | Self::InvalidTaskStatuses { .. }
+            | Self::InvalidTaskTypes { .. }
+            | Self::InvalidTaskCanceledBy { .. }
+            | Self::InvalidIndexUid { .. }
+            | Self::TaskNotFound(_)
+            | Self::TaskFileNotFound(_)
+            | Self::BatchNotFound(_)
+            | Self::TaskDeletionWithEmptyQuery
+            | Self::TaskCancelationWithEmptyQuery
+            | Self::AbortedTask
+            | Self::Dump(_)
+            | Self::Heed(_)
+            | Self::Milli { .. }
+            | Self::ProcessBatchPanicked(_)
+            | Self::FileStore(_)
+            | Self::IoError(_)
+            | Self::Persist(_)
+            | Self::FeatureNotEnabled(_)
+            | Self::Anyhow(_) => true,
+            Self::CreateBatch(_)
+            | Self::CorruptedTaskQueue
+            | Self::DatabaseUpgrade(_)
+            | Self::UnrecoverableError(_)
+            | Self::HeedTransaction(_) => false,
             #[cfg(test)]
-            Error::PlannedFailure => false,
+            Self::PlannedFailure => false,
         }
     }
 
@@ -237,51 +237,51 @@ impl Error {
 impl ErrorCode for Error {
     fn error_code(&self) -> Code {
         match self {
-            Error::WithCustomErrorCode(code, _) => *code,
-            Error::BadTaskId { .. } => Code::BadRequest,
-            Error::IndexNotFound(_) => Code::IndexNotFound,
-            Error::IndexAlreadyExists(_) => Code::IndexAlreadyExists,
-            Error::SwapDuplicateIndexesFound(_) => Code::InvalidSwapDuplicateIndexFound,
-            Error::SwapDuplicateIndexFound(_) => Code::InvalidSwapDuplicateIndexFound,
-            Error::SwapIndexNotFound(_) => Code::IndexNotFound,
-            Error::SwapIndexesNotFound(_) => Code::IndexNotFound,
-            Error::InvalidTaskDate { field, .. } => (*field).into(),
-            Error::InvalidTaskUid { .. } => Code::InvalidTaskUids,
-            Error::InvalidBatchUid { .. } => Code::InvalidBatchUids,
-            Error::InvalidTaskStatuses { .. } => Code::InvalidTaskStatuses,
-            Error::InvalidTaskTypes { .. } => Code::InvalidTaskTypes,
-            Error::InvalidTaskCanceledBy { .. } => Code::InvalidTaskCanceledBy,
-            Error::InvalidIndexUid { .. } => Code::InvalidIndexUid,
-            Error::TaskNotFound(_) => Code::TaskNotFound,
-            Error::TaskFileNotFound(_) => Code::TaskFileNotFound,
-            Error::BatchNotFound(_) => Code::BatchNotFound,
-            Error::TaskDeletionWithEmptyQuery => Code::MissingTaskFilters,
-            Error::TaskCancelationWithEmptyQuery => Code::MissingTaskFilters,
+            Self::WithCustomErrorCode(code, _) => *code,
+            Self::BadTaskId { .. } => Code::BadRequest,
+            Self::IndexNotFound(_) => Code::IndexNotFound,
+            Self::IndexAlreadyExists(_) => Code::IndexAlreadyExists,
+            Self::SwapDuplicateIndexesFound(_) => Code::InvalidSwapDuplicateIndexFound,
+            Self::SwapDuplicateIndexFound(_) => Code::InvalidSwapDuplicateIndexFound,
+            Self::SwapIndexNotFound(_) => Code::IndexNotFound,
+            Self::SwapIndexesNotFound(_) => Code::IndexNotFound,
+            Self::InvalidTaskDate { field, .. } => (*field).into(),
+            Self::InvalidTaskUid { .. } => Code::InvalidTaskUids,
+            Self::InvalidBatchUid { .. } => Code::InvalidBatchUids,
+            Self::InvalidTaskStatuses { .. } => Code::InvalidTaskStatuses,
+            Self::InvalidTaskTypes { .. } => Code::InvalidTaskTypes,
+            Self::InvalidTaskCanceledBy { .. } => Code::InvalidTaskCanceledBy,
+            Self::InvalidIndexUid { .. } => Code::InvalidIndexUid,
+            Self::TaskNotFound(_) => Code::TaskNotFound,
+            Self::TaskFileNotFound(_) => Code::TaskFileNotFound,
+            Self::BatchNotFound(_) => Code::BatchNotFound,
+            Self::TaskDeletionWithEmptyQuery => Code::MissingTaskFilters,
+            Self::TaskCancelationWithEmptyQuery => Code::MissingTaskFilters,
             // TODO: not sure of the Code to use
-            Error::NoSpaceLeftInTaskQueue => Code::NoSpaceLeftOnDevice,
-            Error::Dump(e) => e.error_code(),
-            Error::Milli { error, .. } => error.error_code(),
-            Error::ProcessBatchPanicked(_) => Code::Internal,
-            Error::Heed(e) => e.error_code(),
-            Error::HeedTransaction(e) => e.error_code(),
-            Error::FileStore(e) => e.error_code(),
-            Error::IoError(e) => e.error_code(),
-            Error::Persist(e) => e.error_code(),
-            Error::FeatureNotEnabled(_) => Code::FeatureNotEnabled,
+            Self::NoSpaceLeftInTaskQueue => Code::NoSpaceLeftOnDevice,
+            Self::Dump(e) => e.error_code(),
+            Self::Milli { error, .. } => error.error_code(),
+            Self::ProcessBatchPanicked(_) => Code::Internal,
+            Self::Heed(e) => e.error_code(),
+            Self::HeedTransaction(e) => e.error_code(),
+            Self::FileStore(e) => e.error_code(),
+            Self::IoError(e) => e.error_code(),
+            Self::Persist(e) => e.error_code(),
+            Self::FeatureNotEnabled(_) => Code::FeatureNotEnabled,
 
             // Irrecoverable errors
-            Error::Anyhow(_) => Code::Internal,
-            Error::CorruptedTaskQueue => Code::Internal,
-            Error::CorruptedDump => Code::Internal,
-            Error::DatabaseUpgrade(_) => Code::Internal,
-            Error::UnrecoverableError(_) => Code::Internal,
-            Error::CreateBatch(_) => Code::Internal,
+            Self::Anyhow(_) => Code::Internal,
+            Self::CorruptedTaskQueue => Code::Internal,
+            Self::CorruptedDump => Code::Internal,
+            Self::DatabaseUpgrade(_) => Code::Internal,
+            Self::UnrecoverableError(_) => Code::Internal,
+            Self::CreateBatch(_) => Code::Internal,
 
             // This one should never be seen by the end user
-            Error::AbortedTask => Code::Internal,
+            Self::AbortedTask => Code::Internal,
 
             #[cfg(test)]
-            Error::PlannedFailure => Code::Internal,
+            Self::PlannedFailure => Code::Internal,
         }
     }
 }

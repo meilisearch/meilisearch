@@ -26,7 +26,7 @@ pub struct TraceLayer {
 impl Trace {
     pub fn new(profile_memory: bool) -> (Self, TraceLayer) {
         let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
-        let trace = Trace { receiver };
+        let trace = Self { receiver };
         let layer = TraceLayer {
             sender,
             callsites: Default::default(),

@@ -142,7 +142,7 @@ impl Task {
     /// Return the content_uuid of the `Task` if there is one.
     pub fn get_content_uuid(&self) -> Option<Uuid> {
         match self {
-            Task { content: TaskContent::DocumentAddition { content_uuid, .. }, .. } => {
+            Self { content: TaskContent::DocumentAddition { content_uuid, .. }, .. } => {
                 Some(*content_uuid)
             }
             _ => None,

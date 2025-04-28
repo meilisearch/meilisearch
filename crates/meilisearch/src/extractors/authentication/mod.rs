@@ -179,8 +179,8 @@ pub mod policies {
             use jsonwebtoken::errors::ErrorKind;
 
             match error.kind() {
-                ErrorKind::InvalidToken => AuthError::InvalidTenantToken,
-                _ => AuthError::CouldNotDecodeTenantToken(error),
+                ErrorKind::InvalidToken => Self::InvalidTenantToken,
+                _ => Self::CouldNotDecodeTenantToken(error),
             }
         }
     }
@@ -188,7 +188,7 @@ pub mod policies {
     impl ErrorCode for AuthError {
         fn error_code(&self) -> Code {
             match self {
-                AuthError::InternalInvalidAction(_) => Code::Internal,
+                Self::InternalInvalidAction(_) => Code::Internal,
                 _ => Code::InvalidApiKey,
             }
         }
@@ -240,7 +240,7 @@ pub mod policies {
             }
 
             let (key_uuid, search_rules) =
-                match ActionPolicy::<A>::authenticate_tenant_token(&auth, token) {
+                match Self::authenticate_tenant_token(&auth, token) {
                     Ok(TenantTokenOutcome::Valid(key_uuid, search_rules)) => {
                         (key_uuid, Some(search_rules))
                     }

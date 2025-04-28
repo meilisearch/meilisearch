@@ -193,7 +193,7 @@ pub struct SummarizedTaskView {
 
 impl From<Task> for SummarizedTaskView {
     fn from(task: Task) -> Self {
-        SummarizedTaskView {
+        Self {
             task_uid: task.uid,
             index_uid: task.index_uid().map(|s| s.to_string()),
             status: task.status,

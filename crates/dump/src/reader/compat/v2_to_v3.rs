@@ -14,14 +14,14 @@ pub enum CompatV2ToV3 {
 }
 
 impl CompatV2ToV3 {
-    pub fn new(v2: v2::V2Reader) -> CompatV2ToV3 {
-        CompatV2ToV3::V2(v2)
+    pub fn new(v2: v2::V2Reader) -> Self {
+        Self::V2(v2)
     }
 
     pub fn index_uuid(&self) -> Vec<v3::meta::IndexUuid> {
         let v2_uuids = match self {
-            CompatV2ToV3::V2(from) => from.index_uuid(),
-            CompatV2ToV3::Compat(compat) => compat.index_uuid(),
+            Self::V2(from) => from.index_uuid(),
+            Self::Compat(compat) => compat.index_uuid(),
         };
         v2_uuids
             .into_iter()
@@ -35,15 +35,15 @@ impl CompatV2ToV3 {
 
     pub fn version(&self) -> crate::Version {
         match self {
-            CompatV2ToV3::V2(from) => from.version(),
-            CompatV2ToV3::Compat(compat) => compat.version(),
+            Self::V2(from) => from.version(),
+            Self::Compat(compat) => compat.version(),
         }
     }
 
     pub fn date(&self) -> Option<time::OffsetDateTime> {
         match self {
-            CompatV2ToV3::V2(from) => from.date(),
-            CompatV2ToV3::Compat(compat) => compat.date(),
+            Self::V2(from) => from.date(),
+            Self::Compat(compat) => compat.date(),
         }
     }
 
@@ -53,12 +53,12 @@ impl CompatV2ToV3 {
 
     pub fn indexes(&self) -> Result<impl Iterator<Item = Result<CompatIndexV2ToV3>> + '_> {
         Ok(match self {
-            CompatV2ToV3::V2(from) => Box::new(from.indexes()?.map(|index_reader| -> Result<_> {
+            Self::V2(from) => Box::new(from.indexes()?.map(|index_reader| -> Result<_> {
                 let compat = CompatIndexV2ToV3::new(index_reader?);
                 Ok(compat)
             }))
                 as Box<dyn Iterator<Item = Result<CompatIndexV2ToV3>> + '_>,
-            CompatV2ToV3::Compat(compat) => Box::new(compat.indexes()?.map(|index_reader| {
+            Self::Compat(compat) => Box::new(compat.indexes()?.map(|index_reader| {
                 let compat = CompatIndexV2ToV3::Compat(Box::new(index_reader?));
                 Ok(compat)
             }))
@@ -73,8 +73,8 @@ impl CompatV2ToV3 {
             + '_,
     > {
         let tasks = match self {
-            CompatV2ToV3::V2(from) => from.tasks(),
-            CompatV2ToV3::Compat(compat) => compat.tasks(),
+            Self::V2(from) => from.tasks(),
+            Self::Compat(compat) => compat.tasks(),
         };
 
         Box::new(
@@ -102,30 +102,30 @@ pub enum CompatIndexV2ToV3 {
 }
 
 impl CompatIndexV2ToV3 {
-    pub fn new(v2: v2::V2IndexReader) -> CompatIndexV2ToV3 {
-        CompatIndexV2ToV3::V2(v2)
+    pub fn new(v2: v2::V2IndexReader) -> Self {
+        Self::V2(v2)
     }
 
     pub fn metadata(&self) -> &crate::IndexMetadata {
         match self {
-            CompatIndexV2ToV3::V2(from) => from.metadata(),
-            CompatIndexV2ToV3::Compat(compat) => compat.metadata(),
+            Self::V2(from) => from.metadata(),
+            Self::Compat(compat) => compat.metadata(),
         }
     }
 
     pub fn documents(&mut self) -> Result<Box<dyn Iterator<Item = Result<Document>> + '_>> {
         match self {
-            CompatIndexV2ToV3::V2(from) => from
+            Self::V2(from) => from
                 .documents()
                 .map(|iter| Box::new(iter) as Box<dyn Iterator<Item = Result<Document>> + '_>),
-            CompatIndexV2ToV3::Compat(compat) => compat.documents(),
+            Self::Compat(compat) => compat.documents(),
         }
     }
 
     pub fn settings(&mut self) -> Result<v3::Settings<v3::Checked>> {
         let settings = match self {
-            CompatIndexV2ToV3::V2(from) => from.settings()?,
-            CompatIndexV2ToV3::Compat(compat) => compat.settings()?,
+            Self::V2(from) => from.settings()?,
+            Self::Compat(compat) => compat.settings()?,
         };
         Ok(v3::Settings::<v3::Unchecked>::from(settings).check())
     }
@@ -136,7 +136,7 @@ impl From<v2::updates::UpdateStatus> for v3::updates::UpdateStatus {
         match update {
             v2::updates::UpdateStatus::Processing(processing) => {
                 match (processing.from.meta.clone(), processing.from.content).try_into() {
-                    Ok(meta) => v3::updates::UpdateStatus::Processing(v3::updates::Processing {
+                    Ok(meta) => Self::Processing(v3::updates::Processing {
                         from: v3::updates::Enqueued {
                             update_id: processing.from.update_id,
                             meta,
@@ -147,7 +147,7 @@ impl From<v2::updates::UpdateStatus> for v3::updates::UpdateStatus {
                     Err(e) => {
                         tracing::warn!("Error with task {}: {}", processing.from.update_id, e);
                         tracing::warn!("Task will be marked as `Failed`.");
-                        v3::updates::UpdateStatus::Failed(v3::updates::Failed {
+                        Self::Failed(v3::updates::Failed {
                             from: v3::updates::Processing {
                                 from: v3::updates::Enqueued {
                                     update_id: processing.from.update_id,
@@ -165,7 +165,7 @@ impl From<v2::updates::UpdateStatus> for v3::updates::UpdateStatus {
             }
             v2::updates::UpdateStatus::Enqueued(enqueued) => {
                 match (enqueued.meta.clone(), enqueued.content).try_into() {
-                    Ok(meta) => v3::updates::UpdateStatus::Enqueued(v3::updates::Enqueued {
+                    Ok(meta) => Self::Enqueued(v3::updates::Enqueued {
                         update_id: enqueued.update_id,
                         meta,
                         enqueued_at: enqueued.enqueued_at,
@@ -173,7 +173,7 @@ impl From<v2::updates::UpdateStatus> for v3::updates::UpdateStatus {
                     Err(e) => {
                         tracing::warn!("Error with task {}: {}", enqueued.update_id, e);
                         tracing::warn!("Task will be marked as `Failed`.");
-                        v3::updates::UpdateStatus::Failed(v3::updates::Failed {
+                        Self::Failed(v3::updates::Failed {
                             from: v3::updates::Processing {
                                 from: v3::updates::Enqueued {
                                     update_id: enqueued.update_id,
@@ -190,7 +190,7 @@ impl From<v2::updates::UpdateStatus> for v3::updates::UpdateStatus {
                 }
             }
             v2::updates::UpdateStatus::Processed(processed) => {
-                v3::updates::UpdateStatus::Processed(v3::updates::Processed {
+                Self::Processed(v3::updates::Processed {
                     success: processed.success.into(),
                     processed_at: processed.processed_at,
                     from: v3::updates::Processing {
@@ -205,7 +205,7 @@ impl From<v2::updates::UpdateStatus> for v3::updates::UpdateStatus {
                 })
             }
             v2::updates::UpdateStatus::Aborted(aborted) => {
-                v3::updates::UpdateStatus::Aborted(v3::updates::Aborted {
+                Self::Aborted(v3::updates::Aborted {
                     from: v3::updates::Enqueued {
                         update_id: aborted.from.update_id,
                         // since we're never going to read the content_file again it's ok to generate a fake one.
@@ -216,7 +216,7 @@ impl From<v2::updates::UpdateStatus> for v3::updates::UpdateStatus {
                 })
             }
             v2::updates::UpdateStatus::Failed(failed) => {
-                v3::updates::UpdateStatus::Failed(v3::updates::Failed {
+                Self::Failed(v3::updates::Failed {
                     from: v3::updates::Processing {
                         from: v3::updates::Enqueued {
                             update_id: failed.from.from.update_id,
@@ -243,7 +243,7 @@ impl TryFrom<(v2::updates::UpdateMeta, Option<Uuid>)> for v3::updates::Update {
             v2::updates::UpdateMeta::DocumentsAddition { method, format: _, primary_key }
                 if uuid.is_some() =>
             {
-                v3::updates::Update::DocumentAddition {
+                Self::DocumentAddition {
                     primary_key,
                     method: match method {
                         v2::updates::IndexDocumentsMethod::ReplaceDocuments => {
@@ -259,12 +259,12 @@ impl TryFrom<(v2::updates::UpdateMeta, Option<Uuid>)> for v3::updates::Update {
             v2::updates::UpdateMeta::DocumentsAddition { .. } => {
                 return Err(crate::Error::MalformedTask)
             }
-            v2::updates::UpdateMeta::ClearDocuments => v3::updates::Update::ClearDocuments,
+            v2::updates::UpdateMeta::ClearDocuments => Self::ClearDocuments,
             v2::updates::UpdateMeta::DeleteDocuments { ids } => {
-                v3::updates::Update::DeleteDocuments(ids)
+                Self::DeleteDocuments(ids)
             }
             v2::updates::UpdateMeta::Settings(settings) => {
-                v3::updates::Update::Settings(settings.into())
+                Self::Settings(settings.into())
             }
         })
     }
@@ -301,14 +301,14 @@ impl From<v2::updates::UpdateResult> for v3::updates::UpdateResult {
     fn from(result: v2::updates::UpdateResult) -> Self {
         match result {
             v2::updates::UpdateResult::DocumentsAddition(addition) => {
-                v3::updates::UpdateResult::DocumentsAddition(v3::updates::DocumentAdditionResult {
+                Self::DocumentsAddition(v3::updates::DocumentAdditionResult {
                     nb_documents: addition.nb_documents,
                 })
             }
             v2::updates::UpdateResult::DocumentDeletion { deleted } => {
-                v3::updates::UpdateResult::DocumentDeletion { deleted }
+                Self::DocumentDeletion { deleted }
             }
-            v2::updates::UpdateResult::Other => v3::updates::UpdateResult::Other,
+            v2::updates::UpdateResult::Other => Self::Other,
         }
     }
 }
@@ -316,44 +316,44 @@ impl From<v2::updates::UpdateResult> for v3::updates::UpdateResult {
 impl From<String> for v3::Code {
     fn from(code: String) -> Self {
         match code.as_ref() {
-            "create_index" => v3::Code::CreateIndex,
-            "index_already_exists" => v3::Code::IndexAlreadyExists,
-            "index_not_found" => v3::Code::IndexNotFound,
-            "invalid_index_uid" => v3::Code::InvalidIndexUid,
-            "invalid_state" => v3::Code::InvalidState,
-            "missing_primary_key" => v3::Code::MissingPrimaryKey,
-            "primary_key_already_present" => v3::Code::PrimaryKeyAlreadyPresent,
-            "max_fields_limit_exceeded" => v3::Code::MaxFieldsLimitExceeded,
-            "missing_document_id" => v3::Code::MissingDocumentId,
-            "invalid_document_id" => v3::Code::InvalidDocumentId,
-            "filter" => v3::Code::Filter,
-            "sort" => v3::Code::Sort,
-            "bad_parameter" => v3::Code::BadParameter,
-            "bad_request" => v3::Code::BadRequest,
-            "database_size_limit_reached" => v3::Code::DatabaseSizeLimitReached,
-            "document_not_found" => v3::Code::DocumentNotFound,
-            "internal" => v3::Code::Internal,
-            "invalid_geo_field" => v3::Code::InvalidGeoField,
-            "invalid_ranking_rule" => v3::Code::InvalidRankingRule,
-            "invalid_store" => v3::Code::InvalidStore,
-            "invalid_token" => v3::Code::InvalidToken,
-            "missing_authorization_header" => v3::Code::MissingAuthorizationHeader,
-            "no_space_left_on_device" => v3::Code::NoSpaceLeftOnDevice,
-            "dump_not_found" => v3::Code::DumpNotFound,
-            "task_not_found" => v3::Code::TaskNotFound,
-            "payload_too_large" => v3::Code::PayloadTooLarge,
-            "retrieve_document" => v3::Code::RetrieveDocument,
-            "search_documents" => v3::Code::SearchDocuments,
-            "unsupported_media_type" => v3::Code::UnsupportedMediaType,
-            "dump_already_in_progress" => v3::Code::DumpAlreadyInProgress,
-            "dump_process_failed" => v3::Code::DumpProcessFailed,
-            "invalid_content_type" => v3::Code::InvalidContentType,
-            "missing_content_type" => v3::Code::MissingContentType,
-            "malformed_payload" => v3::Code::MalformedPayload,
-            "missing_payload" => v3::Code::MissingPayload,
+            "create_index" => Self::CreateIndex,
+            "index_already_exists" => Self::IndexAlreadyExists,
+            "index_not_found" => Self::IndexNotFound,
+            "invalid_index_uid" => Self::InvalidIndexUid,
+            "invalid_state" => Self::InvalidState,
+            "missing_primary_key" => Self::MissingPrimaryKey,
+            "primary_key_already_present" => Self::PrimaryKeyAlreadyPresent,
+            "max_fields_limit_exceeded" => Self::MaxFieldsLimitExceeded,
+            "missing_document_id" => Self::MissingDocumentId,
+            "invalid_document_id" => Self::InvalidDocumentId,
+            "filter" => Self::Filter,
+            "sort" => Self::Sort,
+            "bad_parameter" => Self::BadParameter,
+            "bad_request" => Self::BadRequest,
+            "database_size_limit_reached" => Self::DatabaseSizeLimitReached,
+            "document_not_found" => Self::DocumentNotFound,
+            "internal" => Self::Internal,
+            "invalid_geo_field" => Self::InvalidGeoField,
+            "invalid_ranking_rule" => Self::InvalidRankingRule,
+            "invalid_store" => Self::InvalidStore,
+            "invalid_token" => Self::InvalidToken,
+            "missing_authorization_header" => Self::MissingAuthorizationHeader,
+            "no_space_left_on_device" => Self::NoSpaceLeftOnDevice,
+            "dump_not_found" => Self::DumpNotFound,
+            "task_not_found" => Self::TaskNotFound,
+            "payload_too_large" => Self::PayloadTooLarge,
+            "retrieve_document" => Self::RetrieveDocument,
+            "search_documents" => Self::SearchDocuments,
+            "unsupported_media_type" => Self::UnsupportedMediaType,
+            "dump_already_in_progress" => Self::DumpAlreadyInProgress,
+            "dump_process_failed" => Self::DumpProcessFailed,
+            "invalid_content_type" => Self::InvalidContentType,
+            "missing_content_type" => Self::MissingContentType,
+            "malformed_payload" => Self::MalformedPayload,
+            "missing_payload" => Self::MissingPayload,
             other => {
                 tracing::warn!("Unknown error code {}", other);
-                v3::Code::UnretrievableErrorCode
+                Self::UnretrievableErrorCode
             }
         }
     }
@@ -362,9 +362,9 @@ impl From<String> for v3::Code {
 impl<A> From<v2::Setting<A>> for v3::Setting<A> {
     fn from(setting: v2::Setting<A>) -> Self {
         match setting {
-            v2::settings::Setting::Set(a) => v3::settings::Setting::Set(a),
-            v2::settings::Setting::Reset => v3::settings::Setting::Reset,
-            v2::settings::Setting::NotSet => v3::settings::Setting::NotSet,
+            v2::settings::Setting::Set(a) => Self::Set(a),
+            v2::settings::Setting::Reset => Self::Reset,
+            v2::settings::Setting::NotSet => Self::NotSet,
         }
     }
 }

@@ -291,7 +291,7 @@ impl std::convert::TryFrom<String> for RankingScoreThresholdGet {
 
     fn try_from(s: String) -> Result<Self, Self::Error> {
         let f: f64 = s.parse().map_err(|_| InvalidSimilarRankingScoreThreshold)?;
-        Ok(RankingScoreThresholdGet(RankingScoreThresholdSimilar::try_from(f)?))
+        Ok(Self(RankingScoreThresholdSimilar::try_from(f)?))
     }
 }
 
@@ -318,7 +318,7 @@ impl From<SimilarQueryGet> for SimilarQuery {
             None => None,
         };
 
-        SimilarQuery {
+        Self {
             id: serde_json::Value::String(id.0),
             offset: offset.0,
             limit: limit.0,

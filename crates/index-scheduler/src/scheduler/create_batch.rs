@@ -100,19 +100,19 @@ impl Batch {
     /// Return the task ids associated with this batch.
     pub fn ids(&self) -> RoaringBitmap {
         match self {
-            Batch::TaskCancelation { task, .. }
-            | Batch::Dump(task)
-            | Batch::IndexCreation { task, .. }
-            | Batch::IndexUpdate { task, .. } => {
+            Self::TaskCancelation { task, .. }
+            | Self::Dump(task)
+            | Self::IndexCreation { task, .. }
+            | Self::IndexUpdate { task, .. } => {
                 RoaringBitmap::from_sorted_iter(std::iter::once(task.uid)).unwrap()
             }
-            Batch::SnapshotCreation(tasks)
-            | Batch::TaskDeletions(tasks)
-            | Batch::UpgradeDatabase { tasks }
-            | Batch::IndexDeletion { tasks, .. } => {
+            Self::SnapshotCreation(tasks)
+            | Self::TaskDeletions(tasks)
+            | Self::UpgradeDatabase { tasks }
+            | Self::IndexDeletion { tasks, .. } => {
                 RoaringBitmap::from_iter(tasks.iter().map(|task| task.uid))
             }
-            Batch::IndexOperation { op, .. } => match op {
+            Self::IndexOperation { op, .. } => match op {
                 IndexOperation::DocumentOperation { tasks, .. }
                 | IndexOperation::Settings { tasks, .. }
                 | IndexOperation::DocumentDeletion { tasks, .. }
@@ -128,7 +128,7 @@ impl Batch {
                     ..
                 } => RoaringBitmap::from_iter(tasks.iter().chain(other).map(|task| task.uid)),
             },
-            Batch::IndexSwap { task } => {
+            Self::IndexSwap { task } => {
                 RoaringBitmap::from_sorted_iter(std::iter::once(task.uid)).unwrap()
             }
         }
@@ -158,16 +158,16 @@ impl fmt::Display for Batch {
         let index_uid = self.index_uid();
         let tasks = self.ids();
         match self {
-            Batch::TaskCancelation { .. } => f.write_str("TaskCancelation")?,
-            Batch::TaskDeletions(_) => f.write_str("TaskDeletion")?,
-            Batch::SnapshotCreation(_) => f.write_str("SnapshotCreation")?,
-            Batch::Dump(_) => f.write_str("Dump")?,
-            Batch::IndexOperation { op, .. } => write!(f, "{op}")?,
-            Batch::IndexCreation { .. } => f.write_str("IndexCreation")?,
-            Batch::IndexUpdate { .. } => f.write_str("IndexUpdate")?,
-            Batch::IndexDeletion { .. } => f.write_str("IndexDeletion")?,
-            Batch::IndexSwap { .. } => f.write_str("IndexSwap")?,
-            Batch::UpgradeDatabase { .. } => f.write_str("UpgradeDatabase")?,
+            Self::TaskCancelation { .. } => f.write_str("TaskCancelation")?,
+            Self::TaskDeletions(_) => f.write_str("TaskDeletion")?,
+            Self::SnapshotCreation(_) => f.write_str("SnapshotCreation")?,
+            Self::Dump(_) => f.write_str("Dump")?,
+            Self::IndexOperation { op, .. } => write!(f, "{op}")?,
+            Self::IndexCreation { .. } => f.write_str("IndexCreation")?,
+            Self::IndexUpdate { .. } => f.write_str("IndexUpdate")?,
+            Self::IndexDeletion { .. } => f.write_str("IndexDeletion")?,
+            Self::IndexSwap { .. } => f.write_str("IndexSwap")?,
+            Self::UpgradeDatabase { .. } => f.write_str("UpgradeDatabase")?,
         };
         match index_uid {
             Some(name) => f.write_fmt(format_args!(" on {name:?} from tasks: {tasks:?}")),
@@ -179,12 +179,12 @@ impl fmt::Display for Batch {
 impl IndexOperation {
     pub fn index_uid(&self) -> &str {
         match self {
-            IndexOperation::DocumentOperation { index_uid, .. }
-            | IndexOperation::DocumentEdition { index_uid, .. }
-            | IndexOperation::DocumentDeletion { index_uid, .. }
-            | IndexOperation::DocumentClear { index_uid, .. }
-            | IndexOperation::Settings { index_uid, .. }
-            | IndexOperation::DocumentClearAndSetting { index_uid, .. } => index_uid,
+            Self::DocumentOperation { index_uid, .. }
+            | Self::DocumentEdition { index_uid, .. }
+            | Self::DocumentDeletion { index_uid, .. }
+            | Self::DocumentClear { index_uid, .. }
+            | Self::Settings { index_uid, .. }
+            | Self::DocumentClearAndSetting { index_uid, .. } => index_uid,
         }
     }
 }
@@ -192,18 +192,18 @@ impl IndexOperation {
 impl fmt::Display for IndexOperation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            IndexOperation::DocumentOperation { .. } => {
+            Self::DocumentOperation { .. } => {
                 f.write_str("IndexOperation::DocumentOperation")
             }
-            IndexOperation::DocumentEdition { .. } => {
+            Self::DocumentEdition { .. } => {
                 f.write_str("IndexOperation::DocumentEdition")
             }
-            IndexOperation::DocumentDeletion { .. } => {
+            Self::DocumentDeletion { .. } => {
                 f.write_str("IndexOperation::DocumentDeletion")
             }
-            IndexOperation::DocumentClear { .. } => f.write_str("IndexOperation::DocumentClear"),
-            IndexOperation::Settings { .. } => f.write_str("IndexOperation::Settings"),
-            IndexOperation::DocumentClearAndSetting { .. } => {
+            Self::DocumentClear { .. } => f.write_str("IndexOperation::DocumentClear"),
+            Self::Settings { .. } => f.write_str("IndexOperation::Settings"),
+            Self::DocumentClearAndSetting { .. } => {
                 f.write_str("IndexOperation::DocumentClearAndSetting")
             }
         }

@@ -122,7 +122,7 @@ impl Task {
     /// Return the content_uuid of the `Task` if there is one.
     pub fn get_content_uuid(&self) -> Option<Uuid> {
         match self {
-            Task { content: TaskContent::DocumentAddition { content_uuid, .. }, .. } => {
+            Self { content: TaskContent::DocumentAddition { content_uuid, .. }, .. } => {
                 Some(*content_uuid)
             }
             _ => None,
@@ -355,13 +355,13 @@ pub enum TaskType {
 impl From<TaskContent> for TaskType {
     fn from(other: TaskContent) -> Self {
         match other {
-            TaskContent::IndexCreation { .. } => TaskType::IndexCreation,
-            TaskContent::IndexUpdate { .. } => TaskType::IndexUpdate,
-            TaskContent::IndexDeletion { .. } => TaskType::IndexDeletion,
-            TaskContent::DocumentAddition { .. } => TaskType::DocumentAdditionOrUpdate,
-            TaskContent::DocumentDeletion { .. } => TaskType::DocumentDeletion,
-            TaskContent::SettingsUpdate { .. } => TaskType::SettingsUpdate,
-            TaskContent::Dump { .. } => TaskType::DumpCreation,
+            TaskContent::IndexCreation { .. } => Self::IndexCreation,
+            TaskContent::IndexUpdate { .. } => Self::IndexUpdate,
+            TaskContent::IndexDeletion { .. } => Self::IndexDeletion,
+            TaskContent::DocumentAddition { .. } => Self::DocumentAdditionOrUpdate,
+            TaskContent::DocumentDeletion { .. } => Self::DocumentDeletion,
+            TaskContent::SettingsUpdate { .. } => Self::SettingsUpdate,
+            TaskContent::Dump { .. } => Self::DumpCreation,
         }
     }
 }

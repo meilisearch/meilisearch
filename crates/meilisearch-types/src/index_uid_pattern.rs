@@ -23,7 +23,7 @@ impl IndexUidPattern {
 
     /// Matches any index name.
     pub fn all() -> Self {
-        IndexUidPattern::from_str("*").unwrap()
+        Self::from_str("*").unwrap()
     }
 
     /// Returns `true` if it matches any index.
@@ -69,8 +69,8 @@ impl TryFrom<String> for IndexUidPattern {
 
     fn try_from(uid: String) -> Result<Self, Self::Error> {
         let result = match uid.strip_suffix('*') {
-            Some("") => Ok(IndexUidPattern(uid)),
-            Some(prefix) => IndexUid::from_str(prefix).map(|_| IndexUidPattern(uid)),
+            Some("") => Ok(Self(uid)),
+            Some(prefix) => IndexUid::from_str(prefix).map(|_| Self(uid)),
             None => IndexUid::try_from(uid).map(IndexUid::into_inner).map(IndexUidPattern),
         };
 
@@ -86,7 +86,7 @@ impl TryFrom<String> for IndexUidPattern {
 impl FromStr for IndexUidPattern {
     type Err = IndexUidPatternFormatError;
 
-    fn from_str(uid: &str) -> Result<IndexUidPattern, IndexUidPatternFormatError> {
+    fn from_str(uid: &str) -> Result<Self, IndexUidPatternFormatError> {
         uid.to_string().try_into()
     }
 }

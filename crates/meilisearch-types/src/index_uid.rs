@@ -55,7 +55,7 @@ impl TryFrom<String> for IndexUid {
         {
             Err(IndexUidFormatError { invalid_uid: uid })
         } else {
-            Ok(IndexUid(uid))
+            Ok(Self(uid))
         }
     }
 }
@@ -63,7 +63,7 @@ impl TryFrom<String> for IndexUid {
 impl FromStr for IndexUid {
     type Err = IndexUidFormatError;
 
-    fn from_str(uid: &str) -> Result<IndexUid, IndexUidFormatError> {
+    fn from_str(uid: &str) -> Result<Self, IndexUidFormatError> {
         uid.to_string().try_into()
     }
 }

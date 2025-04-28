@@ -131,7 +131,7 @@ impl std::convert::TryFrom<f64> for RankingScoreThreshold {
         if f > 1.0 || f < 0.0 {
             Err(InvalidSearchRankingScoreThreshold)
         } else {
-            Ok(RankingScoreThreshold(f))
+            Ok(Self(f))
         }
     }
 }
@@ -391,7 +391,7 @@ impl std::convert::TryFrom<f32> for SemanticRatio {
         if f > 1.0 || f < 0.0 {
             Err(InvalidSearchSemanticRatio)
         } else {
-            Ok(SemanticRatio(f))
+            Ok(Self(f))
         }
     }
 }
@@ -531,7 +531,7 @@ impl SearchQueryWithIndex {
             locales,
         } = query;
 
-        SearchQueryWithIndex {
+        Self {
             index_uid,
             q,
             vector,
@@ -564,7 +564,7 @@ impl SearchQueryWithIndex {
     }
 
     pub fn into_index_query_federation(self) -> (IndexUid, SearchQuery, Option<FederationOptions>) {
-        let SearchQueryWithIndex {
+        let Self {
             index_uid,
             federation_options,
             q,
@@ -731,8 +731,8 @@ pub enum FacetValuesSort {
 impl From<FacetValuesSort> for OrderBy {
     fn from(val: FacetValuesSort) -> Self {
         match val {
-            FacetValuesSort::Alpha => OrderBy::Lexicographic,
-            FacetValuesSort::Count => OrderBy::Count,
+            FacetValuesSort::Alpha => Self::Lexicographic,
+            FacetValuesSort::Count => Self::Count,
         }
     }
 }
@@ -780,7 +780,7 @@ pub struct SearchResult {
 
 impl fmt::Debug for SearchResult {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let SearchResult {
+        let Self {
             hits,
             query,
             processing_time_ms,

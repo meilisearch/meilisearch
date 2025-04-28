@@ -12,7 +12,7 @@ use time::{Date, OffsetDateTime, PrimitiveDateTime};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::deserr::{immutable_field_error, DeserrError, DeserrJsonError};
+use crate::deserr::{immutable_field_error, DeserrJsonError};
 use crate::error::deserr_codes::*;
 use crate::error::{Code, ErrorCode, ParseOffsetDateTimeError};
 use crate::index_uid_pattern::{IndexUidPattern, IndexUidPatternFormatError};
@@ -25,7 +25,7 @@ impl<C: Default + ErrorCode> MergeWithError<IndexUidPatternFormatError> for Dese
         other: IndexUidPatternFormatError,
         merge_location: deserr::ValuePointerRef,
     ) -> std::ops::ControlFlow<Self, Self> {
-        DeserrError::error::<Infallible>(
+        Self::error::<Infallible>(
             None,
             deserr::ErrorKind::Unexpected { msg: other.to_string() },
             merge_location,
@@ -64,7 +64,7 @@ pub struct CreateApiKey {
 
 impl CreateApiKey {
     pub fn to_key(self) -> Key {
-        let CreateApiKey { description, name, uid, actions, indexes, expires_at } = self;
+        let Self { description, name, uid, actions, indexes, expires_at } = self;
         let now = OffsetDateTime::now_utc();
         Key {
             description,

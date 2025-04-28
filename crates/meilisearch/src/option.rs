@@ -97,8 +97,8 @@ pub enum LogMode {
 impl Display for LogMode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            LogMode::Human => Display::fmt("HUMAN", f),
-            LogMode::Json => Display::fmt("JSON", f),
+            Self::Human => Display::fmt("HUMAN", f),
+            Self::Json => Display::fmt("JSON", f),
         }
     }
 }
@@ -108,8 +108,8 @@ impl FromStr for LogMode {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.trim().to_lowercase().as_str() {
-            "human" => Ok(LogMode::Human),
-            "json" => Ok(LogMode::Json),
+            "human" => Ok(Self::Human),
+            "json" => Ok(Self::Json),
             _ => Err(LogModeError(s.to_owned())),
         }
     }
@@ -149,12 +149,12 @@ impl Display for LogLevelError {
 impl Display for LogLevel {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            LogLevel::Off => Display::fmt("OFF", f),
-            LogLevel::Error => Display::fmt("ERROR", f),
-            LogLevel::Warn => Display::fmt("WARN", f),
-            LogLevel::Info => Display::fmt("INFO", f),
-            LogLevel::Debug => Display::fmt("DEBUG", f),
-            LogLevel::Trace => Display::fmt("TRACE", f),
+            Self::Off => Display::fmt("OFF", f),
+            Self::Error => Display::fmt("ERROR", f),
+            Self::Warn => Display::fmt("WARN", f),
+            Self::Info => Display::fmt("INFO", f),
+            Self::Debug => Display::fmt("DEBUG", f),
+            Self::Trace => Display::fmt("TRACE", f),
         }
     }
 }
@@ -166,12 +166,12 @@ impl FromStr for LogLevel {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.trim().to_lowercase().as_str() {
-            "off" => Ok(LogLevel::Off),
-            "error" => Ok(LogLevel::Error),
-            "warn" => Ok(LogLevel::Warn),
-            "info" => Ok(LogLevel::Info),
-            "debug" => Ok(LogLevel::Debug),
-            "trace" => Ok(LogLevel::Trace),
+            "off" => Ok(Self::Off),
+            "error" => Ok(Self::Error),
+            "warn" => Ok(Self::Warn),
+            "info" => Ok(Self::Info),
+            "debug" => Ok(Self::Debug),
+            "trace" => Ok(Self::Trace),
             _ => Err(LogLevelError { given_log_level: s.to_owned() }),
         }
     }
@@ -474,7 +474,7 @@ impl Opt {
     /// Build a new Opt from config file, env vars and cli args.
     pub fn try_build() -> anyhow::Result<(Self, Option<PathBuf>)> {
         // Parse the args to get the config_file_path.
-        let mut opts = Opt::parse();
+        let mut opts = Self::parse();
         let mut config_read_from = None;
         let user_specified_config_file_path = opts
             .config_file_path
@@ -487,7 +487,7 @@ impl Opt {
         match std::fs::read_to_string(&config_file_path) {
             Ok(config) => {
                 // If the file is successfully read, we deserialize it with `toml`.
-                let opt_from_config = toml::from_str::<Opt>(&config)?;
+                let opt_from_config = toml::from_str::<Self>(&config)?;
                 // Return an error if config file contains 'config_file_path'
                 // Using that key in the config file doesn't make sense bc it creates a logical loop (config file referencing itself)
                 if opt_from_config.config_file_path.is_some() {
@@ -496,7 +496,7 @@ impl Opt {
                 // We inject the values from the toml in the corresponding env vars if needs be. Doing so, we respect the priority toml < env vars < cli args.
                 opt_from_config.export_to_env();
                 // Once injected we parse the cli args once again to take the new env vars into scope.
-                opts = Opt::parse();
+                opts = Self::parse();
                 config_read_from = Some(config_file_path);
             }
             Err(e) => {
@@ -516,7 +516,7 @@ impl Opt {
 
     /// Exports the opts values to their corresponding env vars if they are not set.
     fn export_to_env(self) {
-        let Opt {
+        let Self {
             db_path,
             http_addr,
             master_key,
@@ -739,7 +739,7 @@ pub struct IndexerOpts {
 impl IndexerOpts {
     /// Exports the values to their corresponding env vars if they are not set.
     pub fn export_to_env(self) {
-        let IndexerOpts { max_indexing_memory, max_indexing_threads, skip_index_budget: _ } = self;
+        let Self { max_indexing_memory, max_indexing_threads, skip_index_budget: _ } = self;
         if let Some(max_indexing_memory) = max_indexing_memory.0 {
             export_to_env_if_not_present(
                 MEILI_MAX_INDEXING_MEMORY,
@@ -780,14 +780,14 @@ pub struct MaxMemory(Option<Byte>);
 impl FromStr for MaxMemory {
     type Err = ParseError;
 
-    fn from_str(s: &str) -> Result<MaxMemory, Self::Err> {
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         Byte::from_str(s).map(Some).map(MaxMemory)
     }
 }
 
 impl Default for MaxMemory {
-    fn default() -> MaxMemory {
-        MaxMemory(total_memory_bytes().map(|bytes| bytes * 2 / 3).map(Byte::from_u64))
+    fn default() -> Self {
+        Self(total_memory_bytes().map(|bytes| bytes * 2 / 3).map(Byte::from_u64))
     }
 }
 
@@ -841,7 +841,7 @@ impl FromStr for MaxThreads {
 
 impl Default for MaxThreads {
     fn default() -> Self {
-        MaxThreads(num_cpus::get() / 2)
+        Self(num_cpus::get() / 2)
     }
 }
 
@@ -1013,8 +1013,8 @@ pub enum ScheduleSnapshot {
 impl Display for ScheduleSnapshot {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ScheduleSnapshot::Disabled => write!(f, ""),
-            ScheduleSnapshot::Enabled(value) => write!(f, "{}", value),
+            Self::Disabled => write!(f, ""),
+            Self::Enabled(value) => write!(f, "{}", value),
         }
     }
 }
@@ -1024,8 +1024,8 @@ impl FromStr for ScheduleSnapshot {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(match s {
-            "" => ScheduleSnapshot::Disabled,
-            s => ScheduleSnapshot::Enabled(s.parse()?),
+            "" => Self::Disabled,
+            s => Self::Enabled(s.parse()?),
         })
     }
 }

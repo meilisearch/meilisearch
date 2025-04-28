@@ -14,12 +14,12 @@ pub enum Document {
 impl Document {
     pub fn to_d(&self) -> Value {
         match self {
-            Document::One => json!({ "id": 0, "doggo": "bernese" }),
-            Document::Two => json!({ "id": 0, "doggo": "golden" }),
-            Document::Three => json!({ "id": 0, "catto": "jorts" }),
-            Document::Four => json!({ "id": 1, "doggo": "bernese" }),
-            Document::Five => json!({ "id": 1, "doggo": "golden" }),
-            Document::Six => json!({ "id": 1, "catto": "jorts" }),
+            Self::One => json!({ "id": 0, "doggo": "bernese" }),
+            Self::Two => json!({ "id": 0, "doggo": "golden" }),
+            Self::Three => json!({ "id": 0, "catto": "jorts" }),
+            Self::Four => json!({ "id": 1, "doggo": "bernese" }),
+            Self::Five => json!({ "id": 1, "doggo": "golden" }),
+            Self::Six => json!({ "id": 1, "catto": "jorts" }),
         }
     }
 }
@@ -33,8 +33,8 @@ pub enum DocId {
 impl DocId {
     pub fn to_s(&self) -> String {
         match self {
-            DocId::Zero => "0".to_string(),
-            DocId::One => "1".to_string(),
+            Self::Zero => "0".to_string(),
+            Self::One => "1".to_string(),
         }
     }
 }
