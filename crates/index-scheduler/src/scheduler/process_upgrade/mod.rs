@@ -1,5 +1,5 @@
-use meilisearch_types::milli::progress::{Progress, VariableNameStep};
 use meilisearch_types::milli;
+use meilisearch_types::milli::progress::{Progress, VariableNameStep};
 
 use crate::{Error, IndexScheduler, Result};
 
