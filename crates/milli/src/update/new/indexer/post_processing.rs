@@ -131,6 +131,20 @@ fn compute_word_fst(
     }
 }
 
+pub fn recompute_word_fst_from_word_docids_database(index: &Index, wtxn: &mut RwTxn) -> Result<()> {
+    let fst = fst::Set::default().map_data(std::borrow::Cow::Owned)?;
+    let mut word_fst_builder = WordFstBuilder::new(&fst)?;
+    let words = index.word_docids.iter(wtxn)?.remap_data_type::<DecodeIgnore>();
+    for res in words {
+        let (word, _) = res?;
+        word_fst_builder.register_word(DelAdd::Addition, word.as_ref())?;
+    }
+    let (word_fst_mmap, _) = word_fst_builder.build(index, wtxn)?;
+    index.main.remap_types::<Str, Bytes>().put(wtxn, WORDS_FST_KEY, &word_fst_mmap)?;
+
+    Ok(())
+}
+
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::facet_search")]
 fn compute_facet_search_database(
     index: &Index,
