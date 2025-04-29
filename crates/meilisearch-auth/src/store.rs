@@ -81,15 +81,8 @@ impl HeedAuthStore {
         // Delete existing actions
         self.delete_key_from_inverted_db(&mut wtxn, &uid)?;
 
-        //Create a new Bit Mask
-
-        // Store the actions with bitflags
-        let mut bit_mask = 0;
-        for action in &key.actions {
-            bit_mask |= action.bits();
-        }
-        let key_masks = KeyMasks::new(bit_mask, &key.indexes, key.expires_at);
-        self.key_actions.put(&mut wtxn, uid.as_bytes(), &key_masks);
+        let key_masks = KeyMasks::from(key.clone());
+        let _ = self.key_actions.put(&mut wtxn, uid.as_bytes(), &key_masks);
         wtxn.commit()?;
         Ok(key)
     }
@@ -298,26 +291,29 @@ where
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct KeyMasks {
-    bit_mask: u32, // Bitflags for bit_maks
+    bitflags: u32, // Bitflags for bit_maks
     indexes: Vec<IndexUidPattern>,
     expires_at: Option<OffsetDateTime>,
 }
 
 impl KeyMasks {
-    fn new(bit_mask: u32, indexes: &[IndexUidPattern], expires_at: Option<OffsetDateTime>) -> Self {
-        let mut bitflags = 0u32;
-        for action in bit_mask {
-            bitflags |= action.bits();
-        }
-        Self { bit_mask: bitflags, indexes: indexes.to_vec(), expires_at }
-    }
-
     fn has_action(&self, action: Action) -> bool {
         for (index, action_flag) in enum_iterator::all::<Action>().enumerate() {
-            if action_flag == action && (self.bit_mask & (1 << index) != 0) {
+            if action_flag == action && (self.bitflags & (1 << index) != 0) {
                 return true;
             }
         }
         false
+    }
+}
+
+impl From<Key> for KeyMasks {
+    fn from(key: Key) -> Self {
+        let Key { actions, indexes, expires_at, .. } = key;
+        let mut bitflags = 0u32;
+        for action in actions {
+            bitflags |= action.bits();
+        }
+        Self { bitflags, indexes, expires_at }
     }
 }
