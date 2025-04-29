@@ -149,7 +149,7 @@ impl IndexScheduler {
 
                 let index_version = index.get_version(&index_wtxn)?.unwrap_or((1, 12, 0));
                 let package_version = (VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH);
-                if index_version != (VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH) {
+                if index_version != package_version {
                     return Err(Error::IndexVersionMismatch {
                         index: index_uid,
                         index_version,
