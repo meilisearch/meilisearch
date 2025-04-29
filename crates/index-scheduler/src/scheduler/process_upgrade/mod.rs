@@ -53,6 +53,12 @@ impl IndexScheduler {
     }
 
     pub fn process_rollback(&self, db_version: (u32, u32, u32), progress: &Progress) -> Result<()> {
+        let mut wtxn = self.env.write_txn()?;
+        tracing::info!(?db_version, "roll back index scheduler version");
+        self.version.set_version(&mut wtxn, db_version)?;
+        let db_path = self.scheduler.version_file_path.parent().unwrap();
+        wtxn.commit()?;
+
         let indexes = self.index_names()?;
 
         tracing::info!("roll backing all indexes");
@@ -71,11 +77,6 @@ impl IndexScheduler {
             }
         }
 
-        let mut wtxn = self.env.write_txn()?;
-        tracing::info!(?db_version, "roll back index scheduler version");
-        self.version.set_version(&mut wtxn, db_version)?;
-        let db_path = self.scheduler.version_file_path.parent().unwrap();
-        wtxn.commit()?;
         tracing::info!(?db_path, ?db_version, "roll back version file");
         meilisearch_types::versioning::create_version_file(
             db_path,
