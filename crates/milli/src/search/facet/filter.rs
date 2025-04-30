@@ -1288,28 +1288,24 @@ mod tests {
         let result = filter.evaluate(&rtxn, &index).unwrap();
         assert!(result.contains(0));
         let filter = Filter::from_str("price < inf").unwrap().unwrap();
-        assert!(matches!(
-            filter.evaluate(&rtxn, &index),
-            Err(crate::Error::UserError(crate::error::UserError::InvalidFilter(_)))
-        ));
+        let result = filter.evaluate(&rtxn, &index).unwrap();
+        // this is allowed due to filters with strings
+        assert!(result.contains(1));
 
         let filter = Filter::from_str("price = NaN").unwrap().unwrap();
         let result = filter.evaluate(&rtxn, &index).unwrap();
         assert!(result.is_empty());
         let filter = Filter::from_str("price < NaN").unwrap().unwrap();
-        assert!(matches!(
-            filter.evaluate(&rtxn, &index),
-            Err(crate::Error::UserError(crate::error::UserError::InvalidFilter(_)))
-        ));
+        let result = filter.evaluate(&rtxn, &index).unwrap();
+        assert!(result.contains(1));
 
         let filter = Filter::from_str("price = infinity").unwrap().unwrap();
         let result = filter.evaluate(&rtxn, &index).unwrap();
         assert!(result.contains(2));
         let filter = Filter::from_str("price < infinity").unwrap().unwrap();
-        assert!(matches!(
-            filter.evaluate(&rtxn, &index),
-            Err(crate::Error::UserError(crate::error::UserError::InvalidFilter(_)))
-        ));
+        let result = filter.evaluate(&rtxn, &index).unwrap();
+        assert!(result.contains(0));
+        assert!(result.contains(1));
     }
 
     #[test]
