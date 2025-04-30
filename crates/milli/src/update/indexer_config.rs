@@ -28,14 +28,14 @@ impl IndexerConfig {
 
     pub fn clone_no_threadpool(other: &IndexerConfig) -> Self {
         Self {
-            log_every_n: other.log_every_n.clone(),
-            max_nb_chunks: other.max_nb_chunks.clone(),
-            documents_chunk_size: other.documents_chunk_size.clone(),
-            max_memory: other.max_memory.clone(),
-            chunk_compression_type: other.chunk_compression_type.clone(),
-            chunk_compression_level: other.chunk_compression_level.clone(),
-            max_positions_per_attributes: other.max_positions_per_attributes.clone(),
-            skip_index_budget: other.skip_index_budget.clone(),
+            log_every_n: other.log_every_n,
+            max_nb_chunks: other.max_nb_chunks,
+            documents_chunk_size: other.documents_chunk_size,
+            max_memory: other.max_memory,
+            chunk_compression_type: other.chunk_compression_type,
+            chunk_compression_level: other.chunk_compression_level,
+            max_positions_per_attributes: other.max_positions_per_attributes,
+            skip_index_budget: other.skip_index_budget,
             thread_pool: None,
         }
     }
