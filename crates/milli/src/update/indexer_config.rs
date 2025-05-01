@@ -26,16 +26,16 @@ impl IndexerConfig {
         }
     }
 
-    pub fn clone_no_threadpool(other: &IndexerConfig) -> Self {
+    pub fn clone_no_threadpool(&self) -> Self {
         Self {
-            log_every_n: other.log_every_n,
-            max_nb_chunks: other.max_nb_chunks,
-            documents_chunk_size: other.documents_chunk_size,
-            max_memory: other.max_memory,
-            chunk_compression_type: other.chunk_compression_type,
-            chunk_compression_level: other.chunk_compression_level,
-            max_positions_per_attributes: other.max_positions_per_attributes,
-            skip_index_budget: other.skip_index_budget,
+            log_every_n: self.log_every_n,
+            max_nb_chunks: self.max_nb_chunks,
+            documents_chunk_size: self.documents_chunk_size,
+            max_memory: self.max_memory,
+            chunk_compression_type: self.chunk_compression_type,
+            chunk_compression_level: self.chunk_compression_level,
+            max_positions_per_attributes: self.max_positions_per_attributes,
+            skip_index_budget: self.skip_index_budget,
             thread_pool: None,
         }
     }
