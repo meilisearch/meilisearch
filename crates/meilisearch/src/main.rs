@@ -55,11 +55,9 @@ fn default_log_stderr_layer(opt: &Opt) -> LogStderrType {
 fn setup(opt: &Opt) -> anyhow::Result<(LogRouteHandle, LogStderrHandle)> {
     let (route_layer, route_layer_handle) =
         tracing_subscriber::reload::Layer::new(default_log_route_layer());
-    let route_layer: tracing_subscriber::reload::Layer<_, _> = route_layer;
 
     let (stderr_layer, stderr_layer_handle) =
         tracing_subscriber::reload::Layer::new(default_log_stderr_layer(opt));
-    let route_layer: tracing_subscriber::reload::Layer<_, _> = route_layer;
 
     let subscriber = tracing_subscriber::registry().with(route_layer).with(stderr_layer);
 
