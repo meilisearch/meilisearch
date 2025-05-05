@@ -1,10 +1,11 @@
 use std::collections::BTreeSet;
 use std::fmt::{Debug, Display};
-use std::ops::Bound::{self, Excluded, Included};
+use std::ops::Bound::{self, Excluded, Included, Unbounded};
 
 use either::Either;
 pub use filter_parser::{Condition, Error as FPError, FilterCondition, Token};
 use heed::types::LazyDecode;
+use heed::BytesEncode;
 use memchr::memmem::Finder;
 use roaring::{MultiOps, RoaringBitmap};
 use serde_json::Value;
@@ -14,7 +15,7 @@ use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::error::{Error, UserError};
 use crate::filterable_attributes_rules::{filtered_matching_patterns, matching_features};
 use crate::heed_codec::facet::{
-    FacetGroupKey, FacetGroupKeyCodec, FacetGroupValue, FacetGroupValueCodec, OrderedF64Codec,
+    FacetGroupKey, FacetGroupKeyCodec, FacetGroupValue, FacetGroupValueCodec,
 };
 use crate::index::db_name::FACET_ID_STRING_DOCIDS;
 use crate::{
@@ -271,7 +272,7 @@ impl<'a> Filter<'a> {
         // as the facets values are all in the same database and prefixed by the
         // field id and the level.
 
-        let (left, right) = match operator {
+        let (number_bounds, (left_str, right_str)) = match operator {
             // return an error if the filter is not allowed for this field
             Condition::GreaterThan(_)
             | Condition::GreaterThanOrEqual(_)
@@ -305,17 +306,37 @@ impl<'a> Filter<'a> {
                 ));
             }
             Condition::GreaterThan(val) => {
-                (Excluded(val.parse_finite_float()?), Included(f64::MAX))
+                let number = val.parse_finite_float().ok();
+                let number_bounds = number.map(|number| (Excluded(number), Included(f64::MAX)));
+                let str_bounds = (Excluded(val.value()), Unbounded);
+                (number_bounds, str_bounds)
             }
             Condition::GreaterThanOrEqual(val) => {
-                (Included(val.parse_finite_float()?), Included(f64::MAX))
+                let number = val.parse_finite_float().ok();
+                let number_bounds = number.map(|number| (Included(number), Included(f64::MAX)));
+                let str_bounds = (Included(val.value()), Unbounded);
+                (number_bounds, str_bounds)
             }
-            Condition::LowerThan(val) => (Included(f64::MIN), Excluded(val.parse_finite_float()?)),
+            Condition::LowerThan(val) => {
+                let number = val.parse_finite_float().ok();
+                let number_bounds = number.map(|number| (Included(f64::MIN), Excluded(number)));
+                let str_bounds = (Unbounded, Excluded(val.value()));
+                (number_bounds, str_bounds)
+            }
             Condition::LowerThanOrEqual(val) => {
-                (Included(f64::MIN), Included(val.parse_finite_float()?))
+                let number = val.parse_finite_float().ok();
+                let number_bounds = number.map(|number| (Included(f64::MIN), Included(number)));
+                let str_bounds = (Unbounded, Included(val.value()));
+                (number_bounds, str_bounds)
             }
             Condition::Between { from, to } => {
-                (Included(from.parse_finite_float()?), Included(to.parse_finite_float()?))
+                let from_number = from.parse_finite_float().ok();
+                let to_number = to.parse_finite_float().ok();
+
+                let number_bounds =
+                    from_number.zip(to_number).map(|(from, to)| (Included(from), Included(to)));
+                let str_bounds = (Included(from.value()), Included(to.value()));
+                (number_bounds, str_bounds)
             }
             Condition::Null => {
                 let is_null = index.null_faceted_documents_ids(rtxn, field_id)?;
@@ -415,29 +436,47 @@ impl<'a> Filter<'a> {
         };
 
         let mut output = RoaringBitmap::new();
-        Self::explore_facet_number_levels(
+
+        if let Some((left_number, right_number)) = number_bounds {
+            Self::explore_facet_levels(
+                rtxn,
+                numbers_db,
+                field_id,
+                &left_number,
+                &right_number,
+                universe,
+                &mut output,
+            )?;
+        }
+
+        Self::explore_facet_levels(
             rtxn,
-            numbers_db,
+            strings_db,
             field_id,
-            left,
-            right,
+            &left_str,
+            &right_str,
             universe,
             &mut output,
         )?;
+
         Ok(output)
     }
 
     /// Aggregates the documents ids that are part of the specified range automatically
     /// going deeper through the levels.
-    fn explore_facet_number_levels(
-        rtxn: &heed::RoTxn<'_>,
-        db: heed::Database<FacetGroupKeyCodec<OrderedF64Codec>, FacetGroupValueCodec>,
+    fn explore_facet_levels<'data, BoundCodec>(
+        rtxn: &'data heed::RoTxn<'data>,
+        db: heed::Database<FacetGroupKeyCodec<BoundCodec>, FacetGroupValueCodec>,
         field_id: FieldId,
-        left: Bound<f64>,
-        right: Bound<f64>,
+        left: &'data Bound<<BoundCodec as heed::BytesEncode<'data>>::EItem>,
+        right: &'data Bound<<BoundCodec as heed::BytesEncode<'data>>::EItem>,
         universe: Option<&RoaringBitmap>,
         output: &mut RoaringBitmap,
-    ) -> Result<()> {
+    ) -> Result<()>
+    where
+        BoundCodec: for<'b> BytesEncode<'b>,
+        for<'b> <BoundCodec as BytesEncode<'b>>::EItem: Sized + PartialOrd,
+    {
         match (left, right) {
             // lower TO upper when lower > upper must return no result
             (Included(l), Included(r)) if l > r => return Ok(()),
@@ -446,8 +485,8 @@ impl<'a> Filter<'a> {
             (Excluded(l), Included(r)) if l >= r => return Ok(()),
             (_, _) => (),
         }
-        facet_range_search::find_docids_of_facet_within_bounds::<OrderedF64Codec>(
-            rtxn, db, field_id, &left, &right, universe, output,
+        facet_range_search::find_docids_of_facet_within_bounds::<BoundCodec>(
+            rtxn, db, field_id, left, right, universe, output,
         )?;
 
         Ok(())
@@ -1249,28 +1288,24 @@ mod tests {
         let result = filter.evaluate(&rtxn, &index).unwrap();
         assert!(result.contains(0));
         let filter = Filter::from_str("price < inf").unwrap().unwrap();
-        assert!(matches!(
-            filter.evaluate(&rtxn, &index),
-            Err(crate::Error::UserError(crate::error::UserError::InvalidFilter(_)))
-        ));
+        let result = filter.evaluate(&rtxn, &index).unwrap();
+        // this is allowed due to filters with strings
+        assert!(result.contains(1));
 
         let filter = Filter::from_str("price = NaN").unwrap().unwrap();
         let result = filter.evaluate(&rtxn, &index).unwrap();
         assert!(result.is_empty());
         let filter = Filter::from_str("price < NaN").unwrap().unwrap();
-        assert!(matches!(
-            filter.evaluate(&rtxn, &index),
-            Err(crate::Error::UserError(crate::error::UserError::InvalidFilter(_)))
-        ));
+        let result = filter.evaluate(&rtxn, &index).unwrap();
+        assert!(result.contains(1));
 
         let filter = Filter::from_str("price = infinity").unwrap().unwrap();
         let result = filter.evaluate(&rtxn, &index).unwrap();
         assert!(result.contains(2));
         let filter = Filter::from_str("price < infinity").unwrap().unwrap();
-        assert!(matches!(
-            filter.evaluate(&rtxn, &index),
-            Err(crate::Error::UserError(crate::error::UserError::InvalidFilter(_)))
-        ));
+        let result = filter.evaluate(&rtxn, &index).unwrap();
+        assert!(result.contains(0));
+        assert!(result.contains(1));
     }
 
     #[test]
