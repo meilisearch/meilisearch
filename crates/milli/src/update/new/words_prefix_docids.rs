@@ -105,7 +105,7 @@ impl WordPrefixDocids {
     }
 }
 
-/// Represents a prefix and the lenght the bitmap takes on disk.
+/// Represents a prefix and the length the bitmap takes on disk.
 struct PrefixEntry<'a> {
     prefix: &'a str,
     serialized_length: usize,
@@ -262,7 +262,7 @@ impl WordPrefixIntegerDocids {
     }
 }
 
-/// Represents a prefix and the lenght the bitmap takes on disk.
+/// Represents a prefix and the length the bitmap takes on disk.
 struct PrefixIntegerEntry<'a> {
     prefix: &'a str,
     pos: u16,

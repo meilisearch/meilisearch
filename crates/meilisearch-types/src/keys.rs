@@ -53,7 +53,7 @@ pub struct CreateApiKey {
     #[schema(example = json!(["documents.add"]))]
     #[deserr(error = DeserrJsonError<InvalidApiKeyActions>, missing_field_error = DeserrJsonError::missing_api_key_actions)]
     pub actions: Vec<Action>,
-    /// A list of accesible indexes permitted for the key. `["*"]` for all indexes. The `*` character can be used as a wildcard when located at the last position. e.g. `products_*` to allow access to all indexes whose names start with `products_`.
+    /// A list of accessible indexes permitted for the key. `["*"]` for all indexes. The `*` character can be used as a wildcard when located at the last position. e.g. `products_*` to allow access to all indexes whose names start with `products_`.
     #[deserr(error = DeserrJsonError<InvalidApiKeyIndexes>, missing_field_error = DeserrJsonError::missing_api_key_indexes)]
     #[schema(value_type = Vec<String>, example = json!(["products"]))]
     pub indexes: Vec<IndexUidPattern>,

@@ -4,7 +4,7 @@ expression: document
 ---
 {
   "id": "e0",
-  "desc": "overriden vector",
+  "desc": "overridden vector",
   "_vectors": {
     "default": [
       0.1,

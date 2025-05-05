@@ -92,7 +92,7 @@ enum Command {
 
     /// Attempts to upgrade from one major version to the next without a dump.
     ///
-    /// Make sure to run this commmand when Meilisearch is not running!
+    /// Make sure to run this command when Meilisearch is not running!
     /// If Meilisearch is running while executing this command, the database could be corrupted
     /// (contain data from both the old and the new versions)
     ///
@@ -128,7 +128,7 @@ enum Command {
     /// Uses the hair dryer the dedicate pages hot in cache
     ///
     /// To make the index faster we must make sure it is hot in the DB cache that's the cure of
-    /// memory-mapping but also it's strengh. This command is designed to make a spcific part of
+    /// memory-mapping but also its strength. This command is designed to make a specific part of
     /// the index hot in cache.
     HairDryer {
         #[arg(long, value_delimiter = ',')]

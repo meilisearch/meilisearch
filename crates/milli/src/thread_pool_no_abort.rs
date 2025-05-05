@@ -43,7 +43,7 @@ impl ThreadPoolNoAbort {
 }
 
 #[derive(Error, Debug)]
-#[error("A panic occured. Read the logs to find more information about it")]
+#[error("A panic occurred. Read the logs to find more information about it")]
 pub struct PanicCatched;
 
 #[derive(Default)]
