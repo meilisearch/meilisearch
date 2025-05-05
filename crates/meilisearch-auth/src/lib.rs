@@ -99,7 +99,7 @@ impl AuthController {
 
         let key_authorized_indexes = SearchRules::Set(key.indexes.into_iter().collect());
 
-        let allow_index_creation = self.is_key_authorized(uid, Action::IndexesAdd, None)?;
+            let allow_index_creation = self.is_key_authorized(uid, Action::IndexesAdd.bits(), None)?;
 
         Ok(AuthFilter { search_rules, key_authorized_indexes, allow_index_creation })
     }
@@ -131,18 +131,18 @@ impl AuthController {
     pub fn is_key_authorized(
         &self,
         uid: Uuid,
-        action: Action,
+        bitflags: u32,
         index: Option<&str>,
     ) -> Result<bool> {
         match self
             .store
             // check if the key has access to all indexes.
-            .get_expiration_date(uid, action, None)?
+            .get_expiration_date(uid, bitflags, None)?
             .or(match index {
                 // else check if the key has access to the requested index.
-                Some(index) => self.store.get_expiration_date(uid, action, Some(index))?,
+                Some(index) => self.store.get_expiration_date(uid, bitflags, Some(index))?,
                 // or to any index if no index has been requested.
-                None => self.store.prefix_first_expiration_date(uid, action)?,
+                None => self.store.prefix_first_expiration_date(uid, bitflags)?,
             }) {
             // check expiration date.
             Some(Some(exp)) => Ok(OffsetDateTime::now_utc() < exp),
