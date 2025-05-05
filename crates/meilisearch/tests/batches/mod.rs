@@ -281,7 +281,8 @@ async fn test_summarized_document_addition_or_update() {
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
-            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
+            ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]"
         },
         @r###"
     {
@@ -303,11 +304,13 @@ async fn test_summarized_document_addition_or_update() {
           "test": 1
         },
         "progressTrace": "[progressTrace]",
-        "writeChannelCongestion": "[writeChannelCongestion]"
+        "writeChannelCongestion": "[writeChannelCongestion]",
+        "internalDatabaseSizes": "[internalDatabaseSizes]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
-      "finishedAt": "[date]"
+      "finishedAt": "[date]",
+      "batchCreationComplete": "batched all enqueued tasks"
     }
     "###);
 
@@ -322,7 +325,8 @@ async fn test_summarized_document_addition_or_update() {
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
-            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
+            ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]"
         },
         @r###"
     {
@@ -348,7 +352,8 @@ async fn test_summarized_document_addition_or_update() {
       },
       "duration": "[duration]",
       "startedAt": "[date]",
-      "finishedAt": "[date]"
+      "finishedAt": "[date]",
+      "batchCreationComplete": "batched all enqueued tasks"
     }
     "###);
 }
@@ -392,7 +397,8 @@ async fn test_summarized_delete_documents_by_batch() {
       },
       "duration": "[duration]",
       "startedAt": "[date]",
-      "finishedAt": "[date]"
+      "finishedAt": "[date]",
+      "batchCreationComplete": "batched all enqueued tasks"
     }
     "###);
 
@@ -407,7 +413,8 @@ async fn test_summarized_delete_documents_by_batch() {
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
-            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
+            ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]"
         },
         @r###"
     {
@@ -432,7 +439,8 @@ async fn test_summarized_delete_documents_by_batch() {
       },
       "duration": "[duration]",
       "startedAt": "[date]",
-      "finishedAt": "[date]"
+      "finishedAt": "[date]",
+      "batchCreationComplete": "batched all enqueued tasks"
     }
     "###);
 }
@@ -479,7 +487,8 @@ async fn test_summarized_delete_documents_by_filter() {
       },
       "duration": "[duration]",
       "startedAt": "[date]",
-      "finishedAt": "[date]"
+      "finishedAt": "[date]",
+      "batchCreationComplete": "batched all enqueued tasks"
     }
     "###);
 
@@ -495,7 +504,8 @@ async fn test_summarized_delete_documents_by_filter() {
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
-            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
+            ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]"
         },
         @r###"
     {
@@ -521,7 +531,8 @@ async fn test_summarized_delete_documents_by_filter() {
       },
       "duration": "[duration]",
       "startedAt": "[date]",
-      "finishedAt": "[date]"
+      "finishedAt": "[date]",
+      "batchCreationComplete": "batched all enqueued tasks"
     }
     "###);
 
@@ -537,9 +548,10 @@ async fn test_summarized_delete_documents_by_filter() {
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
-            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
+            ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]"
         },
-        @r#"
+        @r###"
     {
       "uid": 4,
       "progress": null,
@@ -563,9 +575,10 @@ async fn test_summarized_delete_documents_by_filter() {
       },
       "duration": "[duration]",
       "startedAt": "[date]",
-      "finishedAt": "[date]"
+      "finishedAt": "[date]",
+      "batchCreationComplete": "batched all enqueued tasks"
     }
-    "#);
+    "###);
 }
 
 #[actix_web::test]
@@ -585,7 +598,7 @@ async fn test_summarized_delete_document_by_id() {
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
-        @r#"
+        @r###"
     {
       "uid": "[uid]",
       "progress": null,
@@ -608,9 +621,10 @@ async fn test_summarized_delete_document_by_id() {
       },
       "duration": "[duration]",
       "startedAt": "[date]",
-      "finishedAt": "[date]"
+      "finishedAt": "[date]",
+      "batchCreationComplete": "batched all enqueued tasks"
     }
-    "#);
+    "###);
 
     index.create(None).await;
     let (task, _status_code) = index.delete_document(42).await;
@@ -623,9 +637,10 @@ async fn test_summarized_delete_document_by_id() {
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
-            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
+            ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]"
         },
-        @r#"
+        @r###"
     {
       "uid": 2,
       "progress": null,
@@ -648,9 +663,10 @@ async fn test_summarized_delete_document_by_id() {
       },
       "duration": "[duration]",
       "startedAt": "[date]",
-      "finishedAt": "[date]"
+      "finishedAt": "[date]",
+      "batchCreationComplete": "batched all enqueued tasks"
     }
-    "#);
+    "###);
 }
 
 #[actix_web::test]
@@ -679,7 +695,8 @@ async fn test_summarized_settings_update() {
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
-            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
+            ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]"
         },
         @r###"
     {
@@ -713,7 +730,8 @@ async fn test_summarized_settings_update() {
       },
       "duration": "[duration]",
       "startedAt": "[date]",
-      "finishedAt": "[date]"
+      "finishedAt": "[date]",
+      "batchCreationComplete": "batched all enqueued tasks"
     }
     "###);
 }
@@ -754,7 +772,8 @@ async fn test_summarized_index_creation() {
       },
       "duration": "[duration]",
       "startedAt": "[date]",
-      "finishedAt": "[date]"
+      "finishedAt": "[date]",
+      "batchCreationComplete": "task with id 0 of type `indexCreation` cannot be batched"
     }
     "###);
 
@@ -792,7 +811,8 @@ async fn test_summarized_index_creation() {
       },
       "duration": "[duration]",
       "startedAt": "[date]",
-      "finishedAt": "[date]"
+      "finishedAt": "[date]",
+      "batchCreationComplete": "task with id 1 of type `indexCreation` cannot be batched"
     }
     "###);
 }
@@ -943,7 +963,8 @@ async fn test_summarized_index_update() {
       },
       "duration": "[duration]",
       "startedAt": "[date]",
-      "finishedAt": "[date]"
+      "finishedAt": "[date]",
+      "batchCreationComplete": "task with id 0 of type `indexUpdate` cannot be batched"
     }
     "###);
 
@@ -981,7 +1002,8 @@ async fn test_summarized_index_update() {
       },
       "duration": "[duration]",
       "startedAt": "[date]",
-      "finishedAt": "[date]"
+      "finishedAt": "[date]",
+      "batchCreationComplete": "task with id 1 of type `indexUpdate` cannot be batched"
     }
     "###);
 
@@ -1000,7 +1022,7 @@ async fn test_summarized_index_update() {
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
         },
-        @r#"
+        @r###"
     {
       "uid": 3,
       "progress": null,
@@ -1020,9 +1042,10 @@ async fn test_summarized_index_update() {
       },
       "duration": "[duration]",
       "startedAt": "[date]",
-      "finishedAt": "[date]"
+      "finishedAt": "[date]",
+      "batchCreationComplete": "task with id 3 of type `indexUpdate` cannot be batched"
     }
-    "#);
+    "###);
 
     let (task, _status_code) = index.update(Some("bones")).await;
     index.wait_task(task.uid()).await.succeeded();
@@ -1058,7 +1081,8 @@ async fn test_summarized_index_update() {
       },
       "duration": "[duration]",
       "startedAt": "[date]",
-      "finishedAt": "[date]"
+      "finishedAt": "[date]",
+      "batchCreationComplete": "task with id 4 of type `indexUpdate` cannot be batched"
     }
     "###);
 }
@@ -1109,7 +1133,8 @@ async fn test_summarized_index_swap() {
       },
       "duration": "[duration]",
       "startedAt": "[date]",
-      "finishedAt": "[date]"
+      "finishedAt": "[date]",
+      "batchCreationComplete": "task with id 0 of type `indexSwap` cannot be batched"
     }
     "###);
 
@@ -1151,7 +1176,8 @@ async fn test_summarized_index_swap() {
       },
       "duration": "[duration]",
       "startedAt": "[date]",
-      "finishedAt": "[date]"
+      "finishedAt": "[date]",
+      "batchCreationComplete": "task with id 1 of type `indexCreation` cannot be batched"
     }
     "###);
 }
@@ -1197,7 +1223,8 @@ async fn test_summarized_batch_cancelation() {
       },
       "duration": "[duration]",
       "startedAt": "[date]",
-      "finishedAt": "[date]"
+      "finishedAt": "[date]",
+      "batchCreationComplete": "task with id 1 of type `taskCancelation` cannot be batched"
     }
     "###);
 }
@@ -1243,7 +1270,8 @@ async fn test_summarized_batch_deletion() {
       },
       "duration": "[duration]",
       "startedAt": "[date]",
-      "finishedAt": "[date]"
+      "finishedAt": "[date]",
+      "batchCreationComplete": "a batch of tasks of type `taskDeletion` cannot be batched with any other type of task"
     }
     "###);
 }
@@ -1284,7 +1312,8 @@ async fn test_summarized_dump_creation() {
       },
       "duration": "[duration]",
       "startedAt": "[date]",
-      "finishedAt": "[date]"
+      "finishedAt": "[date]",
+      "batchCreationComplete": "task with id 0 of type `dumpCreation` cannot be batched"
     }
     "###);
 }

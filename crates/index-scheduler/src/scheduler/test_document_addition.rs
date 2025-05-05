@@ -1055,22 +1055,11 @@ fn test_document_addition_with_set_and_null_primary_key() {
     let primary_key = index.primary_key(&rtxn).unwrap();
     snapshot!(primary_key.is_none(), @"true");
 
-    // The third batch should succeed and only contains one task.
-    handle.advance_one_successful_batch();
-    snapshot!(snapshot_index_scheduler(&index_scheduler), name: "third_task_succeeds");
-
-    // The primary key should be set to `id` since this batch succeeded.
-    let index = index_scheduler.index("doggos").unwrap();
-    let rtxn = index.read_txn().unwrap();
-    let primary_key = index.primary_key(&rtxn).unwrap().unwrap();
-    snapshot!(primary_key, @"paw");
-
-    // We should be able to batch together the next two tasks that don't specify any primary key
-    // + the last task that matches the current primary-key. Everything should succeed.
+    // The third batch should succeed and only contains all remaining tasks.
     handle.advance_one_successful_batch();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "all_other_tasks_succeeds");
 
-    // Is the primary key still what we expect?
+    // The primary key should be set to `paw` since this batch succeeded.
     let index = index_scheduler.index("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let primary_key = index.primary_key(&rtxn).unwrap().unwrap();
@@ -1139,12 +1128,7 @@ fn test_document_addition_with_set_and_null_primary_key_inference_works() {
     handle.advance_one_successful_batch();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "second_task_fails");
 
-    // The third batch should succeed and only contains one task.
-    handle.advance_one_successful_batch();
-    snapshot!(snapshot_index_scheduler(&index_scheduler), name: "third_task_succeeds");
-
-    // We should be able to batch together the next two tasks that don't specify any primary key
-    // + the last task that matches the current primary-key. Everything should succeed.
+    // The third batch should succeed and contain the remaining tasks.
     handle.advance_one_successful_batch();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "all_other_tasks_succeeds");
 

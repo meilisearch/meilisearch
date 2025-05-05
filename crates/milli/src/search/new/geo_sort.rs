@@ -1,10 +1,8 @@
-use std::collections::VecDeque;
-use std::iter::FromIterator;
-
 use heed::types::{Bytes, Unit};
 use heed::{RoPrefix, RoTxn};
 use roaring::RoaringBitmap;
 use rstar::RTree;
+use std::collections::VecDeque;
 
 use super::facet_string_values;
 use super::ranking_rules::{RankingRule, RankingRuleOutput, RankingRuleQueryTrait};
@@ -41,6 +39,21 @@ fn facet_number_values<'a>(
     Ok(iter)
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct Parameter {
+    // Define the strategy used by the geo sort
+    pub strategy: Strategy,
+    // Limit the number of docs in a single bucket to avoid unexpectedly large overhead
+    pub max_bucket_size: u64,
+    // Considering the errors of GPS and geographical calculations, distances less than distance_error_margin will be treated as equal
+    pub distance_error_margin: f64,
+}
+
+impl Default for Parameter {
+    fn default() -> Self {
+        Self { strategy: Strategy::default(), max_bucket_size: 1000, distance_error_margin: 1.0 }
+    }
+}
 /// Define the strategy used by the geo sort.
 /// The parameter represents the cache size, and, in the case of the Dynamic strategy,
 /// the point where we move from using the iterative strategy to the rtree.
@@ -84,15 +97,21 @@ pub struct GeoSort<Q: RankingRuleQueryTrait> {
 
     cached_sorted_docids: VecDeque<(u32, [f64; 2])>,
     geo_candidates: RoaringBitmap,
+
+    // Limit the number of docs in a single bucket to avoid unexpectedly large overhead
+    max_bucket_size: u64,
+    // Considering the errors of GPS and geographical calculations, distances less than distance_error_margin will be treated as equal
+    distance_error_margin: f64,
 }
 
 impl<Q: RankingRuleQueryTrait> GeoSort<Q> {
     pub fn new(
-        strategy: Strategy,
+        parameter: Parameter,
         geo_faceted_docids: RoaringBitmap,
         point: [f64; 2],
         ascending: bool,
     ) -> Result<Self> {
+        let Parameter { strategy, max_bucket_size, distance_error_margin } = parameter;
         Ok(Self {
             query: None,
             strategy,
@@ -102,6 +121,8 @@ impl<Q: RankingRuleQueryTrait> GeoSort<Q> {
             field_ids: None,
             rtree: None,
             cached_sorted_docids: VecDeque::new(),
+            max_bucket_size,
+            distance_error_margin,
         })
     }
 
@@ -240,12 +261,12 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for GeoSort<Q> {
     fn next_bucket(
         &mut self,
         ctx: &mut SearchContext<'ctx>,
-        logger: &mut dyn SearchLogger<Q>,
+        _logger: &mut dyn SearchLogger<Q>,
         universe: &RoaringBitmap,
     ) -> Result<Option<RankingRuleOutput<Q>>> {
         let query = self.query.as_ref().unwrap().clone();
 
-        let geo_candidates = &self.geo_candidates & universe;
+        let mut geo_candidates = &self.geo_candidates & universe;
 
         if geo_candidates.is_empty() {
             return Ok(Some(RankingRuleOutput {
@@ -267,24 +288,102 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for GeoSort<Q> {
                 cache.pop_back()
             }
         };
-        while let Some((id, point)) = next(&mut self.cached_sorted_docids) {
-            if geo_candidates.contains(id) {
-                return Ok(Some(RankingRuleOutput {
-                    query,
-                    candidates: RoaringBitmap::from_iter([id]),
-                    score: ScoreDetails::GeoSort(score_details::GeoSort {
-                        target_point: self.point,
-                        ascending: self.ascending,
-                        value: Some(point),
-                    }),
-                }));
+        let put_back = |cache: &mut VecDeque<_>, x: _| {
+            if ascending {
+                cache.push_front(x)
+            } else {
+                cache.push_back(x)
+            }
+        };
+
+        let mut current_bucket = RoaringBitmap::new();
+        // current_distance stores the first point and distance in current bucket
+        let mut current_distance: Option<([f64; 2], f64)> = None;
+        loop {
+            // The loop will only exit when we have found all points with equal distance or have exhausted the candidates.
+            if let Some((id, point)) = next(&mut self.cached_sorted_docids) {
+                if geo_candidates.contains(id) {
+                    let distance = distance_between_two_points(&self.point, &point);
+                    if let Some((point0, bucket_distance)) = current_distance.as_ref() {
+                        if (bucket_distance - distance).abs() > self.distance_error_margin {
+                            // different distance, point belongs to next bucket
+                            put_back(&mut self.cached_sorted_docids, (id, point));
+                            return Ok(Some(RankingRuleOutput {
+                                query,
+                                candidates: current_bucket,
+                                score: ScoreDetails::GeoSort(score_details::GeoSort {
+                                    target_point: self.point,
+                                    ascending: self.ascending,
+                                    value: Some(point0.to_owned()),
+                                }),
+                            }));
+                        } else {
+                            // same distance, point belongs to current bucket
+                            current_bucket.insert(id);
+                            // remove from cadidates to prevent it from being added to the cache again
+                            geo_candidates.remove(id);
+                            // current bucket size reaches limit, force return
+                            if current_bucket.len() == self.max_bucket_size {
+                                return Ok(Some(RankingRuleOutput {
+                                    query,
+                                    candidates: current_bucket,
+                                    score: ScoreDetails::GeoSort(score_details::GeoSort {
+                                        target_point: self.point,
+                                        ascending: self.ascending,
+                                        value: Some(point0.to_owned()),
+                                    }),
+                                }));
+                            }
+                        }
+                    } else {
+                        // first doc in current bucket
+                        current_distance = Some((point, distance));
+                        current_bucket.insert(id);
+                        geo_candidates.remove(id);
+                        // current bucket size reaches limit, force return
+                        if current_bucket.len() == self.max_bucket_size {
+                            return Ok(Some(RankingRuleOutput {
+                                query,
+                                candidates: current_bucket,
+                                score: ScoreDetails::GeoSort(score_details::GeoSort {
+                                    target_point: self.point,
+                                    ascending: self.ascending,
+                                    value: Some(point.to_owned()),
+                                }),
+                            }));
+                        }
+                    }
+                }
+            } else {
+                // cache exhausted, we need to refill it
+                self.fill_buffer(ctx, &geo_candidates)?;
+
+                if self.cached_sorted_docids.is_empty() {
+                    // candidates exhausted, exit
+                    if let Some((point0, _)) = current_distance.as_ref() {
+                        return Ok(Some(RankingRuleOutput {
+                            query,
+                            candidates: current_bucket,
+                            score: ScoreDetails::GeoSort(score_details::GeoSort {
+                                target_point: self.point,
+                                ascending: self.ascending,
+                                value: Some(point0.to_owned()),
+                            }),
+                        }));
+                    } else {
+                        return Ok(Some(RankingRuleOutput {
+                            query,
+                            candidates: universe.clone(),
+                            score: ScoreDetails::GeoSort(score_details::GeoSort {
+                                target_point: self.point,
+                                ascending: self.ascending,
+                                value: None,
+                            }),
+                        }));
+                    }
+                }
             }
         }
-
-        // if we got out of this loop it means we've exhausted our cache.
-        // we need to refill it and run the function again.
-        self.fill_buffer(ctx, &geo_candidates)?;
-        self.next_bucket(ctx, logger, universe)
     }
 
     #[tracing::instrument(level = "trace", skip_all, target = "search::geo_sort")]

@@ -1,6 +1,5 @@
 ---
 source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
-snapshot_kind: text
 ---
 {
   "results": [
@@ -29,7 +28,8 @@ snapshot_kind: text
       },
       "duration": "[duration]",
       "startedAt": "[date]",
-      "finishedAt": "[date]"
+      "finishedAt": "[date]",
+      "batchCreationComplete": "unspecified"
     }
   ],
   "total": 1,
