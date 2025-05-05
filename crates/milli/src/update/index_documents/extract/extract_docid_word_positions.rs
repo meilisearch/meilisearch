@@ -94,7 +94,7 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
         key_buffer.clear();
         key_buffer.extend_from_slice(&document_id.to_be_bytes());
 
-        // Tokenize deletions and additions in 2 diffferent threads.
+        // Tokenize deletions and additions in 2 different threads.
         let (del, add): (Result<_>, Result<_>) = rayon::join(
             || {
                 // deletions
@@ -321,7 +321,7 @@ fn process_tokens<'a>(
 
 #[derive(Default)]
 struct Buffers {
-    // the field buffer for each fields desserialization, and must be cleared between each field.
+    // the field buffer for each fields deserialization, and must be cleared between each field.
     field_buffer: String,
     // buffer used to store the value data containing an obkv.
     obkv_buffer: Vec<u8>,

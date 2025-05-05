@@ -897,7 +897,7 @@ fn create_and_list_index() {
     let empty = index_scheduler.get_paginated_indexes_stats(&AuthFilter::default(), 0, 20).unwrap();
     snapshot!(format!("{empty:?}"), @"(0, [])");
 
-    // After advancing just once the index should've been created, the wtxn has been released and commited
+    // After advancing just once the index should've been created, the wtxn has been released and committed
     // but the indexUpdate task has not been processed yet
     handle.advance_till([InsideProcessBatch]);
 

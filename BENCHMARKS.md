@@ -140,13 +140,13 @@ They are JSON files with the following structure (comments are not actually supp
   "assets": {
     // name of the asset.
     // Must be unique at the workload level.
-    // For better results, the same asset (same sha256) should have the same name accross workloads.
-    // Having multiple assets with the same name and distinct hashes is supported accross workloads,
+    // For better results, the same asset (same sha256) should have the same name across workloads.
+    // Having multiple assets with the same name and distinct hashes is supported across workloads,
     // but will lead to superfluous downloads.
     //
     // Assets are stored in the `bench/assets/` directory by default.
     "hackernews-100_000.ndjson": {
-      // If the assets exists in the local filesystem (Meilisearch repository or for your local workloads)
+      // If the assets exist in the local filesystem (Meilisearch repository or for your local workloads)
       // Its file path can be specified here.
       // `null` if the asset should be downloaded from a remote location.
       "local_location": null,

@@ -4,11 +4,11 @@ This workspace is dedicated to the parsing of the Meilisearch filters.
 
 Most of the code and explanation are in the [`lib.rs`](./src/lib.rs). Especially, the BNF of the filters at the top of this file.
 
-The parser use [nom](https://docs.rs/nom/) to do most of its work and [nom-locate](https://docs.rs/nom_locate/) to keep track of what we were doing when we encountered an error.
+The parser uses [nom](https://docs.rs/nom/) to do most of its work and [nom-locate](https://docs.rs/nom_locate/) to keep track of what we were doing when we encountered an error.
 
 ## Cli
 A simple main is provided to quick-test if a filter can be parsed or not without bringing milli.
-It takes one argument and try to parse it.
+It takes one argument and tries to parse it.
 ```
 cargo run -- 'field = value' # success
 cargo run -- 'field = "doggo' # error => missing closing delimiter "

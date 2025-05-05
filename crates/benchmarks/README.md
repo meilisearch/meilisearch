@@ -11,7 +11,7 @@ Benchmarks
 
 ### On our private server
 
-The Meili team has self-hosted his own GitHub runner to run benchmarks on our dedicated bare metal server.
+The Meili team has self-hosted its own GitHub runner to run benchmarks on our dedicated bare metal server.
 
 To trigger the benchmark workflow:
 - Go to the `Actions` tab of this repository.
@@ -77,7 +77,7 @@ search_songs_main_cb45a10b.json
 Run the comparison script:
 
 ```bash
-# we get the result of ONE benchmark, this give you an idea of how much time an operation took
+# we get the result of ONE benchmark, this gives you an idea of how much time an operation took
 ./benchmarks/scripts/compare.sh son songs_geosearch_24ec456.json
 # we compare two benchmarks
 ./benchmarks/scripts/compare.sh songs_main_09a4321.json songs_geosearch_24ec456.json
@@ -87,7 +87,7 @@ Run the comparison script:
 
 ## Datasets
 
-The benchmarks uses the following datasets:
+The benchmarks use the following datasets:
 - `smol-songs`
 - `smol-wiki`
 - `movies`
