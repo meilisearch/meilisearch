@@ -149,7 +149,7 @@ impl HeedAuthStore {
     pub fn get_expiration_date(
         &self,
         uid: Uuid,
-        action: Action,
+        bitflags: u32,
         index: Option<&str>,
     ) -> Result<Option<Option<OffsetDateTime>>> {
         let rtxn = self.env.read_txn()?;
@@ -157,7 +157,7 @@ impl HeedAuthStore {
         // Get the key actions
         if let Some(key_actions) = self.key_actions.get(&rtxn, uid.as_bytes())? {
             // Check if the action is allowed
-            if !key_actions.has_action(action) {
+            if !key_actions.has_action(bitflags) {
                 return Ok(None);
             }
 
@@ -183,12 +183,12 @@ impl HeedAuthStore {
     pub fn prefix_first_expiration_date(
         &self,
         uid: Uuid,
-        action: Action,
+        bitflags: u32,
     ) -> Result<Option<Option<OffsetDateTime>>> {
         let rtxn = self.env.read_txn()?;
 
         if let Some(key_actions) = self.key_actions.get(&rtxn, uid.as_bytes())? {
-            if key_actions.has_action(action) {
+            if key_actions.has_action(bitflags) {
                 return Ok(Some(key_actions.expires_at));
             }
         }
@@ -297,9 +297,9 @@ struct KeyMasks {
 }
 
 impl KeyMasks {
-    fn has_action(&self, action: Action) -> bool {
+    fn has_action(&self, bitflags: u32) -> bool {
         for (index, action_flag) in enum_iterator::all::<Action>().enumerate() {
-            if action_flag == action && (self.bitflags & (1 << index) != 0) {
+            if action_flag.bits() == bitflags && (self.bitflags & (1 << index) != 0) {
                 return true;
             }
         }
