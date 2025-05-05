@@ -235,10 +235,7 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Arc<
         auto_upgrade: opt.experimental_dumpless_upgrade,
         embedding_cache_cap: opt.experimental_embedding_cache_entries,
     };
-    let bin_major: u32 = VERSION_MAJOR.parse().unwrap();
-    let bin_minor: u32 = VERSION_MINOR.parse().unwrap();
-    let bin_patch: u32 = VERSION_PATCH.parse().unwrap();
-    let binary_version = (bin_major, bin_minor, bin_patch);
+    let binary_version = (VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH);
 
     let empty_db = is_empty_db(&opt.db_path);
     let (index_scheduler, auth_controller) = if let Some(ref snapshot_path) = opt.import_snapshot {

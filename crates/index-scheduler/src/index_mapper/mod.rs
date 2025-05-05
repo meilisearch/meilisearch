@@ -7,6 +7,7 @@ use meilisearch_types::heed::types::{SerdeJson, Str};
 use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn, WithoutTls};
 use meilisearch_types::milli;
 use meilisearch_types::milli::database_stats::DatabaseStats;
+use meilisearch_types::milli::index::RollbackOutcome;
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::{FieldDistribution, Index};
 use serde::{Deserialize, Serialize};
@@ -429,6 +430,51 @@ impl IndexMapper {
         };
 
         Ok(index)
+    }
+
+    pub fn rollback_index(
+        &self,
+        rtxn: &RoTxn,
+        name: &str,
+        to: (u32, u32, u32),
+    ) -> Result<RollbackOutcome> {
+        // remove any currently updating index to make sure that we aren't keeping a reference to the index somewhere
+        drop(self.currently_updating_index.write().unwrap().take());
+
+        let uuid = self
+            .index_mapping
+            .get(rtxn, name)?
+            .ok_or_else(|| Error::IndexNotFound(name.to_string()))?;
+
+        // take the lock to make sure noone is messing with the indexes while we rollback
+        // this will block any search or other operation, but we are rollbacking so this is probably acceptable.
+        let mut index_map = self.index_map.write().unwrap();
+
+        'close_index: loop {
+            match index_map.get(&uuid) {
+                Available(_) => {
+                    index_map.close_for_resize(&uuid, self.enable_mdb_writemap, 0);
+                    // index should now be `Closing`; try again
+                    continue;
+                }
+                // index already closed
+                Missing => break 'close_index,
+                // closing requested by this thread or another one; wait for closing to complete, then exit
+                Closing(closing_index) => {
+                    if closing_index.wait_timeout(Duration::from_secs(100)).is_none() {
+                        // release the lock so it doesn't get poisoned
+                        drop(index_map);
+                        panic!("cannot close index")
+                    }
+                    break;
+                }
+                BeingDeleted => return Err(Error::IndexNotFound(name.to_string())),
+            };
+        }
+
+        let index_path = self.base_path.join(uuid.to_string());
+        Index::rollback(milli::heed::EnvOpenOptions::new().read_txn_without_tls(), index_path, to)
+            .map_err(|err| crate::Error::from_milli(err, Some(name.to_string())))
     }
 
     /// Attempts `f` for each index that exists in the index mapper.

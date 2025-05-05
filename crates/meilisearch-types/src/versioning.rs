@@ -8,9 +8,7 @@ use tempfile::NamedTempFile;
 /// The name of the file that contains the version of the database.
 pub const VERSION_FILE_NAME: &str = "VERSION";
 
-pub static VERSION_MAJOR: &str = env!("CARGO_PKG_VERSION_MAJOR");
-pub static VERSION_MINOR: &str = env!("CARGO_PKG_VERSION_MINOR");
-pub static VERSION_PATCH: &str = env!("CARGO_PKG_VERSION_PATCH");
+pub use milli::constants::{VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH};
 
 /// Persists the version of the current Meilisearch binary to a VERSION file
 pub fn create_current_version_file(db_path: &Path) -> anyhow::Result<()> {
@@ -19,9 +17,9 @@ pub fn create_current_version_file(db_path: &Path) -> anyhow::Result<()> {
 
 pub fn create_version_file(
     db_path: &Path,
-    major: &str,
-    minor: &str,
-    patch: &str,
+    major: u32,
+    minor: u32,
+    patch: u32,
 ) -> anyhow::Result<()> {
     let version_path = db_path.join(VERSION_FILE_NAME);
     // In order to persist the file later we must create it in the `data.ms` and not in `/tmp`

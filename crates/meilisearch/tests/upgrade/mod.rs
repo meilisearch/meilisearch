@@ -54,7 +54,7 @@ async fn version_requires_downgrade() {
     std::fs::create_dir_all(&db_path).unwrap();
     let major = meilisearch_types::versioning::VERSION_MAJOR;
     let minor = meilisearch_types::versioning::VERSION_MINOR;
-    let patch = meilisearch_types::versioning::VERSION_PATCH.parse::<u32>().unwrap() + 1;
+    let patch = meilisearch_types::versioning::VERSION_PATCH + 1;
     std::fs::write(db_path.join("VERSION"), format!("{major}.{minor}.{patch}")).unwrap();
     let options = Opt { experimental_dumpless_upgrade: true, ..default_settings };
     let err = Server::new_with_options(options).await.map(|_| ()).unwrap_err();
