@@ -1,11 +1,12 @@
 mod v1_12;
 mod v1_13;
 mod v1_14;
-
+mod v1_15;
 use heed::RwTxn;
 use v1_12::{V1_12_3_To_V1_13_0, V1_12_To_V1_12_3};
 use v1_13::{V1_13_0_To_V1_13_1, V1_13_1_To_Latest_V1_13};
 use v1_14::Latest_V1_13_To_Latest_V1_14;
+use v1_15::Latest_V1_14_To_Latest_V1_15;
 
 use crate::progress::{Progress, VariableNameStep};
 use crate::{Index, InternalError, Result};
@@ -36,6 +37,7 @@ pub fn upgrade(
         &V1_13_0_To_V1_13_1 {},
         &V1_13_1_To_Latest_V1_13 {},
         &Latest_V1_13_To_Latest_V1_14 {},
+        &Latest_V1_14_To_Latest_V1_15 {},
     ];
 
     let start = match from {
@@ -43,8 +45,9 @@ pub fn upgrade(
         (1, 12, 3..) => 1,
         (1, 13, 0) => 2,
         (1, 13, _) => 4,
+        (1, 14, _) => 5,
         // We must handle the current version in the match because in case of a failure some index may have been upgraded but not other.
-        (1, 14, _) => 4,
+        (1, 15, _) => 5,
         (major, minor, patch) => {
             return Err(InternalError::CannotUpgradeToVersion(major, minor, patch).into())
         }

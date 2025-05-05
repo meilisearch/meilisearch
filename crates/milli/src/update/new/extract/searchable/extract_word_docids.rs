@@ -319,8 +319,11 @@ impl WordDocidsExtractors {
         let doc_alloc = &context.doc_alloc;
 
         let exact_attributes = index.exact_attributes(rtxn)?;
-        let is_exact_attribute =
-            |fname: &str| exact_attributes.iter().any(|attr| contained_in(fname, attr));
+        let disabled_typos_terms = index.disabled_typos_terms(rtxn)?;
+        let is_exact = |fname: &str, word: &str| {
+            exact_attributes.iter().any(|attr| contained_in(fname, attr))
+                || disabled_typos_terms.is_exact(word)
+        };
         match document_change {
             DocumentChange::Deletion(inner) => {
                 let mut token_fn = |fname: &str, fid, pos, word: &str| {
@@ -328,7 +331,7 @@ impl WordDocidsExtractors {
                         fid,
                         pos,
                         word,
-                        is_exact_attribute(fname),
+                        is_exact(fname, word),
                         inner.docid(),
                         doc_alloc,
                     )
@@ -356,7 +359,7 @@ impl WordDocidsExtractors {
                         fid,
                         pos,
                         word,
-                        is_exact_attribute(fname),
+                        is_exact(fname, word),
                         inner.docid(),
                         doc_alloc,
                     )
@@ -372,7 +375,7 @@ impl WordDocidsExtractors {
                         fid,
                         pos,
                         word,
-                        is_exact_attribute(fname),
+                        is_exact(fname, word),
                         inner.docid(),
                         doc_alloc,
                     )
@@ -389,7 +392,7 @@ impl WordDocidsExtractors {
                         fid,
                         pos,
                         word,
-                        is_exact_attribute(fname),
+                        is_exact(fname, word),
                         inner.docid(),
                         doc_alloc,
                     )

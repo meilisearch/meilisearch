@@ -9,6 +9,7 @@ pub use document_operation::{DocumentOperation, PayloadStats};
 use hashbrown::HashMap;
 use heed::RwTxn;
 pub use partial_dump::PartialDump;
+pub use post_processing::recompute_word_fst_from_word_docids_database;
 pub use update_by_function::UpdateByFunction;
 pub use write::ChannelCongestion;
 use write::{build_vectors, update_index, write_to_db};
