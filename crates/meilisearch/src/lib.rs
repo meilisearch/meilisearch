@@ -504,18 +504,22 @@ fn import_dump(
     let network = dump_reader.network()?.cloned().unwrap_or_default();
     index_scheduler.put_network(network)?;
 
-    let mut indexer_config = index_scheduler.indexer_config().clone_no_threadpool();
-
-    // 3.1 Use all cpus to index the import dump
-    indexer_config.thread_pool = {
-        let all_cpus = num_cpus::get();
-
-        let temp_pool = ThreadPoolNoAbortBuilder::new()
-            .thread_name(|index| format!("indexing-thread:{index}"))
-            .num_threads(all_cpus)
-            .build()?;
-
-        Some(temp_pool)
+    // 3.1 Use all cpus to process dump if max_indexing_threads not configured
+    let backup_config;
+    let indexer_config = if index_scheduler.indexer_config().max_threads.is_none() {
+        let mut _config = index_scheduler.indexer_config().clone_no_threadpool();
+        _config.thread_pool = {
+            Some(
+                ThreadPoolNoAbortBuilder::new()
+                    .thread_name(|index| format!("indexing-thread:{index}"))
+                    .num_threads(num_cpus::get())
+                    .build()?,
+            )
+        };
+        backup_config = _config;
+        &backup_config
+    } else {
+        index_scheduler.indexer_config()
     };
 
     // /!\ The tasks must be imported AFTER importing the indexes or else the scheduler might
@@ -533,7 +537,7 @@ fn import_dump(
 
         let mut wtxn = index.write_txn()?;
 
-        let mut builder = milli::update::Settings::new(&mut wtxn, &index, &indexer_config);
+        let mut builder = milli::update::Settings::new(&mut wtxn, &index, indexer_config);
         // 4.1 Import the primary key if there is one.
         if let Some(ref primary_key) = metadata.primary_key {
             builder.set_primary_key(primary_key.to_string());
@@ -568,7 +572,7 @@ fn import_dump(
         let builder = milli::update::IndexDocuments::new(
             &mut wtxn,
             &index,
-            &indexer_config,
+            indexer_config,
             IndexDocumentsConfig {
                 update_method: IndexDocumentsMethod::ReplaceDocuments,
                 ..Default::default()
