@@ -519,7 +519,7 @@ async fn query_combination() {
       "message": "Error while generating embeddings: user error: attempt to embed the following text in a configuration where embeddings must be user provided:\n  - `Captain`",
       "code": "vector_embedding_error",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+      "link": "https://docs.meilisearch.com/errors#vector-embedding-error"
     }
     "###);
 

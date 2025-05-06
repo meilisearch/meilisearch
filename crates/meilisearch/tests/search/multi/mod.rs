@@ -48,7 +48,7 @@ async fn search_json_object() {
       "message": "Missing field `queries`",
       "code": "bad_request",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#bad_request"
+      "link": "https://docs.meilisearch.com/errors#bad-request"
     }
     "###);
 }
@@ -64,7 +64,7 @@ async fn federation_no_queries() {
       "message": "Missing field `queries`",
       "code": "bad_request",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#bad_request"
+      "link": "https://docs.meilisearch.com/errors#bad-request"
     }
     "###);
 }
@@ -80,7 +80,7 @@ async fn search_json_array() {
       "message": "Invalid value type: expected an object, but found an array: `[]`",
       "code": "bad_request",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#bad_request"
+      "link": "https://docs.meilisearch.com/errors#bad-request"
     }
     "###);
 }
@@ -332,7 +332,7 @@ async fn simple_search_missing_index_uid() {
       "message": "Missing field `indexUid` inside `.queries[0]`",
       "code": "missing_index_uid",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#missing_index_uid"
+      "link": "https://docs.meilisearch.com/errors#missing-index-uid"
     }
     "###);
 }
@@ -357,7 +357,7 @@ async fn federation_simple_search_missing_index_uid() {
       "message": "Missing field `indexUid` inside `.queries[0]`",
       "code": "missing_index_uid",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#missing_index_uid"
+      "link": "https://docs.meilisearch.com/errors#missing-index-uid"
     }
     "###);
 }
@@ -382,7 +382,7 @@ async fn simple_search_illegal_index_uid() {
       "message": "Invalid value at `.queries[0].indexUid`: `hé` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_), and can not be more than 512 bytes.",
       "code": "invalid_index_uid",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_index_uid"
+      "link": "https://docs.meilisearch.com/errors#invalid-index-uid"
     }
     "###);
 }
@@ -407,7 +407,7 @@ async fn federation_search_illegal_index_uid() {
       "message": "Invalid value at `.queries[0].indexUid`: `hé` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_), and can not be more than 512 bytes.",
       "code": "invalid_index_uid",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_index_uid"
+      "link": "https://docs.meilisearch.com/errors#invalid-index-uid"
     }
     "###);
 }
@@ -815,7 +815,7 @@ async fn search_one_index_doesnt_exist() {
       "message": "Inside `.queries[1]`: Index `nested` not found.",
       "code": "index_not_found",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#index_not_found"
+      "link": "https://docs.meilisearch.com/errors#index-not-found"
     }
     "###);
 }
@@ -841,7 +841,7 @@ async fn federation_one_index_doesnt_exist() {
       "message": "Inside `.queries[1]`: Index `nested` not found.",
       "code": "index_not_found",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#index_not_found"
+      "link": "https://docs.meilisearch.com/errors#index-not-found"
     }
     "###);
 }
@@ -862,7 +862,7 @@ async fn search_multiple_indexes_dont_exist() {
       "message": "Inside `.queries[0]`: Index `test` not found.",
       "code": "index_not_found",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#index_not_found"
+      "link": "https://docs.meilisearch.com/errors#index-not-found"
     }
     "###);
 }
@@ -885,7 +885,7 @@ async fn federation_multiple_indexes_dont_exist() {
       "message": "Inside `.queries[1]`: Index `nested` not found.",
       "code": "index_not_found",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#index_not_found"
+      "link": "https://docs.meilisearch.com/errors#index-not-found"
     }
     "###);
 }
@@ -917,7 +917,7 @@ async fn search_one_query_error() {
       "message": "Inside `.queries[0]`: Invalid facet distribution: Attribute `title` is not filterable. This index does not have configured filterable attributes.",
       "code": "invalid_search_facets",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-facets"
     }
     "###);
 }
@@ -949,7 +949,7 @@ async fn federation_one_query_error() {
       "message": "Inside `.queries[1]`: Index `nested`: Attribute `title` is not filterable. This index does not have configured filterable attributes.\n1:6 title = toto",
       "code": "invalid_search_filter",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-filter"
     }
     "###);
 }
@@ -981,7 +981,7 @@ async fn federation_one_query_sort_error() {
       "message": "Inside `.queries[1]`: Index `nested`: Attribute `doggos` is not sortable. This index does not have configured sortable attributes.",
       "code": "invalid_search_sort",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_sort"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-sort"
     }
     "###);
 }
@@ -1013,7 +1013,7 @@ async fn search_multiple_query_errors() {
       "message": "Inside `.queries[0]`: Invalid facet distribution: Attribute `title` is not filterable. This index does not have configured filterable attributes.",
       "code": "invalid_search_facets",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-facets"
     }
     "###);
 }
@@ -1045,7 +1045,7 @@ async fn federation_multiple_query_errors() {
       "message": "Inside `.queries[0]`: Index `test`: Attribute `title` is not filterable. This index does not have configured filterable attributes.\n1:6 title = toto",
       "code": "invalid_search_filter",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-filter"
     }
     "###);
 }
@@ -1077,7 +1077,7 @@ async fn federation_multiple_query_sort_errors() {
       "message": "Inside `.queries[0]`: Index `test`: Attribute `title` is not sortable. This index does not have configured sortable attributes.",
       "code": "invalid_search_sort",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_sort"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-sort"
     }
     "###);
 }
@@ -1110,7 +1110,7 @@ async fn federation_multiple_query_errors_interleaved() {
       "message": "Inside `.queries[1]`: Index `nested`: Attribute `doggos` is not filterable. This index does not have configured filterable attributes.\n1:7 doggos IN [intel, kefir]",
       "code": "invalid_search_filter",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-filter"
     }
     "###);
 }
@@ -1143,7 +1143,7 @@ async fn federation_multiple_query_sort_errors_interleaved() {
       "message": "Inside `.queries[1]`: Index `nested`: Attribute `doggos` is not sortable. This index does not have configured sortable attributes.",
       "code": "invalid_search_sort",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_sort"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-sort"
     }
     "###);
 }
@@ -3365,7 +3365,7 @@ async fn federation_invalid_weight() {
       "message": "Invalid value at `.queries[1].federationOptions.weight`: the value of `weight` is invalid, expected a positive float (>= 0.0).",
       "code": "invalid_multi_search_weight",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_multi_search_weight"
+      "link": "https://docs.meilisearch.com/errors#invalid-multi-search-weight"
     }
     "###);
 }
@@ -3461,7 +3461,7 @@ async fn federation_federated_contains_pagination() {
       "message": "Inside `.queries[1]`: Using pagination options is not allowed in federated queries.\n - Hint: remove `limit` from query #1 or remove `federation` from the request\n - Hint: pass `federation.limit` and `federation.offset` for pagination in federated search",
       "code": "invalid_multi_search_query_pagination",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_multi_search_query_pagination"
+      "link": "https://docs.meilisearch.com/errors#invalid-multi-search-query-pagination"
     }
     "###);
     // fail when a federated query contains "offset"
@@ -3477,7 +3477,7 @@ async fn federation_federated_contains_pagination() {
       "message": "Inside `.queries[1]`: Using pagination options is not allowed in federated queries.\n - Hint: remove `offset` from query #1 or remove `federation` from the request\n - Hint: pass `federation.limit` and `federation.offset` for pagination in federated search",
       "code": "invalid_multi_search_query_pagination",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_multi_search_query_pagination"
+      "link": "https://docs.meilisearch.com/errors#invalid-multi-search-query-pagination"
     }
     "###);
     // fail when a federated query contains "page"
@@ -3493,7 +3493,7 @@ async fn federation_federated_contains_pagination() {
       "message": "Inside `.queries[1]`: Using pagination options is not allowed in federated queries.\n - Hint: remove `page` from query #1 or remove `federation` from the request\n - Hint: pass `federation.limit` and `federation.offset` for pagination in federated search",
       "code": "invalid_multi_search_query_pagination",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_multi_search_query_pagination"
+      "link": "https://docs.meilisearch.com/errors#invalid-multi-search-query-pagination"
     }
     "###);
     // fail when a federated query contains "hitsPerPage"
@@ -3509,7 +3509,7 @@ async fn federation_federated_contains_pagination() {
       "message": "Inside `.queries[1]`: Using pagination options is not allowed in federated queries.\n - Hint: remove `hitsPerPage` from query #1 or remove `federation` from the request\n - Hint: pass `federation.limit` and `federation.offset` for pagination in federated search",
       "code": "invalid_multi_search_query_pagination",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_multi_search_query_pagination"
+      "link": "https://docs.meilisearch.com/errors#invalid-multi-search-query-pagination"
     }
     "###);
 }
@@ -3593,7 +3593,7 @@ async fn federation_federated_contains_facets() {
       "message": "Inside `.queries[1]`: Using facet options is not allowed in federated queries.\n - Hint: remove `facets` from query #1 or remove `federation` from the request\n - Hint: pass `federation.facetsByIndex.fruits: [\"BOOSTED\"]` for facets in federated search",
       "code": "invalid_multi_search_query_facets",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_multi_search_query_facets"
+      "link": "https://docs.meilisearch.com/errors#invalid-multi-search-query-facets"
     }
     "###);
 }
@@ -3650,7 +3650,7 @@ async fn federation_non_faceted_for_an_index() {
       "message": "Inside `.federation.facetsByIndex.fruits-no-name`: Invalid facet distribution: Attribute `name` is not filterable. Available filterable attributes patterns are: `BOOST, id`.\n - Note: index `fruits-no-name` used in `.queries[1]`",
       "code": "invalid_multi_search_facets",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_multi_search_facets"
+      "link": "https://docs.meilisearch.com/errors#invalid-multi-search-facets"
     }
     "###);
 
@@ -3672,7 +3672,7 @@ async fn federation_non_faceted_for_an_index() {
       "message": "Inside `.federation.facetsByIndex.fruits-no-name`: Invalid facet distribution: Attribute `name` is not filterable. Available filterable attributes patterns are: `BOOST, id`.\n - Note: index `fruits-no-name` is not used in queries",
       "code": "invalid_multi_search_facets",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_multi_search_facets"
+      "link": "https://docs.meilisearch.com/errors#invalid-multi-search-facets"
     }
     "###);
 
@@ -3695,7 +3695,7 @@ async fn federation_non_faceted_for_an_index() {
       "message": "Inside `.federation.facetsByIndex.fruits-no-facets`: Invalid facet distribution: Attributes `BOOST, id` are not filterable. This index does not have configured filterable attributes.\n - Note: index `fruits-no-facets` is not used in queries",
       "code": "invalid_multi_search_facets",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_multi_search_facets"
+      "link": "https://docs.meilisearch.com/errors#invalid-multi-search-facets"
     }
     "#);
 
@@ -3717,7 +3717,7 @@ async fn federation_non_faceted_for_an_index() {
       "message": "Inside `.federation.facetsByIndex.zorglub`: Index `zorglub` not found.\n - Note: index `zorglub` is not used in queries",
       "code": "index_not_found",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#index_not_found"
+      "link": "https://docs.meilisearch.com/errors#index-not-found"
     }
     "###);
 }
@@ -5597,7 +5597,7 @@ async fn federation_inconsistent_merge_order() {
       "message": "Inside `.federation.facetsByIndex.movies-2`: Inconsistent order for values in facet `color`: index `movies` orders alphabetically, but index `movies-2` orders by count.\n - Hint: Remove `federation.mergeFacets` or change `faceting.sortFacetValuesBy` to be consistent in settings.\n - Note: index `movies-2` used in `.queries[2]`",
       "code": "invalid_multi_search_facet_order",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_multi_search_facet_order"
+      "link": "https://docs.meilisearch.com/errors#invalid-multi-search-facet-order"
     }
     "###);
 

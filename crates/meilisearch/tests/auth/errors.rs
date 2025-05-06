@@ -19,7 +19,7 @@ async fn create_api_key_bad_description() {
       "message": "Invalid value type at `.description`: expected a string, but found an array: `[\"doggo\"]`",
       "code": "invalid_api_key_description",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_api_key_description"
+      "link": "https://docs.meilisearch.com/errors#invalid-api-key_description"
     }
     "###);
 }
@@ -36,7 +36,7 @@ async fn create_api_key_bad_name() {
       "message": "Invalid value type at `.name`: expected a string, but found an array: `[\"doggo\"]`",
       "code": "invalid_api_key_name",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_api_key_name"
+      "link": "https://docs.meilisearch.com/errors#invalid-api-key_name"
     }
     "###);
 }
@@ -54,7 +54,7 @@ async fn create_api_key_bad_uid() {
       "message": "Invalid value type at `.uid`: expected a string, but found an array: `[\"doggo\"]`",
       "code": "invalid_api_key_uid",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_api_key_uid"
+      "link": "https://docs.meilisearch.com/errors#invalid-api-key_uid"
     }
     "###);
 
@@ -66,7 +66,7 @@ async fn create_api_key_bad_uid() {
       "message": "Invalid value at `.uid`: invalid character: expected an optional prefix of `urn:uuid:` followed by [0-9a-fA-F-], found `o` at 2",
       "code": "invalid_api_key_uid",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_api_key_uid"
+      "link": "https://docs.meilisearch.com/errors#invalid-api-key_uid"
     }
     "###);
 }
@@ -84,7 +84,7 @@ async fn create_api_key_bad_actions() {
       "message": "Invalid value type at `.actions`: expected an array, but found a string: `\"doggo\"`",
       "code": "invalid_api_key_actions",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_api_key_actions"
+      "link": "https://docs.meilisearch.com/errors#invalid-api-key_actions"
     }
     "###);
 
@@ -96,7 +96,7 @@ async fn create_api_key_bad_actions() {
       "message": "Unknown value `doggo` at `.actions[0]`: expected one of `*`, `search`, `documents.*`, `documents.add`, `documents.get`, `documents.delete`, `indexes.*`, `indexes.create`, `indexes.get`, `indexes.update`, `indexes.delete`, `indexes.swap`, `tasks.*`, `tasks.cancel`, `tasks.delete`, `tasks.get`, `settings.*`, `settings.get`, `settings.update`, `stats.*`, `stats.get`, `metrics.*`, `metrics.get`, `dumps.*`, `dumps.create`, `snapshots.*`, `snapshots.create`, `version`, `keys.create`, `keys.get`, `keys.update`, `keys.delete`, `experimental.get`, `experimental.update`, `network.get`, `network.update`, `chatCompletions`, `chats.*`, `chats.get`, `chats.delete`, `chatsSettings.*`, `chatsSettings.get`, `chatsSettings.update`",
       "code": "invalid_api_key_actions",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_api_key_actions"
+      "link": "https://docs.meilisearch.com/errors#invalid-api-key_actions"
     }
     "###);
 }
@@ -114,7 +114,7 @@ async fn create_api_key_bad_indexes() {
       "message": "Invalid value type at `.indexes`: expected an array, but found a string: `\"doggo\"`",
       "code": "invalid_api_key_indexes",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_api_key_indexes"
+      "link": "https://docs.meilisearch.com/errors#invalid-api-key_indexes"
     }
     "###);
 
@@ -126,7 +126,7 @@ async fn create_api_key_bad_indexes() {
       "message": "Invalid value at `.indexes[0]`: `good doggo` is not a valid index uid pattern. Index uid patterns can be an integer or a string containing only alphanumeric characters, hyphens (-), underscores (_), and optionally end with a star (*).",
       "code": "invalid_api_key_indexes",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_api_key_indexes"
+      "link": "https://docs.meilisearch.com/errors#invalid-api-key_indexes"
     }
     "###);
 }
@@ -144,7 +144,7 @@ async fn create_api_key_bad_expires_at() {
       "message": "Unknown field `expires_at`: did you mean `expiresAt`? expected one of `description`, `name`, `uid`, `actions`, `indexes`, `expiresAt`",
       "code": "bad_request",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#bad_request"
+      "link": "https://docs.meilisearch.com/errors#bad-request"
     }
     "###);
 
@@ -156,7 +156,7 @@ async fn create_api_key_bad_expires_at() {
       "message": "Unknown field `expires_at`: did you mean `expiresAt`? expected one of `description`, `name`, `uid`, `actions`, `indexes`, `expiresAt`",
       "code": "bad_request",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#bad_request"
+      "link": "https://docs.meilisearch.com/errors#bad-request"
     }
     "###);
 }
@@ -174,7 +174,7 @@ async fn create_api_key_missing_action() {
       "message": "Missing field `actions`",
       "code": "missing_api_key_actions",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#missing_api_key_actions"
+      "link": "https://docs.meilisearch.com/errors#missing-api-key-actions"
     }
     "###);
 }
@@ -193,7 +193,7 @@ async fn create_api_key_missing_indexes() {
       "message": "Missing field `indexes`",
       "code": "missing_api_key_indexes",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#missing_api_key_indexes"
+      "link": "https://docs.meilisearch.com/errors#missing-api-key-indexes"
     }
     "###);
 }
@@ -212,7 +212,7 @@ async fn create_api_key_missing_expires_at() {
       "message": "Missing field `expiresAt`",
       "code": "missing_api_key_expires_at",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#missing_api_key_expires_at"
+      "link": "https://docs.meilisearch.com/errors#missing-api-key-expires-at"
     }
     "###);
 }
@@ -231,7 +231,7 @@ async fn create_api_key_unexpected_field() {
       "message": "Unknown field `doggo`: expected one of `description`, `name`, `uid`, `actions`, `indexes`, `expiresAt`",
       "code": "bad_request",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#bad_request"
+      "link": "https://docs.meilisearch.com/errors#bad-request"
     }
     "###);
 }
@@ -248,7 +248,7 @@ async fn list_api_keys_bad_offset() {
       "message": "Invalid value in parameter `offset`: could not parse `doggo` as a positive integer",
       "code": "invalid_api_key_offset",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_api_key_offset"
+      "link": "https://docs.meilisearch.com/errors#invalid-api-key_offset"
     }
     "###);
 }
@@ -265,7 +265,7 @@ async fn list_api_keys_bad_limit() {
       "message": "Invalid value in parameter `limit`: could not parse `doggo` as a positive integer",
       "code": "invalid_api_key_limit",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_api_key_limit"
+      "link": "https://docs.meilisearch.com/errors#invalid-api-key_limit"
     }
     "###);
 }
@@ -282,7 +282,7 @@ async fn list_api_keys_unexpected_field() {
       "message": "Unknown parameter `doggo`: expected one of `offset`, `limit`",
       "code": "bad_request",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#bad_request"
+      "link": "https://docs.meilisearch.com/errors#bad-request"
     }
     "###);
 }
@@ -299,7 +299,7 @@ async fn patch_api_keys_bad_description() {
       "message": "Invalid value type at `.description`: expected a string, but found an array: `[\"doggo\"]`",
       "code": "invalid_api_key_description",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_api_key_description"
+      "link": "https://docs.meilisearch.com/errors#invalid-api-key_description"
     }
     "###);
 }
@@ -316,7 +316,7 @@ async fn patch_api_keys_bad_name() {
       "message": "Invalid value type at `.name`: expected a string, but found an array: `[\"doggo\"]`",
       "code": "invalid_api_key_name",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_api_key_name"
+      "link": "https://docs.meilisearch.com/errors#invalid-api-key_name"
     }
     "###);
 }
@@ -333,7 +333,7 @@ async fn patch_api_keys_immutable_uid() {
       "message": "Immutable field `uid`: expected one of `description`, `name`",
       "code": "immutable_api_key_uid",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#immutable_api_key_uid"
+      "link": "https://docs.meilisearch.com/errors#immutable-api-key-uid"
     }
     "###);
 }
@@ -350,7 +350,7 @@ async fn patch_api_keys_immutable_actions() {
       "message": "Immutable field `actions`: expected one of `description`, `name`",
       "code": "immutable_api_key_actions",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#immutable_api_key_actions"
+      "link": "https://docs.meilisearch.com/errors#immutable-api-key-actions"
     }
     "###);
 }
@@ -367,7 +367,7 @@ async fn patch_api_keys_immutable_indexes() {
       "message": "Immutable field `indexes`: expected one of `description`, `name`",
       "code": "immutable_api_key_indexes",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#immutable_api_key_indexes"
+      "link": "https://docs.meilisearch.com/errors#immutable-api-key-indexes"
     }
     "###);
 }
@@ -384,7 +384,7 @@ async fn patch_api_keys_immutable_expires_at() {
       "message": "Immutable field `expiresAt`: expected one of `description`, `name`",
       "code": "immutable_api_key_expires_at",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#immutable_api_key_expires_at"
+      "link": "https://docs.meilisearch.com/errors#immutable-api-key-expires-at"
     }
     "###);
 }
@@ -401,7 +401,7 @@ async fn patch_api_keys_immutable_created_at() {
       "message": "Immutable field `createdAt`: expected one of `description`, `name`",
       "code": "immutable_api_key_created_at",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#immutable_api_key_created_at"
+      "link": "https://docs.meilisearch.com/errors#immutable-api-key-created-at"
     }
     "###);
 }
@@ -418,7 +418,7 @@ async fn patch_api_keys_immutable_updated_at() {
       "message": "Immutable field `updatedAt`: expected one of `description`, `name`",
       "code": "immutable_api_key_updated_at",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#immutable_api_key_updated_at"
+      "link": "https://docs.meilisearch.com/errors#immutable-api-key-updated-at"
     }
     "###);
 }
@@ -435,7 +435,7 @@ async fn patch_api_keys_unknown_field() {
       "message": "Unknown field `doggo`: expected one of `description`, `name`",
       "code": "bad_request",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#bad_request"
+      "link": "https://docs.meilisearch.com/errors#bad-request"
     }
     "###);
 }
@@ -474,7 +474,7 @@ async fn invalid_auth_format() {
       "message": "The Authorization header is missing. It must use the bearer authorization method.",
       "code": "missing_authorization_header",
       "type": "auth",
-      "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+      "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
     }
     "###);
 
@@ -489,7 +489,7 @@ async fn invalid_auth_format() {
       "message": "The Authorization header is missing. It must use the bearer authorization method.",
       "code": "missing_authorization_header",
       "type": "auth",
-      "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+      "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
     }
     "###);
 
@@ -501,7 +501,7 @@ async fn invalid_auth_format() {
       "message": "The provided API key is invalid.",
       "code": "invalid_api_key",
       "type": "auth",
-      "link": "https://docs.meilisearch.com/errors#invalid_api_key"
+      "link": "https://docs.meilisearch.com/errors#invalid-api-key"
     }
     "###);
 }
@@ -519,7 +519,7 @@ async fn invalid_api_key() {
       "message": "The provided API key is invalid.",
       "code": "invalid_api_key",
       "type": "auth",
-      "link": "https://docs.meilisearch.com/errors#invalid_api_key"
+      "link": "https://docs.meilisearch.com/errors#invalid-api-key"
     }
     "###);
 
@@ -561,7 +561,7 @@ async fn invalid_api_key() {
       "message": "The API key cannot acces the index `doggo`, authorized indexes are [\"dog\"].",
       "code": "invalid_api_key",
       "type": "auth",
-      "link": "https://docs.meilisearch.com/errors#invalid_api_key"
+      "link": "https://docs.meilisearch.com/errors#invalid-api-key"
     }
     "###);
 }
@@ -584,7 +584,7 @@ async fn invalid_tenant_token() {
       "message": "The provided API key is invalid.",
       "code": "invalid_api_key",
       "type": "auth",
-      "link": "https://docs.meilisearch.com/errors#invalid_api_key"
+      "link": "https://docs.meilisearch.com/errors#invalid-api-key"
     }
     "###);
 
@@ -599,7 +599,7 @@ async fn invalid_tenant_token() {
       "message": "Could not decode tenant token, JSON error: missing field `searchRules` at line 1 column 16.",
       "code": "invalid_api_key",
       "type": "auth",
-      "link": "https://docs.meilisearch.com/errors#invalid_api_key"
+      "link": "https://docs.meilisearch.com/errors#invalid-api-key"
     }
     "###);
 
@@ -615,7 +615,7 @@ async fn invalid_tenant_token() {
       "message": "Could not decode tenant token, JSON error: data did not match any variant of untagged enum SearchRules at line 1 column 23.",
       "code": "invalid_api_key",
       "type": "auth",
-      "link": "https://docs.meilisearch.com/errors#invalid_api_key"
+      "link": "https://docs.meilisearch.com/errors#invalid-api-key"
     }
     "###);
 
@@ -631,7 +631,7 @@ async fn invalid_tenant_token() {
       "message": "Could not decode tenant token, InvalidSignature.",
       "code": "invalid_api_key",
       "type": "auth",
-      "link": "https://docs.meilisearch.com/errors#invalid_api_key"
+      "link": "https://docs.meilisearch.com/errors#invalid-api-key"
     }
     "###);
 
@@ -680,7 +680,7 @@ async fn invalid_tenant_token() {
       "message": "The provided tenant token cannot acces the index `dog`, allowed indexes are [\"catto\", \"doggo\"].",
       "code": "invalid_api_key",
       "type": "auth",
-      "link": "https://docs.meilisearch.com/errors#invalid_api_key"
+      "link": "https://docs.meilisearch.com/errors#invalid-api-key"
     }
     "###);
 
@@ -694,7 +694,7 @@ async fn invalid_tenant_token() {
       "message": "The API key used to generate this tenant token cannot acces the index `doggo`.",
       "code": "invalid_api_key",
       "type": "auth",
-      "link": "https://docs.meilisearch.com/errors#invalid_api_key"
+      "link": "https://docs.meilisearch.com/errors#invalid-api-key"
     }
     "###);
 }

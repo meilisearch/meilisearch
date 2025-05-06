@@ -389,7 +389,7 @@ async fn add_documents_and_deactivate_facet_search() {
       "message": "The facet search is disabled for this index",
       "code": "facet_search_disabled",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#facet_search_disabled"
+      "link": "https://docs.meilisearch.com/errors#facet-search-disabled"
     }
     "###);
 }
@@ -420,7 +420,7 @@ async fn deactivate_facet_search_and_add_documents() {
       "message": "The facet search is disabled for this index",
       "code": "facet_search_disabled",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#facet_search_disabled"
+      "link": "https://docs.meilisearch.com/errors#facet-search-disabled"
     }
     "###);
 }

@@ -17,7 +17,7 @@ async fn get_all_documents_bad_offset() {
       "message": "Invalid value in parameter `offset`: could not parse `` as a positive integer",
       "code": "invalid_document_offset",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_document_offset"
+      "link": "https://docs.meilisearch.com/errors#invalid-document-offset"
     }
     "###);
 
@@ -28,7 +28,7 @@ async fn get_all_documents_bad_offset() {
       "message": "Invalid value in parameter `offset`: could not parse `doggo` as a positive integer",
       "code": "invalid_document_offset",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_document_offset"
+      "link": "https://docs.meilisearch.com/errors#invalid-document-offset"
     }
     "###);
 
@@ -39,7 +39,7 @@ async fn get_all_documents_bad_offset() {
       "message": "Invalid value in parameter `offset`: could not parse `-1` as a positive integer",
       "code": "invalid_document_offset",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_document_offset"
+      "link": "https://docs.meilisearch.com/errors#invalid-document-offset"
     }
     "###);
 }
@@ -55,7 +55,7 @@ async fn get_all_documents_bad_limit() {
       "message": "Invalid value in parameter `limit`: could not parse `` as a positive integer",
       "code": "invalid_document_limit",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_document_limit"
+      "link": "https://docs.meilisearch.com/errors#invalid-document-limit"
     }
     "###);
 
@@ -66,7 +66,7 @@ async fn get_all_documents_bad_limit() {
       "message": "Invalid value in parameter `limit`: could not parse `doggo` as a positive integer",
       "code": "invalid_document_limit",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_document_limit"
+      "link": "https://docs.meilisearch.com/errors#invalid-document-limit"
     }
     "###);
 
@@ -77,7 +77,7 @@ async fn get_all_documents_bad_limit() {
       "message": "Invalid value in parameter `limit`: could not parse `-1` as a positive integer",
       "code": "invalid_document_limit",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_document_limit"
+      "link": "https://docs.meilisearch.com/errors#invalid-document-limit"
     }
     "###);
 }
@@ -93,7 +93,7 @@ async fn get_all_documents_bad_filter() {
       "message": "Index `DOES_NOT_EXISTS` not found.",
       "code": "index_not_found",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#index_not_found"
+      "link": "https://docs.meilisearch.com/errors#index-not-found"
     }
     "###);
 
@@ -104,7 +104,7 @@ async fn get_all_documents_bad_filter() {
       "message": "Index `DOES_NOT_EXISTS` not found.",
       "code": "index_not_found",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#index_not_found"
+      "link": "https://docs.meilisearch.com/errors#index-not-found"
     }
     "###);
 
@@ -115,7 +115,7 @@ async fn get_all_documents_bad_filter() {
       "message": "Index `DOES_NOT_EXISTS` not found.",
       "code": "index_not_found",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#index_not_found"
+      "link": "https://docs.meilisearch.com/errors#index-not-found"
     }
     "###);
 
@@ -139,7 +139,7 @@ async fn get_all_documents_bad_filter() {
       "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `doggo`.\n1:6 doggo",
       "code": "invalid_document_filter",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
+      "link": "https://docs.meilisearch.com/errors#invalid-document-filter"
     }
     "###);
 
@@ -150,7 +150,7 @@ async fn get_all_documents_bad_filter() {
       "message": "Attribute `doggo` is not filterable. This index does not have configured filterable attributes.\n1:6 doggo=bernese",
       "code": "invalid_document_filter",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
+      "link": "https://docs.meilisearch.com/errors#invalid-document-filter"
     }
     "###);
 }
@@ -166,7 +166,7 @@ async fn delete_documents_batch() {
       "message": "Json deserialize error: invalid type: string \"doggo\", expected a sequence at line 1 column 7",
       "code": "bad_request",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#bad_request"
+      "link": "https://docs.meilisearch.com/errors#bad-request"
     }
     "###);
 }
@@ -183,7 +183,7 @@ async fn replace_documents_missing_payload() {
       "message": "A json payload is missing.",
       "code": "missing_payload",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#missing_payload"
+      "link": "https://docs.meilisearch.com/errors#missing-payload"
     }
     "###);
 
@@ -195,7 +195,7 @@ async fn replace_documents_missing_payload() {
       "message": "A ndjson payload is missing.",
       "code": "missing_payload",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#missing_payload"
+      "link": "https://docs.meilisearch.com/errors#missing-payload"
     }
     "###);
 
@@ -207,7 +207,7 @@ async fn replace_documents_missing_payload() {
       "message": "A csv payload is missing.",
       "code": "missing_payload",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#missing_payload"
+      "link": "https://docs.meilisearch.com/errors#missing-payload"
     }
     "###);
 }
@@ -223,7 +223,7 @@ async fn update_documents_missing_payload() {
       "message": "A json payload is missing.",
       "code": "missing_payload",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#missing_payload"
+      "link": "https://docs.meilisearch.com/errors#missing-payload"
     }
     "###);
 
@@ -234,7 +234,7 @@ async fn update_documents_missing_payload() {
       "message": "A ndjson payload is missing.",
       "code": "missing_payload",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#missing_payload"
+      "link": "https://docs.meilisearch.com/errors#missing-payload"
     }
     "###);
 
@@ -245,7 +245,7 @@ async fn update_documents_missing_payload() {
       "message": "A csv payload is missing.",
       "code": "missing_payload",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#missing_payload"
+      "link": "https://docs.meilisearch.com/errors#missing-payload"
     }
     "###);
 }
@@ -261,7 +261,7 @@ async fn replace_documents_missing_content_type() {
       "message": "A Content-Type header is missing. Accepted values for the Content-Type header are: `application/json`, `application/x-ndjson`, `text/csv`",
       "code": "missing_content_type",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#missing_content_type"
+      "link": "https://docs.meilisearch.com/errors#missing-content-type"
     }
     "###);
 
@@ -273,7 +273,7 @@ async fn replace_documents_missing_content_type() {
       "message": "A Content-Type header is missing. Accepted values for the Content-Type header are: `application/json`, `application/x-ndjson`, `text/csv`",
       "code": "missing_content_type",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#missing_content_type"
+      "link": "https://docs.meilisearch.com/errors#missing-content-type"
     }
     "###);
 }
@@ -289,7 +289,7 @@ async fn update_documents_missing_content_type() {
       "message": "A Content-Type header is missing. Accepted values for the Content-Type header are: `application/json`, `application/x-ndjson`, `text/csv`",
       "code": "missing_content_type",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#missing_content_type"
+      "link": "https://docs.meilisearch.com/errors#missing-content-type"
     }
     "###);
 
@@ -301,7 +301,7 @@ async fn update_documents_missing_content_type() {
       "message": "A Content-Type header is missing. Accepted values for the Content-Type header are: `application/json`, `application/x-ndjson`, `text/csv`",
       "code": "missing_content_type",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#missing_content_type"
+      "link": "https://docs.meilisearch.com/errors#missing-content-type"
     }
     "###);
 }
@@ -317,7 +317,7 @@ async fn replace_documents_bad_content_type() {
       "message": "The Content-Type `doggo` is invalid. Accepted values for the Content-Type header are: `application/json`, `application/x-ndjson`, `text/csv`",
       "code": "invalid_content_type",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_content_type"
+      "link": "https://docs.meilisearch.com/errors#invalid-content-type"
     }
     "###);
 }
@@ -333,7 +333,7 @@ async fn update_documents_bad_content_type() {
       "message": "The Content-Type `doggo` is invalid. Accepted values for the Content-Type header are: `application/json`, `application/x-ndjson`, `text/csv`",
       "code": "invalid_content_type",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_content_type"
+      "link": "https://docs.meilisearch.com/errors#invalid-content-type"
     }
     "###);
 }
@@ -351,7 +351,7 @@ async fn replace_documents_bad_csv_delimiter() {
       "message": "Invalid value in parameter `csvDelimiter`: expected a string of one character, but found an empty string",
       "code": "invalid_document_csv_delimiter",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_document_csv_delimiter"
+      "link": "https://docs.meilisearch.com/errors#invalid-document-csv-delimiter"
     }
     "###);
 
@@ -364,7 +364,7 @@ async fn replace_documents_bad_csv_delimiter() {
       "message": "Invalid value in parameter `csvDelimiter`: expected a string of one character, but found the following string of 5 characters: `doggo`",
       "code": "invalid_document_csv_delimiter",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_document_csv_delimiter"
+      "link": "https://docs.meilisearch.com/errors#invalid-document-csv-delimiter"
     }
     "###);
 
@@ -381,7 +381,7 @@ async fn replace_documents_bad_csv_delimiter() {
       "message": "csv delimiter must be an ascii character. Found: `🍰`",
       "code": "invalid_document_csv_delimiter",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_document_csv_delimiter"
+      "link": "https://docs.meilisearch.com/errors#invalid-document-csv-delimiter"
     }
     "###);
 }
@@ -398,7 +398,7 @@ async fn update_documents_bad_csv_delimiter() {
       "message": "Invalid value in parameter `csvDelimiter`: expected a string of one character, but found an empty string",
       "code": "invalid_document_csv_delimiter",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_document_csv_delimiter"
+      "link": "https://docs.meilisearch.com/errors#invalid-document-csv-delimiter"
     }
     "###);
 
@@ -410,7 +410,7 @@ async fn update_documents_bad_csv_delimiter() {
       "message": "Invalid value in parameter `csvDelimiter`: expected a string of one character, but found the following string of 5 characters: `doggo`",
       "code": "invalid_document_csv_delimiter",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_document_csv_delimiter"
+      "link": "https://docs.meilisearch.com/errors#invalid-document-csv-delimiter"
     }
     "###);
 
@@ -427,7 +427,7 @@ async fn update_documents_bad_csv_delimiter() {
       "message": "csv delimiter must be an ascii character. Found: `🍰`",
       "code": "invalid_document_csv_delimiter",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_document_csv_delimiter"
+      "link": "https://docs.meilisearch.com/errors#invalid-document-csv-delimiter"
     }
     "###);
 }
@@ -445,7 +445,7 @@ async fn replace_documents_csv_delimiter_with_bad_content_type() {
       "message": "The Content-Type `application/json` does not support the use of a csv delimiter. The csv delimiter can only be used with the Content-Type `text/csv`.",
       "code": "invalid_content_type",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_content_type"
+      "link": "https://docs.meilisearch.com/errors#invalid-content-type"
     }
     "###);
 
@@ -458,7 +458,7 @@ async fn replace_documents_csv_delimiter_with_bad_content_type() {
       "message": "The Content-Type `application/x-ndjson` does not support the use of a csv delimiter. The csv delimiter can only be used with the Content-Type `text/csv`.",
       "code": "invalid_content_type",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_content_type"
+      "link": "https://docs.meilisearch.com/errors#invalid-content-type"
     }
     "###);
 }
@@ -475,7 +475,7 @@ async fn update_documents_csv_delimiter_with_bad_content_type() {
       "message": "The Content-Type `application/json` does not support the use of a csv delimiter. The csv delimiter can only be used with the Content-Type `text/csv`.",
       "code": "invalid_content_type",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_content_type"
+      "link": "https://docs.meilisearch.com/errors#invalid-content-type"
     }
     "###);
 
@@ -487,7 +487,7 @@ async fn update_documents_csv_delimiter_with_bad_content_type() {
       "message": "The Content-Type `application/x-ndjson` does not support the use of a csv delimiter. The csv delimiter can only be used with the Content-Type `text/csv`.",
       "code": "invalid_content_type",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_content_type"
+      "link": "https://docs.meilisearch.com/errors#invalid-content-type"
     }
     "###);
 }
@@ -504,7 +504,7 @@ async fn delete_document_by_filter() {
       "message": "Invalid value type: expected an object, but found a string: `\"hello\"`",
       "code": "bad_request",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#bad_request"
+      "link": "https://docs.meilisearch.com/errors#bad-request"
     }
     "###);
 
@@ -516,7 +516,7 @@ async fn delete_document_by_filter() {
       "message": "Invalid syntax for the filter parameter: `expected String, Array, found: true`.",
       "code": "invalid_document_filter",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
+      "link": "https://docs.meilisearch.com/errors#invalid-document-filter"
     }
     "###);
 
@@ -528,7 +528,7 @@ async fn delete_document_by_filter() {
       "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `hello`.\n1:6 hello",
       "code": "invalid_document_filter",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
+      "link": "https://docs.meilisearch.com/errors#invalid-document-filter"
     }
     "###);
 
@@ -540,7 +540,7 @@ async fn delete_document_by_filter() {
       "message": "Sending an empty filter is forbidden.",
       "code": "invalid_document_filter",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
+      "link": "https://docs.meilisearch.com/errors#invalid-document-filter"
     }
     "###);
 
@@ -552,7 +552,7 @@ async fn delete_document_by_filter() {
       "message": "Missing field `filter`",
       "code": "missing_document_filter",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#missing_document_filter"
+      "link": "https://docs.meilisearch.com/errors#missing-document-filter"
     }
     "###);
 
@@ -577,7 +577,7 @@ async fn delete_document_by_filter() {
         "message": "Index `DOES_NOT_EXISTS` not found.",
         "code": "index_not_found",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index_not_found"
+        "link": "https://docs.meilisearch.com/errors#index-not-found"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -607,7 +607,7 @@ async fn delete_document_by_filter() {
         "message": "Index `EMPTY_INDEX`: Attribute `doggo` is not filterable. This index does not have configured filterable attributes.\n1:6 doggo = bernese",
         "code": "invalid_document_filter",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
+        "link": "https://docs.meilisearch.com/errors#invalid-document-filter"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -639,7 +639,7 @@ async fn delete_document_by_filter() {
         "message": "Index `SHARED_DOCUMENTS`: Attribute `catto` is not filterable. Available filterable attribute patterns are: `id`, `title`.\n1:6 catto = jorts",
         "code": "invalid_document_filter",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
+        "link": "https://docs.meilisearch.com/errors#invalid-document-filter"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -674,7 +674,7 @@ async fn fetch_document_by_filter() {
       "message": "Invalid value type: expected an object, but found null",
       "code": "bad_request",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#bad_request"
+      "link": "https://docs.meilisearch.com/errors#bad-request"
     }
     "###);
 
@@ -685,7 +685,7 @@ async fn fetch_document_by_filter() {
       "message": "Invalid value type at `.offset`: expected a positive integer, but found a string: `\"doggo\"`",
       "code": "invalid_document_offset",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_document_offset"
+      "link": "https://docs.meilisearch.com/errors#invalid-document-offset"
     }
     "###);
 
@@ -696,7 +696,7 @@ async fn fetch_document_by_filter() {
       "message": "Invalid value type at `.limit`: expected a positive integer, but found a string: `\"doggo\"`",
       "code": "invalid_document_limit",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_document_limit"
+      "link": "https://docs.meilisearch.com/errors#invalid-document-limit"
     }
     "###);
 
@@ -707,7 +707,7 @@ async fn fetch_document_by_filter() {
       "message": "Invalid value type at `.fields`: expected an array, but found a string: `\"doggo\"`",
       "code": "invalid_document_fields",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_document_fields"
+      "link": "https://docs.meilisearch.com/errors#invalid-document-fields"
     }
     "###);
 
@@ -718,7 +718,7 @@ async fn fetch_document_by_filter() {
       "message": "Invalid syntax for the filter parameter: `expected String, Array, found: true`.",
       "code": "invalid_document_filter",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
+      "link": "https://docs.meilisearch.com/errors#invalid-document-filter"
     }
     "###);
 
@@ -729,7 +729,7 @@ async fn fetch_document_by_filter() {
       "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `cool doggo`.\n1:11 cool doggo",
       "code": "invalid_document_filter",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
+      "link": "https://docs.meilisearch.com/errors#invalid-document-filter"
     }
     "###);
 
@@ -740,7 +740,7 @@ async fn fetch_document_by_filter() {
       "message": "Attribute `doggo` is not filterable. Available filterable attribute patterns are: `color`.\n1:6 doggo = bernese",
       "code": "invalid_document_filter",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
+      "link": "https://docs.meilisearch.com/errors#invalid-document-filter"
     }
     "###);
 }

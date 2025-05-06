@@ -292,7 +292,7 @@ fn entry_stream(
     responses(
         (status = OK, description = "Logs are being returned", body = String, content_type = "application/json", example = json!(
             r#"
-2024-10-08T13:35:02.643750Z  WARN HTTP request{method=GET host="localhost:7700" route=/metrics query_parameters= user_agent=HTTPie/3.2.3 status_code=400 error=Getting metrics requires enabling the `metrics` experimental feature. See https://github.com/meilisearch/product/discussions/625}: tracing_actix_web::middleware: Error encountered while processing the incoming HTTP request: ResponseError { code: 400, message: "Getting metrics requires enabling the `metrics` experimental feature. See https://github.com/meilisearch/product/discussions/625", error_code: "feature_not_enabled", error_type: "invalid_request", error_link: "https://docs.meilisearch.com/errors#feature_not_enabled" }
+2024-10-08T13:35:02.643750Z  WARN HTTP request{method=GET host="localhost:7700" route=/metrics query_parameters= user_agent=HTTPie/3.2.3 status_code=400 error=Getting metrics requires enabling the `metrics` experimental feature. See https://github.com/meilisearch/product/discussions/625}: tracing_actix_web::middleware: Error encountered while processing the incoming HTTP request: ResponseError { code: 400, message: "Getting metrics requires enabling the `metrics` experimental feature. See https://github.com/meilisearch/product/discussions/625", error_code: "feature_not_enabled", error_type: "invalid_request", error_link: "https://docs.meilisearch.com/errors#feature-not-enabled" }
 2024-10-08T13:35:02.644191Z  INFO HTTP request{method=GET host="localhost:7700" route=/metrics query_parameters= user_agent=HTTPie/3.2.3 status_code=400 error=Getting metrics requires enabling the `metrics` experimental feature. See https://github.com/meilisearch/product/discussions/625}: meilisearch: close time.busy=1.66ms time.idle=658µs
 2024-10-08T13:35:18.564152Z  INFO HTTP request{method=PATCH host="localhost:7700" route=/experimental-features query_parameters= user_agent=curl/8.6.0 status_code=200}: meilisearch: close time.busy=1.17ms time.idle=127µs
 2024-10-08T13:35:23.094987Z  INFO HTTP request{method=GET host="localhost:7700" route=/metrics query_parameters= user_agent=HTTPie/3.2.3 status_code=200}: meilisearch: close time.busy=2.12ms time.idle=595µs
@@ -303,7 +303,7 @@ fn entry_stream(
                 "message": "The `/logs/stream` route is currently in use by someone else.",
                 "code": "bad_request",
                 "type": "invalid_request",
-                "link": "https://docs.meilisearch.com/errors#bad_request"
+                "link": "https://docs.meilisearch.com/errors#bad-request"
             }
         )),
         (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
@@ -311,7 +311,7 @@ fn entry_stream(
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+                "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
             }
         )),
     )
@@ -363,7 +363,7 @@ pub async fn get_logs(
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+                "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
             }
         )),
     )
@@ -408,7 +408,7 @@ pub struct UpdateStderrLogs {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+                "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
             }
         )),
     )

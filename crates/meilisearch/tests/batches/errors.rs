@@ -13,7 +13,7 @@ async fn batch_bad_uids() {
       "message": "Invalid value in parameter `uids`: could not parse `doggo` as a positive integer",
       "code": "invalid_task_uids",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_task_uids"
+      "link": "https://docs.meilisearch.com/errors#invalid-task-uids"
     }
     "#);
 }
@@ -29,7 +29,7 @@ async fn batch_bad_canceled_by() {
       "message": "Invalid value in parameter `canceledBy`: could not parse `doggo` as a positive integer",
       "code": "invalid_task_canceled_by",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_task_canceled_by"
+      "link": "https://docs.meilisearch.com/errors#invalid-task-canceled-by"
     }
     "#);
 }
@@ -45,7 +45,7 @@ async fn batch_bad_types() {
       "message": "Invalid value in parameter `types`: `doggo` is not a valid task type. Available types are `documentAdditionOrUpdate`, `documentEdition`, `documentDeletion`, `settingsUpdate`, `indexCreation`, `indexDeletion`, `indexUpdate`, `indexSwap`, `taskCancelation`, `taskDeletion`, `dumpCreation`, `snapshotCreation`, `upgradeDatabase`.",
       "code": "invalid_task_types",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_task_types"
+      "link": "https://docs.meilisearch.com/errors#invalid-task-types"
     }
     "#);
 }
@@ -61,7 +61,7 @@ async fn batch_bad_statuses() {
       "message": "Invalid value in parameter `statuses`: `doggo` is not a valid task status. Available statuses are `enqueued`, `processing`, `succeeded`, `failed`, `canceled`.",
       "code": "invalid_task_statuses",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_task_statuses"
+      "link": "https://docs.meilisearch.com/errors#invalid-task-statuses"
     }
     "#);
 }
@@ -77,7 +77,7 @@ async fn batch_bad_index_uids() {
       "message": "Invalid value in parameter `indexUids`: `the good doggo` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_), and can not be more than 512 bytes.",
       "code": "invalid_index_uid",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_index_uid"
+      "link": "https://docs.meilisearch.com/errors#invalid-index-uid"
     }
     "###);
 }
@@ -93,7 +93,7 @@ async fn batch_bad_limit() {
       "message": "Invalid value in parameter `limit`: could not parse `doggo` as a positive integer",
       "code": "invalid_task_limit",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_task_limit"
+      "link": "https://docs.meilisearch.com/errors#invalid-task-limit"
     }
     "#);
 }
@@ -152,7 +152,7 @@ async fn batch_bad_after_enqueued_at() {
       "message": "Invalid value in parameter `afterEnqueuedAt`: `doggo` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
       "code": "invalid_task_after_enqueued_at",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_task_after_enqueued_at"
+      "link": "https://docs.meilisearch.com/errors#invalid-task-after-enqueued-at"
     }
     "#);
 }
@@ -168,7 +168,7 @@ async fn batch_bad_before_enqueued_at() {
       "message": "Invalid value in parameter `beforeEnqueuedAt`: `doggo` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
       "code": "invalid_task_before_enqueued_at",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_task_before_enqueued_at"
+      "link": "https://docs.meilisearch.com/errors#invalid-task-before-enqueued-at"
     }
     "#);
 }
@@ -184,7 +184,7 @@ async fn batch_bad_after_started_at() {
       "message": "Invalid value in parameter `afterStartedAt`: `doggo` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
       "code": "invalid_task_after_started_at",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_task_after_started_at"
+      "link": "https://docs.meilisearch.com/errors#invalid-task-after-started-at"
     }
     "#);
 }
@@ -200,7 +200,7 @@ async fn batch_bad_before_started_at() {
       "message": "Invalid value in parameter `beforeStartedAt`: `doggo` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
       "code": "invalid_task_before_started_at",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_task_before_started_at"
+      "link": "https://docs.meilisearch.com/errors#invalid-task-before-started-at"
     }
     "#);
 }
@@ -216,7 +216,7 @@ async fn batch_bad_after_finished_at() {
       "message": "Invalid value in parameter `afterFinishedAt`: `doggo` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
       "code": "invalid_task_after_finished_at",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_task_after_finished_at"
+      "link": "https://docs.meilisearch.com/errors#invalid-task-after-finished-at"
     }
     "#);
 }
@@ -232,7 +232,7 @@ async fn batch_bad_before_finished_at() {
       "message": "Invalid value in parameter `beforeFinishedAt`: `doggo` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
       "code": "invalid_task_before_finished_at",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_task_before_finished_at"
+      "link": "https://docs.meilisearch.com/errors#invalid-task-before-finished-at"
     }
     "#);
 }

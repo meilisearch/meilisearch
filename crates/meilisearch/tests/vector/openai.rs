@@ -716,7 +716,7 @@ async fn bad_api_key() {
         "message": "Index `doggo`: While embedding documents for embedder `default`: user error: could not authenticate against OpenAI server\n  - server replied with `{\"error\":{\"message\":\"Incorrect API key provided: Bearer doggo. You can find your API key at https://platform.openai.com/account/api-keys.\",\"type\":\"invalid_request_error\",\"param\":null,\"code\":\"invalid_api_key\"}}`\n  - Hint: Check the `apiKey` parameter in the embedder configuration, and the `MEILI_OPENAI_API_KEY` and `OPENAI_API_KEY` environment variables",
         "code": "vector_embedding_error",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+        "link": "https://docs.meilisearch.com/errors#vector-embedding-error"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -760,7 +760,7 @@ async fn bad_api_key() {
         "message": "Index `doggo`: While embedding documents for embedder `default`: user error: could not authenticate against OpenAI server\n  - server replied with `{\"error\":{\"message\":\"You didn't provide an API key. You need to provide your API key in an Authorization header using Bearer auth (i.e. Authorization: Bearer YOUR_KEY), or as the password field (with blank username) if you're accessing the API from your browser and are prompted for a username and password. You can obtain an API key from https://platform.openai.com/account/api-keys.\",\"type\":\"invalid_request_error\",\"param\":null,\"code\":null}}`\n  - Hint: Check the `apiKey` parameter in the embedder configuration, and the `MEILI_OPENAI_API_KEY` and `OPENAI_API_KEY` environment variables",
         "code": "vector_embedding_error",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+        "link": "https://docs.meilisearch.com/errors#vector-embedding-error"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -785,7 +785,7 @@ async fn bad_api_key() {
       "message": "Invalid value type at `.embedders.default.apiKey`: expected a string, but found a positive integer: `42`",
       "code": "invalid_settings_embedders",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_embedders"
+      "link": "https://docs.meilisearch.com/errors#invalid-settings-embedders"
     }
     "###);
 }
@@ -844,7 +844,7 @@ async fn bad_model() {
       "message": "`.embedders.default.model`: Invalid model `doggo` for OpenAI. Supported models: [\"text-embedding-ada-002\", \"text-embedding-3-small\", \"text-embedding-3-large\"]",
       "code": "invalid_settings_embedders",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_embedders"
+      "link": "https://docs.meilisearch.com/errors#invalid-settings-embedders"
     }
     "###);
 
@@ -864,7 +864,7 @@ async fn bad_model() {
       "message": "Invalid value type at `.embedders.default.model`: expected a string, but found a positive integer: `42`",
       "code": "invalid_settings_embedders",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_embedders"
+      "link": "https://docs.meilisearch.com/errors#invalid-settings-embedders"
     }
     "###);
 }
@@ -922,7 +922,7 @@ async fn bad_dimensions() {
       "message": "`.embedders.default.dimensions`: `dimensions` cannot be zero",
       "code": "invalid_settings_embedders",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_embedders"
+      "link": "https://docs.meilisearch.com/errors#invalid-settings-embedders"
     }
     "###);
 
@@ -942,7 +942,7 @@ async fn bad_dimensions() {
       "message": "Invalid value type at `.embedders.default.dimensions`: expected a positive integer, but found a negative integer: `-42`",
       "code": "invalid_settings_embedders",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_embedders"
+      "link": "https://docs.meilisearch.com/errors#invalid-settings-embedders"
     }
     "###);
 
@@ -962,7 +962,7 @@ async fn bad_dimensions() {
       "message": "`.embedders.default.dimensions`: Model `text-embedding-3-large` does not support overriding its dimensions to a value higher than 3072. Found 42000000",
       "code": "invalid_settings_embedders",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_embedders"
+      "link": "https://docs.meilisearch.com/errors#invalid-settings-embedders"
     }
     "###);
 }

@@ -919,7 +919,7 @@ async fn invalid_locales() {
       "message": "Unknown value `invalid` at `.locales[0]`: expected one of `af`, `ak`, `am`, `ar`, `az`, `be`, `bn`, `bg`, `ca`, `cs`, `da`, `de`, `el`, `en`, `eo`, `et`, `fi`, `fr`, `gu`, `he`, `hi`, `hr`, `hu`, `hy`, `id`, `it`, `jv`, `ja`, `kn`, `ka`, `km`, `ko`, `la`, `lv`, `lt`, `ml`, `mr`, `mk`, `my`, `ne`, `nl`, `nb`, `or`, `pa`, `fa`, `pl`, `pt`, `ro`, `ru`, `si`, `sk`, `sl`, `sn`, `es`, `sr`, `sv`, `ta`, `te`, `tl`, `th`, `tk`, `tr`, `uk`, `ur`, `uz`, `vi`, `yi`, `zh`, `zu`, `afr`, `aka`, `amh`, `ara`, `aze`, `bel`, `ben`, `bul`, `cat`, `ces`, `dan`, `deu`, `ell`, `eng`, `epo`, `est`, `fin`, `fra`, `guj`, `heb`, `hin`, `hrv`, `hun`, `hye`, `ind`, `ita`, `jav`, `jpn`, `kan`, `kat`, `khm`, `kor`, `lat`, `lav`, `lit`, `mal`, `mar`, `mkd`, `mya`, `nep`, `nld`, `nob`, `ori`, `pan`, `pes`, `pol`, `por`, `ron`, `rus`, `sin`, `slk`, `slv`, `sna`, `spa`, `srp`, `swe`, `tam`, `tel`, `tgl`, `tha`, `tuk`, `tur`, `ukr`, `urd`, `uzb`, `vie`, `yid`, `zho`, `zul`, `cmn`",
       "code": "invalid_search_locales",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_locales"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-locales"
     }
     "###);
 
@@ -932,7 +932,7 @@ async fn invalid_locales() {
       "message": "Invalid value in parameter `locales`: Unsupported locale `invalid`, expected one of af, ak, am, ar, az, be, bg, bn, ca, cs, da, de, el, en, eo, es, et, fa, fi, fr, gu, he, hi, hr, hu, hy, id, it, ja, jv, ka, km, kn, ko, la, lt, lv, mk, ml, mr, my, nb, ne, nl, or, pa, pl, pt, ro, ru, si, sk, sl, sn, sr, sv, ta, te, th, tk, tl, tr, uk, ur, uz, vi, yi, zh, zu, afr, aka, amh, ara, aze, bel, ben, bul, cat, ces, cmn, dan, deu, ell, eng, epo, est, fin, fra, guj, heb, hin, hrv, hun, hye, ind, ita, jav, jpn, kan, kat, khm, kor, lat, lav, lit, mal, mar, mkd, mya, nep, nld, nob, ori, pan, pes, pol, por, ron, rus, sin, slk, slv, sna, spa, srp, swe, tam, tel, tgl, tha, tuk, tur, ukr, urd, uzb, vie, yid, zho, zul",
       "code": "invalid_search_locales",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_locales"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-locales"
     }
     "###);
 }
@@ -954,7 +954,7 @@ async fn invalid_localized_attributes_rules() {
       "message": "Unknown value `japan` at `.localizedAttributes[0].locales[0]`: expected one of `af`, `ak`, `am`, `ar`, `az`, `be`, `bn`, `bg`, `ca`, `cs`, `da`, `de`, `el`, `en`, `eo`, `et`, `fi`, `fr`, `gu`, `he`, `hi`, `hr`, `hu`, `hy`, `id`, `it`, `jv`, `ja`, `kn`, `ka`, `km`, `ko`, `la`, `lv`, `lt`, `ml`, `mr`, `mk`, `my`, `ne`, `nl`, `nb`, `or`, `pa`, `fa`, `pl`, `pt`, `ro`, `ru`, `si`, `sk`, `sl`, `sn`, `es`, `sr`, `sv`, `ta`, `te`, `tl`, `th`, `tk`, `tr`, `uk`, `ur`, `uz`, `vi`, `yi`, `zh`, `zu`, `afr`, `aka`, `amh`, `ara`, `aze`, `bel`, `ben`, `bul`, `cat`, `ces`, `dan`, `deu`, `ell`, `eng`, `epo`, `est`, `fin`, `fra`, `guj`, `heb`, `hin`, `hrv`, `hun`, `hye`, `ind`, `ita`, `jav`, `jpn`, `kan`, `kat`, `khm`, `kor`, `lat`, `lav`, `lit`, `mal`, `mar`, `mkd`, `mya`, `nep`, `nld`, `nob`, `ori`, `pan`, `pes`, `pol`, `por`, `ron`, `rus`, `sin`, `slk`, `slv`, `sna`, `spa`, `srp`, `swe`, `tam`, `tel`, `tgl`, `tha`, `tuk`, `tur`, `ukr`, `urd`, `uzb`, `vie`, `yid`, `zho`, `zul`, `cmn`",
       "code": "invalid_settings_localized_attributes",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_localized_attributes"
+      "link": "https://docs.meilisearch.com/errors#invalid-settings-localized-attributes"
     }
     "###);
 
@@ -970,7 +970,7 @@ async fn invalid_localized_attributes_rules() {
       "message": "Invalid value type at `.localizedAttributes[0].locales`: expected an array, but found a string: `\"jpn\"`",
       "code": "invalid_settings_localized_attributes",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_localized_attributes"
+      "link": "https://docs.meilisearch.com/errors#invalid-settings-localized-attributes"
     }
     "###);
 
@@ -986,7 +986,7 @@ async fn invalid_localized_attributes_rules() {
       "message": "Invalid value type at `.localizedAttributes[0].attributePatterns`: expected an array, but found a string: `\"*_ja\"`",
       "code": "invalid_settings_localized_attributes",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_localized_attributes"
+      "link": "https://docs.meilisearch.com/errors#invalid-settings-localized-attributes"
     }
     "###);
 
@@ -1002,7 +1002,7 @@ async fn invalid_localized_attributes_rules() {
       "message": "Missing field `attributePatterns` inside `.localizedAttributes[0]`",
       "code": "invalid_settings_localized_attributes",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_localized_attributes"
+      "link": "https://docs.meilisearch.com/errors#invalid-settings-localized-attributes"
     }
     "###);
 }

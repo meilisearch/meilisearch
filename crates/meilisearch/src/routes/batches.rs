@@ -73,7 +73,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+                "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
             }
         )),
     )
@@ -166,7 +166,7 @@ pub struct AllBatches {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+                "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
             }
         )),
     )
