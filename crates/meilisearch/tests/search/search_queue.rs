@@ -136,7 +136,7 @@ async fn refuse_search_requests_when_queue_is_full() {
       "message": "Too many search requests running at the same time: 1. Retry after 10s.",
       "code": "too_many_search_requests",
       "type": "system",
-      "link": "https://docs.meilisearch.com/errors#too_many_search_requests"
+      "link": "https://docs.meilisearch.com/errors#too-many-search-requests"
     }
     "###);
 }
@@ -208,7 +208,7 @@ async fn works_with_capacity_of_zero() {
       "message": "Too many search requests running at the same time: 0. Retry after 10s.",
       "code": "too_many_search_requests",
       "type": "system",
-      "link": "https://docs.meilisearch.com/errors#too_many_search_requests"
+      "link": "https://docs.meilisearch.com/errors#too-many-search-requests"
     }
     "###);
 

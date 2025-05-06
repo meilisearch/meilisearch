@@ -12,7 +12,7 @@ async fn search_unexisting_index() {
         "message": "Index `DOES_NOT_EXISTS` not found.",
         "code": "index_not_found",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index_not_found"
+        "link": "https://docs.meilisearch.com/errors#index-not-found"
     });
 
     index
@@ -48,7 +48,7 @@ async fn search_bad_q() {
       "message": "Invalid value type at `.q`: expected a string, but found an array: `[\"doggo\"]`",
       "code": "invalid_search_q",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_q"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-q"
     }
     "###);
     // Can't make the `q` fail with a get search since it'll accept anything as a string.
@@ -66,7 +66,7 @@ async fn search_bad_offset() {
       "message": "Invalid value type at `.offset`: expected a positive integer, but found a string: `\"doggo\"`",
       "code": "invalid_search_offset",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_offset"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-offset"
     }
     "###);
 
@@ -77,7 +77,7 @@ async fn search_bad_offset() {
       "message": "Invalid value in parameter `offset`: could not parse `doggo` as a positive integer",
       "code": "invalid_search_offset",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_offset"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-offset"
     }
     "###);
 }
@@ -94,7 +94,7 @@ async fn search_bad_limit() {
       "message": "Invalid value type at `.limit`: expected a positive integer, but found a string: `\"doggo\"`",
       "code": "invalid_search_limit",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_limit"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-limit"
     }
     "###);
 
@@ -105,7 +105,7 @@ async fn search_bad_limit() {
       "message": "Invalid value in parameter `limit`: could not parse `doggo` as a positive integer",
       "code": "invalid_search_limit",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_limit"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-limit"
     }
     "###);
 }
@@ -122,7 +122,7 @@ async fn search_bad_page() {
       "message": "Invalid value type at `.page`: expected a positive integer, but found a string: `\"doggo\"`",
       "code": "invalid_search_page",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_page"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-page"
     }
     "###);
 
@@ -133,7 +133,7 @@ async fn search_bad_page() {
       "message": "Invalid value in parameter `page`: could not parse `doggo` as a positive integer",
       "code": "invalid_search_page",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_page"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-page"
     }
     "###);
 }
@@ -150,7 +150,7 @@ async fn search_bad_hits_per_page() {
       "message": "Invalid value type at `.hitsPerPage`: expected a positive integer, but found a string: `\"doggo\"`",
       "code": "invalid_search_hits_per_page",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_hits_per_page"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-hits-per-page"
     }
     "###);
 
@@ -161,7 +161,7 @@ async fn search_bad_hits_per_page() {
       "message": "Invalid value in parameter `hitsPerPage`: could not parse `doggo` as a positive integer",
       "code": "invalid_search_hits_per_page",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_hits_per_page"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-hits-per-page"
     }
     "###);
 }
@@ -178,7 +178,7 @@ async fn search_bad_attributes_to_retrieve() {
       "message": "Invalid value type at `.attributesToRetrieve`: expected an array, but found a string: `\"doggo\"`",
       "code": "invalid_search_attributes_to_retrieve",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_attributes_to_retrieve"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-attributes-to-retrieve"
     }
     "###);
     // Can't make the `attributes_to_retrieve` fail with a get search since it'll accept anything as an array of strings.
@@ -246,7 +246,7 @@ async fn search_bad_attributes_to_crop() {
       "message": "Invalid value type at `.attributesToCrop`: expected an array, but found a string: `\"doggo\"`",
       "code": "invalid_search_attributes_to_crop",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_attributes_to_crop"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-attributes-to-crop"
     }
     "###);
     // Can't make the `attributes_to_crop` fail with a get search since it'll accept anything as an array of strings.
@@ -264,7 +264,7 @@ async fn search_bad_crop_length() {
       "message": "Invalid value type at `.cropLength`: expected a positive integer, but found a string: `\"doggo\"`",
       "code": "invalid_search_crop_length",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_crop_length"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-crop-length"
     }
     "###);
 
@@ -275,7 +275,7 @@ async fn search_bad_crop_length() {
       "message": "Invalid value in parameter `cropLength`: could not parse `doggo` as a positive integer",
       "code": "invalid_search_crop_length",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_crop_length"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-crop-length"
     }
     "###);
 }
@@ -292,7 +292,7 @@ async fn search_bad_attributes_to_highlight() {
       "message": "Invalid value type at `.attributesToHighlight`: expected an array, but found a string: `\"doggo\"`",
       "code": "invalid_search_attributes_to_highlight",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_attributes_to_highlight"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-attributes-to-highlight"
     }
     "###);
     // Can't make the `attributes_to_highlight` fail with a get search since it'll accept anything as an array of strings.
@@ -316,7 +316,7 @@ async fn search_bad_filter() {
       "message": "Invalid syntax for the filter parameter: `expected String, Array, found: true`.",
       "code": "invalid_search_filter",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-filter"
     }
     "###);
     // Can't make the `filter` fail with a get search since it'll accept anything as a strings.
@@ -334,7 +334,7 @@ async fn search_bad_sort() {
       "message": "Invalid value type at `.sort`: expected an array, but found a string: `\"doggo\"`",
       "code": "invalid_search_sort",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_sort"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-sort"
     }
     "###);
     // Can't make the `sort` fail with a get search since it'll accept anything as a strings.
@@ -352,7 +352,7 @@ async fn search_bad_show_matches_position() {
       "message": "Invalid value type at `.showMatchesPosition`: expected a boolean, but found a string: `\"doggo\"`",
       "code": "invalid_search_show_matches_position",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_show_matches_position"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-show-matches-position"
     }
     "###);
 
@@ -363,7 +363,7 @@ async fn search_bad_show_matches_position() {
       "message": "Invalid value in parameter `showMatchesPosition`: could not parse `doggo` as a boolean, expected either `true` or `false`",
       "code": "invalid_search_show_matches_position",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_show_matches_position"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-show-matches-position"
     }
     "###);
 }
@@ -380,7 +380,7 @@ async fn search_bad_facets() {
       "message": "Invalid value type at `.facets`: expected an array, but found a string: `\"doggo\"`",
       "code": "invalid_search_facets",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-facets"
     }
     "###);
     // Can't make the `attributes_to_highlight` fail with a get search since it'll accept anything as an array of strings.
@@ -398,7 +398,7 @@ async fn search_bad_threshold() {
       "message": "Invalid value type at `.rankingScoreThreshold`: expected a number, but found a string: `\"doggo\"`",
       "code": "invalid_search_ranking_score_threshold",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_ranking_score_threshold"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-ranking-score-threshold"
     }
     "###);
 }
@@ -415,7 +415,7 @@ async fn search_invalid_threshold() {
       "message": "Invalid value at `.rankingScoreThreshold`: the value of `rankingScoreThreshold` is invalid, expected a float between `0.0` and `1.0`.",
       "code": "invalid_search_ranking_score_threshold",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_ranking_score_threshold"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-ranking-score-threshold"
     }
     "###);
 }
@@ -435,7 +435,7 @@ async fn search_non_filterable_facets() {
       "message": "Invalid facet distribution: Attribute `doggo` is not filterable. Available filterable attributes patterns are: `title`.",
       "code": "invalid_search_facets",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-facets"
     }
     "###);
 
@@ -446,7 +446,7 @@ async fn search_non_filterable_facets() {
       "message": "Invalid facet distribution: Attribute `doggo` is not filterable. Available filterable attributes patterns are: `title`.",
       "code": "invalid_search_facets",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-facets"
     }
     "###);
 }
@@ -466,7 +466,7 @@ async fn search_non_filterable_facets_multiple_filterable() {
       "message": "Invalid facet distribution: Attribute `doggo` is not filterable. Available filterable attributes patterns are: `genres, title`.",
       "code": "invalid_search_facets",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-facets"
     }
     "###);
 
@@ -477,7 +477,7 @@ async fn search_non_filterable_facets_multiple_filterable() {
       "message": "Invalid facet distribution: Attribute `doggo` is not filterable. Available filterable attributes patterns are: `genres, title`.",
       "code": "invalid_search_facets",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-facets"
     }
     "###);
 }
@@ -496,7 +496,7 @@ async fn search_non_filterable_facets_no_filterable() {
       "message": "Invalid facet distribution: Attribute `doggo` is not filterable. This index does not have configured filterable attributes.",
       "code": "invalid_search_facets",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-facets"
     }
     "###);
 
@@ -507,7 +507,7 @@ async fn search_non_filterable_facets_no_filterable() {
       "message": "Invalid facet distribution: Attribute `doggo` is not filterable. This index does not have configured filterable attributes.",
       "code": "invalid_search_facets",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-facets"
     }
     "###);
 }
@@ -527,7 +527,7 @@ async fn search_non_filterable_facets_multiple_facets() {
       "message": "Invalid facet distribution: Attributes `doggo, neko` are not filterable. Available filterable attributes patterns are: `genres, title`.",
       "code": "invalid_search_facets",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-facets"
     }
     "###);
 
@@ -538,7 +538,7 @@ async fn search_non_filterable_facets_multiple_facets() {
       "message": "Invalid facet distribution: Attributes `doggo, neko` are not filterable. Available filterable attributes patterns are: `genres, title`.",
       "code": "invalid_search_facets",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-facets"
     }
     "###);
 }
@@ -555,7 +555,7 @@ async fn search_bad_highlight_pre_tag() {
       "message": "Invalid value type at `.highlightPreTag`: expected a string, but found an array: `[\"doggo\"]`",
       "code": "invalid_search_highlight_pre_tag",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_highlight_pre_tag"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-highlight-pre-tag"
     }
     "###);
     // Can't make the `highlight_pre_tag` fail with a get search since it'll accept anything as a strings.
@@ -573,7 +573,7 @@ async fn search_bad_highlight_post_tag() {
       "message": "Invalid value type at `.highlightPostTag`: expected a string, but found an array: `[\"doggo\"]`",
       "code": "invalid_search_highlight_post_tag",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_highlight_post_tag"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-highlight-post-tag"
     }
     "###);
     // Can't make the `highlight_post_tag` fail with a get search since it'll accept anything as a strings.
@@ -591,7 +591,7 @@ async fn search_bad_crop_marker() {
       "message": "Invalid value type at `.cropMarker`: expected a string, but found an array: `[\"doggo\"]`",
       "code": "invalid_search_crop_marker",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_crop_marker"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-crop-marker"
     }
     "###);
     // Can't make the `crop_marker` fail with a get search since it'll accept anything as a strings.
@@ -609,7 +609,7 @@ async fn search_bad_matching_strategy() {
       "message": "Unknown value `doggo` at `.matchingStrategy`: expected one of `last`, `all`, `frequency`",
       "code": "invalid_search_matching_strategy",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_matching_strategy"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-matching-strategy"
     }
     "###);
 
@@ -620,7 +620,7 @@ async fn search_bad_matching_strategy() {
       "message": "Invalid value type at `.matchingStrategy`: expected a string, but found an object: `{\"doggo\":\"doggo\"}`",
       "code": "invalid_search_matching_strategy",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_matching_strategy"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-matching-strategy"
     }
     "###);
 
@@ -631,7 +631,7 @@ async fn search_bad_matching_strategy() {
       "message": "Unknown value `doggo` for parameter `matchingStrategy`: expected one of `last`, `all`, `frequency`",
       "code": "invalid_search_matching_strategy",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_matching_strategy"
+      "link": "https://docs.meilisearch.com/errors#invalid-search-matching-strategy"
     }
     "###);
 }
@@ -648,7 +648,7 @@ async fn filter_invalid_syntax_object() {
               "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `title & Glass`.\n1:14 title & Glass",
               "code": "invalid_search_filter",
               "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+              "link": "https://docs.meilisearch.com/errors#invalid-search-filter"
             }
             "###);
             snapshot!(code, @"400 Bad Request");
@@ -669,7 +669,7 @@ async fn filter_invalid_syntax_array() {
               "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `title & Glass`.\n1:14 title & Glass",
               "code": "invalid_search_filter",
               "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+              "link": "https://docs.meilisearch.com/errors#invalid-search-filter"
             }
             "###);
             snapshot!(code, @"400 Bad Request");
@@ -690,7 +690,7 @@ async fn filter_invalid_syntax_string() {
               "message": "Found unexpected characters at the end of the filter: `XOR title = Glass`. You probably forgot an `OR` or an `AND` rule.\n15:32 title = Glass XOR title = Glass",
               "code": "invalid_search_filter",
               "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+              "link": "https://docs.meilisearch.com/errors#invalid-search-filter"
             }
             "###);
             snapshot!(code, @"400 Bad Request");
@@ -711,7 +711,7 @@ async fn filter_invalid_attribute_array() {
               "message": "Index `test`: Attribute `many` is not filterable. Available filterable attribute patterns are: `title`.\n1:5 many = Glass",
               "code": "invalid_search_filter",
               "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+              "link": "https://docs.meilisearch.com/errors#invalid-search-filter"
             }
             "###);
             snapshot!(code, @"400 Bad Request");
@@ -732,7 +732,7 @@ async fn filter_invalid_attribute_string() {
               "message": "Index `test`: Attribute `many` is not filterable. Available filterable attribute patterns are: `title`.\n1:5 many = Glass",
               "code": "invalid_search_filter",
               "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+              "link": "https://docs.meilisearch.com/errors#invalid-search-filter"
             }
             "###);
             snapshot!(code, @"400 Bad Request");
@@ -753,7 +753,7 @@ async fn filter_reserved_geo_attribute_array() {
               "message": "`_geo` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:13 _geo = Glass",
               "code": "invalid_search_filter",
               "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+              "link": "https://docs.meilisearch.com/errors#invalid-search-filter"
             }
             "###);
             snapshot!(code, @"400 Bad Request");
@@ -774,7 +774,7 @@ async fn filter_reserved_geo_attribute_string() {
               "message": "`_geo` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:13 _geo = Glass",
               "code": "invalid_search_filter",
               "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+              "link": "https://docs.meilisearch.com/errors#invalid-search-filter"
             }
             "###);
             snapshot!(code, @"400 Bad Request");
@@ -795,7 +795,7 @@ async fn filter_reserved_attribute_array() {
               "message": "`_geoDistance` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:21 _geoDistance = Glass",
               "code": "invalid_search_filter",
               "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+              "link": "https://docs.meilisearch.com/errors#invalid-search-filter"
             }
             "###);
             snapshot!(code, @"400 Bad Request");
@@ -816,7 +816,7 @@ async fn filter_reserved_attribute_string() {
               "message": "`_geoDistance` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:21 _geoDistance = Glass",
               "code": "invalid_search_filter",
               "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+              "link": "https://docs.meilisearch.com/errors#invalid-search-filter"
             }
             "###);
             snapshot!(code, @"400 Bad Request");
@@ -837,7 +837,7 @@ async fn filter_reserved_geo_point_array() {
               "message": "`_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:18 _geoPoint = Glass",
               "code": "invalid_search_filter",
               "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+              "link": "https://docs.meilisearch.com/errors#invalid-search-filter"
             }
             "###);
             snapshot!(code, @"400 Bad Request");
@@ -858,7 +858,7 @@ async fn filter_reserved_geo_point_string() {
               "message": "`_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:18 _geoPoint = Glass",
               "code": "invalid_search_filter",
               "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+              "link": "https://docs.meilisearch.com/errors#invalid-search-filter"
             }
             "###);
             snapshot!(code, @"400 Bad Request");
@@ -889,7 +889,7 @@ async fn search_with_pattern_filter_settings_errors() {
               "message": "Index `test`: Filter operator `=` is not allowed for the attribute `cattos`.\n  - Note: allowed operators: OR, AND, NOT, <, >, <=, >=, TO, IS EMPTY, IS NULL, EXISTS.\n  - Note: field `cattos` matched rule #0 in `filterableAttributes`\n  - Hint: enable equality in rule #0 by modifying the features.filter object\n  - Hint: prepend another rule matching `cattos` with appropriate filter features before rule #0",
               "code": "invalid_search_filter",
               "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+              "link": "https://docs.meilisearch.com/errors#invalid-search-filter"
             }
             "#);
         },
@@ -915,7 +915,7 @@ async fn search_with_pattern_filter_settings_errors() {
           "message": "Index `test`: Filter operator `=` is not allowed for the attribute `cattos`.\n  - Note: allowed operators: OR, AND, NOT, <, >, <=, >=, TO, IS EMPTY, IS NULL, EXISTS.\n  - Note: field `cattos` matched rule #0 in `filterableAttributes`\n  - Hint: enable equality in rule #0 by modifying the features.filter object\n  - Hint: prepend another rule matching `cattos` with appropriate filter features before rule #0",
           "code": "invalid_search_filter",
           "type": "invalid_request",
-          "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+          "link": "https://docs.meilisearch.com/errors#invalid-search-filter"
         }
         "#);
     },
@@ -936,7 +936,7 @@ async fn search_with_pattern_filter_settings_errors() {
               "message": "Index `test`: Filter operator `>` is not allowed for the attribute `doggos.age`.\n  - Note: allowed operators: OR, AND, NOT, =, !=, IN, IS EMPTY, IS NULL, EXISTS.\n  - Note: field `doggos.age` matched rule #0 in `filterableAttributes`\n  - Hint: enable comparison in rule #0 by modifying the features.filter object\n  - Hint: prepend another rule matching `doggos.age` with appropriate filter features before rule #0",
               "code": "invalid_search_filter",
               "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+              "link": "https://docs.meilisearch.com/errors#invalid-search-filter"
             }
             "#);
         },
@@ -962,7 +962,7 @@ async fn search_with_pattern_filter_settings_errors() {
               "message": "Index `test`: Filter operator `>` is not allowed for the attribute `doggos.age`.\n  - Note: allowed operators: OR, AND, NOT, =, !=, IN, IS EMPTY, IS NULL, EXISTS.\n  - Note: field `doggos.age` matched rule #0 in `filterableAttributes`\n  - Hint: enable comparison in rule #0 by modifying the features.filter object\n  - Hint: prepend another rule matching `doggos.age` with appropriate filter features before rule #0",
               "code": "invalid_search_filter",
               "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+              "link": "https://docs.meilisearch.com/errors#invalid-search-filter"
             }
             "#);
         },
@@ -988,7 +988,7 @@ async fn search_with_pattern_filter_settings_errors() {
               "message": "Index `test`: Filter operator `TO` is not allowed for the attribute `doggos.age`.\n  - Note: allowed operators: OR, AND, NOT, =, !=, IN, IS EMPTY, IS NULL, EXISTS.\n  - Note: field `doggos.age` matched rule #0 in `filterableAttributes`\n  - Hint: enable comparison in rule #0 by modifying the features.filter object\n  - Hint: prepend another rule matching `doggos.age` with appropriate filter features before rule #0",
               "code": "invalid_search_filter",
               "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+              "link": "https://docs.meilisearch.com/errors#invalid-search-filter"
             }
             "#);
         },
@@ -1008,7 +1008,7 @@ async fn sort_geo_reserved_attribute() {
         "message": "`_geo` is a reserved keyword and thus can't be used as a sort expression. Use the _geoPoint(latitude, longitude) built-in rule to sort on _geo field coordinates.",
         "code": "invalid_search_sort",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_search_sort"
+        "link": "https://docs.meilisearch.com/errors#invalid-search-sort"
     });
     index
         .search(
@@ -1035,7 +1035,7 @@ async fn sort_reserved_attribute() {
         "message": "`_geoDistance` is a reserved keyword and thus can't be used as a sort expression.",
         "code": "invalid_search_sort",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_search_sort"
+        "link": "https://docs.meilisearch.com/errors#invalid-search-sort"
     });
     index
         .search(
@@ -1061,7 +1061,7 @@ async fn sort_unsortable_attribute() {
         "message": format!("Index `{}`: Attribute `title` is not sortable. Available sortable attributes are: `id`.", index.uid),
         "code": "invalid_search_sort",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_search_sort"
+        "link": "https://docs.meilisearch.com/errors#invalid-search-sort"
     });
     index
         .search(
@@ -1088,7 +1088,7 @@ async fn sort_invalid_syntax() {
         "message": "Invalid syntax for the sort parameter: expected expression ending by `:asc` or `:desc`, found `title`.",
         "code": "invalid_search_sort",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_search_sort"
+        "link": "https://docs.meilisearch.com/errors#invalid-search-sort"
     });
     index
         .search(
@@ -1119,7 +1119,7 @@ async fn sort_unset_ranking_rule() {
         "message": format!("Index `{}`: You must specify where `sort` is listed in the rankingRules setting to use the sort parameter at search time.", index.uid),
         "code": "invalid_search_sort",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_search_sort"
+        "link": "https://docs.meilisearch.com/errors#invalid-search-sort"
     });
     index
         .search(
@@ -1147,7 +1147,7 @@ async fn search_on_unknown_field() {
               "message": "Index `test`: Attribute `unknown` is not searchable. Available searchable attributes are: `id, title`.",
               "code": "invalid_search_attributes_to_search_on",
               "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#invalid_search_attributes_to_search_on"
+              "link": "https://docs.meilisearch.com/errors#invalid-search-attributes-to-search-on"
             }
             "###);
         },
@@ -1168,7 +1168,7 @@ async fn search_on_unknown_field_plus_joker() {
               "message": "Index `test`: Attribute `unknown` is not searchable. Available searchable attributes are: `id, title`.",
               "code": "invalid_search_attributes_to_search_on",
               "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#invalid_search_attributes_to_search_on"
+              "link": "https://docs.meilisearch.com/errors#invalid-search-attributes-to-search-on"
             }
             "###);
         },
@@ -1186,7 +1186,7 @@ async fn search_on_unknown_field_plus_joker() {
               "message": "Index `test`: Attribute `unknown` is not searchable. Available searchable attributes are: `id, title`.",
               "code": "invalid_search_attributes_to_search_on",
               "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#invalid_search_attributes_to_search_on"
+              "link": "https://docs.meilisearch.com/errors#invalid-search-attributes-to-search-on"
             }
             "###);
         },
@@ -1278,7 +1278,7 @@ async fn search_with_contains_without_enabling_the_feature() {
               "message": "Using `CONTAINS` or `STARTS WITH` in a filter requires enabling the `contains filter` experimental feature. See https://github.com/orgs/meilisearch/discussions/763\n7:15 doggo CONTAINS kefir",
               "code": "feature_not_enabled",
               "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+              "link": "https://docs.meilisearch.com/errors#feature-not-enabled"
             }
             "###);
         })
@@ -1291,7 +1291,7 @@ async fn search_with_contains_without_enabling_the_feature() {
               "message": "Using `CONTAINS` or `STARTS WITH` in a filter requires enabling the `contains filter` experimental feature. See https://github.com/orgs/meilisearch/discussions/763\n25:33 doggo != echo AND doggo CONTAINS kefir",
               "code": "feature_not_enabled",
               "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+              "link": "https://docs.meilisearch.com/errors#feature-not-enabled"
             }
             "###);
         })
@@ -1307,7 +1307,7 @@ async fn search_with_contains_without_enabling_the_feature() {
       "message": "Using `CONTAINS` or `STARTS WITH` in a filter requires enabling the `contains filter` experimental feature. See https://github.com/orgs/meilisearch/discussions/763\n7:15 doggo CONTAINS kefir",
       "code": "feature_not_enabled",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+      "link": "https://docs.meilisearch.com/errors#feature-not-enabled"
     }
     "###);
     let (response, code) =
@@ -1319,7 +1319,7 @@ async fn search_with_contains_without_enabling_the_feature() {
       "message": "Using `CONTAINS` or `STARTS WITH` in a filter requires enabling the `contains filter` experimental feature. See https://github.com/orgs/meilisearch/discussions/763\n7:15 doggo CONTAINS kefir",
       "code": "feature_not_enabled",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+      "link": "https://docs.meilisearch.com/errors#feature-not-enabled"
     }
     "###);
 }

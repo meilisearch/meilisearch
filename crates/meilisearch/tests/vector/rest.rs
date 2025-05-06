@@ -374,7 +374,7 @@ async fn bad_request() {
     "message": "Error while generating embeddings: user error: in `request`: \"{{text}}\" not found",
     "code": "vector_embedding_error",
     "type": "invalid_request",
-    "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+    "link": "https://docs.meilisearch.com/errors#vector-embedding-error"
   }
   "###);
 
@@ -402,7 +402,7 @@ async fn bad_request() {
       "message": "Error while generating embeddings: user error: in `request.input.input`: \"{{..}}\" appears nested inside of a value that is itself repeated",
       "code": "vector_embedding_error",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+      "link": "https://docs.meilisearch.com/errors#vector-embedding-error"
     }
     "###);
 
@@ -425,7 +425,7 @@ async fn bad_request() {
       "message": "Error while generating embeddings: user error: in `request.input.repeat`: \"{{..}}\" appears outside of an array",
       "code": "vector_embedding_error",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+      "link": "https://docs.meilisearch.com/errors#vector-embedding-error"
     }
     "###);
 
@@ -448,7 +448,7 @@ async fn bad_request() {
       "message": "Error while generating embeddings: user error: in `request.input`: \"{{..}}\" expected at position #1, but found at position #0",
       "code": "vector_embedding_error",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+      "link": "https://docs.meilisearch.com/errors#vector-embedding-error"
     }
     "###);
 
@@ -471,7 +471,7 @@ async fn bad_request() {
       "message": "Error while generating embeddings: user error: in `request.input`: \"{{..}}\" expected at position #1, but found at position #2",
       "code": "vector_embedding_error",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+      "link": "https://docs.meilisearch.com/errors#vector-embedding-error"
     }
     "###);
 
@@ -494,7 +494,7 @@ async fn bad_request() {
       "message": "Error while generating embeddings: user error: in `request.input[0]`: Expected \"{{text}}\" inside of the repeated value",
       "code": "vector_embedding_error",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+      "link": "https://docs.meilisearch.com/errors#vector-embedding-error"
     }
     "###);
 
@@ -521,7 +521,7 @@ async fn bad_request() {
       "message": "Error while generating embeddings: user error: in `request.data`: Found \"{{..}}\", but it was already present in `request.input`",
       "code": "vector_embedding_error",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+      "link": "https://docs.meilisearch.com/errors#vector-embedding-error"
     }
     "###);
 
@@ -542,7 +542,7 @@ async fn bad_request() {
       "message": "Error while generating embeddings: user error: in `request.data`: Found \"{{text}}\", but it was already present in `request.input`",
       "code": "vector_embedding_error",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+      "link": "https://docs.meilisearch.com/errors#vector-embedding-error"
     }
     "###);
 
@@ -563,7 +563,7 @@ async fn bad_request() {
       "message": "Error while generating embeddings: user error: in `request.repeated.data[1]`: Found \"{{text}}\", but it was already present in `request.repeated.input`",
       "code": "vector_embedding_error",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+      "link": "https://docs.meilisearch.com/errors#vector-embedding-error"
     }
     "###);
 
@@ -584,7 +584,7 @@ async fn bad_request() {
       "message": "Error while generating embeddings: user error: in `request.data`: Found \"{{text}}\", but it was already present in `request.input[0]` (repeated)",
       "code": "vector_embedding_error",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+      "link": "https://docs.meilisearch.com/errors#vector-embedding-error"
     }
     "###);
 }
@@ -610,7 +610,7 @@ async fn bad_response() {
       "message": "Error while generating embeddings: user error: in `response`: \"{{embedding}}\" not found",
       "code": "vector_embedding_error",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+      "link": "https://docs.meilisearch.com/errors#vector-embedding-error"
     }
     "###);
 
@@ -638,7 +638,7 @@ async fn bad_response() {
       "message": "Error while generating embeddings: user error: in `response.output.output`: \"{{..}}\" appears nested inside of a value that is itself repeated",
       "code": "vector_embedding_error",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+      "link": "https://docs.meilisearch.com/errors#vector-embedding-error"
     }
     "###);
 
@@ -661,7 +661,7 @@ async fn bad_response() {
       "message": "Error while generating embeddings: user error: in `response.output.repeat`: \"{{..}}\" appears outside of an array",
       "code": "vector_embedding_error",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+      "link": "https://docs.meilisearch.com/errors#vector-embedding-error"
     }
     "###);
 
@@ -684,7 +684,7 @@ async fn bad_response() {
       "message": "Error while generating embeddings: user error: in `response.output`: \"{{..}}\" expected at position #1, but found at position #0",
       "code": "vector_embedding_error",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+      "link": "https://docs.meilisearch.com/errors#vector-embedding-error"
     }
     "###);
 
@@ -707,7 +707,7 @@ async fn bad_response() {
       "message": "Error while generating embeddings: user error: in `response.output`: \"{{..}}\" expected at position #1, but found at position #2",
       "code": "vector_embedding_error",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+      "link": "https://docs.meilisearch.com/errors#vector-embedding-error"
     }
     "###);
 
@@ -730,7 +730,7 @@ async fn bad_response() {
       "message": "Error while generating embeddings: user error: in `response.output[0]`: Expected \"{{embedding}}\" inside of the repeated value",
       "code": "vector_embedding_error",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+      "link": "https://docs.meilisearch.com/errors#vector-embedding-error"
     }
     "###);
 
@@ -757,7 +757,7 @@ async fn bad_response() {
       "message": "Error while generating embeddings: user error: in `response.data`: Found \"{{..}}\", but it was already present in `response.output`",
       "code": "vector_embedding_error",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+      "link": "https://docs.meilisearch.com/errors#vector-embedding-error"
     }
     "###);
 
@@ -778,7 +778,7 @@ async fn bad_response() {
       "message": "Error while generating embeddings: user error: in `response.data`: Found \"{{embedding}}\", but it was already present in `response.output[0].data`",
       "code": "vector_embedding_error",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+      "link": "https://docs.meilisearch.com/errors#vector-embedding-error"
     }
     "###);
 
@@ -799,7 +799,7 @@ async fn bad_response() {
       "message": "Error while generating embeddings: user error: in `response.repeated.data[1]`: Found \"{{embedding}}\", but it was already present in `response.repeated.output`",
       "code": "vector_embedding_error",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+      "link": "https://docs.meilisearch.com/errors#vector-embedding-error"
     }
     "###);
 
@@ -820,7 +820,7 @@ async fn bad_response() {
       "message": "Error while generating embeddings: user error: in `response.data`: Found \"{{embedding}}\", but it was already present in `response.output[0]` (repeated)",
       "code": "vector_embedding_error",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+      "link": "https://docs.meilisearch.com/errors#vector-embedding-error"
     }
     "###);
 
@@ -840,7 +840,7 @@ async fn bad_response() {
       "message": "Error while generating embeddings: user error: in `response`: `response` has multiple embeddings, but `request` has only one text to embed",
       "code": "vector_embedding_error",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+      "link": "https://docs.meilisearch.com/errors#vector-embedding-error"
     }
     "###);
 
@@ -860,7 +860,7 @@ async fn bad_response() {
       "message": "Error while generating embeddings: user error: in `response`: `response` has a single embedding, but `request` has multiple texts to embed",
       "code": "vector_embedding_error",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+      "link": "https://docs.meilisearch.com/errors#vector-embedding-error"
     }
     "###);
 }
@@ -885,7 +885,7 @@ async fn bad_settings() {
       "message": "Error while generating embeddings: user error: in `request`: \"{{text}}\" not found",
       "code": "vector_embedding_error",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+      "link": "https://docs.meilisearch.com/errors#vector-embedding-error"
     }
     "###);
 
@@ -902,7 +902,7 @@ async fn bad_settings() {
       "message": "`.embedders.rest.url`: could not parse `kefir`: relative URL without a base",
       "code": "invalid_settings_embedders",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_embedders"
+      "link": "https://docs.meilisearch.com/errors#invalid-settings-embedders"
     }
     "###);
 
@@ -919,7 +919,7 @@ async fn bad_settings() {
       "message": "`.embedders.rest`: Missing field `request` (note: this field is mandatory for source `rest`)",
       "code": "invalid_settings_embedders",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_embedders"
+      "link": "https://docs.meilisearch.com/errors#invalid-settings-embedders"
     }
     "###);
 
@@ -936,7 +936,7 @@ async fn bad_settings() {
       "message": "`.embedders.rest`: Missing field `response` (note: this field is mandatory for source `rest`)",
       "code": "invalid_settings_embedders",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_embedders"
+      "link": "https://docs.meilisearch.com/errors#invalid-settings-embedders"
     }
     "###);
 
@@ -953,7 +953,7 @@ async fn bad_settings() {
       "message": "Error while generating embeddings: user error: in `response`: \"{{embedding}}\" not found",
       "code": "vector_embedding_error",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+      "link": "https://docs.meilisearch.com/errors#vector-embedding-error"
     }
     "###);
 
@@ -988,7 +988,7 @@ async fn bad_settings() {
         "message": "Index `doggo`: Error while generating embeddings: runtime error: could not determine model dimensions:\n  - test embedding failed with runtime error: error extracting embeddings from the response:\n  - in `response`, while extracting a single \"{{embedding}}\", expected `response` to be an array of numbers, but failed to parse server response:\n  - invalid type: map, expected a sequence",
         "code": "vector_embedding_error",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+        "link": "https://docs.meilisearch.com/errors#vector-embedding-error"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -1028,7 +1028,7 @@ async fn bad_settings() {
         "message": "Index `doggo`: While embedding documents for embedder `rest`: runtime error: was expecting embeddings of dimension `2`, got embeddings of dimensions `3`",
         "code": "vector_embedding_error",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+        "link": "https://docs.meilisearch.com/errors#vector-embedding-error"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -1181,7 +1181,7 @@ async fn server_returns_bad_request() {
         "message": "Index `doggo`: Error while generating embeddings: runtime error: could not determine model dimensions:\n  - test embedding failed with user error: sent a bad request to embedding server\n  - Hint: check that the `request` in the embedder configuration matches the remote server's API\n  - server replied with `{\"error\":\"Invalid request: invalid type: string \\\"test\\\", expected struct MultipleRequest at line 1 column 6\"}`",
         "code": "vector_embedding_error",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+        "link": "https://docs.meilisearch.com/errors#vector-embedding-error"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -1250,7 +1250,7 @@ async fn server_returns_bad_request() {
         "message": "Index `doggo`: While embedding documents for embedder `rest`: user error: sent a bad request to embedding server\n  - Hint: check that the `request` in the embedder configuration matches the remote server's API\n  - server replied with `{\"error\":\"Invalid request: invalid type: string \\\"name: kefir\\\\n\\\", expected struct MultipleRequest at line 1 column 15\"}`",
         "code": "vector_embedding_error",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+        "link": "https://docs.meilisearch.com/errors#vector-embedding-error"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -1309,7 +1309,7 @@ async fn server_returns_bad_response() {
         "message": "Index `doggo`: Error while generating embeddings: runtime error: could not determine model dimensions:\n  - test embedding failed with runtime error: error extracting embeddings from the response:\n  - in `response`, while extracting the array of \"{{embedding}}\"s, configuration expects `response` to be an array with at least 1 item(s) but server sent an object with 1 field(s)",
         "code": "vector_embedding_error",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+        "link": "https://docs.meilisearch.com/errors#vector-embedding-error"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -1365,7 +1365,7 @@ async fn server_returns_bad_response() {
         "message": "Index `doggo`: Error while generating embeddings: runtime error: could not determine model dimensions:\n  - test embedding failed with runtime error: error extracting embeddings from the response:\n  - in `response`, while extracting item #0 from the array of \"{{embedding}}\"s, expected `response` to be an array of numbers, but failed to parse server response:\n  - invalid type: map, expected a sequence",
         "code": "vector_embedding_error",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+        "link": "https://docs.meilisearch.com/errors#vector-embedding-error"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -1417,7 +1417,7 @@ async fn server_returns_bad_response() {
         "message": "Index `doggo`: Error while generating embeddings: runtime error: could not determine model dimensions:\n  - test embedding failed with runtime error: error extracting embeddings from the response:\n  - in `response.output`, while extracting a single \"{{embedding}}\", expected `output` to be an array of numbers, but failed to parse server response:\n  - invalid type: map, expected f32",
         "code": "vector_embedding_error",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+        "link": "https://docs.meilisearch.com/errors#vector-embedding-error"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -1481,7 +1481,7 @@ async fn server_returns_bad_response() {
         "message": "Index `doggo`: Error while generating embeddings: runtime error: could not determine model dimensions:\n  - test embedding failed with runtime error: error extracting embeddings from the response:\n  - in `response.embedding`, while extracting item #0 from the array of \"{{embedding}}\"s, configuration expects `embedding` to be an object with key `data` but server sent an array of size 3",
         "code": "vector_embedding_error",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+        "link": "https://docs.meilisearch.com/errors#vector-embedding-error"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -1545,7 +1545,7 @@ async fn server_returns_bad_response() {
         "message": "Index `doggo`: Error while generating embeddings: runtime error: could not determine model dimensions:\n  - test embedding failed with runtime error: error extracting embeddings from the response:\n  - in `response.output[0]`, while extracting a single \"{{embedding}}\", configuration expects key \"embeddings\", which is missing in response\n  - Hint: item #0 inside `output` has key `embedding`, did you mean `response.output[0].embedding` in embedder configuration?",
         "code": "vector_embedding_error",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+        "link": "https://docs.meilisearch.com/errors#vector-embedding-error"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -1911,7 +1911,7 @@ async fn server_custom_header() {
         "message": "Index `doggo`: Error while generating embeddings: runtime error: could not determine model dimensions:\n  - test embedding failed with user error: could not authenticate against embedding server\n  - server replied with `{\"error\":\"missing header 'my-nonstandard-auth'\"}`\n  - Hint: Check the `apiKey` parameter in the embedder configuration",
         "code": "vector_embedding_error",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+        "link": "https://docs.meilisearch.com/errors#vector-embedding-error"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -1954,7 +1954,7 @@ async fn server_custom_header() {
         "message": "Index `doggo`: Error while generating embeddings: runtime error: could not determine model dimensions:\n  - test embedding failed with user error: could not authenticate against embedding server\n  - server replied with `{\"error\":\"thou shall not pass, Balrog\"}`\n  - Hint: Check the `apiKey` parameter in the embedder configuration",
         "code": "vector_embedding_error",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+        "link": "https://docs.meilisearch.com/errors#vector-embedding-error"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -2102,7 +2102,7 @@ async fn searchable_reindex() {
         "message": "Index `doggo`: While embedding documents for embedder `rest`: error: received unexpected HTTP 404 from embedding server\n  - server replied with `{\"error\":\"text not found\",\"text\":\"breed: patou\\n\"}`",
         "code": "vector_embedding_error",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+        "link": "https://docs.meilisearch.com/errors#vector-embedding-error"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",

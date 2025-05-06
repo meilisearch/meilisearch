@@ -21,7 +21,7 @@ async fn error_get_unexisting_task_status() {
         "message": "Task `1` not found.",
         "code": "task_not_found",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#task_not_found"
+        "link": "https://docs.meilisearch.com/errors#task-not-found"
     });
 
     assert_eq!(response, expected_response);
@@ -353,7 +353,7 @@ async fn test_summarized_delete_documents_by_batch() {
         "message": "Index `test` not found.",
         "code": "index_not_found",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index_not_found"
+        "link": "https://docs.meilisearch.com/errors#index-not-found"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -418,7 +418,7 @@ async fn test_summarized_delete_documents_by_filter() {
         "message": "Index `test` not found.",
         "code": "index_not_found",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index_not_found"
+        "link": "https://docs.meilisearch.com/errors#index-not-found"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -451,7 +451,7 @@ async fn test_summarized_delete_documents_by_filter() {
         "message": "Index `test`: Attribute `doggo` is not filterable. This index does not have configured filterable attributes.\n1:6 doggo = bernese",
         "code": "invalid_document_filter",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
+        "link": "https://docs.meilisearch.com/errors#invalid-document-filter"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -515,7 +515,7 @@ async fn test_summarized_delete_document_by_id() {
         "message": "Index `test` not found.",
         "code": "index_not_found",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index_not_found"
+        "link": "https://docs.meilisearch.com/errors#index-not-found"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -564,7 +564,7 @@ async fn test_summarized_settings_update() {
       "message": "Invalid value at `.rankingRules[0]`: `custom` ranking rule is invalid. Valid ranking rules are words, typo, sort, proximity, attribute, exactness and custom ranking rules.",
       "code": "invalid_settings_ranking_rules",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_ranking_rules"
+      "link": "https://docs.meilisearch.com/errors#invalid-settings-ranking-rules"
     }
     "###);
 
@@ -651,7 +651,7 @@ async fn test_summarized_index_creation() {
         "message": "Index `test` already exists.",
         "code": "index_already_exists",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index_already_exists"
+        "link": "https://docs.meilisearch.com/errors#index-already-exists"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -683,7 +683,7 @@ async fn test_summarized_index_deletion() {
         "message": "Index `test` not found.",
         "code": "index_not_found",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index_not_found"
+        "link": "https://docs.meilisearch.com/errors#index-not-found"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -760,7 +760,7 @@ async fn test_summarized_index_deletion() {
         "message": "Index `test` not found.",
         "code": "index_not_found",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index_not_found"
+        "link": "https://docs.meilisearch.com/errors#index-not-found"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -795,7 +795,7 @@ async fn test_summarized_index_update() {
         "message": "Index `test` not found.",
         "code": "index_not_found",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index_not_found"
+        "link": "https://docs.meilisearch.com/errors#index-not-found"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -824,7 +824,7 @@ async fn test_summarized_index_update() {
         "message": "Index `test` not found.",
         "code": "index_not_found",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index_not_found"
+        "link": "https://docs.meilisearch.com/errors#index-not-found"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -919,7 +919,7 @@ async fn test_summarized_index_swap() {
         "message": "Indexes `cattos`, `doggos` not found.",
         "code": "index_not_found",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index_not_found"
+        "link": "https://docs.meilisearch.com/errors#index-not-found"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",

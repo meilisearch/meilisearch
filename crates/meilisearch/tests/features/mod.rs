@@ -132,7 +132,7 @@ async fn experimental_feature_metrics() {
       "message": "Getting metrics requires enabling the `metrics` experimental feature. See https://github.com/meilisearch/product/discussions/625",
       "code": "feature_not_enabled",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+      "link": "https://docs.meilisearch.com/errors#feature-not-enabled"
     }
     "###);
 
@@ -159,7 +159,7 @@ async fn errors() {
       "message": "Unknown field `NotAFeature`: expected one of `metrics`, `logsRoute`, `editDocumentsByFunction`, `containsFilter`, `network`, `getTaskDocumentsRoute`, `compositeEmbedders`",
       "code": "bad_request",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#bad_request"
+      "link": "https://docs.meilisearch.com/errors#bad-request"
     }
     "###);
 
@@ -172,7 +172,7 @@ async fn errors() {
       "message": "Invalid value type at `.metrics`: expected a boolean, but found a positive integer: `42`",
       "code": "bad_request",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#bad_request"
+      "link": "https://docs.meilisearch.com/errors#bad-request"
     }
     "###);
 
@@ -185,7 +185,7 @@ async fn errors() {
       "message": "Invalid value type at `.metrics`: expected a boolean, but found a string: `\"true\"`",
       "code": "bad_request",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#bad_request"
+      "link": "https://docs.meilisearch.com/errors#bad-request"
     }
     "###);
 }

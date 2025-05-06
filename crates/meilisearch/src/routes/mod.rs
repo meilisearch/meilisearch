@@ -415,7 +415,7 @@ pub struct Stats {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+                "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
             }
         )),
     )
@@ -501,7 +501,7 @@ struct VersionResponse {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+                "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
             }
         )),
     )

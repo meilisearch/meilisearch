@@ -15,7 +15,7 @@ async fn error_network_not_enabled() {
       "message": "Using the /network route requires enabling the `network` experimental feature. See https://github.com/orgs/meilisearch/discussions/805",
       "code": "feature_not_enabled",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+      "link": "https://docs.meilisearch.com/errors#feature-not-enabled"
     }
     "###);
 
@@ -27,7 +27,7 @@ async fn error_network_not_enabled() {
       "message": "Using the /network route requires enabling the `network` experimental feature. See https://github.com/orgs/meilisearch/discussions/805",
       "code": "feature_not_enabled",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+      "link": "https://docs.meilisearch.com/errors#feature-not-enabled"
     }
     "###);
 }
@@ -49,7 +49,7 @@ async fn errors_on_param() {
       "message": "Unknown field `selfie`: expected one of `remotes`, `self`",
       "code": "bad_request",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#bad_request"
+      "link": "https://docs.meilisearch.com/errors#bad-request"
     }
     "###);
 
@@ -62,7 +62,7 @@ async fn errors_on_param() {
       "message": "Invalid value type at `.self`: expected a string, but found a positive integer: `42`",
       "code": "invalid_network_self",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_network_self"
+      "link": "https://docs.meilisearch.com/errors#invalid-network-self"
     }
     "###);
 
@@ -75,7 +75,7 @@ async fn errors_on_param() {
       "message": "Invalid value type at `.remotes`: expected an object, but found a positive integer: `42`",
       "code": "invalid_network_remotes",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_network_remotes"
+      "link": "https://docs.meilisearch.com/errors#invalid-network-remotes"
     }
     "###);
 
@@ -94,7 +94,7 @@ async fn errors_on_param() {
       "message": "Missing field `.remotes.new.url`",
       "code": "missing_network_url",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#missing_network_url"
+      "link": "https://docs.meilisearch.com/errors#missing-network-url"
     }
     "###);
 
@@ -113,7 +113,7 @@ async fn errors_on_param() {
       "message": "Invalid value type at `.remotes.new.url`: expected a string, but found a positive integer: `7700`",
       "code": "invalid_network_url",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_network_url"
+      "link": "https://docs.meilisearch.com/errors#invalid-network-url"
     }
     "###);
 
@@ -132,7 +132,7 @@ async fn errors_on_param() {
       "message": "Invalid `.remotes.new.url` (`no-http-scheme`): relative URL without a base",
       "code": "invalid_network_url",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_network_url"
+      "link": "https://docs.meilisearch.com/errors#invalid-network-url"
     }
     "###);
 
@@ -152,7 +152,7 @@ async fn errors_on_param() {
       "message": "Unknown field `doggo` inside `.remotes.new`: expected one of `url`, `searchApiKey`",
       "code": "invalid_network_remotes",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_network_remotes"
+      "link": "https://docs.meilisearch.com/errors#invalid-network-remotes"
     }
     "###);
 
@@ -172,7 +172,7 @@ async fn errors_on_param() {
       "message": "Invalid value type at `.remotes.new.searchApiKey`: expected a string, but found a positive integer: `1204664602099962445`",
       "code": "invalid_network_search_api_key",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_network_search_api_key"
+      "link": "https://docs.meilisearch.com/errors#invalid-network-search-api-key"
     }
     "###);
 
@@ -211,7 +211,7 @@ async fn errors_on_param() {
       "message": "Field `.remotes.kefir.url` cannot be set to `null`",
       "code": "invalid_network_url",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_network_url"
+      "link": "https://docs.meilisearch.com/errors#invalid-network-url"
     }
     "###);
 }
@@ -318,7 +318,7 @@ async fn auth() {
       "message": "The provided API key is invalid.",
       "code": "invalid_api_key",
       "type": "auth",
-      "link": "https://docs.meilisearch.com/errors#invalid_api_key"
+      "link": "https://docs.meilisearch.com/errors#invalid-api-key"
     }
     "###);
 
@@ -335,7 +335,7 @@ async fn auth() {
       "message": "The provided API key is invalid.",
       "code": "invalid_api_key",
       "type": "auth",
-      "link": "https://docs.meilisearch.com/errors#invalid_api_key"
+      "link": "https://docs.meilisearch.com/errors#invalid-api-key"
     }
     "###);
     // try either with bad permission
@@ -348,7 +348,7 @@ async fn auth() {
       "message": "The provided API key is invalid.",
       "code": "invalid_api_key",
       "type": "auth",
-      "link": "https://docs.meilisearch.com/errors#invalid_api_key"
+      "link": "https://docs.meilisearch.com/errors#invalid-api-key"
     }
     "###);
 
@@ -364,7 +364,7 @@ async fn auth() {
       "message": "The provided API key is invalid.",
       "code": "invalid_api_key",
       "type": "auth",
-      "link": "https://docs.meilisearch.com/errors#invalid_api_key"
+      "link": "https://docs.meilisearch.com/errors#invalid-api-key"
     }
     "###);
 }
