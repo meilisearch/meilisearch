@@ -9,6 +9,7 @@ pub struct IndexerConfig {
     pub max_nb_chunks: Option<usize>,
     pub documents_chunk_size: Option<usize>,
     pub max_memory: Option<usize>,
+    pub max_threads: Option<usize>,
     pub chunk_compression_type: CompressionType,
     pub chunk_compression_level: Option<u32>,
     pub thread_pool: Option<ThreadPoolNoAbort>,
@@ -25,6 +26,21 @@ impl IndexerConfig {
             max_nb_chunks: self.max_nb_chunks,
         }
     }
+
+    pub fn clone_no_threadpool(&self) -> Self {
+        Self {
+            log_every_n: self.log_every_n,
+            max_nb_chunks: self.max_nb_chunks,
+            documents_chunk_size: self.documents_chunk_size,
+            max_memory: self.max_memory,
+            max_threads: self.max_threads,
+            chunk_compression_type: self.chunk_compression_type,
+            chunk_compression_level: self.chunk_compression_level,
+            max_positions_per_attributes: self.max_positions_per_attributes,
+            skip_index_budget: self.skip_index_budget,
+            thread_pool: None,
+        }
+    }
 }
 
 impl Default for IndexerConfig {
@@ -34,6 +50,7 @@ impl Default for IndexerConfig {
             max_nb_chunks: None,
             documents_chunk_size: None,
             max_memory: None,
+            max_threads: None,
             chunk_compression_type: CompressionType::None,
             chunk_compression_level: None,
             thread_pool: None,

@@ -38,6 +38,7 @@ use meilisearch_auth::{open_auth_store_env, AuthController};
 use meilisearch_types::milli::constants::VERSION_MAJOR;
 use meilisearch_types::milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
 use meilisearch_types::milli::update::{IndexDocumentsConfig, IndexDocumentsMethod};
+use meilisearch_types::milli::ThreadPoolNoAbortBuilder;
 use meilisearch_types::settings::apply_settings_to_builder;
 use meilisearch_types::tasks::KindWithContent;
 use meilisearch_types::versioning::{
@@ -500,7 +501,23 @@ fn import_dump(
     let network = dump_reader.network()?.cloned().unwrap_or_default();
     index_scheduler.put_network(network)?;
 
-    let indexer_config = index_scheduler.indexer_config();
+    // 3.1 Use all cpus to process dump if max_indexing_threads not configured
+    let backup_config;
+    let indexer_config = if index_scheduler.indexer_config().max_threads.is_none() {
+        let mut _config = index_scheduler.indexer_config().clone_no_threadpool();
+        _config.thread_pool = {
+            Some(
+                ThreadPoolNoAbortBuilder::new()
+                    .thread_name(|index| format!("indexing-thread:{index}"))
+                    .num_threads(num_cpus::get())
+                    .build()?,
+            )
+        };
+        backup_config = _config;
+        &backup_config
+    } else {
+        index_scheduler.indexer_config()
+    };
 
     // /!\ The tasks must be imported AFTER importing the indexes or else the scheduler might
     // try to process tasks while we're trying to import the indexes.
