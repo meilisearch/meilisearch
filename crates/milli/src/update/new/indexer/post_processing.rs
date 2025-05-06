@@ -131,7 +131,12 @@ fn compute_word_fst(
     }
 }
 
-pub fn recompute_word_fst_from_word_docids_database(index: &Index, wtxn: &mut RwTxn) -> Result<()> {
+pub fn recompute_word_fst_from_word_docids_database(
+    index: &Index,
+    wtxn: &mut RwTxn,
+    progress: &Progress,
+) -> Result<()> {
+    progress.update_progress(PostProcessingWords::WordFst);
     let fst = fst::Set::default().map_data(std::borrow::Cow::Owned)?;
     let mut word_fst_builder = WordFstBuilder::new(&fst)?;
     let words = index.word_docids.iter(wtxn)?.remap_data_type::<DecodeIgnore>();
