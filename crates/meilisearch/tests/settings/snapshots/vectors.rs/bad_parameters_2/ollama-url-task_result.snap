@@ -22,7 +22,7 @@ source: crates/meilisearch/tests/settings/vectors.rs
     "message": "Index `test`: Error while generating embeddings: user error: unsupported Ollama URL.\n  - For `ollama` sources, the URL must end with `/api/embed` or `/api/embeddings`\n  - Got `http://rest.example/`",
     "code": "vector_embedding_error",
     "type": "invalid_request",
-    "link": "https://docs.meilisearch.com/errors#vector-embedding-error"
+    "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#vector-embedding-error"
   },
   "duration": "[duration]",
   "enqueuedAt": "[enqueuedAt]",

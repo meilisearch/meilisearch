@@ -27,7 +27,7 @@ static INVALID_RESPONSE: Lazy<Value> = Lazy::new(|| {
         "message": null,
         "code": "invalid_api_key",
         "type": "auth",
-        "link": "https://docs.meilisearch.com/errors#invalid-api-key"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-api-key"
     })
 });
 
