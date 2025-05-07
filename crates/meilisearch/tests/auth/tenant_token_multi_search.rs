@@ -118,7 +118,7 @@ fn invalid_response(query_index: Option<usize>) -> Value {
     json!({"message": message,
         "code": "invalid_api_key",
         "type": "auth",
-        "link": "https://docs.meilisearch.com/errors#invalid_api_key"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-api-key"
     })
 }
 

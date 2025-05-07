@@ -6,7 +6,7 @@ source: crates/index-scheduler/src/scheduler/test_failure.rs
 []
 ----------------------------------------------------------------------
 ### All Tasks:
-0 {uid: 0, batch_uid: 0, status: failed, error: ResponseError { code: 200, message: "Planned failure for tests.", error_code: "internal", error_type: "internal", error_link: "https://docs.meilisearch.com/errors#internal" }, details: { primary_key: Some("mouse") }, kind: IndexCreation { index_uid: "catto", primary_key: Some("mouse") }}
+0 {uid: 0, batch_uid: 0, status: failed, error: ResponseError { code: 200, message: "Planned failure for tests.", error_code: "internal", error_type: "internal", error_link: "https://www.meilisearch.com/docs/reference/errors/error_codes#internal" }, details: { primary_key: Some("mouse") }, kind: IndexCreation { index_uid: "catto", primary_key: Some("mouse") }}
 ----------------------------------------------------------------------
 ### Status:
 enqueued []
