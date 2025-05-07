@@ -10,7 +10,7 @@ source: crates/index-scheduler/src/scheduler/test.rs
 1 {uid: 1, batch_uid: 1, status: succeeded, details: { primary_key: Some("id") }, kind: IndexCreation { index_uid: "b", primary_key: Some("id") }}
 2 {uid: 2, batch_uid: 2, status: succeeded, details: { primary_key: Some("id") }, kind: IndexCreation { index_uid: "c", primary_key: Some("id") }}
 3 {uid: 3, batch_uid: 3, status: succeeded, details: { primary_key: Some("id") }, kind: IndexCreation { index_uid: "d", primary_key: Some("id") }}
-4 {uid: 4, batch_uid: 4, status: failed, error: ResponseError { code: 200, message: "Indexes `e`, `f` not found.", error_code: "index_not_found", error_type: "invalid_request", error_link: "https://docs.meilisearch.com/errors#index-not-found" }, details: { swaps: [IndexSwap { indexes: ("a", "b") }, IndexSwap { indexes: ("c", "e") }, IndexSwap { indexes: ("d", "f") }] }, kind: IndexSwap { swaps: [IndexSwap { indexes: ("a", "b") }, IndexSwap { indexes: ("c", "e") }, IndexSwap { indexes: ("d", "f") }] }}
+4 {uid: 4, batch_uid: 4, status: failed, error: ResponseError { code: 200, message: "Indexes `e`, `f` not found.", error_code: "index_not_found", error_type: "invalid_request", error_link: "https://www.meilisearch.com/docs/reference/errors/error_codes#index-not-found" }, details: { swaps: [IndexSwap { indexes: ("a", "b") }, IndexSwap { indexes: ("c", "e") }, IndexSwap { indexes: ("d", "f") }] }, kind: IndexSwap { swaps: [IndexSwap { indexes: ("a", "b") }, IndexSwap { indexes: ("c", "e") }, IndexSwap { indexes: ("d", "f") }] }}
 ----------------------------------------------------------------------
 ### Status:
 enqueued []

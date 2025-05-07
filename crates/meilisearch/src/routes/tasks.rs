@@ -325,7 +325,7 @@ impl<Method: AggregateMethod + 'static> Aggregate for TaskFilterAnalytics<Method
                 "message": "Query parameters to filter the tasks to cancel are missing. Available query parameters are: `uids`, `indexUids`, `statuses`, `types`, `canceledBy`, `beforeEnqueuedAt`, `afterEnqueuedAt`, `beforeStartedAt`, `afterStartedAt`, `beforeFinishedAt`, `afterFinishedAt`.",
                 "code": "missing_task_filters",
                 "type": "invalid_request",
-                "link": "https://docs.meilisearch.com/errors#missing-task-filters"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-task-filters"
             }
         )),
         (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
@@ -333,7 +333,7 @@ impl<Method: AggregateMethod + 'static> Aggregate for TaskFilterAnalytics<Method
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-authorization-header"
             }
         )),
         (status = 404, description = "The task uid does not exists", body = ResponseError, content_type = "application/json", example = json!(
@@ -341,7 +341,7 @@ impl<Method: AggregateMethod + 'static> Aggregate for TaskFilterAnalytics<Method
                 "message": "Task :taskUid not found.",
                 "code": "task_not_found",
                 "type": "invalid_request",
-                "link": "https://docs.meilisearch.com/errors/#task-not-found"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes/#task-not-found"
             }
         ))
     )
@@ -419,7 +419,7 @@ async fn cancel_tasks(
                 "message": "Query parameters to filter the tasks to delete are missing. Available query parameters are: `uids`, `indexUids`, `statuses`, `types`, `canceledBy`, `beforeEnqueuedAt`, `afterEnqueuedAt`, `beforeStartedAt`, `afterStartedAt`, `beforeFinishedAt`, `afterFinishedAt`.",
                 "code": "missing_task_filters",
                 "type": "invalid_request",
-                "link": "https://docs.meilisearch.com/errors#missing-task-filters"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-task-filters"
             }
         )),
         (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
@@ -427,7 +427,7 @@ async fn cancel_tasks(
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-authorization-header"
             }
         )),
         (status = 404, description = "The task uid does not exists", body = ResponseError, content_type = "application/json", example = json!(
@@ -435,7 +435,7 @@ async fn cancel_tasks(
                 "message": "Task :taskUid not found.",
                 "code": "task_not_found",
                 "type": "invalid_request",
-                "link": "https://docs.meilisearch.com/errors/#task-not-found"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes/#task-not-found"
             }
         ))
     )
@@ -546,7 +546,7 @@ pub struct AllTasks {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-authorization-header"
             }
         )),
     )
@@ -608,7 +608,7 @@ async fn get_tasks(
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-authorization-header"
             }
         )),
         (status = 404, description = "The task uid does not exists", body = ResponseError, content_type = "application/json", example = json!(
@@ -616,7 +616,7 @@ async fn get_tasks(
                 "message": "Task :taskUid not found.",
                 "code": "task_not_found",
                 "type": "invalid_request",
-                "link": "https://docs.meilisearch.com/errors/#task-not-found"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes/#task-not-found"
             }
         ))
     )
@@ -662,7 +662,7 @@ async fn get_task(
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-authorization-header"
             }
         )),
         (status = 404, description = "The task uid does not exists", body = ResponseError, content_type = "application/json", example = json!(
@@ -670,7 +670,7 @@ async fn get_task(
                 "message": "Task :taskUid not found.",
                 "code": "task_not_found",
                 "type": "invalid_request",
-                "link": "https://docs.meilisearch.com/errors/#task-not-found"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes/#task-not-found"
             }
         ))
     )

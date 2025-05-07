@@ -234,7 +234,7 @@ impl<Method: AggregateMethod> Aggregate for DocumentsFetchAggregator<Method> {
                 "message": "Index `movies` not found.",
                 "code": "index_not_found",
                 "type": "invalid_request",
-                "link": "https://docs.meilisearch.com/errors#index-not-found"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#index-not-found"
             }
         )),
         (status = 404, description = "Document not found", body = ResponseError, content_type = "application/json", example = json!(
@@ -242,7 +242,7 @@ impl<Method: AggregateMethod> Aggregate for DocumentsFetchAggregator<Method> {
               "message": "Document `a` not found.",
               "code": "document_not_found",
               "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#document-not-found"
+              "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#document-not-found"
             }
         )),
         (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
@@ -250,7 +250,7 @@ impl<Method: AggregateMethod> Aggregate for DocumentsFetchAggregator<Method> {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-authorization-header"
             }
         )),
     )
@@ -345,7 +345,7 @@ impl Aggregate for DocumentsDeletionAggregator {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-authorization-header"
             }
         )),
     )
@@ -477,7 +477,7 @@ pub struct BrowseQuery {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-authorization-header"
             }
         )),
     )
@@ -549,7 +549,7 @@ pub async fn documents_by_query_post(
                 "message": "Index `movies` not found.",
                 "code": "index_not_found",
                 "type": "invalid_request",
-                "link": "https://docs.meilisearch.com/errors#index-not-found"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#index-not-found"
             }
         )),
         (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
@@ -557,7 +557,7 @@ pub async fn documents_by_query_post(
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-authorization-header"
             }
         )),
     )
@@ -753,7 +753,7 @@ impl<Method: AggregateMethod> Aggregate for DocumentsAggregator<Method> {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-authorization-header"
             }
         )),
     )
@@ -854,7 +854,7 @@ pub async fn replace_documents(
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-authorization-header"
             }
         )),
     )
@@ -1120,7 +1120,7 @@ async fn copy_body_to_file(
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-authorization-header"
             }
         )),
     )
@@ -1197,7 +1197,7 @@ pub struct DocumentDeletionByFilter {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-authorization-header"
             }
         )),
     )
@@ -1311,7 +1311,7 @@ impl Aggregate for EditDocumentsByFunctionAggregator {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-authorization-header"
             }
         )),
     )
@@ -1409,7 +1409,7 @@ pub async fn edit_documents_by_function(
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-authorization-header"
             }
         )),
     )

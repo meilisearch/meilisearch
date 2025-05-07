@@ -160,7 +160,7 @@ impl ListIndexes {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-authorization-header"
             }
         )),
     )
@@ -245,7 +245,7 @@ impl Aggregate for IndexCreatedAggregate {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-authorization-header"
             }
         )),
     )
@@ -322,7 +322,7 @@ fn deny_immutable_fields_index(
                 "message": "Index `movies` not found.",
                 "code": "index_not_found",
                 "type": "invalid_request",
-                "link": "https://docs.meilisearch.com/errors#index-not-found"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#index-not-found"
             }
         )),
         (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
@@ -330,7 +330,7 @@ fn deny_immutable_fields_index(
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-authorization-header"
             }
         )),
     )
@@ -403,7 +403,7 @@ pub struct UpdateIndexRequest {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-authorization-header"
             }
         )),
     )
@@ -464,7 +464,7 @@ pub async fn update_index(
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-authorization-header"
             }
         )),
     )
@@ -557,7 +557,7 @@ impl From<index_scheduler::IndexStats> for IndexStats {
                 "message": "Index `movies` not found.",
                 "code": "index_not_found",
                 "type": "invalid_request",
-                "link": "https://docs.meilisearch.com/errors#index-not-found"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#index-not-found"
             }
         )),
         (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
@@ -565,7 +565,7 @@ impl From<index_scheduler::IndexStats> for IndexStats {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-authorization-header"
             }
         )),
     )
