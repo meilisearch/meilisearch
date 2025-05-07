@@ -266,12 +266,15 @@ impl Step for arroy::MainStep {
                 "writing the descendants and metadata"
             }
             arroy::MainStep::RetrieveTheUpdatedItems => "retrieve the updated items",
-            arroy::MainStep::RetrievingTheTreeAndItemNodes => "retrieving the tree and item nodes",
-            arroy::MainStep::UpdatingTheTrees => "updating the trees",
-            arroy::MainStep::CreateNewTrees => "create new trees",
-            arroy::MainStep::WritingNodesToDatabase => "writing nodes to database",
-            arroy::MainStep::DeleteExtraneousTrees => "delete extraneous trees",
             arroy::MainStep::WriteTheMetadata => "write the metadata",
+            arroy::MainStep::RetrievingTheItemsIds => "retrieving the items ids",
+            arroy::MainStep::RetrievingTheUsedTreeNodes => "retrieving the used tree nodes",
+            arroy::MainStep::DeletingExtraTrees => "deleting extra trees",
+            arroy::MainStep::RemoveItemsFromExistingTrees => "remove items from existing trees",
+            arroy::MainStep::InsertItemsInCurrentTrees => "insert items in current trees",
+            arroy::MainStep::IncrementalIndexLargeDescendants => {
+                "incremental index large descendants"
+            }
         }
         .into()
     }
