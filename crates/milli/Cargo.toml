@@ -87,7 +87,8 @@ rhai = { version = "1.22.2", features = [
     "no_time",
     "sync",
 ] }
-arroy = "0.6.1"
+# arroy = "0.6.1"
+arroy = { git = "https://github.com/meilisearch/arroy.git", rev = "5b748bac2c69c65a97980901b02067a3a545e357" } # incremental update
 rand = "0.8.5"
 tracing = "0.1.41"
 ureq = { version = "2.12.1", features = ["json"] }
