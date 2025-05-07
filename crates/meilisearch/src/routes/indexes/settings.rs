@@ -112,7 +112,7 @@ macro_rules! make_setting_route {
                             "message": "The Authorization header is missing. It must use the bearer authorization method.",
                             "code": "missing_authorization_header",
                             "type": "auth",
-                            "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
+                            "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-authorization-header"
                         }
                     )),
                 )
@@ -176,7 +176,7 @@ macro_rules! make_setting_route {
                             "message": "The Authorization header is missing. It must use the bearer authorization method.",
                             "code": "missing_authorization_header",
                             "type": "auth",
-                            "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
+                            "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-authorization-header"
                         }
                     )),
                 )
@@ -255,7 +255,7 @@ macro_rules! make_setting_route {
                             "message": "The Authorization header is missing. It must use the bearer authorization method.",
                             "code": "missing_authorization_header",
                             "type": "auth",
-                            "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
+                            "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-authorization-header"
                         }
                     )),
                 )
@@ -544,7 +544,7 @@ make_setting_routes!(
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-authorization-header"
             }
         )),
     )
@@ -648,7 +648,7 @@ pub async fn update_all(
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-authorization-header"
             }
         )),
     )
@@ -694,7 +694,7 @@ pub async fn get_all(
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-authorization-header"
             }
         )),
     )

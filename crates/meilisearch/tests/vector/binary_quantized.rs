@@ -277,7 +277,7 @@ async fn try_to_disable_binary_quantization() {
         "message": "Index `[uuid]`: `.embedders.manual.binaryQuantized`: Cannot disable the binary quantization.\n - Note: Binary quantization is a lossy operation that cannot be reverted.\n - Hint: Add a new embedder that is non-quantized and regenerate the vectors.",
         "code": "invalid_settings_embedders",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid-settings-embedders"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-settings-embedders"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",

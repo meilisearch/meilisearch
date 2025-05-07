@@ -302,7 +302,7 @@ pub fn fix_sort_query_parameters(sort_query: &str) -> Vec<String> {
                 "message": "Index `movies` not found.",
                 "code": "index_not_found",
                 "type": "invalid_request",
-                "link": "https://docs.meilisearch.com/errors#index-not-found"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#index-not-found"
             }
         )),
         (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
@@ -310,7 +310,7 @@ pub fn fix_sort_query_parameters(sort_query: &str) -> Vec<String> {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-authorization-header"
             }
         )),
     )
@@ -408,7 +408,7 @@ pub async fn search_with_url_query(
                 "message": "Index `movies` not found.",
                 "code": "index_not_found",
                 "type": "invalid_request",
-                "link": "https://docs.meilisearch.com/errors#index-not-found"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#index-not-found"
             }
         )),
         (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
@@ -416,7 +416,7 @@ pub async fn search_with_url_query(
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing-authorization-header"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-authorization-header"
             }
         )),
     )

@@ -354,7 +354,7 @@ async fn invalid_semantic_ratio() {
       "message": "Invalid value at `.hybrid.semanticRatio`: the value of `semanticRatio` is invalid, expected a float between `0.0` and `1.0`.",
       "code": "invalid_search_semantic_ratio",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_semantic_ratio"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid_search_semantic_ratio"
     }
     "###);
 
@@ -369,7 +369,7 @@ async fn invalid_semantic_ratio() {
       "message": "Invalid value at `.hybrid.semanticRatio`: the value of `semanticRatio` is invalid, expected a float between `0.0` and `1.0`.",
       "code": "invalid_search_semantic_ratio",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_semantic_ratio"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid_search_semantic_ratio"
     }
     "###);
 
@@ -387,7 +387,7 @@ async fn invalid_semantic_ratio() {
       "message": "Invalid value in parameter `hybridSemanticRatio`: the value of `semanticRatio` is invalid, expected a float between `0.0` and `1.0`.",
       "code": "invalid_search_semantic_ratio",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_semantic_ratio"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid_search_semantic_ratio"
     }
     "###);
 
@@ -405,7 +405,7 @@ async fn invalid_semantic_ratio() {
       "message": "Invalid value in parameter `hybridSemanticRatio`: the value of `semanticRatio` is invalid, expected a float between `0.0` and `1.0`.",
       "code": "invalid_search_semantic_ratio",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_semantic_ratio"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid_search_semantic_ratio"
     }
     "###);
 }
@@ -460,7 +460,7 @@ async fn query_combination() {
       "message": "Invalid vector dimensions: expected: `2`, found: `3`.",
       "code": "invalid_vector_dimensions",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_vector_dimensions"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid_vector_dimensions"
     }
     "###);
 
@@ -502,7 +502,7 @@ async fn query_combination() {
       "message": "Invalid request: missing `hybrid` parameter when `vector` is present.",
       "code": "missing_search_hybrid",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#missing_search_hybrid"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing_search_hybrid"
     }
     "###);
 
@@ -519,7 +519,7 @@ async fn query_combination() {
       "message": "Error while generating embeddings: user error: attempt to embed the following text in a configuration where embeddings must be user provided:\n  - `Captain`",
       "code": "vector_embedding_error",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#vector-embedding-error"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#vector-embedding-error"
     }
     "###);
 

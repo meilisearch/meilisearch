@@ -20,7 +20,7 @@ source: crates/meilisearch/tests/settings/vectors.rs
     "message": "Index `test`: Error while generating embeddings: error: fetching file from HG_HUB failed:\n  - request error: https://huggingface.co/BAAI/bge-base-en-v1.5/resolve/e4ce9877abf3edfe10b0d82785e83bdcb973e22e/config.json: status code 404",
     "code": "vector_embedding_error",
     "type": "invalid_request",
-    "link": "https://docs.meilisearch.com/errors#vector-embedding-error"
+    "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#vector-embedding-error"
   },
   "duration": "[duration]",
   "enqueuedAt": "[enqueuedAt]",

@@ -83,7 +83,7 @@ static INVALID_RESPONSE: Lazy<Value> = Lazy::new(|| {
     json!({"message": null,
         "code": "invalid_api_key",
         "type": "auth",
-        "link": "https://docs.meilisearch.com/errors#invalid-api-key"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-api-key"
     })
 });
 
@@ -91,7 +91,7 @@ static INVALID_METRICS_RESPONSE: Lazy<Value> = Lazy::new(|| {
     json!({"message": "The provided API key is invalid. The API key for the `/metrics` route must allow access to all indexes.",
         "code": "invalid_api_key",
         "type": "auth",
-        "link": "https://docs.meilisearch.com/errors#invalid-api-key"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-api-key"
     })
 });
 
@@ -741,7 +741,7 @@ async fn error_creating_index_without_action() {
         "message": "Index `test` not found.",
         "code": "index_not_found",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index-not-found"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#index-not-found"
     });
 
     // try to create a index via add documents route

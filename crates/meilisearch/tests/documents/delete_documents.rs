@@ -91,7 +91,7 @@ async fn error_delete_batch_unexisting_index() {
         "message": format!("Index `{}` not found.", index.uid),
         "code": "index_not_found",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index-not-found"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#index-not-found"
     });
     assert_eq!(code, 202);
 

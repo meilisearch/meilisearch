@@ -1744,7 +1744,7 @@ async fn test_nested_fields() {
               "message": "Index `[uuid]`: Attribute `nested` is not filterable. Available filterable attribute patterns are: `nested.machin`, `nested.object`, `title`.\n1:7 nested = array",
               "code": "invalid_search_filter",
               "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#invalid-search-filter"
+              "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-search-filter"
             }
             "###);
         },
@@ -1763,7 +1763,7 @@ async fn test_nested_fields() {
               "message": "Index `[uuid]`: Attribute `nested` is not filterable. Available filterable attribute patterns are: `nested.machin`, `nested.object`, `title`.\n1:7 nested = \"I lied\"",
               "code": "invalid_search_filter",
               "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#invalid-search-filter"
+              "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-search-filter"
             }
             "###);
         },

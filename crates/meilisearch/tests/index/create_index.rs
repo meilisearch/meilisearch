@@ -189,7 +189,7 @@ async fn error_create_existing_index() {
         "message": msg,
         "code": "index_already_exists",
         "type": "invalid_request",
-        "link":"https://docs.meilisearch.com/errors#index-already-exists"
+        "link":"https://www.meilisearch.com/docs/reference/errors/error_codes#index-already-exists"
     });
 
     assert_eq!(response["error"], expected_response);
@@ -207,7 +207,7 @@ async fn error_create_with_invalid_index_uid() {
       "message": "Invalid value at `.uid`: `test test#!` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_), and can not be more than 512 bytes.",
       "code": "invalid_index_uid",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-index-uid"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-index-uid"
     }
     "###);
 }
@@ -283,7 +283,7 @@ async fn send_task_id() {
       "message": "Received bad task id: 12 should be >= to 26.",
       "code": "bad_request",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#bad-request"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#bad-request"
     }
     "###);
 }

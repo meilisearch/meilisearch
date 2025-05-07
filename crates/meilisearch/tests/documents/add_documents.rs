@@ -213,7 +213,7 @@ async fn add_single_document_gzip_encoded_with_incomplete_error() {
       "message": "The provided payload is incomplete and cannot be parsed",
       "code": "bad_request",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#bad-request"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#bad-request"
     }
     "###);
 
@@ -235,7 +235,7 @@ async fn add_single_document_gzip_encoded_with_incomplete_error() {
       "message": "The provided payload is incomplete and cannot be parsed",
       "code": "bad_request",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#bad-request"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#bad-request"
     }
     "###);
 }
@@ -493,7 +493,7 @@ async fn add_csv_document_with_types_error() {
       "message": "The `csv` payload provided is malformed: `Error parsing boolean \"doggo\" at line 1: provided string was not `true` or `false``.",
       "code": "malformed_payload",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#malformed-payload"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#malformed-payload"
     }
     "###);
 
@@ -507,7 +507,7 @@ async fn add_csv_document_with_types_error() {
       "message": "The `csv` payload provided is malformed: `Error parsing number \"doggo\" at line 1: invalid float literal`.",
       "code": "malformed_payload",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#malformed-payload"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#malformed-payload"
     }
     "###);
 }
@@ -543,7 +543,7 @@ async fn error_add_documents_test_bad_content_types() {
       "message": "The Content-Type `text/plain` is invalid. Accepted values for the Content-Type header are: `application/json`, `application/x-ndjson`, `text/csv`",
       "code": "invalid_content_type",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-content-type"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-content-type"
     }
     "###);
 
@@ -564,7 +564,7 @@ async fn error_add_documents_test_bad_content_types() {
       "message": "The Content-Type `text/plain` is invalid. Accepted values for the Content-Type header are: `application/json`, `application/x-ndjson`, `text/csv`",
       "code": "invalid_content_type",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-content-type"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-content-type"
     }
     "###);
 }
@@ -599,7 +599,7 @@ async fn error_add_documents_test_no_content_type() {
       "message": "A Content-Type header is missing. Accepted values for the Content-Type header are: `application/json`, `application/x-ndjson`, `text/csv`",
       "code": "missing_content_type",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#missing-content-type"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-content-type"
     }
     "###);
 
@@ -619,7 +619,7 @@ async fn error_add_documents_test_no_content_type() {
       "message": "A Content-Type header is missing. Accepted values for the Content-Type header are: `application/json`, `application/x-ndjson`, `text/csv`",
       "code": "missing_content_type",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#missing-content-type"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-content-type"
     }
     "###);
 }
@@ -649,7 +649,7 @@ async fn error_add_malformed_csv_documents() {
       "message": "The `csv` payload provided is malformed: `CSV error: record 1 (line: 2, byte: 12): found record with 3 fields, but the previous record has 2 fields`.",
       "code": "malformed_payload",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#malformed-payload"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#malformed-payload"
     }
     "###);
 
@@ -670,7 +670,7 @@ async fn error_add_malformed_csv_documents() {
       "message": "The `csv` payload provided is malformed: `CSV error: record 1 (line: 2, byte: 12): found record with 3 fields, but the previous record has 2 fields`.",
       "code": "malformed_payload",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#malformed-payload"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#malformed-payload"
     }
     "###);
 }
@@ -700,7 +700,7 @@ async fn error_add_malformed_json_documents() {
       "message": "The `json` payload provided is malformed. `Couldn't serialize document value: key must be a string at line 1 column 14`.",
       "code": "malformed_payload",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#malformed-payload"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#malformed-payload"
     }
     "###);
 
@@ -721,7 +721,7 @@ async fn error_add_malformed_json_documents() {
       "message": "The `json` payload provided is malformed. `Couldn't serialize document value: key must be a string at line 1 column 14`.",
       "code": "malformed_payload",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#malformed-payload"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#malformed-payload"
     }
     "###);
 
@@ -746,7 +746,7 @@ async fn error_add_malformed_json_documents() {
       "message": "The `json` payload provided is malformed. `Couldn't serialize document value: data are neither an object nor a list of objects`.",
       "code": "malformed_payload",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#malformed-payload"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#malformed-payload"
     }
     "###);
 
@@ -767,7 +767,7 @@ async fn error_add_malformed_json_documents() {
       "message": "The `json` payload provided is malformed. `Couldn't serialize document value: data are neither an object nor a list of objects`.",
       "code": "malformed_payload",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#malformed-payload"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#malformed-payload"
     }
     "###);
 }
@@ -797,7 +797,7 @@ async fn error_add_malformed_ndjson_documents() {
       "message": "The `ndjson` payload provided is malformed. `Couldn't serialize document value: key must be a string at line 2 column 2`.",
       "code": "malformed_payload",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#malformed-payload"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#malformed-payload"
     }
     "###);
 
@@ -818,7 +818,7 @@ async fn error_add_malformed_ndjson_documents() {
       "message": "The `ndjson` payload provided is malformed. `Couldn't serialize document value: key must be a string at line 2 column 2`.",
       "code": "malformed_payload",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#malformed-payload"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#malformed-payload"
     }
     "###);
 }
@@ -848,7 +848,7 @@ async fn error_add_missing_payload_csv_documents() {
       "message": "A csv payload is missing.",
       "code": "missing_payload",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#missing-payload"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-payload"
     }
     "###);
 
@@ -869,7 +869,7 @@ async fn error_add_missing_payload_csv_documents() {
       "message": "A csv payload is missing.",
       "code": "missing_payload",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#missing-payload"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-payload"
     }
     "###);
 }
@@ -899,7 +899,7 @@ async fn error_add_missing_payload_json_documents() {
       "message": "A json payload is missing.",
       "code": "missing_payload",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#missing-payload"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-payload"
     }
     "###);
 
@@ -920,7 +920,7 @@ async fn error_add_missing_payload_json_documents() {
       "message": "A json payload is missing.",
       "code": "missing_payload",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#missing-payload"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-payload"
     }
     "###);
 }
@@ -950,7 +950,7 @@ async fn error_add_missing_payload_ndjson_documents() {
       "message": "A ndjson payload is missing.",
       "code": "missing_payload",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#missing-payload"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-payload"
     }
     "###);
 
@@ -971,7 +971,7 @@ async fn error_add_missing_payload_ndjson_documents() {
       "message": "A ndjson payload is missing.",
       "code": "missing_payload",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#missing-payload"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-payload"
     }
     "###);
 }
@@ -1039,7 +1039,7 @@ async fn error_document_add_create_index_bad_uid() {
       "message": "`883  fj!` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_), and can not be more than 512 bytes.",
       "code": "invalid_index_uid",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid-index-uid"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-index-uid"
     }
     "###);
 }
@@ -1382,7 +1382,7 @@ async fn error_add_documents_bad_document_id() {
         "message": "Document identifier `\"foo & bar\"` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_), and can not be more than 511 bytes.",
         "code": "invalid_document_id",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid-document-id"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-document-id"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -1419,7 +1419,7 @@ async fn error_add_documents_bad_document_id() {
         "message": "Document identifier `\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_), and can not be more than 511 bytes.",
         "code": "invalid_document_id",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid-document-id"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-document-id"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -1456,7 +1456,7 @@ async fn error_add_documents_bad_document_id() {
         "message": "Document identifier `\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_), and can not be more than 511 bytes.",
         "code": "invalid_document_id",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid-document-id"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-document-id"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -1498,7 +1498,7 @@ async fn error_add_documents_missing_document_id() {
         "message": "Document doesn't have a `docid` attribute: `{\"id\":\"11\",\"content\":\"foobar\"}`.",
         "code": "missing_document_id",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#missing-document-id"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-document-id"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -1547,7 +1547,7 @@ async fn error_document_field_limit_reached_in_one_document() {
         "message": "A document cannot contain more than 65,535 fields.",
         "code": "max_fields_limit_exceeded",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#max_fields_limit_exceeded"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#max_fields_limit_exceeded"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -1630,7 +1630,7 @@ async fn error_document_field_limit_reached_over_multiple_documents() {
         "message": "A document cannot contain more than 65,535 fields.",
         "code": "max_fields_limit_exceeded",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#max_fields_limit_exceeded"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#max_fields_limit_exceeded"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -2117,7 +2117,7 @@ async fn add_documents_invalid_geo_field() {
         "message": "Index `[uuid]`: The `_geo` field in the document with the id: `\"11\"` is not an object. Was expecting an object with the `_geo.lat` and `_geo.lng` fields but instead got `\"foobar\"`.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid-document-geo-field"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-document-geo-field"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -2155,7 +2155,7 @@ async fn add_documents_invalid_geo_field() {
         "message": "Index `[uuid]`: Could not find latitude nor longitude in the document with the id: `\"11\"`. Was expecting `_geo.lat` and `_geo.lng` fields.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid-document-geo-field"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-document-geo-field"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -2193,7 +2193,7 @@ async fn add_documents_invalid_geo_field() {
         "message": "Index `[uuid]`: Could not find latitude nor longitude in the document with the id: `\"11\"`. Was expecting `_geo.lat` and `_geo.lng` fields.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid-document-geo-field"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-document-geo-field"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -2231,7 +2231,7 @@ async fn add_documents_invalid_geo_field() {
         "message": "Index `[uuid]`: Could not find longitude in the document with the id: `\"11\"`. Was expecting a `_geo.lng` field.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid-document-geo-field"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-document-geo-field"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -2269,7 +2269,7 @@ async fn add_documents_invalid_geo_field() {
         "message": "Index `[uuid]`: Could not find latitude in the document with the id: `\"11\"`. Was expecting a `_geo.lat` field.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid-document-geo-field"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-document-geo-field"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -2307,7 +2307,7 @@ async fn add_documents_invalid_geo_field() {
         "message": "Index `[uuid]`: Could not find longitude in the document with the id: `\"11\"`. Was expecting a `_geo.lng` field.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid-document-geo-field"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-document-geo-field"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -2345,7 +2345,7 @@ async fn add_documents_invalid_geo_field() {
         "message": "Index `[uuid]`: Could not find latitude in the document with the id: `\"11\"`. Was expecting a `_geo.lat` field.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid-document-geo-field"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-document-geo-field"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -2383,7 +2383,7 @@ async fn add_documents_invalid_geo_field() {
         "message": "Index `[uuid]`: Could not parse latitude nor longitude in the document with the id: `\"11\"`. Was expecting finite numbers but instead got `false` and `true`.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid-document-geo-field"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-document-geo-field"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -2421,7 +2421,7 @@ async fn add_documents_invalid_geo_field() {
         "message": "Index `[uuid]`: Could not find longitude in the document with the id: `\"11\"`. Was expecting a `_geo.lng` field.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid-document-geo-field"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-document-geo-field"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -2459,7 +2459,7 @@ async fn add_documents_invalid_geo_field() {
         "message": "Index `[uuid]`: Could not find latitude in the document with the id: `\"11\"`. Was expecting a `_geo.lat` field.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid-document-geo-field"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-document-geo-field"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -2497,7 +2497,7 @@ async fn add_documents_invalid_geo_field() {
         "message": "Index `[uuid]`: Could not parse latitude nor longitude in the document with the id: `\"11\"`. Was expecting finite numbers but instead got `\"doggo\"` and `\"doggo\"`.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid-document-geo-field"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-document-geo-field"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -2535,7 +2535,7 @@ async fn add_documents_invalid_geo_field() {
         "message": "Index `[uuid]`: The `_geo` field in the document with the id: `\"11\"` contains the following unexpected fields: `{\"doggo\":\"are the best\"}`.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid-document-geo-field"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-document-geo-field"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -2574,7 +2574,7 @@ async fn add_documents_invalid_geo_field() {
         "message": "Index `[uuid]`: Could not parse longitude in the document with the id: `\"12\"`. Was expecting a finite number but instead got `null`.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid-document-geo-field"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-document-geo-field"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -2611,7 +2611,7 @@ async fn add_documents_invalid_geo_field() {
         "message": "Index `[uuid]`: Could not parse latitude in the document with the id: `\"12\"`. Was expecting a finite number but instead got `null`.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid-document-geo-field"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-document-geo-field"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -2648,7 +2648,7 @@ async fn add_documents_invalid_geo_field() {
         "message": "Index `[uuid]`: Could not parse latitude nor longitude in the document with the id: `\"13\"`. Was expecting finite numbers but instead got `null` and `null`.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid-document-geo-field"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-document-geo-field"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -2715,7 +2715,7 @@ async fn add_invalid_geo_and_then_settings() {
         "message": "Index `[uuid]`: Could not parse latitude in the document with the id: `\"11\"`. Was expecting a finite number but instead got `null`.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid-document-geo-field"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-document-geo-field"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -2747,7 +2747,7 @@ async fn error_add_documents_payload_size() {
       "message": "The provided payload reached the size limit. The maximum accepted payload size is 10 MiB.",
       "code": "payload_too_large",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#payload-too-large"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#payload-too-large"
     }
     "###);
 }
@@ -2786,7 +2786,7 @@ async fn error_primary_key_inference() {
         "message": "The primary key inference failed as the engine did not find any field ending with `id` in its name. Please specify the primary key manually using the `primaryKey` query parameter.",
         "code": "index_primary_key_no_candidate_found",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index-primary-key-no-candidate-found"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#index-primary-key-no-candidate-found"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -2827,7 +2827,7 @@ async fn error_primary_key_inference() {
         "message": "The primary key inference failed as the engine found 3 fields ending with `id` in their names: 'id' and 'object_id'. Please specify the primary key manually using the `primaryKey` query parameter.",
         "code": "index_primary_key_multiple_candidates_found",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index-primary-key-multiple-candidates-found"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#index-primary-key-multiple-candidates-found"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -2993,7 +2993,7 @@ async fn dry_register_file() {
       "message": "Task `0` not found.",
       "code": "task_not_found",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#task-not-found"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#task-not-found"
     }
     "###);
     snapshot!(code, @"404 Not Found");
