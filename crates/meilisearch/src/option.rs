@@ -768,10 +768,10 @@ impl TryFrom<&IndexerOpts> for IndexerConfig {
             .build()?;
 
         Ok(Self {
+            thread_pool,
             log_every_n: Some(DEFAULT_LOG_EVERY_N),
             max_memory: other.max_indexing_memory.map(|b| b.as_u64() as usize),
             max_threads: *other.max_indexing_threads,
-            thread_pool: Some(thread_pool),
             max_positions_per_attributes: None,
             skip_index_budget: other.skip_index_budget,
             ..Default::default()

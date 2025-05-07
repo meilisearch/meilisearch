@@ -1893,7 +1893,6 @@ pub(crate) mod tests {
     use crate::vector::EmbeddingConfigs;
     use crate::{
         db_snap, obkv_to_json, Filter, FilterableAttributesRule, Index, Search, SearchResult,
-        ThreadPoolNoAbortBuilder,
     };
 
     pub(crate) struct TempIndex {
@@ -1934,15 +1933,8 @@ pub(crate) mod tests {
             wtxn: &mut RwTxn<'t>,
             documents: Mmap,
         ) -> Result<(), crate::error::Error> {
-            let local_pool;
             let indexer_config = &self.indexer_config;
-            let pool = match &indexer_config.thread_pool {
-                Some(pool) => pool,
-                None => {
-                    local_pool = ThreadPoolNoAbortBuilder::new().build().unwrap();
-                    &local_pool
-                }
-            };
+            let pool = &indexer_config.thread_pool;
 
             let rtxn = self.inner.read_txn()?;
             let db_fields_ids_map = self.inner.fields_ids_map(&rtxn)?;
@@ -2028,15 +2020,8 @@ pub(crate) mod tests {
             wtxn: &mut RwTxn<'t>,
             external_document_ids: Vec<String>,
         ) -> Result<(), crate::error::Error> {
-            let local_pool;
             let indexer_config = &self.indexer_config;
-            let pool = match &indexer_config.thread_pool {
-                Some(pool) => pool,
-                None => {
-                    local_pool = ThreadPoolNoAbortBuilder::new().build().unwrap();
-                    &local_pool
-                }
-            };
+            let pool = &indexer_config.thread_pool;
 
             let rtxn = self.inner.read_txn()?;
             let db_fields_ids_map = self.inner.fields_ids_map(&rtxn)?;
@@ -2107,15 +2092,8 @@ pub(crate) mod tests {
         let mut wtxn = index.inner.write_txn().unwrap();
         let should_abort = AtomicBool::new(false);
 
-        let local_pool;
         let indexer_config = &index.indexer_config;
-        let pool = match &indexer_config.thread_pool {
-            Some(pool) => pool,
-            None => {
-                local_pool = ThreadPoolNoAbortBuilder::new().build().unwrap();
-                &local_pool
-            }
-        };
+        let pool = &indexer_config.thread_pool;
 
         let rtxn = index.inner.read_txn().unwrap();
         let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();

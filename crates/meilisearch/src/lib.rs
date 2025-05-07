@@ -37,7 +37,7 @@ use index_scheduler::{IndexScheduler, IndexSchedulerOptions};
 use meilisearch_auth::{open_auth_store_env, AuthController};
 use meilisearch_types::milli::constants::VERSION_MAJOR;
 use meilisearch_types::milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
-use meilisearch_types::milli::update::{IndexDocumentsConfig, IndexDocumentsMethod};
+use meilisearch_types::milli::update::{IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig};
 use meilisearch_types::milli::ThreadPoolNoAbortBuilder;
 use meilisearch_types::settings::apply_settings_to_builder;
 use meilisearch_types::tasks::KindWithContent;
@@ -504,22 +504,22 @@ fn import_dump(
     let network = dump_reader.network()?.cloned().unwrap_or_default();
     index_scheduler.put_network(network)?;
 
-    // 3.1 Use all cpus to process dump if max_indexing_threads not configured
+    // 3.1 Use all cpus to process dump if a) `max_indexing_threads` not configured and
+    // b) we're not executing from within a test
     let backup_config;
-    let indexer_config = if index_scheduler.indexer_config().max_threads.is_none() {
-        let mut _config = index_scheduler.indexer_config().clone_no_threadpool();
-        _config.thread_pool = {
-            Some(
-                ThreadPoolNoAbortBuilder::new()
-                    .thread_name(|index| format!("indexing-thread:{index}"))
-                    .num_threads(num_cpus::get())
-                    .build()?,
-            )
-        };
+    let base_config = index_scheduler.indexer_config();
+
+    let indexer_config = if base_config.max_threads.is_none() && !cfg!(test) {
+        let thread_pool = ThreadPoolNoAbortBuilder::new()
+            .thread_name(|index| format!("indexing-thread:{index}"))
+            .num_threads(num_cpus::get())
+            .build()?;
+
+        let _config = IndexerConfig { thread_pool, ..*base_config };
         backup_config = _config;
         &backup_config
     } else {
-        index_scheduler.indexer_config()
+        base_config
     };
 
     // /!\ The tasks must be imported AFTER importing the indexes or else the scheduler might

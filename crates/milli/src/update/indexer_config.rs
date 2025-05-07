@@ -1,7 +1,7 @@
 use grenad::CompressionType;
 
 use super::GrenadParameters;
-use crate::thread_pool_no_abort::ThreadPoolNoAbort;
+use crate::{thread_pool_no_abort::ThreadPoolNoAbort, ThreadPoolNoAbortBuilder};
 
 #[derive(Debug)]
 pub struct IndexerConfig {
@@ -12,7 +12,7 @@ pub struct IndexerConfig {
     pub max_threads: Option<usize>,
     pub chunk_compression_type: CompressionType,
     pub chunk_compression_level: Option<u32>,
-    pub thread_pool: Option<ThreadPoolNoAbort>,
+    pub thread_pool: ThreadPoolNoAbort,
     pub max_positions_per_attributes: Option<u32>,
     pub skip_index_budget: bool,
 }
@@ -26,25 +26,23 @@ impl IndexerConfig {
             max_nb_chunks: self.max_nb_chunks,
         }
     }
-
-    pub fn clone_no_threadpool(&self) -> Self {
-        Self {
-            log_every_n: self.log_every_n,
-            max_nb_chunks: self.max_nb_chunks,
-            documents_chunk_size: self.documents_chunk_size,
-            max_memory: self.max_memory,
-            max_threads: self.max_threads,
-            chunk_compression_type: self.chunk_compression_type,
-            chunk_compression_level: self.chunk_compression_level,
-            max_positions_per_attributes: self.max_positions_per_attributes,
-            skip_index_budget: self.skip_index_budget,
-            thread_pool: None,
-        }
-    }
 }
 
 impl Default for IndexerConfig {
     fn default() -> Self {
+        #[allow(unused_mut)]
+        let mut pool_builder = ThreadPoolNoAbortBuilder::new();
+
+        #[cfg(test)]
+        {
+            pool_builder = pool_builder.num_threads(1);
+        }
+
+        let thread_pool = pool_builder
+            .thread_name(|index| format!("indexing-thread:{index}"))
+            .build()
+            .expect("failed to build default rayon thread pool");
+
         Self {
             log_every_n: None,
             max_nb_chunks: None,
@@ -53,9 +51,9 @@ impl Default for IndexerConfig {
             max_threads: None,
             chunk_compression_type: CompressionType::None,
             chunk_compression_level: None,
-            thread_pool: None,
             max_positions_per_attributes: None,
             skip_index_budget: false,
+            thread_pool,
         }
     }
 }
