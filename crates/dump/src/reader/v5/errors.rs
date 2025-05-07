@@ -227,7 +227,7 @@ impl Code {
 
     /// return the doc url associated with the error
     fn url(&self) -> String {
-        format!("https://www.meilisearch.com/docs/reference/errors/error_codes#{}", self.name())
+        format!("https://docs.meilisearch.com/errors#{}", self.name())
     }
 }
 
