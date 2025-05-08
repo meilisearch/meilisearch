@@ -111,7 +111,7 @@ jobs:
         run: |
           JSON_STRING=$( jq --null-input --compact-output \
           --arg version "${{ github.ref_name }}" \
-          --arg appName "" \
+          --arg appName "meilisearch" \
           --arg environment "production" \
           --arg commitSha "${{ github.sha }}" \
           --arg repositoryFullName "${{ github.repository }}" \
