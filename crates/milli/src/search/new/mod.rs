@@ -120,17 +120,39 @@ impl<'ctx> SearchContext<'ctx> {
         let searchable_fields_weights = self.index.searchable_fields_and_weights(self.txn)?;
         let exact_attributes_ids = self.index.exact_attributes_ids(self.txn)?;
 
-        let mut wildcard = false;
+        let mut universal_wildcard = false;
 
         let mut restricted_fids = RestrictedFids::default();
         for field_name in attributes_to_search_on {
             if field_name == "*" {
-                wildcard = true;
+                universal_wildcard = true;
                 // we cannot early exit as we want to returns error in case of unknown fields
                 continue;
             }
             let searchable_weight =
                 searchable_fields_weights.iter().find(|(name, _, _)| name == field_name);
+
+            // The field is not searchable but may contain a wildcard pattern
+            if searchable_weight.is_none() && field_name.contains("*") {
+                let matching_searchable_weights: Vec<_> = searchable_fields_weights
+                    .iter()
+                    .filter(|(name, _, _)| {
+                        Self::matches_wildcard_pattern(field_name, name)
+                    })
+                    .collect();
+
+                if !matching_searchable_weights.is_empty() {
+                    for (_name, fid, weight) in matching_searchable_weights {
+                        if exact_attributes_ids.contains(fid) {
+                            restricted_fids.exact.push((*fid, *weight));
+                        } else {
+                            restricted_fids.tolerant.push((*fid, *weight));
+                        }
+                    }
+                    continue;
+                }
+            }
+
             let (fid, weight) = match searchable_weight {
                 // The Field id exist and the field is searchable
                 Some((_name, fid, weight)) => (*fid, *weight),
@@ -160,13 +182,41 @@ impl<'ctx> SearchContext<'ctx> {
             };
         }
 
-        if wildcard {
+        if universal_wildcard {
             self.restricted_fids = None;
         } else {
             self.restricted_fids = Some(restricted_fids);
         }
 
         Ok(())
+    }
+
+    fn matches_wildcard_pattern(wildcard_pattern: &str, name: &str) -> bool {
+        let wildcard_subfields: Vec<&str> = wildcard_pattern.split(".").collect();
+        let name_subfields: Vec<&str> = name.split(".").collect();
+
+        // Deep wildcard matches all attributes after ('**')
+        if !wildcard_subfields.is_empty() && wildcard_subfields.last() == Some(&"**") {
+            let prefix_len = wildcard_subfields.len() - 1;
+            if prefix_len > name_subfields.len() {
+                return false;
+            }
+
+            return wildcard_subfields[..prefix_len]
+                .iter()
+                .zip(name_subfields.iter())
+                .all(|(wc, sf)| *wc == "*" || *wc == *sf);
+        }
+
+        // Using single wildcard ('*') should match length (e.g. 'a.*.c' matches 'a.b.c')
+        // where '*' can match any single segment
+        if wildcard_subfields.len() != name_subfields.len() {
+            return false;
+        }
+
+        wildcard_subfields.iter()
+            .zip(name_subfields.iter())
+            .all(|(wc, sf)| *wc == "*" || *wc == *sf)
     }
 }
 
