@@ -43,7 +43,7 @@ async fn version_too_old() {
     std::fs::write(db_path.join("VERSION"), "1.11.9999").unwrap();
     let options = Opt { experimental_dumpless_upgrade: true, ..default_settings };
     let err = Server::new_with_options(options).await.map(|_| ()).unwrap_err();
-    snapshot!(err, @"Database version 1.11.9999 is too old for the experimental dumpless upgrade feature. Please generate a dump using the v1.11.9999 and import it in the v1.14.0");
+    snapshot!(err, @"Database version 1.11.9999 is too old for the experimental dumpless upgrade feature. Please generate a dump using the v1.11.9999 and import it in the v1.15.0");
 }
 
 #[actix_rt::test]
@@ -54,11 +54,11 @@ async fn version_requires_downgrade() {
     std::fs::create_dir_all(&db_path).unwrap();
     let major = meilisearch_types::versioning::VERSION_MAJOR;
     let minor = meilisearch_types::versioning::VERSION_MINOR;
-    let patch = meilisearch_types::versioning::VERSION_PATCH.parse::<u32>().unwrap() + 1;
+    let patch = meilisearch_types::versioning::VERSION_PATCH + 1;
     std::fs::write(db_path.join("VERSION"), format!("{major}.{minor}.{patch}")).unwrap();
     let options = Opt { experimental_dumpless_upgrade: true, ..default_settings };
     let err = Server::new_with_options(options).await.map(|_| ()).unwrap_err();
-    snapshot!(err, @"Database version 1.14.1 is higher than the Meilisearch version 1.14.0. Downgrade is not supported");
+    snapshot!(err, @"Database version 1.15.1 is higher than the Meilisearch version 1.15.0. Downgrade is not supported");
 }
 
 #[actix_rt::test]

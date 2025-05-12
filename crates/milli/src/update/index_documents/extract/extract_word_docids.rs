@@ -127,7 +127,8 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
         // merge all deletions
         let obkv = KvReaderDelAdd::from_slice(value);
         if let Some(value) = obkv.get(DelAdd::Deletion) {
-            let delete_from_exact = settings_diff.old.exact_attributes.contains(&fid);
+            let delete_from_exact = settings_diff.old.exact_attributes.contains(&fid)
+                || settings_diff.old.disabled_typos_terms.is_exact(w);
             buffer.clear();
             let mut obkv = KvWriterDelAdd::new(&mut buffer);
             obkv.insert(DelAdd::Deletion, value)?;
@@ -139,7 +140,8 @@ pub fn extract_word_docids<R: io::Read + io::Seek>(
         }
         // merge all additions
         if let Some(value) = obkv.get(DelAdd::Addition) {
-            let add_in_exact = settings_diff.new.exact_attributes.contains(&fid);
+            let add_in_exact = settings_diff.new.exact_attributes.contains(&fid)
+                || settings_diff.new.disabled_typos_terms.is_exact(w);
             buffer.clear();
             let mut obkv = KvWriterDelAdd::new(&mut buffer);
             obkv.insert(DelAdd::Addition, value)?;

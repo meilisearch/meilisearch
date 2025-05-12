@@ -39,9 +39,9 @@ impl Versioning {
     }
 
     pub fn set_current_version(&self, wtxn: &mut RwTxn) -> Result<(), heed::Error> {
-        let major = versioning::VERSION_MAJOR.parse().unwrap();
-        let minor = versioning::VERSION_MINOR.parse().unwrap();
-        let patch = versioning::VERSION_PATCH.parse().unwrap();
+        let major = versioning::VERSION_MAJOR;
+        let minor = versioning::VERSION_MINOR;
+        let patch = versioning::VERSION_PATCH;
         self.set_version(wtxn, (major, minor, patch))
     }
 
@@ -64,9 +64,9 @@ impl Versioning {
         };
         wtxn.commit()?;
 
-        let bin_major: u32 = versioning::VERSION_MAJOR.parse().unwrap();
-        let bin_minor: u32 = versioning::VERSION_MINOR.parse().unwrap();
-        let bin_patch: u32 = versioning::VERSION_PATCH.parse().unwrap();
+        let bin_major: u32 = versioning::VERSION_MAJOR;
+        let bin_minor: u32 = versioning::VERSION_MINOR;
+        let bin_patch: u32 = versioning::VERSION_PATCH;
         let to = (bin_major, bin_minor, bin_patch);
 
         if from != to {

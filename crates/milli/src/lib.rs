@@ -12,6 +12,7 @@ mod asc_desc;
 mod attribute_patterns;
 mod criterion;
 pub mod database_stats;
+pub mod disabled_typos_terms;
 mod error;
 mod external_documents_ids;
 pub mod facet;

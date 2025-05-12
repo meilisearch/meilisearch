@@ -2,6 +2,7 @@ use std::fmt::Display;
 
 use meilisearch_types::batches::BatchId;
 use meilisearch_types::error::{Code, ErrorCode};
+use meilisearch_types::milli::index::RollbackOutcome;
 use meilisearch_types::tasks::{Kind, Status};
 use meilisearch_types::{heed, milli};
 use thiserror::Error;
@@ -150,8 +151,24 @@ pub enum Error {
     CorruptedTaskQueue,
     #[error(transparent)]
     DatabaseUpgrade(Box<Self>),
+    #[error("Failed to rollback for index `{index}`: {rollback_outcome} ")]
+    RollbackFailed { index: String, rollback_outcome: RollbackOutcome },
     #[error(transparent)]
     UnrecoverableError(Box<Self>),
+    #[error("The index scheduler is in version v{}.{}.{}, but Meilisearch is in version v{}.{}.{}.\n  - hint: start the correct version of Meilisearch, or consider updating your database. See also <https://www.meilisearch.com/docs/learn/update_and_migration/updating>",
+    index_scheduler_version.0, index_scheduler_version.1, index_scheduler_version.2,
+    package_version.0, package_version.1, package_version.2)]
+    IndexSchedulerVersionMismatch {
+        index_scheduler_version: (u32, u32, u32),
+        package_version: (u32, u32, u32),
+    },
+    #[error("Index `{index}` is in version v{}.{}.{}, but Meilisearch is in version v{}.{}.{}.\n  - note: this is an internal error, please consider filing a bug report: <https://github.com/meilisearch/meilisearch/issues/new?template=bug_report.md>",
+    index_version.0, index_version.1, index_version.2, package_version.0, package_version.1, package_version.2)]
+    IndexVersionMismatch {
+        index: String,
+        index_version: (u32, u32, u32),
+        package_version: (u32, u32, u32),
+    },
     #[error(transparent)]
     HeedTransaction(heed::Error),
 
@@ -209,6 +226,9 @@ impl Error {
             | Error::CorruptedTaskQueue
             | Error::DatabaseUpgrade(_)
             | Error::UnrecoverableError(_)
+            | Error::IndexSchedulerVersionMismatch { .. }
+            | Error::IndexVersionMismatch { .. }
+            | Error::RollbackFailed { .. }
             | Error::HeedTransaction(_) => false,
             #[cfg(test)]
             Error::PlannedFailure => false,
@@ -274,7 +294,10 @@ impl ErrorCode for Error {
             Error::CorruptedTaskQueue => Code::Internal,
             Error::CorruptedDump => Code::Internal,
             Error::DatabaseUpgrade(_) => Code::Internal,
+            Error::RollbackFailed { .. } => Code::Internal,
             Error::UnrecoverableError(_) => Code::Internal,
+            Error::IndexSchedulerVersionMismatch { .. } => Code::Internal,
+            Error::IndexVersionMismatch { .. } => Code::Internal,
             Error::CreateBatch(_) => Code::Internal,
 
             // This one should never be seen by the end user

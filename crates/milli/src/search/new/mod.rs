@@ -22,6 +22,8 @@ mod vector_sort;
 mod tests;
 
 use std::collections::HashSet;
+use std::ops::AddAssign;
+use std::time::Duration;
 
 use bucket_sort::{bucket_sort, BucketSortOutput};
 use charabia::{Language, TokenizerBuilder};
@@ -72,6 +74,7 @@ pub struct SearchContext<'ctx> {
     pub phrase_docids: PhraseDocIdsCache,
     pub restricted_fids: Option<RestrictedFids>,
     pub prefix_search: PrefixSearch,
+    pub vector_store_stats: Option<VectorStoreStats>,
 }
 
 impl<'ctx> SearchContext<'ctx> {
@@ -101,6 +104,7 @@ impl<'ctx> SearchContext<'ctx> {
             phrase_docids: <_>::default(),
             restricted_fids: None,
             prefix_search,
+            vector_store_stats: None,
         })
     }
 
@@ -163,6 +167,25 @@ impl<'ctx> SearchContext<'ctx> {
         }
 
         Ok(())
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct VectorStoreStats {
+    /// The total time spent on vector search.
+    pub total_time: Duration,
+    /// The number of searches performed.
+    pub total_queries: usize,
+    /// The number of nearest neighbors found.
+    pub total_results: usize,
+}
+
+impl AddAssign for VectorStoreStats {
+    fn add_assign(&mut self, other: Self) {
+        let Self { total_time, total_queries, total_results } = self;
+        *total_time += other.total_time;
+        *total_queries += other.total_queries;
+        *total_results += other.total_results;
     }
 }
 
