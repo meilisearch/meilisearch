@@ -92,12 +92,12 @@ fn find_one_typo_derivations(
     let mut stream = fst.search_with_state(Intersection(starts, &dfa)).into_stream();
 
     while let Some((derived_word, state)) = stream.next() {
-        let derived_word = std::str::from_utf8(derived_word)?;
-        let derived_word = ctx.word_interner.insert(derived_word.to_owned());
         let d = dfa.distance(state.1);
         match d.to_u8() {
             0 => (),
             1 => {
+                let derived_word = std::str::from_utf8(derived_word)?;
+                let derived_word = ctx.word_interner.insert(derived_word.to_owned());
                 let cf = visit(derived_word)?;
                 if cf.is_break() {
                     break;
