@@ -28,12 +28,17 @@ pub fn upgrade_index_scheduler(
     let current_minor = to.1;
     let current_patch = to.2;
 
-    let upgrade_functions: &[&dyn UpgradeIndexScheduler] = &[&ToCurrentNoOp {}];
+    let upgrade_functions: &[&dyn UpgradeIndexScheduler] = &[
+        // This is the last upgrade function, it will be called when the index is up to date.
+        // any other upgrade function should be added before this one.
+        &ToCurrentNoOp {},
+    ];
 
     let start = match from {
         (1, 12, _) => 0,
         (1, 13, _) => 0,
         (1, 14, _) => 0,
+        (1, 15, _) => 0,
         (major, minor, patch) => {
             if major > current_major
                 || (major == current_major && minor > current_minor)
