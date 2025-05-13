@@ -33,9 +33,13 @@ impl Default for IndexerConfig {
         #[allow(unused_mut)]
         let mut pool_builder = ThreadPoolNoAbortBuilder::new();
 
+        #[allow(unused_mut, unused_assignments)]
+        let mut max_threads = None;
+
         #[cfg(test)]
         {
             pool_builder = pool_builder.num_threads(1);
+            max_threads = Some(1);
         }
 
         let thread_pool = pool_builder
@@ -44,16 +48,16 @@ impl Default for IndexerConfig {
             .expect("failed to build default rayon thread pool");
 
         Self {
+            max_threads,
+            thread_pool,
             log_every_n: None,
             max_nb_chunks: None,
             documents_chunk_size: None,
             max_memory: None,
-            max_threads: None,
             chunk_compression_type: CompressionType::None,
             chunk_compression_level: None,
             max_positions_per_attributes: None,
             skip_index_budget: false,
-            thread_pool,
         }
     }
 }

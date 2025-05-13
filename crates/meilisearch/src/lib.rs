@@ -501,12 +501,11 @@ fn import_dump(
     let network = dump_reader.network()?.cloned().unwrap_or_default();
     index_scheduler.put_network(network)?;
 
-    // 3.1 Use all cpus to process dump if a) `max_indexing_threads` not configured and
-    // b) we're not executing from within a test
+    // 3.1 Use all cpus to process dump if `max_indexing_threads` not configured
     let backup_config;
     let base_config = index_scheduler.indexer_config();
 
-    let indexer_config = if base_config.max_threads.is_none() && !cfg!(test) {
+    let indexer_config = if base_config.max_threads.is_none() {
         let thread_pool = ThreadPoolNoAbortBuilder::new()
             .thread_name(|index| format!("indexing-thread:{index}"))
             .num_threads(num_cpus::get())
