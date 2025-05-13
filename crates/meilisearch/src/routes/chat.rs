@@ -88,34 +88,36 @@ async fn chat(
 
     let mut response;
     loop {
-        let mut tools = chat_completion.tools.get_or_insert_default();
-        tools.push(ChatCompletionToolArgs::default()
-            .r#type(ChatCompletionToolType::Function)
-            .function(FunctionObjectArgs::default()
-                .name("searchInIndex")
-                .description(DEFAULT_SEARCH_IN_INDEX_TOOL_DESCRIPTION)
-                .parameters(json!({
-                    "type": "object",
-                    "properties": {
-                        "index_uid": {
-                            "type": "string",
-                            "enum": ["main"],
-                            "description": DEFAULT_SEARCH_IN_INDEX_INDEX_PARAMETER_TOOL_DESCRIPTION,
-                        },
-                        "q": {
-                            "type": ["string", "null"],
-                            "description": DEFAULT_SEARCH_IN_INDEX_Q_PARAMETER_TOOL_DESCRIPTION,
-                        }
-                    },
-                    "required": ["index_uid", "q"],
-                    "additionalProperties": false,
-                }))
-                .strict(true)
+        let tools = chat_completion.tools.get_or_insert_default();
+        tools.push(
+            ChatCompletionToolArgs::default()
+                .r#type(ChatCompletionToolType::Function)
+                .function(
+                    FunctionObjectArgs::default()
+                        .name("searchInIndex")
+                        .description(&search_in_index_description)
+                        .parameters(json!({
+                            "type": "object",
+                            "properties": {
+                                "index_uid": {
+                                    "type": "string",
+                                    "enum": ["main"],
+                                    "description": search_in_index_index_description,
+                                },
+                                "q": {
+                                    "type": ["string", "null"],
+                                    "description": search_in_index_q_param_description,
+                                }
+                            },
+                            "required": ["index_uid", "q"],
+                            "additionalProperties": false,
+                        }))
+                        .strict(true)
+                        .build()
+                        .unwrap(),
+                )
                 .build()
                 .unwrap(),
-            )
-            .build()
-            .unwrap()
         );
         response = dbg!(client.chat().create(chat_completion.clone()).await.unwrap());
 
@@ -137,7 +139,7 @@ async fn chat(
 
                 for call in meili_calls {
                     let SearchInIndexParameters { index_uid, q } =
-                        serde_json::from_str(dbg!(&call.function.arguments)).unwrap();
+                        serde_json::from_str(&call.function.arguments).unwrap();
 
                     let mut query = SearchQuery {
                         q,
@@ -145,6 +147,7 @@ async fn chat(
                             semantic_ratio: SemanticRatio::default(),
                             embedder: EMBEDDER_NAME.to_string(),
                         }),
+                        limit: 20,
                         ..Default::default()
                     };
 
@@ -241,10 +244,15 @@ fn format_documents(index: &Index, documents: impl Iterator<Item = Document>) ->
         quantized: _,
     } = config;
 
+    #[derive(Serialize)]
+    struct Doc<T: Serialize> {
+        doc: T,
+    }
+
     let template = liquid::ParserBuilder::with_stdlib().build().unwrap().parse(&template).unwrap();
     documents
         .map(|doc| {
-            let object = liquid::to_object(&doc).unwrap();
+            let object = liquid::to_object(&Doc { doc }).unwrap();
             template.render(&object).unwrap()
         })
         .collect()
