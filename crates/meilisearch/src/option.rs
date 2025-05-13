@@ -760,7 +760,7 @@ impl TryFrom<&IndexerOpts> for IndexerConfig {
 
     fn try_from(other: &IndexerOpts) -> Result<Self, Self::Error> {
         // use 1/2 cpu threads if no value specified
-        let max_indexing_threads = other.max_indexing_threads.unwrap_or(num_cpus::get() / 2);
+        let max_indexing_threads = other.max_indexing_threads.unwrap_or_else(|| num_cpus::get() / 2);
 
         let thread_pool = ThreadPoolNoAbortBuilder::new()
             .thread_name(|index| format!("indexing-thread:{index}"))
