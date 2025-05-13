@@ -53,8 +53,8 @@ use flate2::Compression;
 use meilisearch_types::batches::Batch;
 use meilisearch_types::features::{InstanceTogglableFeatures, Network, RuntimeTogglableFeatures};
 use meilisearch_types::heed::byteorder::BE;
-use meilisearch_types::heed::types::I128;
-use meilisearch_types::heed::{self, Env, RoTxn, WithoutTls};
+use meilisearch_types::heed::types::{Str, I128};
+use meilisearch_types::heed::{self, Database, Env, RoTxn, WithoutTls};
 use meilisearch_types::milli::index::IndexEmbeddingConfig;
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::vector::{Embedder, EmbedderOptions, EmbeddingConfigs};
@@ -153,6 +153,9 @@ pub struct IndexScheduler {
     /// In charge of fetching and setting the status of experimental features.
     features: features::FeatureData,
 
+    /// Stores the custom prompts for the chat
+    chat_prompts: Database<Str, Str>,
+
     /// Everything related to the processing of the tasks
     pub scheduler: scheduler::Scheduler,
 
@@ -211,11 +214,16 @@ impl IndexScheduler {
             #[cfg(test)]
             run_loop_iteration: self.run_loop_iteration.clone(),
             features: self.features.clone(),
+            chat_prompts: self.chat_prompts.clone(),
         }
     }
 
     pub(crate) const fn nb_db() -> u32 {
-        Versioning::nb_db() + Queue::nb_db() + IndexMapper::nb_db() + features::FeatureData::nb_db()
+        Versioning::nb_db()
+            + Queue::nb_db()
+            + IndexMapper::nb_db()
+            + features::FeatureData::nb_db()
+            + 1 // chat-prompts
     }
 
     /// Create an index scheduler and start its run loop.
@@ -269,6 +277,7 @@ impl IndexScheduler {
         let features = features::FeatureData::new(&env, &mut wtxn, options.instance_features)?;
         let queue = Queue::new(&env, &mut wtxn, &options)?;
         let index_mapper = IndexMapper::new(&env, &mut wtxn, &options, budget)?;
+        let chat_prompts = env.create_database(&mut wtxn, Some("chat-prompts"))?;
         wtxn.commit()?;
 
         // allow unreachable_code to get rids of the warning in the case of a test build.
@@ -292,6 +301,7 @@ impl IndexScheduler {
             #[cfg(test)]
             run_loop_iteration: Arc::new(RwLock::new(0)),
             features,
+            chat_prompts,
         };
 
         this.run();
@@ -863,6 +873,10 @@ impl IndexScheduler {
             )
             .collect();
         res.map(EmbeddingConfigs::new)
+    }
+
+    pub fn chat_prompts<'t>(&self, rtxn: &'t RoTxn, name: &str) -> heed::Result<Option<&'t str>> {
+        self.chat_prompts.get(rtxn, name)
     }
 }
 
