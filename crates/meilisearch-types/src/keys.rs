@@ -308,6 +308,9 @@ pub enum Action {
     #[serde(rename = "network.update")]
     #[deserr(rename = "network.update")]
     NetworkUpdate,
+    #[serde(rename = "chat.get")]
+    #[deserr(rename = "chat.get")]
+    ChatGet,
 }
 
 impl Action {
@@ -349,6 +352,7 @@ impl Action {
             EXPERIMENTAL_FEATURES_UPDATE => Some(Self::ExperimentalFeaturesUpdate),
             NETWORK_GET => Some(Self::NetworkGet),
             NETWORK_UPDATE => Some(Self::NetworkUpdate),
+            CHAT_GET => Some(Self::ChatGet),
             _otherwise => None,
         }
     }
@@ -397,4 +401,6 @@ pub mod actions {
 
     pub const NETWORK_GET: u8 = NetworkGet.repr();
     pub const NETWORK_UPDATE: u8 = NetworkUpdate.repr();
+
+    pub const CHAT_GET: u8 = ChatGet.repr();
 }
