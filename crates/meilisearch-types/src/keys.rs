@@ -389,6 +389,7 @@ impl Action {
             EXPERIMENTAL_FEATURES_UPDATE => Some(Self::ExperimentalFeaturesUpdate),
             NETWORK_GET => Some(Self::NetworkGet),
             NETWORK_UPDATE => Some(Self::NetworkUpdate),
+            CHAT_GET => Some(Self::ChatGet),
             _otherwise => None,
         }
     }
