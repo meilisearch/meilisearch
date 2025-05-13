@@ -111,6 +111,7 @@ utoipa = { version = "5.3.1", features = [
     "openapi_extensions",
 ] }
 utoipa-scalar = { version = "0.3.0", optional = true, features = ["actix-web"] }
+async-openai = "0.28.1"
 
 [dev-dependencies]
 actix-rt = "2.10.0"
