@@ -17,7 +17,7 @@ use meilisearch_types::milli::index::IndexEmbeddingConfig;
 use meilisearch_types::milli::prompt::PromptData;
 use meilisearch_types::milli::vector::EmbeddingConfig;
 use meilisearch_types::{Document, Index};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::extractors::authentication::policies::ActionPolicy;
@@ -67,6 +67,24 @@ async fn chat(
         1,
         "Meilisearch /chat only support one completion at a time (n = 1, n = null)"
     );
+
+    let rtxn = index_scheduler.read_txn().unwrap();
+    let search_in_index_description = index_scheduler
+        .chat_prompts(&rtxn, "searchInIndex-description")
+        .unwrap()
+        .unwrap_or(DEFAULT_SEARCH_IN_INDEX_TOOL_DESCRIPTION)
+        .to_string();
+    let search_in_index_q_param_description = index_scheduler
+        .chat_prompts(&rtxn, "searchInIndex-q-param-description")
+        .unwrap()
+        .unwrap_or(DEFAULT_SEARCH_IN_INDEX_Q_PARAMETER_TOOL_DESCRIPTION)
+        .to_string();
+    let search_in_index_index_description = index_scheduler
+        .chat_prompts(&rtxn, "searchInIndex-index-param-description")
+        .unwrap()
+        .unwrap_or(DEFAULT_SEARCH_IN_INDEX_INDEX_PARAMETER_TOOL_DESCRIPTION)
+        .to_string();
+    drop(rtxn);
 
     let mut response;
     loop {
