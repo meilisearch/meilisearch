@@ -6,6 +6,7 @@ use std::str;
 
 use hmac::{Hmac, Mac};
 use meilisearch_types::heed::{BoxedError, WithoutTls};
+use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::index_uid_pattern::IndexUidPattern;
 use meilisearch_types::keys::KeyId;
 use meilisearch_types::milli::heed;
@@ -146,54 +147,48 @@ impl HeedAuthStore {
         Ok(list)
     }
 
-    pub fn get_expiration_date(
+    pub fn is_key_authorized(
         &self,
         uid: Uuid,
         bitflags: u32,
         index: Option<&str>,
-    ) -> Result<Option<Option<OffsetDateTime>>> {
+    ) -> Result<AuthorizationStatus> {
         let rtxn = self.env.read_txn()?;
 
-        // Get the key actions
-        if let Some(key_actions) = self.key_actions.get(&rtxn, uid.as_bytes())? {
-            // Check if the action is allowed
-            if !key_actions.has_action(bitflags) {
-                return Ok(None);
-            }
+        // Get key info from database
+        let key_masks = match self.key_actions.get(&rtxn, uid.as_bytes())? {
+            Some(key_masks) => key_masks,
+            None => return Ok(AuthorizationStatus::Refused),
+        };
 
-            // Check index restrictions
-            let no_index_restriction = key_actions.indexes.iter().any(|p| p.matches_all());
-            if no_index_restriction {
-                return Ok(Some(key_actions.expires_at));
-            }
+        // Check if the key's bitflags contain the required bitflags
+        if !key_masks.is_bitflag_authorized(bitflags) {
+            return Ok(AuthorizationStatus::Refused);
+        }
 
-            // Check specific index
-            if let Some(index) = index {
-                for pattern in &key_actions.indexes {
-                    if pattern.matches_str(index) {
-                        return Ok(Some(key_actions.expires_at));
-                    }
-                }
+        // Check if the key is authorized for the requested index
+        if let Some(index_str) = index {
+            let index_uid = match IndexUid::try_from(String::from(index_str)) {
+                Ok(uid) => uid,
+                Err(_) => return Ok(AuthorizationStatus::Refused),
+            };
+
+            let authorized_for_index =
+                key_masks.indexes.iter().any(|pattern| pattern.matches(&index_uid));
+            if !authorized_for_index {
+                return Ok(AuthorizationStatus::Refused);
             }
         }
 
-        Ok(None)
-    }
-
-    pub fn prefix_first_expiration_date(
-        &self,
-        uid: Uuid,
-        bitflags: u32,
-    ) -> Result<Option<Option<OffsetDateTime>>> {
-        let rtxn = self.env.read_txn()?;
-
-        if let Some(key_actions) = self.key_actions.get(&rtxn, uid.as_bytes())? {
-            if key_actions.has_action(bitflags) {
-                return Ok(Some(key_actions.expires_at));
+        // Check if the key is expired
+        if let Some(expires_at) = key_masks.expires_at {
+            if expires_at < OffsetDateTime::now_utc() {
+                return Ok(AuthorizationStatus::Refused);
             }
         }
 
-        Ok(None)
+        // All checks passed
+        Ok(AuthorizationStatus::Ok)
     }
 
     fn delete_key_from_inverted_db(&self, wtxn: &mut RwTxn, key: &KeyId) -> Result<()> {
@@ -297,13 +292,8 @@ struct KeyMasks {
 }
 
 impl KeyMasks {
-    fn has_action(&self, bitflags: u32) -> bool {
-        for (index, action_flag) in enum_iterator::all::<Action>().enumerate() {
-            if action_flag.bits() == bitflags && (self.bitflags & (1 << index) != 0) {
-                return true;
-            }
-        }
-        false
+    fn is_bitflag_authorized(&self, bitflags: u32) -> bool {
+        (self.bitflags & bitflags) == bitflags
     }
 }
 
@@ -316,4 +306,10 @@ impl From<Key> for KeyMasks {
         }
         Self { bitflags, indexes, expires_at }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AuthorizationStatus {
+    Ok,
+    Refused,
 }
