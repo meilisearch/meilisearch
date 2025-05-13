@@ -81,7 +81,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
                 "message": "Meilisearch is running without a master key. To access this API endpoint, you must have set a master key at launch.",
                 "code": "missing_master_key",
                 "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing_master_key"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-master-key"
             }
         )),
         (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
@@ -89,7 +89,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-authorization-header"
             }
         )),
     )
@@ -167,7 +167,7 @@ impl ListApiKeys {
                 "message": "Meilisearch is running without a master key. To access this API endpoint, you must have set a master key at launch.",
                 "code": "missing_master_key",
                 "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing_master_key"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-master-key"
             }
         )),
         (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
@@ -175,7 +175,7 @@ impl ListApiKeys {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-authorization-header"
             }
         )),
     )
@@ -230,7 +230,7 @@ pub async fn list_api_keys(
                 "message": "Meilisearch is running without a master key. To access this API endpoint, you must have set a master key at launch.",
                 "code": "missing_master_key",
                 "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing_master_key"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-master-key"
             }
         )),
         (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
@@ -238,7 +238,7 @@ pub async fn list_api_keys(
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-authorization-header"
             }
         )),
     )
@@ -296,7 +296,7 @@ pub async fn get_api_key(
                 "message": "Meilisearch is running without a master key. To access this API endpoint, you must have set a master key at launch.",
                 "code": "missing_master_key",
                 "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing_master_key"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-master-key"
             }
         )),
         (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
@@ -304,7 +304,7 @@ pub async fn get_api_key(
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-authorization-header"
             }
         )),
     )
@@ -345,7 +345,7 @@ pub async fn patch_api_key(
                 "message": "Meilisearch is running without a master key. To access this API endpoint, you must have set a master key at launch.",
                 "code": "missing_master_key",
                 "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing_master_key"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-master-key"
             }
         )),
         (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
@@ -353,7 +353,7 @@ pub async fn patch_api_key(
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+                "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-authorization-header"
             }
         )),
     )

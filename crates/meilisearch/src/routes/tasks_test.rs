@@ -69,7 +69,7 @@ mod tests {
               "message": "Invalid value in parameter `afterFinishedAt`: `2021` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
               "code": "invalid_task_after_finished_at",
               "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#invalid_task_after_finished_at"
+              "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-task-after-finished-at"
             }
             "###);
         }
@@ -81,7 +81,7 @@ mod tests {
               "message": "Invalid value in parameter `beforeFinishedAt`: `2021` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
               "code": "invalid_task_before_finished_at",
               "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#invalid_task_before_finished_at"
+              "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-task-before-finished-at"
             }
             "###);
         }
@@ -93,7 +93,7 @@ mod tests {
               "message": "Invalid value in parameter `afterEnqueuedAt`: `2021-12` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
               "code": "invalid_task_after_enqueued_at",
               "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#invalid_task_after_enqueued_at"
+              "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-task-after-enqueued-at"
             }
             "###);
         }
@@ -106,7 +106,7 @@ mod tests {
               "message": "Invalid value in parameter `beforeEnqueuedAt`: `2021-12-03T23` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
               "code": "invalid_task_before_enqueued_at",
               "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#invalid_task_before_enqueued_at"
+              "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-task-before-enqueued-at"
             }
             "###);
         }
@@ -118,7 +118,7 @@ mod tests {
               "message": "Invalid value in parameter `afterStartedAt`: `2021-12-03T23:45` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
               "code": "invalid_task_after_started_at",
               "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#invalid_task_after_started_at"
+              "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-task-after-started-at"
             }
             "###);
         }
@@ -130,7 +130,7 @@ mod tests {
               "message": "Invalid value in parameter `beforeStartedAt`: `2021-12-03T23:45` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
               "code": "invalid_task_before_started_at",
               "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#invalid_task_before_started_at"
+              "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-task-before-started-at"
             }
             "###);
         }
@@ -156,7 +156,7 @@ mod tests {
               "message": "Invalid value in parameter `uids[0]`: could not parse `cat` as a positive integer",
               "code": "invalid_task_uids",
               "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#invalid_task_uids"
+              "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-task-uids"
             }
             "###);
         }
@@ -168,7 +168,7 @@ mod tests {
               "message": "Invalid value in parameter `uids[1]`: could not parse `hello` as a positive integer",
               "code": "invalid_task_uids",
               "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#invalid_task_uids"
+              "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-task-uids"
             }
             "###);
         }
@@ -180,7 +180,7 @@ mod tests {
               "message": "Invalid value in parameter `uids`: could not parse `cat` as a positive integer",
               "code": "invalid_task_uids",
               "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#invalid_task_uids"
+              "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-task-uids"
             }
             "###);
         }
@@ -206,7 +206,7 @@ mod tests {
               "message": "Invalid value in parameter `statuses`: `finished` is not a valid task status. Available statuses are `enqueued`, `processing`, `succeeded`, `failed`, `canceled`.",
               "code": "invalid_task_statuses",
               "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#invalid_task_statuses"
+              "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-task-statuses"
             }
             "###);
         }
@@ -231,7 +231,7 @@ mod tests {
               "message": "Invalid value in parameter `types`: `createIndex` is not a valid task type. Available types are `documentAdditionOrUpdate`, `documentEdition`, `documentDeletion`, `settingsUpdate`, `indexCreation`, `indexDeletion`, `indexUpdate`, `indexSwap`, `taskCancelation`, `taskDeletion`, `dumpCreation`, `snapshotCreation`, `upgradeDatabase`.",
               "code": "invalid_task_types",
               "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#invalid_task_types"
+              "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-task-types"
             }
             "#);
         }
@@ -256,7 +256,7 @@ mod tests {
               "message": "Invalid value in parameter `indexUids[1]`: `hé` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_), and can not be more than 512 bytes.",
               "code": "invalid_index_uid",
               "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#invalid_index_uid"
+              "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-index-uid"
             }
             "###);
         }
@@ -268,7 +268,7 @@ mod tests {
               "message": "Invalid value in parameter `indexUids`: `hé` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_), and can not be more than 512 bytes.",
               "code": "invalid_index_uid",
               "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#invalid_index_uid"
+              "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-index-uid"
             }
             "###);
         }
@@ -303,7 +303,7 @@ mod tests {
               "message": "Invalid value in parameter `from`: could not parse `*` as a positive integer",
               "code": "invalid_task_from",
               "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#invalid_task_from"
+              "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid_task_from"
             }
             "###);
         }
@@ -316,7 +316,7 @@ mod tests {
               "message": "Unknown parameter `from`: expected one of `uids`, `batchUids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt`",
               "code": "bad_request",
               "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#bad_request"
+              "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#bad-request"
             }
             "###);
         }
@@ -329,7 +329,7 @@ mod tests {
               "message": "Unknown parameter `limit`: expected one of `uids`, `batchUids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt`",
               "code": "bad_request",
               "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#bad_request"
+              "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#bad-request"
             }
             "###);
         }
