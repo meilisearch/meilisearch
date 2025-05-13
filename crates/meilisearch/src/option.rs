@@ -852,7 +852,7 @@ impl fmt::Display for MaxThreads {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.0 {
             Some(threads) => write!(f, "{}", threads),
-            None => Ok(()),
+            None => write!(f, "unlimited"),
         }
     }
 }
