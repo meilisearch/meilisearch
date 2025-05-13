@@ -48,6 +48,7 @@ is-terminal = "0.4.13"
 itertools = "0.14.0"
 jsonwebtoken = "9.3.0"
 lazy_static = "1.5.0"
+liquid = "0.26.9"
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
 mimalloc = { version = "0.1.43", default-features = false }
