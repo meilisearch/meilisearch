@@ -112,6 +112,26 @@ async fn simple_search() {
         .await;
 }
 
+/// See <https://github.com/meilisearch/meilisearch/issues/5547>
+#[actix_rt::test]
+async fn bug_5547() {
+    let server = Server::new().await;
+    let index = server.index("big_fst");
+    let (response, _code) = index.create(None).await;
+    index.wait_task(response.uid()).await.succeeded();
+
+    let mut documents = Vec::new();
+    for i in 0..65_535 {
+        documents.push(json!({"id": i, "title": format!("title{i}")}));
+    }
+
+    let (response, _code) = index.add_documents(json!(documents), Some("id")).await;
+    index.wait_task(response.uid()).await.succeeded();
+    let (response, code) = index.search_post(json!({"q": "title"})).await;
+    assert_eq!(code, 200);
+    snapshot!(response["hits"], @r###"[{"id":0,"title":"title0"},{"id":1,"title":"title1"},{"id":10,"title":"title10"},{"id":100,"title":"title100"},{"id":101,"title":"title101"},{"id":102,"title":"title102"},{"id":103,"title":"title103"},{"id":104,"title":"title104"},{"id":105,"title":"title105"},{"id":106,"title":"title106"},{"id":107,"title":"title107"},{"id":108,"title":"title108"},{"id":1000,"title":"title1000"},{"id":1001,"title":"title1001"},{"id":1002,"title":"title1002"},{"id":1003,"title":"title1003"},{"id":1004,"title":"title1004"},{"id":1005,"title":"title1005"},{"id":1006,"title":"title1006"},{"id":1007,"title":"title1007"}]"###);
+}
+
 #[actix_rt::test]
 async fn search_with_stop_word() {
     // related to https://github.com/meilisearch/meilisearch/issues/4984
