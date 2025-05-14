@@ -293,7 +293,7 @@ struct KeyMasks {
 
 impl KeyMasks {
     fn is_bitflag_authorized(&self, bitflags: u32) -> bool {
-        (self.bitflags & bitflags) == bitflags
+        bitflags & self.bitflags == 0
     }
 }
 
