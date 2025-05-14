@@ -109,7 +109,7 @@ jobs:
       - name: Send deployment to Swarmia
         # if: github.event_name == 'push' && success()
         run: |
-          sudo apt-get update && sudo apt-get install -y jq
+          apt-get update && sudo apt-get install -y jq
           JSON_STRING=$( jq --null-input --compact-output \
           --arg version "${{ github.ref_name }}" \
           --arg appName "meilisearch" \
