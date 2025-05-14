@@ -118,9 +118,12 @@ impl<'indexing> GlobalFieldsIdsMap<'indexing> {
         self.local.metadata(id)
     }
 }
-
+#[warn(unconditional_recursion)]
 impl MutFieldIdMapper for GlobalFieldsIdsMap<'_> {
     fn insert(&mut self, name: &str) -> Option<FieldId> {
         self.id_or_insert(name)
+    }
+    fn len(&mut self) -> i32 {
+        GlobalFieldsIdsMap::len(self) as i32
     }
 }

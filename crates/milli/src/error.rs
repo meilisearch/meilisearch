@@ -108,9 +108,12 @@ pub enum FieldIdMapMissingEntry {
 
 #[derive(Error, Debug)]
 pub enum UserError {
-    #[error("A single index cannot have more than 65,535 unique fields across all documents. \n\ note: prior to this batch of tasks, the index already contained 65,535 unique fields.\n\
-        note: other documents from the same batch might have successfully added new unique fields before this one")]
-    AttributeLimitReached,
+    #[error("Adding the document with id {document_id:?} would add {new_field_count:?} new unique field to the index the index already contained {number_of_existing_field:?} unique fields")]
+    AttributeLimitReached{
+        document_id: Option<String>,
+        new_field_count: i32,
+        number_of_existing_field: i32,
+    },
     #[error(transparent)]
     CriterionError(#[from] CriterionError),
     #[error("Maximum number of documents reached.")]
