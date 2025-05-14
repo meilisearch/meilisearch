@@ -109,10 +109,10 @@ pub enum FieldIdMapMissingEntry {
 #[derive(Error, Debug)]
 pub enum UserError {
     #[error("Adding the document with id {document_id:?} would add {new_field_count:?} new unique field to the index the index already contained {number_of_existing_field:?} unique fields")]
-    AttributeLimitReached{
+    AttributeLimitReached {
         document_id: Option<String>,
-        new_field_count: i32,
-        number_of_existing_field: i32,
+        new_field_count: usize,
+        number_of_existing_field: usize,
     },
     #[error(transparent)]
     CriterionError(#[from] CriterionError),

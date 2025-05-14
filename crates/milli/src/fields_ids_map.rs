@@ -107,15 +107,15 @@ impl crate::documents::FieldIdMapper for FieldsIdsMap {
 
 pub trait MutFieldIdMapper {
     fn insert(&mut self, name: &str) -> Option<FieldId>;
-    fn len(&mut self) -> i32;
+    fn len(&mut self) -> usize;
 }
 
 impl MutFieldIdMapper for FieldsIdsMap {
     fn insert(&mut self, name: &str) -> Option<FieldId> {
         self.insert(name)
     }
-    fn len(&mut self)-> i32 {
-        FieldsIdsMap::len(self) as i32
+    fn len(&mut self) -> usize {
+        FieldsIdsMap::len(self) as usize
     }
 }
 
