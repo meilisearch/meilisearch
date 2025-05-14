@@ -324,7 +324,7 @@ async fn streamed_chat(
                             break 'main;
                         }
 
-                        if let Some(text) = content {
+                        if let Some(_) = content {
                             tx.send(Event::Data(sse::Data::new_json(&resp).unwrap())).await.unwrap()
                         }
 
@@ -348,9 +348,6 @@ async fn streamed_chat(
                                         })
                                         .append(arguments.as_ref().unwrap());
                                 }
-                                tx.send(Event::Data(sse::Data::new_json(&resp).unwrap()))
-                                    .await
-                                    .unwrap()
                             }
                             None if !global_tool_calls.is_empty() => {
                                 // dbg!(&global_tool_calls);
@@ -441,17 +438,24 @@ async fn streamed_chat(
                                         search_result.hits.into_iter().map(|doc| doc.document),
                                     );
                                     let text = formatted.join("\n");
-                                    chat_completion.messages.push(
-                                        ChatCompletionRequestMessage::Tool(
-                                            ChatCompletionRequestToolMessage {
-                                                tool_call_id: call.id,
-                                                content:
-                                                    ChatCompletionRequestToolMessageContent::Text(
-                                                        text,
-                                                    ),
-                                            },
-                                        ),
+                                    let tool = ChatCompletionRequestMessage::Tool(
+                                        ChatCompletionRequestToolMessage {
+                                            tool_call_id: call.id,
+                                            content: ChatCompletionRequestToolMessageContent::Text(
+                                                text,
+                                            ),
+                                        },
                                     );
+                                    tx.send(Event::Data(
+                                        sse::Data::new_json(&json!({
+                                            "object": "chat.completion.tool.event",
+                                            "tool": tool,
+                                        }))
+                                        .unwrap(),
+                                    ))
+                                    .await
+                                    .unwrap();
+                                    chat_completion.messages.push(tool);
                                 }
                             }
                             None => (),
