@@ -83,16 +83,16 @@ jobs:
             type=semver,pattern=v{{major}},enable=${{ steps.check-tag-format.outputs.stable == 'true' }}
             type=raw,value=latest,enable=${{ steps.check-tag-format.outputs.stable == 'true' && steps.check-tag-format.outputs.latest == 'true' }}
 
-      # - name: Build and push
-      #   uses: docker/build-push-action@v6
-      #   with:
-      #     push: true
-      #     platforms: linux/amd64,linux/arm64
-      #     tags: ${{ steps.meta.outputs.tags }}
-      #     build-args: |
-      #       COMMIT_SHA=${{ github.sha }}
-      #       COMMIT_DATE=${{ steps.build-metadata.outputs.date }}
-      #       GIT_TAG=${{ github.ref_name }}
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          build-args: |
+            COMMIT_SHA=${{ github.sha }}
+            COMMIT_DATE=${{ steps.build-metadata.outputs.date }}
+            GIT_TAG=${{ github.ref_name }}
 
       # /!\ Don't touch this without checking with Cloud team
       - name: Send CI information to Cloud team
@@ -109,7 +109,7 @@ jobs:
       - name: 'Setup jq'
         uses: dcarbone/install-jq-action@v3
       - name: Send deployment to Swarmia
-        # if: github.event_name == 'push' && success()
+        if: github.event_name == 'push' && success()
         run: |
           JSON_STRING=$( jq --null-input --compact-output \
           --arg version "${{ github.ref_name }}" \
