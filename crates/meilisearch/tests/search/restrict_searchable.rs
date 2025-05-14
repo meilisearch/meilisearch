@@ -425,7 +425,11 @@ static NESTED_SEARCH_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
             "desc": "a Captain Marvel ersatz",
             "weaknesses": ["magic", "requires transformation"],
             "outfit": {
-                "has_cape": true
+                "has_cape": true,
+                "colors": {
+                    "primary": "red",
+                    "secondary": "gold"
+                }
             }
         },
         "id": "1",
@@ -494,13 +498,13 @@ async fn nested_search_all_details_with_deep_wildcard() {
     let server = Server::new().await;
     let index = index_with_documents(&server, &NESTED_SEARCH_DOCUMENTS).await;
 
-    // Similar to matching all attributes on simple search documents with universal wildcard
+    // Deep wildcard should match deeply nested attributes
     index
         .search(
-            json!({"q": "Captain Marvel", "attributesToSearchOn": ["details.**"]}),
+            json!({"q": "gold", "attributesToSearchOn": ["details.**"]}),
             |response, code| {
                 snapshot!(code, @"200 OK");
-                snapshot!(response["hits"].as_array().unwrap().len(), @"3");
+                snapshot!(response["hits"].as_array().unwrap().len(), @"1");
             },
         )
         .await;
