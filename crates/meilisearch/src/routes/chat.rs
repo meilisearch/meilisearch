@@ -301,7 +301,7 @@ async fn streamed_chat(
     let mut global_tool_calls = HashMap::<u32, Call>::new();
     actix_web_lab::sse::Sse::from_stream(response.map(move |response| {
         response.map(|mut r| {
-            let delta = r.choices.pop().unwrap().delta;
+            let delta = &r.choices[0].delta;
             let ChatCompletionStreamResponseDelta {
                 ref content,
                 ref function_call,
@@ -330,10 +330,10 @@ async fn streamed_chat(
                 None if !global_tool_calls.is_empty() => {
                     dbg!(&global_tool_calls);
                 }
-                _ => (),
+                None => (),
             }
 
-            Event::Data(sse::Data::new_json(delta).unwrap())
+            Event::Data(sse::Data::new_json(r).unwrap())
         })
     }))
 }
