@@ -442,7 +442,7 @@ dependencies = [
  "derive_builder 0.20.2",
  "eventsource-stream",
  "futures",
- "rand",
+ "rand 0.8.5",
  "reqwest",
  "reqwest-eventsource",
  "secrecy",
@@ -499,7 +499,7 @@ dependencies = [
  "getrandom 0.2.15",
  "instant",
  "pin-project-lite",
- "rand",
+ "rand 0.8.5",
  "tokio",
 ]
 
