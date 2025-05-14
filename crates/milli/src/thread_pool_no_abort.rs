@@ -54,6 +54,10 @@ impl ThreadPoolNoAbortBuilder {
         ThreadPoolNoAbortBuilder::default()
     }
 
+    pub fn new_for_indexing() -> ThreadPoolNoAbortBuilder {
+        ThreadPoolNoAbortBuilder::default().thread_name(|index| format!("indexing-thread:{index}"))
+    }
+
     pub fn thread_name<F>(mut self, closure: F) -> Self
     where
         F: FnMut(usize) -> String + 'static,

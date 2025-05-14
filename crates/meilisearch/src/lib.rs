@@ -506,10 +506,8 @@ fn import_dump(
     let base_config = index_scheduler.indexer_config();
 
     let indexer_config = if base_config.max_threads.is_none() {
-        let thread_pool = ThreadPoolNoAbortBuilder::new()
-            .thread_name(|index| format!("indexing-thread:{index}"))
-            .num_threads(num_cpus::get())
-            .build()?;
+        let thread_pool =
+            ThreadPoolNoAbortBuilder::new_for_indexing().num_threads(num_cpus::get()).build()?;
 
         let _config = IndexerConfig { thread_pool, ..*base_config };
         backup_config = _config;

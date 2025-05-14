@@ -759,12 +759,8 @@ impl TryFrom<&IndexerOpts> for IndexerConfig {
     type Error = anyhow::Error;
 
     fn try_from(other: &IndexerOpts) -> Result<Self, Self::Error> {
-        // use 1/2 cpu threads if no value specified
-        let max_indexing_threads = other.max_indexing_threads.unwrap_or_else(|| num_cpus::get() / 2);
-
-        let thread_pool = ThreadPoolNoAbortBuilder::new()
-            .thread_name(|index| format!("indexing-thread:{index}"))
-            .num_threads(max_indexing_threads)
+        let thread_pool = ThreadPoolNoAbortBuilder::new_for_indexing()
+            .num_threads(other.max_indexing_threads.unwrap_or_else(|| num_cpus::get() / 2))
             .build()?;
 
         Ok(Self {
@@ -841,7 +837,7 @@ impl FromStr for MaxThreads {
     type Err = ParseIntError;
 
     fn from_str(s: &str) -> Result<MaxThreads, Self::Err> {
-        if s.is_empty() {
+        if s.is_empty() || s == "unlimited" {
             return Ok(MaxThreads::default());
         }
         usize::from_str(s).map(Some).map(MaxThreads)

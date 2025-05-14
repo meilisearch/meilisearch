@@ -28,24 +28,29 @@ impl IndexerConfig {
     }
 }
 
+/// By default use only 1 thread for indexing in tests
+#[cfg(test)]
+fn default_thread_pool_and_threads() -> (ThreadPoolNoAbort, Option<usize>) {
+    let pool = ThreadPoolNoAbortBuilder::new_for_indexing()
+        .num_threads(1)
+        .build()
+        .expect("failed to build default rayon thread pool");
+
+    (pool, Some(1))
+}
+
+#[cfg(not(test))]
+fn default_thread_pool_and_threads() -> (ThreadPoolNoAbort, Option<usize>) {
+    let pool = ThreadPoolNoAbortBuilder::new_for_indexing()
+        .build()
+        .expect("failed to build default rayon thread pool");
+
+    (pool, None)
+}
+
 impl Default for IndexerConfig {
     fn default() -> Self {
-        #[allow(unused_mut)]
-        let mut pool_builder = ThreadPoolNoAbortBuilder::new();
-
-        #[allow(unused_mut, unused_assignments)]
-        let mut max_threads = None;
-
-        #[cfg(test)]
-        {
-            pool_builder = pool_builder.num_threads(1);
-            max_threads = Some(1);
-        }
-
-        let thread_pool = pool_builder
-            .thread_name(|index| format!("indexing-thread:{index}"))
-            .build()
-            .expect("failed to build default rayon thread pool");
+        let (thread_pool, max_threads) = default_thread_pool_and_threads();
 
         Self {
             max_threads,
