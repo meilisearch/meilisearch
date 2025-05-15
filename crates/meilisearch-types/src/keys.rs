@@ -311,6 +311,12 @@ pub enum Action {
     #[serde(rename = "chat.get")]
     #[deserr(rename = "chat.get")]
     ChatGet,
+    #[serde(rename = "chatSettings.get")]
+    #[deserr(rename = "chatSettings.get")]
+    ChatSettingsGet,
+    #[serde(rename = "chatSettings.update")]
+    #[deserr(rename = "chatSettings.update")]
+    ChatSettingsUpdate,
 }
 
 impl Action {
@@ -403,4 +409,6 @@ pub mod actions {
     pub const NETWORK_UPDATE: u8 = NetworkUpdate.repr();
 
     pub const CHAT_GET: u8 = ChatGet.repr();
+    pub const CHAT_SETTINGS_GET: u8 = ChatSettingsGet.repr();
+    pub const CHAT_SETTINGS_UPDATE: u8 = ChatSettingsUpdate.repr();
 }

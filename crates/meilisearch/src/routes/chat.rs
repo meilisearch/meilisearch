@@ -9,6 +9,7 @@ use async_openai::config::OpenAIConfig;
 use async_openai::types::{
     ChatCompletionMessageToolCall, ChatCompletionMessageToolCallChunk,
     ChatCompletionRequestAssistantMessageArgs, ChatCompletionRequestMessage,
+    ChatCompletionRequestSystemMessage, ChatCompletionRequestSystemMessageContent,
     ChatCompletionRequestToolMessage, ChatCompletionRequestToolMessageContent,
     ChatCompletionStreamResponseDelta, ChatCompletionToolArgs, ChatCompletionToolType,
     CreateChatCompletionRequest, FinishReason, FunctionCall, FunctionCallStream,
@@ -27,6 +28,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::runtime::Handle;
 
+use super::settings::chat::{ChatPrompts, ChatSettings};
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::GuardedData;
 use crate::metrics::MEILISEARCH_DEGRADED_SEARCH_REQUESTS;
@@ -36,31 +38,10 @@ use crate::search::{
 };
 use crate::search_queue::SearchQueue;
 
-/// The default description of the searchInIndex tool provided to OpenAI.
-const DEFAULT_SEARCH_IN_INDEX_TOOL_DESCRIPTION: &str =
-    "Search the database for relevant JSON documents using an optional query.";
-/// The default description of the searchInIndex `q` parameter tool provided to OpenAI.
-const DEFAULT_SEARCH_IN_INDEX_Q_PARAMETER_TOOL_DESCRIPTION: &str =
-    "The search query string used to find relevant documents in the index. \
-This should contain keywords or phrases that best represent what the user is looking for. \
-More specific queries will yield more precise results.";
-/// The default description of the searchInIndex `index` parameter tool provided to OpenAI.
-const DEFAULT_SEARCH_IN_INDEX_INDEX_PARAMETER_TOOL_DESCRIPTION: &str =
-"The name of the index to search within. An index is a collection of documents organized for search. \
-Selecting the right index ensures the most relevant results for the user query";
-
 const EMBEDDER_NAME: &str = "openai";
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::resource("").route(web::post().to(chat)));
-}
-
-/// Creates OpenAI client with API key
-fn create_openai_client() -> Client<OpenAIConfig> {
-    let api_key = std::env::var("MEILI_OPENAI_API_KEY")
-        .expect("cannot find OpenAI API Key (MEILI_OPENAI_API_KEY)");
-    let config = OpenAIConfig::default().with_api_key(&api_key);
-    Client::with_config(config)
 }
 
 /// Get a chat completion
@@ -86,12 +67,7 @@ async fn chat(
 }
 
 /// Setup search tool in chat completion request
-fn setup_search_tool(
-    chat_completion: &mut CreateChatCompletionRequest,
-    search_in_index_description: &str,
-    search_in_index_q_param_description: &str,
-    search_in_index_index_description: &str,
-) {
+fn setup_search_tool(chat_completion: &mut CreateChatCompletionRequest, prompts: &ChatPrompts) {
     let tools = chat_completion.tools.get_or_insert_default();
     tools.push(
         ChatCompletionToolArgs::default()
@@ -99,18 +75,18 @@ fn setup_search_tool(
             .function(
                 FunctionObjectArgs::default()
                     .name("searchInIndex")
-                    .description(search_in_index_description)
+                    .description(&prompts.search_description)
                     .parameters(json!({
                         "type": "object",
                         "properties": {
                             "index_uid": {
                                 "type": "string",
                                 "enum": ["main"],
-                                "description": search_in_index_index_description,
+                                "description": prompts.search_index_uid_param,
                             },
                             "q": {
                                 "type": ["string", "null"],
-                                "description": search_in_index_q_param_description,
+                                "description": prompts.search_q_param,
                             }
                         },
                         "required": ["index_uid", "q"],
@@ -122,6 +98,17 @@ fn setup_search_tool(
             )
             .build()
             .unwrap(),
+    );
+}
+
+/// Prepend system message to the conversation
+fn prepend_system_message(chat_completion: &mut CreateChatCompletionRequest, system_prompt: &str) {
+    chat_completion.messages.insert(
+        0,
+        ChatCompletionRequestMessage::System(ChatCompletionRequestSystemMessage {
+            content: ChatCompletionRequestSystemMessageContent::Text(system_prompt.to_string()),
+            name: None,
+        }),
     );
 }
 
@@ -187,56 +174,32 @@ async fn process_search_request(
     Ok((index, text))
 }
 
-/// Get prompt descriptions from index scheduler
-fn get_prompt_descriptions(
-    index_scheduler: &GuardedData<ActionPolicy<{ actions::CHAT_GET }>, Data<IndexScheduler>>,
-) -> (String, String, String) {
-    let rtxn = index_scheduler.read_txn().unwrap();
-    let search_in_index_description = index_scheduler
-        .chat_prompts(&rtxn, "searchInIndex-description")
-        .unwrap()
-        .unwrap_or(DEFAULT_SEARCH_IN_INDEX_TOOL_DESCRIPTION)
-        .to_string();
-    let search_in_index_q_param_description = index_scheduler
-        .chat_prompts(&rtxn, "searchInIndex-q-param-description")
-        .unwrap()
-        .unwrap_or(DEFAULT_SEARCH_IN_INDEX_Q_PARAMETER_TOOL_DESCRIPTION)
-        .to_string();
-    let search_in_index_index_description = index_scheduler
-        .chat_prompts(&rtxn, "searchInIndex-index-param-description")
-        .unwrap()
-        .unwrap_or(DEFAULT_SEARCH_IN_INDEX_INDEX_PARAMETER_TOOL_DESCRIPTION)
-        .to_string();
-    drop(rtxn);
-
-    (
-        search_in_index_description,
-        search_in_index_q_param_description,
-        search_in_index_index_description,
-    )
-}
-
 async fn non_streamed_chat(
     index_scheduler: GuardedData<ActionPolicy<{ actions::CHAT_GET }>, Data<IndexScheduler>>,
     search_queue: web::Data<SearchQueue>,
     mut chat_completion: CreateChatCompletionRequest,
 ) -> Result<HttpResponse, ResponseError> {
-    let client = create_openai_client();
+    let chat_settings = match index_scheduler.chat_settings().unwrap() {
+        Some(value) => serde_json::from_value(value).unwrap(),
+        None => ChatSettings::default(),
+    };
 
-    let (
-        search_in_index_description,
-        search_in_index_q_param_description,
-        search_in_index_index_description,
-    ) = get_prompt_descriptions(&index_scheduler);
+    let mut config = OpenAIConfig::default();
+    if let Some(api_key) = chat_settings.api_key.as_ref() {
+        config = config.with_api_key(api_key);
+    }
+    // We cannot change the endpoint
+    // if let Some(endpoint) = chat_settings.endpoint.as_ref() {
+    //     config.with_api_base(&endpoint);
+    // }
+    let client = Client::with_config(config);
+
+    // Prepend system message to the conversation
+    prepend_system_message(&mut chat_completion, &chat_settings.prompts.system);
 
     let mut response;
     loop {
-        setup_search_tool(
-            &mut chat_completion,
-            &search_in_index_description,
-            &search_in_index_q_param_description,
-            &search_in_index_index_description,
-        );
+        setup_search_tool(&mut chat_completion, &chat_settings.prompts);
 
         response = client.chat().create(chat_completion.clone()).await.unwrap();
 
@@ -290,22 +253,29 @@ async fn streamed_chat(
     search_queue: web::Data<SearchQueue>,
     mut chat_completion: CreateChatCompletionRequest,
 ) -> impl Responder {
-    let (
-        search_in_index_description,
-        search_in_index_q_param_description,
-        search_in_index_index_description,
-    ) = get_prompt_descriptions(&index_scheduler);
+    let chat_settings = match index_scheduler.chat_settings().unwrap() {
+        Some(value) => serde_json::from_value(value).unwrap(),
+        None => ChatSettings::default(),
+    };
 
-    setup_search_tool(
-        &mut chat_completion,
-        &search_in_index_description,
-        &search_in_index_q_param_description,
-        &search_in_index_index_description,
-    );
+    let mut config = OpenAIConfig::default();
+    if let Some(api_key) = chat_settings.api_key.as_ref() {
+        config = config.with_api_key(api_key);
+    }
+    // We cannot change the endpoint
+    // if let Some(endpoint) = chat_settings.endpoint.as_ref() {
+    //     config.with_api_base(&endpoint);
+    // }
+
+    // Prepend system message to the conversation
+    prepend_system_message(&mut chat_completion, &chat_settings.prompts.system);
+
+    // Setup the search tool
+    setup_search_tool(&mut chat_completion, &chat_settings.prompts);
 
     let (tx, rx) = tokio::sync::mpsc::channel(10);
     let _join_handle = Handle::current().spawn(async move {
-        let client = create_openai_client();
+        let client = Client::with_config(config.clone());
         let mut global_tool_calls = HashMap::<u32, Call>::new();
 
         'main: loop {
