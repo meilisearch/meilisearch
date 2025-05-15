@@ -113,6 +113,7 @@ impl IndexScheduler {
             instance_features: Default::default(),
             auto_upgrade: true, // Don't cost much and will ensure the happy path works
             embedding_cache_cap: 10,
+            experimental_no_snapshot_compaction: false,
         };
         let version = configuration(&mut options).unwrap_or({
             (versioning::VERSION_MAJOR, versioning::VERSION_MINOR, versioning::VERSION_PATCH)

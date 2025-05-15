@@ -131,6 +131,8 @@ pub struct IndexSchedulerOptions {
     ///
     /// 0 disables the cache.
     pub embedding_cache_cap: usize,
+    /// Snapshot compaction status.
+    pub experimental_no_snapshot_compaction: bool,
 }
 
 /// Structure which holds meilisearch's indexes and schedules the tasks
