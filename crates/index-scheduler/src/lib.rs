@@ -212,7 +212,7 @@ impl IndexScheduler {
             #[cfg(test)]
             run_loop_iteration: self.run_loop_iteration.clone(),
             features: self.features.clone(),
-            chat_settings: self.chat_settings.clone(),
+            chat_settings: self.chat_settings,
         }
     }
 
@@ -870,12 +870,12 @@ impl IndexScheduler {
 
     pub fn chat_settings(&self) -> Result<Option<serde_json::Value>> {
         let rtxn = self.env.read_txn().map_err(Error::HeedTransaction)?;
-        self.chat_settings.get(&rtxn, &"main").map_err(Into::into)
+        self.chat_settings.get(&rtxn, "main").map_err(Into::into)
     }
 
     pub fn put_chat_settings(&self, settings: &serde_json::Value) -> Result<()> {
         let mut wtxn = self.env.write_txn().map_err(Error::HeedTransaction)?;
-        self.chat_settings.put(&mut wtxn, &"main", &settings)?;
+        self.chat_settings.put(&mut wtxn, "main", settings)?;
         wtxn.commit().map_err(Error::HeedTransaction)?;
         Ok(())
     }

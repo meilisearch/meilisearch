@@ -276,11 +276,11 @@ async fn streamed_chat(
                 match result {
                     Ok(resp) => {
                         let delta = &resp.choices[0].delta;
+                        #[allow(deprecated)]
                         let ChatCompletionStreamResponseDelta {
                             content,
                             // Using deprecated field but keeping for compatibility
-                            #[allow(deprecated)]
-                                function_call: _,
+                            function_call: _,
                             ref tool_calls,
                             role: _,
                             refusal: _,
@@ -291,7 +291,7 @@ async fn streamed_chat(
                             break 'main;
                         }
 
-                        if let Some(_) = content {
+                        if content.is_some() {
                             tx.send(Event::Data(sse::Data::new_json(&resp).unwrap())).await.unwrap()
                         }
 
@@ -321,8 +321,8 @@ async fn streamed_chat(
 
                                 let (meili_calls, _other_calls): (Vec<_>, Vec<_>) =
                                     mem::take(&mut global_tool_calls)
-                                        .into_iter()
-                                        .map(|(_, call)| ChatCompletionMessageToolCall {
+                                        .into_values()
+                                        .map(|call| ChatCompletionMessageToolCall {
                                             id: call.id,
                                             r#type: ChatCompletionToolType::Function,
                                             function: FunctionCall {
@@ -342,7 +342,7 @@ async fn streamed_chat(
 
                                 for call in meili_calls {
                                     tx.send(Event::Data(
-                                        sse::Data::new_json(&json!({
+                                        sse::Data::new_json(json!({
                                             "object": "chat.completion.tool.call",
                                             "tool": call,
                                         }))
@@ -380,7 +380,7 @@ async fn streamed_chat(
                                     );
 
                                     tx.send(Event::Data(
-                                        sse::Data::new_json(&json!({
+                                        sse::Data::new_json(json!({
                                             "object": "chat.completion.tool.output",
                                             "tool": ChatCompletionRequestMessage::Tool(
                                                 ChatCompletionRequestToolMessage {
