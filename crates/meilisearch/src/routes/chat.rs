@@ -374,6 +374,16 @@ async fn streamed_chat(
                                 );
 
                                 for call in meili_calls {
+                                    tx.send(Event::Data(
+                                        sse::Data::new_json(&json!({
+                                            "object": "chat.completion.tool.call",
+                                            "tool": call,
+                                        }))
+                                        .unwrap(),
+                                    ))
+                                    .await
+                                    .unwrap();
+
                                     let SearchInIndexParameters { index_uid, q } =
                                         serde_json::from_str(&call.function.arguments).unwrap();
 
@@ -448,7 +458,7 @@ async fn streamed_chat(
                                     );
                                     tx.send(Event::Data(
                                         sse::Data::new_json(&json!({
-                                            "object": "chat.completion.tool.event",
+                                            "object": "chat.completion.tool.output",
                                             "tool": tool,
                                         }))
                                         .unwrap(),
