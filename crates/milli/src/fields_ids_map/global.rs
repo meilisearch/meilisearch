@@ -118,9 +118,11 @@ impl<'indexing> GlobalFieldsIdsMap<'indexing> {
         self.local.metadata(id)
     }
 }
-
 impl MutFieldIdMapper for GlobalFieldsIdsMap<'_> {
     fn insert(&mut self, name: &str) -> Option<FieldId> {
         self.id_or_insert(name)
+    }
+    fn len(&mut self) -> usize {
+        self.local.names_ids.len() as usize
     }
 }

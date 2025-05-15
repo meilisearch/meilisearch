@@ -87,6 +87,7 @@ fn create_fields_mapping(
     index_field_map: &mut FieldIdMapWithMetadata,
     batch_field_map: &DocumentsBatchIndex,
 ) -> Result<HashMap<FieldId, FieldId>> {
+    let no_of_existing_field = index_field_map.len();
     batch_field_map
         .iter()
         // we sort by id here to ensure a deterministic mapping of the fields, that preserves
@@ -96,7 +97,11 @@ fn create_fields_mapping(
             Some(id) => Ok((*field, id)),
             None => index_field_map
                 .insert(name)
-                .ok_or(Error::UserError(UserError::AttributeLimitReached))
+                .ok_or(Error::UserError(UserError::AttributeLimitReached {
+                    document_id: None,
+                    number_of_existing_field: no_of_existing_field,
+                    new_field_count: 1,
+                }))
                 .map(|id| (*field, id)),
         })
         .collect()
@@ -178,8 +183,13 @@ impl<'a, 'i> Transform<'a, 'i> {
         let mapping = create_fields_mapping(&mut self.fields_ids_map, &fields_index)?;
 
         let primary_key = cursor.primary_key().to_string();
+        let no_of_existing_field = self.fields_ids_map.len();
         let primary_key_id =
-            self.fields_ids_map.insert(&primary_key).ok_or(UserError::AttributeLimitReached)?;
+            self.fields_ids_map.insert(&primary_key).ok_or(UserError::AttributeLimitReached {
+                document_id: Some(primary_key.clone()),
+                number_of_existing_field: no_of_existing_field,
+                new_field_count: 1,
+            })?;
 
         let mut obkv_buffer = Vec::new();
         let mut document_sorter_value_buffer = Vec::new();
@@ -413,8 +423,14 @@ impl<'a, 'i> Transform<'a, 'i> {
 
         // Once we have the flattened version we insert all the new generated fields_ids
         // (if any) in the fields ids map and serialize the value.
-        for (key, value) in flattened.into_iter() {
-            let fid = fields_ids_map.insert(&key).ok_or(UserError::AttributeLimitReached)?;
+        for (key, value) in flattened.clone().into_iter() {
+            let no_of_existing_fields = fields_ids_map.len();
+            let no_of_new_fields = flattened.clone().into_iter().len();
+            let fid = fields_ids_map.insert(&key).ok_or(UserError::AttributeLimitReached {
+                document_id: None,
+                new_field_count: no_of_new_fields,
+                number_of_existing_field: no_of_existing_fields,
+            })?;
             let value = serde_json::to_vec(&value).map_err(InternalError::SerdeJson)?;
             key_value.push((fid, value.into()));
         }
