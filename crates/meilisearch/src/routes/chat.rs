@@ -186,10 +186,9 @@ async fn non_streamed_chat(
     if let Some(api_key) = chat_settings.api_key.as_ref() {
         config = config.with_api_key(api_key);
     }
-    // We cannot change the endpoint
-    // if let Some(endpoint) = chat_settings.endpoint.as_ref() {
-    //     config.with_api_base(&endpoint);
-    // }
+    if let Some(base_api) = chat_settings.base_api.as_ref() {
+        config = config.with_api_base(base_api);
+    }
     let client = Client::with_config(config);
 
     setup_search_tool(&mut chat_completion, &chat_settings.prompts);
@@ -257,10 +256,9 @@ async fn streamed_chat(
     if let Some(api_key) = chat_settings.api_key.as_ref() {
         config = config.with_api_key(api_key);
     }
-    // We cannot change the endpoint
-    // if let Some(endpoint) = chat_settings.endpoint.as_ref() {
-    //     config.with_api_base(&endpoint);
-    // }
+    if let Some(base_api) = chat_settings.base_api.as_ref() {
+        config = config.with_api_base(base_api);
+    }
 
     setup_search_tool(&mut chat_completion, &chat_settings.prompts);
 
