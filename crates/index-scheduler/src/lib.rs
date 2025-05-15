@@ -383,6 +383,11 @@ impl IndexScheduler {
     /// This function will execute in a different thread and must be called
     /// only once per index scheduler.
     fn run(&self) {
+        // If the number of batched tasks is 0, we don't need to run the scheduler at all.
+        // It will never be able to process any tasks.
+        if self.scheduler.max_number_of_batched_tasks == 0 {
+            return;
+        }
         let run = self.private_clone();
         std::thread::Builder::new()
             .name(String::from("scheduler"))

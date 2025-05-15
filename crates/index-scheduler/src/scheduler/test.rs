@@ -929,3 +929,30 @@ fn create_and_list_index() {
     ]
     "###);
 }
+
+#[test]
+fn test_scheduler_doesnt_run_with_zero_batched_tasks() {
+    let (index_scheduler, mut handle) = IndexScheduler::test_with_custom_config(vec![], |config| {
+        config.max_number_of_batched_tasks = 0;
+        None
+    });
+
+    handle.scheduler_is_down();
+
+    // Register a task
+    index_scheduler
+        .register(
+            KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None },
+            None,
+            false,
+        )
+        .unwrap();
+    snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_task");
+
+    handle.scheduler_is_down();
+
+    // If we restart the scheduler, it should run properly.
+    let (index_scheduler, mut handle) = handle.restart(index_scheduler, true, vec![], |_| None);
+    handle.advance_n_successful_batches(1);
+    snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_restart");
+}
