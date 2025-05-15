@@ -27,6 +27,7 @@ use meilisearch_types::{Document, Index};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::runtime::Handle;
+use tracing::error;
 
 use super::settings::chat::{ChatPrompts, ChatSettings};
 use crate::extractors::authentication::policies::ActionPolicy;
@@ -361,32 +362,40 @@ async fn streamed_chat(
                                     )
                                     .await;
 
-                                    // Handle potential errors more explicitly
-                                    if let Err(err) = &result {
-                                        // Log the error or handle it as needed
-                                        eprintln!("Error processing search request: {:?}", err);
-                                        continue;
-                                    }
-
-                                    let (_, text) = result.unwrap();
+                                    let text = match result {
+                                        Ok((_, text)) => text,
+                                        Err(err) => {
+                                            error!("Error processing search request: {err:?}");
+                                            continue;
+                                        }
+                                    };
 
                                     let tool = ChatCompletionRequestMessage::Tool(
                                         ChatCompletionRequestToolMessage {
-                                            tool_call_id: call.id,
+                                            tool_call_id: call.id.clone(),
                                             content: ChatCompletionRequestToolMessageContent::Text(
-                                                text,
+                                                format!("{}\n\n{text}", chat_settings.prompts.pre_query),
                                             ),
                                         },
                                     );
+
                                     tx.send(Event::Data(
                                         sse::Data::new_json(&json!({
                                             "object": "chat.completion.tool.output",
-                                            "tool": tool,
+                                            "tool": ChatCompletionRequestMessage::Tool(
+                                                ChatCompletionRequestToolMessage {
+                                                    tool_call_id: call.id,
+                                                    content: ChatCompletionRequestToolMessageContent::Text(
+                                                        text,
+                                                    ),
+                                                },
+                                            ),
                                         }))
                                         .unwrap(),
                                     ))
                                     .await
                                     .unwrap();
+
                                     chat_completion.messages.push(tool);
                                 }
                             }
