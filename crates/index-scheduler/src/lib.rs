@@ -883,6 +883,7 @@ impl IndexScheduler {
     pub fn put_chat_settings(&self, settings: &serde_json::Value) -> Result<()> {
         let mut wtxn = self.env.write_txn().map_err(Error::HeedTransaction)?;
         self.chat_settings.put(&mut wtxn, &"main", &settings)?;
+        wtxn.commit().map_err(Error::HeedTransaction)?;
         Ok(())
     }
 }
