@@ -99,14 +99,11 @@ fn setup_search_tool(chat_completion: &mut CreateChatCompletionRequest, prompts:
             .build()
             .unwrap(),
     );
-}
 
-/// Prepend system message to the conversation
-fn prepend_system_message(chat_completion: &mut CreateChatCompletionRequest, system_prompt: &str) {
     chat_completion.messages.insert(
         0,
         ChatCompletionRequestMessage::System(ChatCompletionRequestSystemMessage {
-            content: ChatCompletionRequestSystemMessageContent::Text(system_prompt.to_string()),
+            content: ChatCompletionRequestSystemMessageContent::Text(prompts.system.clone()),
             name: None,
         }),
     );
@@ -194,13 +191,10 @@ async fn non_streamed_chat(
     // }
     let client = Client::with_config(config);
 
-    // Prepend system message to the conversation
-    prepend_system_message(&mut chat_completion, &chat_settings.prompts.system);
+    setup_search_tool(&mut chat_completion, &chat_settings.prompts);
 
     let mut response;
     loop {
-        setup_search_tool(&mut chat_completion, &chat_settings.prompts);
-
         response = client.chat().create(chat_completion.clone()).await.unwrap();
 
         let choice = &mut response.choices[0];
@@ -267,10 +261,6 @@ async fn streamed_chat(
     //     config.with_api_base(&endpoint);
     // }
 
-    // Prepend system message to the conversation
-    prepend_system_message(&mut chat_completion, &chat_settings.prompts.system);
-
-    // Setup the search tool
     setup_search_tool(&mut chat_completion, &chat_settings.prompts);
 
     let (tx, rx) = tokio::sync::mpsc::channel(10);
