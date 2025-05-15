@@ -53,7 +53,7 @@ use flate2::Compression;
 use meilisearch_types::batches::Batch;
 use meilisearch_types::features::{InstanceTogglableFeatures, Network, RuntimeTogglableFeatures};
 use meilisearch_types::heed::byteorder::BE;
-use meilisearch_types::heed::types::{Str, I128};
+use meilisearch_types::heed::types::{SerdeJson, Str, I128};
 use meilisearch_types::heed::{self, Database, Env, RoTxn, WithoutTls};
 use meilisearch_types::milli::index::IndexEmbeddingConfig;
 use meilisearch_types::milli::update::IndexerConfig;
@@ -153,8 +153,8 @@ pub struct IndexScheduler {
     /// In charge of fetching and setting the status of experimental features.
     features: features::FeatureData,
 
-    /// Stores the custom prompts for the chat
-    chat_prompts: Database<Str, Str>,
+    /// Stores the custom chat prompts and other settings of the indexes.
+    chat_settings: Database<Str, SerdeJson<serde_json::Value>>,
 
     /// Everything related to the processing of the tasks
     pub scheduler: scheduler::Scheduler,
@@ -214,7 +214,7 @@ impl IndexScheduler {
             #[cfg(test)]
             run_loop_iteration: self.run_loop_iteration.clone(),
             features: self.features.clone(),
-            chat_prompts: self.chat_prompts.clone(),
+            chat_settings: self.chat_settings.clone(),
         }
     }
 
@@ -277,7 +277,7 @@ impl IndexScheduler {
         let features = features::FeatureData::new(&env, &mut wtxn, options.instance_features)?;
         let queue = Queue::new(&env, &mut wtxn, &options)?;
         let index_mapper = IndexMapper::new(&env, &mut wtxn, &options, budget)?;
-        let chat_prompts = env.create_database(&mut wtxn, Some("chat-prompts"))?;
+        let chat_settings = env.create_database(&mut wtxn, Some("chat-settings"))?;
         wtxn.commit()?;
 
         // allow unreachable_code to get rids of the warning in the case of a test build.
@@ -301,7 +301,7 @@ impl IndexScheduler {
             #[cfg(test)]
             run_loop_iteration: Arc::new(RwLock::new(0)),
             features,
-            chat_prompts,
+            chat_settings,
         };
 
         this.run();
@@ -875,8 +875,15 @@ impl IndexScheduler {
         res.map(EmbeddingConfigs::new)
     }
 
-    pub fn chat_prompts<'t>(&self, rtxn: &'t RoTxn, name: &str) -> heed::Result<Option<&'t str>> {
-        self.chat_prompts.get(rtxn, name)
+    pub fn chat_settings(&self) -> Result<Option<serde_json::Value>> {
+        let rtxn = self.env.read_txn().map_err(Error::HeedTransaction)?;
+        self.chat_settings.get(&rtxn, &"main").map_err(Into::into)
+    }
+
+    pub fn put_chat_settings(&self, settings: &serde_json::Value) -> Result<()> {
+        let mut wtxn = self.env.write_txn().map_err(Error::HeedTransaction)?;
+        self.chat_settings.put(&mut wtxn, &"main", &settings)?;
+        Ok(())
     }
 }
 
