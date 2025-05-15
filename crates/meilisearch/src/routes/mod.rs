@@ -62,6 +62,7 @@ mod multi_search;
 mod multi_search_analytics;
 pub mod network;
 mod open_api_utils;
+pub mod settings;
 mod snapshot;
 mod swap_indexes;
 pub mod tasks;
@@ -115,7 +116,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(web::scope("/metrics").configure(metrics::configure))
         .service(web::scope("/experimental-features").configure(features::configure))
         .service(web::scope("/network").configure(network::configure))
-        .service(web::scope("/chat").configure(chat::configure));
+        .service(web::scope("/chat").configure(chat::configure))
+        .service(web::scope("/settings/chat").configure(settings::chat::configure));
 
     #[cfg(feature = "swagger")]
     {
