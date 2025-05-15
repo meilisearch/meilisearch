@@ -37,8 +37,9 @@ use index_scheduler::{IndexScheduler, IndexSchedulerOptions};
 use meilisearch_auth::{open_auth_store_env, AuthController};
 use meilisearch_types::milli::constants::VERSION_MAJOR;
 use meilisearch_types::milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
-use meilisearch_types::milli::update::{IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig};
-use meilisearch_types::milli::ThreadPoolNoAbortBuilder;
+use meilisearch_types::milli::update::{
+    default_thread_pool_and_threads, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig,
+};
 use meilisearch_types::settings::apply_settings_to_builder;
 use meilisearch_types::tasks::KindWithContent;
 use meilisearch_types::versioning::{
@@ -506,8 +507,7 @@ fn import_dump(
     let base_config = index_scheduler.indexer_config();
 
     let indexer_config = if base_config.max_threads.is_none() {
-        let thread_pool =
-            ThreadPoolNoAbortBuilder::new_for_indexing().num_threads(num_cpus::get()).build()?;
+        let (thread_pool, _) = default_thread_pool_and_threads();
 
         let _config = IndexerConfig { thread_pool, ..*base_config };
         backup_config = _config;

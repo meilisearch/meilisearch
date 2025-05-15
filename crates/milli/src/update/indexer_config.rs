@@ -30,7 +30,7 @@ impl IndexerConfig {
 
 /// By default use only 1 thread for indexing in tests
 #[cfg(test)]
-fn default_thread_pool_and_threads() -> (ThreadPoolNoAbort, Option<usize>) {
+pub fn default_thread_pool_and_threads() -> (ThreadPoolNoAbort, Option<usize>) {
     let pool = ThreadPoolNoAbortBuilder::new_for_indexing()
         .num_threads(1)
         .build()
@@ -40,7 +40,7 @@ fn default_thread_pool_and_threads() -> (ThreadPoolNoAbort, Option<usize>) {
 }
 
 #[cfg(not(test))]
-fn default_thread_pool_and_threads() -> (ThreadPoolNoAbort, Option<usize>) {
+pub fn default_thread_pool_and_threads() -> (ThreadPoolNoAbort, Option<usize>) {
     let pool = ThreadPoolNoAbortBuilder::new_for_indexing()
         .build()
         .expect("failed to build default rayon thread pool");
