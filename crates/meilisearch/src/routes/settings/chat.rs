@@ -48,7 +48,7 @@ async fn patch_settings(
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct ChatSettings {
     pub source: String,
-    pub endpoint: Option<String>,
+    pub base_api: Option<String>,
     pub api_key: Option<String>,
     pub prompts: ChatPrompts,
     pub indexes: BTreeMap<String, ChatIndexSettings>,
@@ -95,7 +95,7 @@ impl Default for ChatSettings {
     fn default() -> Self {
         ChatSettings {
             source: "openai".to_string(),
-            endpoint: None,
+            base_api: None,
             api_key: None,
             prompts: ChatPrompts {
                 system: DEFAULT_SYSTEM_MESSAGE.to_string(),
