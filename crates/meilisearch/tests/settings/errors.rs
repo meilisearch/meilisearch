@@ -339,6 +339,47 @@ async fn settings_bad_pagination() {
 }
 
 #[actix_rt::test]
+async fn settings_bad_max_total_hits() {
+    let server = Server::new_shared();
+    let index = server.unique_index();
+
+    let (response, code) =
+        index.update_settings(json!({ "pagination": { "maxTotalHits": "doggo" } })).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Invalid value type at `.pagination.maxTotalHits`: expected a positive integer, but found a string: `\"doggo\"`",
+      "code": "invalid_settings_pagination",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_settings_pagination"
+    }
+    "###);
+
+    let (response, code) =
+        index.update_settings_pagination(json!({ "maxTotalHits": "doggo" } )).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r#"
+    {
+      "message": "Invalid value type at `.maxTotalHits`: expected a positive integer, but found a string: `\"doggo\"`",
+      "code": "invalid_settings_pagination",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_settings_pagination"
+    }
+    "#);
+
+    let (response, code) = index.update_settings_pagination(json!({ "maxTotalHits": 0 } )).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r#"
+    {
+      "message": "Invalid value at `.maxTotalHits`: a non-zero integer value lower than `18446744073709551615` was expected, but found a zero",
+      "code": "invalid_settings_pagination",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_settings_pagination"
+    }
+    "#);
+}
+
+#[actix_rt::test]
 async fn settings_bad_search_cutoff_ms() {
     let server = Server::new_shared();
     let index = server.unique_index();

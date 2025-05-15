@@ -1,3 +1,4 @@
+use std::num::NonZeroUsize;
 use std::str::FromStr;
 
 use super::v4_to_v5::{CompatIndexV4ToV5, CompatV4ToV5};
@@ -388,7 +389,13 @@ impl<T> From<v5::Settings<T>> for v6::Settings<v6::Unchecked> {
             },
             pagination: match settings.pagination {
                 v5::Setting::Set(pagination) => v6::Setting::Set(v6::PaginationSettings {
-                    max_total_hits: pagination.max_total_hits.into(),
+                    max_total_hits: match pagination.max_total_hits {
+                        v5::Setting::Set(max_total_hits) => v6::Setting::Set(
+                            max_total_hits.try_into().unwrap_or(NonZeroUsize::new(1).unwrap()),
+                        ),
+                        v5::Setting::Reset => v6::Setting::Reset,
+                        v5::Setting::NotSet => v6::Setting::NotSet,
+                    },
                 }),
                 v5::Setting::Reset => v6::Setting::Reset,
                 v5::Setting::NotSet => v6::Setting::NotSet,
