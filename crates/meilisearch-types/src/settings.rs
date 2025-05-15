@@ -132,7 +132,7 @@ pub struct PaginationSettings {
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<usize>, example = json!(250))]
-    pub max_total_hits: Setting<usize>,
+    pub max_total_hits: Setting<NonZeroUsize>,
 }
 
 impl MergeWithError<milli::CriterionError> for DeserrJsonError<InvalidSettingsRankingRules> {
@@ -748,7 +748,7 @@ pub fn apply_settings_to_builder(
 
     match pagination {
         Setting::Set(ref value) => match value.max_total_hits {
-            Setting::Set(val) => builder.set_pagination_max_total_hits(val),
+            Setting::Set(val) => builder.set_pagination_max_total_hits(val.into()),
             Setting::Reset => builder.reset_pagination_max_total_hits(),
             Setting::NotSet => (),
         },
@@ -867,8 +867,8 @@ pub fn settings(
         max_total_hits: Setting::Set(
             index
                 .pagination_max_total_hits(rtxn)?
-                .map(|x| x as usize)
-                .unwrap_or(DEFAULT_PAGINATION_MAX_TOTAL_HITS),
+                .and_then(|x| (x as usize).try_into().ok())
+                .unwrap_or(NonZeroUsize::new(DEFAULT_PAGINATION_MAX_TOTAL_HITS).unwrap()),
         ),
     };
 
