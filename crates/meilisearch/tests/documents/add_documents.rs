@@ -18,8 +18,8 @@ async fn add_documents_test_json_content_types() {
         }
     ]);
 
-    // this is a what is expected and should work
-    let server = Server::new().await;
+    // this is what is expected and should work
+    let server = Server::new_shared();
     let app = server.init_web_app().await;
 
     // post
@@ -75,8 +75,8 @@ async fn add_single_document_test_json_content_types() {
         "content": "Bouvier Bernois",
     });
 
-    // this is a what is expected and should work
-    let server = Server::new().await;
+    // this is what is expected and should work
+    let server = Server::new_shared();
     let app = server.init_web_app().await;
 
     // post
@@ -132,8 +132,8 @@ async fn add_single_document_gzip_encoded() {
         "content": "Bouvier Bernois",
     });
 
-    // this is a what is expected and should work
-    let server = Server::new().await;
+    // this is what is expected and should work
+    let server = Server::new_shared();
     let app = server.init_web_app().await;
     // post
     let document = serde_json::to_string(&document).unwrap();
@@ -187,8 +187,8 @@ async fn add_single_document_gzip_encoded() {
 async fn add_single_document_gzip_encoded_with_incomplete_error() {
     let document = json!("kefir");
 
-    // this is a what is expected and should work
-    let server = Server::new().await;
+    // this is what is expected and should work
+    let server = Server::new_shared();
     let app = server.init_web_app().await;
     // post
     let document = serde_json::to_string(&document).unwrap();
@@ -244,8 +244,8 @@ async fn add_single_document_with_every_encoding() {
         "content": "Bouvier Bernois",
     });
 
-    // this is a what is expected and should work
-    let server = Server::new().await;
+    // this is what is expected and should work
+    let server = Server::new_shared();
     let app = server.init_web_app().await;
     // post
     let document = serde_json::to_string(&document).unwrap();
@@ -518,7 +518,7 @@ async fn error_add_documents_test_bad_content_types() {
         }
     ]);
 
-    let server = Server::new().await;
+    let server = Server::new_shared();
     let app = server.init_web_app().await;
 
     // post
@@ -574,7 +574,7 @@ async fn error_add_documents_test_no_content_type() {
         }
     ]);
 
-    let server = Server::new().await;
+    let server = Server::new_shared();
     let app = server.init_web_app().await;
 
     // post
@@ -622,7 +622,7 @@ async fn error_add_documents_test_no_content_type() {
 async fn error_add_malformed_csv_documents() {
     let document = "id, content\n1234, hello, world\n12, hello world";
 
-    let server = Server::new().await;
+    let server = Server::new_shared();
     let app = server.init_web_app().await;
 
     // post
@@ -672,7 +672,7 @@ async fn error_add_malformed_csv_documents() {
 async fn error_add_malformed_json_documents() {
     let document = r#"[{"id": 1}, {id: 2}]"#;
 
-    let server = Server::new().await;
+    let server = Server::new_shared();
     let app = server.init_web_app().await;
 
     // post
@@ -768,7 +768,7 @@ async fn error_add_malformed_json_documents() {
 async fn error_add_malformed_ndjson_documents() {
     let document = "{\"id\": 1}\n{id: 2}";
 
-    let server = Server::new().await;
+    let server = Server::new_shared();
     let app = server.init_web_app().await;
 
     // post
@@ -818,7 +818,7 @@ async fn error_add_malformed_ndjson_documents() {
 async fn error_add_missing_payload_csv_documents() {
     let document = "";
 
-    let server = Server::new().await;
+    let server = Server::new_shared();
     let app = server.init_web_app().await;
 
     // post
@@ -868,7 +868,7 @@ async fn error_add_missing_payload_csv_documents() {
 async fn error_add_missing_payload_json_documents() {
     let document = "";
 
-    let server = Server::new().await;
+    let server = Server::new_shared();
     let app = server.init_web_app().await;
 
     // post
@@ -918,7 +918,7 @@ async fn error_add_missing_payload_json_documents() {
 async fn error_add_missing_payload_ndjson_documents() {
     let document = "";
 
-    let server = Server::new().await;
+    let server = Server::new_shared();
     let app = server.init_web_app().await;
 
     // post
