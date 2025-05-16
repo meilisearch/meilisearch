@@ -268,30 +268,25 @@ async fn streamed_chat(
     let _join_handle = Handle::current().spawn(async move {
         let client = Client::with_config(config.clone());
         let mut global_tool_calls = HashMap::<u32, Call>::new();
+        let mut finish_reason = None;
 
-        'main: loop {
+        'main: while finish_reason.map_or(true, |fr| fr == FinishReason::ToolCalls) {
             let mut response = client.chat().create_stream(chat_completion.clone()).await.unwrap();
             while let Some(result) = response.next().await {
                 match result {
                     Ok(resp) => {
-                        let delta = &resp.choices[0].delta;
+                        let choice = &resp.choices[0];
+                        finish_reason = choice.finish_reason;
+
                         #[allow(deprecated)]
                         let ChatCompletionStreamResponseDelta {
                             content,
                             // Using deprecated field but keeping for compatibility
                             function_call: _,
                             ref tool_calls,
-                            role,
+                            role: _,
                             refusal: _,
-                        } = delta;
-
-                        if content.as_ref().map_or(true, |s| s.is_empty())
-                            && tool_calls.is_none()
-                            && global_tool_calls.is_empty()
-                            && role.is_none()
-                        {
-                            break 'main;
-                        }
+                        } = &choice.delta;
 
                         if content.is_some() {
                             tx.send(Event::Data(sse::Data::new_json(&resp).unwrap())).await.unwrap()
@@ -409,6 +404,7 @@ async fn streamed_chat(
                     Err(err) => {
                         // writeln!(lock, "error: {err}").unwrap();
                         tracing::error!("{err:?}");
+                        break 'main;
                     }
                 }
             }

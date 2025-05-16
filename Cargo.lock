@@ -470,7 +470,7 @@ dependencies = [
 [[package]]
 name = "async-openai"
 version = "0.28.1"
-source = "git+https://github.com/meilisearch/async-openai?branch=optional-type-function#dd328d4c35ca24c30284c8aff616541ac82eb47a"
+source = "git+https://github.com/meilisearch/async-openai?branch=optional-type-function#603f1d17bb4530c45fb9a6e93294ab715a7af869"
 dependencies = [
  "async-openai-macros",
  "backoff",
@@ -495,7 +495,7 @@ dependencies = [
 [[package]]
 name = "async-openai-macros"
 version = "0.1.0"
-source = "git+https://github.com/meilisearch/async-openai?branch=optional-type-function#dd328d4c35ca24c30284c8aff616541ac82eb47a"
+source = "git+https://github.com/meilisearch/async-openai?branch=optional-type-function#603f1d17bb4530c45fb9a6e93294ab715a7af869"
 dependencies = [
  "proc-macro2",
  "quote",
