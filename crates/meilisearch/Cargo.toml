@@ -169,6 +169,7 @@ vietnamese = ["meilisearch-types/vietnamese"]
 swedish-recomposition = ["meilisearch-types/swedish-recomposition"]
 german = ["meilisearch-types/german"]
 turkish = ["meilisearch-types/turkish"]
+uds = [] # Unix Domain Socket
 
 [package.metadata.mini-dashboard]
 assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.2.19/build.zip"

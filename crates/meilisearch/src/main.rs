@@ -180,7 +180,8 @@ async fn run_http(
 
     if let Some(config) = opt_clone.get_ssl_config()? {
         http_server.bind_rustls_0_23(opt_clone.http_addr, config)?.run().await?;
-    } else if opt_clone.http_addr.starts_with("/") {
+    }
+    else if cfg!(feature = "uds") && opt_clone.http_addr.starts_with("/") {
         http_server.bind_uds(&opt_clone.http_addr)?.run().await?;
     } else {
         http_server.bind(&opt_clone.http_addr)?.run().await?;
@@ -193,7 +194,7 @@ fn print_launch_resume(opt: &Opt, analytics: Analytics, config_read_from: Option
 
     let protocol = if opt.ssl_cert_path.is_some() && opt.ssl_key_path.is_some() {
         "https"
-    } else if opt.http_addr.starts_with("/") {
+    } else if cfg!(feature = "uds") && opt.http_addr.starts_with("/") {
         "unix"
     } else {
         "http"
@@ -342,9 +343,10 @@ fn generated_master_key_message() -> String {
     )
 }
 
+#[cfg(feature = "uds")]
 #[cfg(test)]
 mod tests {
-    use http_client_unix_domain_socket::{ClientUnix, ErrorAndResponse, Method, StatusCode};
+    use http_client_unix_domain_socket::{ClientUnix, Method, StatusCode};
     use once_cell::sync::Lazy;
     use std::path::PathBuf;
     use std::time::Duration;
@@ -367,18 +369,17 @@ mod tests {
         let unix_domain_socket =
             dir.as_ref().join("meilisearch.sock").to_string_lossy().to_string();
 
-        let cargo_manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR")?);
+        let cargo_manifest_path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR")?);
 
-        let workspace_path = cargo_manifest_dir.join("../../target");
+        let workspace_path = cargo_manifest_path.join("../../target");
         let mut meilisearch_binary = workspace_path.join("debug").join("meilisearch");
-
         if !meilisearch_binary.exists() {
             meilisearch_binary = workspace_path.join("release").join("meilisearch");
         }
 
         assert!(
             meilisearch_binary.exists(),
-            "Cannot find neither debug nor release binary of 'meilisearch"
+            "Cannot find neither debug nor release binary of 'meilisearch'. This test needs it to run an UDS client against it!"
         );
 
         let mut meilisearch_process = Command::new(meilisearch_binary.into_os_string())
