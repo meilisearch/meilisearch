@@ -18,8 +18,8 @@ async fn add_documents_test_json_content_types() {
         }
     ]);
 
-    // this is a what is expected and should work
-    let server = Server::new().await;
+    // this is what is expected and should work
+    let server = Server::new_shared();
     let app = server.init_web_app().await;
 
     // post
@@ -75,8 +75,8 @@ async fn add_single_document_test_json_content_types() {
         "content": "Bouvier Bernois",
     });
 
-    // this is a what is expected and should work
-    let server = Server::new().await;
+    // this is what is expected and should work
+    let server = Server::new_shared();
     let app = server.init_web_app().await;
 
     // post
@@ -132,8 +132,8 @@ async fn add_single_document_gzip_encoded() {
         "content": "Bouvier Bernois",
     });
 
-    // this is a what is expected and should work
-    let server = Server::new().await;
+    // this is what is expected and should work
+    let server = Server::new_shared();
     let app = server.init_web_app().await;
     // post
     let document = serde_json::to_string(&document).unwrap();
@@ -187,8 +187,8 @@ async fn add_single_document_gzip_encoded() {
 async fn add_single_document_gzip_encoded_with_incomplete_error() {
     let document = json!("kefir");
 
-    // this is a what is expected and should work
-    let server = Server::new().await;
+    // this is what is expected and should work
+    let server = Server::new_shared();
     let app = server.init_web_app().await;
     // post
     let document = serde_json::to_string(&document).unwrap();
@@ -244,8 +244,8 @@ async fn add_single_document_with_every_encoding() {
         "content": "Bouvier Bernois",
     });
 
-    // this is a what is expected and should work
-    let server = Server::new().await;
+    // this is what is expected and should work
+    let server = Server::new_shared();
     let app = server.init_web_app().await;
     // post
     let document = serde_json::to_string(&document).unwrap();
@@ -518,7 +518,7 @@ async fn error_add_documents_test_bad_content_types() {
         }
     ]);
 
-    let server = Server::new().await;
+    let server = Server::new_shared();
     let app = server.init_web_app().await;
 
     // post
@@ -574,7 +574,7 @@ async fn error_add_documents_test_no_content_type() {
         }
     ]);
 
-    let server = Server::new().await;
+    let server = Server::new_shared();
     let app = server.init_web_app().await;
 
     // post
@@ -622,7 +622,7 @@ async fn error_add_documents_test_no_content_type() {
 async fn error_add_malformed_csv_documents() {
     let document = "id, content\n1234, hello, world\n12, hello world";
 
-    let server = Server::new().await;
+    let server = Server::new_shared();
     let app = server.init_web_app().await;
 
     // post
@@ -672,7 +672,7 @@ async fn error_add_malformed_csv_documents() {
 async fn error_add_malformed_json_documents() {
     let document = r#"[{"id": 1}, {id: 2}]"#;
 
-    let server = Server::new().await;
+    let server = Server::new_shared();
     let app = server.init_web_app().await;
 
     // post
@@ -768,7 +768,7 @@ async fn error_add_malformed_json_documents() {
 async fn error_add_malformed_ndjson_documents() {
     let document = "{\"id\": 1}\n{id: 2}";
 
-    let server = Server::new().await;
+    let server = Server::new_shared();
     let app = server.init_web_app().await;
 
     // post
@@ -818,7 +818,7 @@ async fn error_add_malformed_ndjson_documents() {
 async fn error_add_missing_payload_csv_documents() {
     let document = "";
 
-    let server = Server::new().await;
+    let server = Server::new_shared();
     let app = server.init_web_app().await;
 
     // post
@@ -868,7 +868,7 @@ async fn error_add_missing_payload_csv_documents() {
 async fn error_add_missing_payload_json_documents() {
     let document = "";
 
-    let server = Server::new().await;
+    let server = Server::new_shared();
     let app = server.init_web_app().await;
 
     // post
@@ -918,7 +918,7 @@ async fn error_add_missing_payload_json_documents() {
 async fn error_add_missing_payload_ndjson_documents() {
     let document = "";
 
-    let server = Server::new().await;
+    let server = Server::new_shared();
     let app = server.init_web_app().await;
 
     // post
@@ -1111,7 +1111,7 @@ async fn document_addition_with_huge_int_primary_key() {
     let (response, code) = index.add_documents(documents, Some("primary")).await;
     snapshot!(code, @"202 Accepted");
 
-    let response = index.wait_task(response.uid()).await;
+    let response = index.wait_task(response.uid()).await.succeeded();
     snapshot!(response,
         @r###"
     {
@@ -1568,7 +1568,7 @@ async fn error_document_field_limit_reached_over_multiple_documents() {
     let (response, code) = index.update_documents(documents, Some("id")).await;
     snapshot!(code, @"202 Accepted");
 
-    let response = index.wait_task(response.uid()).await;
+    let response = index.wait_task(response.uid()).await.succeeded();
     snapshot!(code, @"202 Accepted");
     snapshot!(response,
         @r###"
@@ -1603,7 +1603,7 @@ async fn error_document_field_limit_reached_over_multiple_documents() {
     let (response, code) = index.update_documents(documents, Some("id")).await;
     snapshot!(code, @"202 Accepted");
 
-    let response = index.wait_task(response.uid()).await;
+    let response = index.wait_task(response.uid()).await.failed();
     snapshot!(code, @"202 Accepted");
     snapshot!(response,
         @r###"
@@ -1652,7 +1652,7 @@ async fn error_document_field_limit_reached_in_one_nested_document() {
     let (response, code) = index.update_documents(documents, Some("id")).await;
     snapshot!(code, @"202 Accepted");
 
-    let response = index.wait_task(response.uid()).await;
+    let response = index.wait_task(response.uid()).await.succeeded();
     snapshot!(code, @"202 Accepted");
     // Documents without a primary key are not accepted.
     snapshot!(response,
@@ -1697,7 +1697,7 @@ async fn error_document_field_limit_reached_over_multiple_documents_with_nested_
     let (response, code) = index.update_documents(documents, Some("id")).await;
     snapshot!(code, @"202 Accepted");
 
-    let response = index.wait_task(response.uid()).await;
+    let response = index.wait_task(response.uid()).await.succeeded();
     snapshot!(code, @"202 Accepted");
     snapshot!(response,
         @r###"
@@ -1733,7 +1733,7 @@ async fn error_document_field_limit_reached_over_multiple_documents_with_nested_
     let (response, code) = index.update_documents(documents, Some("id")).await;
     snapshot!(code, @"202 Accepted");
 
-    let response = index.wait_task(response.uid()).await;
+    let response = index.wait_task(response.uid()).await.succeeded();
     snapshot!(code, @"202 Accepted");
     snapshot!(response,
         @r###"
@@ -1782,7 +1782,7 @@ async fn add_documents_with_geo_field() {
     ]);
 
     let (task, _status_code) = index.add_documents(documents, None).await;
-    let response = index.wait_task(task.uid()).await;
+    let response = index.wait_task(task.uid()).await.succeeded();
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
@@ -1906,7 +1906,7 @@ async fn update_documents_with_geo_field() {
     ]);
 
     let (task, _status_code) = index.add_documents(documents, None).await;
-    let response = index.wait_task(task.uid()).await;
+    let response = index.wait_task(task.uid()).await.succeeded();
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
@@ -1975,7 +1975,7 @@ async fn update_documents_with_geo_field() {
         }
     ]);
     let (task, _status_code) = index.update_documents(updated_documents, None).await;
-    let response = index.wait_task(task.uid()).await;
+    let response = index.wait_task(task.uid()).await.succeeded();
     snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
@@ -2913,7 +2913,7 @@ async fn batch_several_documents_addition() {
 
     // wait first batch of documents to finish
     futures::future::join_all(waiter).await;
-    index.wait_task(4).await;
+    index.wait_task(4).await.succeeded();
 
     // run a second completely failing batch
     documents[40] = json!({"title": "error", "desc": "error"});
@@ -2925,7 +2925,7 @@ async fn batch_several_documents_addition() {
     }
     // wait second batch of documents to finish
     futures::future::join_all(waiter).await;
-    index.wait_task(9).await;
+    index.wait_task(9).await.failed();
 
     let (response, _code) = index.filtered_tasks(&[], &["failed"], &[]).await;
 
