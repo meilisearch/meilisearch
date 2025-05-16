@@ -281,11 +281,14 @@ async fn streamed_chat(
                             // Using deprecated field but keeping for compatibility
                             function_call: _,
                             ref tool_calls,
-                            role: _,
+                            role,
                             refusal: _,
                         } = delta;
 
-                        if content.is_none() && tool_calls.is_none() && global_tool_calls.is_empty()
+                        if content.as_ref().map_or(true, |s| s.is_empty())
+                            && tool_calls.is_none()
+                            && global_tool_calls.is_empty()
+                            && role.is_none()
                         {
                             break 'main;
                         }
