@@ -18,7 +18,7 @@ async fn stats() {
 
     assert_eq!(code, 200);
     assert_eq!(response["numberOfDocuments"], 0);
-    assert!(response["isIndexing"] == false);
+    assert_eq!(response["isIndexing"], false);
     assert!(response["fieldDistribution"].as_object().unwrap().is_empty());
 
     let documents = json!([
@@ -42,7 +42,7 @@ async fn stats() {
 
     assert_eq!(code, 200);
     assert_eq!(response["numberOfDocuments"], 2);
-    assert!(response["isIndexing"] == false);
+    assert_eq!(response["isIndexing"], false);
     assert_eq!(response["fieldDistribution"]["id"], 2);
     assert_eq!(response["fieldDistribution"]["name"], 1);
     assert_eq!(response["fieldDistribution"]["age"], 1);
@@ -50,7 +50,7 @@ async fn stats() {
 
 #[actix_rt::test]
 async fn error_get_stats_unexisting_index() {
-    let index = shared_does_not_exists_index();
+    let index = shared_does_not_exists_index().await;
     let (response, code) = index.stats().await;
 
     let expected_response = json!({
