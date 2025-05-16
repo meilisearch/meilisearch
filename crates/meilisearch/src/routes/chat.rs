@@ -86,7 +86,9 @@ fn setup_search_tool(chat_completion: &mut CreateChatCompletionRequest, prompts:
                                 "description": prompts.search_index_uid_param,
                             },
                             "q": {
-                                "type": ["string", "null"],
+                                // Unfortunately, Mistral does not support an array of types, here.
+                                // "type": ["string", "null"],
+                                "type": "string",
                                 "description": prompts.search_q_param,
                             }
                         },
@@ -269,7 +271,6 @@ async fn streamed_chat(
 
         'main: loop {
             let mut response = client.chat().create_stream(chat_completion.clone()).await.unwrap();
-
             while let Some(result) = response.next().await {
                 match result {
                     Ok(resp) => {
@@ -306,12 +307,14 @@ async fn streamed_chat(
                                         function.as_ref().unwrap();
                                     global_tool_calls
                                         .entry(*index)
+                                        .and_modify(|call| {
+                                            call.append(arguments.as_ref().unwrap());
+                                        })
                                         .or_insert_with(|| Call {
                                             id: id.as_ref().unwrap().clone(),
                                             function_name: name.as_ref().unwrap().clone(),
                                             arguments: arguments.as_ref().unwrap().clone(),
-                                        })
-                                        .append(arguments.as_ref().unwrap());
+                                        });
                                 }
                             }
                             None if !global_tool_calls.is_empty() => {
@@ -322,7 +325,7 @@ async fn streamed_chat(
                                         .into_values()
                                         .map(|call| ChatCompletionMessageToolCall {
                                             id: call.id,
-                                            r#type: ChatCompletionToolType::Function,
+                                            r#type: Some(ChatCompletionToolType::Function),
                                             function: FunctionCall {
                                                 name: call.function_name,
                                                 arguments: call.arguments,
@@ -400,8 +403,9 @@ async fn streamed_chat(
                             None => (),
                         }
                     }
-                    Err(_err) => {
+                    Err(err) => {
                         // writeln!(lock, "error: {err}").unwrap();
+                        tracing::error!("{err:?}");
                     }
                 }
             }
