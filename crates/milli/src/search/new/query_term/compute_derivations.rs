@@ -131,10 +131,11 @@ fn find_one_two_typo_derivations(
 
     while let Some((derived_word, state)) = stream.next() {
         let derived_word = std::str::from_utf8(derived_word)?;
-        let derived_word_interned = word_interner.insert(derived_word.to_owned());
+        // No need to intern here
         // in the case the typo is on the first letter, we know the number of typo
         // is two
         if get_first(derived_word) != get_first(word) {
+            let derived_word_interned = word_interner.insert(derived_word.to_owned());
             let cf = visit(derived_word_interned, NumberOfTypos::Two)?;
             if cf.is_break() {
                 break;
@@ -146,12 +147,14 @@ fn find_one_two_typo_derivations(
             match d.to_u8() {
                 0 => (),
                 1 => {
+                    let derived_word_interned = word_interner.insert(derived_word.to_owned());
                     let cf = visit(derived_word_interned, NumberOfTypos::One)?;
                     if cf.is_break() {
                         break;
                     }
                 }
                 2 => {
+                    let derived_word_interned = word_interner.insert(derived_word.to_owned());
                     let cf = visit(derived_word_interned, NumberOfTypos::Two)?;
                     if cf.is_break() {
                         break;
