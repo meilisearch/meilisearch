@@ -119,6 +119,7 @@ actix-web-lab = { version = "0.24.1", default-features = false }
 [dev-dependencies]
 actix-rt = "2.10.0"
 brotli = "6.0.0"
+http-client-unix-domain-socket = { version = "0.1.1" }
 # fixed version due to format breakages in v1.40
 insta = { version = "=1.39.0", features = ["redactions"] }
 http-client-unix-domain-socket = { version = "0.1.1" }
