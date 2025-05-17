@@ -293,7 +293,9 @@ struct KeyMasks {
 
 impl KeyMasks {
     fn is_bitflag_authorized(&self, bitflags: u32) -> bool {
-        bitflags & self.bitflags == 0
+        Action::from_bits(bitflags)
+            .map(|flags| flags.difference(Action::from_bits(self.bitflags).unwrap_or(Action::empty())).is_empty())
+            .unwrap_or(false)
     }
 }
 
