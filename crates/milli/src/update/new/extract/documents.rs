@@ -45,6 +45,7 @@ impl<'extractor> Extractor<'extractor> for DocumentsExtractor<'_, '_> {
     ) -> Result<()> {
         let mut document_buffer = bumpalo::collections::Vec::new_in(&context.doc_alloc);
         let mut document_extractor_data = context.data.0.borrow_mut_or_yield();
+        let embedder_actions = &Default::default();
 
         for change in changes {
             let change = change?;
@@ -121,9 +122,11 @@ impl<'extractor> Extractor<'extractor> for DocumentsExtractor<'_, '_> {
                     let content = write_to_obkv(
                         &content,
                         vector_content.as_ref(),
+                        embedder_actions,
                         &mut new_fields_ids_map,
                         &mut document_buffer,
                     )?;
+
                     self.document_sender.uncompressed(docid, external_docid, content).unwrap();
                 }
                 DocumentChange::Insertion(insertion) => {
@@ -146,6 +149,7 @@ impl<'extractor> Extractor<'extractor> for DocumentsExtractor<'_, '_> {
                     let content = write_to_obkv(
                         &content,
                         inserted_vectors.as_ref(),
+                        embedder_actions,
                         &mut new_fields_ids_map,
                         &mut document_buffer,
                     )?;
