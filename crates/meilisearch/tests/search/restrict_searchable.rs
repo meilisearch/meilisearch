@@ -466,10 +466,19 @@ async fn nested_search_on_title_with_prefix_wildcard() {
     // Wildcard should match to 'details.' attribute
     index
         .search(
-            json!({"q": "Captain Marvel", "attributesToSearchOn": ["*.title"]}),
+            json!({"q": "Captain Marvel", "attributesToSearchOn": ["*.title"], "attributesToRetrieve": ["id"]}),
             |response, code| {
                 snapshot!(code, @"200 OK");
-                snapshot!(response["hits"].as_array().unwrap().len(), @"2");
+                snapshot!(json_string!(response["hits"]),
+                    @r###"
+                [
+                  {
+                    "id": "3"
+                  },
+                  {
+                    "id": "2"
+                  }
+                ]"###);
             },
         )
         .await;
