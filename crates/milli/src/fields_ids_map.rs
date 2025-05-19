@@ -115,7 +115,7 @@ impl MutFieldIdMapper for FieldsIdsMap {
         self.insert(name)
     }
     fn len(&mut self) -> usize {
-        FieldsIdsMap::len(self) as usize
+        FieldsIdsMap::len(self)
     }
 }
 
