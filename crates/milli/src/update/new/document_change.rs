@@ -37,6 +37,11 @@ pub struct Insertion<'doc> {
     new: Versions<'doc>,
 }
 
+pub struct SettingsChangeDocument<'doc> {
+    docid: DocumentId,
+    external_document_id: &'doc str,
+}
+
 impl<'doc> DocumentChange<'doc> {
     pub fn docid(&self) -> DocumentId {
         match &self {
@@ -302,5 +307,30 @@ impl<'doc> Update<'doc> {
                 embedders,
             )
         }
+    }
+}
+
+impl<'doc> SettingsChangeDocument<'doc> {
+    pub fn create(docid: DocumentId, external_document_id: &'doc str) -> Self {
+        Self { docid, external_document_id }
+    }
+
+    pub fn docid(&self) -> DocumentId {
+        self.docid
+    }
+
+    pub fn external_document_id(&self) -> &'doc str {
+        self.external_document_id
+    }
+
+    pub fn current<'a, Mapper: FieldIdMapper>(
+        &self,
+        rtxn: &'a RoTxn,
+        index: &'a Index,
+        mapper: &'a Mapper,
+    ) -> Result<DocumentFromDb<'a, Mapper>> {
+        Ok(DocumentFromDb::new(self.docid, rtxn, index, mapper)?.ok_or(
+            crate::error::UserError::UnknownInternalDocumentId { document_id: self.docid },
+        )?)
     }
 }
