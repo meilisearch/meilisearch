@@ -43,7 +43,7 @@ async fn error_get_unexisting_index() {
 
 #[actix_rt::test]
 async fn no_index_return_empty_list() {
-    let server = Server::new_shared();
+    let server = Server::new().await;
     let (response, code) = server.list_indexes(None, None).await;
     assert_eq!(code, 200);
     assert!(response["results"].is_array());
@@ -63,11 +63,11 @@ async fn list_multiple_indexes() {
     index_without_key.wait_task(response_without_key.uid()).await.succeeded();
     index_with_key.wait_task(response_with_key.uid()).await.succeeded();
 
-    let (response, code) = server.list_indexes(None, None).await;
+    let (response, code) = server.list_indexes(None, Some(1000)).await;
     assert_eq!(code, 200);
     assert!(response["results"].is_array());
     let arr = response["results"].as_array().unwrap();
-    assert_eq!(arr.len(), 2);
+    assert!(arr.len() >= 2, "Expected at least 2 indexes.");
     assert!(arr.iter().any(|entry| entry["uid"] == index_without_key.uid && entry["primaryKey"] == Value::Null));
     assert!(arr.iter().any(|entry| entry["uid"] == index_with_key.uid && entry["primaryKey"] == "key"));
 }
