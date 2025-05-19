@@ -35,6 +35,7 @@ pub fn extract_document_facets<'doc>(
             distinct_field,
         )
     };
+    let no_of_existing_fields = field_id_map.len();
 
     // extract the field if it is faceted (facet searchable, filterable, sortable)
     let mut extract_field = |name: &str, depth: perm_json_p::Depth, value: &Value| -> Result<()> {
@@ -44,7 +45,11 @@ pub fn extract_document_facets<'doc>(
 
                 Ok(())
             }
-            None => Err(UserError::AttributeLimitReached.into()),
+            None => Err(UserError::AttributeLimitReached {
+                document_id: None,
+                new_field_count: 1,
+                number_of_existing_field: no_of_existing_fields
+            }.into()),
         }
     };
 
@@ -108,7 +113,11 @@ pub fn extract_document_facets<'doc>(
                 let ((lat_fid, lat_meta), (lng_fid, lng_meta)) = field_id_map
                     .id_with_metadata_or_insert("_geo.lat")
                     .zip(field_id_map.id_with_metadata_or_insert("_geo.lng"))
-                    .ok_or(UserError::AttributeLimitReached)?;
+                    .ok_or(UserError::AttributeLimitReached {
+                        document_id: Some(external_document_id.to_string()),
+                        new_field_count: 2,
+                        number_of_existing_field: field_id_map.len()
+                    })?;
 
                 facet_fn(lat_fid, lat_meta, perm_json_p::Depth::OnBaseKey, &lat.into())?;
                 facet_fn(lng_fid, lng_meta, perm_json_p::Depth::OnBaseKey, &lng.into())?;
