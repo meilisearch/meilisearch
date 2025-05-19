@@ -52,6 +52,7 @@ pub use self::geo_sort::Strategy as GeoSortStrategy;
 use self::graph_based_ranking_rule::Words;
 use self::interner::Interned;
 use self::vector_sort::VectorSort;
+use crate::attribute_patterns::{match_pattern, PatternMatch};
 use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::index::PrefixSearch;
 use crate::localized_attributes_rules::LocalizedFieldIds;
@@ -137,7 +138,7 @@ impl<'ctx> SearchContext<'ctx> {
                 let matching_searchable_weights: Vec<_> = searchable_fields_weights
                     .iter()
                     .filter(|(name, _, _)| {
-                        Self::matches_wildcard_pattern(field_name, name)
+                        match_pattern(field_name, name) == PatternMatch::Match
                     })
                     .collect();
 
@@ -189,34 +190,6 @@ impl<'ctx> SearchContext<'ctx> {
         }
 
         Ok(())
-    }
-
-    fn matches_wildcard_pattern(wildcard_pattern: &str, name: &str) -> bool {
-        let wildcard_subfields: Vec<&str> = wildcard_pattern.split(".").collect();
-        let name_subfields: Vec<&str> = name.split(".").collect();
-
-        // Deep wildcard matches all attributes after ('**')
-        if !wildcard_subfields.is_empty() && wildcard_subfields.last() == Some(&"**") {
-            let prefix_len = wildcard_subfields.len() - 1;
-            if prefix_len > name_subfields.len() {
-                return false;
-            }
-
-            return wildcard_subfields[..prefix_len]
-                .iter()
-                .zip(name_subfields.iter())
-                .all(|(wc, sf)| *wc == "*" || *wc == *sf);
-        }
-
-        // Using single wildcard ('*') should match length (e.g. 'a.*.c' matches 'a.b.c')
-        // where '*' can match any single segment
-        if wildcard_subfields.len() != name_subfields.len() {
-            return false;
-        }
-
-        wildcard_subfields.iter()
-            .zip(name_subfields.iter())
-            .all(|(wc, sf)| *wc == "*" || *wc == *sf)
     }
 }
 

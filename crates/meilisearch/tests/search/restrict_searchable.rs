@@ -476,7 +476,7 @@ async fn nested_search_on_title_with_prefix_wildcard() {
 }
 
 #[actix_rt::test]
-async fn nested_search_on_title_with_suffix_wildcard() {
+async fn nested_search_with_suffix_wildcard() {
     let server = Server::new().await;
     let index = index_with_documents(&server, &NESTED_SEARCH_DOCUMENTS).await;
 
@@ -491,17 +491,11 @@ async fn nested_search_on_title_with_suffix_wildcard() {
             },
         )
         .await;
-}
 
-#[actix_rt::test]
-async fn nested_search_all_details_with_deep_wildcard() {
-    let server = Server::new().await;
-    let index = index_with_documents(&server, &NESTED_SEARCH_DOCUMENTS).await;
-
-    // Deep wildcard should match deeply nested attributes
+    // Should return 1 document (ids: 1)
     index
         .search(
-            json!({"q": "gold", "attributesToSearchOn": ["details.**"]}),
+            json!({"q": "gold", "attributesToSearchOn": ["details.*"]}),
             |response, code| {
                 snapshot!(code, @"200 OK");
                 snapshot!(response["hits"].as_array().unwrap().len(), @"1");
@@ -512,7 +506,7 @@ async fn nested_search_all_details_with_deep_wildcard() {
     // Should return 2 documents (ids: 1 and 2)
     index
         .search(
-            json!({"q": "true", "attributesToSearchOn": ["details.**"]}),
+            json!({"q": "true", "attributesToSearchOn": ["details.*"]}),
             |response, code| {
                 snapshot!(code, @"200 OK");
                 snapshot!(response["hits"].as_array().unwrap().len(), @"2");
@@ -522,7 +516,7 @@ async fn nested_search_all_details_with_deep_wildcard() {
 }
 
 #[actix_rt::test]
-async fn nested_search_all_details_restricted_set_with_any_wildcard() {
+async fn nested_search_on_title_restricted_set_with_suffix_wildcard() {
     let server = Server::new().await;
     let index = index_with_documents(&server, &NESTED_SEARCH_DOCUMENTS).await;
     let (task, _status_code) = index.update_settings_searchable_attributes(json!(["details.title"])).await;
@@ -531,16 +525,6 @@ async fn nested_search_all_details_restricted_set_with_any_wildcard() {
     index
         .search(
             json!({"q": "Captain Marvel", "attributesToSearchOn": ["details.*"]}),
-            |response, code| {
-                snapshot!(code, @"200 OK");
-                snapshot!(response["hits"].as_array().unwrap().len(), @"2");
-            },
-        )
-        .await;
-
-    index
-        .search(
-            json!({"q": "Captain Marvel", "attributesToSearchOn": ["details.**"]}),
             |response, code| {
                 snapshot!(code, @"200 OK");
                 snapshot!(response["hits"].as_array().unwrap().len(), @"2");
@@ -577,16 +561,6 @@ async fn nested_search_no_searchable_attribute_set_with_any_wildcard() {
         )
         .await;
 
-    index
-        .search(
-            json!({"q": "Captain Marvel", "attributesToSearchOn": ["unknown.**",]}),
-            |response, code| {
-                snapshot!(code, @"200 OK");
-                snapshot!(response["hits"].as_array().unwrap().len(), @"0");
-            },
-        )
-        .await;
-
     let (task, _status_code) = index.update_settings_searchable_attributes(json!(["*"])).await;
     index.wait_task(task.uid()).await.succeeded();
 
@@ -596,17 +570,6 @@ async fn nested_search_no_searchable_attribute_set_with_any_wildcard() {
             |response, code| {
                 snapshot!(code, @"200 OK");
                 snapshot!(response["hits"].as_array().unwrap().len(), @"2");
-            },
-        )
-        .await;
-
-    // We only match deep wild card at the end, otherwise we need to recursively match deep wildcards
-    index
-        .search(
-            json!({"q": "Captain Marvel", "attributesToSearchOn": ["unknown.**", "details.**"]}),
-            |response, code| {
-                snapshot!(code, @"200 OK");
-                snapshot!(response["hits"].as_array().unwrap().len(), @"3");
             },
         )
         .await;
@@ -646,14 +609,14 @@ async fn nested_prefix_search_on_details_with_suffix_wildcard() {
 }
 
 #[actix_rt::test]
-async fn nested_prefix_search_on_weaknesses_with_deep_wildcard() {
+async fn nested_prefix_search_on_weaknesses_with_suffix_wildcard() {
     let server = Server::new().await;
     let index = index_with_documents(&server, &NESTED_SEARCH_DOCUMENTS).await;
 
     // Deep wildcard search on nested weaknesses should return 2 documents (ids: 1 and 3)
     index
         .search(
-            json!({"q": "mag", "attributesToSearchOn": ["details.**"]}),
+            json!({"q": "mag", "attributesToSearchOn": ["details.*"]}),
             |response, code| {
                 snapshot!(code, @"200 OK");
                 snapshot!(response["hits"].as_array().unwrap().len(), @"2");
@@ -680,7 +643,7 @@ async fn nested_search_on_title_matching_strategy_all() {
 }
 
 #[actix_rt::test]
-async fn nested_attributes_ranking_rule_order_with_wildcard() {
+async fn nested_attributes_ranking_rule_order_with_prefix_wildcard() {
     let server = Server::new().await;
     let index = index_with_documents(&server, &NESTED_SEARCH_DOCUMENTS).await;
 
@@ -711,14 +674,14 @@ async fn nested_attributes_ranking_rule_order_with_wildcard() {
 }
 
 #[actix_rt::test]
-async fn nested_attributes_ranking_rule_order_with_deep_wildcard() {
+async fn nested_attributes_ranking_rule_order_with_suffix_wildcard() {
     let server = Server::new().await;
     let index = index_with_documents(&server, &NESTED_SEARCH_DOCUMENTS).await;
 
     // Document 3 should appear before documents 1 and 2
     index
         .search(
-            json!({"q": "Captain Marvel", "attributesToSearchOn": ["details.**"], "attributesToRetrieve": ["id"]}),
+            json!({"q": "Captain Marvel", "attributesToSearchOn": ["details.*"], "attributesToRetrieve": ["id"]}),
             |response, code| {
                 snapshot!(code, @"200 OK");
                 snapshot!(json_string!(response["hits"]),
