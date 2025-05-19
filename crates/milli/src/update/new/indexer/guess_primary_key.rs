@@ -52,8 +52,9 @@ pub fn retrieve_or_guess_primary_key<'a>(
                         return Some(Err(UserError::AttributeLimitReached {
                             document_id: None,
                             new_field_count: 1,
-                            number_of_existing_field: no_of_existing_fields
-                        }.into()));
+                            number_of_existing_field: no_of_existing_fields,
+                        }
+                        .into()));
                     };
                     name.to_lowercase().ends_with(DEFAULT_PRIMARY_KEY).then_some(Ok(name))
                 })

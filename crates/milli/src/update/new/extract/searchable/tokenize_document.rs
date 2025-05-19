@@ -36,8 +36,9 @@ impl DocumentTokenizer<'_> {
                 return Err(UserError::AttributeLimitReached {
                     document_id: None,
                     new_field_count: 1,
-                    number_of_existing_field: no_of_existing_fields
-                }.into());
+                    number_of_existing_field: no_of_existing_fields,
+                }
+                .into());
             };
 
             if meta.is_searchable() {

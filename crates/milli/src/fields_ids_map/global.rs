@@ -117,7 +117,7 @@ impl<'indexing> GlobalFieldsIdsMap<'indexing> {
 
         self.local.metadata(id)
     }
-    pub fn len(&mut self) -> usize{
+    pub fn len(&mut self) -> usize {
         self.local.names_ids.len() as usize
     }
 }

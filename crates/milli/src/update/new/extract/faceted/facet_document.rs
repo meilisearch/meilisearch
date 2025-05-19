@@ -48,8 +48,9 @@ pub fn extract_document_facets<'doc>(
             None => Err(UserError::AttributeLimitReached {
                 document_id: None,
                 new_field_count: 1,
-                number_of_existing_field: no_of_existing_fields
-            }.into()),
+                number_of_existing_field: no_of_existing_fields,
+            }
+            .into()),
         }
     };
 
@@ -116,7 +117,7 @@ pub fn extract_document_facets<'doc>(
                     .ok_or(UserError::AttributeLimitReached {
                         document_id: Some(external_document_id.to_string()),
                         new_field_count: 2,
-                        number_of_existing_field: field_id_map.len()
+                        number_of_existing_field: field_id_map.len(),
                     })?;
 
                 facet_fn(lat_fid, lat_meta, perm_json_p::Depth::OnBaseKey, &lat.into())?;

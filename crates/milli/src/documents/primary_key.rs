@@ -71,8 +71,12 @@ impl<'a> PrimaryKey<'a> {
         Ok(if path.contains(PRIMARY_KEY_SPLIT_SYMBOL) {
             Self::Nested { name: path }
         } else {
-                let number_of_existing_field = fields.len();
-            let field_id = fields.insert(path).ok_or(UserError::AttributeLimitReached{document_id: None, new_field_count: 1, number_of_existing_field:number_of_existing_field })?;
+            let number_of_existing_field = fields.len();
+            let field_id = fields.insert(path).ok_or(UserError::AttributeLimitReached {
+                document_id: None,
+                new_field_count: 1,
+                number_of_existing_field: number_of_existing_field,
+            })?;
             Self::Flat { name: path, field_id }
         })
     }

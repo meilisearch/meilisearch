@@ -796,7 +796,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                     fields_ids_map.insert(primary_key).ok_or(UserError::AttributeLimitReached {
                         document_id: None,
                         new_field_count: 1,
-                        number_of_existing_field: no_of_existing_fields
+                        number_of_existing_field: no_of_existing_fields,
                     })?;
                     self.index.put_fields_ids_map(self.wtxn, &fields_ids_map)?;
                     self.index.put_primary_key(self.wtxn, primary_key)?;
@@ -1567,7 +1567,7 @@ impl InnerIndexSettings {
                     .ok_or(UserError::AttributeLimitReached {
                         document_id: None,
                         new_field_count: 2,
-                        number_of_existing_field: no_of_existing_fields
+                        number_of_existing_field: no_of_existing_fields,
                     })?;
                 Some(field_ids)
             }
