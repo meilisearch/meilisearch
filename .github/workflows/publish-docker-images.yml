@@ -106,20 +106,20 @@ jobs:
           client-payload: '{ "meilisearch_version": "${{ github.ref_name }}", "stable": "${{ steps.check-tag-format.outputs.stable }}" }'
 
       # Send notification to Swarmia to notify of a deployment: https://app.swarmia.com
-      - name: 'Setup jq'
-        uses: dcarbone/install-jq-action
-      - name: Send deployment to Swarmia
-        if: github.event_name == 'push' && success()
-        run: |
-          JSON_STRING=$( jq --null-input --compact-output \
-          --arg version "${{ github.ref_name }}" \
-          --arg appName "meilisearch" \
-          --arg environment "production" \
-          --arg commitSha "${{ github.sha }}" \
-          --arg repositoryFullName "${{ github.repository }}" \
-          '{"version": $version, "appName": $appName, "environment": $environment, "commitSha": $commitSha, "repositoryFullName": $repositoryFullName}' )
+      # - name: 'Setup jq'
+      #   uses: dcarbone/install-jq-action
+      # - name: Send deployment to Swarmia
+      #   if: github.event_name == 'push' && success()
+      #   run: |
+      #     JSON_STRING=$( jq --null-input --compact-output \
+      #     --arg version "${{ github.ref_name }}" \
+      #     --arg appName "meilisearch" \
+      #     --arg environment "production" \
+      #     --arg commitSha "${{ github.sha }}" \
+      #     --arg repositoryFullName "${{ github.repository }}" \
+      #     '{"version": $version, "appName": $appName, "environment": $environment, "commitSha": $commitSha, "repositoryFullName": $repositoryFullName}' )
 
-          curl -H "Authorization: ${{ secrets.SWARMIA_DEPLOYMENTS_AUTHORIZATION }}" \
-            -H "Content-Type: application/json" \
-            -d "$JSON_STRING" \
-            https://hook.swarmia.com/deployments
+      #     curl -H "Authorization: ${{ secrets.SWARMIA_DEPLOYMENTS_AUTHORIZATION }}" \
+      #       -H "Content-Type: application/json" \
+      #       -d "$JSON_STRING" \
+      #       https://hook.swarmia.com/deployments
