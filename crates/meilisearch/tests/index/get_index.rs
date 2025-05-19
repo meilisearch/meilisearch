@@ -68,8 +68,12 @@ async fn list_multiple_indexes() {
     assert!(response["results"].is_array());
     let arr = response["results"].as_array().unwrap();
     assert!(arr.len() >= 2, "Expected at least 2 indexes.");
-    assert!(arr.iter().any(|entry| entry["uid"] == index_without_key.uid && entry["primaryKey"] == Value::Null));
-    assert!(arr.iter().any(|entry| entry["uid"] == index_with_key.uid && entry["primaryKey"] == "key"));
+    assert!(arr
+        .iter()
+        .any(|entry| entry["uid"] == index_without_key.uid && entry["primaryKey"] == Value::Null));
+    assert!(arr
+        .iter()
+        .any(|entry| entry["uid"] == index_with_key.uid && entry["primaryKey"] == "key"));
 }
 
 #[actix_rt::test]
