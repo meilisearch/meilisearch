@@ -114,12 +114,8 @@ impl IndexScheduler {
             auto_upgrade: true, // Don't cost much and will ensure the happy path works
             embedding_cache_cap: 10,
         };
-        let version = configuration(&mut options).unwrap_or_else(|| {
-            (
-                versioning::VERSION_MAJOR.parse().unwrap(),
-                versioning::VERSION_MINOR.parse().unwrap(),
-                versioning::VERSION_PATCH.parse().unwrap(),
-            )
+        let version = configuration(&mut options).unwrap_or({
+            (versioning::VERSION_MAJOR, versioning::VERSION_MINOR, versioning::VERSION_PATCH)
         });
 
         std::fs::create_dir_all(&options.auth_path).unwrap();

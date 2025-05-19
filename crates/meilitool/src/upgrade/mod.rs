@@ -49,15 +49,10 @@ impl OfflineUpgrade {
         const LAST_SUPPORTED_UPGRADE_TO_VERSION: &str = "1.12.7";
 
         let upgrade_list = [
-            (
-                v1_9_to_v1_10 as fn(&Path, u32, u32, u32) -> Result<(), anyhow::Error>,
-                "1",
-                "10",
-                "0",
-            ),
-            (v1_10_to_v1_11, "1", "11", "0"),
-            (v1_11_to_v1_12, "1", "12", "0"),
-            (v1_12_to_v1_12_3, "1", "12", "3"),
+            (v1_9_to_v1_10 as fn(&Path, u32, u32, u32) -> Result<(), anyhow::Error>, 1, 10, 0),
+            (v1_10_to_v1_11, 1, 11, 0),
+            (v1_11_to_v1_12, 1, 12, 0),
+            (v1_12_to_v1_12_3, 1, 12, 3),
         ];
 
         let no_upgrade: usize = upgrade_list.len();
@@ -95,13 +90,8 @@ impl OfflineUpgrade {
 
         if start_at == no_upgrade {
             println!("No upgrade operation to perform, writing VERSION file");
-            create_version_file(
-                &self.db_path,
-                &target_major.to_string(),
-                &target_minor.to_string(),
-                &target_patch.to_string(),
-            )
-            .context("while writing VERSION file after the upgrade")?;
+            create_version_file(&self.db_path, target_major, target_minor, target_patch)
+                .context("while writing VERSION file after the upgrade")?;
             println!("Success");
             return Ok(());
         }

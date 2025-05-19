@@ -74,6 +74,7 @@ make_enum_progress! {
 make_enum_progress! {
     pub enum TaskCancelationProgress {
         RetrievingTasks,
+        CancelingUpgrade,
         UpdatingTasks,
     }
 }

@@ -41,11 +41,8 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
     let mut snap = String::new();
 
     let indx_sched_version = version.get_version(&rtxn).unwrap();
-    let latest_version = (
-        versioning::VERSION_MAJOR.parse().unwrap(),
-        versioning::VERSION_MINOR.parse().unwrap(),
-        versioning::VERSION_PATCH.parse().unwrap(),
-    );
+    let latest_version =
+        (versioning::VERSION_MAJOR, versioning::VERSION_MINOR, versioning::VERSION_PATCH);
     if indx_sched_version != Some(latest_version) {
         snap.push_str(&format!("index scheduler running on version {indx_sched_version:?}\n"));
     }

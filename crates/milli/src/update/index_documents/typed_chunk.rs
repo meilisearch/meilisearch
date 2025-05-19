@@ -273,14 +273,11 @@ pub(crate) fn write_typed_chunk_into_index(
                     unreachable!();
                 };
                 let clonable_word_docids = unsafe { as_cloneable_grenad(&word_docids_reader) }?;
-                let clonable_exact_word_docids =
-                    unsafe { as_cloneable_grenad(&exact_word_docids_reader) }?;
 
                 word_docids_builder.push(word_docids_reader.into_cursor()?);
                 exact_word_docids_builder.push(exact_word_docids_reader.into_cursor()?);
                 word_fid_docids_builder.push(word_fid_docids_reader.into_cursor()?);
                 fst_merger_builder.push(clonable_word_docids.into_cursor()?);
-                fst_merger_builder.push(clonable_exact_word_docids.into_cursor()?);
             }
 
             let word_docids_merger = word_docids_builder.build();

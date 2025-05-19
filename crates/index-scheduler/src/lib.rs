@@ -398,9 +398,9 @@ impl IndexScheduler {
                         Ok(Ok(TickOutcome::StopProcessingForever)) => break,
                         Ok(Err(e)) => {
                             tracing::error!("{e}");
-                            // Wait one second when an irrecoverable error occurs.
+                            // Wait when an irrecoverable error occurs.
                             if !e.is_recoverable() {
-                                std::thread::sleep(Duration::from_secs(1));
+                                std::thread::sleep(Duration::from_secs(10));
                             }
                         }
                         Err(_panic) => {

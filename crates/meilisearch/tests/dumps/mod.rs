@@ -87,7 +87,8 @@ async fn import_dump_v1_movie_raw() {
           "twoTypos": 9
         },
         "disableOnWords": [],
-        "disableOnAttributes": []
+        "disableOnAttributes": [],
+        "disableOnNumbers": false
       },
       "faceting": {
         "maxValuesPerFacet": 100,
@@ -260,7 +261,8 @@ async fn import_dump_v1_movie_with_settings() {
           "twoTypos": 9
         },
         "disableOnWords": [],
-        "disableOnAttributes": []
+        "disableOnAttributes": [],
+        "disableOnNumbers": false
       },
       "faceting": {
         "maxValuesPerFacet": 100,
@@ -432,7 +434,8 @@ async fn import_dump_v1_rubygems_with_settings() {
           "twoTypos": 9
         },
         "disableOnWords": [],
-        "disableOnAttributes": []
+        "disableOnAttributes": [],
+        "disableOnNumbers": false
       },
       "faceting": {
         "maxValuesPerFacet": 100,
@@ -590,7 +593,8 @@ async fn import_dump_v2_movie_raw() {
           "twoTypos": 9
         },
         "disableOnWords": [],
-        "disableOnAttributes": []
+        "disableOnAttributes": [],
+        "disableOnNumbers": false
       },
       "faceting": {
         "maxValuesPerFacet": 100,
@@ -760,7 +764,8 @@ async fn import_dump_v2_movie_with_settings() {
           "twoTypos": 9
         },
         "disableOnWords": [],
-        "disableOnAttributes": []
+        "disableOnAttributes": [],
+        "disableOnNumbers": false
       },
       "faceting": {
         "maxValuesPerFacet": 100,
@@ -929,7 +934,8 @@ async fn import_dump_v2_rubygems_with_settings() {
           "twoTypos": 9
         },
         "disableOnWords": [],
-        "disableOnAttributes": []
+        "disableOnAttributes": [],
+        "disableOnNumbers": false
       },
       "faceting": {
         "maxValuesPerFacet": 100,
@@ -1087,7 +1093,8 @@ async fn import_dump_v3_movie_raw() {
           "twoTypos": 9
         },
         "disableOnWords": [],
-        "disableOnAttributes": []
+        "disableOnAttributes": [],
+        "disableOnNumbers": false
       },
       "faceting": {
         "maxValuesPerFacet": 100,
@@ -1257,7 +1264,8 @@ async fn import_dump_v3_movie_with_settings() {
           "twoTypos": 9
         },
         "disableOnWords": [],
-        "disableOnAttributes": []
+        "disableOnAttributes": [],
+        "disableOnNumbers": false
       },
       "faceting": {
         "maxValuesPerFacet": 100,
@@ -1426,7 +1434,8 @@ async fn import_dump_v3_rubygems_with_settings() {
           "twoTypos": 9
         },
         "disableOnWords": [],
-        "disableOnAttributes": []
+        "disableOnAttributes": [],
+        "disableOnNumbers": false
       },
       "faceting": {
         "maxValuesPerFacet": 100,
@@ -1584,7 +1593,8 @@ async fn import_dump_v4_movie_raw() {
           "twoTypos": 9
         },
         "disableOnWords": [],
-        "disableOnAttributes": []
+        "disableOnAttributes": [],
+        "disableOnNumbers": false
       },
       "faceting": {
         "maxValuesPerFacet": 100,
@@ -1754,7 +1764,8 @@ async fn import_dump_v4_movie_with_settings() {
           "twoTypos": 9
         },
         "disableOnWords": [],
-        "disableOnAttributes": []
+        "disableOnAttributes": [],
+        "disableOnNumbers": false
       },
       "faceting": {
         "maxValuesPerFacet": 100,
@@ -1923,7 +1934,8 @@ async fn import_dump_v4_rubygems_with_settings() {
           "twoTypos": 9
         },
         "disableOnWords": [],
-        "disableOnAttributes": []
+        "disableOnAttributes": [],
+        "disableOnNumbers": false
       },
       "faceting": {
         "maxValuesPerFacet": 100,
@@ -2212,7 +2224,8 @@ async fn import_dump_v6_containing_experimental_features() {
           "twoTypos": 9
         },
         "disableOnWords": [],
-        "disableOnAttributes": []
+        "disableOnAttributes": [],
+        "disableOnNumbers": false
       },
       "faceting": {
         "maxValuesPerFacet": 100,
@@ -2444,7 +2457,8 @@ async fn generate_and_import_dump_containing_vectors() {
           "twoTypos": 9
         },
         "disableOnWords": [],
-        "disableOnAttributes": []
+        "disableOnAttributes": [],
+        "disableOnNumbers": false
       },
       "faceting": {
         "maxValuesPerFacet": 100,

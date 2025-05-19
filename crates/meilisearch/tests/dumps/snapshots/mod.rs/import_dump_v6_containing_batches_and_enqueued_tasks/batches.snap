@@ -27,7 +27,7 @@ source: crates/meilisearch/tests/dumps/mod.rs
       "duration": "[date]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batcherStoppedBecause": "batched all enqueued tasks"
+      "batchCreationComplete": "batched all enqueued tasks"
     },
     {
       "uid": 1,
@@ -51,7 +51,7 @@ source: crates/meilisearch/tests/dumps/mod.rs
       "duration": "PT0.144827890S",
       "startedAt": "2025-02-04T10:15:21.275640274Z",
       "finishedAt": "2025-02-04T10:15:21.420468164Z",
-      "batcherStoppedBecause": "unspecified"
+      "batchCreationComplete": "unspecified"
     },
     {
       "uid": 0,
@@ -72,7 +72,7 @@ source: crates/meilisearch/tests/dumps/mod.rs
       "duration": "PT0.032902186S",
       "startedAt": "2025-02-04T10:14:43.559526162Z",
       "finishedAt": "2025-02-04T10:14:43.592428348Z",
-      "batcherStoppedBecause": "unspecified"
+      "batchCreationComplete": "unspecified"
     }
   ],
   "total": 3,

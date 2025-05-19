@@ -25,7 +25,7 @@ source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batcherStoppedBecause": "unspecified"
+      "batchCreationComplete": "unspecified"
     },
     {
       "uid": 0,
@@ -49,7 +49,7 @@ source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
       "duration": "PT0.111055654S",
       "startedAt": "2025-01-16T16:45:16.020248085Z",
       "finishedAt": "2025-01-16T16:45:16.131303739Z",
-      "batcherStoppedBecause": "unspecified"
+      "batchCreationComplete": "unspecified"
     }
   ],
   "total": 2,

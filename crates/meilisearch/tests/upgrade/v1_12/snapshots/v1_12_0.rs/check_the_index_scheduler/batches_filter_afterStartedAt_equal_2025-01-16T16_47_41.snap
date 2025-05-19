@@ -8,7 +8,7 @@ source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
       "progress": null,
       "details": {
         "upgradeFrom": "v1.12.0",
-        "upgradeTo": "v1.14.0"
+        "upgradeTo": "v1.15.0"
       },
       "stats": {
         "totalNbTasks": 1,
@@ -24,7 +24,7 @@ source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batcherStoppedBecause": "a batch of tasks of type `upgradeDatabase` cannot be batched with any other type of task"
+      "batchCreationComplete": "a batch of tasks of type `upgradeDatabase` cannot be batched with any other type of task"
     },
     {
       "uid": 23,
@@ -47,7 +47,7 @@ source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
       "duration": "PT0.004146631S",
       "startedAt": "2025-01-23T11:38:57.012591321Z",
       "finishedAt": "2025-01-23T11:38:57.016737952Z",
-      "batcherStoppedBecause": "unspecified"
+      "batchCreationComplete": "unspecified"
     },
     {
       "uid": 22,
@@ -71,7 +71,7 @@ source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
       "duration": "PT0.102738497S",
       "startedAt": "2025-01-23T11:36:22.551906856Z",
       "finishedAt": "2025-01-23T11:36:22.654645353Z",
-      "batcherStoppedBecause": "unspecified"
+      "batchCreationComplete": "unspecified"
     },
     {
       "uid": 21,
@@ -95,7 +95,7 @@ source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
       "duration": "PT0.005108474S",
       "startedAt": "2025-01-23T11:36:04.132670526Z",
       "finishedAt": "2025-01-23T11:36:04.137779Z",
-      "batcherStoppedBecause": "unspecified"
+      "batchCreationComplete": "unspecified"
     },
     {
       "uid": 20,
@@ -119,7 +119,7 @@ source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
       "duration": "PT0.027954894S",
       "startedAt": "2025-01-23T11:35:53.631082795Z",
       "finishedAt": "2025-01-23T11:35:53.659037689Z",
-      "batcherStoppedBecause": "unspecified"
+      "batchCreationComplete": "unspecified"
     },
     {
       "uid": 19,
@@ -142,7 +142,7 @@ source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
       "duration": "PT0.006903297S",
       "startedAt": "2025-01-20T11:50:52.874106134Z",
       "finishedAt": "2025-01-20T11:50:52.881009431Z",
-      "batcherStoppedBecause": "unspecified"
+      "batchCreationComplete": "unspecified"
     },
     {
       "uid": 18,
@@ -171,7 +171,7 @@ source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
       "duration": "PT0.000481257S",
       "startedAt": "2025-01-20T11:48:04.92820416Z",
       "finishedAt": "2025-01-20T11:48:04.928685417Z",
-      "batcherStoppedBecause": "unspecified"
+      "batchCreationComplete": "unspecified"
     },
     {
       "uid": 17,
@@ -194,7 +194,7 @@ source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
       "duration": "PT0.000407005S",
       "startedAt": "2025-01-20T11:47:53.509403957Z",
       "finishedAt": "2025-01-20T11:47:53.509810962Z",
-      "batcherStoppedBecause": "unspecified"
+      "batchCreationComplete": "unspecified"
     },
     {
       "uid": 16,
@@ -217,7 +217,7 @@ source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
       "duration": "PT0.000403716S",
       "startedAt": "2025-01-20T11:47:48.430653005Z",
       "finishedAt": "2025-01-20T11:47:48.431056721Z",
-      "batcherStoppedBecause": "unspecified"
+      "batchCreationComplete": "unspecified"
     },
     {
       "uid": 15,
@@ -240,7 +240,7 @@ source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
       "duration": "PT0.000417016S",
       "startedAt": "2025-01-20T11:47:42.429678617Z",
       "finishedAt": "2025-01-20T11:47:42.430095633Z",
-      "batcherStoppedBecause": "unspecified"
+      "batchCreationComplete": "unspecified"
     },
     {
       "uid": 14,
@@ -264,7 +264,7 @@ source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
       "duration": "PT12.086284842S",
       "startedAt": "2025-01-20T11:47:03.092181576Z",
       "finishedAt": "2025-01-20T11:47:15.178466418Z",
-      "batcherStoppedBecause": "unspecified"
+      "batchCreationComplete": "unspecified"
     },
     {
       "uid": 13,
@@ -296,7 +296,7 @@ source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
       "duration": "PT0.011506614S",
       "startedAt": "2025-01-16T17:18:43.29334923Z",
       "finishedAt": "2025-01-16T17:18:43.304855844Z",
-      "batcherStoppedBecause": "unspecified"
+      "batchCreationComplete": "unspecified"
     },
     {
       "uid": 12,
@@ -324,7 +324,7 @@ source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
       "duration": "PT0.007640163S",
       "startedAt": "2025-01-16T17:02:52.539749853Z",
       "finishedAt": "2025-01-16T17:02:52.547390016Z",
-      "batcherStoppedBecause": "unspecified"
+      "batchCreationComplete": "unspecified"
     },
     {
       "uid": 11,
@@ -347,7 +347,7 @@ source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
       "duration": "PT0.007307840S",
       "startedAt": "2025-01-16T17:01:14.112756687Z",
       "finishedAt": "2025-01-16T17:01:14.120064527Z",
-      "batcherStoppedBecause": "unspecified"
+      "batchCreationComplete": "unspecified"
     },
     {
       "uid": 10,
@@ -375,7 +375,7 @@ source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
       "duration": "PT0.007391353S",
       "startedAt": "2025-01-16T17:00:29.201180268Z",
       "finishedAt": "2025-01-16T17:00:29.208571621Z",
-      "batcherStoppedBecause": "unspecified"
+      "batchCreationComplete": "unspecified"
     },
     {
       "uid": 9,
@@ -403,7 +403,7 @@ source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
       "duration": "PT0.007445825S",
       "startedAt": "2025-01-16T17:00:15.77629445Z",
       "finishedAt": "2025-01-16T17:00:15.783740275Z",
-      "batcherStoppedBecause": "unspecified"
+      "batchCreationComplete": "unspecified"
     },
     {
       "uid": 8,
@@ -436,7 +436,7 @@ source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
       "duration": "PT0.012020083S",
       "startedAt": "2025-01-16T16:59:42.744086671Z",
       "finishedAt": "2025-01-16T16:59:42.756106754Z",
-      "batcherStoppedBecause": "unspecified"
+      "batchCreationComplete": "unspecified"
     },
     {
       "uid": 7,
@@ -463,7 +463,7 @@ source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
       "duration": "PT0.007440092S",
       "startedAt": "2025-01-16T16:58:41.2155771Z",
       "finishedAt": "2025-01-16T16:58:41.223017192Z",
-      "batcherStoppedBecause": "unspecified"
+      "batchCreationComplete": "unspecified"
     },
     {
       "uid": 6,
@@ -490,7 +490,7 @@ source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
       "duration": "PT0.007565161S",
       "startedAt": "2025-01-16T16:54:51.940332781Z",
       "finishedAt": "2025-01-16T16:54:51.947897942Z",
-      "batcherStoppedBecause": "unspecified"
+      "batchCreationComplete": "unspecified"
     },
     {
       "uid": 5,
@@ -516,7 +516,7 @@ source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
       "duration": "PT0.016307263S",
       "startedAt": "2025-01-16T16:53:19.913351957Z",
       "finishedAt": "2025-01-16T16:53:19.92965922Z",
-      "batcherStoppedBecause": "unspecified"
+      "batchCreationComplete": "unspecified"
     }
   ],
   "total": 23,
