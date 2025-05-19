@@ -7,15 +7,16 @@ use crate::json;
 
 #[actix_rt::test]
 async fn update_primary_key() {
-    let server = Server::new().await;
-    let index = server.index("test");
-    let (_, code) = index.create(None).await;
+    let server = Server::new_shared();
+    let index = server.unique_index();
+    let (task, code) = index.create(None).await;
 
     assert_eq!(code, 202);
+    index.wait_task(task.uid()).await.succeeded();
 
     let (task, _status_code) = index.update(Some("primary")).await;
 
-    let response = index.wait_task(task.uid()).await;
+    let response = index.wait_task(task.uid()).await.succeeded();
 
     assert_eq!(response["status"], "succeeded");
 
@@ -23,7 +24,7 @@ async fn update_primary_key() {
 
     assert_eq!(code, 200);
 
-    assert_eq!(response["uid"], "test");
+    assert_eq!(response["uid"], index.uid);
     assert!(response.get("createdAt").is_some());
     assert!(response.get("updatedAt").is_some());
 
@@ -39,24 +40,25 @@ async fn update_primary_key() {
 
 #[actix_rt::test]
 async fn create_and_update_with_different_encoding() {
-    let server = Server::new().await;
-    let index = server.index_with_encoder("test", Encoder::Gzip);
-    let (_, code) = index.create(None).await;
+    let server = Server::new_shared();
+    let index = server.unique_index_with_encoder(Encoder::Gzip);
+    let (create_task, code) = index.create(None).await;
 
     assert_eq!(code, 202);
+    index.wait_task(create_task.uid()).await.succeeded();
 
-    let index = server.index_with_encoder("test", Encoder::Brotli);
+    let index = index.with_encoder(Encoder::Brotli);
     let (task, _status_code) = index.update(Some("primary")).await;
 
-    let response = index.wait_task(task.uid()).await;
+    let response = index.wait_task(task.uid()).await.succeeded();
 
     assert_eq!(response["status"], "succeeded");
 }
 
 #[actix_rt::test]
 async fn update_nothing() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     let (task1, code) = index.create(None).await;
 
     assert_eq!(code, 202);
@@ -67,18 +69,19 @@ async fn update_nothing() {
 
     assert_eq!(code, 202);
 
-    let response = index.wait_task(task2.uid()).await;
+    let response = index.wait_task(task2.uid()).await.succeeded();
 
     assert_eq!(response["status"], "succeeded");
 }
 
 #[actix_rt::test]
 async fn error_update_existing_primary_key() {
-    let server = Server::new().await;
-    let index = server.index("test");
-    let (_response, code) = index.create(Some("id")).await;
+    let server = Server::new_shared();
+    let index = server.unique_index();
+    let (create_task, code) = index.create(Some("id")).await;
 
     assert_eq!(code, 202);
+    index.wait_task(create_task.uid()).await.succeeded();
 
     let documents = json!([
         {
@@ -86,16 +89,17 @@ async fn error_update_existing_primary_key() {
             "content": "foobar"
         }
     ]);
-    index.add_documents(documents, None).await;
+    let (add_docs_task, add_docs_status_code) = index.add_documents(documents, None).await;
+    assert_eq!(add_docs_status_code, 202);
+    index.wait_task(add_docs_task.uid()).await.succeeded();
 
-    let (task, code) = index.update(Some("primary")).await;
+    let (update_task, code) = index.update(Some("primary")).await;
 
     assert_eq!(code, 202);
-
-    let response = index.wait_task(task.uid()).await;
+    let response = index.wait_task(update_task.uid()).await.failed();
 
     let expected_response = json!({
-        "message": "Index `test`: Index already has a primary key: `id`.",
+        "message": format!("Index `{}`: Index already has a primary key: `id`.", index.uid),
         "code": "index_primary_key_already_exists",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#index_primary_key_already_exists"
@@ -106,15 +110,16 @@ async fn error_update_existing_primary_key() {
 
 #[actix_rt::test]
 async fn error_update_unexisting_index() {
-    let server = Server::new().await;
-    let (task, code) = server.index("test").update(None).await;
+    let server = Server::new_shared();
+    let index = server.unique_index();
+    let (task, code) = index.update(None).await;
 
     assert_eq!(code, 202);
 
-    let response = server.index("test").wait_task(task.uid()).await;
+    let response = index.wait_task(task.uid()).await.failed();
 
     let expected_response = json!({
-        "message": "Index `test` not found.",
+        "message": format!("Index `{}` not found.", index.uid),
         "code": "index_not_found",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#index_not_found"
