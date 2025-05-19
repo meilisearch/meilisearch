@@ -43,7 +43,7 @@ async fn error_get_unexisting_index() {
 
 #[actix_rt::test]
 async fn no_index_return_empty_list() {
-    let server = Server::new().await;
+    let server = Server::new_shared();
     let (response, code) = server.list_indexes(None, None).await;
     assert_eq!(code, 200);
     assert!(response["results"].is_array());
@@ -52,29 +52,39 @@ async fn no_index_return_empty_list() {
 
 #[actix_rt::test]
 async fn list_multiple_indexes() {
-    let server = Server::new().await;
-    server.index("test").create(None).await;
-    let (task, _status_code) = server.index("test1").create(Some("key")).await;
+    let server = Server::new_shared();
 
-    server.index("test").wait_task(task.uid()).await.succeeded();
+    let index_without_key = server.unique_index();
+    let (response_without_key, _status_code) = index_without_key.create(None).await;
+
+    let index_with_key = server.unique_index();
+    let (response_with_key, _status_code) = index_with_key.create(Some("key")).await;
+
+    index_without_key.wait_task(response_without_key.uid()).await.succeeded();
+    index_with_key.wait_task(response_with_key.uid()).await.succeeded();
 
     let (response, code) = server.list_indexes(None, None).await;
     assert_eq!(code, 200);
     assert!(response["results"].is_array());
     let arr = response["results"].as_array().unwrap();
     assert_eq!(arr.len(), 2);
-    assert!(arr.iter().any(|entry| entry["uid"] == "test" && entry["primaryKey"] == Value::Null));
-    assert!(arr.iter().any(|entry| entry["uid"] == "test1" && entry["primaryKey"] == "key"));
+    assert!(arr.iter().any(|entry| entry["uid"] == index_without_key.uid && entry["primaryKey"] == Value::Null));
+    assert!(arr.iter().any(|entry| entry["uid"] == index_with_key.uid && entry["primaryKey"] == "key"));
 }
 
 #[actix_rt::test]
 async fn get_and_paginate_indexes() {
-    let server = Server::new().await;
+    let server = Server::new_shared();
+
+    let mut indices_names = Vec::new();
     const NB_INDEXES: usize = 50;
-    for i in 0..NB_INDEXES {
-        server.index(format!("test_{i:02}")).create(None).await;
-        server.index(format!("test_{i:02}")).wait_task(i as u64).await;
+    for _ in 0..NB_INDEXES {
+        let index = server.unique_index();
+        indices_names.push(index.uid.clone());
+        let (response, _status_code) = index.create(None).await;
+        index.wait_task(response.uid()).await.succeeded();
     }
+    indices_names.sort();
 
     // basic
     let (response, code) = server.list_indexes(None, None).await;
@@ -87,7 +97,7 @@ async fn get_and_paginate_indexes() {
     assert_eq!(arr.len(), 20);
     // ensuring we get all the indexes in the alphabetical order
     assert!((0..20)
-        .map(|idx| format!("test_{idx:02}"))
+        .map(|idx| indices_names[idx].clone())
         .zip(arr)
         .all(|(expected, entry)| entry["uid"] == expected));
 
@@ -101,7 +111,7 @@ async fn get_and_paginate_indexes() {
     let arr = response["results"].as_array().unwrap();
     assert_eq!(arr.len(), 20);
     assert!((15..35)
-        .map(|idx| format!("test_{idx:02}"))
+        .map(|idx| indices_names[idx].clone())
         .zip(arr)
         .all(|(expected, entry)| entry["uid"] == expected));
 
@@ -115,7 +125,7 @@ async fn get_and_paginate_indexes() {
     let arr = response["results"].as_array().unwrap();
     assert_eq!(arr.len(), 5);
     assert!((45..50)
-        .map(|idx| format!("test_{idx:02}"))
+        .map(|idx| indices_names[idx].clone())
         .zip(arr)
         .all(|(expected, entry)| entry["uid"] == expected));
 
@@ -129,7 +139,7 @@ async fn get_and_paginate_indexes() {
     let arr = response["results"].as_array().unwrap();
     assert_eq!(arr.len(), 5);
     assert!((0..5)
-        .map(|idx| format!("test_{idx:02}"))
+        .map(|idx| indices_names[idx].clone())
         .zip(arr)
         .all(|(expected, entry)| entry["uid"] == expected));
 
@@ -143,7 +153,7 @@ async fn get_and_paginate_indexes() {
     let arr = response["results"].as_array().unwrap();
     assert_eq!(arr.len(), 40);
     assert!((0..40)
-        .map(|idx| format!("test_{idx:02}"))
+        .map(|idx| indices_names[idx].clone())
         .zip(arr)
         .all(|(expected, entry)| entry["uid"] == expected));
 
@@ -157,7 +167,7 @@ async fn get_and_paginate_indexes() {
     let arr = response["results"].as_array().unwrap();
     assert_eq!(arr.len(), 50);
     assert!((0..50)
-        .map(|idx| format!("test_{idx:02}"))
+        .map(|idx| indices_names[idx].clone())
         .zip(arr)
         .all(|(expected, entry)| entry["uid"] == expected));
 
@@ -171,7 +181,7 @@ async fn get_and_paginate_indexes() {
     let arr = response["results"].as_array().unwrap();
     assert_eq!(arr.len(), 10);
     assert!((20..30)
-        .map(|idx| format!("test_{idx:02}"))
+        .map(|idx| indices_names[idx].clone())
         .zip(arr)
         .all(|(expected, entry)| entry["uid"] == expected));
 }
