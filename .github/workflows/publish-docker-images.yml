@@ -107,7 +107,7 @@ jobs:
 
       # Send notification to Swarmia to notify of a deployment: https://app.swarmia.com
       - name: 'Setup jq'
-        uses: dcarbone/install-jq-action
+        uses: dcarbone/install-jq-action@v3
       - name: Send deployment to Swarmia
         if: github.event_name == 'push' && success()
         run: |
