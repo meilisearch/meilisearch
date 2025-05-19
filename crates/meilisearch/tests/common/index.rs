@@ -29,6 +29,10 @@ impl<'a> Index<'a, Owned> {
         }
     }
 
+    pub fn with_encoder(&self, encoder: Encoder) -> Index<'a, Owned> {
+        Index { uid: self.uid.clone(), service: self.service, encoder, marker: PhantomData }
+    }
+
     pub async fn load_test_set(&self) -> u64 {
         let url = format!("/indexes/{}/documents", urlencode(self.uid.as_ref()));
         let (response, code) = self
