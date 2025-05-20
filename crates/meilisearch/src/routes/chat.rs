@@ -42,7 +42,7 @@ use crate::search_queue::SearchQueue;
 const EMBEDDER_NAME: &str = "openai";
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.service(web::resource("").route(web::post().to(chat)));
+    cfg.service(web::resource("/completions").route(web::post().to(chat)));
 }
 
 /// Get a chat completion
