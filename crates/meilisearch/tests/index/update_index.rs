@@ -47,9 +47,7 @@ async fn create_and_update_with_different_encoding() {
     let index = index.with_encoder(Encoder::Brotli);
     let (task, _status_code) = index.update(Some("primary")).await;
 
-    let response = index.wait_task(task.uid()).await.succeeded();
-
-    assert_eq!(response["status"], "succeeded");
+    index.wait_task(task.uid()).await.succeeded();
 }
 
 #[actix_rt::test]
