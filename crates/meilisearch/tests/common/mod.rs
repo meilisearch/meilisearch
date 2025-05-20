@@ -264,6 +264,25 @@ pub static SCORE_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
     ])
 });
 
+pub async fn shared_index_with_score_documents() -> &'static Index<'static, Shared> {
+    static INDEX: OnceCell<Index<'static, Shared>> = OnceCell::const_new();
+    INDEX.get_or_init(|| async {
+        let server = Server::new_shared();
+        let index = server._index("SCORE_DOCUMENTS").to_shared();
+        let documents = SCORE_DOCUMENTS.clone();
+        let (response, _code) = index._add_documents(documents, None).await;
+        index.wait_task(response.uid()).await.succeeded();
+        let (response, _code) = index
+            ._update_settings(
+                json!({"filterableAttributes": ["id", "title"], "sortableAttributes": ["id", "title"]}),
+            )
+            .await;
+        index.wait_task(response.uid()).await.succeeded();
+        index
+    }).await
+}
+
+
 pub static NESTED_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
     json!([
         {
