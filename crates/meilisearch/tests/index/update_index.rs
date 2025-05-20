@@ -17,9 +17,6 @@ async fn update_primary_key() {
     let (task, _status_code) = index.update(Some("primary")).await;
 
     let response = index.wait_task(task.uid()).await.succeeded();
-
-    assert_eq!(response["status"], "succeeded");
-
     let (response, code) = index.get().await;
 
     assert_eq!(code, 200);
