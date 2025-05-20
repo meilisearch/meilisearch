@@ -64,9 +64,7 @@ async fn update_nothing() {
 
     assert_eq!(code, 202);
 
-    let response = index.wait_task(task2.uid()).await.succeeded();
-
-    assert_eq!(response["status"], "succeeded");
+    index.wait_task(task2.uid()).await.succeeded();
 }
 
 #[actix_rt::test]
