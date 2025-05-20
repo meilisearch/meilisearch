@@ -1536,7 +1536,7 @@ async fn error_document_field_limit_reached_in_one_document() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "A single index cannot have more than 65,535 unique fields across all documents.",
+        "message": "Adding the document with id None would add 1 new unique field to the index. The index already contained 65535 unique fields",
         "code": "max_fields_limit_exceeded",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#max_fields_limit_exceeded"
@@ -1619,7 +1619,7 @@ async fn error_document_field_limit_reached_over_multiple_documents() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "A single index cannot have more than 65,535 unique fields across all documents.",
+        "message": "Adding the document with id None would add 1 new unique field to the index. The index already contained 65535 unique fields",
         "code": "max_fields_limit_exceeded",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#max_fields_limit_exceeded"
