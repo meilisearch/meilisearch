@@ -398,18 +398,17 @@ async fn streamed_chat(
                                         return;
                                     }
 
-                                    let SearchInIndexParameters { index_uid, q } =
-                                        serde_json::from_str(&call.function.arguments).unwrap();
-
-                                    let result = process_search_request(
-                                        &index_scheduler,
-                                        auth_ctrl.clone(),
-                                        &search_queue,
-                                        &auth_token,
-                                        index_uid,
-                                        q,
-                                    )
-                                    .await;
+                                    let result = match serde_json::from_str(&call.function.arguments) {
+                                        Ok(SearchInIndexParameters { index_uid, q }) => process_search_request(
+                                            &index_scheduler,
+                                            auth_ctrl.clone(),
+                                            &search_queue,
+                                            &auth_token,
+                                            index_uid,
+                                            q,
+                                        ).await.map_err(|e| e.to_string()),
+                                        Err(err) => Err(err.to_string()),
+                                    };
 
                                     let is_error = result.is_err();
                                     let text = match result {
