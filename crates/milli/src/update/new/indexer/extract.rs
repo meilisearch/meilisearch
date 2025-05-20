@@ -12,12 +12,14 @@ use super::super::steps::IndexingStep;
 use super::super::thread_local::{FullySend, ThreadLocal};
 use super::super::FacetFieldIdsDelta;
 use super::document_changes::{extract, DocumentChanges, IndexingContext};
+use super::settings_changes::SettingsChangeDocuments;
 use crate::index::IndexEmbeddingConfig;
 use crate::progress::MergingWordCache;
 use crate::proximity::ProximityPrecision;
 use crate::update::new::extract::EmbeddingExtractor;
 use crate::update::new::merger::merge_and_send_rtree;
 use crate::update::new::{merge_and_send_docids, merge_and_send_facet_docids, FacetDatabases};
+use crate::update::settings::SettingsDelta;
 use crate::vector::EmbeddingConfigs;
 use crate::{Result, ThreadPoolNoAbort, ThreadPoolNoAbortBuilder};
 
@@ -310,6 +312,49 @@ where
     finished_extraction.store(true, std::sync::atomic::Ordering::Relaxed);
 
     Result::Ok((facet_field_ids_delta, index_embeddings))
+}
+
+pub(super) fn extract_all_settings_changes<'pl, 'extractor, SCD, MSP, SD>(
+    document_changes: &SCD,
+    indexing_context: IndexingContext<MSP>,
+    indexer_span: Span,
+    extractor_sender: ExtractorBbqueueSender,
+    settings_delta: &SD,
+    extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
+    finished_extraction: &AtomicBool,
+    field_distribution: &mut BTreeMap<String, u64>,
+    mut index_embeddings: Vec<IndexEmbeddingConfig>,
+    document_ids: &mut RoaringBitmap,
+    modified_docids: &mut RoaringBitmap,
+) -> Result<Vec<IndexEmbeddingConfig>>
+where
+    SCD: SettingsChangeDocuments<'pl>,
+    MSP: Fn() -> bool + Sync,
+    SD: SettingsDelta,
+{
+    let span =
+        tracing::trace_span!(target: "indexing::documents", parent: &indexer_span, "extract");
+    let _entered = span.enter();
+
+    update_database_documents(
+        document_changes,
+        indexing_context,
+        extractor_sender,
+        settings_delta,
+        extractor_allocs,
+    )?;
+
+    'vectors: {
+        // TODO: extract embeddings for settings changes
+        // extract embeddings from new embedders
+        // remove embeddings for embedders that are no longer in the settings
+        todo!()
+    }
+
+    indexing_context.progress.update_progress(IndexingStep::WaitingForDatabaseWrites);
+    finished_extraction.store(true, std::sync::atomic::Ordering::Relaxed);
+
+    Result::Ok(index_embeddings)
 }
 
 fn request_threads() -> &'static ThreadPoolNoAbort {

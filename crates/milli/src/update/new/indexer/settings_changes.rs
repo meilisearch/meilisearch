@@ -15,6 +15,7 @@ use crate::update::new::indexer::document_changes::DocumentChangeContext;
 use crate::update::new::parallel_iterator_ext::ParallelIteratorExt as _;
 use crate::update::new::steps::IndexingStep;
 use crate::update::new::thread_local::{FullySend, MostlySend, ThreadLocal};
+use crate::update::settings::SettingsDelta;
 use crate::update::GrenadParameters;
 use crate::{FieldsIdsMap, GlobalFieldsIdsMap, Index, InternalError, Result};
 

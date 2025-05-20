@@ -32,7 +32,7 @@ mod extract;
 mod guess_primary_key;
 mod partial_dump;
 mod post_processing;
-mod settings_changes;
+pub mod settings_changes;
 mod update_by_function;
 mod write;
 

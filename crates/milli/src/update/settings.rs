@@ -2179,6 +2179,17 @@ fn deserialize_sub_embedder(
     }
 }
 
+pub trait SettingsDelta {
+    fn new_embedding_configs(&self) -> &EmbeddingConfigs;
+    fn embedder_actions(&self) -> &BTreeMap<String, EmbedderAction>;
+}
+
+impl SettingsDelta for InnerIndexSettingsDiff {
+    fn embedder_actions(&self) -> &BTreeMap<String, EmbedderAction> {
+        &self.embedding_config_updates
+    }
+}
+
 #[cfg(test)]
 #[path = "test_settings.rs"]
 mod tests;

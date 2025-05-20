@@ -319,7 +319,7 @@ impl<'doc> SettingsChangeDocument<'doc> {
         self.docid
     }
 
-    pub fn external_document_id(&self) -> &'doc str {
+    pub fn external_docid(&self) -> &'doc str {
         self.external_document_id
     }
 
@@ -330,6 +330,18 @@ impl<'doc> SettingsChangeDocument<'doc> {
         mapper: &'a Mapper,
     ) -> Result<DocumentFromDb<'a, Mapper>> {
         Ok(DocumentFromDb::new(self.docid, rtxn, index, mapper)?.ok_or(
+            crate::error::UserError::UnknownInternalDocumentId { document_id: self.docid },
+        )?)
+    }
+
+    pub fn current_vectors<'a, Mapper: FieldIdMapper>(
+        &self,
+        rtxn: &'a RoTxn,
+        index: &'a Index,
+        mapper: &'a Mapper,
+        doc_alloc: &'a Bump,
+    ) -> Result<VectorDocumentFromDb<'a>> {
+        Ok(VectorDocumentFromDb::new(self.docid, index, rtxn, mapper, doc_alloc)?.ok_or(
             crate::error::UserError::UnknownInternalDocumentId { document_id: self.docid },
         )?)
     }
