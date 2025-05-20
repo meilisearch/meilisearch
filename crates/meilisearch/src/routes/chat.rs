@@ -400,13 +400,21 @@ async fn streamed_chat(
                         }
                     }
                     Err(err) => {
-                        // writeln!(lock, "error: {err}").unwrap();
                         tracing::error!("{err:?}");
+                        if let Err(SendError(_)) = tx.send(Event::Data(sse::Data::new_json(&json!({
+                            "object": "chat.completion.error",
+                            "tool": err.to_string(),
+                        })).unwrap())).await {
+                            return;
+                        }
+
                         break 'main;
                     }
                 }
             }
         }
+
+        let _ = tx.send(Event::Data(sse::Data::new("[DONE]")));
     });
 
     Sse::from_infallible_receiver(rx).with_retry_duration(Duration::from_secs(10))
