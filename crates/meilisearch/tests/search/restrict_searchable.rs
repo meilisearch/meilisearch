@@ -493,10 +493,22 @@ async fn nested_search_with_suffix_wildcard() {
     // It's worth noting the difference between 'details.*' and '*.title'
     index
         .search(
-            json!({"q": "Captain Marvel", "attributesToSearchOn": ["details.*"]}),
+            json!({"q": "Captain Marvel", "attributesToSearchOn": ["details.*"], "attributesToRetrieve": ["id"]}),
             |response, code| {
                 snapshot!(code, @"200 OK");
-                snapshot!(response["hits"].as_array().unwrap().len(), @"3");
+                snapshot!(json_string!(response["hits"]),
+                    @r###"
+                [
+                  {
+                    "id": "3"
+                  },
+                  {
+                    "id": "1"
+                  },
+                  {
+                    "id": "2"
+                  }
+                ]"###);
             },
         )
         .await;
@@ -504,10 +516,16 @@ async fn nested_search_with_suffix_wildcard() {
     // Should return 1 document (ids: 1)
     index
         .search(
-            json!({"q": "gold", "attributesToSearchOn": ["details.*"]}),
+            json!({"q": "gold", "attributesToSearchOn": ["details.*"], "attributesToRetrieve": ["id"]}),
             |response, code| {
                 snapshot!(code, @"200 OK");
-                snapshot!(response["hits"].as_array().unwrap().len(), @"1");
+                snapshot!(json_string!(response["hits"]),
+                    @r###"
+                [
+                  {
+                    "id": "1"
+                  }
+                ]"###);
             },
         )
         .await;
@@ -515,10 +533,19 @@ async fn nested_search_with_suffix_wildcard() {
     // Should return 2 documents (ids: 1 and 2)
     index
         .search(
-            json!({"q": "true", "attributesToSearchOn": ["details.*"]}),
+            json!({"q": "true", "attributesToSearchOn": ["details.*"], "attributesToRetrieve": ["id"]}),
             |response, code| {
                 snapshot!(code, @"200 OK");
-                snapshot!(response["hits"].as_array().unwrap().len(), @"2");
+                snapshot!(json_string!(response["hits"]),
+                    @r###"
+                [
+                  {
+                    "id": "1"
+                  },
+                  {
+                    "id": "2"
+                  }
+                ]"###);
             },
         )
         .await;
@@ -533,10 +560,19 @@ async fn nested_search_on_title_restricted_set_with_suffix_wildcard() {
 
     index
         .search(
-            json!({"q": "Captain Marvel", "attributesToSearchOn": ["details.*"]}),
+            json!({"q": "Captain Marvel", "attributesToSearchOn": ["details.*"], "attributesToRetrieve": ["id"]}),
             |response, code| {
                 snapshot!(code, @"200 OK");
-                snapshot!(response["hits"].as_array().unwrap().len(), @"2");
+                snapshot!(json_string!(response["hits"]),
+                    @r###"
+                [
+                  {
+                    "id": "3"
+                  },
+                  {
+                    "id": "2"
+                  }
+                ]"###);
             },
         )
         .await;
@@ -575,10 +611,19 @@ async fn nested_search_no_searchable_attribute_set_with_any_wildcard() {
 
     index
         .search(
-            json!({"q": "Captain Marvel", "attributesToSearchOn": ["unknown.*", "*.unknown", "*.title"]}),
+            json!({"q": "Captain Marvel", "attributesToSearchOn": ["unknown.*", "*.unknown", "*.title"], "attributesToRetrieve": ["id"]}),
             |response, code| {
                 snapshot!(code, @"200 OK");
-                snapshot!(response["hits"].as_array().unwrap().len(), @"2");
+                snapshot!(json_string!(response["hits"]),
+                    @r###"
+                [
+                  {
+                    "id": "3"
+                  },
+                  {
+                    "id": "2"
+                  }
+                ]"###);
             },
         )
         .await;
@@ -589,13 +634,22 @@ async fn nested_prefix_search_on_title_with_prefix_wildcard() {
     let server = Server::new().await;
     let index = index_with_documents(&server, &NESTED_SEARCH_DOCUMENTS).await;
 
-    // Nested prefix search with wildcard prefix should return 2 documents (ids: 2 and 3).
+    // Nested prefix search with prefix wildcard should return 2 documents (ids: 2 and 3).
     index
         .search(
-            json!({"q": "Captain Mar", "attributesToSearchOn": ["*.title"]}),
+            json!({"q": "Captain Mar", "attributesToSearchOn": ["*.title"], "attributesToRetrieve": ["id"]}),
             |response, code| {
                 snapshot!(code, @"200 OK");
-                snapshot!(response["hits"].as_array().unwrap().len(), @"2");
+                snapshot!(json_string!(response["hits"]),
+                    @r###"
+                [
+                  {
+                    "id": "3"
+                  },
+                  {
+                    "id": "2"
+                  }
+                ]"###);
             },
         )
         .await;
@@ -608,10 +662,22 @@ async fn nested_prefix_search_on_details_with_suffix_wildcard() {
 
     index
         .search(
-            json!({"q": "Captain Mar", "attributesToSearchOn": ["details.*"]}),
+            json!({"q": "Captain Mar", "attributesToSearchOn": ["details.*"], "attributesToRetrieve": ["id"]}),
             |response, code| {
                 snapshot!(code, @"200 OK");
-                snapshot!(response["hits"].as_array().unwrap().len(), @"3");
+                snapshot!(json_string!(response["hits"]),
+                    @r###"
+                [
+                  {
+                    "id": "3"
+                  },
+                  {
+                    "id": "1"
+                  },
+                  {
+                    "id": "2"
+                  }
+                ]"###);
             },
         )
         .await;
@@ -622,13 +688,22 @@ async fn nested_prefix_search_on_weaknesses_with_suffix_wildcard() {
     let server = Server::new().await;
     let index = index_with_documents(&server, &NESTED_SEARCH_DOCUMENTS).await;
 
-    // Deep wildcard search on nested weaknesses should return 2 documents (ids: 1 and 3)
+    // Wildcard search on nested weaknesses should return 2 documents (ids: 1 and 3)
     index
         .search(
-            json!({"q": "mag", "attributesToSearchOn": ["details.*"]}),
+            json!({"q": "mag", "attributesToSearchOn": ["details.*"], "attributesToRetrieve": ["id"]}),
             |response, code| {
                 snapshot!(code, @"200 OK");
-                snapshot!(response["hits"].as_array().unwrap().len(), @"2");
+                snapshot!(json_string!(response["hits"]),
+                    @r###"
+                [
+                  {
+                    "id": "1"
+                  },
+                  {
+                    "id": "3"
+                  }
+                ]"###);
             },
         )
         .await;
@@ -642,10 +717,16 @@ async fn nested_search_on_title_matching_strategy_all() {
     // Nested search matching strategy all should only return 1 document (ids: 3)
     index
         .search(
-            json!({"q": "Captain Marvel", "attributesToSearchOn": ["*.title"], "matchingStrategy": "all"}),
+            json!({"q": "Captain Marvel", "attributesToSearchOn": ["*.title"], "matchingStrategy": "all", "attributesToRetrieve": ["id"]}),
             |response, code| {
                 snapshot!(code, @"200 OK");
-                snapshot!(response["hits"].as_array().unwrap().len(), @"1");
+                snapshot!(json_string!(response["hits"]),
+                    @r###"
+                [
+                  {
+                    "id": "3"
+                  }
+                ]"###);
             },
         )
         .await;
