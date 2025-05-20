@@ -299,8 +299,8 @@ pub mod policies {
             auth: &AuthController,
             token: &str,
         ) -> Result<TenantTokenOutcome, AuthError> {
-            // Only search action can be accessed by a tenant token.
-            if A != actions::SEARCH {
+            // Only search and chat actions can be accessed by a tenant token.
+            if A != actions::SEARCH && A != actions::CHAT {
                 return Ok(TenantTokenOutcome::NotATenantToken);
             }
 
