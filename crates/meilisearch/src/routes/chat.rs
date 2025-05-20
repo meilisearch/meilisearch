@@ -47,7 +47,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 
 /// Get a chat completion
 async fn chat(
-    index_scheduler: GuardedData<ActionPolicy<{ actions::CHAT_GET }>, Data<IndexScheduler>>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::CHAT }>, Data<IndexScheduler>>,
     search_queue: web::Data<SearchQueue>,
     web::Json(chat_completion): web::Json<CreateChatCompletionRequest>,
 ) -> impl Responder {
@@ -114,7 +114,7 @@ fn setup_search_tool(chat_completion: &mut CreateChatCompletionRequest, prompts:
 
 /// Process search request and return formatted results
 async fn process_search_request(
-    index_scheduler: &GuardedData<ActionPolicy<{ actions::CHAT_GET }>, Data<IndexScheduler>>,
+    index_scheduler: &GuardedData<ActionPolicy<{ actions::CHAT }>, Data<IndexScheduler>>,
     search_queue: &web::Data<SearchQueue>,
     index_uid: String,
     q: Option<String>,
@@ -175,7 +175,7 @@ async fn process_search_request(
 }
 
 async fn non_streamed_chat(
-    index_scheduler: GuardedData<ActionPolicy<{ actions::CHAT_GET }>, Data<IndexScheduler>>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::CHAT }>, Data<IndexScheduler>>,
     search_queue: web::Data<SearchQueue>,
     mut chat_completion: CreateChatCompletionRequest,
 ) -> Result<HttpResponse, ResponseError> {
@@ -245,7 +245,7 @@ async fn non_streamed_chat(
 }
 
 async fn streamed_chat(
-    index_scheduler: GuardedData<ActionPolicy<{ actions::CHAT_GET }>, Data<IndexScheduler>>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::CHAT }>, Data<IndexScheduler>>,
     search_queue: web::Data<SearchQueue>,
     mut chat_completion: CreateChatCompletionRequest,
 ) -> impl Responder {

@@ -158,6 +158,21 @@ impl Key {
             updated_at: now,
         }
     }
+
+    pub fn default_chat() -> Self {
+        let now = OffsetDateTime::now_utc();
+        let uid = Uuid::new_v4();
+        Self {
+            name: Some("Default Chat API Key".to_string()),
+            description: Some("Use it to chat and search from the frontend".to_string()),
+            uid,
+            actions: vec![Action::Chat, Action::Search],
+            indexes: vec![IndexUidPattern::all()],
+            expires_at: None,
+            created_at: now,
+            updated_at: now,
+        }
+    }
 }
 
 fn parse_expiration_date(
@@ -310,7 +325,7 @@ pub enum Action {
     NetworkUpdate,
     #[serde(rename = "chat.get")]
     #[deserr(rename = "chat.get")]
-    ChatGet,
+    Chat,
     #[serde(rename = "chatSettings.get")]
     #[deserr(rename = "chatSettings.get")]
     ChatSettingsGet,
@@ -358,7 +373,7 @@ impl Action {
             EXPERIMENTAL_FEATURES_UPDATE => Some(Self::ExperimentalFeaturesUpdate),
             NETWORK_GET => Some(Self::NetworkGet),
             NETWORK_UPDATE => Some(Self::NetworkUpdate),
-            CHAT_GET => Some(Self::ChatGet),
+            CHAT => Some(Self::Chat),
             _otherwise => None,
         }
     }
@@ -408,7 +423,7 @@ pub mod actions {
     pub const NETWORK_GET: u8 = NetworkGet.repr();
     pub const NETWORK_UPDATE: u8 = NetworkUpdate.repr();
 
-    pub const CHAT_GET: u8 = ChatGet.repr();
+    pub const CHAT: u8 = Chat.repr();
     pub const CHAT_SETTINGS_GET: u8 = ChatSettingsGet.repr();
     pub const CHAT_SETTINGS_UPDATE: u8 = ChatSettingsUpdate.repr();
 }
