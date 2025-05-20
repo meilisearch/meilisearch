@@ -4,6 +4,7 @@ use std::marker::PhantomData;
 use std::ops::Deref;
 use std::pin::Pin;
 
+use actix_web::http::header::AUTHORIZATION;
 use actix_web::web::Data;
 use actix_web::FromRequest;
 pub use error::AuthenticationError;
@@ -94,33 +95,41 @@ impl<P: Policy + 'static, D: 'static + Clone> FromRequest for GuardedData<P, D> 
         _payload: &mut actix_web::dev::Payload,
     ) -> Self::Future {
         match req.app_data::<Data<AuthController>>().cloned() {
-            Some(auth) => match req
-                .headers()
-                .get("Authorization")
-                .map(|type_token| type_token.to_str().unwrap_or_default().splitn(2, ' '))
-            {
-                Some(mut type_token) => match type_token.next() {
-                    Some("Bearer") => {
-                        // TODO: find a less hardcoded way?
-                        let index = req.match_info().get("index_uid");
-                        match type_token.next() {
-                            Some(token) => Box::pin(Self::auth_bearer(
-                                auth,
-                                token.to_string(),
-                                index.map(String::from),
-                                req.app_data::<D>().cloned(),
-                            )),
-                            None => Box::pin(err(AuthenticationError::InvalidToken.into())),
-                        }
-                    }
-                    _otherwise => {
-                        Box::pin(err(AuthenticationError::MissingAuthorizationHeader.into()))
-                    }
-                },
-                None => Box::pin(Self::auth_token(auth, req.app_data::<D>().cloned())),
+            Some(auth) => match extract_token_from_request(req) {
+                Ok(Some(token)) => {
+                    // TODO: find a less hardcoded way?
+                    let index = req.match_info().get("index_uid");
+                    Box::pin(Self::auth_bearer(
+                        auth,
+                        token.to_string(),
+                        index.map(String::from),
+                        req.app_data::<D>().cloned(),
+                    ))
+                }
+                Ok(None) => Box::pin(Self::auth_token(auth, req.app_data::<D>().cloned())),
+                Err(e) => Box::pin(err(e.into())),
             },
             None => Box::pin(err(AuthenticationError::IrretrievableState.into())),
         }
+    }
+}
+
+pub fn extract_token_from_request(
+    req: &actix_web::HttpRequest,
+) -> Result<Option<&str>, AuthenticationError> {
+    match req
+        .headers()
+        .get(AUTHORIZATION)
+        .map(|type_token| type_token.to_str().unwrap_or_default().splitn(2, ' '))
+    {
+        Some(mut type_token) => match type_token.next() {
+            Some("Bearer") => match type_token.next() {
+                Some(token) => Ok(Some(token)),
+                None => Err(AuthenticationError::InvalidToken),
+            },
+            _otherwise => Err(AuthenticationError::MissingAuthorizationHeader),
+        },
+        None => Ok(None),
     }
 }
 
