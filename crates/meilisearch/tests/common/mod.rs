@@ -282,7 +282,6 @@ pub async fn shared_index_with_score_documents() -> &'static Index<'static, Shar
     }).await
 }
 
-
 pub static NESTED_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
     json!([
         {
