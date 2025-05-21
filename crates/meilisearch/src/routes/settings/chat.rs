@@ -24,10 +24,11 @@ async fn get_settings(
         Data<IndexScheduler>,
     >,
 ) -> Result<HttpResponse, ResponseError> {
-    let settings = match index_scheduler.chat_settings()? {
+    let mut settings = match index_scheduler.chat_settings()? {
         Some(value) => serde_json::from_value(value).unwrap(),
         None => GlobalChatSettings::default(),
     };
+    settings.hide_secrets();
     Ok(HttpResponse::Ok().json(settings))
 }
 
@@ -78,6 +79,33 @@ pub struct GlobalChatSettings {
     pub api_key: Setting<String>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     pub prompts: Setting<ChatPrompts>,
+}
+
+impl GlobalChatSettings {
+    pub fn hide_secrets(&mut self) {
+        match &mut self.api_key {
+            Setting::Set(key) => Self::hide_secret(key),
+            Setting::Reset => (),
+            Setting::NotSet => (),
+        }
+    }
+
+    fn hide_secret(secret: &mut String) {
+        match secret.len() {
+            x if x < 10 => {
+                secret.replace_range(.., "XXX...");
+            }
+            x if x < 20 => {
+                secret.replace_range(2.., "XXXX...");
+            }
+            x if x < 30 => {
+                secret.replace_range(3.., "XXXXX...");
+            }
+            _x => {
+                secret.replace_range(5.., "XXXXXX...");
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
