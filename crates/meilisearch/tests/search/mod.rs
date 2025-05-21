@@ -110,8 +110,8 @@ async fn simple_search() {
 /// See <https://github.com/meilisearch/meilisearch/issues/5547>
 #[actix_rt::test]
 async fn bug_5547() {
-    let server = Server::new().await;
-    let index = server.index("big_fst");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     let (response, _code) = index.create(None).await;
     index.wait_task(response.uid()).await.succeeded();
 
@@ -130,8 +130,8 @@ async fn bug_5547() {
 #[actix_rt::test]
 async fn search_with_stop_word() {
     // related to https://github.com/meilisearch/meilisearch/issues/4984
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (_, code) = index
         .update_settings(json!({"stopWords": ["the", "The", "a", "an", "to", "in", "of"]}))
@@ -195,8 +195,8 @@ async fn search_with_stop_word() {
 #[actix_rt::test]
 async fn search_with_typo_settings() {
     // related to https://github.com/meilisearch/meilisearch/issues/5240
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (_, code) = index
         .update_settings(json!({"typoTolerance": { "disableOnAttributes": ["title", "id"]}}))
@@ -229,8 +229,8 @@ async fn search_with_typo_settings() {
 #[actix_rt::test]
 async fn phrase_search_with_stop_word() {
     // related to https://github.com/meilisearch/meilisearch/issues/3521
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (_, code) = index.update_settings(json!({"stopWords": ["the", "of"]})).await;
     snapshot!(code, @"202 Accepted");
@@ -312,8 +312,8 @@ async fn non_negative_search() {
 
 #[actix_rt::test]
 async fn negative_special_cases_search() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let documents = DOCUMENTS.clone();
     let (task, _status_code) = index.add_documents(documents, None).await;
@@ -338,8 +338,8 @@ async fn negative_special_cases_search() {
 #[cfg(not(feature = "chinese-pinyin"))]
 #[actix_rt::test]
 async fn test_kanji_language_detection() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let documents = json!([
         { "id": 0, "title": "The quick (\"brown\") fox can't jump 32.3 feet, right? Brr, it's 29.3°F!" },
@@ -360,8 +360,8 @@ async fn test_kanji_language_detection() {
 #[cfg(feature = "default")]
 #[actix_rt::test]
 async fn test_thai_language() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     // We don't need documents, the issue is on the query side only.
     let documents = json!([
@@ -588,8 +588,8 @@ async fn search_facet_distribution() {
 
 #[actix_rt::test]
 async fn displayed_attributes() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     index.update_settings(json!({ "displayedAttributes": ["title"] })).await;
 
@@ -605,8 +605,8 @@ async fn displayed_attributes() {
 
 #[actix_rt::test]
 async fn placeholder_search_is_hard_limited() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let documents: Vec<_> = (0..1200).map(|i| json!({ "id": i, "text": "I am unique!" })).collect();
     let (task, _status_code) = index.add_documents(documents.into(), None).await;
@@ -669,8 +669,8 @@ async fn placeholder_search_is_hard_limited() {
 
 #[actix_rt::test]
 async fn search_is_hard_limited() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let documents: Vec<_> = (0..1200).map(|i| json!({ "id": i, "text": "I am unique!" })).collect();
     let (task, _status_code) = index.add_documents(documents.into(), None).await;
@@ -737,8 +737,8 @@ async fn search_is_hard_limited() {
 
 #[actix_rt::test]
 async fn faceting_max_values_per_facet() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     index.update_settings(json!({ "filterableAttributes": ["number"] })).await;
 
@@ -1034,8 +1034,8 @@ async fn test_score_threshold() {
 
 #[actix_rt::test]
 async fn test_degraded_score_details() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let documents = NESTED_DOCUMENTS.clone();
 
@@ -1123,8 +1123,8 @@ async fn test_degraded_score_details() {
 #[cfg(feature = "default")]
 #[actix_rt::test]
 async fn camelcased_words() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     // related to https://github.com/meilisearch/meilisearch/issues/3818
     let documents = json!([
@@ -1349,8 +1349,8 @@ async fn camelcased_words() {
 
 #[actix_rt::test]
 async fn simple_search_with_strange_synonyms() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (task, _status_code) =
         index.update_settings(json!({ "synonyms": {"&": ["to"], "to": ["&"]} })).await;
@@ -1418,8 +1418,8 @@ async fn simple_search_with_strange_synonyms() {
 
 #[actix_rt::test]
 async fn change_attributes_settings() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     index.update_settings(json!({ "searchableAttributes": ["father", "mother"] })).await;
 
@@ -1923,8 +1923,8 @@ async fn test_typo_settings() {
 /// Modifying facets with different casing should work correctly
 #[actix_rt::test]
 async fn change_facet_casing() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) = index
         .update_settings(json!({
