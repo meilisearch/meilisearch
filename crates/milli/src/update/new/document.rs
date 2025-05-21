@@ -353,21 +353,25 @@ where
                     }
                 }
             } else {
-                if embedder_actions.contains_key(name) {
-                    continue;
+                match embedder_actions.get(name) {
+                    Some(action) if action.write_back().is_none() => {
+                        continue;
+                    }
+                    _ => {
+                        vectors.insert(
+                            name,
+                            if entry.implicit {
+                                serde_json::json!(entry.embeddings)
+                            } else {
+                                serde_json::json!({
+                                "regenerate": entry.regenerate,
+                                // TODO: consider optimizing the shape of embedders here to store an array of f32 rather than a JSON object
+                                    "embeddings": entry.embeddings,
+                                })
+                            },
+                        );
+                    }
                 }
-                vectors.insert(
-                    name,
-                    if entry.implicit {
-                        serde_json::json!(entry.embeddings)
-                    } else {
-                        serde_json::json!({
-                        "regenerate": entry.regenerate,
-                        // TODO: consider optimizing the shape of embedders here to store an array of f32 rather than a JSON object
-                            "embeddings": entry.embeddings,
-                        })
-                    },
-                );
             }
         }
 

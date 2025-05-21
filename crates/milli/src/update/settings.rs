@@ -31,13 +31,17 @@ use crate::progress::Progress;
 use crate::prompt::{default_max_bytes, default_template_text, PromptData};
 use crate::proximity::ProximityPrecision;
 use crate::update::index_documents::IndexDocumentsMethod;
+use crate::update::new::indexer::reindex;
 use crate::update::{IndexDocuments, UpdateIndexingStep};
 use crate::vector::settings::{
     EmbedderAction, EmbedderSource, EmbeddingSettings, NestingContext, ReindexAction,
     SubEmbeddingSettings, WriteBackToDocuments,
 };
 use crate::vector::{Embedder, EmbeddingConfig, EmbeddingConfigs};
-use crate::{FieldId, FilterableAttributesRule, Index, LocalizedAttributesRule, Result};
+use crate::{
+    ChannelCongestion, FieldId, FieldsIdsMap, FilterableAttributesRule, Index,
+    LocalizedAttributesRule, Result, ThreadPoolNoAbortBuilder,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum Setting<T> {
@@ -1424,16 +1428,18 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         mut self,
         must_stop_processing: &'indexer MSP,
         progress: &'indexer Progress,
-    ) -> Result<()>
+    ) -> Result<Option<ChannelCongestion>>
     where
         MSP: Fn() -> bool + Sync,
     {
         // force the old indexer if the environment says so
         if std::env::var_os("MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_SETTINGS").is_some() {
-            return self.execute(
-                |indexing_step| tracing::debug!("update: {:?}", indexing_step),
-                must_stop_processing,
-            );
+            return self
+                .execute(
+                    |indexing_step| tracing::debug!("update: {:?}", indexing_step),
+                    must_stop_processing,
+                )
+                .map(|_| None);
         }
 
         // only use the new indexer when only the embedder possibly changed
@@ -1469,7 +1475,40 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             indexer_config: _,
         } = &self
         {
+            self.index.set_updated_at(self.wtxn, &OffsetDateTime::now_utc())?;
+
+            let old_inner_settings = InnerIndexSettings::from_index(self.index, self.wtxn, None)?;
+
+            // Update index settings
+            let embedding_config_updates = self.update_embedding_configs()?;
+
+            let mut new_inner_settings =
+                InnerIndexSettings::from_index(self.index, self.wtxn, None)?;
+            new_inner_settings.recompute_searchables(self.wtxn, self.index)?;
+
+            let primary_key_id = self
+                .index
+                .primary_key(self.wtxn)?
+                .and_then(|name| new_inner_settings.fields_ids_map.id(name));
+            let settings_update_only = true;
+            let inner_settings_diff = InnerIndexSettingsDiff::new(
+                old_inner_settings,
+                new_inner_settings,
+                primary_key_id,
+                embedding_config_updates,
+                settings_update_only,
+            );
+
             todo!()
+            // reindex(
+            //     self.wtxn,
+            //     self.index,
+            //     &self.indexer_config.pool,
+            //     self.indexer_config.grenad_parameters(),
+            //     &inner_settings_diff,
+            //     must_stop_processing,
+            //     progress,
+            // )
             // 1. First we want to update the database and compute the settings diff, we might reuse a bunch of existing functions here
             // 2. Pick which pipelines we need to run.
             // 3. Execute extraction pipelines
@@ -1486,6 +1525,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                 |indexing_step| tracing::debug!("update: {:?}", indexing_step),
                 must_stop_processing,
             )
+            .map(|_| None)
         }
 
         // create rtxn, populate FieldIdMapWithMetadata (old + new)
@@ -2179,14 +2219,30 @@ fn deserialize_sub_embedder(
     }
 }
 
+/// Implement this trait for the settings delta type.
+/// This is used in the new settings update flow and will allow to easily replace the old settings delta type: `InnerIndexSettingsDiff`.
 pub trait SettingsDelta {
-    fn new_embedding_configs(&self) -> &EmbeddingConfigs;
+    fn new_embedders(&self) -> &EmbeddingConfigs;
+    fn old_embedders(&self) -> &EmbeddingConfigs;
     fn embedder_actions(&self) -> &BTreeMap<String, EmbedderAction>;
+    fn new_fields_ids_map(&self) -> &FieldIdMapWithMetadata;
 }
 
 impl SettingsDelta for InnerIndexSettingsDiff {
+    fn new_embedders(&self) -> &EmbeddingConfigs {
+        &self.new.embedding_configs
+    }
+
+    fn old_embedders(&self) -> &EmbeddingConfigs {
+        &self.old.embedding_configs
+    }
+
     fn embedder_actions(&self) -> &BTreeMap<String, EmbedderAction> {
         &self.embedding_config_updates
+    }
+
+    fn new_fields_ids_map(&self) -> &FieldIdMapWithMetadata {
+        &self.new.fields_ids_map
     }
 }
 

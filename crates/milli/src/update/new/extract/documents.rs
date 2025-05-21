@@ -8,12 +8,12 @@ use super::DelAddRoaringBitmap;
 use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::update::new::channel::{DocumentsSender, ExtractorBbqueueSender};
 use crate::update::new::document::{write_to_obkv, Document as _};
-use crate::update::new::document_change::SettingsChangeDocument;
+use crate::update::new::document_change::DatabaseDocument;
 use crate::update::new::indexer::document_changes::{
     DocumentChangeContext, Extractor, IndexingContext,
 };
 use crate::update::new::indexer::settings_changes::{
-    settings_change_extract, SettingsChangeDocuments, SettingsChangeExtractor,
+    settings_change_extract, DatabaseDocuments, SettingsChangeExtractor,
 };
 use crate::update::new::ref_cell_ext::RefCellExt as _;
 use crate::update::new::thread_local::{FullySend, ThreadLocal};
@@ -195,7 +195,7 @@ impl<'extractor> SettingsChangeExtractor<'extractor> for SettingsChangeDocumentE
 
     fn process<'doc>(
         &self,
-        documents: impl Iterator<Item = Result<SettingsChangeDocument<'doc>>>,
+        documents: impl Iterator<Item = Result<DatabaseDocument<'doc>>>,
         context: &DocumentChangeContext<Self::Data>,
     ) -> Result<()> {
         let mut document_buffer = bumpalo::collections::Vec::new_in(&context.doc_alloc);
@@ -206,7 +206,7 @@ impl<'extractor> SettingsChangeExtractor<'extractor> for SettingsChangeDocumentE
             // Otherwise, `BorrowMutError` will occur for document changes that also need the new_fields_ids_map (e.g.: UpdateByFunction)
             let mut new_fields_ids_map = context.new_fields_ids_map.borrow_mut_or_yield();
 
-            let external_docid = document.external_docid().to_owned();
+            let external_docid = document.external_document_id().to_owned();
             let content =
                 document.current(&context.rtxn, context.index, &context.db_fields_ids_map)?;
             let vector_content = document.current_vectors(
@@ -238,25 +238,29 @@ impl<'extractor> SettingsChangeExtractor<'extractor> for SettingsChangeDocumentE
 /// modifies them by adding or removing vector fields based on embedder actions,
 /// and then updates the database.
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::documents::extract")]
-pub fn update_database_documents<'pl, 'extractor, SCD, MSP, SD>(
-    document_changes: &SCD,
+pub fn update_database_documents<'indexer, 'extractor, MSP, SD>(
+    documents: &'indexer DatabaseDocuments<'indexer>,
     indexing_context: IndexingContext<MSP>,
-    extractor_sender: ExtractorBbqueueSender,
+    extractor_sender: &ExtractorBbqueueSender,
     settings_delta: &SD,
     extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
 ) -> Result<()>
 where
     MSP: Fn() -> bool + Sync,
     SD: SettingsDelta,
-    SCD: SettingsChangeDocuments<'pl>,
 {
+    // skip if no embedder_actions
+    if settings_delta.embedder_actions().is_empty() {
+        return Ok(());
+    }
+
     let document_sender = extractor_sender.documents();
     let document_extractor =
         SettingsChangeDocumentExtractor::new(document_sender, settings_delta.embedder_actions());
     let datastore = ThreadLocal::with_capacity(rayon::current_num_threads());
 
     settings_change_extract(
-        document_changes,
+        documents,
         &document_extractor,
         indexing_context,
         extractor_allocs,
