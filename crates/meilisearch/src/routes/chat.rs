@@ -44,7 +44,8 @@ use crate::extractors::authentication::{extract_token_from_request, GuardedData,
 use crate::metrics::MEILISEARCH_DEGRADED_SEARCH_REQUESTS;
 use crate::routes::indexes::search::search_kind;
 use crate::search::{
-    add_search_rules, prepare_search, search_from_kind, HybridQuery, SearchQuery, SemanticRatio,
+    add_search_rules, prepare_search, search_from_kind, HybridQuery, MatchingStrategy, SearchQuery,
+    SemanticRatio,
 };
 use crate::search_queue::SearchQueue;
 
@@ -159,6 +160,7 @@ async fn process_search_request(
             embedder: EMBEDDER_NAME.to_string(),
         }),
         limit: 20,
+        matching_strategy: MatchingStrategy::Frequency,
         ..Default::default()
     };
 
