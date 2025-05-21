@@ -13,7 +13,7 @@ use time::OffsetDateTime;
 
 use super::del_add::{DelAdd, DelAddOperation};
 use super::index_documents::{IndexDocumentsConfig, Transform};
-use super::IndexerConfig;
+use super::{ChatSettings, IndexerConfig};
 use crate::attribute_patterns::PatternMatch;
 use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::criterion::Criterion;
@@ -22,11 +22,11 @@ use crate::error::UserError;
 use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
 use crate::filterable_attributes_rules::match_faceted_field;
 use crate::index::{
-    IndexEmbeddingConfig, PrefixSearch, DEFAULT_MIN_WORD_LEN_ONE_TYPO,
+    ChatConfig, IndexEmbeddingConfig, PrefixSearch, DEFAULT_MIN_WORD_LEN_ONE_TYPO,
     DEFAULT_MIN_WORD_LEN_TWO_TYPOS,
 };
 use crate::order_by_map::OrderByMap;
-use crate::prompt::default_max_bytes;
+use crate::prompt::{default_max_bytes, PromptData};
 use crate::proximity::ProximityPrecision;
 use crate::update::index_documents::IndexDocumentsMethod;
 use crate::update::{IndexDocuments, UpdateIndexingStep};
@@ -185,6 +185,7 @@ pub struct Settings<'a, 't, 'i> {
     localized_attributes_rules: Setting<Vec<LocalizedAttributesRule>>,
     prefix_search: Setting<PrefixSearch>,
     facet_search: Setting<bool>,
+    chat: Setting<ChatSettings>,
 }
 
 impl<'a, 't, 'i> Settings<'a, 't, 'i> {
@@ -223,6 +224,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             localized_attributes_rules: Setting::NotSet,
             prefix_search: Setting::NotSet,
             facet_search: Setting::NotSet,
+            chat: Setting::NotSet,
             indexer_config,
         }
     }
@@ -451,6 +453,14 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
 
     pub fn reset_facet_search(&mut self) {
         self.facet_search = Setting::Reset;
+    }
+
+    pub fn set_chat(&mut self, value: ChatSettings) {
+        self.chat = Setting::Set(value);
+    }
+
+    pub fn reset_chat(&mut self) {
+        self.chat = Setting::Reset;
     }
 
     #[tracing::instrument(
@@ -1239,6 +1249,45 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         Ok(())
     }
 
+    fn update_chat_config(&mut self) -> heed::Result<bool> {
+        match &mut self.chat {
+            Setting::Set(ChatSettings {
+                description: new_description,
+                document_template: new_document_template,
+                document_template_max_bytes: new_document_template_max_bytes,
+            }) => {
+                let mut old = self.index.chat_config(self.wtxn)?;
+                let ChatConfig {
+                    ref mut description,
+                    prompt: PromptData { ref mut template, ref mut max_bytes },
+                } = old;
+
+                match new_description {
+                    Setting::Set(d) => *description = d.clone(),
+                    Setting::Reset => *description = Default::default(),
+                    Setting::NotSet => (),
+                }
+
+                match new_document_template {
+                    Setting::Set(dt) => *template = dt.clone(),
+                    Setting::Reset => *template = Default::default(),
+                    Setting::NotSet => (),
+                }
+
+                match new_document_template_max_bytes {
+                    Setting::Set(m) => *max_bytes = NonZeroUsize::new(*m),
+                    Setting::Reset => *max_bytes = Some(default_max_bytes()),
+                    Setting::NotSet => (),
+                }
+
+                self.index.put_chat_config(self.wtxn, &old)?;
+                Ok(true)
+            }
+            Setting::Reset => self.index.delete_chat_config(self.wtxn),
+            Setting::NotSet => Ok(false),
+        }
+    }
+
     pub fn execute<FP, FA>(mut self, progress_callback: FP, should_abort: FA) -> Result<()>
     where
         FP: Fn(UpdateIndexingStep) + Sync,
@@ -1276,6 +1325,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         self.update_facet_search()?;
         self.update_localized_attributes_rules()?;
         self.update_disabled_typos_terms()?;
+        self.update_chat_config()?;
 
         let embedding_config_updates = self.update_embedding_configs()?;
 
