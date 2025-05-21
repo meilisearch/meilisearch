@@ -326,6 +326,9 @@ pub enum Action {
     #[serde(rename = "chat.get")]
     #[deserr(rename = "chat.get")]
     Chat,
+    #[serde(rename = "chatSettings.*")]
+    #[deserr(rename = "chatSettings.*")]
+    ChatSettingsAll,
     #[serde(rename = "chatSettings.get")]
     #[deserr(rename = "chatSettings.get")]
     ChatSettingsGet,
@@ -357,6 +360,9 @@ impl Action {
             SETTINGS_ALL => Some(Self::SettingsAll),
             SETTINGS_GET => Some(Self::SettingsGet),
             SETTINGS_UPDATE => Some(Self::SettingsUpdate),
+            CHAT_SETTINGS_ALL => Some(Self::ChatSettingsAll),
+            CHAT_SETTINGS_GET => Some(Self::ChatSettingsGet),
+            CHAT_SETTINGS_UPDATE => Some(Self::ChatSettingsUpdate),
             STATS_ALL => Some(Self::StatsAll),
             STATS_GET => Some(Self::StatsGet),
             METRICS_ALL => Some(Self::MetricsAll),
@@ -424,6 +430,7 @@ pub mod actions {
     pub const NETWORK_UPDATE: u8 = NetworkUpdate.repr();
 
     pub const CHAT: u8 = Chat.repr();
+    pub const CHAT_SETTINGS_ALL: u8 = ChatSettingsAll.repr();
     pub const CHAT_SETTINGS_GET: u8 = ChatSettingsGet.repr();
     pub const CHAT_SETTINGS_UPDATE: u8 = ChatSettingsUpdate.repr();
 }
