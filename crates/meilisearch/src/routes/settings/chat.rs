@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use actix_web::web::{self, Data};
 use actix_web::HttpResponse;
 use index_scheduler::IndexScheduler;
@@ -51,7 +49,6 @@ pub struct GlobalChatSettings {
     pub base_api: Option<String>,
     pub api_key: Option<String>,
     pub prompts: ChatPrompts,
-    pub indexes: BTreeMap<String, ChatIndexSettings>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -105,7 +102,6 @@ impl Default for GlobalChatSettings {
                     .to_string(),
                 pre_query: "".to_string(),
             },
-            indexes: BTreeMap::new(),
         }
     }
 }

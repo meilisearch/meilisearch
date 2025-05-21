@@ -3782,6 +3782,7 @@ dependencies = [
  "brotli 6.0.0",
  "bstr",
  "build-info",
+ "bumpalo",
  "byte-unit",
  "bytes",
  "cargo_toml",

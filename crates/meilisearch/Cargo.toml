@@ -32,6 +32,7 @@ async-trait = "0.1.85"
 bstr = "1.11.3"
 byte-unit = { version = "5.1.6", features = ["serde"] }
 bytes = "1.9.0"
+bumpalo = "3.16.0"
 clap = { version = "4.5.24", features = ["derive", "env"] }
 crossbeam-channel = "0.5.15"
 deserr = { version = "0.6.3", features = ["actix-web"] }

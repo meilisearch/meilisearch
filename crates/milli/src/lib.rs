@@ -52,18 +52,19 @@ pub use search::new::{
 };
 use serde_json::Value;
 pub use thread_pool_no_abort::{PanicCatched, ThreadPoolNoAbort, ThreadPoolNoAbortBuilder};
-pub use {charabia as tokenizer, heed, rhai};
+pub use {arroy, charabia as tokenizer, heed, rhai};
 
 pub use self::asc_desc::{AscDesc, AscDescError, Member, SortError};
-pub use self::attribute_patterns::AttributePatterns;
-pub use self::attribute_patterns::PatternMatch;
+pub use self::attribute_patterns::{AttributePatterns, PatternMatch};
 pub use self::criterion::{default_criteria, Criterion, CriterionError};
 pub use self::error::{
     Error, FieldIdMapMissingEntry, InternalError, SerializationError, UserError,
 };
 pub use self::external_documents_ids::ExternalDocumentsIds;
 pub use self::fieldids_weights_map::FieldidsWeightsMap;
-pub use self::fields_ids_map::{FieldsIdsMap, GlobalFieldsIdsMap};
+pub use self::fields_ids_map::{
+    FieldIdMapWithMetadata, FieldsIdsMap, GlobalFieldsIdsMap, MetadataBuilder,
+};
 pub use self::filterable_attributes_rules::{
     FilterFeatures, FilterableAttributesFeatures, FilterableAttributesPatterns,
     FilterableAttributesRule,
@@ -83,8 +84,6 @@ pub use self::search::{
     Search, SearchResult, SemanticSearch, TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
 };
 pub use self::update::ChannelCongestion;
-
-pub use arroy;
 
 pub type Result<T> = std::result::Result<T, error::Error>;
 
