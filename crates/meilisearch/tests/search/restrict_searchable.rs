@@ -555,7 +555,8 @@ async fn nested_search_with_suffix_wildcard() {
 async fn nested_search_on_title_restricted_set_with_suffix_wildcard() {
     let server = Server::new().await;
     let index = index_with_documents(&server, &NESTED_SEARCH_DOCUMENTS).await;
-    let (task, _status_code) = index.update_settings_searchable_attributes(json!(["details.title"])).await;
+    let (task, _status_code) =
+        index.update_settings_searchable_attributes(json!(["details.title"])).await;
     index.wait_task(task.uid()).await.succeeded();
 
     index

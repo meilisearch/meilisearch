@@ -137,9 +137,7 @@ impl<'ctx> SearchContext<'ctx> {
             if searchable_weight.is_none() && field_name.contains("*") {
                 let matching_searchable_weights: Vec<_> = searchable_fields_weights
                     .iter()
-                    .filter(|(name, _, _)| {
-                        match_pattern(field_name, name) == PatternMatch::Match
-                    })
+                    .filter(|(name, _, _)| match_pattern(field_name, name) == PatternMatch::Match)
                     .collect();
 
                 if !matching_searchable_weights.is_empty() {
