@@ -91,7 +91,7 @@ Selecting the right index ensures the most relevant results for the user query";
 impl Default for GlobalChatSettings {
     fn default() -> Self {
         GlobalChatSettings {
-            source: "openai".to_string(),
+            source: "openAi".to_string(),
             base_api: None,
             api_key: None,
             prompts: ChatPrompts {

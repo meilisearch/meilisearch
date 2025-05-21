@@ -28,6 +28,7 @@ mod lru;
 mod processing;
 mod queue;
 mod scheduler;
+mod settings;
 #[cfg(test)]
 mod test_utils;
 pub mod upgrade;
@@ -54,7 +55,7 @@ use meilisearch_types::batches::Batch;
 use meilisearch_types::features::{InstanceTogglableFeatures, Network, RuntimeTogglableFeatures};
 use meilisearch_types::heed::byteorder::BE;
 use meilisearch_types::heed::types::{SerdeJson, Str, I128};
-use meilisearch_types::heed::{self, Database, Env, RoTxn, WithoutTls};
+use meilisearch_types::heed::{self, Database, Env, RoTxn, Unspecified, WithoutTls};
 use meilisearch_types::milli::index::IndexEmbeddingConfig;
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::vector::{Embedder, EmbedderOptions, EmbeddingConfigs};
@@ -142,6 +143,8 @@ pub struct IndexScheduler {
     /// The list of tasks currently processing
     pub(crate) processing_tasks: Arc<RwLock<ProcessingTasks>>,
 
+    /// The main database that also has the chat settings.
+    pub main: Database<Str, Unspecified>,
     /// A database containing only the version of the index-scheduler
     pub version: versioning::Versioning,
     /// The queue containing both the tasks and the batches.
@@ -150,9 +153,6 @@ pub struct IndexScheduler {
     pub(crate) index_mapper: IndexMapper,
     /// In charge of fetching and setting the status of experimental features.
     features: features::FeatureData,
-
-    /// Stores the custom chat prompts and other settings of the indexes.
-    chat_settings: Database<Str, SerdeJson<serde_json::Value>>,
 
     /// Everything related to the processing of the tasks
     pub scheduler: scheduler::Scheduler,
@@ -199,7 +199,7 @@ impl IndexScheduler {
             version: self.version.clone(),
             queue: self.queue.private_clone(),
             scheduler: self.scheduler.private_clone(),
-
+            main: self.main.clone(),
             index_mapper: self.index_mapper.clone(),
             cleanup_enabled: self.cleanup_enabled,
             webhook_url: self.webhook_url.clone(),
@@ -212,16 +212,11 @@ impl IndexScheduler {
             #[cfg(test)]
             run_loop_iteration: self.run_loop_iteration.clone(),
             features: self.features.clone(),
-            chat_settings: self.chat_settings,
         }
     }
 
     pub(crate) const fn nb_db() -> u32 {
-        Versioning::nb_db()
-            + Queue::nb_db()
-            + IndexMapper::nb_db()
-            + features::FeatureData::nb_db()
-            + 1 // chat-prompts
+        Versioning::nb_db() + Queue::nb_db() + IndexMapper::nb_db() + features::FeatureData::nb_db()
     }
 
     /// Create an index scheduler and start its run loop.

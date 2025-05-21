@@ -17,6 +17,7 @@ use milli::{Criterion, CriterionError, FilterableAttributesRule, Index, DEFAULT_
 use serde::{Deserialize, Serialize, Serializer};
 use utoipa::ToSchema;
 
+use super::{Checked, Unchecked};
 use crate::deserr::DeserrJsonError;
 use crate::error::deserr_codes::*;
 use crate::facet_values_sort::FacetValuesSort;
