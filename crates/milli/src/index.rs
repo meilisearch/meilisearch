@@ -23,6 +23,7 @@ use crate::heed_codec::facet::{
 use crate::heed_codec::version::VersionCodec;
 use crate::heed_codec::{BEU16StrCodec, FstSetCodec, StrBEU16Codec, StrRefCodec};
 use crate::order_by_map::OrderByMap;
+use crate::prompt::PromptData;
 use crate::proximity::ProximityPrecision;
 use crate::vector::{ArroyStats, ArroyWrapper, Embedding, EmbeddingConfig};
 use crate::{
@@ -79,6 +80,7 @@ pub mod main_key {
     pub const PREFIX_SEARCH: &str = "prefix_search";
     pub const DOCUMENTS_STATS: &str = "documents_stats";
     pub const DISABLED_TYPOS_TERMS: &str = "disabled_typos_terms";
+    pub const CHAT: &str = "chat";
 }
 
 pub mod db_name {
@@ -1691,6 +1693,25 @@ impl Index {
         self.main.remap_key_type::<Str>().delete(txn, main_key::FACET_SEARCH)
     }
 
+    pub fn chat_config(&self, txn: &RoTxn<'_>) -> heed::Result<ChatConfig> {
+        self.main
+            .remap_types::<Str, SerdeBincode<_>>()
+            .get(txn, main_key::CHAT)
+            .map(|o| o.unwrap_or_default())
+    }
+
+    pub(crate) fn put_chat_config(
+        &self,
+        txn: &mut RwTxn<'_>,
+        val: &ChatConfig,
+    ) -> heed::Result<()> {
+        self.main.remap_types::<Str, SerdeBincode<_>>().put(txn, main_key::CHAT, &val)
+    }
+
+    pub(crate) fn delete_chat_config(&self, txn: &mut RwTxn<'_>) -> heed::Result<bool> {
+        self.main.remap_key_type::<Str>().delete(txn, main_key::CHAT)
+    }
+
     pub fn localized_attributes_rules(
         &self,
         rtxn: &RoTxn<'_>,
@@ -1915,6 +1936,13 @@ pub struct IndexEmbeddingConfig {
     pub name: String,
     pub config: EmbeddingConfig,
     pub user_provided: RoaringBitmap,
+}
+
+#[derive(Debug, Default, Deserialize, Serialize)]
+pub struct ChatConfig {
+    pub description: String,
+    /// Contains the document template and max template length.
+    pub prompt: PromptData,
 }
 
 #[derive(Debug, Deserialize, Serialize)]

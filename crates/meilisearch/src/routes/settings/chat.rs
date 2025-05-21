@@ -27,7 +27,7 @@ async fn get_settings(
 ) -> Result<HttpResponse, ResponseError> {
     let settings = match index_scheduler.chat_settings()? {
         Some(value) => serde_json::from_value(value).unwrap(),
-        None => ChatSettings::default(),
+        None => GlobalChatSettings::default(),
     };
     Ok(HttpResponse::Ok().json(settings))
 }
@@ -37,7 +37,7 @@ async fn patch_settings(
         ActionPolicy<{ actions::CHAT_SETTINGS_UPDATE }>,
         Data<IndexScheduler>,
     >,
-    web::Json(chat_settings): web::Json<ChatSettings>,
+    web::Json(chat_settings): web::Json<GlobalChatSettings>,
 ) -> Result<HttpResponse, ResponseError> {
     let chat_settings = serde_json::to_value(chat_settings).unwrap();
     index_scheduler.put_chat_settings(&chat_settings)?;
@@ -46,7 +46,7 @@ async fn patch_settings(
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
-pub struct ChatSettings {
+pub struct GlobalChatSettings {
     pub source: String,
     pub base_api: Option<String>,
     pub api_key: Option<String>,
@@ -91,9 +91,9 @@ const DEFAULT_SEARCH_IN_INDEX_INDEX_PARAMETER_TOOL_DESCRIPTION: &str =
 "The name of the index to search within. An index is a collection of documents organized for search. \
 Selecting the right index ensures the most relevant results for the user query";
 
-impl Default for ChatSettings {
+impl Default for GlobalChatSettings {
     fn default() -> Self {
-        ChatSettings {
+        GlobalChatSettings {
             source: "openai".to_string(),
             base_api: None,
             api_key: None,

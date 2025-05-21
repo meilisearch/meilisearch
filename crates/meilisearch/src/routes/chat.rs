@@ -30,7 +30,7 @@ use serde_json::json;
 use tokio::runtime::Handle;
 use tokio::sync::mpsc::error::SendError;
 
-use super::settings::chat::{ChatPrompts, ChatSettings};
+use super::settings::chat::{ChatPrompts, GlobalChatSettings};
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::{extract_token_from_request, GuardedData, Policy as _};
 use crate::metrics::MEILISEARCH_DEGRADED_SEARCH_REQUESTS;
@@ -216,7 +216,7 @@ async fn non_streamed_chat(
 
     let chat_settings = match index_scheduler.chat_settings().unwrap() {
         Some(value) => serde_json::from_value(value).unwrap(),
-        None => ChatSettings::default(),
+        None => GlobalChatSettings::default(),
     };
 
     let mut config = OpenAIConfig::default();
@@ -307,7 +307,7 @@ async fn streamed_chat(
 
     let chat_settings = match index_scheduler.chat_settings().unwrap() {
         Some(value) => serde_json::from_value(value).unwrap(),
-        None => ChatSettings::default(),
+        None => GlobalChatSettings::default(),
     };
 
     let mut config = OpenAIConfig::default();
