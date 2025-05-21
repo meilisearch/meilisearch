@@ -882,7 +882,7 @@ pub fn add_search_rules(filter: &mut Option<Value>, rules: IndexSearchRules) {
     }
 }
 
-fn prepare_search<'t>(
+pub fn prepare_search<'t>(
     index: &'t Index,
     rtxn: &'t RoTxn,
     query: &'t SearchQuery,
