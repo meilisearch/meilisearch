@@ -70,9 +70,15 @@ async fn patch_settings(
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub enum ChatSource {
+    OpenAi,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct GlobalChatSettings {
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    pub source: Setting<String>,
+    pub source: Setting<ChatSource>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     pub base_api: Setting<String>,
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
@@ -146,7 +152,7 @@ Selecting the right index ensures the most relevant results for the user query";
 impl Default for GlobalChatSettings {
     fn default() -> Self {
         GlobalChatSettings {
-            source: Setting::Set("openAi".to_string()),
+            source: Setting::NotSet,
             base_api: Setting::NotSet,
             api_key: Setting::NotSet,
             prompts: Setting::Set(ChatPrompts::default()),
