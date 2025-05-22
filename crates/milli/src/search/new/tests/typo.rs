@@ -151,7 +151,7 @@ fn test_no_typo() {
     let index = create_index();
     index
         .update_settings(|s| {
-            s.set_autorize_typos(false);
+            s.set_authorize_typos(false);
         })
         .unwrap();
 

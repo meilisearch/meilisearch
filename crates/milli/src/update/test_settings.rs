@@ -792,7 +792,7 @@ fn test_disable_typo() {
 
     index
         .update_settings_using_wtxn(&mut txn, |settings| {
-            settings.set_autorize_typos(false);
+            settings.set_authorize_typos(false);
         })
         .unwrap();
 

@@ -72,7 +72,7 @@ fn test_2gram_simple() {
     let index = create_index();
     index
         .update_settings(|s| {
-            s.set_autorize_typos(false);
+            s.set_authorize_typos(false);
         })
         .unwrap();
 
@@ -103,7 +103,7 @@ fn test_3gram_simple() {
     let index = create_index();
     index
         .update_settings(|s| {
-            s.set_autorize_typos(false);
+            s.set_authorize_typos(false);
         })
         .unwrap();
 
@@ -153,7 +153,7 @@ fn test_no_disable_ngrams() {
     let index = create_index();
     index
         .update_settings(|s| {
-            s.set_autorize_typos(false);
+            s.set_authorize_typos(false);
         })
         .unwrap();
 
@@ -179,7 +179,7 @@ fn test_2gram_prefix() {
     let index = create_index();
     index
         .update_settings(|s| {
-            s.set_autorize_typos(false);
+            s.set_authorize_typos(false);
         })
         .unwrap();
 
@@ -208,7 +208,7 @@ fn test_3gram_prefix() {
     let index = create_index();
     index
         .update_settings(|s| {
-            s.set_autorize_typos(false);
+            s.set_authorize_typos(false);
         })
         .unwrap();
 
@@ -260,7 +260,7 @@ fn test_disable_split_words() {
     let index = create_index();
     index
         .update_settings(|s| {
-            s.set_autorize_typos(false);
+            s.set_authorize_typos(false);
         })
         .unwrap();
 
