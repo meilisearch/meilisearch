@@ -33,13 +33,6 @@ impl Index {
 
         Ok(())
     }
-
-    pub(crate) fn delete_disabled_typos_terms(&self, txn: &mut RwTxn<'_>) -> heed::Result<()> {
-        self.main
-            .remap_types::<Str, SerdeJson<DisabledTyposTerms>>()
-            .delete(txn, main_key::DISABLED_TYPOS_TERMS)?;
-        Ok(())
-    }
 }
 
 impl DisabledTyposTerms {
