@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::fmt::Write as _;
 use std::mem;
 use std::sync::RwLock;
 use std::time::Duration;
@@ -97,18 +98,29 @@ fn setup_search_tool(
         panic!("{SEARCH_IN_INDEX_FUNCTION_NAME} function already set");
     }
 
-    let index_uids: Vec<_> = index_scheduler
-        .index_names()?
-        .into_iter()
-        .filter(|index_uid| filters.is_index_authorized(&index_uid))
-        .collect();
+    let mut index_uids = Vec::new();
+    let mut function_description = prompts.search_description.clone().unwrap();
+    index_scheduler.try_for_each_index::<_, ()>(|name, index| {
+        // Make sure to skip unauthorized indexes
+        if !filters.is_index_authorized(&name) {
+            return Ok(());
+        }
+
+        let rtxn = index.read_txn()?;
+        let chat_config = index.chat_config(&rtxn)?;
+        let index_description = chat_config.description;
+        let _ = writeln!(&mut function_description, "\n\n - {name}: {index_description}\n");
+        index_uids.push(name.to_string());
+
+        Ok(())
+    })?;
 
     let tool = ChatCompletionToolArgs::default()
         .r#type(ChatCompletionToolType::Function)
         .function(
             FunctionObjectArgs::default()
                 .name(SEARCH_IN_INDEX_FUNCTION_NAME)
-                .description(&prompts.search_description.clone().unwrap())
+                .description(&function_description)
                 .parameters(json!({
                     "type": "object",
                     "properties": {
