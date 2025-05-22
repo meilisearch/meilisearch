@@ -50,7 +50,7 @@ impl AttributePatterns {
 ///
 /// * `pattern` - The pattern to match against.
 /// * `str` - The string to match against the pattern.
-fn match_pattern(pattern: &str, str: &str) -> PatternMatch {
+pub fn match_pattern(pattern: &str, str: &str) -> PatternMatch {
     // If the pattern is a wildcard, return Match
     if pattern == "*" {
         return PatternMatch::Match;
