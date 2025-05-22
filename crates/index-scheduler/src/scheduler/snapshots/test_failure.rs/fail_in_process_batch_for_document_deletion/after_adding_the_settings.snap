@@ -38,7 +38,7 @@ doggos: { number_of_documents: 0, field_distribution: {} }
 [timestamp] [0,]
 ----------------------------------------------------------------------
 ### All Batches:
-0 {uid: 0, details: {"filterableAttributes":["catto"]}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"settingsUpdate":1},"indexUids":{"doggos":1}}, stop reason: "task with id 1 is a document operation in a batch of settings changes", }
+0 {uid: 0, details: {"filterableAttributes":["catto"]}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"settingsUpdate":1},"indexUids":{"doggos":1}}, stop reason: "stopped before task with id 1 because it is a document operation which cannot be batched with settings changes", }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:
 0 [0,]

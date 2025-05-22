@@ -42,8 +42,8 @@ doggos [0,1,2,]
 [timestamp] [1,2,]
 ----------------------------------------------------------------------
 ### All Batches:
-0 {uid: 0, details: {}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"doggos":1}}, stop reason: "task with id 0 of type `indexCreation` cannot be batched", }
-1 {uid: 1, details: {"receivedDocuments":1,"indexedDocuments":0,"deletedDocuments":0}, stats: {"totalNbTasks":2,"status":{"succeeded":2},"types":{"documentAdditionOrUpdate":1,"indexDeletion":1},"indexUids":{"doggos":2}}, stop reason: "task with id 2 deletes the index", }
+0 {uid: 0, details: {}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"doggos":1}}, stop reason: "created batch containing only task with id 0 of type `indexCreation` that cannot be batched with any other task.", }
+1 {uid: 1, details: {"receivedDocuments":1,"indexedDocuments":0,"deletedDocuments":0}, stats: {"totalNbTasks":2,"status":{"succeeded":2},"types":{"documentAdditionOrUpdate":1,"indexDeletion":1},"indexUids":{"doggos":2}}, stop reason: "stopped after task with id 2 because it deletes the index", }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:
 0 [0,]

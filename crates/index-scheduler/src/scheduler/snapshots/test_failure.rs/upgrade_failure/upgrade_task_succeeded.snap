@@ -43,7 +43,7 @@ doggo [2,3,]
 [timestamp] [0,]
 ----------------------------------------------------------------------
 ### All Batches:
-0 {uid: 0, details: {"upgradeFrom":"v1.12.0","upgradeTo":"v1.15.0"}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"upgradeDatabase":1},"indexUids":{}}, stop reason: "a batch of tasks of type `upgradeDatabase` cannot be batched with any other type of task", }
+0 {uid: 0, details: {"upgradeFrom":"v1.12.0","upgradeTo":"v1.15.0"}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"upgradeDatabase":1},"indexUids":{}}, stop reason: "stopped after the last task of type `upgradeDatabase` because they cannot be batched with tasks of any other type.", }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:
 0 [0,]
