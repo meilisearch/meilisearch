@@ -174,7 +174,7 @@ macro_rules! make_error_codes {
 
             /// return the doc url associated with the error
             fn url(&self) -> String {
-                format!("https://docs.meilisearch.com/errors#{}", self.name())
+                format!("https://www.meilisearch.com/docs/reference/errors/error_codes#{}", self.name())
             }
         }
         pub mod deserr_codes {
