@@ -4,7 +4,7 @@ source: crates/index-scheduler/src/scheduler/test.rs
 ### Autobatching Enabled = true
 ### Processing batch Some(0):
 [3,]
-{uid: 0, details: {"matchedTasks":2,"deletedTasks":null,"originalFilter":"test_query"}, stats: {"totalNbTasks":1,"status":{"processing":1},"types":{"taskDeletion":1},"indexUids":{}}, stop reason: "a batch of tasks of type `taskDeletion` cannot be batched with any other type of task", }
+{uid: 0, details: {"matchedTasks":2,"deletedTasks":null,"originalFilter":"test_query"}, stats: {"totalNbTasks":1,"status":{"processing":1},"types":{"taskDeletion":1},"indexUids":{}}, stop reason: "stopped after the last task of type `taskDeletion` because they cannot be batched with tasks of any other type.", }
 ----------------------------------------------------------------------
 ### All Tasks:
 0 {uid: 0, status: enqueued, details: { primary_key: Some("mouse") }, kind: IndexCreation { index_uid: "catto", primary_key: Some("mouse") }}

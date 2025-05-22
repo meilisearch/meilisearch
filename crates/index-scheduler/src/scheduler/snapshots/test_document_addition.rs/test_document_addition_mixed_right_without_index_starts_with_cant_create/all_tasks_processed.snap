@@ -56,7 +56,7 @@ doggos: { number_of_documents: 9, field_distribution: {"doggo": 9, "id": 9} }
 [timestamp] [1,2,3,4,5,6,7,8,9,]
 ----------------------------------------------------------------------
 ### All Batches:
-0 {uid: 0, details: {"receivedDocuments":1,"indexedDocuments":0}, stats: {"totalNbTasks":1,"status":{"failed":1},"types":{"documentAdditionOrUpdate":1},"indexUids":{"doggos":1}}, stop reason: "task with id 1 has different index creation rules as in the batch", }
+0 {uid: 0, details: {"receivedDocuments":1,"indexedDocuments":0}, stats: {"totalNbTasks":1,"status":{"failed":1},"types":{"documentAdditionOrUpdate":1},"indexUids":{"doggos":1}}, stop reason: "stopped batching before task with id 1 because its index creation rules differ from the ones from the batch", }
 1 {uid: 1, details: {"receivedDocuments":9,"indexedDocuments":9}, stats: {"totalNbTasks":9,"status":{"succeeded":9},"types":{"documentAdditionOrUpdate":9},"indexUids":{"doggos":9}}, stop reason: "batched all enqueued tasks", }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:

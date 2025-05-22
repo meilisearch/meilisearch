@@ -49,7 +49,7 @@ doggos: { number_of_documents: 3, field_distribution: {"catto": 1, "doggo": 2, "
 [timestamp] [1,]
 ----------------------------------------------------------------------
 ### All Batches:
-0 {uid: 0, details: {"filterableAttributes":["catto"]}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"settingsUpdate":1},"indexUids":{"doggos":1}}, stop reason: "task with id 1 is a document operation in a batch of settings changes", }
+0 {uid: 0, details: {"filterableAttributes":["catto"]}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"settingsUpdate":1},"indexUids":{"doggos":1}}, stop reason: "stopped before task with id 1 because it is a document operation which cannot be batched with settings changes", }
 1 {uid: 1, details: {"receivedDocuments":3,"indexedDocuments":3}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"documentAdditionOrUpdate":1},"indexUids":{"doggos":1}}, stop reason: "batched all enqueued tasks", }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:

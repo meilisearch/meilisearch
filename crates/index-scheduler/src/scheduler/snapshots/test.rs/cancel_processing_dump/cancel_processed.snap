@@ -38,7 +38,7 @@ canceled [0,]
 [timestamp] [0,1,]
 ----------------------------------------------------------------------
 ### All Batches:
-0 {uid: 0, details: {"matchedTasks":1,"canceledTasks":1,"originalFilter":"cancel dump"}, stats: {"totalNbTasks":2,"status":{"succeeded":1,"canceled":1},"types":{"taskCancelation":1,"dumpCreation":1},"indexUids":{}}, stop reason: "task with id 1 of type `taskCancelation` cannot be batched", }
+0 {uid: 0, details: {"matchedTasks":1,"canceledTasks":1,"originalFilter":"cancel dump"}, stats: {"totalNbTasks":2,"status":{"succeeded":1,"canceled":1},"types":{"taskCancelation":1,"dumpCreation":1},"indexUids":{}}, stop reason: "created batch containing only task with id 1 of type `taskCancelation` that cannot be batched with any other task.", }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:
 0 [0,1,]

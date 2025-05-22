@@ -38,7 +38,7 @@ catto: { number_of_documents: 1, field_distribution: {"id": 1} }
 [timestamp] [2,]
 ----------------------------------------------------------------------
 ### All Batches:
-1 {uid: 1, details: {"matchedTasks":1,"deletedTasks":1,"originalFilter":"test_query"}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"taskDeletion":1},"indexUids":{}}, stop reason: "a batch of tasks of type `taskDeletion` cannot be batched with any other type of task", }
+1 {uid: 1, details: {"matchedTasks":1,"deletedTasks":1,"originalFilter":"test_query"}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"taskDeletion":1},"indexUids":{}}, stop reason: "stopped after the last task of type `taskDeletion` because they cannot be batched with tasks of any other type.", }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:
 1 [2,]

@@ -746,70 +746,70 @@ impl Display for BatchStopReason {
         match self {
             BatchStopReason::Unspecified => f.write_str("unspecified"),
             BatchStopReason::TaskKindCannotBeBatched { kind } => {
-                write!(f, "a batch of tasks of type `{kind}` cannot be batched with any other type of task")
+                write!(f, "stopped after the last task of type `{kind}` because they cannot be batched with tasks of any other type.")
             }
             BatchStopReason::TaskCannotBeBatched { kind, id } => {
-                write!(f, "task with id {id} of type `{kind}` cannot be batched")
+                write!(f, "created batch containing only task with id {id} of type `{kind}` that cannot be batched with any other task.")
             }
             BatchStopReason::ExhaustedEnqueuedTasks => f.write_str("batched all enqueued tasks"),
             BatchStopReason::ExhaustedEnqueuedTasksForIndex { index } => {
                 write!(f, "batched all enqueued tasks for index `{index}`")
             }
             BatchStopReason::ReachedTaskLimit { task_limit } => {
-                write!(f, "reached configured batch limit of {task_limit} tasks")
+                write!(f, "batched up to configured batch limit of {task_limit} tasks")
             }
             BatchStopReason::ReachedSizeLimit { size_limit, size } => write!(
                 f,
-                "reached configured batch size limit of {size_limit}B with a total of {size}B"
+                "batched up to configured batch size limit of {size_limit}B with a total of {size}B",
             ),
             BatchStopReason::PrimaryKeyIndexMismatch { id, in_index, in_task } => {
-                write!(f, "primary key `{in_task}` in task with id {id} is different from the primary key of the index `{in_index}`")
+                write!(f, "stopped batching before task with id {id} because its primary key `{in_task}` is different from the primary key of the index `{in_index}`")
             }
             BatchStopReason::IndexCreationMismatch { id } => {
-                write!(f, "task with id {id} has different index creation rules as in the batch")
+                write!(f, "stopped batching before task with id {id} because its index creation rules differ from the ones from the batch")
             }
             BatchStopReason::PrimaryKeyMismatch { reason, id } => match reason {
                 PrimaryKeyMismatchReason::TaskPrimaryKeyDifferFromIndexPrimaryKey {
                     task_pk,
                     index_pk,
                 } => {
-                    write!(f, "primary key `{task_pk}` in task with id {id} is different from the primary key of the index `{index_pk}`")
+                    write!(f, "stopped batching before task with id {id} because its primary key `{task_pk}` is different from the primary key of the index `{index_pk}`")
                 }
                 PrimaryKeyMismatchReason::TaskPrimaryKeyDifferFromCurrentBatchPrimaryKey {
                     task_pk,
                     batch_pk,
                 } => {
-                    write!(f, "primary key `{task_pk}` in task with id {id} is different from the primary key of the batch `{batch_pk}`")
+                    write!(f, "stopped batching before task with id {id} because its primary key `{task_pk}` is different from the primary key of the batch `{batch_pk}`")
                 }
                 PrimaryKeyMismatchReason::CannotInterfereWithPrimaryKeyGuessing { task_pk } => {
-                    write!(f, "task with id {id} is setting the `{task_pk}` primary key but cannot interfere with primary key guessing of the batch")
+                    write!(f, "stopped batching before task with id {id} because it is setting the `{task_pk}` primary key and it would interfere with primary key guessing of the batch")
                 }
             },
             BatchStopReason::IndexDeletion { id } => {
-                write!(f, "task with id {id} deletes the index")
+                write!(f, "stopped after task with id {id} because it deletes the index")
             }
             BatchStopReason::DocumentOperationWithSettings { id } => {
                 write!(
                     f,
-                    "task with id {id} is a settings change in a batch of document operations"
+                    "stopped before task with id {id} because it is a settings change which cannot be batched with document operations"
                 )
             }
             BatchStopReason::DocumentOperationWithDeletionByFilter { id } => {
                 write!(
                     f,
-                    "task with id {id} is a deletion by filter in a batch of document operations"
+                    "stopped before task with id {id} because it is a deletion by filter which cannot be batched with document operations"
                 )
             }
             BatchStopReason::DeletionByFilterWithDocumentOperation { id } => {
                 write!(
                     f,
-                    "task with id {id} is a document operation in a batch of deletions by filter"
+                    "stopped before task with id {id} because it is a document operation which cannot be batched with deletions by filter"
                 )
             }
             BatchStopReason::SettingsWithDocumentOperation { id } => {
                 write!(
                     f,
-                    "task with id {id} is a document operation in a batch of settings changes"
+                    "stopped before task with id {id} because it is a document operation which cannot be batched with settings changes"
                 )
             }
         }
