@@ -804,8 +804,9 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                 if self.index.number_of_documents(self.wtxn)? == 0 {
                     let mut fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
                     let no_of_existing_fields = fields_ids_map.len();
+                    let doc_id = primary_key.to_string();
                     fields_ids_map.insert(primary_key).ok_or(UserError::AttributeLimitReached {
-                        document_id: None,
+                        document_id: Some(doc_id),
                         new_field_count: 1,
                         number_of_existing_field: no_of_existing_fields,
                     })?;
@@ -1592,12 +1593,13 @@ impl InnerIndexSettings {
         let geo_fields_ids = match fields_ids_map.id(RESERVED_GEO_FIELD_NAME) {
             Some(_) if index.is_geo_enabled(rtxn)? => {
                 let no_of_existing_fields = fields_ids_map.len();
+                let doc_id = String::from("_geo.lat");
                 // if `_geo` is faceted then we get the `lat` and `lng`
                 let field_ids = fields_ids_map
                     .insert("_geo.lat")
                     .zip(fields_ids_map.insert("_geo.lng"))
                     .ok_or(UserError::AttributeLimitReached {
-                        document_id: None,
+                        document_id: Some(doc_id),
                         new_field_count: 2,
                         number_of_existing_field: no_of_existing_fields,
                     })?;

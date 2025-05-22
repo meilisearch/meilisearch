@@ -72,8 +72,9 @@ impl<'a> PrimaryKey<'a> {
             Self::Nested { name: path }
         } else {
             let no_of_existing_field = fields.len();
+            let doc_id = path.to_string();
             let field_id = fields.insert(path).ok_or(UserError::AttributeLimitReached {
-                document_id: None,
+                document_id: Some(doc_id),
                 new_field_count: 1,
                 number_of_existing_field: no_of_existing_field,
             })?;
