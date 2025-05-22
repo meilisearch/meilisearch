@@ -26,7 +26,7 @@ use meilisearch_auth::AuthController;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::keys::actions;
-use meilisearch_types::milli::index::ChatConfig;
+use meilisearch_types::milli::index::{self, ChatConfig, SearchParameters};
 use meilisearch_types::milli::prompt::{Prompt, PromptData};
 use meilisearch_types::milli::update::new::document::DocumentFromDb;
 use meilisearch_types::milli::update::Setting;
@@ -46,12 +46,12 @@ use crate::extractors::authentication::{extract_token_from_request, GuardedData,
 use crate::metrics::MEILISEARCH_DEGRADED_SEARCH_REQUESTS;
 use crate::routes::indexes::search::search_kind;
 use crate::search::{
-    add_search_rules, prepare_search, search_from_kind, HybridQuery, MatchingStrategy, SearchQuery,
-    SemanticRatio,
+    add_search_rules, prepare_search, search_from_kind, HybridQuery, MatchingStrategy,
+    RankingScoreThreshold, SearchQuery, SemanticRatio, DEFAULT_SEARCH_LIMIT,
+    DEFAULT_SEMANTIC_RATIO,
 };
 use crate::search_queue::SearchQueue;
 
-const EMBEDDER_NAME: &str = "openai";
 const SEARCH_IN_INDEX_FUNCTION_NAME: &str = "_meiliSearchInIndex";
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
@@ -168,14 +168,43 @@ async fn process_search_request(
     index_uid: String,
     q: Option<String>,
 ) -> Result<(Index, String), ResponseError> {
+    // TBD
+    // let mut aggregate = SearchAggregator::<SearchPOST>::from_query(&query);
+
+    let index = index_scheduler.index(&index_uid)?;
+    let rtxn = index.static_read_txn()?;
+    let ChatConfig { description: _, prompt: _, search_parameters } = index.chat_config(&rtxn)?;
+    let SearchParameters {
+        hybrid,
+        limit,
+        sort,
+        distinct,
+        matching_strategy,
+        attributes_to_search_on,
+        ranking_score_threshold,
+    } = search_parameters;
+
     let mut query = SearchQuery {
         q,
-        hybrid: Some(HybridQuery {
-            semantic_ratio: SemanticRatio::default(),
-            embedder: EMBEDDER_NAME.to_string(),
+        hybrid: hybrid.map(|index::HybridQuery { semantic_ratio, embedder }| HybridQuery {
+            semantic_ratio: SemanticRatio::try_from(semantic_ratio)
+                .ok()
+                .unwrap_or_else(DEFAULT_SEMANTIC_RATIO),
+            embedder,
         }),
-        limit: 20,
-        matching_strategy: MatchingStrategy::Frequency,
+        limit: limit.unwrap_or_else(DEFAULT_SEARCH_LIMIT),
+        sort: sort,
+        distinct: distinct,
+        matching_strategy: matching_strategy
+            .map(|ms| match ms {
+                index::MatchingStrategy::Last => MatchingStrategy::Last,
+                index::MatchingStrategy::All => MatchingStrategy::All,
+                index::MatchingStrategy::Frequency => MatchingStrategy::Frequency,
+            })
+            .unwrap_or(MatchingStrategy::Frequency),
+        attributes_to_search_on: attributes_to_search_on,
+        ranking_score_threshold: ranking_score_threshold
+            .and_then(|rst| RankingScoreThreshold::try_from(rst).ok()),
         ..Default::default()
     };
 
@@ -189,19 +218,13 @@ async fn process_search_request(
     if let Some(search_rules) = auth_filter.get_index_search_rules(&index_uid) {
         add_search_rules(&mut query.filter, search_rules);
     }
-
-    // TBD
-    // let mut aggregate = SearchAggregator::<SearchPOST>::from_query(&query);
-
-    let index = index_scheduler.index(&index_uid)?;
     let search_kind =
         search_kind(&query, index_scheduler.get_ref(), index_uid.to_string(), &index)?;
 
     let permit = search_queue.try_get_search_permit().await?;
     let features = index_scheduler.features();
     let index_cloned = index.clone();
-    let search_result = tokio::task::spawn_blocking(move || -> Result<_, ResponseError> {
-        let rtxn = index_cloned.read_txn()?;
+    let output = tokio::task::spawn_blocking(move || -> Result<_, ResponseError> {
         let time_budget = match index_cloned
             .search_cutoff(&rtxn)
             .map_err(|e| MeilisearchHttpError::from_milli(e, Some(index_uid.clone())))?
@@ -214,14 +237,14 @@ async fn process_search_request(
             prepare_search(&index_cloned, &rtxn, &query, &search_kind, time_budget, features)?;
 
         search_from_kind(index_uid, search_kind, search)
-            .map(|(search_results, _)| search_results)
+            .map(|(search_results, _)| (rtxn, search_results))
             .map_err(ResponseError::from)
     })
     .await;
     permit.drop().await;
 
-    let search_result = search_result?;
-    if let Ok(ref search_result) = search_result {
+    let output = output?;
+    if let Ok((_, ref search_result)) = output {
         // aggregate.succeed(search_result);
         if search_result.degraded {
             MEILISEARCH_DEGRADED_SEARCH_REQUESTS.inc();
@@ -229,8 +252,8 @@ async fn process_search_request(
     }
     // analytics.publish(aggregate, &req);
 
-    let search_result = search_result?;
-    let rtxn = index.read_txn()?;
+    let (rtxn, search_result) = output?;
+    // let rtxn = index.read_txn()?;
     let render_alloc = Bump::new();
     let formatted = format_documents(&rtxn, &index, &render_alloc, search_result.documents_ids)?;
     let text = formatted.join("\n");

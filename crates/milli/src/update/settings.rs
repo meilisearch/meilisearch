@@ -11,6 +11,7 @@ use roaring::RoaringBitmap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use time::OffsetDateTime;
 
+use super::chat::{ChatSearchParams, RankingScoreThreshold};
 use super::del_add::{DelAdd, DelAddOperation};
 use super::index_documents::{IndexDocumentsConfig, Transform};
 use super::{ChatSettings, IndexerConfig};
@@ -22,8 +23,8 @@ use crate::error::UserError;
 use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
 use crate::filterable_attributes_rules::match_faceted_field;
 use crate::index::{
-    ChatConfig, IndexEmbeddingConfig, PrefixSearch, DEFAULT_MIN_WORD_LEN_ONE_TYPO,
-    DEFAULT_MIN_WORD_LEN_TWO_TYPOS,
+    ChatConfig, IndexEmbeddingConfig, MatchingStrategy, PrefixSearch,
+    DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS,
 };
 use crate::order_by_map::OrderByMap;
 use crate::prompt::{default_max_bytes, PromptData};
@@ -1264,11 +1265,13 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                 description: new_description,
                 document_template: new_document_template,
                 document_template_max_bytes: new_document_template_max_bytes,
+                search_parameters: new_search_parameters,
             }) => {
                 let mut old = self.index.chat_config(self.wtxn)?;
                 let ChatConfig {
                     ref mut description,
                     prompt: PromptData { ref mut template, ref mut max_bytes },
+                    ref mut search_parameters,
                 } = old;
 
                 match new_description {
@@ -1286,6 +1289,85 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                 match new_document_template_max_bytes {
                     Setting::Set(m) => *max_bytes = NonZeroUsize::new(*m),
                     Setting::Reset => *max_bytes = Some(default_max_bytes()),
+                    Setting::NotSet => (),
+                }
+
+                match new_search_parameters {
+                    Setting::Set(sp) => {
+                        let ChatSearchParams {
+                            hybrid,
+                            limit,
+                            sort,
+                            distinct,
+                            matching_strategy,
+                            attributes_to_search_on,
+                            ranking_score_threshold,
+                        } = sp;
+
+                        match hybrid {
+                            Setting::Set(hybrid) => {
+                                search_parameters.hybrid = Some(crate::index::HybridQuery {
+                                    semantic_ratio: *hybrid.semantic_ratio,
+                                    embedder: hybrid.embedder.clone(),
+                                })
+                            }
+                            Setting::Reset => search_parameters.hybrid = None,
+                            Setting::NotSet => (),
+                        }
+
+                        match limit {
+                            Setting::Set(limit) => search_parameters.limit = Some(*limit),
+                            Setting::Reset => search_parameters.limit = None,
+                            Setting::NotSet => (),
+                        }
+
+                        match sort {
+                            Setting::Set(sort) => search_parameters.sort = Some(sort.clone()),
+                            Setting::Reset => search_parameters.sort = None,
+                            Setting::NotSet => (),
+                        }
+
+                        match distinct {
+                            Setting::Set(distinct) => {
+                                search_parameters.distinct = Some(distinct.clone())
+                            }
+                            Setting::Reset => search_parameters.distinct = None,
+                            Setting::NotSet => (),
+                        }
+
+                        match matching_strategy {
+                            Setting::Set(matching_strategy) => {
+                                let strategy = match matching_strategy {
+                                    super::chat::MatchingStrategy::Last => MatchingStrategy::Last,
+                                    super::chat::MatchingStrategy::All => MatchingStrategy::All,
+                                    super::chat::MatchingStrategy::Frequency => {
+                                        MatchingStrategy::Frequency
+                                    }
+                                };
+                                search_parameters.matching_strategy = Some(strategy)
+                            }
+                            Setting::Reset => search_parameters.matching_strategy = None,
+                            Setting::NotSet => (),
+                        }
+
+                        match attributes_to_search_on {
+                            Setting::Set(attributes_to_search_on) => {
+                                search_parameters.attributes_to_search_on =
+                                    Some(attributes_to_search_on.clone())
+                            }
+                            Setting::Reset => search_parameters.attributes_to_search_on = None,
+                            Setting::NotSet => (),
+                        }
+
+                        match ranking_score_threshold {
+                            Setting::Set(RankingScoreThreshold(score)) => {
+                                search_parameters.ranking_score_threshold = Some(*score)
+                            }
+                            Setting::Reset => search_parameters.ranking_score_threshold = None,
+                            Setting::NotSet => (),
+                        }
+                    }
+                    Setting::Reset => *search_parameters = Default::default(),
                     Setting::NotSet => (),
                 }
 
