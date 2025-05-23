@@ -2,7 +2,7 @@ use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 
 use crate::common::encoder::Encoder;
-use crate::common::Server;
+use crate::common::{shared_does_not_exists_index, shared_index_with_documents, Server};
 use crate::json;
 
 #[actix_rt::test]
@@ -69,24 +69,9 @@ async fn update_nothing() {
 
 #[actix_rt::test]
 async fn error_update_existing_primary_key() {
-    let server = Server::new_shared();
-    let index = server.unique_index();
-    let (create_task, code) = index.create(Some("id")).await;
+    let index = shared_index_with_documents().await;
 
-    assert_eq!(code, 202);
-    index.wait_task(create_task.uid()).await.succeeded();
-
-    let documents = json!([
-        {
-            "id": "11",
-            "content": "foobar"
-        }
-    ]);
-    let (add_docs_task, add_docs_status_code) = index.add_documents(documents, None).await;
-    assert_eq!(add_docs_status_code, 202);
-    index.wait_task(add_docs_task.uid()).await.succeeded();
-
-    let (update_task, code) = index.update(Some("primary")).await;
+    let (update_task, code) = index.update_index_fail(Some("primary")).await;
 
     assert_eq!(code, 202);
     let response = index.wait_task(update_task.uid()).await.failed();
@@ -103,9 +88,8 @@ async fn error_update_existing_primary_key() {
 
 #[actix_rt::test]
 async fn error_update_unexisting_index() {
-    let server = Server::new_shared();
-    let index = server.unique_index();
-    let (task, code) = index.update(None).await;
+    let index = shared_does_not_exists_index().await;
+    let (task, code) = index.update_index_fail(Some("my-primary-key")).await;
 
     assert_eq!(code, 202);
 
