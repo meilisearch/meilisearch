@@ -122,6 +122,7 @@ pub struct SearchQuery {
 #[derive(Debug, Clone, Copy, PartialEq, Deserr, ToSchema, Serialize)]
 #[deserr(try_from(f64) = TryFrom::try_from -> InvalidSearchRankingScoreThreshold)]
 pub struct RankingScoreThreshold(f64);
+
 impl std::convert::TryFrom<f64> for RankingScoreThreshold {
     type Error = InvalidSearchRankingScoreThreshold;
 
@@ -279,8 +280,8 @@ impl fmt::Debug for SearchQuery {
 #[deserr(error = DeserrJsonError<InvalidSearchHybridQuery>, rename_all = camelCase, deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 pub struct HybridQuery {
-    #[deserr(default, error = DeserrJsonError<InvalidSearchSemanticRatio>, default)]
-    #[schema(value_type = f32, default)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchSemanticRatio>)]
+    #[schema(default, value_type = f32)]
     #[serde(default)]
     pub semantic_ratio: SemanticRatio,
     #[deserr(error = DeserrJsonError<InvalidSearchEmbedder>)]
@@ -882,7 +883,7 @@ pub fn add_search_rules(filter: &mut Option<Value>, rules: IndexSearchRules) {
     }
 }
 
-fn prepare_search<'t>(
+pub fn prepare_search<'t>(
     index: &'t Index,
     rtxn: &'t RoTxn,
     query: &'t SearchQuery,

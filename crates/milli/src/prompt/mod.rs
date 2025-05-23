@@ -105,10 +105,10 @@ impl Prompt {
             max_bytes,
         };
 
-        // render template with special object that's OK with `doc.*` and `fields.*`
-        this.template
-            .render(&template_checker::TemplateChecker)
-            .map_err(NewPromptError::invalid_fields_in_template)?;
+        // // render template with special object that's OK with `doc.*` and `fields.*`
+        // this.template
+        //     .render(&template_checker::TemplateChecker)
+        //     .map_err(NewPromptError::invalid_fields_in_template)?;
 
         Ok(this)
     }

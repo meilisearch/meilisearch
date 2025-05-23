@@ -158,6 +158,21 @@ impl Key {
             updated_at: now,
         }
     }
+
+    pub fn default_chat() -> Self {
+        let now = OffsetDateTime::now_utc();
+        let uid = Uuid::new_v4();
+        Self {
+            name: Some("Default Chat API Key".to_string()),
+            description: Some("Use it to chat and search from the frontend".to_string()),
+            uid,
+            actions: vec![Action::Chat, Action::Search],
+            indexes: vec![IndexUidPattern::all()],
+            expires_at: None,
+            created_at: now,
+            updated_at: now,
+        }
+    }
 }
 
 fn parse_expiration_date(
@@ -308,6 +323,18 @@ pub enum Action {
     #[serde(rename = "network.update")]
     #[deserr(rename = "network.update")]
     NetworkUpdate,
+    #[serde(rename = "chat.get")]
+    #[deserr(rename = "chat.get")]
+    Chat,
+    #[serde(rename = "chatSettings.*")]
+    #[deserr(rename = "chatSettings.*")]
+    ChatSettingsAll,
+    #[serde(rename = "chatSettings.get")]
+    #[deserr(rename = "chatSettings.get")]
+    ChatSettingsGet,
+    #[serde(rename = "chatSettings.update")]
+    #[deserr(rename = "chatSettings.update")]
+    ChatSettingsUpdate,
 }
 
 impl Action {
@@ -333,6 +360,9 @@ impl Action {
             SETTINGS_ALL => Some(Self::SettingsAll),
             SETTINGS_GET => Some(Self::SettingsGet),
             SETTINGS_UPDATE => Some(Self::SettingsUpdate),
+            CHAT_SETTINGS_ALL => Some(Self::ChatSettingsAll),
+            CHAT_SETTINGS_GET => Some(Self::ChatSettingsGet),
+            CHAT_SETTINGS_UPDATE => Some(Self::ChatSettingsUpdate),
             STATS_ALL => Some(Self::StatsAll),
             STATS_GET => Some(Self::StatsGet),
             METRICS_ALL => Some(Self::MetricsAll),
@@ -349,6 +379,7 @@ impl Action {
             EXPERIMENTAL_FEATURES_UPDATE => Some(Self::ExperimentalFeaturesUpdate),
             NETWORK_GET => Some(Self::NetworkGet),
             NETWORK_UPDATE => Some(Self::NetworkUpdate),
+            CHAT => Some(Self::Chat),
             _otherwise => None,
         }
     }
@@ -397,4 +428,9 @@ pub mod actions {
 
     pub const NETWORK_GET: u8 = NetworkGet.repr();
     pub const NETWORK_UPDATE: u8 = NetworkUpdate.repr();
+
+    pub const CHAT: u8 = Chat.repr();
+    pub const CHAT_SETTINGS_ALL: u8 = ChatSettingsAll.repr();
+    pub const CHAT_SETTINGS_GET: u8 = ChatSettingsGet.repr();
+    pub const CHAT_SETTINGS_UPDATE: u8 = ChatSettingsUpdate.repr();
 }

@@ -597,7 +597,7 @@ impl fmt::Display for ParseTaskKindError {
 }
 impl std::error::Error for ParseTaskKindError {}
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub enum Details {
     DocumentAdditionOrUpdate {
         received_documents: u64,

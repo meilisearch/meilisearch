@@ -11,9 +11,10 @@ use roaring::RoaringBitmap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use time::OffsetDateTime;
 
+use super::chat::{ChatSearchParams, RankingScoreThreshold};
 use super::del_add::{DelAdd, DelAddOperation};
 use super::index_documents::{IndexDocumentsConfig, Transform};
-use super::IndexerConfig;
+use super::{ChatSettings, IndexerConfig};
 use crate::attribute_patterns::PatternMatch;
 use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::criterion::Criterion;
@@ -22,11 +23,11 @@ use crate::error::UserError;
 use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
 use crate::filterable_attributes_rules::match_faceted_field;
 use crate::index::{
-    IndexEmbeddingConfig, PrefixSearch, DEFAULT_MIN_WORD_LEN_ONE_TYPO,
-    DEFAULT_MIN_WORD_LEN_TWO_TYPOS,
+    ChatConfig, IndexEmbeddingConfig, MatchingStrategy, PrefixSearch,
+    DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS,
 };
 use crate::order_by_map::OrderByMap;
-use crate::prompt::default_max_bytes;
+use crate::prompt::{default_max_bytes, PromptData};
 use crate::proximity::ProximityPrecision;
 use crate::update::index_documents::IndexDocumentsMethod;
 use crate::update::{IndexDocuments, UpdateIndexingStep};
@@ -123,6 +124,15 @@ impl<T> Setting<T> {
         *self = new;
         true
     }
+
+    #[track_caller]
+    pub fn unwrap(self) -> T {
+        match self {
+            Setting::Set(value) => value,
+            Setting::Reset => panic!("Setting::Reset unwrapped"),
+            Setting::NotSet => panic!("Setting::NotSet unwrapped"),
+        }
+    }
 }
 
 impl<T: Serialize> Serialize for Setting<T> {
@@ -185,6 +195,7 @@ pub struct Settings<'a, 't, 'i> {
     localized_attributes_rules: Setting<Vec<LocalizedAttributesRule>>,
     prefix_search: Setting<PrefixSearch>,
     facet_search: Setting<bool>,
+    chat: Setting<ChatSettings>,
 }
 
 impl<'a, 't, 'i> Settings<'a, 't, 'i> {
@@ -223,6 +234,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             localized_attributes_rules: Setting::NotSet,
             prefix_search: Setting::NotSet,
             facet_search: Setting::NotSet,
+            chat: Setting::NotSet,
             indexer_config,
         }
     }
@@ -451,6 +463,14 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
 
     pub fn reset_facet_search(&mut self) {
         self.facet_search = Setting::Reset;
+    }
+
+    pub fn set_chat(&mut self, value: ChatSettings) {
+        self.chat = Setting::Set(value);
+    }
+
+    pub fn reset_chat(&mut self) {
+        self.chat = Setting::Reset;
     }
 
     #[tracing::instrument(
@@ -1239,6 +1259,126 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         Ok(())
     }
 
+    fn update_chat_config(&mut self) -> heed::Result<bool> {
+        match &mut self.chat {
+            Setting::Set(ChatSettings {
+                description: new_description,
+                document_template: new_document_template,
+                document_template_max_bytes: new_document_template_max_bytes,
+                search_parameters: new_search_parameters,
+            }) => {
+                let mut old = self.index.chat_config(self.wtxn)?;
+                let ChatConfig {
+                    ref mut description,
+                    prompt: PromptData { ref mut template, ref mut max_bytes },
+                    ref mut search_parameters,
+                } = old;
+
+                match new_description {
+                    Setting::Set(d) => *description = d.clone(),
+                    Setting::Reset => *description = Default::default(),
+                    Setting::NotSet => (),
+                }
+
+                match new_document_template {
+                    Setting::Set(dt) => *template = dt.clone(),
+                    Setting::Reset => *template = Default::default(),
+                    Setting::NotSet => (),
+                }
+
+                match new_document_template_max_bytes {
+                    Setting::Set(m) => *max_bytes = NonZeroUsize::new(*m),
+                    Setting::Reset => *max_bytes = Some(default_max_bytes()),
+                    Setting::NotSet => (),
+                }
+
+                match new_search_parameters {
+                    Setting::Set(sp) => {
+                        let ChatSearchParams {
+                            hybrid,
+                            limit,
+                            sort,
+                            distinct,
+                            matching_strategy,
+                            attributes_to_search_on,
+                            ranking_score_threshold,
+                        } = sp;
+
+                        match hybrid {
+                            Setting::Set(hybrid) => {
+                                search_parameters.hybrid = Some(crate::index::HybridQuery {
+                                    semantic_ratio: *hybrid.semantic_ratio,
+                                    embedder: hybrid.embedder.clone(),
+                                })
+                            }
+                            Setting::Reset => search_parameters.hybrid = None,
+                            Setting::NotSet => (),
+                        }
+
+                        match limit {
+                            Setting::Set(limit) => search_parameters.limit = Some(*limit),
+                            Setting::Reset => search_parameters.limit = None,
+                            Setting::NotSet => (),
+                        }
+
+                        match sort {
+                            Setting::Set(sort) => search_parameters.sort = Some(sort.clone()),
+                            Setting::Reset => search_parameters.sort = None,
+                            Setting::NotSet => (),
+                        }
+
+                        match distinct {
+                            Setting::Set(distinct) => {
+                                search_parameters.distinct = Some(distinct.clone())
+                            }
+                            Setting::Reset => search_parameters.distinct = None,
+                            Setting::NotSet => (),
+                        }
+
+                        match matching_strategy {
+                            Setting::Set(matching_strategy) => {
+                                let strategy = match matching_strategy {
+                                    super::chat::MatchingStrategy::Last => MatchingStrategy::Last,
+                                    super::chat::MatchingStrategy::All => MatchingStrategy::All,
+                                    super::chat::MatchingStrategy::Frequency => {
+                                        MatchingStrategy::Frequency
+                                    }
+                                };
+                                search_parameters.matching_strategy = Some(strategy)
+                            }
+                            Setting::Reset => search_parameters.matching_strategy = None,
+                            Setting::NotSet => (),
+                        }
+
+                        match attributes_to_search_on {
+                            Setting::Set(attributes_to_search_on) => {
+                                search_parameters.attributes_to_search_on =
+                                    Some(attributes_to_search_on.clone())
+                            }
+                            Setting::Reset => search_parameters.attributes_to_search_on = None,
+                            Setting::NotSet => (),
+                        }
+
+                        match ranking_score_threshold {
+                            Setting::Set(RankingScoreThreshold(score)) => {
+                                search_parameters.ranking_score_threshold = Some(*score)
+                            }
+                            Setting::Reset => search_parameters.ranking_score_threshold = None,
+                            Setting::NotSet => (),
+                        }
+                    }
+                    Setting::Reset => *search_parameters = Default::default(),
+                    Setting::NotSet => (),
+                }
+
+                self.index.put_chat_config(self.wtxn, &old)?;
+                Ok(true)
+            }
+            Setting::Reset => self.index.delete_chat_config(self.wtxn),
+            Setting::NotSet => Ok(false),
+        }
+    }
+
     pub fn execute<FP, FA>(mut self, progress_callback: FP, should_abort: FA) -> Result<()>
     where
         FP: Fn(UpdateIndexingStep) + Sync,
@@ -1276,6 +1416,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         self.update_facet_search()?;
         self.update_localized_attributes_rules()?;
         self.update_disabled_typos_terms()?;
+        self.update_chat_config()?;
 
         let embedding_config_updates = self.update_embedding_configs()?;
 

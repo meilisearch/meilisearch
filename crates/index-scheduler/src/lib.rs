@@ -53,8 +53,8 @@ use flate2::Compression;
 use meilisearch_types::batches::Batch;
 use meilisearch_types::features::{InstanceTogglableFeatures, Network, RuntimeTogglableFeatures};
 use meilisearch_types::heed::byteorder::BE;
-use meilisearch_types::heed::types::I128;
-use meilisearch_types::heed::{self, Env, RoTxn, WithoutTls};
+use meilisearch_types::heed::types::{SerdeJson, Str, I128};
+use meilisearch_types::heed::{self, Database, Env, RoTxn, WithoutTls};
 use meilisearch_types::milli::index::IndexEmbeddingConfig;
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::vector::{Embedder, EmbedderOptions, EmbeddingConfigs};
@@ -151,6 +151,9 @@ pub struct IndexScheduler {
     /// In charge of fetching and setting the status of experimental features.
     features: features::FeatureData,
 
+    /// Stores the custom chat prompts and other settings of the indexes.
+    chat_settings: Database<Str, SerdeJson<serde_json::Value>>,
+
     /// Everything related to the processing of the tasks
     pub scheduler: scheduler::Scheduler,
 
@@ -209,11 +212,16 @@ impl IndexScheduler {
             #[cfg(test)]
             run_loop_iteration: self.run_loop_iteration.clone(),
             features: self.features.clone(),
+            chat_settings: self.chat_settings,
         }
     }
 
     pub(crate) const fn nb_db() -> u32 {
-        Versioning::nb_db() + Queue::nb_db() + IndexMapper::nb_db() + features::FeatureData::nb_db()
+        Versioning::nb_db()
+            + Queue::nb_db()
+            + IndexMapper::nb_db()
+            + features::FeatureData::nb_db()
+            + 1 // chat-prompts
     }
 
     /// Create an index scheduler and start its run loop.
@@ -267,6 +275,7 @@ impl IndexScheduler {
         let features = features::FeatureData::new(&env, &mut wtxn, options.instance_features)?;
         let queue = Queue::new(&env, &mut wtxn, &options)?;
         let index_mapper = IndexMapper::new(&env, &mut wtxn, &options, budget)?;
+        let chat_settings = env.create_database(&mut wtxn, Some("chat-settings"))?;
         wtxn.commit()?;
 
         // allow unreachable_code to get rids of the warning in the case of a test build.
@@ -290,6 +299,7 @@ impl IndexScheduler {
             #[cfg(test)]
             run_loop_iteration: Arc::new(RwLock::new(0)),
             features,
+            chat_settings,
         };
 
         this.run();
@@ -856,6 +866,18 @@ impl IndexScheduler {
             )
             .collect();
         res.map(EmbeddingConfigs::new)
+    }
+
+    pub fn chat_settings(&self) -> Result<Option<serde_json::Value>> {
+        let rtxn = self.env.read_txn().map_err(Error::HeedTransaction)?;
+        self.chat_settings.get(&rtxn, "main").map_err(Into::into)
+    }
+
+    pub fn put_chat_settings(&self, settings: &serde_json::Value) -> Result<()> {
+        let mut wtxn = self.env.write_txn().map_err(Error::HeedTransaction)?;
+        self.chat_settings.put(&mut wtxn, "main", settings)?;
+        wtxn.commit().map_err(Error::HeedTransaction)?;
+        Ok(())
     }
 }
 

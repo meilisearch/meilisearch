@@ -52,6 +52,7 @@ const PAGINATION_DEFAULT_LIMIT_FN: fn() -> usize = || 20;
 
 mod api_key;
 pub mod batches;
+pub mod chat;
 mod dump;
 pub mod features;
 pub mod indexes;
@@ -61,6 +62,7 @@ mod multi_search;
 mod multi_search_analytics;
 pub mod network;
 mod open_api_utils;
+pub mod settings;
 mod snapshot;
 mod swap_indexes;
 pub mod tasks;
@@ -113,7 +115,9 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(web::scope("/swap-indexes").configure(swap_indexes::configure))
         .service(web::scope("/metrics").configure(metrics::configure))
         .service(web::scope("/experimental-features").configure(features::configure))
-        .service(web::scope("/network").configure(network::configure));
+        .service(web::scope("/network").configure(network::configure))
+        .service(web::scope("/chat").configure(chat::configure))
+        .service(web::scope("/settings/chat").configure(settings::chat::configure));
 
     #[cfg(feature = "swagger")]
     {

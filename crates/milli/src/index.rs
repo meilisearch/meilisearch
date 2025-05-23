@@ -23,6 +23,7 @@ use crate::heed_codec::facet::{
 use crate::heed_codec::version::VersionCodec;
 use crate::heed_codec::{BEU16StrCodec, FstSetCodec, StrBEU16Codec, StrRefCodec};
 use crate::order_by_map::OrderByMap;
+use crate::prompt::PromptData;
 use crate::proximity::ProximityPrecision;
 use crate::vector::{ArroyStats, ArroyWrapper, Embedding, EmbeddingConfig};
 use crate::{
@@ -79,6 +80,7 @@ pub mod main_key {
     pub const PREFIX_SEARCH: &str = "prefix_search";
     pub const DOCUMENTS_STATS: &str = "documents_stats";
     pub const DISABLED_TYPOS_TERMS: &str = "disabled_typos_terms";
+    pub const CHAT: &str = "chat";
 }
 
 pub mod db_name {
@@ -1691,6 +1693,25 @@ impl Index {
         self.main.remap_key_type::<Str>().delete(txn, main_key::FACET_SEARCH)
     }
 
+    pub fn chat_config(&self, txn: &RoTxn<'_>) -> heed::Result<ChatConfig> {
+        self.main
+            .remap_types::<Str, SerdeJson<_>>()
+            .get(txn, main_key::CHAT)
+            .map(|o| o.unwrap_or_default())
+    }
+
+    pub(crate) fn put_chat_config(
+        &self,
+        txn: &mut RwTxn<'_>,
+        val: &ChatConfig,
+    ) -> heed::Result<()> {
+        self.main.remap_types::<Str, SerdeJson<_>>().put(txn, main_key::CHAT, &val)
+    }
+
+    pub(crate) fn delete_chat_config(&self, txn: &mut RwTxn<'_>) -> heed::Result<bool> {
+        self.main.remap_key_type::<Str>().delete(txn, main_key::CHAT)
+    }
+
     pub fn localized_attributes_rules(
         &self,
         rtxn: &RoTxn<'_>,
@@ -1917,11 +1938,57 @@ pub struct IndexEmbeddingConfig {
     pub user_provided: RoaringBitmap,
 }
 
+#[derive(Debug, Default, Deserialize, Serialize)]
+pub struct ChatConfig {
+    pub description: String,
+    /// Contains the document template and max template length.
+    pub prompt: PromptData,
+    pub search_parameters: SearchParameters,
+}
+
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchParameters {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hybrid: Option<HybridQuery>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sort: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub distinct: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub matching_strategy: Option<MatchingStrategy>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attributes_to_search_on: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ranking_score_threshold: Option<f64>,
+}
+
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HybridQuery {
+    pub semantic_ratio: f32,
+    pub embedder: String,
+}
+
 #[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PrefixSettings {
     pub prefix_count_threshold: usize,
     pub max_prefix_length: usize,
     pub compute_prefixes: PrefixSearch,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum MatchingStrategy {
+    /// Remove query words from last to first
+    Last,
+    /// All query words are mandatory
+    All,
+    /// Remove query words from the most frequent to the least
+    Frequency,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
