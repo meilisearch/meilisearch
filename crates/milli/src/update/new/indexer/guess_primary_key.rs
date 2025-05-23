@@ -50,7 +50,7 @@ pub fn retrieve_or_guess_primary_key<'a>(
                 .filter_map(|name| {
                     let Some(_) = new_fields_ids_map.insert(name) else {
                         return Some(Err(UserError::AttributeLimitReached {
-                            document_id: None,
+                            document_id: Some(name.to_string()),
                             new_field_count: 1,
                             number_of_existing_field: no_of_existing_fields,
                         }

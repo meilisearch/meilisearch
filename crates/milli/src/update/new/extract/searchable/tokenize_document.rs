@@ -34,7 +34,7 @@ impl DocumentTokenizer<'_> {
         let mut tokenize_field = |field_name: &str, _depth, value: &Value| {
             let Some((field_id, meta)) = field_id_map.id_with_metadata_or_insert(field_name) else {
                 return Err(UserError::AttributeLimitReached {
-                    document_id: None,
+                    document_id: Some(field_name.to_string()),
                     new_field_count: 1,
                     number_of_existing_field: no_of_existing_fields,
                 }

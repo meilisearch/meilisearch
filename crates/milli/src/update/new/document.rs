@@ -385,12 +385,12 @@ where
             },
         )?;
         fields_ids_map.id_or_insert("_geo.lat").ok_or(UserError::AttributeLimitReached {
-            document_id: None,
+            document_id: Some(String::from("_geo.lat")),
             new_field_count: 1,
             number_of_existing_field: no_of_existing_fields,
         })?;
         fields_ids_map.id_or_insert("_geo.lng").ok_or(UserError::AttributeLimitReached {
-            document_id: None,
+            document_id: Some(String::from("_geo.lng")),
             new_field_count: 1,
             number_of_existing_field: no_of_existing_fields,
         })?;
