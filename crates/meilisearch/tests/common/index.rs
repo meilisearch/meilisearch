@@ -294,6 +294,20 @@ impl Index<'_, Shared> {
         }
         (task, code)
     }
+
+    pub async fn update_index_fail(&self, primary_key: Option<&str>) -> (Value, StatusCode) {
+        let (mut task, code) = self._update(primary_key).await;
+        if code.is_success() {
+            task = self.wait_task(task.uid()).await;
+            if task.is_success() {
+                panic!(
+                    "`update_index_fail` succeeded: {}",
+                    serde_json::to_string_pretty(&task).unwrap()
+                );
+            }
+        }
+        (task, code)
+    }
 }
 
 #[allow(dead_code)]
@@ -335,6 +349,14 @@ impl<State> Index<'_, State> {
             "primaryKey": primary_key,
         });
         self.service.post_encoded("/indexes", body, self.encoder).await
+    }
+
+    pub(super) async fn _update(&self, primary_key: Option<&str>) -> (Value, StatusCode) {
+        let body = json!({
+            "primaryKey": primary_key,
+        });
+        let url = format!("/indexes/{}", urlencode(self.uid.as_ref()));
+        self.service.patch_encoded(url, body, self.encoder).await
     }
 
     pub(super) async fn _delete(&self) -> (Value, StatusCode) {
