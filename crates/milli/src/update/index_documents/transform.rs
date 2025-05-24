@@ -98,7 +98,7 @@ fn create_fields_mapping(
             None => index_field_map
                 .insert(name)
                 .ok_or(Error::UserError(UserError::AttributeLimitReached {
-                    document_id: None,
+                    document_id: name.to_string(),
                     number_of_existing_field: no_of_existing_field,
                     new_field_count: 1,
                 }))
@@ -186,7 +186,7 @@ impl<'a, 'i> Transform<'a, 'i> {
         let no_of_existing_field = self.fields_ids_map.len();
         let primary_key_id =
             self.fields_ids_map.insert(&primary_key).ok_or(UserError::AttributeLimitReached {
-                document_id: Some(primary_key.clone()),
+                document_id: primary_key.clone(),
                 number_of_existing_field: no_of_existing_field,
                 new_field_count: 1,
             })?;
@@ -427,7 +427,7 @@ impl<'a, 'i> Transform<'a, 'i> {
             let no_of_existing_fields = fields_ids_map.len();
             let no_of_new_fields = flattened.clone().into_iter().len();
             let fid = fields_ids_map.insert(&key).ok_or(UserError::AttributeLimitReached {
-                document_id: None,
+                document_id: key.to_string(),
                 new_field_count: no_of_new_fields,
                 number_of_existing_field: no_of_existing_fields,
             })?;

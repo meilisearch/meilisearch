@@ -78,10 +78,11 @@ impl<'de, 'indexer: 'de, Mapper: MutFieldIdMapper> Visitor<'de>
         }
 
         let no_of_existing_field = MAX_POSITION_PER_ATTRIBUTE - 1;
+        let docmnt_id = self.primary_key.name().to_string();
         // return previously detected errors
         if attribute_limit_reached {
             return Ok(Err(UserError::AttributeLimitReached {
-                document_id: None,
+                document_id: docmnt_id,
                 new_field_count: 1,
                 number_of_existing_field: no_of_existing_field as usize,
             }));

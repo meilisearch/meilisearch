@@ -327,10 +327,9 @@ where
 
     for res in document.iter_top_level_fields() {
         let (field_name, value) = res?;
-        let doc_id = field_name.to_string();
         let field_id =
             fields_ids_map.id_or_insert(field_name).ok_or(UserError::AttributeLimitReached {
-                document_id: Some(doc_id),
+                document_id: field_name.to_string(),
                 new_field_count: 1,
                 number_of_existing_field: no_of_existing_fields,
             })?;
@@ -366,7 +365,7 @@ where
 
         let vectors_fid = fields_ids_map.id_or_insert(RESERVED_VECTORS_FIELD_NAME).ok_or(
             UserError::AttributeLimitReached {
-                document_id: Some(RESERVED_GEO_FIELD_NAME.to_string()),
+                document_id: RESERVED_GEO_FIELD_NAME.to_string(),
                 new_field_count: 1,
                 number_of_existing_field: no_of_existing_fields,
             },
@@ -379,18 +378,18 @@ where
     if let Some(geo_value) = document.geo_field()? {
         let fid = fields_ids_map.id_or_insert(RESERVED_GEO_FIELD_NAME).ok_or(
             UserError::AttributeLimitReached {
-                document_id: Some(RESERVED_GEO_FIELD_NAME.to_string()),
+                document_id: RESERVED_GEO_FIELD_NAME.to_string(),
                 new_field_count: 1,
                 number_of_existing_field: no_of_existing_fields,
             },
         )?;
         fields_ids_map.id_or_insert("_geo.lat").ok_or(UserError::AttributeLimitReached {
-            document_id: Some(String::from("_geo.lat")),
+            document_id: String::from("_geo.lat"),
             new_field_count: 1,
             number_of_existing_field: no_of_existing_fields,
         })?;
         fields_ids_map.id_or_insert("_geo.lng").ok_or(UserError::AttributeLimitReached {
-            document_id: Some(String::from("_geo.lng")),
+            document_id: String::from("_geo.lng"),
             new_field_count: 1,
             number_of_existing_field: no_of_existing_fields,
         })?;

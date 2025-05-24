@@ -804,9 +804,8 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                 if self.index.number_of_documents(self.wtxn)? == 0 {
                     let mut fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
                     let no_of_existing_fields = fields_ids_map.len();
-                    let doc_id = primary_key.to_string();
                     fields_ids_map.insert(primary_key).ok_or(UserError::AttributeLimitReached {
-                        document_id: Some(doc_id),
+                        document_id: primary_key.to_string(),
                         new_field_count: 1,
                         number_of_existing_field: no_of_existing_fields,
                     })?;
@@ -1599,7 +1598,7 @@ impl InnerIndexSettings {
                     .insert("_geo.lat")
                     .zip(fields_ids_map.insert("_geo.lng"))
                     .ok_or(UserError::AttributeLimitReached {
-                        document_id: Some(doc_id),
+                        document_id: doc_id,
                         new_field_count: 2,
                         number_of_existing_field: no_of_existing_fields,
                     })?;
