@@ -17,11 +17,9 @@ mod restrict_searchable;
 mod search_queue;
 
 use meili_snap::{json_string, snapshot};
-use meilisearch::Opt;
-use tempfile::TempDir;
 
 use crate::common::{
-    default_settings, shared_index_with_documents, shared_index_with_nested_documents,
+    shared_index_with_documents, shared_index_with_nested_documents,
     shared_index_with_score_documents, Server, Value, DOCUMENTS, FRUITS_DOCUMENTS,
     NESTED_DOCUMENTS, SCORE_DOCUMENTS, VECTOR_DOCUMENTS,
 };
@@ -33,11 +31,10 @@ async fn test_settings_documents_indexing_swapping_and_search(
     query: &Value,
     test: impl Fn(Value, actix_http::StatusCode) + std::panic::UnwindSafe + Clone,
 ) {
-    let temp = TempDir::new().unwrap();
-    let server = Server::new_with_options(Opt { ..default_settings(temp.path()) }).await.unwrap();
+    let server = Server::new_shared();
 
     eprintln!("Documents -> Settings -> test");
-    let index = server.index("test");
+    let index = server.unique_index();
 
     let (task, code) = index.add_documents(documents.clone(), None).await;
     assert_eq!(code, 202, "{task}");
@@ -48,12 +45,9 @@ async fn test_settings_documents_indexing_swapping_and_search(
     index.wait_task(task.uid()).await.succeeded();
 
     index.search(query.clone(), test.clone()).await;
-    let (task, code) = server.delete_index("test").await;
-    assert_eq!(code, 202, "{task}");
-    server.wait_task(task.uid()).await.succeeded();
 
     eprintln!("Settings -> Documents -> test");
-    let index = server.index("test");
+    let index = server.unique_index();
 
     let (task, code) = index.update_settings(settings.clone()).await;
     assert_eq!(code, 202, "{task}");
@@ -64,9 +58,6 @@ async fn test_settings_documents_indexing_swapping_and_search(
     index.wait_task(task.uid()).await.succeeded();
 
     index.search(query.clone(), test.clone()).await;
-    let (task, code) = server.delete_index("test").await;
-    assert_eq!(code, 202, "{task}");
-    server.wait_task(task.uid()).await.succeeded();
 }
 
 #[actix_rt::test]

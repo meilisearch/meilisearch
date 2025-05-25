@@ -64,7 +64,7 @@ pub enum MeilisearchHttpError {
     #[error(transparent)]
     IndexScheduler(#[from] index_scheduler::Error),
     #[error("{}", match .index_name {
-        Some(name) if !name.is_empty() => format!("Index `{}`: {error}", name),
+        Some(name) if !name.is_empty() => format!("Index `{}`: {error}", MeilisearchHttpError::index_name(name)),
         _ => format!("{error}")
     })]
     Milli { error: milli::Error, index_name: Option<String> },
@@ -83,6 +83,14 @@ pub enum MeilisearchHttpError {
 impl MeilisearchHttpError {
     pub(crate) fn from_milli(error: milli::Error, index_name: Option<String>) -> Self {
         Self::Milli { error, index_name }
+    }
+
+    fn index_name(index_name: &str) -> &str {
+        if let Ok(_) = uuid::Uuid::parse_str(index_name) {
+            "[uuid]"
+        } else {
+            index_name
+        }
     }
 }
 

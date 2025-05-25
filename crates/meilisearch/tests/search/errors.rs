@@ -729,7 +729,7 @@ async fn filter_invalid_attribute_string() {
         |response, code| {
             snapshot!(response, @r###"
             {
-              "message": "Index `test`: Attribute `many` is not filterable. Available filterable attribute patterns are: `title`.\n1:5 many = Glass",
+              "message": "Index `[uuid]`: Attribute `many` is not filterable. Available filterable attribute patterns are: `title`.\n1:5 many = Glass",
               "code": "invalid_search_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
