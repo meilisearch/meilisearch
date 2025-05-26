@@ -91,7 +91,8 @@ impl FacetedDocidsExtractor {
         let mut del_add_facet_value = DelAddFacetValue::new(&context.doc_alloc);
         let docid = document_change.docid();
 
-        macro_rules! facet_fn_factory {
+        // Macro expanding to an insertion/deletion facet fn
+        macro_rules! facet_fn {
             (del) => {
                 |fid: FieldId, meta: Metadata, depth: perm_json_p::Depth, value: &Value| {
                     Self::facet_fn_with_options(
@@ -130,7 +131,7 @@ impl FacetedDocidsExtractor {
 
         match document_change {
             DocumentChange::Deletion(inner) => {
-                let mut del = facet_fn_factory!(del);
+                let mut del = facet_fn!(del);
 
                 extract_document_facets(
                     inner.current(rtxn, index, context.db_fields_ids_map)?,
@@ -148,7 +149,6 @@ impl FacetedDocidsExtractor {
                         inner.current(rtxn, index, context.db_fields_ids_map)?,
                         inner.external_document_id(),
                         new_fields_ids_map.deref_mut(),
-                        asc_desc_fields,
                         &mut del,
                     )?;
                 }
@@ -173,7 +173,7 @@ impl FacetedDocidsExtractor {
 
                 if has_changed {
                     // 1. Delete old facet values
-                    let mut del = facet_fn_factory!(del);
+                    let mut del = facet_fn!(del);
 
                     extract_document_facets(
                         inner.current(rtxn, index, context.db_fields_ids_map)?,
@@ -191,12 +191,12 @@ impl FacetedDocidsExtractor {
                             inner.current(rtxn, index, context.db_fields_ids_map)?,
                             inner.external_document_id(),
                             new_fields_ids_map.deref_mut(),
-                            asc_desc_fields,
                             &mut del,
                         )?;
                     }
 
-                    let mut add = facet_fn_factory!(add);
+                    // 2. Insert new facet values
+                    let mut add = facet_fn!(add);
 
                     extract_document_facets(
                         inner.merged(rtxn, index, context.db_fields_ids_map)?,
@@ -214,14 +214,13 @@ impl FacetedDocidsExtractor {
                             inner.merged(rtxn, index, context.db_fields_ids_map)?,
                             inner.external_document_id(),
                             new_fields_ids_map.deref_mut(),
-                            asc_desc_fields,
                             &mut add,
                         )?;
                     }
                 }
             }
             DocumentChange::Insertion(inner) => {
-                let mut add = facet_fn_factory!(add);
+                let mut add = facet_fn!(add);
 
                 extract_document_facets(
                     inner.inserted(),
@@ -238,7 +237,6 @@ impl FacetedDocidsExtractor {
                         inner.inserted(),
                         inner.external_document_id(),
                         new_fields_ids_map.deref_mut(),
-                        asc_desc_fields,
                         &mut add,
                     )?;
                 }

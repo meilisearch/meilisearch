@@ -108,7 +108,6 @@ pub fn extract_geo_document<'doc>(
     document: impl Document<'doc>,
     external_document_id: &str,
     field_id_map: &mut GlobalFieldsIdsMap,
-    asc_desc_fields: &HashSet<String>,
     facet_fn: &mut impl FnMut(FieldId, Metadata, perm_json_p::Depth, &Value) -> Result<()>,
 ) -> Result<()> {
     if let Some(geo_value) = document.geo_field()? {
