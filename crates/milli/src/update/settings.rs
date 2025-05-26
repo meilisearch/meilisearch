@@ -884,7 +884,6 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                 disabled_typos_terms.disable_on_numbers = disable_on_numbers;
             }
             Setting::Reset => {
-                self.index.delete_disabled_typos_terms(self.wtxn)?;
                 disabled_typos_terms.disable_on_numbers =
                     DisabledTyposTerms::default().disable_on_numbers;
             }

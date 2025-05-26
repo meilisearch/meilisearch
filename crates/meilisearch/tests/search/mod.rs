@@ -2045,7 +2045,7 @@ async fn test_exact_typos_terms() {
         }),
         &json!({"q": "12345"}),
         |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             snapshot!(json_string!(response["hits"]), @r###"
             [
               {
@@ -2080,7 +2080,7 @@ async fn test_exact_typos_terms() {
         }),
         &json!({"q": "123457"}),
         |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             snapshot!(json_string!(response["hits"]), @r###"[]"###);
         },
     )
