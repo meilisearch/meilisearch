@@ -4,9 +4,17 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 pub use insta;
+use insta::internals::{Content, ContentPath};
 use once_cell::sync::Lazy;
+use regex_lite::{Regex, RegexBuilder};
 
 static SNAPSHOT_NAMES: Lazy<Mutex<HashMap<PathBuf, usize>>> = Lazy::new(Mutex::default);
+/// A regex to match UUIDs in messages, specifically looking for the UUID v4 format
+static UUID_IN_MESSAGE_RE: Lazy<Regex> = Lazy::new(|| {
+    RegexBuilder::new(r"(?<before>.*)([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})(?<after>.*)")
+        .case_insensitive(true)
+        .build().unwrap()
+});
 
 /// Return the md5 hash of the given string
 pub fn hash_snapshot(snap: &str) -> String {
@@ -25,6 +33,19 @@ pub fn default_snapshot_settings_for_test<'a>(
     let path = Path::new(std::panic::Location::caller().file());
     let filename = path.file_name().unwrap().to_str().unwrap();
     settings.set_omit_expression(true);
+
+    fn uuid_in_message_redaction(content: Content, _content_path: ContentPath) -> Content {
+        match &content {
+            Content::String(s) => {
+                let uuid_replaced = UUID_IN_MESSAGE_RE.replace_all(s, "$before[uuid]$after");
+                Content::String(uuid_replaced.to_string())
+            }
+            _ => content,
+        }
+    }
+
+    settings.add_dynamic_redaction(".message", uuid_in_message_redaction);
+    settings.add_dynamic_redaction(".error.message", uuid_in_message_redaction);
 
     let test_name = test_name.strip_suffix("::{{closure}}").unwrap_or(test_name);
     let test_name = test_name.rsplit("::").next().unwrap().to_owned();
