@@ -178,10 +178,9 @@ pub enum Error {
 }
 
 impl Error {
-
     #[inline]
     fn index_name(index_name: &str) -> &str {
-        if let Ok(_) = uuid::Uuid::parse_str(index_name) {
+        if uuid::Uuid::parse_str(index_name).is_ok() {
             "[uuid]"
         } else {
             index_name

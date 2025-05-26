@@ -33,7 +33,6 @@ pub fn default_snapshot_settings_for_test<'a>(
     let filename = path.file_name().unwrap().to_str().unwrap();
     settings.set_omit_expression(true);
 
-<<<<<<< HEAD
     fn uuid_in_message_redaction(content: Content, _content_path: ContentPath) -> Content {
         match &content {
             Content::String(s) => {
