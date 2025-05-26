@@ -5,11 +5,11 @@ pub mod registry;
 pub mod server;
 
 #[cfg(test)]
-mod tests {
-    mod conversion_tests;
-    mod integration_tests;
-    mod e2e_tests;
-}
+mod conversion_tests;
+#[cfg(test)]
+mod integration_tests;
+#[cfg(test)]
+mod e2e_tests;
 
 pub use error::Error;
 pub use registry::McpToolRegistry;

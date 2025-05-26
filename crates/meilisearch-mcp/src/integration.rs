@@ -2,12 +2,8 @@ use crate::registry::McpToolRegistry;
 use crate::server::{McpServer, MeilisearchClient};
 use crate::Error;
 use actix_web::{web, HttpResponse};
-use meilisearch::routes::MeilisearchApi;
-use meilisearch_auth::AuthController;
-use meilisearch_types::error::ResponseError;
 use serde_json::Value;
-use std::sync::Arc;
-use utoipa::OpenApi;
+use utoipa::openapi::OpenApi;
 
 pub struct MeilisearchMcpClient {
     base_url: String,
@@ -75,10 +71,7 @@ impl MeilisearchClient for MeilisearchMcpClient {
     }
 }
 
-pub fn create_mcp_server_from_openapi() -> McpServer {
-    // Get the OpenAPI specification from Meilisearch
-    let openapi = MeilisearchApi::openapi();
-    
+pub fn create_mcp_server_from_openapi(openapi: OpenApi) -> McpServer {
     // Create registry from OpenAPI
     let registry = McpToolRegistry::from_openapi(&openapi);
     
@@ -86,12 +79,14 @@ pub fn create_mcp_server_from_openapi() -> McpServer {
     McpServer::new(registry)
 }
 
-pub fn configure_mcp_route(cfg: &mut web::ServiceConfig) {
-    cfg.service(
-        web::resource("/mcp")
-            .route(web::get().to(crate::server::mcp_sse_handler))
-            .route(web::post().to(mcp_post_handler))
-    );
+pub fn configure_mcp_route(cfg: &mut web::ServiceConfig, openapi: OpenApi) {
+    let server = create_mcp_server_from_openapi(openapi);
+    cfg.app_data(web::Data::new(server))
+        .service(
+            web::resource("/mcp")
+                .route(web::get().to(crate::server::mcp_sse_handler))
+                .route(web::post().to(mcp_post_handler))
+        );
 }
 
 async fn mcp_post_handler(
@@ -102,18 +97,20 @@ async fn mcp_post_handler(
     Ok(HttpResponse::Ok().json(response))
 }
 
-pub fn inject_mcp_server(app_data: &mut web::Data<()>) -> web::Data<McpServer> {
-    let server = create_mcp_server_from_openapi();
-    web::Data::new(server)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use utoipa::openapi::{OpenApiBuilder, InfoBuilder};
 
     #[test]
     fn test_create_mcp_server() {
-        let server = create_mcp_server_from_openapi();
+        let openapi = OpenApiBuilder::new()
+            .info(InfoBuilder::new()
+                .title("Test API")
+                .version("1.0")
+                .build())
+            .build();
+        let _server = create_mcp_server_from_openapi(openapi);
         // Server should be created successfully
         assert!(true);
     }

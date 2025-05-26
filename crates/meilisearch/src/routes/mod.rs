@@ -118,7 +118,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     #[cfg(feature = "mcp")]
     {
         use meilisearch_mcp::integration::configure_mcp_route;
-        configure_mcp_route(cfg);
+        let openapi = MeilisearchApi::openapi();
+        configure_mcp_route(cfg, openapi);
     }
 
     #[cfg(feature = "swagger")]

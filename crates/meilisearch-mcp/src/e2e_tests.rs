@@ -18,7 +18,7 @@ async fn test_mcp_server_sse_communication() {
         .insert_header(("Accept", "text/event-stream"))
         .to_request();
 
-    let mut resp = test::call_service(&app, req).await;
+    let resp = test::call_service(&app, req).await;
     assert!(resp.status().is_success());
     assert_eq!(
         resp.headers().get("Content-Type").unwrap(),

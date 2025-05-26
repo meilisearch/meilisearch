@@ -2,7 +2,8 @@ use crate::protocol::Tool;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
-use utoipa::openapi::{OpenApi, Operation, PathItem, PathItemType};
+use utoipa::openapi::{OpenApi, PathItem};
+use utoipa::openapi::path::Operation;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct McpTool {
@@ -28,10 +29,9 @@ impl McpToolRegistry {
     pub fn from_openapi(openapi: &OpenApi) -> Self {
         let mut registry = Self::new();
 
-        if let Some(paths) = &openapi.paths {
-            for (path, path_item) in paths.iter() {
-                registry.process_path_item(path, path_item);
-            }
+        // openapi.paths is of type Paths
+        for (path, path_item) in openapi.paths.paths.iter() {
+            registry.process_path_item(path, path_item);
         }
 
         registry
@@ -58,11 +58,11 @@ impl McpToolRegistry {
 
     fn process_path_item(&mut self, path: &str, path_item: &PathItem) {
         let methods = [
-            (PathItemType::Get, &path_item.get),
-            (PathItemType::Post, &path_item.post),
-            (PathItemType::Put, &path_item.put),
-            (PathItemType::Delete, &path_item.delete),
-            (PathItemType::Patch, &path_item.patch),
+            ("GET", &path_item.get),
+            ("POST", &path_item.post),
+            ("PUT", &path_item.put),
+            ("DELETE", &path_item.delete),
+            ("PATCH", &path_item.patch),
         ];
 
         for (method_type, operation) in methods {
@@ -78,13 +78,13 @@ impl McpToolRegistry {
 impl McpTool {
     pub fn from_openapi_path(
         path: &str,
-        method: PathItemType,
+        method: &str,
         _path_item: &PathItem,
     ) -> Self {
         // This is a simplified version for testing
         // In the real implementation, we would extract from the PathItem
-        let name = Self::generate_tool_name(path, method.as_str());
-        let description = format!("{} {}", method.as_str(), path);
+        let name = Self::generate_tool_name(path, method);
+        let description = format!("{} {}", method, path);
         
         let input_schema = json!({
             "type": "object",
@@ -96,19 +96,19 @@ impl McpTool {
             name,
             description,
             input_schema,
-            http_method: method.as_str().to_string(),
+            http_method: method.to_string(),
             path_template: path.to_string(),
         }
     }
 
-    fn from_operation(path: &str, method: PathItemType, operation: &Operation) -> Option<Self> {
-        let name = Self::generate_tool_name(path, method.as_str());
+    fn from_operation(path: &str, method: &str, operation: &Operation) -> Option<Self> {
+        let name = Self::generate_tool_name(path, method);
         let description = operation
             .summary
             .as_ref()
             .or(operation.description.as_ref())
             .cloned()
-            .unwrap_or_else(|| format!("{} {}", method.as_str(), path));
+            .unwrap_or_else(|| format!("{} {}", method, path));
 
         let mut properties = serde_json::Map::new();
         let mut required = Vec::new();
@@ -116,20 +116,18 @@ impl McpTool {
         // Extract path parameters
         if let Some(params) = &operation.parameters {
             for param in params {
-                if let Some(param_name) = param.name() {
-                    let camel_name = to_camel_case(param_name);
-                    
-                    properties.insert(
-                        camel_name.clone(),
-                        json!({
-                            "type": "string",
-                            "description": param.description().unwrap_or("")
-                        }),
-                    );
+                let camel_name = to_camel_case(&param.name);
+                
+                properties.insert(
+                    camel_name.clone(),
+                    json!({
+                        "type": "string",
+                        "description": param.description.as_deref().unwrap_or("")
+                    }),
+                );
 
-                    if param.required() {
-                        required.push(camel_name);
-                    }
+                if matches!(param.required, utoipa::openapi::Required::True) {
+                    required.push(camel_name);
                 }
             }
         }
@@ -158,7 +156,7 @@ impl McpTool {
             name,
             description,
             input_schema,
-            http_method: method.as_str().to_string(),
+            http_method: method.to_string(),
             path_template: path.to_string(),
         })
     }
@@ -175,7 +173,12 @@ impl McpTool {
         match method.to_uppercase().as_str() {
             "GET" => {
                 if is_collection && !path.contains('{') {
-                    format!("get{}", to_pascal_case(&pluralize(resource)))
+                    // Don't pluralize if already plural
+                    if resource.ends_with('s') {
+                        format!("get{}", to_pascal_case(resource))
+                    } else {
+                        format!("get{}", to_pascal_case(&pluralize(resource)))
+                    }
                 } else {
                     format!("get{}", to_pascal_case(&singularize(resource)))
                 }
@@ -218,7 +221,7 @@ fn to_pascal_case(s: &str) -> String {
             let mut chars = part.chars();
             chars
                 .next()
-                .map(|c| c.to_uppercase().collect::<String>() + &chars.as_str().to_lowercase())
+                .map(|c| c.to_uppercase().collect::<String>() + chars.as_str().to_lowercase().as_str())
                 .unwrap_or_default()
         })
         .collect()
@@ -250,7 +253,7 @@ fn extract_schema_properties(schema: &utoipa::openapi::RefOr<utoipa::openapi::Sc
     // This is a simplified extraction - in a real implementation, 
     // we would properly handle $ref resolution and nested schemas
     match schema {
-        utoipa::openapi::RefOr::T(schema) => {
+        utoipa::openapi::RefOr::T(_schema) => {
             // Extract properties from the schema
             // This would need proper implementation based on the schema type
             Some(serde_json::Map::new())

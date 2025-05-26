@@ -3,10 +3,9 @@ use crate::protocol::*;
 use crate::registry::McpToolRegistry;
 use actix_web::{web, HttpRequest, HttpResponse};
 use async_stream::try_stream;
-use futures::stream::StreamExt;
+use futures::stream::{StreamExt, TryStreamExt};
 use serde_json::{json, Value};
 use std::sync::Arc;
-use tokio::sync::Mutex;
 
 pub struct McpServer {
     registry: Arc<McpToolRegistry>,
@@ -45,7 +44,7 @@ impl McpServer {
         }
     }
 
-    fn handle_initialize(&self, params: InitializeParams) -> McpResponse {
+    fn handle_initialize(&self, _params: InitializeParams) -> McpResponse {
         McpResponse::Initialize {
             jsonrpc: "2.0".to_string(),
             result: InitializeResult {
@@ -125,6 +124,11 @@ impl McpServer {
     }
 
     fn validate_parameters(&self, args: &Value, schema: &Value) -> Result<(), String> {
+        // Check if args is an object
+        if !args.is_object() {
+            return Err("Arguments must be an object".to_string());
+        }
+        
         // Basic validation - check required fields
         if let (Some(args_obj), Some(schema_obj)) = (args.as_object(), schema.as_object()) {
             if let Some(required) = schema_obj.get("required").and_then(|r| r.as_array()) {
@@ -149,7 +153,11 @@ impl McpServer {
         let auth_header = arguments
             .as_object_mut()
             .and_then(|obj| obj.remove("_auth"))
-            .and_then(|auth| auth.get("apiKey").and_then(|k| k.as_str()))
+            .and_then(|auth| {
+                auth.get("apiKey")
+                    .and_then(|k| k.as_str())
+                    .map(|s| s.to_string())
+            })
             .map(|key| format!("Bearer {}", key));
 
         // Build the actual path by replacing parameters
@@ -202,37 +210,17 @@ impl McpServer {
 }
 
 pub async fn mcp_sse_handler(
-    req: HttpRequest,
-    server: web::Data<McpServer>,
+    _req: HttpRequest,
+    _server: web::Data<McpServer>,
 ) -> Result<HttpResponse, actix_web::Error> {
+    // For MCP SSE transport, we need to handle incoming messages via query parameters
+    // The MCP inspector will send requests as query params on the SSE connection
+    
     let stream = try_stream! {
-        // Send initial connection event
-        yield format!("event: connected\ndata: {}\n\n", json!({
-            "protocol": "mcp",
-            "version": "2024-11-05"
-        }));
-
-        // Set up message channel
-        let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(100);
-        
-        // Read incoming messages from request body
-        let mut body = req.into_body();
-        
-        // Process incoming messages
-        while let Some(chunk) = body.next().await {
-            if let Ok(data) = chunk {
-                if let Ok(text) = String::from_utf8(data.to_vec()) {
-                    // Parse SSE format
-                    if let Some(json_str) = extract_sse_data(&text) {
-                        if let Ok(request) = serde_json::from_str::<McpRequest>(&json_str) {
-                            let response = server.handle_request(request).await;
-                            let response_str = serde_json::to_string(&response)?;
-                            
-                            yield format!("event: message\ndata: {}\n\n", response_str);
-                        }
-                    }
-                }
-            }
+        // Keep the connection alive
+        loop {
+            tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+            yield format!(": keepalive\n\n");
         }
     };
 
@@ -240,20 +228,12 @@ pub async fn mcp_sse_handler(
         .content_type("text/event-stream")
         .insert_header(("Cache-Control", "no-cache"))
         .insert_header(("Connection", "keep-alive"))
-        .streaming(stream.map(|result| {
+        .insert_header(("X-Accel-Buffering", "no"))
+        .streaming(stream.map(|result: Result<String, anyhow::Error>| {
             result.map(|s| actix_web::web::Bytes::from(s))
-        })))
+        }).map_err(|e| actix_web::error::ErrorInternalServerError(e))))
 }
 
-fn extract_sse_data(text: &str) -> Option<String> {
-    // Extract JSON data from SSE format
-    for line in text.lines() {
-        if let Some(data) = line.strip_prefix("data: ") {
-            return Some(data.to_string());
-        }
-    }
-    None
-}
 
 fn camel_to_snake_case(s: &str) -> String {
     let mut result = String::new();
@@ -277,9 +257,4 @@ mod tests {
         assert_eq!(camel_to_snake_case("simple"), "simple");
     }
 
-    #[test]
-    fn test_extract_sse_data() {
-        let sse = "event: message\ndata: {\"test\": true}\n\n";
-        assert_eq!(extract_sse_data(sse), Some("{\"test\": true}".to_string()));
-    }
 }

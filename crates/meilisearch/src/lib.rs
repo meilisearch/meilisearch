@@ -631,11 +631,6 @@ pub fn configure_data(
             web::QueryConfig::default().error_handler(|err, _req| PayloadError::from(err).into()),
         );
 
-    #[cfg(feature = "mcp")]
-    {
-        let mcp_server = meilisearch_mcp::integration::create_mcp_server_from_openapi();
-        config.app_data(web::Data::new(mcp_server));
-    }
 }
 
 #[cfg(feature = "mini-dashboard")]

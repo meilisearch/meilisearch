@@ -14,7 +14,7 @@ anyhow = "1.0.86"
 async-stream = "0.3.5"
 async-trait = "0.1.81"
 futures = "0.3.30"
-meilisearch = { path = "../meilisearch" }
+# Removed meilisearch dependency to avoid cyclic dependency
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
 serde = { version = "1.0.204", features = ["derive"] }
@@ -22,7 +22,7 @@ serde_json = { version = "1.0.120", features = ["preserve_order"] }
 thiserror = "1.0.61"
 tokio = { version = "1.38.0", features = ["full"] }
 tracing = "0.1.40"
-utoipa = { version = "5.3", features = ["actix_extras", "time", "json"] }
+utoipa = { version = "5.3.1", features = ["actix_extras", "time"] }
 uuid = { version = "1.10.0", features = ["serde", "v4"] }
 reqwest = { version = "0.12.5", features = ["json"] }
 

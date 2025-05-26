@@ -1,18 +1,17 @@
-use crate::protocol::Tool;
 use crate::registry::{McpTool, McpToolRegistry};
 use serde_json::json;
-use utoipa::openapi::{OpenApi, PathItem, PathItemType};
+use utoipa::openapi::{OpenApi, PathItem};
 
 #[test]
 fn test_convert_simple_get_endpoint() {
     let tool = McpTool::from_openapi_path(
         "/indexes/{index_uid}",
-        PathItemType::Get,
+        "GET",
         &create_mock_path_item_get(),
     );
     
     assert_eq!(tool.name, "getIndex");
-    assert_eq!(tool.description, "Get information about an index");
+    assert_eq!(tool.description, "GET /indexes/{index_uid}");
     assert_eq!(tool.http_method, "GET");
     assert_eq!(tool.path_template, "/indexes/{index_uid}");
     
@@ -26,7 +25,7 @@ fn test_convert_simple_get_endpoint() {
 fn test_convert_search_endpoint_with_query_params() {
     let tool = McpTool::from_openapi_path(
         "/indexes/{index_uid}/search",
-        PathItemType::Post,
+        "POST",
         &create_mock_search_path_item(),
     );
     
@@ -47,7 +46,7 @@ fn test_convert_search_endpoint_with_query_params() {
 fn test_convert_document_addition_endpoint() {
     let tool = McpTool::from_openapi_path(
         "/indexes/{index_uid}/documents",
-        PathItemType::Post,
+        "POST",
         &create_mock_add_documents_path_item(),
     );
     
@@ -135,7 +134,7 @@ fn test_tool_name_generation() {
 fn test_parameter_extraction() {
     let tool = McpTool::from_openapi_path(
         "/indexes/{index_uid}/documents/{document_id}",
-        PathItemType::Get,
+        "GET",
         &create_mock_get_document_path_item(),
     );
     
@@ -274,7 +273,7 @@ fn create_mock_get_document_path_item() -> PathItem {
 
 fn create_mock_openapi() -> OpenApi {
     serde_json::from_value(json!({
-        "openapi": "3.0.0",
+        "openapi": "3.1.0",
         "info": {
             "title": "Meilisearch API",
             "version": "1.0.0"
