@@ -153,7 +153,7 @@ impl FacetedDocidsExtractor {
                 }
             }
             DocumentChange::Update(inner) => {
-                let has_changed = inner.has_changed_for_fields(
+                let has_changed_for_facets = inner.has_changed_for_fields(
                     &mut |field_name| {
                         match_faceted_field(
                             field_name,
@@ -171,7 +171,7 @@ impl FacetedDocidsExtractor {
                     inner.has_changed_for_geo_fields(rtxn, index, context.db_fields_ids_map)?;
 
                 // 1. Maybe update doc
-                if has_changed {
+                if has_changed_for_facets {
                     extract_document_facets(
                         inner.current(rtxn, index, context.db_fields_ids_map)?,
                         new_fields_ids_map.deref_mut(),
