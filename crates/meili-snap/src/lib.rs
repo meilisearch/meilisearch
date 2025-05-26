@@ -33,6 +33,7 @@ pub fn default_snapshot_settings_for_test<'a>(
     let filename = path.file_name().unwrap().to_str().unwrap();
     settings.set_omit_expression(true);
 
+<<<<<<< HEAD
     fn uuid_in_message_redaction(content: Content, _content_path: ContentPath) -> Content {
         match &content {
             Content::String(s) => {
@@ -45,6 +46,15 @@ pub fn default_snapshot_settings_for_test<'a>(
 
     settings.add_dynamic_redaction(".message", uuid_in_message_redaction);
     settings.add_dynamic_redaction(".error.message", uuid_in_message_redaction);
+    settings.add_dynamic_redaction(".indexUid", |content, _content_path| {
+        match &content {
+            Content::String(s) => match uuid::Uuid::parse_str(s) {
+                Ok(_) => Content::String("[uuid]".to_owned()),
+                Err(_) => content,
+            },
+            _ => content,
+        }
+    });
 
     let test_name = test_name.strip_suffix("::{{closure}}").unwrap_or(test_name);
     let test_name = test_name.rsplit("::").next().unwrap().to_owned();
