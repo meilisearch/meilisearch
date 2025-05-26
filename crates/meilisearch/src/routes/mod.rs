@@ -114,6 +114,12 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(web::scope("/metrics").configure(metrics::configure))
         .service(web::scope("/experimental-features").configure(features::configure))
         .service(web::scope("/network").configure(network::configure));
+    
+    #[cfg(feature = "mcp")]
+    {
+        use meilisearch_mcp::integration::configure_mcp_route;
+        configure_mcp_route(cfg);
+    }
 
     #[cfg(feature = "swagger")]
     {

@@ -5,6 +5,7 @@ members = [
     "crates/meilitool",
     "crates/meilisearch-types",
     "crates/meilisearch-auth",
+    "crates/meilisearch-mcp",
     "crates/meili-snap",
     "crates/index-scheduler",
     "crates/dump",

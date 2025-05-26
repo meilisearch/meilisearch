@@ -89,6 +89,53 @@ We also offer a wide range of dedicated guides to all Meilisearch features, such
 
 Finally, for more in-depth information, refer to our articles explaining fundamental Meilisearch concepts such as [documents](https://www.meilisearch.com/docs/learn/core_concepts/documents?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=advanced) and [indexes](https://www.meilisearch.com/docs/learn/core_concepts/indexes?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=advanced).
 
+## 🤖 MCP (Model Context Protocol) Server
+
+Meilisearch now supports the [Model Context Protocol](https://modelcontextprotocol.io/), allowing AI assistants and LLM applications to directly interact with your search engine.
+
+### Enabling MCP Server
+
+To enable the MCP server, compile Meilisearch with the `mcp` feature:
+
+```bash
+cargo build --release --features mcp
+```
+
+The MCP server will be available at `/mcp` endpoint, supporting both SSE (Server-Sent Events) and regular HTTP POST requests.
+
+### Features
+
+- **Automatic Tool Discovery**: All Meilisearch API endpoints are automatically exposed as MCP tools
+- **Full API Coverage**: Search, index management, document operations, and more
+- **Authentication Support**: Works with existing Meilisearch API keys
+- **Streaming Support**: Long-running operations can stream progress updates
+
+### Example Usage
+
+AI assistants can discover available tools:
+```json
+{
+  "method": "tools/list"
+}
+```
+
+And call Meilisearch operations:
+```json
+{
+  "method": "tools/call",
+  "params": {
+    "name": "searchDocuments",
+    "arguments": {
+      "indexUid": "movies",
+      "q": "science fiction",
+      "limit": 10
+    }
+  }
+}
+```
+
+For more details on MCP integration, see the [MCP documentation](crates/meilisearch-mcp/README.md).
+
 ## 📊 Telemetry
 
 Meilisearch collects **anonymized** user data to help us improve our product. You can [deactivate this](https://www.meilisearch.com/docs/learn/what_is_meilisearch/telemetry?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=telemetry#how-to-disable-data-collection) whenever you want.

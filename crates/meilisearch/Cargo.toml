@@ -50,6 +50,7 @@ jsonwebtoken = "9.3.0"
 lazy_static = "1.5.0"
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
+meilisearch-mcp = { path = "../meilisearch-mcp", optional = true }
 mimalloc = { version = "0.1.43", default-features = false }
 mime = "0.3.17"
 num_cpus = "1.16.0"
@@ -142,6 +143,7 @@ zip = { version = "2.3.0", optional = true }
 default = ["meilisearch-types/all-tokenizations", "mini-dashboard"]
 swagger = ["utoipa-scalar"]
 test-ollama = []
+mcp = ["meilisearch-mcp"]
 mini-dashboard = [
     "static-files",
     "anyhow",

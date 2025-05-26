@@ -1,0 +1,33 @@
+[package]
+name = "meilisearch-mcp"
+version = "1.13.0"
+authors = ["Clément Renault <clement@meilisearch.com>"]
+description = "MCP (Model Context Protocol) server for Meilisearch"
+homepage = "https://www.meilisearch.com"
+readme = "README.md"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+actix-web = { version = "4.8.0", default-features = false }
+anyhow = "1.0.86"
+async-stream = "0.3.5"
+async-trait = "0.1.81"
+futures = "0.3.30"
+meilisearch = { path = "../meilisearch" }
+meilisearch-auth = { path = "../meilisearch-auth" }
+meilisearch-types = { path = "../meilisearch-types" }
+serde = { version = "1.0.204", features = ["derive"] }
+serde_json = { version = "1.0.120", features = ["preserve_order"] }
+thiserror = "1.0.61"
+tokio = { version = "1.38.0", features = ["full"] }
+tracing = "0.1.40"
+utoipa = { version = "5.3", features = ["actix_extras", "time", "json"] }
+uuid = { version = "1.10.0", features = ["serde", "v4"] }
+reqwest = { version = "0.12.5", features = ["json"] }
+
+[dev-dependencies]
+insta = "1.39.0"
+tokio = { version = "1.38.0", features = ["test-util"] }
+actix-web = { version = "4.8.0", features = ["macros"] }
+actix-rt = "2.10.0"
