@@ -2040,6 +2040,14 @@ async fn update_documents_with_geo_field() {
     {
       "hits": [
         {
+          "id": "4",
+          "_geo": {
+            "lat": "4",
+            "lng": "0"
+          },
+          "_geoDistance": 667170
+        },
+        {
           "id": "3",
           "_geo": {
             "lat": 5,
@@ -2047,14 +2055,6 @@ async fn update_documents_with_geo_field() {
           },
           "doggo": "kefir",
           "_geoDistance": 555975
-        },
-        {
-          "id": "4",
-          "_geo": {
-            "lat": "4",
-            "lng": "0"
-          },
-          "_geoDistance": 667170
         },
         {
           "id": "1"

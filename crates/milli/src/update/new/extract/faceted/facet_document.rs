@@ -16,7 +16,6 @@ use crate::filterable_attributes_rules::match_faceted_field;
 #[allow(clippy::too_many_arguments)]
 pub fn extract_document_facets<'doc>(
     document: impl Document<'doc>,
-    external_document_id: &str,
     field_id_map: &mut GlobalFieldsIdsMap,
     filterable_attributes: &[FilterableAttributesRule],
     sortable_fields: &HashSet<String>,

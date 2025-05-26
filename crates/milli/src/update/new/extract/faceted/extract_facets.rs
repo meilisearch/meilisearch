@@ -135,7 +135,6 @@ impl FacetedDocidsExtractor {
 
                 extract_document_facets(
                     inner.current(rtxn, index, context.db_fields_ids_map)?,
-                    inner.external_document_id(),
                     new_fields_ids_map.deref_mut(),
                     filterable_attributes,
                     sortable_fields,
@@ -177,7 +176,6 @@ impl FacetedDocidsExtractor {
 
                     extract_document_facets(
                         inner.current(rtxn, index, context.db_fields_ids_map)?,
-                        inner.external_document_id(),
                         new_fields_ids_map.deref_mut(),
                         filterable_attributes,
                         sortable_fields,
@@ -200,7 +198,6 @@ impl FacetedDocidsExtractor {
 
                     extract_document_facets(
                         inner.merged(rtxn, index, context.db_fields_ids_map)?,
-                        inner.external_document_id(),
                         new_fields_ids_map.deref_mut(),
                         filterable_attributes,
                         sortable_fields,
@@ -224,7 +221,6 @@ impl FacetedDocidsExtractor {
 
                 extract_document_facets(
                     inner.inserted(),
-                    inner.external_document_id(),
                     new_fields_ids_map.deref_mut(),
                     filterable_attributes,
                     sortable_fields,
@@ -232,6 +228,7 @@ impl FacetedDocidsExtractor {
                     distinct_field,
                     &mut add,
                 )?;
+
                 if is_geo_enabled {
                     extract_geo_document(
                         inner.inserted(),
