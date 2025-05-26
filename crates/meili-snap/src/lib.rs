@@ -55,6 +55,14 @@ pub fn default_snapshot_settings_for_test<'a>(
         }
     });
 
+    settings.add_dynamic_redaction(".error.message", |content, _content_path| match &content {
+        Content::String(s) => {
+            let uuid_replaced = UUID_IN_MESSAGE_RE.replace_all(s, "$before[uuid]$after");
+            Content::String(uuid_replaced.to_string())
+        }
+        _ => content,
+    });
+
     let test_name = test_name.strip_suffix("::{{closure}}").unwrap_or(test_name);
     let test_name = test_name.rsplit("::").next().unwrap().to_owned();
 

@@ -126,7 +126,7 @@ pub enum Error {
     #[error(transparent)]
     Heed(#[from] heed::Error),
     #[error("{}", match .index_uid {
-        Some(uid) if !uid.is_empty() => format!("Index `{}`: {error}", Error::index_name(uid)),
+        Some(uid) if !uid.is_empty() => format!("Index `{}`: {error}", uid),
         _ => format!("{error}")
     })]
     Milli { error: milli::Error, index_uid: Option<String> },
@@ -175,17 +175,6 @@ pub enum Error {
     #[cfg(test)]
     #[error("Planned failure for tests.")]
     PlannedFailure,
-}
-
-impl Error {
-    #[inline]
-    fn index_name(index_name: &str) -> &str {
-        if uuid::Uuid::parse_str(index_name).is_ok() {
-            "[uuid]"
-        } else {
-            index_name
-        }
-    }
 }
 
 #[derive(Debug, thiserror::Error)]
