@@ -170,10 +170,10 @@ impl FacetedDocidsExtractor {
                 let has_changed_for_geo_fields =
                     inner.has_changed_for_geo_fields(rtxn, index, context.db_fields_ids_map)?;
 
-                if has_changed {
-                    // 1. Delete old facet values
-                    let mut del = facet_fn!(del);
+                // 1. Delete old facet values
+                let mut del = facet_fn!(del);
 
+                if has_changed {
                     extract_document_facets(
                         inner.current(rtxn, index, context.db_fields_ids_map)?,
                         new_fields_ids_map.deref_mut(),
@@ -183,19 +183,20 @@ impl FacetedDocidsExtractor {
                         distinct_field,
                         &mut del,
                     )?;
+                }
+                if is_geo_enabled && has_changed_for_geo_fields {
+                    extract_geo_document(
+                        inner.current(rtxn, index, context.db_fields_ids_map)?,
+                        inner.external_document_id(),
+                        new_fields_ids_map.deref_mut(),
+                        &mut del,
+                    )?;
+                }
 
-                    if is_geo_enabled && has_changed_for_geo_fields {
-                        extract_geo_document(
-                            inner.current(rtxn, index, context.db_fields_ids_map)?,
-                            inner.external_document_id(),
-                            new_fields_ids_map.deref_mut(),
-                            &mut del,
-                        )?;
-                    }
+                // 2. Insert new facet values
+                let mut add = facet_fn!(add);
 
-                    // 2. Insert new facet values
-                    let mut add = facet_fn!(add);
-
+                if has_changed {
                     extract_document_facets(
                         inner.merged(rtxn, index, context.db_fields_ids_map)?,
                         new_fields_ids_map.deref_mut(),
@@ -205,15 +206,14 @@ impl FacetedDocidsExtractor {
                         distinct_field,
                         &mut add,
                     )?;
-
-                    if is_geo_enabled && has_changed_for_geo_fields {
-                        extract_geo_document(
-                            inner.merged(rtxn, index, context.db_fields_ids_map)?,
-                            inner.external_document_id(),
-                            new_fields_ids_map.deref_mut(),
-                            &mut add,
-                        )?;
-                    }
+                }
+                if is_geo_enabled && has_changed_for_geo_fields {
+                    extract_geo_document(
+                        inner.merged(rtxn, index, context.db_fields_ids_map)?,
+                        inner.external_document_id(),
+                        new_fields_ids_map.deref_mut(),
+                        &mut add,
+                    )?;
                 }
             }
             DocumentChange::Insertion(inner) => {
