@@ -2924,8 +2924,10 @@ async fn batch_several_documents_addition() {
     }
 
     // wait first batch of documents to finish
-    futures::future::join_all(waiter).await;
-    index.wait_task(4).await.succeeded();
+    let finished_tasks = futures::future::join_all(waiter).await;
+    for (task, _code) in finished_tasks {
+        index.wait_task(task.uid()).await;
+    }
 
     // run a second completely failing batch
     documents[40] = json!({"title": "error", "desc": "error"});
@@ -2936,8 +2938,10 @@ async fn batch_several_documents_addition() {
         waiter.push(index.add_documents(json!(chunk), Some("id")));
     }
     // wait second batch of documents to finish
-    futures::future::join_all(waiter).await;
-    index.wait_task(9).await.failed();
+    let finished_tasks = futures::future::join_all(waiter).await;
+    for (task, _code) in finished_tasks {
+        index.wait_task(task.uid()).await;
+    }
 
     let (response, _code) = index.filtered_tasks(&[], &["failed"], &[]).await;
 
