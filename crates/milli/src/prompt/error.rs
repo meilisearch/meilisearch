@@ -18,6 +18,7 @@ impl NewPromptError {
         Self { kind: NewPromptErrorKind::CannotParseTemplate(inner), fault: FaultSource::User }
     }
 
+    #[allow(unused)]
     pub(crate) fn invalid_fields_in_template(inner: liquid::Error) -> NewPromptError {
         Self { kind: NewPromptErrorKind::InvalidFieldsInTemplate(inner), fault: FaultSource::User }
     }
@@ -27,6 +28,7 @@ impl NewPromptError {
 pub enum NewPromptErrorKind {
     #[error("cannot parse template: {0}")]
     CannotParseTemplate(liquid::Error),
+    #[allow(unused)]
     #[error("template contains invalid fields: {0}. Only `doc.*`, `fields[i].name`, `fields[i].value` are supported")]
     InvalidFieldsInTemplate(liquid::Error),
 }

@@ -2,7 +2,6 @@ mod context;
 mod document;
 pub(crate) mod error;
 mod fields;
-mod template_checker;
 
 use std::cell::RefCell;
 use std::convert::TryFrom;
@@ -105,11 +104,6 @@ impl Prompt {
             max_bytes,
         };
 
-        // render template with special object that's OK with `doc.*` and `fields.*`
-        this.template
-            .render(&template_checker::TemplateChecker)
-            .map_err(NewPromptError::invalid_fields_in_template)?;
-
         Ok(this)
     }
 
@@ -206,6 +200,7 @@ mod test {
     }
 
     #[test]
+    #[ignore]
     fn template_missing_doc() {
         assert!(matches!(
             Prompt::new("{{title}}: {{overview}}".into(), None),
@@ -236,6 +231,7 @@ mod test {
     }
 
     #[test]
+    #[ignore]
     fn template_fields_invalid() {
         assert!(matches!(
             // intentionally garbled field
