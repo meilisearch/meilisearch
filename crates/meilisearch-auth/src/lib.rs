@@ -128,7 +128,12 @@ impl AuthController {
 
     /// Check if the provided key is authorized to make a specific action
     /// without checking if the key is valid.
-    pub fn is_key_authorized(&self, uid: Uuid, bitflags: Action, index: Option<&str>) -> Result<bool> {
+    pub fn is_key_authorized(
+        &self,
+        uid: Uuid,
+        bitflags: Action,
+        index: Option<&str>,
+    ) -> Result<bool> {
         let status = self.store.is_key_authorized(uid, bitflags, index)?;
 
         // Return whether authorization was successfull
