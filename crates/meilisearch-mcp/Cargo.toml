@@ -24,6 +24,7 @@ tokio = { version = "1.38.0", features = ["full"] }
 tracing = "0.1.40"
 utoipa = { version = "5.3.1", features = ["actix_extras", "time"] }
 uuid = { version = "1.10.0", features = ["serde", "v4"] }
+regex = "1.10.2"
 reqwest = { version = "0.12.5", features = ["json"] }
 
 [dev-dependencies]

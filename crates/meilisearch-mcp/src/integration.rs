@@ -86,15 +86,27 @@ pub fn configure_mcp_route(cfg: &mut web::ServiceConfig, openapi: OpenApi) {
             web::resource("/mcp")
                 .route(web::get().to(crate::server::mcp_sse_handler))
                 .route(web::post().to(mcp_post_handler))
+                .route(web::method(actix_web::http::Method::OPTIONS).to(mcp_options_handler))
         );
 }
 
 async fn mcp_post_handler(
-    req_body: web::Json<crate::protocol::McpRequest>,
+    req_body: web::Json<crate::protocol::JsonRpcRequest>,
     server: web::Data<McpServer>,
 ) -> Result<HttpResponse, actix_web::Error> {
-    let response = server.handle_request(req_body.into_inner()).await;
-    Ok(HttpResponse::Ok().json(response))
+    let response = server.handle_json_rpc_request(req_body.into_inner()).await;
+    Ok(HttpResponse::Ok()
+        .insert_header(("Access-Control-Allow-Origin", "*"))
+        .insert_header(("Access-Control-Allow-Headers", "*"))
+        .json(response))
+}
+
+async fn mcp_options_handler() -> Result<HttpResponse, actix_web::Error> {
+    Ok(HttpResponse::Ok()
+        .insert_header(("Access-Control-Allow-Origin", "*"))
+        .insert_header(("Access-Control-Allow-Methods", "GET, POST, OPTIONS"))
+        .insert_header(("Access-Control-Allow-Headers", "*"))
+        .finish())
 }
 
 #[cfg(test)]

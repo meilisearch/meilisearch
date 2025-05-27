@@ -1,6 +1,40 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+// JSON-RPC 2.0 wrapper types
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JsonRpcRequest {
+    pub jsonrpc: String,
+    pub method: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub params: Option<Value>,
+    pub id: Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum JsonRpcResponse {
+    Success {
+        jsonrpc: String,
+        result: Value,
+        id: Value,
+    },
+    Error {
+        jsonrpc: String,
+        error: JsonRpcError,
+        id: Value,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JsonRpcError {
+    pub code: i32,
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<Value>,
+}
+
+// MCP-specific request types
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "method")]
 pub enum McpRequest {
@@ -18,6 +52,7 @@ pub enum McpRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct InitializeParams {
     pub protocol_version: String,
     pub capabilities: ClientCapabilities,
@@ -33,6 +68,7 @@ pub struct ClientCapabilities {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct ClientInfo {
     pub name: String,
     pub version: String,
@@ -45,28 +81,10 @@ pub struct CallToolParams {
     pub arguments: Value,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum McpResponse {
-    Initialize {
-        jsonrpc: String,
-        result: InitializeResult,
-    },
-    ListTools {
-        jsonrpc: String,
-        result: ListToolsResult,
-    },
-    CallTool {
-        jsonrpc: String,
-        result: CallToolResult,
-    },
-    Error {
-        jsonrpc: String,
-        error: McpError,
-    },
-}
+// Response types are now just the result objects, wrapped in JsonRpcResponse
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct InitializeResult {
     pub protocol_version: String,
     pub capabilities: ServerCapabilities,
@@ -81,11 +99,13 @@ pub struct ServerCapabilities {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ToolsCapability {
     pub list_changed: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ServerInfo {
     pub name: String,
     pub version: String,
@@ -105,6 +125,7 @@ pub struct Tool {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CallToolResult {
     pub content: Vec<ToolContent>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -118,23 +139,9 @@ pub struct ToolContent {
     pub text: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct McpError {
-    pub code: i32,
-    pub message: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub data: Option<Value>,
-}
-
-impl Default for McpResponse {
-    fn default() -> Self {
-        McpResponse::Error {
-            jsonrpc: "2.0".to_string(),
-            error: McpError {
-                code: -32603,
-                message: "Internal error".to_string(),
-                data: None,
-            },
-        }
-    }
-}
+// Standard JSON-RPC error codes
+pub const PARSE_ERROR: i32 = -32700;
+pub const INVALID_REQUEST: i32 = -32600;
+pub const METHOD_NOT_FOUND: i32 = -32601;
+pub const INVALID_PARAMS: i32 = -32602;
+pub const INTERNAL_ERROR: i32 = -32603;

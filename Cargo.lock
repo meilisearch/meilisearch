@@ -3784,6 +3784,7 @@ dependencies = [
  "insta",
  "meilisearch-auth",
  "meilisearch-types",
+ "regex",
  "reqwest",
  "serde",
  "serde_json",

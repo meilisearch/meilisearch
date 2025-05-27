@@ -36,90 +36,122 @@ impl McpServer {
         self
     }
 
-    pub async fn handle_request(&self, request: McpRequest) -> McpResponse {
-        match request {
-            McpRequest::Initialize { params } => self.handle_initialize(params),
-            McpRequest::ListTools => self.handle_list_tools(),
-            McpRequest::CallTool { params } => self.handle_call_tool(params).await,
-        }
-    }
-
-    fn handle_initialize(&self, _params: InitializeParams) -> McpResponse {
-        McpResponse::Initialize {
-            jsonrpc: "2.0".to_string(),
-            result: InitializeResult {
-                protocol_version: "2024-11-05".to_string(),
-                capabilities: ServerCapabilities {
-                    tools: ToolsCapability {
-                        list_changed: true,
+    pub async fn handle_json_rpc_request(&self, request: JsonRpcRequest) -> JsonRpcResponse {
+        // Parse the method and params
+        let result = match request.method.as_str() {
+            "initialize" => {
+                let params: InitializeParams = match request.params {
+                    Some(p) => match serde_json::from_value(p) {
+                        Ok(params) => params,
+                        Err(e) => return self.error_response(request.id, INVALID_PARAMS, &format!("Invalid params: {}", e)),
                     },
-                    experimental: json!({}),
-                },
-                server_info: ServerInfo {
-                    name: "meilisearch-mcp".to_string(),
-                    version: env!("CARGO_PKG_VERSION").to_string(),
-                },
+                    None => InitializeParams::default(),
+                };
+                self.handle_initialize(params)
+            }
+            "tools/list" => self.handle_list_tools(),
+            "tools/call" => {
+                let params: CallToolParams = match request.params {
+                    Some(p) => match serde_json::from_value(p) {
+                        Ok(params) => params,
+                        Err(e) => return self.error_response(request.id, INVALID_PARAMS, &format!("Invalid params: {}", e)),
+                    },
+                    None => return self.error_response(request.id, INVALID_PARAMS, "Missing params"),
+                };
+                self.handle_call_tool(params).await
+            }
+            _ => return self.error_response(request.id, METHOD_NOT_FOUND, &format!("Method not found: {}", request.method)),
+        };
+
+        match result {
+            Ok(value) => JsonRpcResponse::Success {
+                jsonrpc: "2.0".to_string(),
+                result: value,
+                id: request.id,
+            },
+            Err((code, message, data)) => JsonRpcResponse::Error {
+                jsonrpc: "2.0".to_string(),
+                error: JsonRpcError { code, message, data },
+                id: request.id,
             },
         }
     }
 
-    fn handle_list_tools(&self) -> McpResponse {
-        let tools = self.registry.list_tools();
-        
-        McpResponse::ListTools {
+    fn error_response(&self, id: Value, code: i32, message: &str) -> JsonRpcResponse {
+        JsonRpcResponse::Error {
             jsonrpc: "2.0".to_string(),
-            result: ListToolsResult { tools },
+            error: JsonRpcError {
+                code,
+                message: message.to_string(),
+                data: None,
+            },
+            id,
         }
     }
 
-    async fn handle_call_tool(&self, params: CallToolParams) -> McpResponse {
+    fn handle_initialize(&self, _params: InitializeParams) -> Result<Value, (i32, String, Option<Value>)> {
+        let result = InitializeResult {
+            protocol_version: "2024-11-05".to_string(),
+            capabilities: ServerCapabilities {
+                tools: ToolsCapability {
+                    list_changed: true,
+                },
+                experimental: json!({}),
+            },
+            server_info: ServerInfo {
+                name: "meilisearch-mcp".to_string(),
+                version: env!("CARGO_PKG_VERSION").to_string(),
+            },
+        };
+        
+        Ok(serde_json::to_value(result).unwrap())
+    }
+
+    fn handle_list_tools(&self) -> Result<Value, (i32, String, Option<Value>)> {
+        let tools = self.registry.list_tools();
+        let result = ListToolsResult { tools };
+        Ok(serde_json::to_value(result).unwrap())
+    }
+
+    async fn handle_call_tool(&self, params: CallToolParams) -> Result<Value, (i32, String, Option<Value>)> {
         // Get the tool definition
         let tool = match self.registry.get_tool(&params.name) {
             Some(tool) => tool,
             None => {
-                return McpResponse::Error {
-                    jsonrpc: "2.0".to_string(),
-                    error: McpError {
-                        code: -32601,
-                        message: format!("Tool not found: {}", params.name),
-                        data: None,
-                    },
-                };
+                return Err((
+                    METHOD_NOT_FOUND,
+                    format!("Tool not found: {}", params.name),
+                    None,
+                ));
             }
         };
 
         // Validate parameters
         if let Err(e) = self.validate_parameters(&params.arguments, &tool.input_schema) {
-            return McpResponse::Error {
-                jsonrpc: "2.0".to_string(),
-                error: McpError {
-                    code: -32602,
-                    message: format!("Invalid parameters: {}", e),
-                    data: Some(json!({ "schema": tool.input_schema })),
-                },
-            };
+            return Err((
+                INVALID_PARAMS,
+                format!("Invalid parameters: {}", e),
+                Some(json!({ "schema": tool.input_schema })),
+            ));
         }
 
         // Execute the tool
         match self.execute_tool(tool, params.arguments).await {
-            Ok(result) => McpResponse::CallTool {
-                jsonrpc: "2.0".to_string(),
-                result: CallToolResult {
+            Ok(result_text) => {
+                let result = CallToolResult {
                     content: vec![ToolContent {
                         content_type: "text".to_string(),
-                        text: result,
+                        text: result_text,
                     }],
                     is_error: None,
-                },
-            },
-            Err(e) => McpResponse::Error {
-                jsonrpc: "2.0".to_string(),
-                error: McpError {
-                    code: -32000,
-                    message: format!("Tool execution failed: {}", e),
-                    data: None,
-                },
-            },
+                };
+                Ok(serde_json::to_value(result).unwrap())
+            }
+            Err(e) => Err((
+                INTERNAL_ERROR,
+                format!("Tool execution failed: {}", e),
+                None,
+            )),
         }
     }
 
@@ -210,28 +242,61 @@ impl McpServer {
 }
 
 pub async fn mcp_sse_handler(
-    _req: HttpRequest,
+    req: HttpRequest,
     _server: web::Data<McpServer>,
 ) -> Result<HttpResponse, actix_web::Error> {
-    // For MCP SSE transport, we need to handle incoming messages via query parameters
-    // The MCP inspector will send requests as query params on the SSE connection
+    // MCP SSE transport implementation
+    // This endpoint handles server-to-client messages via SSE
+    // Client-to-server messages come via POST requests
+    
+    // Check for session ID header
+    let session_id = req.headers()
+        .get("Mcp-Session-Id")
+        .and_then(|h| h.to_str().ok())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    
+    // Check for Last-Event-ID header for resumability
+    let _last_event_id = req.headers()
+        .get("Last-Event-ID")
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| s.parse::<u64>().ok());
+    
+    // Create a channel for this SSE connection
+    let (_tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+    
+    // Store the sender for this session (in a real implementation, you'd use a shared state)
+    // For now, we'll just keep the connection open
     
     let stream = try_stream! {
-        // Keep the connection alive
+        // Always send the endpoint event first
+        yield format!("event: endpoint\ndata: {{\"uri\": \"/mcp\"}}\n\n");
+        
+        // Keep connection alive and handle any messages
         loop {
-            tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
-            yield format!(": keepalive\n\n");
+            tokio::select! {
+                Some(message) = rx.recv() => {
+                    yield message;
+                }
+                _ = tokio::time::sleep(tokio::time::Duration::from_secs(30)) => {
+                    yield format!(": keepalive\n\n");
+                }
+            }
         }
     };
 
-    Ok(HttpResponse::Ok()
-        .content_type("text/event-stream")
-        .insert_header(("Cache-Control", "no-cache"))
-        .insert_header(("Connection", "keep-alive"))
-        .insert_header(("X-Accel-Buffering", "no"))
-        .streaming(stream.map(|result: Result<String, anyhow::Error>| {
-            result.map(|s| actix_web::web::Bytes::from(s))
-        }).map_err(|e| actix_web::error::ErrorInternalServerError(e))))
+    let mut response = HttpResponse::Ok();
+    response.content_type("text/event-stream");
+    response.insert_header(("Cache-Control", "no-cache"));
+    response.insert_header(("Connection", "keep-alive"));
+    response.insert_header(("X-Accel-Buffering", "no"));
+    response.insert_header(("Access-Control-Allow-Origin", "*"));
+    response.insert_header(("Access-Control-Allow-Headers", "*"));
+    response.insert_header(("Mcp-Session-Id", session_id));
+    
+    Ok(response.streaming(stream.map(|result: Result<String, anyhow::Error>| {
+        result.map(|s| actix_web::web::Bytes::from(s))
+    }).map_err(|e| actix_web::error::ErrorInternalServerError(e))))
 }
 
 

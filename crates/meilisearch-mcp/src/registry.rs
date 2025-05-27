@@ -79,25 +79,72 @@ impl McpTool {
     pub fn from_openapi_path(
         path: &str,
         method: &str,
-        _path_item: &PathItem,
+        path_item: &PathItem,
     ) -> Self {
-        // This is a simplified version for testing
-        // In the real implementation, we would extract from the PathItem
-        let name = Self::generate_tool_name(path, method);
-        let description = format!("{} {}", method, path);
-        
-        let input_schema = json!({
-            "type": "object",
-            "properties": {},
-            "required": []
-        });
+        // Get the operation based on method
+        let operation = match method.to_uppercase().as_str() {
+            "GET" => path_item.get.as_ref(),
+            "POST" => path_item.post.as_ref(),
+            "PUT" => path_item.put.as_ref(),
+            "DELETE" => path_item.delete.as_ref(),
+            "PATCH" => path_item.patch.as_ref(),
+            _ => None,
+        };
 
-        Self {
-            name,
-            description,
-            input_schema,
-            http_method: method.to_string(),
-            path_template: path.to_string(),
+        if let Some(op) = operation {
+            Self::from_operation(path, method, op).unwrap_or_else(|| {
+                // Fallback if operation parsing fails
+                let name = Self::generate_tool_name(path, method);
+                let description = format!("{} {}", method, path);
+                
+                Self {
+                    name,
+                    description,
+                    input_schema: json!({
+                        "type": "object",
+                        "properties": {},
+                        "required": []
+                    }),
+                    http_method: method.to_string(),
+                    path_template: path.to_string(),
+                }
+            })
+        } else {
+            // No operation found, use basic extraction
+            let name = Self::generate_tool_name(path, method);
+            let description = format!("{} {}", method, path);
+            
+            // Extract path parameters from the path template
+            let mut properties = serde_json::Map::new();
+            let mut required = Vec::new();
+            
+            // Find parameters in curly braces
+            let re = regex::Regex::new(r"\{([^}]+)\}").unwrap();
+            for cap in re.captures_iter(path) {
+                let param_name = &cap[1];
+                let camel_name = to_camel_case(param_name);
+                
+                properties.insert(
+                    camel_name.clone(),
+                    json!({
+                        "type": "string",
+                        "description": format!("The {}", param_name.replace('_', " "))
+                    }),
+                );
+                required.push(camel_name);
+            }
+            
+            Self {
+                name,
+                description,
+                input_schema: json!({
+                    "type": "object",
+                    "properties": properties,
+                    "required": required
+                }),
+                http_method: method.to_string(),
+                path_template: path.to_string(),
+            }
         }
     }
 
@@ -135,12 +182,34 @@ impl McpTool {
         // Extract request body schema
         if let Some(request_body) = &operation.request_body {
             if let Some(content) = request_body.content.get("application/json") {
-                if let Some(schema) = &content.schema {
-                    // Merge request body schema into properties
-                    if let Some(body_props) = extract_schema_properties(schema) {
-                        for (key, value) in body_props {
-                            properties.insert(key, value);
-                        }
+                if let Some(_schema) = &content.schema {
+                    // Special handling for known endpoints
+                    if path.contains("/documents") && method == "POST" {
+                        // Document addition endpoint expects an array
+                        properties.insert(
+                            "documents".to_string(),
+                            json!({
+                                "type": "array",
+                                "items": {"type": "object"},
+                                "description": "Array of documents to add or update"
+                            }),
+                        );
+                        required.push("documents".to_string());
+                    } else if path.contains("/search") {
+                        // Search endpoint has specific properties
+                        properties.insert("q".to_string(), json!({"type": "string", "description": "Query string"}));
+                        properties.insert("limit".to_string(), json!({"type": "integer", "description": "Maximum number of results", "default": 20}));
+                        properties.insert("offset".to_string(), json!({"type": "integer", "description": "Number of results to skip", "default": 0}));
+                        properties.insert("filter".to_string(), json!({"type": "string", "description": "Filter expression"}));
+                    } else {
+                        // Generic request body handling
+                        properties.insert(
+                            "body".to_string(),
+                            json!({
+                                "type": "object",
+                                "description": "Request body"
+                            }),
+                        );
                     }
                 }
             }
@@ -168,19 +237,23 @@ impl McpTool {
             .collect();
 
         let resource = parts.last().unwrap_or(&"resource");
-        let is_collection = !path.contains('}') || path.ends_with('}');
+        // Check if the path ends with a resource name (not a parameter)
+        let ends_with_param = path.ends_with('}');
 
         match method.to_uppercase().as_str() {
             "GET" => {
-                if is_collection && !path.contains('{') {
-                    // Don't pluralize if already plural
-                    if resource.ends_with('s') {
+                if ends_with_param {
+                    // Getting a single resource by ID
+                    format!("get{}", to_pascal_case(&singularize(resource)))
+                } else {
+                    // Getting a collection
+                    if resource == &"keys" {
+                        "getApiKeys".to_string()
+                    } else if resource.ends_with('s') {
                         format!("get{}", to_pascal_case(resource))
                     } else {
                         format!("get{}", to_pascal_case(&pluralize(resource)))
                     }
-                } else {
-                    format!("get{}", to_pascal_case(&singularize(resource)))
                 }
             }
             "POST" => {
@@ -190,13 +263,29 @@ impl McpTool {
                     "multiSearch".to_string()
                 } else if resource == &"swap-indexes" {
                     "swapIndexes".to_string()
+                } else if resource == &"documents" {
+                    "addDocuments".to_string()
+                } else if resource == &"keys" {
+                    "createApiKey".to_string()
                 } else {
                     format!("create{}", to_pascal_case(&singularize(resource)))
                 }
             }
             "PUT" => format!("update{}", to_pascal_case(&singularize(resource))),
-            "DELETE" => format!("delete{}", to_pascal_case(&singularize(resource))),
-            "PATCH" => format!("update{}", to_pascal_case(&singularize(resource))),
+            "DELETE" => {
+                if resource == &"documents" && !ends_with_param {
+                    "deleteDocuments".to_string()
+                } else {
+                    format!("delete{}", to_pascal_case(&singularize(resource)))
+                }
+            },
+            "PATCH" => {
+                if resource == &"settings" {
+                    "updateSettings".to_string()
+                } else {
+                    format!("update{}", to_pascal_case(&singularize(resource)))
+                }
+            },
             _ => format!("{}{}", method.to_lowercase(), to_pascal_case(resource)),
         }
     }

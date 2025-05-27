@@ -8,26 +8,30 @@ use tokio;
 async fn test_mcp_initialize_request() {
     let server = McpServer::new(McpToolRegistry::new());
     
-    let request = McpRequest::Initialize {
-        params: InitializeParams {
-            protocol_version: "2024-11-05".to_string(),
-            capabilities: ClientCapabilities::default(),
-            client_info: ClientInfo {
-                name: "test-client".to_string(),
-                version: "1.0.0".to_string(),
-            },
-        },
+    let request = JsonRpcRequest {
+        jsonrpc: "2.0".to_string(),
+        method: "initialize".to_string(),
+        params: Some(json!({
+            "protocol_version": "2024-11-05",
+            "capabilities": {},
+            "client_info": {
+                "name": "test-client",
+                "version": "1.0.0"
+            }
+        })),
+        id: json!(1),
     };
     
-    let response = server.handle_request(request).await;
+    let response = server.handle_json_rpc_request(request).await;
     
     match response {
-        McpResponse::Initialize { result, .. } => {
-            assert_eq!(result.protocol_version, "2024-11-05");
-            assert_eq!(result.server_info.name, "meilisearch-mcp");
-            assert!(result.capabilities.tools.list_changed);
+        JsonRpcResponse::Success { result, .. } => {
+            let init_result: InitializeResult = serde_json::from_value(result).unwrap();
+            assert_eq!(init_result.protocol_version, "2024-11-05");
+            assert_eq!(init_result.server_info.name, "meilisearch-mcp");
+            assert!(init_result.capabilities.tools.list_changed);
         }
-        _ => panic!("Expected Initialize response"),
+        _ => panic!("Expected success response"),
     }
 }
 
@@ -50,17 +54,23 @@ async fn test_mcp_list_tools_request() {
     });
     
     let server = McpServer::new(registry);
-    let request = McpRequest::ListTools;
-    let response = server.handle_request(request).await;
+    let request = JsonRpcRequest {
+        jsonrpc: "2.0".to_string(),
+        method: "tools/list".to_string(),
+        params: None,
+        id: json!(2),
+    };
+    let response = server.handle_json_rpc_request(request).await;
     
     match response {
-        McpResponse::ListTools { result, .. } => {
-            assert_eq!(result.tools.len(), 1);
-            assert_eq!(result.tools[0].name, "searchDocuments");
-            assert_eq!(result.tools[0].description, "Search for documents");
-            assert!(result.tools[0].input_schema["type"] == "object");
+        JsonRpcResponse::Success { result, .. } => {
+            let list_result: ListToolsResult = serde_json::from_value(result).unwrap();
+            assert_eq!(list_result.tools.len(), 1);
+            assert_eq!(list_result.tools[0].name, "searchDocuments");
+            assert_eq!(list_result.tools[0].description, "Search for documents");
+            assert!(list_result.tools[0].input_schema["type"] == "object");
         }
-        _ => panic!("Expected ListTools response"),
+        _ => panic!("Expected success response"),
     }
 }
 
@@ -79,43 +89,50 @@ async fn test_mcp_call_tool_request_success() {
     });
     
     let server = McpServer::new(registry);
-    let request = McpRequest::CallTool {
-        params: CallToolParams {
-            name: "getStats".to_string(),
-            arguments: json!({}),
-        },
+    let request = JsonRpcRequest {
+        jsonrpc: "2.0".to_string(),
+        method: "tools/call".to_string(),
+        params: Some(json!({
+            "name": "getStats",
+            "arguments": {}
+        })),
+        id: json!(1),
     };
     
-    let response = server.handle_request(request).await;
+    let response = server.handle_json_rpc_request(request).await;
     
     match response {
-        McpResponse::CallTool { result, .. } => {
-            assert!(!result.content.is_empty());
-            assert_eq!(result.content[0].content_type, "text");
-            assert!(result.is_error.is_none() || !result.is_error.unwrap());
+        JsonRpcResponse::Success { result, .. } => {
+            let call_result: CallToolResult = serde_json::from_value(result).unwrap();
+            assert!(!call_result.content.is_empty());
+            assert_eq!(call_result.content[0].content_type, "text");
+            assert!(call_result.is_error.is_none() || !call_result.is_error.unwrap());
         }
-        _ => panic!("Expected CallTool response"),
+        _ => panic!("Expected success response"),
     }
 }
 
 #[tokio::test]
 async fn test_mcp_call_unknown_tool() {
     let server = McpServer::new(McpToolRegistry::new());
-    let request = McpRequest::CallTool {
-        params: CallToolParams {
-            name: "unknownTool".to_string(),
-            arguments: json!({}),
-        },
+    let request = JsonRpcRequest {
+        jsonrpc: "2.0".to_string(),
+        method: "tools/call".to_string(),
+        params: Some(json!({
+            "name": "unknownTool",
+            "arguments": {}
+        })),
+        id: json!(1),
     };
     
-    let response = server.handle_request(request).await;
+    let response = server.handle_json_rpc_request(request).await;
     
     match response {
-        McpResponse::Error { error, .. } => {
-            assert_eq!(error.code, -32601);
+        JsonRpcResponse::Error { error, .. } => {
+            assert_eq!(error.code, crate::protocol::METHOD_NOT_FOUND);
             assert!(error.message.contains("Tool not found"));
         }
-        _ => panic!("Expected Error response"),
+        _ => panic!("Expected error response"),
     }
 }
 
@@ -138,21 +155,24 @@ async fn test_mcp_call_tool_with_invalid_params() {
     });
     
     let server = McpServer::new(registry);
-    let request = McpRequest::CallTool {
-        params: CallToolParams {
-            name: "searchDocuments".to_string(),
-            arguments: json!({}), // Missing required indexUid
-        },
+    let request = JsonRpcRequest {
+        jsonrpc: "2.0".to_string(),
+        method: "tools/call".to_string(),
+        params: Some(json!({
+            "name": "searchDocuments",
+            "arguments": {} // Missing required indexUid
+        })),
+        id: json!(1),
     };
     
-    let response = server.handle_request(request).await;
+    let response = server.handle_json_rpc_request(request).await;
     
     match response {
-        McpResponse::Error { error, .. } => {
-            assert_eq!(error.code, -32602);
+        JsonRpcResponse::Error { error, .. } => {
+            assert_eq!(error.code, crate::protocol::INVALID_PARAMS);
             assert!(error.message.contains("Invalid parameters"));
         }
-        _ => panic!("Expected Error response"),
+        _ => panic!("Expected error response"),
     }
 }
 
@@ -167,55 +187,60 @@ async fn test_protocol_version_negotiation() {
     ];
     
     for version in test_versions {
-        let request = McpRequest::Initialize {
-            params: InitializeParams {
-                protocol_version: version.to_string(),
-                capabilities: ClientCapabilities::default(),
-                client_info: ClientInfo {
-                    name: "test-client".to_string(),
-                    version: "1.0.0".to_string(),
-                },
-            },
+        let request = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            method: "initialize".to_string(),
+            params: Some(json!({
+                "protocol_version": version,
+                "capabilities": {},
+                "client_info": {
+                    "name": "test-client",
+                    "version": "1.0.0"
+                }
+            })),
+            id: json!(1),
         };
         
-        let response = server.handle_request(request).await;
+        let response = server.handle_json_rpc_request(request).await;
         
         match response {
-            McpResponse::Initialize { result, .. } => {
+            JsonRpcResponse::Success { result, .. } => {
+                let init_result: InitializeResult = serde_json::from_value(result).unwrap();
                 // Server should always return its supported version
-                assert_eq!(result.protocol_version, "2024-11-05");
+                assert_eq!(init_result.protocol_version, "2024-11-05");
             }
-            _ => panic!("Expected Initialize response"),
+            _ => panic!("Expected success response"),
         }
     }
 }
 
 #[tokio::test]
-async fn test_mcp_response_serialization() {
-    let response = McpResponse::Initialize {
+async fn test_json_rpc_response_serialization() {
+    let response = JsonRpcResponse::Success {
         jsonrpc: "2.0".to_string(),
-        result: InitializeResult {
-            protocol_version: "2024-11-05".to_string(),
-            capabilities: ServerCapabilities {
-                tools: ToolsCapability {
-                    list_changed: true,
+        result: json!({
+            "protocol_version": "2024-11-05",
+            "capabilities": {
+                "tools": {
+                    "list_changed": true
                 },
-                experimental: json!({}),
+                "experimental": {}
             },
-            server_info: ServerInfo {
-                name: "meilisearch-mcp".to_string(),
-                version: env!("CARGO_PKG_VERSION").to_string(),
-            },
-        },
+            "server_info": {
+                "name": "meilisearch-mcp",
+                "version": env!("CARGO_PKG_VERSION")
+            }
+        }),
+        id: json!(1),
     };
     
     let serialized = serde_json::to_string(&response).unwrap();
-    let deserialized: McpResponse = serde_json::from_str(&serialized).unwrap();
+    let deserialized: JsonRpcResponse = serde_json::from_str(&serialized).unwrap();
     
     match deserialized {
-        McpResponse::Initialize { result, .. } => {
-            assert_eq!(result.protocol_version, "2024-11-05");
-            assert_eq!(result.server_info.name, "meilisearch-mcp");
+        JsonRpcResponse::Success { result, .. } => {
+            assert_eq!(result["protocol_version"], "2024-11-05");
+            assert_eq!(result["server_info"]["name"], "meilisearch-mcp");
         }
         _ => panic!("Deserialization failed"),
     }
@@ -241,13 +266,14 @@ async fn test_tool_result_formatting() {
 
 #[tokio::test]
 async fn test_error_response_formatting() {
-    let error_response = McpResponse::Error {
+    let error_response = JsonRpcResponse::Error {
         jsonrpc: "2.0".to_string(),
-        error: McpError {
+        error: JsonRpcError {
             code: -32601,
             message: "Method not found".to_string(),
             data: Some(json!({ "method": "unknownMethod" })),
         },
+        id: json!(1),
     };
     
     let serialized = serde_json::to_string(&error_response).unwrap();

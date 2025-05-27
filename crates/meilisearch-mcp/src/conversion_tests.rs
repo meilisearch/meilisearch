@@ -11,7 +11,7 @@ fn test_convert_simple_get_endpoint() {
     );
     
     assert_eq!(tool.name, "getIndex");
-    assert_eq!(tool.description, "GET /indexes/{index_uid}");
+    assert_eq!(tool.description, "Get information about an index");
     assert_eq!(tool.http_method, "GET");
     assert_eq!(tool.path_template, "/indexes/{index_uid}");
     
@@ -207,6 +207,11 @@ fn create_mock_search_path_item() -> PathItem {
                         }
                     }
                 }
+            },
+            "responses": {
+                "200": {
+                    "description": "Search results"
+                }
             }
         }
     }))
@@ -238,6 +243,11 @@ fn create_mock_add_documents_path_item() -> PathItem {
                         }
                     }
                 }
+            },
+            "responses": {
+                "202": {
+                    "description": "Accepted"
+                }
             }
         }
     }))
@@ -265,7 +275,12 @@ fn create_mock_get_document_path_item() -> PathItem {
                         "type": "string"
                     }
                 }
-            ]
+            ],
+            "responses": {
+                "200": {
+                    "description": "Document found"
+                }
+            }
         }
     }))
     .unwrap()
@@ -281,10 +296,20 @@ fn create_mock_openapi() -> OpenApi {
         "paths": {
             "/indexes": {
                 "get": {
-                    "summary": "List all indexes"
+                    "summary": "List all indexes",
+                    "responses": {
+                        "200": {
+                            "description": "List of indexes"
+                        }
+                    }
                 },
                 "post": {
-                    "summary": "Create an index"
+                    "summary": "Create an index",
+                    "responses": {
+                        "202": {
+                            "description": "Index created"
+                        }
+                    }
                 }
             },
             "/indexes/{index_uid}": {
@@ -299,7 +324,12 @@ fn create_mock_openapi() -> OpenApi {
                                 "type": "string"
                             }
                         }
-                    ]
+                    ],
+                    "responses": {
+                        "200": {
+                            "description": "Index information"
+                        }
+                    }
                 }
             },
             "/indexes/{index_uid}/search": {
@@ -314,7 +344,12 @@ fn create_mock_openapi() -> OpenApi {
                                 "type": "string"
                             }
                         }
-                    ]
+                    ],
+                    "responses": {
+                        "200": {
+                            "description": "Search results"
+                        }
+                    }
                 }
             }
         }
