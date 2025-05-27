@@ -1,5 +1,6 @@
 use std::collections::BTreeSet;
 use std::io::BufWriter;
+use std::borrow::Cow;
 
 use fst::{Set, SetBuilder, Streamer};
 use memmap2::Mmap;
@@ -14,6 +15,8 @@ pub struct WordFstBuilder<'a> {
     word_fst_builder: FstMergerBuilder<'a>,
     prefix_fst_builder: Option<PrefixFstBuilder>,
     registered_words: usize,
+    built_words: usize,
+    progress_callback: Option<Box<dyn Fn(usize, usize) + 'a>>, //new
 }
 
 impl<'a> WordFstBuilder<'a> {
@@ -21,7 +24,9 @@ impl<'a> WordFstBuilder<'a> {
         Ok(Self {
             word_fst_builder: FstMergerBuilder::new(Some(words_fst))?,
             prefix_fst_builder: None,
+            built_words: 0,
             registered_words: 0,
+            progress_callback: None,
         })
     }
 
@@ -43,8 +48,25 @@ impl<'a> WordFstBuilder<'a> {
             }
         })?;
 
+        // progress update
+        self.built_words += 1;
+        if let Some(callback) = &self.progress_callback {
+            callback(self.built_words, self.registered_words);
+        }
+
         Ok(())
     }
+
+    /// Set a callback that is called after each word is processed during FST building.
+    /// The callback receives the current number of built words and the total number of words to build.
+    /// This can be used to display progress updates in a UI or CLI.
+
+    pub fn set_progress_callback<F>(&mut self, callback: F)
+    where 
+        F: Fn(usize, usize) + 'a,
+        {
+            self.progress_callback = Some(Box::new(callback));
+        }
 
     pub fn build(
         mut self,
@@ -195,5 +217,63 @@ impl PrefixFstBuilder {
                 deleted: deleted_prefixes,
             },
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fst::{Set, SetBuilder};
+    use std::borrow::Cow;
+    use crate::update::del_add::DelAdd;
+
+    #[test]
+    fn test_word_fst_builder_register_word() -> Result<()> {
+        let words = vec![
+            "bird".as_bytes(),
+            "cat".as_bytes(),
+            "dog".as_bytes(),
+        ];
+
+        let mut builder = SetBuilder::memory();
+        for word in &words {
+            println!("Inserting word into FST builder: {:?}", std::str::from_utf8(word));
+            builder.insert(word)?;
+        }
+        let bytes = builder.into_inner()?;
+        let cow_bytes = Cow::Owned(bytes); // Wrap the bytes in Cow::Owned
+        let set = Set::new(cow_bytes)?;
+
+        let mut word_builder = WordFstBuilder::new(&set)?;
+        println!("Initialized WordFstBuilder");
+
+        println!("Registering words...");
+        println!(
+            "Built words: {}, Registered words: {}",
+            word_builder.built_words, word_builder.registered_words
+        );
+        
+        word_builder.register_word(DelAdd::Addition, b"cat")?;
+        println!(
+            "Built words: {}, Registered words: {}",
+            word_builder.built_words, word_builder.registered_words
+        );
+ 
+        word_builder.register_word(DelAdd::Addition, b"cow")?;
+        println!(
+            "Built words: {}, Registered words: {}",
+            word_builder.built_words, word_builder.registered_words
+        );
+
+        word_builder.register_word(DelAdd::Addition, b"dog")?;
+        println!(
+            "Built words: {}, Registered words: {}",
+            word_builder.built_words, word_builder.registered_words
+        );
+
+        assert_eq!(word_builder.registered_words, 3);
+        assert_eq!(word_builder.built_words, 3);
+
+        Ok(())
     }
 }
