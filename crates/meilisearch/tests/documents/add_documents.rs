@@ -34,16 +34,16 @@ async fn add_documents_test_json_content_types() {
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
     snapshot!(status_code, @"202 Accepted");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
-        @r###"
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r#"
     {
-      "taskUid": 0,
+      "taskUid": "[task_uid]",
       "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "documentAdditionOrUpdate",
       "enqueuedAt": "[date]"
     }
-    "###);
+    "#);
 
     // put
     let req = test::TestRequest::put()
@@ -56,10 +56,10 @@ async fn add_documents_test_json_content_types() {
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
     snapshot!(status_code, @"202 Accepted");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "taskUid": 1,
+      "taskUid": "[task_uid]",
       "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "documentAdditionOrUpdate",
@@ -92,16 +92,16 @@ async fn add_single_document_test_json_content_types() {
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
     snapshot!(status_code, @"202 Accepted");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
-        @r###"
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r#"
     {
-      "taskUid": 0,
+      "taskUid": "[task_uid]",
       "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "documentAdditionOrUpdate",
       "enqueuedAt": "[date]"
     }
-    "###);
+    "#);
 
     // put
     let req = test::TestRequest::put()
@@ -114,10 +114,10 @@ async fn add_single_document_test_json_content_types() {
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
     snapshot!(status_code, @"202 Accepted");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "taskUid": 1,
+      "taskUid": "[task_uid]",
       "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "documentAdditionOrUpdate",
@@ -152,16 +152,16 @@ async fn add_single_document_gzip_encoded() {
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
     snapshot!(status_code, @"202 Accepted");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
-        @r###"
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r#"
     {
-      "taskUid": 0,
+      "taskUid": "[task_uid]",
       "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "documentAdditionOrUpdate",
       "enqueuedAt": "[date]"
     }
-    "###);
+    "#);
 
     // put
     let req = test::TestRequest::put()
@@ -175,10 +175,10 @@ async fn add_single_document_gzip_encoded() {
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
     snapshot!(status_code, @"202 Accepted");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "taskUid": 1,
+      "taskUid": "[task_uid]",
       "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "documentAdditionOrUpdate",
@@ -255,7 +255,7 @@ async fn add_single_document_with_every_encoding() {
     // post
     let document = serde_json::to_string(&document).unwrap();
 
-    for (task_uid, encoder) in Encoder::iterator().enumerate() {
+    for encoder in Encoder::iterator() {
         let mut req = test::TestRequest::post()
             .uri(format!("/indexes/{index_name}/documents").as_str())
             .set_payload(encoder.encode(document.clone()))
@@ -268,9 +268,8 @@ async fn add_single_document_with_every_encoding() {
         let res = test::call_service(&app, req).await;
         let status_code = res.status();
         let body = test::read_body(res).await;
-        let response: Value = serde_json::from_slice(&body).unwrap_or_default();
+        let _response: Value = serde_json::from_slice(&body).unwrap_or_default();
         assert_eq!(status_code, 202);
-        assert_eq!(response["taskUid"], task_uid);
     }
 }
 
@@ -285,20 +284,20 @@ async fn add_csv_document() {
 
     let (response, code) = index.raw_update_documents(document, Some("text/csv"), "").await;
     snapshot!(code, @"202 Accepted");
-    snapshot!(json_string!(response, { ".enqueuedAt" => "[date]" }), @r###"
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".enqueuedAt" => "[date]" }), @r#"
     {
-      "taskUid": 0,
+      "taskUid": "[task_uid]",
       "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "documentAdditionOrUpdate",
       "enqueuedAt": "[date]"
     }
-    "###);
+    "#);
     let response = index.wait_task(response.uid()).await.succeeded();
-    snapshot!(json_string!(response, { ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".duration" => "[duration]" }), @r###"
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".duration" => "[duration]" }), @r###"
     {
-      "uid": 0,
-      "batchUid": 0,
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "[uuid]",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -350,20 +349,20 @@ async fn add_csv_document_with_types() {
 
     let (response, code) = index.raw_update_documents(document, Some("text/csv"), "").await;
     snapshot!(code, @"202 Accepted");
-    snapshot!(json_string!(response, { ".enqueuedAt" => "[date]" }), @r###"
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".enqueuedAt" => "[date]" }), @r#"
     {
-      "taskUid": 0,
+      "taskUid": "[task_uid]",
       "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "documentAdditionOrUpdate",
       "enqueuedAt": "[date]"
     }
-    "###);
+    "#);
     let response = index.wait_task(response.uid()).await.succeeded();
-    snapshot!(json_string!(response, { ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".duration" => "[duration]" }), @r###"
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".duration" => "[duration]" }), @r###"
     {
-      "uid": 0,
-      "batchUid": 0,
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "[uuid]",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -426,20 +425,20 @@ async fn add_csv_document_with_custom_delimiter() {
     let (response, code) =
         index.raw_update_documents(document, Some("text/csv"), "?csvDelimiter=|").await;
     snapshot!(code, @"202 Accepted");
-    snapshot!(json_string!(response, { ".enqueuedAt" => "[date]" }), @r###"
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".enqueuedAt" => "[date]" }), @r#"
     {
-      "taskUid": 0,
+      "taskUid": "[task_uid]",
       "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "documentAdditionOrUpdate",
       "enqueuedAt": "[date]"
     }
-    "###);
+    "#);
     let response = index.wait_task(response.uid()).await.succeeded();
-    snapshot!(json_string!(response, { ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".duration" => "[duration]" }), @r###"
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".duration" => "[duration]" }), @r###"
     {
-      "uid": 0,
-      "batchUid": 0,
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "[uuid]",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -991,17 +990,16 @@ async fn add_documents_no_index_creation() {
 
     let (response, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    assert_eq!(response["taskUid"], 0);
 
     index.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index.get_task(0).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "uid": 0,
-      "batchUid": 0,
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "[uuid]",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -1061,26 +1059,26 @@ async fn document_addition_with_primary_key() {
     ]);
     let (response, code) = index.add_documents(documents, Some("primary")).await;
     snapshot!(code, @"202 Accepted");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
-        @r###"
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r#"
     {
-      "taskUid": 0,
+      "taskUid": "[task_uid]",
       "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "documentAdditionOrUpdate",
       "enqueuedAt": "[date]"
     }
-    "###);
+    "#);
 
     index.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index.get_task(response.uid()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "uid": 0,
-      "batchUid": 0,
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "[uuid]",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -1171,16 +1169,16 @@ async fn replace_document() {
 
     let (response, code) = index.add_documents(documents, None).await;
     snapshot!(code,@"202 Accepted");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
-        @r###"
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r#"
     {
-      "taskUid": 0,
+      "taskUid": "[task_uid]",
       "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "documentAdditionOrUpdate",
       "enqueuedAt": "[date]"
     }
-    "###);
+    "#);
 
     index.wait_task(response.uid()).await.succeeded();
 
@@ -1198,11 +1196,11 @@ async fn replace_document() {
 
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "uid": 1,
-      "batchUid": 1,
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "[uuid]",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -1369,11 +1367,11 @@ async fn error_add_documents_bad_document_id() {
     index.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
-        @r###"
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r#"
     {
-      "uid": 1,
-      "batchUid": 1,
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -1393,7 +1391,7 @@ async fn error_add_documents_bad_document_id() {
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "###);
+    "#);
 
     // More than 512 bytes
     let documents = json!([
@@ -1406,11 +1404,11 @@ async fn error_add_documents_bad_document_id() {
     index.wait_task(value.uid()).await.failed();
     let (response, code) = index.get_task(value.uid()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
       @r###"
     {
-      "uid": 2,
-      "batchUid": 2,
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -1443,11 +1441,11 @@ async fn error_add_documents_bad_document_id() {
     index.wait_task(value.uid()).await.failed();
     let (response, code) = index.get_task(value.uid()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
     @r###"
     {
-      "uid": 3,
-      "batchUid": 3,
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -1485,11 +1483,11 @@ async fn error_add_documents_missing_document_id() {
     index.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
-        @r###"
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r#"
     {
-      "uid": 1,
-      "batchUid": 1,
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -1509,7 +1507,7 @@ async fn error_add_documents_missing_document_id() {
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "###);
+    "#);
 }
 
 #[actix_rt::test]
@@ -1795,11 +1793,11 @@ async fn add_documents_with_geo_field() {
 
     let (task, _status_code) = index.add_documents(documents, None).await;
     let response = index.wait_task(task.uid()).await.succeeded();
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
-        @r###"
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r#"
     {
-      "uid": 1,
-      "batchUid": 1,
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "[uuid]",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -1814,7 +1812,7 @@ async fn add_documents_with_geo_field() {
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "###);
+    "#);
 
     let (response, code) = index.get_all_documents(GetAllDocumentsOptions::default()).await;
 
@@ -1919,11 +1917,11 @@ async fn update_documents_with_geo_field() {
 
     let (task, _status_code) = index.add_documents(documents, None).await;
     let response = index.wait_task(task.uid()).await.succeeded();
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
-        @r###"
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r#"
     {
-      "uid": 1,
-      "batchUid": 1,
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "[uuid]",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -1938,7 +1936,7 @@ async fn update_documents_with_geo_field() {
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "###);
+    "#);
 
     let (response, code) = index.search_post(json!({"sort": ["_geoPoint(10,0):asc"]})).await;
     snapshot!(code, @"200 OK");
@@ -1988,11 +1986,11 @@ async fn update_documents_with_geo_field() {
     ]);
     let (task, _status_code) = index.update_documents(updated_documents, None).await;
     let response = index.wait_task(task.uid()).await.succeeded();
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "uid": 2,
-      "batchUid": 2,
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "[uuid]",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
@@ -2104,11 +2102,11 @@ async fn add_documents_invalid_geo_field() {
     index.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".indexUid" => "[uuid]" }),
-        @r###"
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".indexUid" => "[uuid]" }),
+        @r#"
     {
-      "uid": 2,
-      "batchUid": 2,
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -2128,7 +2126,7 @@ async fn add_documents_invalid_geo_field() {
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "###);
+    "#);
 
     // _geo is an object but is missing both the lat and lng
     let documents = json!([
@@ -2142,11 +2140,11 @@ async fn add_documents_invalid_geo_field() {
     index.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "uid": 3,
-      "batchUid": 3,
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -2180,11 +2178,11 @@ async fn add_documents_invalid_geo_field() {
     index.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "uid": 4,
-      "batchUid": 4,
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -2218,11 +2216,11 @@ async fn add_documents_invalid_geo_field() {
     index.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "uid": 5,
-      "batchUid": 5,
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -2256,11 +2254,11 @@ async fn add_documents_invalid_geo_field() {
     index.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "uid": 6,
-      "batchUid": 6,
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -2294,11 +2292,11 @@ async fn add_documents_invalid_geo_field() {
     index.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "uid": 7,
-      "batchUid": 7,
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -2332,11 +2330,11 @@ async fn add_documents_invalid_geo_field() {
     index.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "uid": 8,
-      "batchUid": 8,
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -2370,11 +2368,11 @@ async fn add_documents_invalid_geo_field() {
     index.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "uid": 9,
-      "batchUid": 9,
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -2408,11 +2406,11 @@ async fn add_documents_invalid_geo_field() {
     index.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "uid": 10,
-      "batchUid": 10,
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -2446,11 +2444,11 @@ async fn add_documents_invalid_geo_field() {
     index.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "uid": 11,
-      "batchUid": 11,
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -2484,11 +2482,11 @@ async fn add_documents_invalid_geo_field() {
     index.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "uid": 12,
-      "batchUid": 12,
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -2522,11 +2520,11 @@ async fn add_documents_invalid_geo_field() {
     index.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "uid": 13,
-      "batchUid": 13,
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -2561,11 +2559,11 @@ async fn add_documents_invalid_geo_field() {
     let (response, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
     let response = index.wait_task(response.uid()).await.failed();
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "uid": 14,
-      "batchUid": 14,
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -2598,11 +2596,11 @@ async fn add_documents_invalid_geo_field() {
     let (response, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
     let response = index.wait_task(response.uid()).await.failed();
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "uid": 15,
-      "batchUid": 15,
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -2635,11 +2633,11 @@ async fn add_documents_invalid_geo_field() {
     let (response, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
     let response = index.wait_task(response.uid()).await.failed();
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "uid": 16,
-      "batchUid": 16,
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -2773,11 +2771,11 @@ async fn error_primary_key_inference() {
     let (response, code) = index.get_task(task.uid()).await;
     assert_eq!(code, 200);
 
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
-    @r###"
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    @r#"
     {
-      "uid": 0,
-      "batchUid": 0,
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -2797,7 +2795,7 @@ async fn error_primary_key_inference() {
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "###);
+    "#);
 
     let documents = json!([
         {
@@ -2814,11 +2812,11 @@ async fn error_primary_key_inference() {
     let (response, code) = index.get_task(task.uid()).await;
     assert_eq!(code, 200);
 
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
     @r###"
     {
-      "uid": 1,
-      "batchUid": 1,
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
@@ -2853,11 +2851,11 @@ async fn error_primary_key_inference() {
     let (response, code) = index.get_task(task.uid()).await;
     assert_eq!(code, 200);
 
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
     @r###"
     {
-      "uid": 2,
-      "batchUid": 2,
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "[uuid]",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
