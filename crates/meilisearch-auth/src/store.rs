@@ -150,7 +150,7 @@ impl HeedAuthStore {
     pub fn is_key_authorized(
         &self,
         uid: Uuid,
-        bitflags: u32,
+        bitflags: Action,
         index: Option<&str>,
     ) -> Result<AuthorizationStatus> {
         let rtxn = self.env.read_txn()?;
@@ -286,25 +286,23 @@ where
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct KeyMasks {
-    bitflags: u32, // Bitflags for bit_maks
+    bitflags: Action, // Bitflags for bit_maks
     indexes: Vec<IndexUidPattern>,
     expires_at: Option<OffsetDateTime>,
 }
 
 impl KeyMasks {
-    fn is_bitflag_authorized(&self, bitflags: u32) -> bool {
-        Action::from_bits(bitflags)
-            .map(|flags| flags.difference(Action::from_bits(self.bitflags).unwrap_or(Action::empty())).is_empty())
-            .unwrap_or(false)
+    fn is_bitflag_authorized(&self, bitflags: Action) -> bool {
+        bitflags.difference(self.bitflags).is_empty()
     }
 }
 
 impl From<Key> for KeyMasks {
     fn from(key: Key) -> Self {
         let Key { actions, indexes, expires_at, .. } = key;
-        let mut bitflags = 0u32;
+        let mut bitflags = Action::empty();
         for action in actions {
-            bitflags |= action.bits();
+            bitflags |= action;
         }
         Self { bitflags, indexes, expires_at }
     }

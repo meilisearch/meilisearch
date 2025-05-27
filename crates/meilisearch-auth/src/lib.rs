@@ -99,7 +99,7 @@ impl AuthController {
 
         let key_authorized_indexes = SearchRules::Set(key.indexes.into_iter().collect());
 
-        let allow_index_creation = self.is_key_authorized(uid, Action::IndexesAdd.bits(), None)?;
+        let allow_index_creation = self.is_key_authorized(uid, Action::IndexesAdd, None)?;
 
         Ok(AuthFilter { search_rules, key_authorized_indexes, allow_index_creation })
     }
@@ -128,20 +128,10 @@ impl AuthController {
 
     /// Check if the provided key is authorized to make a specific action
     /// without checking if the key is valid.
-    pub fn is_key_authorized(&self, uid: Uuid, bitflags: u32, index: Option<&str>) -> Result<bool> {
-        // First check if the key has access to all indexes
-        let all_indexes_status = self.store.is_key_authorized(uid, bitflags, None)?;
+    pub fn is_key_authorized(&self, uid: Uuid, bitflags: Action, index: Option<&str>) -> Result<bool> {
+        let status = self.store.is_key_authorized(uid, bitflags, index)?;
 
-        // If access to all indexes is refused and a specific index is provided, check that index
-        let status = match (all_indexes_status, index) {
-            (store::AuthorizationStatus::Ok, _) => store::AuthorizationStatus::Ok,
-            (store::AuthorizationStatus::Refused, Some(index_str)) => {
-                self.store.is_key_authorized(uid, bitflags, Some(index_str))?
-            }
-            (store::AuthorizationStatus::Refused, None) => store::AuthorizationStatus::Refused,
-        };
-
-        // Return whether authorization was successful
+        // Return whether authorization was successfull
         Ok(status == store::AuthorizationStatus::Ok)
     }
 
