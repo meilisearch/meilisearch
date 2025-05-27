@@ -130,8 +130,8 @@ async fn search_with_stop_word() {
     snapshot!(code, @"202 Accepted");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
+    let (task, code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     // prefix search
     index

@@ -11,7 +11,8 @@ use regex_lite::Regex;
 static SNAPSHOT_NAMES: Lazy<Mutex<HashMap<PathBuf, usize>>> = Lazy::new(Mutex::default);
 /// A regex to match UUIDs in messages, specifically looking for the UUID v4 format
 static UUID_IN_MESSAGE_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}").unwrap()
+    Regex::new(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+        .unwrap()
 });
 
 /// Return the md5 hash of the given string
@@ -250,9 +251,9 @@ macro_rules! json_string {
 
 #[cfg(test)]
 mod tests {
-    use uuid::Uuid;
     use crate as meili_snap;
     use crate::UUID_IN_MESSAGE_RE;
+    use uuid::Uuid;
 
     #[test]
     fn snap() {
