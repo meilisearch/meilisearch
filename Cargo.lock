@@ -3594,6 +3594,7 @@ dependencies = [
  "md5",
  "once_cell",
  "regex-lite",
+ "uuid",
 ]
 
 [[package]]

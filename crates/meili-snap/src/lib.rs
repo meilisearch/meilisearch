@@ -6,14 +6,12 @@ use std::sync::Mutex;
 pub use insta;
 use insta::internals::{Content, ContentPath};
 use once_cell::sync::Lazy;
-use regex_lite::{Regex, RegexBuilder};
+use regex_lite::Regex;
 
 static SNAPSHOT_NAMES: Lazy<Mutex<HashMap<PathBuf, usize>>> = Lazy::new(Mutex::default);
 /// A regex to match UUIDs in messages, specifically looking for the UUID v4 format
 static UUID_IN_MESSAGE_RE: Lazy<Regex> = Lazy::new(|| {
-    RegexBuilder::new(r"(?<before>.*)([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})(?<after>.*)")
-        .case_insensitive(true)
-        .build().unwrap()
+    Regex::new(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}").unwrap()
 });
 
 /// Return the md5 hash of the given string
@@ -37,7 +35,7 @@ pub fn default_snapshot_settings_for_test<'a>(
     fn uuid_in_message_redaction(content: Content, _content_path: ContentPath) -> Content {
         match &content {
             Content::String(s) => {
-                let uuid_replaced = UUID_IN_MESSAGE_RE.replace_all(s, "$before[uuid]$after");
+                let uuid_replaced = UUID_IN_MESSAGE_RE.replace_all(s, "[uuid]");
                 Content::String(uuid_replaced.to_string())
             }
             _ => content,
@@ -252,7 +250,10 @@ macro_rules! json_string {
 
 #[cfg(test)]
 mod tests {
+    use uuid::Uuid;
     use crate as meili_snap;
+    use crate::UUID_IN_MESSAGE_RE;
+
     #[test]
     fn snap() {
         snapshot_hash!(10, @"d3d9446802a44259755d38e6d163e820");
@@ -299,5 +300,15 @@ mod tests {
 
             // snapshot_hash!("", name: "", @"d41d8cd98f00b204e9800998ecf8427e");
         }
+    }
+
+    #[test]
+    fn uuid_in_message_regex() {
+        let uuid1 = Uuid::new_v4();
+        let uuid2 = Uuid::new_v4();
+        let uuid3 = Uuid::new_v4();
+        let to_replace = format!("1 {uuid1} 2 {uuid2} 3 {uuid3} 4");
+        let replaced = UUID_IN_MESSAGE_RE.replace_all(to_replace.as_str(), "[uuid]");
+        assert_eq!(replaced, "1 [uuid] 2 [uuid] 3 [uuid] 4");
     }
 }
