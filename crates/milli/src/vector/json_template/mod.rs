@@ -74,7 +74,22 @@ impl JsonTemplate {
         Ok(Self { value, templates, bump })
     }
 
-    /// Renders this value by replacing all its strings with the rendered version of the template their represent from the contents of the given document.
+    /// Renders this value by replacing all its strings with the rendered version of the template they represent from the given context.
+    ///
+    /// # Error
+    ///
+    /// - If any of the strings contains a template that cannot be rendered with the given context.
+    pub fn render(&self, context: &dyn liquid::ObjectView) -> Result<Value, Error> {
+        let mut rendered = self.value.clone();
+        for TemplateAtPath { template, path } in &self.templates {
+            let injected_value =
+                template.render(context).map_err(|err| error_with_path(err, path.clone()))?;
+            inject_value(&mut rendered, path, Value::String(injected_value));
+        }
+        Ok(rendered)
+    }
+
+    /// Renders this value by replacing all its strings with the rendered version of the template they represent from the contents of the given document.
     ///
     /// # Error
     ///
@@ -83,33 +98,21 @@ impl JsonTemplate {
         &'a self,
         document: D,
     ) -> Result<Value, Error> {
-        let mut rendered = self.value.clone();
         let document = ParseableDocument::new(document, &self.bump);
-        for TemplateAtPath { template, path } in &self.templates {
-            let injected_value =
-                template.render(&document).map_err(|err| error_with_path(err, path.clone()))?;
-            inject_value(&mut rendered, path, Value::String(injected_value));
-        }
-        Ok(rendered)
+        self.render(&document)
     }
 
-    /// Renders this value by replacing all its strings with the rendered version of the template their represent from the contents of the search query.
+    /// Renders this value by replacing all its strings with the rendered version of the template they represent from the contents of the search query.
     ///
     /// # Error
     ///
     /// - If any of the strings contains a template that cannot be rendered from the contents of the search query
     pub fn render_search(&self, q: Option<String>, media: Value) -> Result<Value, Error> {
-        let mut rendered = self.value.clone();
         let search_data = liquid::object!({
             "q": q,
             "media": media
         });
-        for TemplateAtPath { template, path } in &self.templates {
-            let injected_value =
-                template.render(&search_data).map_err(|err| error_with_path(err, path.clone()))?;
-            inject_value(&mut rendered, path, Value::String(injected_value));
-        }
-        Ok(rendered)
+        self.render(&search_data)
     }
 }
 
