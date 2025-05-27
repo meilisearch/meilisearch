@@ -131,26 +131,13 @@ impl AuthController {
     pub fn is_key_authorized(
         &self,
         uid: Uuid,
-        action: Action,
+        bitflags: Action,
         index: Option<&str>,
     ) -> Result<bool> {
-        match self
-            .store
-            // check if the key has access to all indexes.
-            .get_expiration_date(uid, action, None)?
-            .or(match index {
-                // else check if the key has access to the requested index.
-                Some(index) => self.store.get_expiration_date(uid, action, Some(index))?,
-                // or to any index if no index has been requested.
-                None => self.store.prefix_first_expiration_date(uid, action)?,
-            }) {
-            // check expiration date.
-            Some(Some(exp)) => Ok(OffsetDateTime::now_utc() < exp),
-            // no expiration date.
-            Some(None) => Ok(true),
-            // action or index forbidden.
-            None => Ok(false),
-        }
+        let status = self.store.is_key_authorized(uid, bitflags, index)?;
+
+        // Return whether authorization was successfull
+        Ok(status == store::AuthorizationStatus::Ok)
     }
 
     /// Delete all the keys in the DB.
