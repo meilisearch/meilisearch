@@ -194,7 +194,7 @@ impl FacetedDocidsExtractor {
                 }
 
                 // 2. Maybe update geo
-                if is_geo_enabled && has_changed_for_geo_fields {
+                if is_geo_enabled && inner.has_changed_for_geo_fields(rtxn, index, context.db_fields_ids_map)? {
                     extract_geo_document(
                         inner.current(rtxn, index, context.db_fields_ids_map)?,
                         inner.external_document_id(),
