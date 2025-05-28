@@ -91,8 +91,8 @@ impl FacetedDocidsExtractor {
         let mut del_add_facet_value = DelAddFacetValue::new(&context.doc_alloc);
         let docid = document_change.docid();
 
-        // Macro expanding to an insertion/deletion facet fn,
-        // using a macro avoid to borrow the parameters as mutable in both closures at the same time by postponing their creation 
+        // Using a macro avoid borrowing the parameters as mutable in both closures at
+        // the same time by postponing their creation
         macro_rules! facet_fn {
             (del) => {
                 |fid: FieldId, meta: Metadata, depth: perm_json_p::Depth, value: &Value| {
@@ -168,8 +168,6 @@ impl FacetedDocidsExtractor {
                     index,
                     context.db_fields_ids_map,
                 )?;
-                let has_changed_for_geo_fields =
-                    inner.has_changed_for_geo_fields(rtxn, index, context.db_fields_ids_map)?;
 
                 // 1. Maybe update doc
                 if has_changed_for_facets {
@@ -195,7 +193,9 @@ impl FacetedDocidsExtractor {
                 }
 
                 // 2. Maybe update geo
-                if is_geo_enabled && inner.has_changed_for_geo_fields(rtxn, index, context.db_fields_ids_map)? {
+                if is_geo_enabled
+                    && inner.has_changed_for_geo_fields(rtxn, index, context.db_fields_ids_map)?
+                {
                     extract_geo_document(
                         inner.current(rtxn, index, context.db_fields_ids_map)?,
                         inner.external_document_id(),
