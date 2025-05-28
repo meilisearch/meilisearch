@@ -91,7 +91,8 @@ impl FacetedDocidsExtractor {
         let mut del_add_facet_value = DelAddFacetValue::new(&context.doc_alloc);
         let docid = document_change.docid();
 
-        // Macro expanding to an insertion/deletion facet fn
+        // Macro expanding to an insertion/deletion facet fn,
+        // using a macro avoid to borrow the parameters as mutable in both closures at the same time by postponing their creation 
         macro_rules! facet_fn {
             (del) => {
                 |fid: FieldId, meta: Metadata, depth: perm_json_p::Depth, value: &Value| {
