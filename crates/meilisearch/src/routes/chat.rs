@@ -247,8 +247,8 @@ async fn process_search_request(
             embedder,
         }),
         limit: limit.unwrap_or_else(DEFAULT_SEARCH_LIMIT),
-        sort: sort,
-        distinct: distinct,
+        sort,
+        distinct,
         matching_strategy: matching_strategy
             .map(|ms| match ms {
                 index::MatchingStrategy::Last => MatchingStrategy::Last,
@@ -256,7 +256,7 @@ async fn process_search_request(
                 index::MatchingStrategy::Frequency => MatchingStrategy::Frequency,
             })
             .unwrap_or(MatchingStrategy::Frequency),
-        attributes_to_search_on: attributes_to_search_on,
+        attributes_to_search_on,
         ranking_score_threshold: ranking_score_threshold
             .and_then(|rst| RankingScoreThreshold::try_from(rst).ok()),
         ..Default::default()
