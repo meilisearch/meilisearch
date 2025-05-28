@@ -45,14 +45,12 @@ pub fn default_snapshot_settings_for_test<'a>(
 
     settings.add_dynamic_redaction(".message", uuid_in_message_redaction);
     settings.add_dynamic_redaction(".error.message", uuid_in_message_redaction);
-    settings.add_dynamic_redaction(".indexUid", |content, _content_path| {
-        match &content {
-            Content::String(s) => match uuid::Uuid::parse_str(s) {
-                Ok(_) => Content::String("[uuid]".to_owned()),
-                Err(_) => content,
-            },
-            _ => content,
-        }
+    settings.add_dynamic_redaction(".indexUid", |content, _content_path| match &content {
+        Content::String(s) => match uuid::Uuid::parse_str(s) {
+            Ok(_) => Content::String("[uuid]".to_owned()),
+            Err(_) => content,
+        },
+        _ => content,
     });
 
     settings.add_dynamic_redaction(".error.message", |content, _content_path| match &content {
