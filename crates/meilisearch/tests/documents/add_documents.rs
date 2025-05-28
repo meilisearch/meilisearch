@@ -991,11 +991,9 @@ async fn add_documents_no_index_creation() {
     let (response, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
 
-    index.wait_task(response.uid()).await.succeeded();
-
-    let (response, code) = index.get_task(0).await;
+    let response = index.wait_task(response.uid()).await.succeeded();
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(response,
         @r###"
     {
       "uid": "[uid]",
