@@ -992,7 +992,7 @@ async fn add_documents_no_index_creation() {
     snapshot!(code, @"202 Accepted");
 
     let response = index.wait_task(response.uid()).await.succeeded();
-    snapshot!(code, @"200 OK");
+    snapshot!(code, @"202 Accepted");
     snapshot!(response,
         @r###"
     {
