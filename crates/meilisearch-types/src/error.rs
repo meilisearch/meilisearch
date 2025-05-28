@@ -413,7 +413,7 @@ impl ErrorCode for milli::Error {
                     UserError::InvalidStoreFile => Code::InvalidStoreFile,
                     UserError::NoSpaceLeftOnDevice => Code::NoSpaceLeftOnDevice,
                     UserError::MaxDatabaseSizeReached => Code::DatabaseSizeLimitReached,
-                    UserError::AttributeLimitReached => Code::MaxFieldsLimitExceeded,
+                    UserError::AttributeLimitReached { .. } => Code::MaxFieldsLimitExceeded,
                     UserError::InvalidFilter(_) => Code::InvalidSearchFilter,
                     UserError::InvalidFilterExpression(..) => Code::InvalidSearchFilter,
                     UserError::FilterOperatorNotAllowed { .. } => Code::InvalidSearchFilter,

@@ -108,8 +108,12 @@ pub enum FieldIdMapMissingEntry {
 
 #[derive(Error, Debug)]
 pub enum UserError {
-    #[error("A document cannot contain more than 65,535 fields.")]
-    AttributeLimitReached,
+    #[error("Adding the document with id {document_id:?} would add {new_field_count:?} new unique field to the index. The index already contained {number_of_existing_field:?} unique fields")]
+    AttributeLimitReached {
+        document_id: String,
+        new_field_count: usize,
+        number_of_existing_field: usize,
+    },
     #[error(transparent)]
     CriterionError(#[from] CriterionError),
     #[error("Maximum number of documents reached.")]

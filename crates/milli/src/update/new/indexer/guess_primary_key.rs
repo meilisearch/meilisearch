@@ -43,12 +43,18 @@ pub fn retrieve_or_guess_primary_key<'a>(
                 // previous indexer when no pk is set + we send an empty payload => index_primary_key_no_candidate_found
                 None => return Ok(Err(UserError::NoPrimaryKeyCandidateFound)),
             };
+            let no_of_existing_fields = new_fields_ids_map.len();
 
             let guesses: Result<Vec<&str>> = first_document
                 .keys()
                 .filter_map(|name| {
                     let Some(_) = new_fields_ids_map.insert(name) else {
-                        return Some(Err(UserError::AttributeLimitReached.into()));
+                        return Some(Err(UserError::AttributeLimitReached {
+                            document_id: name.to_string(),
+                            new_field_count: 1,
+                            number_of_existing_field: no_of_existing_fields,
+                        }
+                        .into()));
                     };
                     name.to_lowercase().ends_with(DEFAULT_PRIMARY_KEY).then_some(Ok(name))
                 })

@@ -318,6 +318,7 @@ where
     // will be used in 'inject_vectors
     let vectors_value: Box<RawValue>;
 
+    let no_of_existing_fields = fields_ids_map.len();
     document_buffer.clear();
     let mut unordered_field_buffer = Vec::new();
     unordered_field_buffer.clear();
@@ -327,7 +328,11 @@ where
     for res in document.iter_top_level_fields() {
         let (field_name, value) = res?;
         let field_id =
-            fields_ids_map.id_or_insert(field_name).ok_or(UserError::AttributeLimitReached)?;
+            fields_ids_map.id_or_insert(field_name).ok_or(UserError::AttributeLimitReached {
+                document_id: field_name.to_string(),
+                new_field_count: 1,
+                number_of_existing_field: no_of_existing_fields,
+            })?;
         unordered_field_buffer.push((field_id, value));
     }
 
@@ -358,20 +363,36 @@ where
             break 'inject_vectors;
         }
 
-        let vectors_fid = fields_ids_map
-            .id_or_insert(RESERVED_VECTORS_FIELD_NAME)
-            .ok_or(UserError::AttributeLimitReached)?;
+        let vectors_fid = fields_ids_map.id_or_insert(RESERVED_VECTORS_FIELD_NAME).ok_or(
+            UserError::AttributeLimitReached {
+                document_id: RESERVED_GEO_FIELD_NAME.to_string(),
+                new_field_count: 1,
+                number_of_existing_field: no_of_existing_fields,
+            },
+        )?;
 
         vectors_value = serde_json::value::to_raw_value(&vectors).unwrap();
         unordered_field_buffer.push((vectors_fid, &vectors_value));
     }
 
     if let Some(geo_value) = document.geo_field()? {
-        let fid = fields_ids_map
-            .id_or_insert(RESERVED_GEO_FIELD_NAME)
-            .ok_or(UserError::AttributeLimitReached)?;
-        fields_ids_map.id_or_insert("_geo.lat").ok_or(UserError::AttributeLimitReached)?;
-        fields_ids_map.id_or_insert("_geo.lng").ok_or(UserError::AttributeLimitReached)?;
+        let fid = fields_ids_map.id_or_insert(RESERVED_GEO_FIELD_NAME).ok_or(
+            UserError::AttributeLimitReached {
+                document_id: RESERVED_GEO_FIELD_NAME.to_string(),
+                new_field_count: 1,
+                number_of_existing_field: no_of_existing_fields,
+            },
+        )?;
+        fields_ids_map.id_or_insert("_geo.lat").ok_or(UserError::AttributeLimitReached {
+            document_id: String::from("_geo.lat"),
+            new_field_count: 1,
+            number_of_existing_field: no_of_existing_fields,
+        })?;
+        fields_ids_map.id_or_insert("_geo.lng").ok_or(UserError::AttributeLimitReached {
+            document_id: String::from("_geo.lng"),
+            new_field_count: 1,
+            number_of_existing_field: no_of_existing_fields,
+        })?;
         unordered_field_buffer.push((fid, geo_value));
     }
 

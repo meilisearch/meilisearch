@@ -30,9 +30,15 @@ impl DocumentTokenizer<'_> {
         token_fn: &mut impl FnMut(&str, FieldId, u16, &str) -> Result<()>,
     ) -> Result<()> {
         let mut field_position = HashMap::new();
+        let no_of_existing_fields = field_id_map.len();
         let mut tokenize_field = |field_name: &str, _depth, value: &Value| {
             let Some((field_id, meta)) = field_id_map.id_with_metadata_or_insert(field_name) else {
-                return Err(UserError::AttributeLimitReached.into());
+                return Err(UserError::AttributeLimitReached {
+                    document_id: field_name.to_string(),
+                    new_field_count: 1,
+                    number_of_existing_field: no_of_existing_fields,
+                }
+                .into());
             };
 
             if meta.is_searchable() {

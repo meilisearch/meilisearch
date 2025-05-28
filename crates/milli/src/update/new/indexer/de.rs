@@ -1,16 +1,15 @@
 use std::ops::ControlFlow;
 
+use crate::documents::{
+    validate_document_id_str, DocumentIdExtractionError, FieldIdMapper, PrimaryKey,
+};
+use crate::fields_ids_map::MutFieldIdMapper;
+use crate::{FieldId, UserError, MAX_POSITION_PER_ATTRIBUTE};
 use bumpalo::Bump;
 use bumparaw_collections::RawVec;
 use rustc_hash::FxBuildHasher;
 use serde::de::{DeserializeSeed, Deserializer as _, Visitor};
 use serde_json::value::RawValue;
-
-use crate::documents::{
-    validate_document_id_str, DocumentIdExtractionError, FieldIdMapper, PrimaryKey,
-};
-use crate::fields_ids_map::MutFieldIdMapper;
-use crate::{FieldId, UserError};
 
 // visits a document to fill the top level fields of the field id map and retrieve the external document id.
 pub struct FieldAndDocidExtractor<'p, 'indexer, Mapper: MutFieldIdMapper> {
@@ -78,9 +77,15 @@ impl<'de, 'indexer: 'de, Mapper: MutFieldIdMapper> Visitor<'de>
             }
         }
 
+        let no_of_existing_field = MAX_POSITION_PER_ATTRIBUTE - 1;
+        let docmnt_id = self.primary_key.name().to_string();
         // return previously detected errors
         if attribute_limit_reached {
-            return Ok(Err(UserError::AttributeLimitReached));
+            return Ok(Err(UserError::AttributeLimitReached {
+                document_id: docmnt_id,
+                new_field_count: 1,
+                number_of_existing_field: no_of_existing_field as usize,
+            }));
         }
         if let Some(document_id_extraction_error) = document_id_extraction_error {
             return Ok(Ok(Err(document_id_extraction_error)));
