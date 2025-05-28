@@ -666,7 +666,7 @@ pub fn apply_settings_to_builder(
     match typo_tolerance {
         Setting::Set(ref value) => {
             match value.enabled {
-                Setting::Set(val) => builder.set_autorize_typos(val),
+                Setting::Set(val) => builder.set_authorize_typos(val),
                 Setting::Reset => builder.reset_authorize_typos(),
                 Setting::NotSet => (),
             }

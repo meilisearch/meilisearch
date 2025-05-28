@@ -333,7 +333,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         self.primary_key = Setting::Set(primary_key);
     }
 
-    pub fn set_autorize_typos(&mut self, val: bool) {
+    pub fn set_authorize_typos(&mut self, val: bool) {
         self.authorize_typos = Setting::Set(val);
     }
 
