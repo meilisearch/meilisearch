@@ -538,7 +538,7 @@ async fn error_add_api_key_parameters_uid_already_exist() {
     let (response, code) = server.add_api_key(content).await;
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
-      "message": "`uid` field value `4bc0887a-0e41-4f3b-935d-0c451dcee9c8` is already an existing API key.",
+      "message": "`uid` field value `[uuid]` is already an existing API key.",
       "code": "api_key_already_exists",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#api_key_already_exists"

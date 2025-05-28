@@ -1,4 +1,4 @@
-// This modules contains all the test concerning search. Each particular feature of the search
+// This module contains all the test concerning search. Each particular feature of the search
 // should be tested in its own module to isolate tests and keep the tests readable.
 
 mod distinct;
@@ -17,12 +17,11 @@ mod restrict_searchable;
 mod search_queue;
 
 use meili_snap::{json_string, snapshot};
-use meilisearch::Opt;
-use tempfile::TempDir;
 
 use crate::common::{
-    default_settings, shared_index_with_documents, shared_index_with_nested_documents, Server,
-    Value, DOCUMENTS, FRUITS_DOCUMENTS, NESTED_DOCUMENTS, SCORE_DOCUMENTS, VECTOR_DOCUMENTS,
+    shared_index_with_documents, shared_index_with_nested_documents,
+    shared_index_with_score_documents, Server, Value, DOCUMENTS, FRUITS_DOCUMENTS,
+    NESTED_DOCUMENTS, SCORE_DOCUMENTS, VECTOR_DOCUMENTS,
 };
 use crate::json;
 
@@ -32,46 +31,33 @@ async fn test_settings_documents_indexing_swapping_and_search(
     query: &Value,
     test: impl Fn(Value, actix_http::StatusCode) + std::panic::UnwindSafe + Clone,
 ) {
-    let temp = TempDir::new().unwrap();
-    let server = Server::new_with_options(Opt { ..default_settings(temp.path()) }).await.unwrap();
+    let server = Server::new_shared();
 
     eprintln!("Documents -> Settings -> test");
-    let index = server.index("test");
+    let index = server.unique_index();
 
     let (task, code) = index.add_documents(documents.clone(), None).await;
-    assert_eq!(code, 202, "{}", task);
-    let response = index.wait_task(task.uid()).await;
-    assert!(response.is_success(), "{:?}", response);
+    assert_eq!(code, 202, "{task}");
+    index.wait_task(task.uid()).await.succeeded();
 
     let (task, code) = index.update_settings(settings.clone()).await;
-    assert_eq!(code, 202, "{}", task);
-    let response = index.wait_task(task.uid()).await;
-    assert!(response.is_success(), "{:?}", response);
+    assert_eq!(code, 202, "{task}");
+    index.wait_task(task.uid()).await.succeeded();
 
     index.search(query.clone(), test.clone()).await;
-    let (task, code) = server.delete_index("test").await;
-    assert_eq!(code, 202, "{}", task);
-    let response = server.wait_task(task.uid()).await;
-    assert!(response.is_success(), "{:?}", response);
 
     eprintln!("Settings -> Documents -> test");
-    let index = server.index("test");
+    let index = server.unique_index();
 
     let (task, code) = index.update_settings(settings.clone()).await;
-    assert_eq!(code, 202, "{}", task);
-    let response = index.wait_task(task.uid()).await;
-    assert!(response.is_success(), "{:?}", response);
+    assert_eq!(code, 202, "{task}");
+    index.wait_task(task.uid()).await.succeeded();
 
     let (task, code) = index.add_documents(documents.clone(), None).await;
-    assert_eq!(code, 202, "{}", task);
-    let response = index.wait_task(task.uid()).await;
-    assert!(response.is_success(), "{:?}", response);
+    assert_eq!(code, 202, "{task}");
+    index.wait_task(task.uid()).await.succeeded();
 
     index.search(query.clone(), test.clone()).await;
-    let (task, code) = server.delete_index("test").await;
-    assert_eq!(code, 202, "{}", task);
-    let response = server.wait_task(task.uid()).await;
-    assert!(response.is_success(), "{:?}", response);
 }
 
 #[actix_rt::test]
@@ -79,7 +65,7 @@ async fn simple_placeholder_search() {
     let index = shared_index_with_documents().await;
     index
         .search(json!({}), |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             assert_eq!(response["hits"].as_array().unwrap().len(), 5);
         })
         .await;
@@ -87,7 +73,7 @@ async fn simple_placeholder_search() {
     let index = shared_index_with_nested_documents().await;
     index
         .search(json!({}), |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             assert_eq!(response["hits"].as_array().unwrap().len(), 4);
         })
         .await;
@@ -98,7 +84,7 @@ async fn simple_search() {
     let index = shared_index_with_documents().await;
     index
         .search(json!({"q": "glass"}), |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             assert_eq!(response["hits"].as_array().unwrap().len(), 1);
         })
         .await;
@@ -106,7 +92,7 @@ async fn simple_search() {
     let index = shared_index_with_nested_documents().await;
     index
         .search(json!({"q": "pésti"}), |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             assert_eq!(response["hits"].as_array().unwrap().len(), 2);
         })
         .await;
@@ -115,8 +101,8 @@ async fn simple_search() {
 /// See <https://github.com/meilisearch/meilisearch/issues/5547>
 #[actix_rt::test]
 async fn bug_5547() {
-    let server = Server::new().await;
-    let index = server.index("big_fst");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     let (response, _code) = index.create(None).await;
     index.wait_task(response.uid()).await.succeeded();
 
@@ -135,22 +121,22 @@ async fn bug_5547() {
 #[actix_rt::test]
 async fn search_with_stop_word() {
     // related to https://github.com/meilisearch/meilisearch/issues/4984
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (_, code) = index
         .update_settings(json!({"stopWords": ["the", "The", "a", "an", "to", "in", "of"]}))
         .await;
-    meili_snap::snapshot!(code, @"202 Accepted");
+    snapshot!(code, @"202 Accepted");
 
     let documents = DOCUMENTS.clone();
-    index.add_documents(documents, None).await;
-    index.wait_task(1).await;
+    let (task, _code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
 
     // prefix search
     index
         .search(json!({"q": "to the", "attributesToHighlight": ["title"], "attributesToRetrieve": ["title"] }), |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             snapshot!(json_string!(response["hits"]), @"[]");
         })
         .await;
@@ -158,7 +144,7 @@ async fn search_with_stop_word() {
     // non-prefix search
     index
           .search(json!({"q": "to the ", "attributesToHighlight": ["title"], "attributesToRetrieve": ["title"] }), |response, code| {
-              assert_eq!(code, 200, "{}", response);
+              assert_eq!(code, 200, "{response}");
               snapshot!(json_string!(response["hits"]), @r###"
               [
                 {
@@ -200,13 +186,13 @@ async fn search_with_stop_word() {
 #[actix_rt::test]
 async fn search_with_typo_settings() {
     // related to https://github.com/meilisearch/meilisearch/issues/5240
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (_, code) = index
         .update_settings(json!({"typoTolerance": { "disableOnAttributes": ["title", "id"]}}))
         .await;
-    meili_snap::snapshot!(code, @"202 Accepted");
+    snapshot!(code, @"202 Accepted");
 
     let documents = DOCUMENTS.clone();
     let (task, _status_code) = index.add_documents(documents, None).await;
@@ -214,7 +200,7 @@ async fn search_with_typo_settings() {
 
     index
         .search(json!({"q": "287947" }), |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             snapshot!(json_string!(response["hits"]), @r###"
             [
               {
@@ -234,11 +220,11 @@ async fn search_with_typo_settings() {
 #[actix_rt::test]
 async fn phrase_search_with_stop_word() {
     // related to https://github.com/meilisearch/meilisearch/issues/3521
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (_, code) = index.update_settings(json!({"stopWords": ["the", "of"]})).await;
-    meili_snap::snapshot!(code, @"202 Accepted");
+    snapshot!(code, @"202 Accepted");
 
     let documents = DOCUMENTS.clone();
     let (task, _status_code) = index.add_documents(documents, None).await;
@@ -246,7 +232,7 @@ async fn phrase_search_with_stop_word() {
 
     index
         .search(json!({"q": "how \"to\" train \"the" }), |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             assert_eq!(response["hits"].as_array().unwrap().len(), 1);
         })
         .await;
@@ -257,7 +243,7 @@ async fn negative_phrase_search() {
     let index = shared_index_with_documents().await;
     index
         .search(json!({"q": "-\"train your dragon\"" }), |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             let hits = response["hits"].as_array().unwrap();
             assert_eq!(hits.len(), 4);
             assert_eq!(hits[0]["id"], "287947");
@@ -273,7 +259,7 @@ async fn negative_word_search() {
     let index = shared_index_with_documents().await;
     index
         .search(json!({"q": "-escape" }), |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             let hits = response["hits"].as_array().unwrap();
             assert_eq!(hits.len(), 4);
             assert_eq!(hits[0]["id"], "287947");
@@ -286,7 +272,7 @@ async fn negative_word_search() {
     // Everything that contains derivates of escape but not escape: nothing
     index
         .search(json!({"q": "-escape escape" }), |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             let hits = response["hits"].as_array().unwrap();
             assert_eq!(hits.len(), 0);
         })
@@ -298,7 +284,7 @@ async fn non_negative_search() {
     let index = shared_index_with_documents().await;
     index
         .search(json!({"q": "- escape" }), |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             let hits = response["hits"].as_array().unwrap();
             assert_eq!(hits.len(), 1);
             assert_eq!(hits[0]["id"], "522681");
@@ -307,7 +293,7 @@ async fn non_negative_search() {
 
     index
         .search(json!({"q": "- \"train your dragon\"" }), |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             let hits = response["hits"].as_array().unwrap();
             assert_eq!(hits.len(), 1);
             assert_eq!(hits[0]["id"], "166428");
@@ -317,8 +303,8 @@ async fn non_negative_search() {
 
 #[actix_rt::test]
 async fn negative_special_cases_search() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let documents = DOCUMENTS.clone();
     let (task, _status_code) = index.add_documents(documents, None).await;
@@ -331,7 +317,7 @@ async fn negative_special_cases_search() {
     // There is a synonym for escape -> glass but we don't want "escape", only the derivates: glass
     index
         .search(json!({"q": "-escape escape" }), |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             let hits = response["hits"].as_array().unwrap();
             assert_eq!(hits.len(), 1);
             assert_eq!(hits[0]["id"], "450465");
@@ -343,8 +329,8 @@ async fn negative_special_cases_search() {
 #[cfg(not(feature = "chinese-pinyin"))]
 #[actix_rt::test]
 async fn test_kanji_language_detection() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let documents = json!([
         { "id": 0, "title": "The quick (\"brown\") fox can't jump 32.3 feet, right? Brr, it's 29.3°F!" },
@@ -356,7 +342,7 @@ async fn test_kanji_language_detection() {
 
     index
         .search(json!({"q": "東京"}), |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             assert_eq!(response["hits"].as_array().unwrap().len(), 1);
         })
         .await;
@@ -365,8 +351,8 @@ async fn test_kanji_language_detection() {
 #[cfg(feature = "default")]
 #[actix_rt::test]
 async fn test_thai_language() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     // We don't need documents, the issue is on the query side only.
     let documents = json!([
@@ -382,7 +368,7 @@ async fn test_thai_language() {
 
     index
         .search(json!({"q": "สบู"}), |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
         })
         .await;
 }
@@ -400,7 +386,7 @@ async fn search_multiple_params() {
                 "offset": 0,
             }),
             |response, code| {
-                assert_eq!(code, 200, "{}", response);
+                assert_eq!(code, 200, "{response}");
                 assert_eq!(response["hits"].as_array().unwrap().len(), 1);
             },
         )
@@ -417,7 +403,7 @@ async fn search_multiple_params() {
                 "offset": 0,
             }),
             |response, code| {
-                assert_eq!(code, 200, "{}", response);
+                assert_eq!(code, 200, "{response}");
                 assert_eq!(response["hits"].as_array().unwrap().len(), 2);
             },
         )
@@ -433,7 +419,7 @@ async fn search_with_sort_on_numbers() {
                 "sort": ["id:asc"]
             }),
             |response, code| {
-                assert_eq!(code, 200, "{}", response);
+                assert_eq!(code, 200, "{response}");
                 assert_eq!(response["hits"].as_array().unwrap().len(), 5);
             },
         )
@@ -446,7 +432,7 @@ async fn search_with_sort_on_numbers() {
                 "sort": ["doggos.age:asc"]
             }),
             |response, code| {
-                assert_eq!(code, 200, "{}", response);
+                assert_eq!(code, 200, "{response}");
                 assert_eq!(response["hits"].as_array().unwrap().len(), 4);
             },
         )
@@ -462,7 +448,7 @@ async fn search_with_sort_on_strings() {
                 "sort": ["title:desc"]
             }),
             |response, code| {
-                assert_eq!(code, 200, "{}", response);
+                assert_eq!(code, 200, "{response}");
                 assert_eq!(response["hits"].as_array().unwrap().len(), 5);
             },
         )
@@ -475,7 +461,7 @@ async fn search_with_sort_on_strings() {
                 "sort": ["doggos.name:asc"]
             }),
             |response, code| {
-                assert_eq!(code, 200, "{}", response);
+                assert_eq!(code, 200, "{response}");
                 assert_eq!(response["hits"].as_array().unwrap().len(), 4);
             },
         )
@@ -490,7 +476,7 @@ async fn search_with_multiple_sort() {
             "sort": ["id:asc", "title:desc"]
         }))
         .await;
-    assert_eq!(code, 200, "{}", response);
+    assert_eq!(code, 200, "{response}");
     assert_eq!(response["hits"].as_array().unwrap().len(), 5);
 }
 
@@ -503,7 +489,7 @@ async fn search_facet_distribution() {
                 "facets": ["title"]
             }),
             |response, code| {
-                assert_eq!(code, 200, "{}", response);
+                assert_eq!(code, 200, "{response}");
                 let dist = response["facetDistribution"].as_object().unwrap();
                 assert_eq!(dist.len(), 1);
                 assert!(dist.get("title").is_some());
@@ -521,7 +507,7 @@ async fn search_facet_distribution() {
                 "facets": ["father"]
             }),
             |response, code| {
-                assert_eq!(code, 200, "{}", response);
+                assert_eq!(code, 200, "{response}");
                 let dist = response["facetDistribution"].as_object().unwrap();
                 assert_eq!(dist.len(), 1);
                 assert_eq!(
@@ -544,9 +530,9 @@ async fn search_facet_distribution() {
                 "facets": ["doggos.name"]
             }),
             |response, code| {
-                assert_eq!(code, 200, "{}", response);
+                assert_eq!(code, 200, "{response}");
                 let dist = response["facetDistribution"].as_object().unwrap();
-                assert_eq!(dist.len(), 1, "{:?}", dist);
+                assert_eq!(dist.len(), 1, "{dist:?}");
                 assert_eq!(
                     dist["doggos.name"],
                     json!({ "bobby": 1, "buddy": 1, "gros bill": 1, "turbo": 1, "fast": 1})
@@ -561,9 +547,9 @@ async fn search_facet_distribution() {
                 "facets": ["doggos"]
             }),
             |response, code| {
-                assert_eq!(code, 200, "{}", response);
+                assert_eq!(code, 200, "{response}");
                 let dist = response["facetDistribution"].as_object().unwrap();
-                assert_eq!(dist.len(), 3, "{:?}", dist);
+                assert_eq!(dist.len(), 3, "{dist:?}");
                 assert_eq!(
                     dist["doggos.name"],
                     json!({ "bobby": 1, "buddy": 1, "gros bill": 1, "turbo": 1, "fast": 1})
@@ -579,7 +565,7 @@ async fn search_facet_distribution() {
                 "facets": ["doggos.name"]
             }),
             |response, code| {
-                assert_eq!(code, 200, "{}", response);
+                assert_eq!(code, 200, "{response}");
                 let dist = response["facetDistribution"].as_object().unwrap();
                 assert_eq!(dist.len(), 1);
                 assert_eq!(
@@ -593,8 +579,8 @@ async fn search_facet_distribution() {
 
 #[actix_rt::test]
 async fn displayed_attributes() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     index.update_settings(json!({ "displayedAttributes": ["title"] })).await;
 
@@ -604,14 +590,14 @@ async fn displayed_attributes() {
 
     let (response, code) =
         index.search_post(json!({ "attributesToRetrieve": ["title", "id"] })).await;
-    assert_eq!(code, 200, "{}", response);
+    assert_eq!(code, 200, "{response}");
     assert!(response["hits"][0].get("title").is_some());
 }
 
 #[actix_rt::test]
 async fn placeholder_search_is_hard_limited() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let documents: Vec<_> = (0..1200).map(|i| json!({ "id": i, "text": "I am unique!" })).collect();
     let (task, _status_code) = index.add_documents(documents.into(), None).await;
@@ -623,7 +609,7 @@ async fn placeholder_search_is_hard_limited() {
                 "limit": 1500,
             }),
             |response, code| {
-                assert_eq!(code, 200, "{}", response);
+                assert_eq!(code, 200, "{response}");
                 assert_eq!(response["hits"].as_array().unwrap().len(), 1000);
             },
         )
@@ -636,7 +622,7 @@ async fn placeholder_search_is_hard_limited() {
                 "limit": 400,
             }),
             |response, code| {
-                assert_eq!(code, 200, "{}", response);
+                assert_eq!(code, 200, "{response}");
                 assert_eq!(response["hits"].as_array().unwrap().len(), 200);
             },
         )
@@ -652,7 +638,7 @@ async fn placeholder_search_is_hard_limited() {
                 "limit": 1500,
             }),
             |response, code| {
-                assert_eq!(code, 200, "{}", response);
+                assert_eq!(code, 200, "{response}");
                 assert_eq!(response["hits"].as_array().unwrap().len(), 1200);
             },
         )
@@ -665,7 +651,7 @@ async fn placeholder_search_is_hard_limited() {
                 "limit": 400,
             }),
             |response, code| {
-                assert_eq!(code, 200, "{}", response);
+                assert_eq!(code, 200, "{response}");
                 assert_eq!(response["hits"].as_array().unwrap().len(), 200);
             },
         )
@@ -674,8 +660,8 @@ async fn placeholder_search_is_hard_limited() {
 
 #[actix_rt::test]
 async fn search_is_hard_limited() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let documents: Vec<_> = (0..1200).map(|i| json!({ "id": i, "text": "I am unique!" })).collect();
     let (task, _status_code) = index.add_documents(documents.into(), None).await;
@@ -688,7 +674,7 @@ async fn search_is_hard_limited() {
                 "limit": 1500,
             }),
             |response, code| {
-                assert_eq!(code, 200, "{}", response);
+                assert_eq!(code, 200, "{response}");
                 assert_eq!(response["hits"].as_array().unwrap().len(), 1000);
             },
         )
@@ -702,7 +688,7 @@ async fn search_is_hard_limited() {
                 "limit": 400,
             }),
             |response, code| {
-                assert_eq!(code, 200, "{}", response);
+                assert_eq!(code, 200, "{response}");
                 assert_eq!(response["hits"].as_array().unwrap().len(), 200);
             },
         )
@@ -719,7 +705,7 @@ async fn search_is_hard_limited() {
                 "limit": 1500,
             }),
             |response, code| {
-                assert_eq!(code, 200, "{}", response);
+                assert_eq!(code, 200, "{response}");
                 assert_eq!(response["hits"].as_array().unwrap().len(), 1200);
             },
         )
@@ -733,7 +719,7 @@ async fn search_is_hard_limited() {
                 "limit": 400,
             }),
             |response, code| {
-                assert_eq!(code, 200, "{}", response);
+                assert_eq!(code, 200, "{response}");
                 assert_eq!(response["hits"].as_array().unwrap().len(), 200);
             },
         )
@@ -742,8 +728,8 @@ async fn search_is_hard_limited() {
 
 #[actix_rt::test]
 async fn faceting_max_values_per_facet() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     index.update_settings(json!({ "filterableAttributes": ["number"] })).await;
 
@@ -757,7 +743,7 @@ async fn faceting_max_values_per_facet() {
                 "facets": ["number"]
             }),
             |response, code| {
-                assert_eq!(code, 200, "{}", response);
+                assert_eq!(code, 200, "{response}");
                 let numbers = response["facetDistribution"]["number"].as_object().unwrap();
                 assert_eq!(numbers.len(), 100);
             },
@@ -774,7 +760,7 @@ async fn faceting_max_values_per_facet() {
                 "facets": ["number"]
             }),
             |response, code| {
-                assert_eq!(code, 200, "{}", response);
+                assert_eq!(code, 200, "{response}");
                 let numbers = &response["facetDistribution"]["number"].as_object().unwrap();
                 assert_eq!(numbers.len(), 10_000);
             },
@@ -784,13 +770,7 @@ async fn faceting_max_values_per_facet() {
 
 #[actix_rt::test]
 async fn test_score_details() {
-    let server = Server::new().await;
-    let index = server.index("test");
-
-    let documents = DOCUMENTS.clone();
-
-    let res = index.add_documents(json!(documents), None).await;
-    index.wait_task(res.0.uid()).await.succeeded();
+    let index = shared_index_with_documents().await;
 
     index
         .search(
@@ -799,8 +779,8 @@ async fn test_score_details() {
                 "showRankingScoreDetails": true,
             }),
             |response, code| {
-                meili_snap::snapshot!(code, @"200 OK");
-                meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+                snapshot!(code, @"200 OK");
+                snapshot!(json_string!(response["hits"]), @r###"
                 [
                   {
                     "title": "How to Train Your Dragon: The Hidden World",
@@ -850,13 +830,7 @@ async fn test_score_details() {
 
 #[actix_rt::test]
 async fn test_score() {
-    let server = Server::new().await;
-    let index = server.index("test");
-
-    let documents = SCORE_DOCUMENTS.clone();
-
-    let res = index.add_documents(json!(documents), None).await;
-    index.wait_task(res.0.uid()).await.succeeded();
+    let index = shared_index_with_score_documents().await;
 
     index
         .search(
@@ -865,8 +839,8 @@ async fn test_score() {
                 "showRankingScore": true,
             }),
             |response, code| {
-                meili_snap::snapshot!(code, @"200 OK");
-                meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+                snapshot!(code, @"200 OK");
+                snapshot!(json_string!(response["hits"]), @r###"
                 [
                   {
                     "title": "Batman the dark knight returns: Part 1",
@@ -903,13 +877,7 @@ async fn test_score() {
 #[actix_rt::test]
 async fn test_score_threshold() {
     let query = "Badman dark returns 1";
-    let server = Server::new().await;
-    let index = server.index("test");
-
-    let documents = SCORE_DOCUMENTS.clone();
-
-    let res = index.add_documents(json!(documents), None).await;
-    index.wait_task(res.0.uid()).await.succeeded();
+    let index = shared_index_with_score_documents().await;
 
     index
         .search(
@@ -919,9 +887,9 @@ async fn test_score_threshold() {
                 "rankingScoreThreshold": 0.0
             }),
             |response, code| {
-                meili_snap::snapshot!(code, @"200 OK");
-                meili_snap::snapshot!(meili_snap::json_string!(response["estimatedTotalHits"]), @"5");
-                meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+                snapshot!(code, @"200 OK");
+                snapshot!(json_string!(response["estimatedTotalHits"]), @"5");
+                snapshot!(json_string!(response["hits"]), @r###"
                 [
                   {
                     "title": "Batman the dark knight returns: Part 1",
@@ -962,9 +930,9 @@ async fn test_score_threshold() {
                 "rankingScoreThreshold": 0.2
             }),
             |response, code| {
-                meili_snap::snapshot!(code, @"200 OK");
-                meili_snap::snapshot!(meili_snap::json_string!(response["estimatedTotalHits"]), @r###"3"###);
-                meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+                snapshot!(code, @"200 OK");
+                snapshot!(json_string!(response["estimatedTotalHits"]), @r###"3"###);
+                snapshot!(json_string!(response["hits"]), @r###"
                 [
                   {
                     "title": "Batman the dark knight returns: Part 1",
@@ -995,9 +963,9 @@ async fn test_score_threshold() {
                 "rankingScoreThreshold": 0.5
             }),
             |response, code| {
-                meili_snap::snapshot!(code, @"200 OK");
-                meili_snap::snapshot!(meili_snap::json_string!(response["estimatedTotalHits"]), @r###"2"###);
-                meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+                snapshot!(code, @"200 OK");
+                snapshot!(json_string!(response["estimatedTotalHits"]), @r###"2"###);
+                snapshot!(json_string!(response["hits"]), @r###"
                 [
                   {
                     "title": "Batman the dark knight returns: Part 1",
@@ -1023,9 +991,9 @@ async fn test_score_threshold() {
                 "rankingScoreThreshold": 0.8
             }),
             |response, code| {
-                meili_snap::snapshot!(code, @"200 OK");
-                meili_snap::snapshot!(meili_snap::json_string!(response["estimatedTotalHits"]), @r###"1"###);
-                meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+                snapshot!(code, @"200 OK");
+                snapshot!(json_string!(response["estimatedTotalHits"]), @r###"1"###);
+                snapshot!(json_string!(response["hits"]), @r###"
                 [
                   {
                     "title": "Batman the dark knight returns: Part 1",
@@ -1046,10 +1014,10 @@ async fn test_score_threshold() {
                 "rankingScoreThreshold": 1.0
             }),
             |response, code| {
-                meili_snap::snapshot!(code, @"200 OK");
-                meili_snap::snapshot!(meili_snap::json_string!(response["estimatedTotalHits"]), @r###"0"###);
+                snapshot!(code, @"200 OK");
+                snapshot!(json_string!(response["estimatedTotalHits"]), @r###"0"###);
                 // nobody is perfect
-                meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @"[]");
+                snapshot!(json_string!(response["hits"]), @"[]");
             },
         )
         .await;
@@ -1057,8 +1025,8 @@ async fn test_score_threshold() {
 
 #[actix_rt::test]
 async fn test_degraded_score_details() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let documents = NESTED_DOCUMENTS.clone();
 
@@ -1075,8 +1043,8 @@ async fn test_degraded_score_details() {
                 "showRankingScoreDetails": true,
             }),
             |response, code| {
-                meili_snap::snapshot!(code, @"200 OK");
-                meili_snap::snapshot!(meili_snap::json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
+                snapshot!(code, @"200 OK");
+                snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
                 {
                   "hits": [
                     {
@@ -1146,8 +1114,8 @@ async fn test_degraded_score_details() {
 #[cfg(feature = "default")]
 #[actix_rt::test]
 async fn camelcased_words() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     // related to https://github.com/meilisearch/meilisearch/issues/3818
     let documents = json!([
@@ -1162,8 +1130,8 @@ async fn camelcased_words() {
 
     index
         .search(json!({"q": "deLonghi"}), |response, code| {
-            meili_snap::snapshot!(code, @"200 OK");
-            meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+            snapshot!(code, @"200 OK");
+            snapshot!(json_string!(response["hits"]), @r###"
             [
               {
                 "id": 0,
@@ -1180,8 +1148,8 @@ async fn camelcased_words() {
 
     index
         .search(json!({"q": "dellonghi"}), |response, code| {
-            meili_snap::snapshot!(code, @"200 OK");
-            meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+            snapshot!(code, @"200 OK");
+            snapshot!(json_string!(response["hits"]), @r###"
             [
               {
                 "id": 0,
@@ -1198,8 +1166,8 @@ async fn camelcased_words() {
 
     index
         .search(json!({"q": "testa"}), |response, code| {
-            meili_snap::snapshot!(code, @"200 OK");
-            meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+            snapshot!(code, @"200 OK");
+            snapshot!(json_string!(response["hits"]), @r###"
             [
               {
                 "id": 2,
@@ -1220,8 +1188,8 @@ async fn camelcased_words() {
 
     index
         .search(json!({"q": "testab"}), |response, code| {
-            meili_snap::snapshot!(code, @"200 OK");
-            meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+            snapshot!(code, @"200 OK");
+            snapshot!(json_string!(response["hits"]), @r###"
             [
               {
                 "id": 2,
@@ -1242,8 +1210,8 @@ async fn camelcased_words() {
 
     index
         .search(json!({"q": "TestaB"}), |response, code| {
-            meili_snap::snapshot!(code, @"200 OK");
-            meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+            snapshot!(code, @"200 OK");
+            snapshot!(json_string!(response["hits"]), @r###"
             [
               {
                 "id": 2,
@@ -1264,8 +1232,8 @@ async fn camelcased_words() {
 
     index
         .search(json!({"q": "Testab"}), |response, code| {
-            meili_snap::snapshot!(code, @"200 OK");
-            meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+            snapshot!(code, @"200 OK");
+            snapshot!(json_string!(response["hits"]), @r###"
             [
               {
                 "id": 2,
@@ -1286,8 +1254,8 @@ async fn camelcased_words() {
 
     index
         .search(json!({"q": "TestAb"}), |response, code| {
-            meili_snap::snapshot!(code, @"200 OK");
-            meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+            snapshot!(code, @"200 OK");
+            snapshot!(json_string!(response["hits"]), @r###"
             [
               {
                 "id": 2,
@@ -1309,8 +1277,8 @@ async fn camelcased_words() {
     // with Typos
     index
         .search(json!({"q": "dellonghi"}), |response, code| {
-            meili_snap::snapshot!(code, @"200 OK");
-            meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+            snapshot!(code, @"200 OK");
+            snapshot!(json_string!(response["hits"]), @r###"
             [
               {
                 "id": 0,
@@ -1327,8 +1295,8 @@ async fn camelcased_words() {
 
     index
         .search(json!({"q": "TetsAB"}), |response, code| {
-            meili_snap::snapshot!(code, @"200 OK");
-            meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+            snapshot!(code, @"200 OK");
+            snapshot!(json_string!(response["hits"]), @r###"
             [
               {
                 "id": 2,
@@ -1349,8 +1317,8 @@ async fn camelcased_words() {
 
     index
         .search(json!({"q": "TetsAB"}), |response, code| {
-            meili_snap::snapshot!(code, @"200 OK");
-            meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+            snapshot!(code, @"200 OK");
+            snapshot!(json_string!(response["hits"]), @r###"
             [
               {
                 "id": 2,
@@ -1372,13 +1340,13 @@ async fn camelcased_words() {
 
 #[actix_rt::test]
 async fn simple_search_with_strange_synonyms() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (task, _status_code) =
         index.update_settings(json!({ "synonyms": {"&": ["to"], "to": ["&"]} })).await;
-    let r = index.wait_task(task.uid()).await;
-    meili_snap::snapshot!(r["status"], @r###""succeeded""###);
+    let r = index.wait_task(task.uid()).await.succeeded();
+    snapshot!(r["status"], @r###""succeeded""###);
 
     let documents = DOCUMENTS.clone();
     let (task, _status_code) = index.add_documents(documents, None).await;
@@ -1386,8 +1354,8 @@ async fn simple_search_with_strange_synonyms() {
 
     index
         .search(json!({"q": "How to train"}), |response, code| {
-            meili_snap::snapshot!(code, @"200 OK");
-            meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+            snapshot!(code, @"200 OK");
+            snapshot!(json_string!(response["hits"]), @r###"
             [
               {
                 "title": "How to Train Your Dragon: The Hidden World",
@@ -1404,8 +1372,8 @@ async fn simple_search_with_strange_synonyms() {
 
     index
         .search(json!({"q": "How & train"}), |response, code| {
-            meili_snap::snapshot!(code, @"200 OK");
-            meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+            snapshot!(code, @"200 OK");
+            snapshot!(json_string!(response["hits"]), @r###"
             [
               {
                 "title": "How to Train Your Dragon: The Hidden World",
@@ -1422,8 +1390,8 @@ async fn simple_search_with_strange_synonyms() {
 
     index
         .search(json!({"q": "to"}), |response, code| {
-            meili_snap::snapshot!(code, @"200 OK");
-            meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+            snapshot!(code, @"200 OK");
+            snapshot!(json_string!(response["hits"]), @r###"
             [
               {
                 "title": "How to Train Your Dragon: The Hidden World",
@@ -1441,8 +1409,8 @@ async fn simple_search_with_strange_synonyms() {
 
 #[actix_rt::test]
 async fn change_attributes_settings() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     index.update_settings(json!({ "searchableAttributes": ["father", "mother"] })).await;
 
@@ -1462,8 +1430,8 @@ async fn change_attributes_settings() {
                 "attributesToRetrieve": ["id", "doggos"]
             }),
             |response, code| {
-                assert_eq!(code, 200, "{}", response);
-                meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+                assert_eq!(code, 200, "{response}");
+                snapshot!(json_string!(response["hits"]), @r###"
                 [
                   {
                     "id": 852,
@@ -1493,8 +1461,8 @@ async fn change_attributes_settings() {
                 "attributesToRetrieve": ["id", "doggos"]
             }),
             |response, code| {
-                assert_eq!(code, 200, "{}", response);
-                meili_snap::snapshot!(meili_snap::json_string!(response["hits"]), @r###"
+                assert_eq!(code, 200, "{response}");
+                snapshot!(json_string!(response["hits"]), @r###"
                 [
                   {
                     "id": 852,
@@ -1563,7 +1531,7 @@ async fn test_nested_fields() {
         &settings,
         &json!({"q": "document"}),
         |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             snapshot!(json_string!(response["hits"]), @r###"
         [
           {
@@ -1609,7 +1577,7 @@ async fn test_nested_fields() {
         &settings,
         &json!({"q": "zeroth"}),
         |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             snapshot!(json_string!(response["hits"]), @r###"
         [
           {
@@ -1627,7 +1595,7 @@ async fn test_nested_fields() {
         &settings,
         &json!({"q": "first"}),
         |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             snapshot!(json_string!(response["hits"]), @r###"
         [
           {
@@ -1650,7 +1618,7 @@ async fn test_nested_fields() {
         &settings,
         &json!({"q": "field"}),
         |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             snapshot!(json_string!(response["hits"]), @r###"
       [
         {
@@ -1686,7 +1654,7 @@ async fn test_nested_fields() {
         &settings,
         &json!({"q": "array"}),
         |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             // nested is not searchable
             snapshot!(json_string!(response["hits"]), @"[]");
         },
@@ -1698,7 +1666,7 @@ async fn test_nested_fields() {
         &settings,
         &json!({"q": "lied"}),
         |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             // nested is not searchable
             snapshot!(json_string!(response["hits"]), @"[]");
         },
@@ -1711,7 +1679,7 @@ async fn test_nested_fields() {
         &settings,
         &json!({"filter": "nested.object = field"}),
         |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             snapshot!(json_string!(response["hits"]), @r###"
         [
           {
@@ -1747,7 +1715,7 @@ async fn test_nested_fields() {
         &settings,
         &json!({"filter": "nested.machin = bidule"}),
         |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             snapshot!(json_string!(response["hits"]), @r###"
         [
           {
@@ -1770,10 +1738,10 @@ async fn test_nested_fields() {
         &settings,
         &json!({"filter": "nested = array"}),
         |response, code| {
-            assert_eq!(code, 400, "{}", response);
+            assert_eq!(code, 400, "{response}");
             snapshot!(json_string!(response), @r###"
             {
-              "message": "Index `test`: Attribute `nested` is not filterable. Available filterable attribute patterns are: `nested.machin`, `nested.object`, `title`.\n1:7 nested = array",
+              "message": "Index `[uuid]`: Attribute `nested` is not filterable. Available filterable attribute patterns are: `nested.machin`, `nested.object`, `title`.\n1:7 nested = array",
               "code": "invalid_search_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -1789,10 +1757,10 @@ async fn test_nested_fields() {
         &settings,
         &json!({"filter": r#"nested = "I lied""#}),
         |response, code| {
-            assert_eq!(code, 400, "{}", response);
+            assert_eq!(code, 400, "{response}");
             snapshot!(json_string!(response), @r###"
             {
-              "message": "Index `test`: Attribute `nested` is not filterable. Available filterable attribute patterns are: `nested.machin`, `nested.object`, `title`.\n1:7 nested = \"I lied\"",
+              "message": "Index `[uuid]`: Attribute `nested` is not filterable. Available filterable attribute patterns are: `nested.machin`, `nested.object`, `title`.\n1:7 nested = \"I lied\"",
               "code": "invalid_search_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -1850,7 +1818,7 @@ async fn test_typo_settings() {
         }),
         &json!({"q": "document"}),
         |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             snapshot!(json_string!(response["hits"]), @r###"
             [
               {
@@ -1902,7 +1870,7 @@ async fn test_typo_settings() {
         }),
         &json!({"q": "docume"}),
         |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             snapshot!(json_string!(response["hits"]), @r###"
           [
             {
@@ -1946,8 +1914,8 @@ async fn test_typo_settings() {
 /// Modifying facets with different casing should work correctly
 #[actix_rt::test]
 async fn change_facet_casing() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) = index
         .update_settings(json!({
@@ -1955,7 +1923,7 @@ async fn change_facet_casing() {
         }))
         .await;
     assert_eq!("202", code.as_str(), "{:?}", response);
-    index.wait_task(response.uid()).await;
+    index.wait_task(response.uid()).await.succeeded();
 
     let (response, _code) = index
         .add_documents(
@@ -1968,7 +1936,7 @@ async fn change_facet_casing() {
             None,
         )
         .await;
-    index.wait_task(response.uid()).await;
+    index.wait_task(response.uid()).await.succeeded();
 
     let (response, _code) = index
         .add_documents(
@@ -1981,12 +1949,12 @@ async fn change_facet_casing() {
             None,
         )
         .await;
-    index.wait_task(response.uid()).await;
+    index.wait_task(response.uid()).await.succeeded();
 
     index
         .search(json!({ "facets": ["dog"] }), |response, code| {
-            meili_snap::snapshot!(code, @"200 OK");
-            meili_snap::snapshot!(meili_snap::json_string!(response["facetDistribution"]), @r###"
+            snapshot!(code, @"200 OK");
+            snapshot!(json_string!(response["facetDistribution"]), @r###"
             {
               "dog": {
                 "bouvier bernois": 1
@@ -2045,7 +2013,7 @@ async fn test_exact_typos_terms() {
         }),
         &json!({"q": "12345"}),
         |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             snapshot!(json_string!(response["hits"]), @r###"
             [
               {
@@ -2080,7 +2048,7 @@ async fn test_exact_typos_terms() {
         }),
         &json!({"q": "123457"}),
         |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             snapshot!(json_string!(response["hits"]), @r###"[]"###);
         },
     )

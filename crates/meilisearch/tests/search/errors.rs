@@ -708,7 +708,7 @@ async fn filter_invalid_attribute_array() {
         |response, code| {
             snapshot!(response, @r###"
             {
-              "message": "Index `test`: Attribute `many` is not filterable. Available filterable attribute patterns are: `title`.\n1:5 many = Glass",
+              "message": "Index `[uuid]`: Attribute `many` is not filterable. Available filterable attribute patterns are: `title`.\n1:5 many = Glass",
               "code": "invalid_search_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -729,7 +729,7 @@ async fn filter_invalid_attribute_string() {
         |response, code| {
             snapshot!(response, @r###"
             {
-              "message": "Index `test`: Attribute `many` is not filterable. Available filterable attribute patterns are: `title`.\n1:5 many = Glass",
+              "message": "Index `[uuid]`: Attribute `many` is not filterable. Available filterable attribute patterns are: `title`.\n1:5 many = Glass",
               "code": "invalid_search_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -886,7 +886,7 @@ async fn search_with_pattern_filter_settings_errors() {
             snapshot!(code, @"400 Bad Request");
             snapshot!(json_string!(response), @r#"
             {
-              "message": "Index `test`: Filter operator `=` is not allowed for the attribute `cattos`.\n  - Note: allowed operators: OR, AND, NOT, <, >, <=, >=, TO, IS EMPTY, IS NULL, EXISTS.\n  - Note: field `cattos` matched rule #0 in `filterableAttributes`\n  - Hint: enable equality in rule #0 by modifying the features.filter object\n  - Hint: prepend another rule matching `cattos` with appropriate filter features before rule #0",
+              "message": "Index `[uuid]`: Filter operator `=` is not allowed for the attribute `cattos`.\n  - Note: allowed operators: OR, AND, NOT, <, >, <=, >=, TO, IS EMPTY, IS NULL, EXISTS.\n  - Note: field `cattos` matched rule #0 in `filterableAttributes`\n  - Hint: enable equality in rule #0 by modifying the features.filter object\n  - Hint: prepend another rule matching `cattos` with appropriate filter features before rule #0",
               "code": "invalid_search_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -912,7 +912,7 @@ async fn search_with_pattern_filter_settings_errors() {
         snapshot!(code, @"400 Bad Request");
         snapshot!(json_string!(response), @r#"
         {
-          "message": "Index `test`: Filter operator `=` is not allowed for the attribute `cattos`.\n  - Note: allowed operators: OR, AND, NOT, <, >, <=, >=, TO, IS EMPTY, IS NULL, EXISTS.\n  - Note: field `cattos` matched rule #0 in `filterableAttributes`\n  - Hint: enable equality in rule #0 by modifying the features.filter object\n  - Hint: prepend another rule matching `cattos` with appropriate filter features before rule #0",
+          "message": "Index `[uuid]`: Filter operator `=` is not allowed for the attribute `cattos`.\n  - Note: allowed operators: OR, AND, NOT, <, >, <=, >=, TO, IS EMPTY, IS NULL, EXISTS.\n  - Note: field `cattos` matched rule #0 in `filterableAttributes`\n  - Hint: enable equality in rule #0 by modifying the features.filter object\n  - Hint: prepend another rule matching `cattos` with appropriate filter features before rule #0",
           "code": "invalid_search_filter",
           "type": "invalid_request",
           "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -933,7 +933,7 @@ async fn search_with_pattern_filter_settings_errors() {
             snapshot!(code, @"400 Bad Request");
             snapshot!(json_string!(response), @r#"
             {
-              "message": "Index `test`: Filter operator `>` is not allowed for the attribute `doggos.age`.\n  - Note: allowed operators: OR, AND, NOT, =, !=, IN, IS EMPTY, IS NULL, EXISTS.\n  - Note: field `doggos.age` matched rule #0 in `filterableAttributes`\n  - Hint: enable comparison in rule #0 by modifying the features.filter object\n  - Hint: prepend another rule matching `doggos.age` with appropriate filter features before rule #0",
+              "message": "Index `[uuid]`: Filter operator `>` is not allowed for the attribute `doggos.age`.\n  - Note: allowed operators: OR, AND, NOT, =, !=, IN, IS EMPTY, IS NULL, EXISTS.\n  - Note: field `doggos.age` matched rule #0 in `filterableAttributes`\n  - Hint: enable comparison in rule #0 by modifying the features.filter object\n  - Hint: prepend another rule matching `doggos.age` with appropriate filter features before rule #0",
               "code": "invalid_search_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -959,7 +959,7 @@ async fn search_with_pattern_filter_settings_errors() {
             snapshot!(code, @"400 Bad Request");
             snapshot!(json_string!(response), @r#"
             {
-              "message": "Index `test`: Filter operator `>` is not allowed for the attribute `doggos.age`.\n  - Note: allowed operators: OR, AND, NOT, =, !=, IN, IS EMPTY, IS NULL, EXISTS.\n  - Note: field `doggos.age` matched rule #0 in `filterableAttributes`\n  - Hint: enable comparison in rule #0 by modifying the features.filter object\n  - Hint: prepend another rule matching `doggos.age` with appropriate filter features before rule #0",
+              "message": "Index `[uuid]`: Filter operator `>` is not allowed for the attribute `doggos.age`.\n  - Note: allowed operators: OR, AND, NOT, =, !=, IN, IS EMPTY, IS NULL, EXISTS.\n  - Note: field `doggos.age` matched rule #0 in `filterableAttributes`\n  - Hint: enable comparison in rule #0 by modifying the features.filter object\n  - Hint: prepend another rule matching `doggos.age` with appropriate filter features before rule #0",
               "code": "invalid_search_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -985,7 +985,7 @@ async fn search_with_pattern_filter_settings_errors() {
             snapshot!(code, @"400 Bad Request");
             snapshot!(json_string!(response), @r#"
             {
-              "message": "Index `test`: Filter operator `TO` is not allowed for the attribute `doggos.age`.\n  - Note: allowed operators: OR, AND, NOT, =, !=, IN, IS EMPTY, IS NULL, EXISTS.\n  - Note: field `doggos.age` matched rule #0 in `filterableAttributes`\n  - Hint: enable comparison in rule #0 by modifying the features.filter object\n  - Hint: prepend another rule matching `doggos.age` with appropriate filter features before rule #0",
+              "message": "Index `[uuid]`: Filter operator `TO` is not allowed for the attribute `doggos.age`.\n  - Note: allowed operators: OR, AND, NOT, =, !=, IN, IS EMPTY, IS NULL, EXISTS.\n  - Note: field `doggos.age` matched rule #0 in `filterableAttributes`\n  - Hint: enable comparison in rule #0 by modifying the features.filter object\n  - Hint: prepend another rule matching `doggos.age` with appropriate filter features before rule #0",
               "code": "invalid_search_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -1144,7 +1144,7 @@ async fn search_on_unknown_field() {
             snapshot!(code, @"400 Bad Request");
             snapshot!(response, @r###"
             {
-              "message": "Index `test`: Attribute `unknown` is not searchable. Available searchable attributes are: `id, title`.",
+              "message": "Index `[uuid]`: Attribute `unknown` is not searchable. Available searchable attributes are: `id, title`.",
               "code": "invalid_search_attributes_to_search_on",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_search_attributes_to_search_on"
@@ -1165,7 +1165,7 @@ async fn search_on_unknown_field_plus_joker() {
             snapshot!(code, @"400 Bad Request");
             snapshot!(response, @r###"
             {
-              "message": "Index `test`: Attribute `unknown` is not searchable. Available searchable attributes are: `id, title`.",
+              "message": "Index `[uuid]`: Attribute `unknown` is not searchable. Available searchable attributes are: `id, title`.",
               "code": "invalid_search_attributes_to_search_on",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_search_attributes_to_search_on"
@@ -1183,7 +1183,7 @@ async fn search_on_unknown_field_plus_joker() {
             snapshot!(code, @"400 Bad Request");
             snapshot!(response, @r###"
             {
-              "message": "Index `test`: Attribute `unknown` is not searchable. Available searchable attributes are: `id, title`.",
+              "message": "Index `[uuid]`: Attribute `unknown` is not searchable. Available searchable attributes are: `id, title`.",
               "code": "invalid_search_attributes_to_search_on",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_search_attributes_to_search_on"
