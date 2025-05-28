@@ -28,6 +28,7 @@ use std::time::Duration;
 use bucket_sort::{bucket_sort, BucketSortOutput};
 use charabia::{Language, TokenizerBuilder};
 use db_cache::DatabaseCache;
+pub use distinct::{distinct_fid, distinct_single_docid};
 use exact_attribute::ExactAttribute;
 use graph_based_ranking_rule::{Exactness, Fid, Position, Proximity, Typo};
 use heed::RoTxn;
@@ -47,8 +48,7 @@ use sort::Sort;
 
 use self::distinct::facet_string_values;
 use self::geo_sort::GeoSort;
-pub use self::geo_sort::Parameter as GeoSortParameter;
-pub use self::geo_sort::Strategy as GeoSortStrategy;
+pub use self::geo_sort::{Parameter as GeoSortParameter, Strategy as GeoSortStrategy};
 use self::graph_based_ranking_rule::Words;
 use self::interner::Interned;
 use self::vector_sort::VectorSort;
