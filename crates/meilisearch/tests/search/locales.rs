@@ -89,9 +89,9 @@ static DOCUMENTS: Lazy<Value> = Lazy::new(|| {
 
 #[actix_rt::test]
 async fn simple_search() {
-    let server = Server::new().await;
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
-    let index = server.index("test");
     let documents = DOCUMENTS.clone();
     index
         .update_settings(
@@ -196,9 +196,9 @@ async fn simple_search() {
 
 #[actix_rt::test]
 async fn force_locales() {
-    let server = Server::new().await;
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
-    let index = server.index("test");
     let documents = DOCUMENTS.clone();
     let (response, _) = index
         .update_settings(
@@ -211,10 +211,10 @@ async fn force_locales() {
             }),
         )
         .await;
-    snapshot!(response, @r###"
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".enqueuedAt" => "[date]" }), @r###"
     {
-      "taskUid": 0,
-      "indexUid": "test",
+      "taskUid": "[task_uid]",
+      "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "settingsUpdate",
       "enqueuedAt": "[date]"
@@ -274,9 +274,9 @@ async fn force_locales() {
 
 #[actix_rt::test]
 async fn force_locales_with_pattern() {
-    let server = Server::new().await;
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
-    let index = server.index("test");
     let documents = DOCUMENTS.clone();
     let (response, _) = index
         .update_settings(
@@ -289,10 +289,10 @@ async fn force_locales_with_pattern() {
             }),
         )
         .await;
-    snapshot!(response, @r###"
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".enqueuedAt" => "[date]" }), @r###"
     {
-      "taskUid": 0,
-      "indexUid": "test",
+      "taskUid": "[task_uid]",
+      "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "settingsUpdate",
       "enqueuedAt": "[date]"
@@ -352,9 +352,9 @@ async fn force_locales_with_pattern() {
 
 #[actix_rt::test]
 async fn force_locales_with_pattern_nested() {
-    let server = Server::new().await;
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
-    let index = server.index("test");
     let documents = NESTED_DOCUMENTS.clone();
     let (response, _) = index
         .update_settings(json!({
@@ -365,10 +365,10 @@ async fn force_locales_with_pattern_nested() {
             ]
         }))
         .await;
-    snapshot!(response, @r###"
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".enqueuedAt" => "[date]" }), @r###"
     {
-      "taskUid": 0,
-      "indexUid": "test",
+      "taskUid": "[task_uid]",
+      "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "settingsUpdate",
       "enqueuedAt": "[date]"
@@ -423,9 +423,9 @@ async fn force_locales_with_pattern_nested() {
 }
 #[actix_rt::test]
 async fn force_different_locales_with_pattern() {
-    let server = Server::new().await;
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
-    let index = server.index("test");
     let documents = DOCUMENTS.clone();
     let (response, _) = index
         .update_settings(
@@ -440,10 +440,10 @@ async fn force_different_locales_with_pattern() {
             }),
         )
         .await;
-    snapshot!(response, @r###"
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".enqueuedAt" => "[date]" }), @r###"
     {
-      "taskUid": 0,
-      "indexUid": "test",
+      "taskUid": "[task_uid]",
+      "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "settingsUpdate",
       "enqueuedAt": "[date]"
@@ -499,9 +499,9 @@ async fn force_different_locales_with_pattern() {
 
 #[actix_rt::test]
 async fn auto_infer_locales_at_search_with_attributes_to_search_on() {
-    let server = Server::new().await;
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
-    let index = server.index("test");
     let documents = DOCUMENTS.clone();
     let (response, _) = index
         .update_settings(
@@ -518,10 +518,10 @@ async fn auto_infer_locales_at_search_with_attributes_to_search_on() {
             }),
         )
         .await;
-    snapshot!(response, @r###"
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".enqueuedAt" => "[date]" }), @r###"
     {
-      "taskUid": 0,
-      "indexUid": "test",
+      "taskUid": "[task_uid]",
+      "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "settingsUpdate",
       "enqueuedAt": "[date]"
@@ -577,9 +577,9 @@ async fn auto_infer_locales_at_search_with_attributes_to_search_on() {
 
 #[actix_rt::test]
 async fn auto_infer_locales_at_search() {
-    let server = Server::new().await;
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
-    let index = server.index("test");
     let documents = DOCUMENTS.clone();
     let (response, _) = index
         .update_settings(
@@ -592,10 +592,10 @@ async fn auto_infer_locales_at_search() {
             }),
         )
         .await;
-    snapshot!(response, @r###"
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".enqueuedAt" => "[date]" }), @r###"
     {
-      "taskUid": 0,
-      "indexUid": "test",
+      "taskUid": "[task_uid]",
+      "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "settingsUpdate",
       "enqueuedAt": "[date]"
@@ -676,9 +676,9 @@ async fn auto_infer_locales_at_search() {
 
 #[actix_rt::test]
 async fn force_different_locales_with_pattern_nested() {
-    let server = Server::new().await;
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
-    let index = server.index("test");
     let documents = NESTED_DOCUMENTS.clone();
     let (response, _) = index
         .update_settings(json!({
@@ -691,10 +691,10 @@ async fn force_different_locales_with_pattern_nested() {
             ]
         }))
         .await;
-    snapshot!(response, @r###"
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".enqueuedAt" => "[date]" }), @r###"
     {
-      "taskUid": 0,
-      "indexUid": "test",
+      "taskUid": "[task_uid]",
+      "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "settingsUpdate",
       "enqueuedAt": "[date]"
@@ -774,9 +774,9 @@ async fn force_different_locales_with_pattern_nested() {
 
 #[actix_rt::test]
 async fn settings_change() {
-    let server = Server::new().await;
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
-    let index = server.index("test");
     let documents = NESTED_DOCUMENTS.clone();
     let (task, _status_code) = index.add_documents(documents, None).await;
     index.wait_task(task.uid()).await.succeeded();
@@ -789,10 +789,10 @@ async fn settings_change() {
             ]
         }))
         .await;
-    snapshot!(response, @r###"
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".enqueuedAt" => "[date]" }), @r###"
     {
-      "taskUid": 1,
-      "indexUid": "test",
+      "taskUid": "[task_uid]",
+      "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "settingsUpdate",
       "enqueuedAt": "[date]"
@@ -852,10 +852,10 @@ async fn settings_change() {
             ]
         }))
         .await;
-    snapshot!(response, @r###"
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".enqueuedAt" => "[date]" }), @r###"
     {
-      "taskUid": 2,
-      "indexUid": "test",
+      "taskUid": "[task_uid]",
+      "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "settingsUpdate",
       "enqueuedAt": "[date]"
@@ -906,9 +906,9 @@ async fn settings_change() {
 
 #[actix_rt::test]
 async fn invalid_locales() {
-    let server = Server::new().await;
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
-    let index = server.index("test");
     let documents = DOCUMENTS.clone();
     index
         .update_settings(
@@ -945,9 +945,9 @@ async fn invalid_locales() {
 
 #[actix_rt::test]
 async fn invalid_localized_attributes_rules() {
-    let server = Server::new().await;
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
-    let index = server.index("test");
     let (response, _) = index
         .update_settings(json!({
             "localizedAttributes": [
@@ -1015,19 +1015,19 @@ async fn invalid_localized_attributes_rules() {
 
 #[actix_rt::test]
 async fn simple_facet_search() {
-    let server = Server::new().await;
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
-    let index = server.index("test");
     let documents = DOCUMENTS.clone();
     let (response, _) = index
         .update_settings(json!({
             "filterableAttributes": ["name_en", "name_ja", "name_zh"],
         }))
         .await;
-    snapshot!(response, @r###"
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".enqueuedAt" => "[date]" }), @r###"
     {
-      "taskUid": 0,
-      "indexUid": "test",
+      "taskUid": "[task_uid]",
+      "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "settingsUpdate",
       "enqueuedAt": "[date]"
@@ -1073,9 +1073,9 @@ async fn simple_facet_search() {
 
 #[actix_rt::test]
 async fn facet_search_with_localized_attributes() {
-    let server = Server::new().await;
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
-    let index = server.index("test");
     let documents = DOCUMENTS.clone();
     let (response, _) = index
         .update_settings(json!({
@@ -1086,10 +1086,10 @@ async fn facet_search_with_localized_attributes() {
             ]
         }))
         .await;
-    snapshot!(response, @r###"
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".enqueuedAt" => "[date]" }), @r###"
     {
-      "taskUid": 0,
-      "indexUid": "test",
+      "taskUid": "[task_uid]",
+      "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "settingsUpdate",
       "enqueuedAt": "[date]"
@@ -1146,9 +1146,9 @@ async fn facet_search_with_localized_attributes() {
 
 #[actix_rt::test]
 async fn swedish_search() {
-    let server = Server::new().await;
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
-    let index = server.index("test");
     let documents = json!([
       {"id": "tra1-1", "product": "trä"},
       {"id": "tra2-1", "product": "traktor"},
@@ -1269,9 +1269,9 @@ async fn swedish_search() {
 
 #[actix_rt::test]
 async fn german_search() {
-    let server = Server::new().await;
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
-    let index = server.index("test");
     let documents = json!([
       {"id": 1, "product": "Interkulturalität"},
       {"id": 2, "product": "Wissensorganisation"},
