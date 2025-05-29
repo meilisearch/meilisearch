@@ -1196,10 +1196,8 @@ async fn search_on_unknown_field_plus_joker() {
 
 #[actix_rt::test]
 async fn distinct_at_search_time() {
-    let server = Server::new().await;
-    let index = server.index("test");
-    let (task, _) = index.create(None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    let server = Server::new_shared();
+    let index = server.unique_index();
     let (response, _code) =
         index.add_documents(json!([{"id": 1, "color": "Doggo", "machin": "Action"}]), None).await;
     index.wait_task(response.uid()).await.succeeded();
@@ -1209,7 +1207,7 @@ async fn distinct_at_search_time() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "Index `test`: Attribute `doggo.truc` is not filterable and thus, cannot be used as distinct attribute. This index does not have configured filterable attributes.",
+      "message": "Index `[uuid]`: Attribute `doggo.truc` is not filterable and thus, cannot be used as distinct attribute. This index does not have configured filterable attributes.",
       "code": "invalid_search_distinct",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_distinct"
@@ -1224,7 +1222,7 @@ async fn distinct_at_search_time() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "Index `test`: Attribute `doggo.truc` is not filterable and thus, cannot be used as distinct attribute. Available filterable attributes patterns are: `color, machin`.",
+      "message": "Index `[uuid]`: Attribute `doggo.truc` is not filterable and thus, cannot be used as distinct attribute. Available filterable attributes patterns are: `color, machin`.",
       "code": "invalid_search_distinct",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_distinct"
@@ -1239,7 +1237,7 @@ async fn distinct_at_search_time() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "Index `test`: Attribute `doggo.truc` is not filterable and thus, cannot be used as distinct attribute. Available filterable attributes patterns are: `color, <..hidden-attributes>`.",
+      "message": "Index `[uuid]`: Attribute `doggo.truc` is not filterable and thus, cannot be used as distinct attribute. Available filterable attributes patterns are: `color, <..hidden-attributes>`.",
       "code": "invalid_search_distinct",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_distinct"
