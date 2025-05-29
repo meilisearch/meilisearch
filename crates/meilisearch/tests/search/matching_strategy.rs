@@ -2,11 +2,11 @@ use meili_snap::snapshot;
 use once_cell::sync::Lazy;
 
 use crate::common::index::Index;
-use crate::common::{Server, Value};
+use crate::common::{Server, Shared, Value};
 use crate::json;
 
-async fn index_with_documents<'a>(server: &'a Server, documents: &Value) -> Index<'a> {
-    let index = server.index("test");
+async fn index_with_documents<'a>(server: &'a Server<Shared>, documents: &Value) -> Index<'a> {
+    let index = server.unique_index();
 
     let (task, _status_code) = index.add_documents(documents.clone(), None).await;
     index.wait_task(task.uid()).await.succeeded();
@@ -48,8 +48,8 @@ static SIMPLE_SEARCH_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
 
 #[actix_rt::test]
 async fn simple_search() {
-    let server = Server::new().await;
-    let index = index_with_documents(&server, &SIMPLE_SEARCH_DOCUMENTS).await;
+    let server = Server::new_shared();
+    let index = index_with_documents(server, &SIMPLE_SEARCH_DOCUMENTS).await;
 
     index
         .search(json!({"q": "Captain Marvel", "matchingStrategy": "last", "attributesToRetrieve": ["id"]}), |response, code| {
@@ -75,7 +75,7 @@ async fn simple_search() {
 
 #[actix_rt::test]
 async fn search_with_typo() {
-    let server = Server::new().await;
+    let server = Server::new_shared();
     let index = index_with_documents(&server, &SIMPLE_SEARCH_DOCUMENTS).await;
 
     index
@@ -102,7 +102,7 @@ async fn search_with_typo() {
 
 #[actix_rt::test]
 async fn search_with_unknown_word() {
-    let server = Server::new().await;
+    let server = Server::new_shared();
     let index = index_with_documents(&server, &SIMPLE_SEARCH_DOCUMENTS).await;
 
     index
