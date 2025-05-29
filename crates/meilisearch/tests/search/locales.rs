@@ -211,9 +211,9 @@ async fn force_locales() {
             }),
         )
         .await;
-    snapshot!(response, @r###"
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".enqueuedAt" => "[date]" }), @r###"
     {
-      "taskUid": 0,
+      "taskUid": "[task_uid]",
       "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "settingsUpdate",
@@ -289,9 +289,9 @@ async fn force_locales_with_pattern() {
             }),
         )
         .await;
-    snapshot!(response, @r###"
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".enqueuedAt" => "[date]" }), @r###"
     {
-      "taskUid": 0,
+      "taskUid": "[task_uid]",
       "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "settingsUpdate",
@@ -365,9 +365,9 @@ async fn force_locales_with_pattern_nested() {
             ]
         }))
         .await;
-    snapshot!(response, @r###"
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".enqueuedAt" => "[date]" }), @r###"
     {
-      "taskUid": 0,
+      "taskUid": "[task_uid]",
       "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "settingsUpdate",
@@ -440,9 +440,9 @@ async fn force_different_locales_with_pattern() {
             }),
         )
         .await;
-    snapshot!(response, @r###"
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".enqueuedAt" => "[date]" }), @r###"
     {
-      "taskUid": 0,
+      "taskUid": "[task_uid]",
       "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "settingsUpdate",
@@ -518,9 +518,9 @@ async fn auto_infer_locales_at_search_with_attributes_to_search_on() {
             }),
         )
         .await;
-    snapshot!(response, @r###"
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".enqueuedAt" => "[date]" }), @r###"
     {
-      "taskUid": 0,
+      "taskUid": "[task_uid]",
       "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "settingsUpdate",
@@ -592,9 +592,9 @@ async fn auto_infer_locales_at_search() {
             }),
         )
         .await;
-    snapshot!(response, @r###"
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".enqueuedAt" => "[date]" }), @r###"
     {
-      "taskUid": 0,
+      "taskUid": "[task_uid]",
       "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "settingsUpdate",
@@ -691,9 +691,9 @@ async fn force_different_locales_with_pattern_nested() {
             ]
         }))
         .await;
-    snapshot!(response, @r###"
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".enqueuedAt" => "[date]" }), @r###"
     {
-      "taskUid": 0,
+      "taskUid": "[task_uid]",
       "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "settingsUpdate",
@@ -789,9 +789,9 @@ async fn settings_change() {
             ]
         }))
         .await;
-    snapshot!(response, @r###"
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".enqueuedAt" => "[date]" }), @r###"
     {
-      "taskUid": 1,
+      "taskUid": "[task_uid]",
       "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "settingsUpdate",
@@ -852,9 +852,9 @@ async fn settings_change() {
             ]
         }))
         .await;
-    snapshot!(response, @r###"
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".enqueuedAt" => "[date]" }), @r###"
     {
-      "taskUid": 2,
+      "taskUid": "[task_uid]",
       "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "settingsUpdate",
@@ -1024,9 +1024,9 @@ async fn simple_facet_search() {
             "filterableAttributes": ["name_en", "name_ja", "name_zh"],
         }))
         .await;
-    snapshot!(response, @r###"
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".enqueuedAt" => "[date]" }), @r###"
     {
-      "taskUid": 0,
+      "taskUid": "[task_uid]",
       "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "settingsUpdate",
@@ -1086,9 +1086,9 @@ async fn facet_search_with_localized_attributes() {
             ]
         }))
         .await;
-    snapshot!(response, @r###"
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".enqueuedAt" => "[date]" }), @r###"
     {
-      "taskUid": 0,
+      "taskUid": "[task_uid]",
       "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "settingsUpdate",
