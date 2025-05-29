@@ -76,7 +76,7 @@ async fn simple_search() {
 #[actix_rt::test]
 async fn search_with_typo() {
     let server = Server::new_shared();
-    let index = index_with_documents(&server, &SIMPLE_SEARCH_DOCUMENTS).await;
+    let index = index_with_documents(server, &SIMPLE_SEARCH_DOCUMENTS).await;
 
     index
         .search(json!({"q": "Capitain Marvel", "matchingStrategy": "last", "attributesToRetrieve": ["id"]}), |response, code| {
@@ -103,7 +103,7 @@ async fn search_with_typo() {
 #[actix_rt::test]
 async fn search_with_unknown_word() {
     let server = Server::new_shared();
-    let index = index_with_documents(&server, &SIMPLE_SEARCH_DOCUMENTS).await;
+    let index = index_with_documents(server, &SIMPLE_SEARCH_DOCUMENTS).await;
 
     index
         .search(json!({"q": "Captain Supercopter Marvel", "matchingStrategy": "last", "attributesToRetrieve": ["id"]}), |response, code| {
