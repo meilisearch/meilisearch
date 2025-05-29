@@ -380,7 +380,6 @@ mod tests {
 
         Ok(())
     }
-}
 
     #[test]
     fn test_unicode_typo_tolerance_fixed() -> Result<()> {
@@ -397,11 +396,6 @@ mod tests {
         // Cyrillic word "собак" (5 chars, 10 bytes)  
         let cyrillic_word = "собак";
         let cyrillic_typos = nbr_typos(cyrillic_word);
-        
-        eprintln!("ASCII '{}': char_count={}, typos={}", 
-                  ascii_word, ascii_word.chars().count(), ascii_typos);
-        eprintln!("Cyrillic '{}': char_count={}, typos={}", 
-                  cyrillic_word, cyrillic_word.chars().count(), cyrillic_typos);
         
         // Both words have 5 characters, so they should have the same typo tolerance
         assert_eq!(ascii_typos, cyrillic_typos,
@@ -433,11 +427,10 @@ mod tests {
         
         for (word, script) in five_char_words {
             let typos = nbr_typos(word);
-            eprintln!("{} '{}': chars={}, bytes={}, typos={}", 
-                      script, word, word.chars().count(), word.chars().count(), typos);
             assert_eq!(typos, expected_typos,
                 "{} word '{}' should get {} typo(s)", script, word, expected_typos);
         }
         
         Ok(())
     }
+}
