@@ -324,12 +324,12 @@ pub enum Action {
     #[deserr(rename = "network.update")]
     NetworkUpdate,
     // TODO should we rename it chatCompletions.get ?
-    #[serde(rename = "chat.get")]
-    #[deserr(rename = "chat.get")]
+    #[serde(rename = "chat")]
+    #[deserr(rename = "chat")]
     Chat,
     #[serde(rename = "chats.get")]
     #[deserr(rename = "chats.get")]
-    Chats,
+    ChatsGet,
     #[serde(rename = "chatsSettings.*")]
     #[deserr(rename = "chatsSettings.*")]
     ChatsSettingsAll,
@@ -368,7 +368,7 @@ impl Action {
             SETTINGS_GET => Some(Self::SettingsGet),
             SETTINGS_UPDATE => Some(Self::SettingsUpdate),
             CHAT => Some(Self::Chat),
-            CHATS_GET => Some(Self::Chats),
+            CHATS_GET => Some(Self::ChatsGet),
             CHATS_SETTINGS_ALL => Some(Self::ChatsSettingsAll),
             CHATS_SETTINGS_GET => Some(Self::ChatsSettingsGet),
             CHATS_SETTINGS_UPDATE => Some(Self::ChatsSettingsUpdate),
@@ -389,7 +389,6 @@ impl Action {
             EXPERIMENTAL_FEATURES_UPDATE => Some(Self::ExperimentalFeaturesUpdate),
             NETWORK_GET => Some(Self::NetworkGet),
             NETWORK_UPDATE => Some(Self::NetworkUpdate),
-            CHAT_GET => Some(Self::ChatGet),
             _otherwise => None,
         }
     }
@@ -440,7 +439,7 @@ pub mod actions {
     pub const NETWORK_UPDATE: u8 = NetworkUpdate.repr();
 
     pub const CHAT: u8 = Chat.repr();
-    pub const CHATS_GET: u8 = Chats.repr();
+    pub const CHATS_GET: u8 = ChatsGet.repr();
     pub const CHATS_SETTINGS_ALL: u8 = ChatsSettingsAll.repr();
     pub const CHATS_SETTINGS_GET: u8 = ChatsSettingsGet.repr();
     pub const CHATS_SETTINGS_UPDATE: u8 = ChatsSettingsUpdate.repr();
