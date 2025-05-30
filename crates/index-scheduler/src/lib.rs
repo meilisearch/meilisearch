@@ -54,7 +54,7 @@ use meilisearch_types::batches::Batch;
 use meilisearch_types::features::{InstanceTogglableFeatures, Network, RuntimeTogglableFeatures};
 use meilisearch_types::heed::byteorder::BE;
 use meilisearch_types::heed::types::{SerdeJson, Str, I128};
-use meilisearch_types::heed::{self, Database, Env, RoTxn, WithoutTls};
+use meilisearch_types::heed::{self, Database, Env, RoTxn, RwTxn, WithoutTls};
 use meilisearch_types::milli::index::IndexEmbeddingConfig;
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::vector::{Embedder, EmbedderOptions, EmbeddingConfigs};
@@ -154,7 +154,7 @@ pub struct IndexScheduler {
     features: features::FeatureData,
 
     /// Stores the custom chat prompts and other settings of the indexes.
-    chat_settings: Database<Str, SerdeJson<serde_json::Value>>,
+    pub(crate) chat_settings: Database<Str, SerdeJson<serde_json::Value>>,
 
     /// Everything related to the processing of the tasks
     pub scheduler: scheduler::Scheduler,
@@ -308,6 +308,14 @@ impl IndexScheduler {
         Ok(this)
     }
 
+    pub fn write_txn(&self) -> Result<RwTxn> {
+        self.env.write_txn().map_err(|e| e.into())
+    }
+
+    pub fn read_txn(&self) -> Result<RoTxn<WithoutTls>> {
+        self.env.read_txn().map_err(|e| e.into())
+    }
+
     /// Return `Ok(())` if the index scheduler is able to access one of its database.
     pub fn health(&self) -> Result<()> {
         let rtxn = self.env.read_txn()?;
@@ -382,10 +390,6 @@ impl IndexScheduler {
             // However transient errors are: 1) less likely than persistent errors 2) likely to cause other issues down the line anyway.
             false
         }
-    }
-
-    pub fn read_txn(&self) -> Result<RoTxn<WithoutTls>> {
-        self.env.read_txn().map_err(|e| e.into())
     }
 
     /// Start the run loop for the given index scheduler.
@@ -505,7 +509,7 @@ impl IndexScheduler {
 
     /// Returns the total number of indexes available for the specified filter.
     /// And a `Vec` of the index_uid + its stats
-    pub fn get_paginated_indexes_stats(
+    pub fn paginated_indexes_stats(
         &self,
         filters: &meilisearch_auth::AuthFilter,
         from: usize,
@@ -544,6 +548,25 @@ impl IndexScheduler {
         iter.for_each(drop);
 
         ret.map(|ret| (total, ret))
+    }
+
+    /// Returns the total number of chat workspaces available ~~for the specified filter~~.
+    /// And a `Vec` of the workspace_uids
+    pub fn paginated_chat_workspace_uids(
+        &self,
+        _filters: &meilisearch_auth::AuthFilter,
+        from: usize,
+        limit: usize,
+    ) -> Result<(usize, Vec<String>)> {
+        let rtxn = self.read_txn()?;
+        let total = self.chat_settings.len(&rtxn)?;
+        let mut iter = self.chat_settings.iter(&rtxn)?.skip(from);
+        iter.by_ref()
+            .take(limit)
+            .map(|ret| ret.map_err(Error::from))
+            .map(|ret| ret.map(|(uid, _)| uid.to_string()))
+            .collect::<Result<Vec<_>, Error>>()
+            .map(|ret| (total as usize, ret))
     }
 
     /// The returned structure contains:
@@ -875,16 +898,21 @@ impl IndexScheduler {
         res.map(EmbeddingConfigs::new)
     }
 
-    pub fn chat_settings(&self) -> Result<Option<serde_json::Value>> {
-        let rtxn = self.env.read_txn().map_err(Error::HeedTransaction)?;
-        self.chat_settings.get(&rtxn, "main").map_err(Into::into)
+    pub fn chat_settings(&self, rtxn: &RoTxn, uid: &str) -> Result<Option<serde_json::Value>> {
+        self.chat_settings.get(rtxn, uid).map_err(Into::into)
     }
 
-    pub fn put_chat_settings(&self, settings: &serde_json::Value) -> Result<()> {
-        let mut wtxn = self.env.write_txn().map_err(Error::HeedTransaction)?;
-        self.chat_settings.put(&mut wtxn, "main", settings)?;
-        wtxn.commit().map_err(Error::HeedTransaction)?;
-        Ok(())
+    pub fn put_chat_settings(
+        &self,
+        wtxn: &mut RwTxn,
+        uid: &str,
+        settings: &serde_json::Value,
+    ) -> Result<()> {
+        self.chat_settings.put(wtxn, uid, settings).map_err(Into::into)
+    }
+
+    pub fn delete_chat_settings(&self, wtxn: &mut RwTxn, uid: &str) -> Result<bool> {
+        self.chat_settings.delete(wtxn, uid).map_err(Into::into)
     }
 }
 

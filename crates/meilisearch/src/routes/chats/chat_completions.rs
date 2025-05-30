@@ -44,7 +44,8 @@ use tokio::runtime::Handle;
 use tokio::sync::mpsc::error::SendError;
 use tokio::sync::mpsc::Sender;
 
-use super::settings::chat::{ChatPrompts, GlobalChatSettings};
+use super::settings::{ChatPrompts, GlobalChatSettings};
+use super::ChatsParam;
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::{extract_token_from_request, GuardedData, Policy as _};
@@ -60,19 +61,22 @@ const MEILI_REPORT_ERRORS_NAME: &str = "_meiliReportErrors";
 const MEILI_SEARCH_IN_INDEX_FUNCTION_NAME: &str = "_meiliSearchInIndex";
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.service(web::resource("/completions").route(web::post().to(chat)));
+    cfg.service(web::resource("").route(web::post().to(chat)));
 }
 
 /// Get a chat completion
 async fn chat(
     index_scheduler: GuardedData<ActionPolicy<{ actions::CHAT }>, Data<IndexScheduler>>,
     auth_ctrl: web::Data<AuthController>,
+    chats_param: web::Path<ChatsParam>,
     req: HttpRequest,
     search_queue: web::Data<SearchQueue>,
     web::Json(chat_completion): web::Json<CreateChatCompletionRequest>,
 ) -> impl Responder {
     // To enable later on, when the feature will be experimental
     // index_scheduler.features().check_chat("Using the /chat route")?;
+
+    let ChatsParam { workspace_uid } = chats_param.into_inner();
 
     assert_eq!(
         chat_completion.n.unwrap_or(1),
@@ -82,11 +86,27 @@ async fn chat(
 
     if chat_completion.stream.unwrap_or(false) {
         Either::Right(
-            streamed_chat(index_scheduler, auth_ctrl, search_queue, req, chat_completion).await,
+            streamed_chat(
+                index_scheduler,
+                auth_ctrl,
+                search_queue,
+                &workspace_uid,
+                req,
+                chat_completion,
+            )
+            .await,
         )
     } else {
         Either::Left(
-            non_streamed_chat(index_scheduler, auth_ctrl, search_queue, req, chat_completion).await,
+            non_streamed_chat(
+                index_scheduler,
+                auth_ctrl,
+                search_queue,
+                &workspace_uid,
+                req,
+                chat_completion,
+            )
+            .await,
         )
     }
 }
@@ -294,12 +314,14 @@ async fn non_streamed_chat(
     index_scheduler: GuardedData<ActionPolicy<{ actions::CHAT }>, Data<IndexScheduler>>,
     auth_ctrl: web::Data<AuthController>,
     search_queue: web::Data<SearchQueue>,
+    workspace_uid: &str,
     req: HttpRequest,
     mut chat_completion: CreateChatCompletionRequest,
 ) -> Result<HttpResponse, ResponseError> {
     let filters = index_scheduler.filters();
 
-    let chat_settings = match index_scheduler.chat_settings().unwrap() {
+    let rtxn = index_scheduler.read_txn()?;
+    let chat_settings = match index_scheduler.chat_settings(&rtxn, workspace_uid).unwrap() {
         Some(value) => serde_json::from_value(value).unwrap(),
         None => GlobalChatSettings::default(),
     };
@@ -387,15 +409,18 @@ async fn streamed_chat(
     index_scheduler: GuardedData<ActionPolicy<{ actions::CHAT }>, Data<IndexScheduler>>,
     auth_ctrl: web::Data<AuthController>,
     search_queue: web::Data<SearchQueue>,
+    workspace_uid: &str,
     req: HttpRequest,
     mut chat_completion: CreateChatCompletionRequest,
 ) -> Result<impl Responder, ResponseError> {
     let filters = index_scheduler.filters();
 
-    let chat_settings = match index_scheduler.chat_settings().unwrap() {
+    let rtxn = index_scheduler.read_txn()?;
+    let chat_settings = match index_scheduler.chat_settings(&rtxn, workspace_uid).unwrap() {
         Some(value) => serde_json::from_value(value.clone()).unwrap(),
         None => GlobalChatSettings::default(),
     };
+    drop(rtxn);
 
     let mut config = OpenAIConfig::default();
     if let Setting::Set(api_key) = chat_settings.api_key.as_ref() {
@@ -662,6 +687,7 @@ impl SseEventSender {
         function_name: String,
         function_arguments: String,
     ) -> Result<(), SendError<Event>> {
+        #[allow(deprecated)]
         let message =
             ChatCompletionRequestMessage::Assistant(ChatCompletionRequestAssistantMessage {
                 content: None,
@@ -698,6 +724,7 @@ impl SseEventSender {
 
         resp.choices[0] = ChatChoiceStream {
             index: 0,
+            #[allow(deprecated)]
             delta: ChatCompletionStreamResponseDelta {
                 content: None,
                 function_call: None,
@@ -744,6 +771,7 @@ impl SseEventSender {
 
         resp.choices[0] = ChatChoiceStream {
             index: 0,
+            #[allow(deprecated)]
             delta: ChatCompletionStreamResponseDelta {
                 content: None,
                 function_call: None,
@@ -788,6 +816,7 @@ impl SseEventSender {
 
         resp.choices[0] = ChatChoiceStream {
             index: 0,
+            #[allow(deprecated)]
             delta: ChatCompletionStreamResponseDelta {
                 content: None,
                 function_call: None,

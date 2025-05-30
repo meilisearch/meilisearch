@@ -323,18 +323,25 @@ pub enum Action {
     #[serde(rename = "network.update")]
     #[deserr(rename = "network.update")]
     NetworkUpdate,
+    // TODO should we rename it chatCompletions.get ?
     #[serde(rename = "chat.get")]
     #[deserr(rename = "chat.get")]
     Chat,
-    #[serde(rename = "chatSettings.*")]
-    #[deserr(rename = "chatSettings.*")]
-    ChatSettingsAll,
-    #[serde(rename = "chatSettings.get")]
-    #[deserr(rename = "chatSettings.get")]
-    ChatSettingsGet,
-    #[serde(rename = "chatSettings.update")]
-    #[deserr(rename = "chatSettings.update")]
-    ChatSettingsUpdate,
+    #[serde(rename = "chats.get")]
+    #[deserr(rename = "chats.get")]
+    Chats,
+    #[serde(rename = "chatsSettings.*")]
+    #[deserr(rename = "chatsSettings.*")]
+    ChatsSettingsAll,
+    #[serde(rename = "chatsSettings.get")]
+    #[deserr(rename = "chatsSettings.get")]
+    ChatsSettingsGet,
+    #[serde(rename = "chatsSettings.update")]
+    #[deserr(rename = "chatsSettings.update")]
+    ChatsSettingsUpdate,
+    #[serde(rename = "chatsSettings.delete")]
+    #[deserr(rename = "chatsSettings.delete")]
+    ChatsSettingsDelete,
 }
 
 impl Action {
@@ -360,9 +367,12 @@ impl Action {
             SETTINGS_ALL => Some(Self::SettingsAll),
             SETTINGS_GET => Some(Self::SettingsGet),
             SETTINGS_UPDATE => Some(Self::SettingsUpdate),
-            CHAT_SETTINGS_ALL => Some(Self::ChatSettingsAll),
-            CHAT_SETTINGS_GET => Some(Self::ChatSettingsGet),
-            CHAT_SETTINGS_UPDATE => Some(Self::ChatSettingsUpdate),
+            CHAT => Some(Self::Chat),
+            CHATS_GET => Some(Self::Chats),
+            CHATS_SETTINGS_ALL => Some(Self::ChatsSettingsAll),
+            CHATS_SETTINGS_GET => Some(Self::ChatsSettingsGet),
+            CHATS_SETTINGS_UPDATE => Some(Self::ChatsSettingsUpdate),
+            CHATS_SETTINGS_DELETE => Some(Self::ChatsSettingsDelete),
             STATS_ALL => Some(Self::StatsAll),
             STATS_GET => Some(Self::StatsGet),
             METRICS_ALL => Some(Self::MetricsAll),
@@ -379,7 +389,6 @@ impl Action {
             EXPERIMENTAL_FEATURES_UPDATE => Some(Self::ExperimentalFeaturesUpdate),
             NETWORK_GET => Some(Self::NetworkGet),
             NETWORK_UPDATE => Some(Self::NetworkUpdate),
-            CHAT => Some(Self::Chat),
             _otherwise => None,
         }
     }
@@ -430,7 +439,9 @@ pub mod actions {
     pub const NETWORK_UPDATE: u8 = NetworkUpdate.repr();
 
     pub const CHAT: u8 = Chat.repr();
-    pub const CHAT_SETTINGS_ALL: u8 = ChatSettingsAll.repr();
-    pub const CHAT_SETTINGS_GET: u8 = ChatSettingsGet.repr();
-    pub const CHAT_SETTINGS_UPDATE: u8 = ChatSettingsUpdate.repr();
+    pub const CHATS_GET: u8 = Chats.repr();
+    pub const CHATS_SETTINGS_ALL: u8 = ChatsSettingsAll.repr();
+    pub const CHATS_SETTINGS_GET: u8 = ChatsSettingsGet.repr();
+    pub const CHATS_SETTINGS_UPDATE: u8 = ChatsSettingsUpdate.repr();
+    pub const CHATS_SETTINGS_DELETE: u8 = ChatsSettingsDelete.repr();
 }
