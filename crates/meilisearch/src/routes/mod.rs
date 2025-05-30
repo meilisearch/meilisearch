@@ -115,7 +115,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(web::scope("/metrics").configure(metrics::configure))
         .service(web::scope("/experimental-features").configure(features::configure))
         .service(web::scope("/network").configure(network::configure))
-        .service(web::scope("/chats").configure(chats::settings::configure));
+        .service(web::scope("/chats").configure(chats::configure));
 
     #[cfg(feature = "swagger")]
     {

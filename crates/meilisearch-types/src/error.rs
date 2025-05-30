@@ -217,6 +217,7 @@ ImmutableIndexUpdatedAt               , InvalidRequest       , BAD_REQUEST;
 IndexAlreadyExists                    , InvalidRequest       , CONFLICT ;
 IndexCreationFailed                   , Internal             , INTERNAL_SERVER_ERROR;
 IndexNotFound                         , InvalidRequest       , NOT_FOUND;
+ChatWorkspaceNotFound                 , InvalidRequest       , NOT_FOUND;
 IndexPrimaryKeyAlreadyExists          , InvalidRequest       , BAD_REQUEST ;
 IndexPrimaryKeyMultipleCandidatesFound, InvalidRequest       , BAD_REQUEST;
 IndexPrimaryKeyNoCandidateFound       , InvalidRequest       , BAD_REQUEST ;
