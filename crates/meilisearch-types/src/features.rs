@@ -19,6 +19,7 @@ pub struct RuntimeTogglableFeatures {
     pub network: bool,
     pub get_task_documents_route: bool,
     pub composite_embedders: bool,
+    pub chat_completions: bool,
 }
 
 #[derive(Default, Debug, Clone, Copy)]
