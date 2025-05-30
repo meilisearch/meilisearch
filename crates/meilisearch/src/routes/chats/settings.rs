@@ -10,21 +10,29 @@ use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
 
+use super::ChatsParam;
+
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::resource("")
             .route(web::get().to(get_settings))
-            .route(web::patch().to(SeqHandler(patch_settings))),
+            .route(web::patch().to(SeqHandler(patch_settings)))
+            .route(web::delete().to(SeqHandler(delete_settings))),
     );
 }
 
 async fn get_settings(
     index_scheduler: GuardedData<
-        ActionPolicy<{ actions::CHAT_SETTINGS_GET }>,
+        ActionPolicy<{ actions::CHATS_SETTINGS_GET }>,
         Data<IndexScheduler>,
     >,
+    chats_param: web::Path<ChatsParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    let mut settings = match index_scheduler.chat_settings()? {
+    let ChatsParam { workspace_uid } = chats_param.into_inner();
+
+    // TODO do a spawn_blocking here ???
+    let rtxn = index_scheduler.read_txn()?;
+    let mut settings = match index_scheduler.chat_settings(&rtxn, &workspace_uid)? {
         Some(value) => serde_json::from_value(value).unwrap(),
         None => GlobalChatSettings::default(),
     };
@@ -34,12 +42,17 @@ async fn get_settings(
 
 async fn patch_settings(
     index_scheduler: GuardedData<
-        ActionPolicy<{ actions::CHAT_SETTINGS_UPDATE }>,
+        ActionPolicy<{ actions::CHATS_SETTINGS_UPDATE }>,
         Data<IndexScheduler>,
     >,
+    chats_param: web::Path<ChatsParam>,
     web::Json(new): web::Json<GlobalChatSettings>,
 ) -> Result<HttpResponse, ResponseError> {
-    let old = match index_scheduler.chat_settings()? {
+    let ChatsParam { workspace_uid } = chats_param.into_inner();
+
+    // TODO do a spawn_blocking here
+    let mut wtxn = index_scheduler.write_txn()?;
+    let old = match index_scheduler.chat_settings(&mut wtxn, &workspace_uid)? {
         Some(value) => serde_json::from_value(value).unwrap(),
         None => GlobalChatSettings::default(),
     };
@@ -64,8 +77,29 @@ async fn patch_settings(
     };
 
     let value = serde_json::to_value(settings).unwrap();
-    index_scheduler.put_chat_settings(&value)?;
+    index_scheduler.put_chat_settings(&mut wtxn, &workspace_uid, &value)?;
+    wtxn.commit()?;
+
     Ok(HttpResponse::Ok().finish())
+}
+
+async fn delete_settings(
+    index_scheduler: GuardedData<
+        ActionPolicy<{ actions::CHATS_SETTINGS_DELETE }>,
+        Data<IndexScheduler>,
+    >,
+    chats_param: web::Path<ChatsParam>,
+) -> Result<HttpResponse, ResponseError> {
+    let ChatsParam { workspace_uid } = chats_param.into_inner();
+
+    // TODO do a spawn_blocking here
+    let mut wtxn = index_scheduler.write_txn()?;
+    if index_scheduler.delete_chat_settings(&mut wtxn, &workspace_uid)? {
+        wtxn.commit()?;
+        Ok(HttpResponse::Ok().finish())
+    } else {
+        Ok(HttpResponse::NotFound().finish())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -74,6 +108,8 @@ pub enum ChatSource {
     OpenAi,
 }
 
+// TODO Implement Deserr on that.
+// TODO Declare DbGlobalChatSettings (alias it).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct GlobalChatSettings {
@@ -114,6 +150,8 @@ impl GlobalChatSettings {
     }
 }
 
+// TODO Implement Deserr on that.
+// TODO Declare DbChatPrompts (alias it).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct ChatPrompts {
