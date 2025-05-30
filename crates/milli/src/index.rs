@@ -1,14 +1,18 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::error::Error;
+use std::fmt;
 use std::fs::File;
 use std::path::Path;
 
+use deserr::Deserr;
 use heed::types::*;
 use heed::{CompactionOption, Database, DatabaseStat, RoTxn, RwTxn, Unspecified, WithoutTls};
 use indexmap::IndexMap;
 use roaring::RoaringBitmap;
 use rstar::RTree;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 use crate::constants::{self, RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME};
 use crate::database_stats::DatabaseStats;
@@ -25,6 +29,7 @@ use crate::heed_codec::{BEU16StrCodec, FstSetCodec, StrBEU16Codec, StrRefCodec};
 use crate::order_by_map::OrderByMap;
 use crate::prompt::PromptData;
 use crate::proximity::ProximityPrecision;
+use crate::update::new::StdResult;
 use crate::vector::{ArroyStats, ArroyWrapper, Embedding, EmbeddingConfig};
 use crate::{
     default_criteria, CboRoaringBitmapCodec, Criterion, DocumentId, ExternalDocumentsIds,
@@ -1962,10 +1967,46 @@ pub struct SearchParameters {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub attributes_to_search_on: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub ranking_score_threshold: Option<f64>,
+    pub ranking_score_threshold: Option<RankingScoreThreshold>,
 }
 
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Deserr, ToSchema)]
+#[deserr(try_from(f64) = TryFrom::try_from -> InvalidSearchRankingScoreThreshold)]
+pub struct RankingScoreThreshold(f64);
+
+impl RankingScoreThreshold {
+    pub fn as_f64(&self) -> f64 {
+        self.0
+    }
+}
+
+impl TryFrom<f64> for RankingScoreThreshold {
+    type Error = InvalidSearchRankingScoreThreshold;
+
+    fn try_from(value: f64) -> StdResult<Self, Self::Error> {
+        if value < 0.0 || value > 1.0 {
+            Err(InvalidSearchRankingScoreThreshold)
+        } else {
+            Ok(RankingScoreThreshold(value))
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct InvalidSearchRankingScoreThreshold;
+
+impl Error for InvalidSearchRankingScoreThreshold {}
+
+impl fmt::Display for InvalidSearchRankingScoreThreshold {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "the value of `rankingScoreThreshold` is invalid, expected a float between `0.0` and `1.0`."
+        )
+    }
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HybridQuery {
     pub semantic_ratio: f32,
@@ -1980,10 +2021,12 @@ pub struct PrefixSettings {
     pub compute_prefixes: PrefixSearch,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default, Debug, Copy, Clone, PartialEq, Eq, Deserr, ToSchema, Serialize, Deserialize)]
+#[deserr(rename_all = camelCase)]
 #[serde(rename_all = "camelCase")]
 pub enum MatchingStrategy {
     /// Remove query words from last to first
+    #[default]
     Last,
     /// All query words are mandatory
     All,

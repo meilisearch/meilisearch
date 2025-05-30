@@ -926,6 +926,7 @@ fn test_correct_settings_init() {
             assert!(matches!(prefix_search, Setting::NotSet));
             assert!(matches!(facet_search, Setting::NotSet));
             assert!(matches!(disable_on_numbers, Setting::NotSet));
+            assert!(matches!(chat, Setting::NotSet));
         })
         .unwrap();
 }

@@ -6,10 +6,9 @@ use deserr::Deserr;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-use crate::index::{self, ChatConfig, SearchParameters};
+use crate::index::{self, ChatConfig, MatchingStrategy, RankingScoreThreshold, SearchParameters};
 use crate::prompt::{default_max_bytes, PromptData};
 use crate::update::Setting;
-use crate::TermsMatchingStrategy;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Deserr, ToSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
@@ -70,13 +69,10 @@ impl From<ChatConfig> for ChatSettings {
                     HybridQuery { semantic_ratio: SemanticRatio(semantic_ratio), embedder }
                 });
 
-                let matching_strategy = matching_strategy.map(|ms| match ms {
-                    index::MatchingStrategy::Last => MatchingStrategy::Last,
-                    index::MatchingStrategy::All => MatchingStrategy::All,
-                    index::MatchingStrategy::Frequency => MatchingStrategy::Frequency,
-                });
+                let matching_strategy = matching_strategy.map(MatchingStrategy::from);
 
-                let ranking_score_threshold = ranking_score_threshold.map(RankingScoreThreshold);
+                let ranking_score_threshold =
+                    ranking_score_threshold.map(RankingScoreThreshold::from);
 
                 ChatSearchParams {
                     hybrid: Setting::some_or_not_set(hybrid),
@@ -195,65 +191,5 @@ impl std::ops::Deref for SemanticRatio {
 
     fn deref(&self) -> &Self::Target {
         &self.0
-    }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Deserr, ToSchema, Serialize, Deserialize)]
-#[deserr(rename_all = camelCase)]
-#[serde(rename_all = "camelCase")]
-pub enum MatchingStrategy {
-    /// Remove query words from last to first
-    Last,
-    /// All query words are mandatory
-    All,
-    /// Remove query words from the most frequent to the least
-    Frequency,
-}
-
-impl Default for MatchingStrategy {
-    fn default() -> Self {
-        Self::Last
-    }
-}
-
-impl From<MatchingStrategy> for TermsMatchingStrategy {
-    fn from(other: MatchingStrategy) -> Self {
-        match other {
-            MatchingStrategy::Last => Self::Last,
-            MatchingStrategy::All => Self::All,
-            MatchingStrategy::Frequency => Self::Frequency,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Deserr, ToSchema, Serialize, Deserialize)]
-#[deserr(try_from(f64) = TryFrom::try_from -> InvalidSearchRankingScoreThreshold)]
-pub struct RankingScoreThreshold(pub f64);
-
-impl std::convert::TryFrom<f64> for RankingScoreThreshold {
-    type Error = InvalidSearchRankingScoreThreshold;
-
-    fn try_from(f: f64) -> Result<Self, Self::Error> {
-        // the suggested "fix" is: `!(0.0..=1.0).contains(&f)`` which is allegedly less readable
-        #[allow(clippy::manual_range_contains)]
-        if f > 1.0 || f < 0.0 {
-            Err(InvalidSearchRankingScoreThreshold)
-        } else {
-            Ok(RankingScoreThreshold(f))
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct InvalidSearchRankingScoreThreshold;
-
-impl Error for InvalidSearchRankingScoreThreshold {}
-
-impl fmt::Display for InvalidSearchRankingScoreThreshold {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "the value of `rankingScoreThreshold` is invalid, expected a float between `0.0` and `1.0`."
-        )
     }
 }

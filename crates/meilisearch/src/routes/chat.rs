@@ -29,7 +29,7 @@ use meilisearch_auth::AuthController;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::keys::actions;
-use meilisearch_types::milli::index::{self, ChatConfig, SearchParameters};
+use meilisearch_types::milli::index::ChatConfig;
 use meilisearch_types::milli::prompt::{Prompt, PromptData};
 use meilisearch_types::milli::update::new::document::DocumentFromDb;
 use meilisearch_types::milli::update::Setting;
@@ -50,11 +50,7 @@ use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::{extract_token_from_request, GuardedData, Policy as _};
 use crate::metrics::MEILISEARCH_DEGRADED_SEARCH_REQUESTS;
 use crate::routes::indexes::search::search_kind;
-use crate::search::{
-    add_search_rules, prepare_search, search_from_kind, HybridQuery, MatchingStrategy,
-    RankingScoreThreshold, SearchQuery, SemanticRatio, DEFAULT_SEARCH_LIMIT,
-    DEFAULT_SEMANTIC_RATIO,
-};
+use crate::search::{add_search_rules, prepare_search, search_from_kind, SearchQuery};
 use crate::search_queue::SearchQueue;
 
 const MEILI_SEARCH_PROGRESS_NAME: &str = "_meiliSearchProgress";
@@ -228,40 +224,7 @@ async fn process_search_request(
     let index = index_scheduler.index(&index_uid)?;
     let rtxn = index.static_read_txn()?;
     let ChatConfig { description: _, prompt: _, search_parameters } = index.chat_config(&rtxn)?;
-    let SearchParameters {
-        hybrid,
-        limit,
-        sort,
-        distinct,
-        matching_strategy,
-        attributes_to_search_on,
-        ranking_score_threshold,
-    } = search_parameters;
-
-    let mut query = SearchQuery {
-        q,
-        hybrid: hybrid.map(|index::HybridQuery { semantic_ratio, embedder }| HybridQuery {
-            semantic_ratio: SemanticRatio::try_from(semantic_ratio)
-                .ok()
-                .unwrap_or_else(DEFAULT_SEMANTIC_RATIO),
-            embedder,
-        }),
-        limit: limit.unwrap_or_else(DEFAULT_SEARCH_LIMIT),
-        sort,
-        distinct,
-        matching_strategy: matching_strategy
-            .map(|ms| match ms {
-                index::MatchingStrategy::Last => MatchingStrategy::Last,
-                index::MatchingStrategy::All => MatchingStrategy::All,
-                index::MatchingStrategy::Frequency => MatchingStrategy::Frequency,
-            })
-            .unwrap_or(MatchingStrategy::Frequency),
-        attributes_to_search_on,
-        ranking_score_threshold: ranking_score_threshold
-            .and_then(|rst| RankingScoreThreshold::try_from(rst).ok()),
-        ..Default::default()
-    };
-
+    let mut query = SearchQuery { q, ..SearchQuery::from(search_parameters) };
     let auth_filter = ActionPolicy::<{ actions::SEARCH }>::authenticate(
         auth_ctrl,
         auth_token,
