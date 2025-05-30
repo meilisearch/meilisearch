@@ -405,6 +405,7 @@ impl<T> From<v5::Settings<T>> for v6::Settings<v6::Unchecked> {
             search_cutoff_ms: v6::Setting::NotSet,
             facet_search: v6::Setting::NotSet,
             prefix_search: v6::Setting::NotSet,
+            chat: v6::Setting::NotSet,
             _kind: std::marker::PhantomData,
         }
     }

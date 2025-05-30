@@ -197,6 +197,7 @@ struct Infos {
     experimental_max_number_of_batched_tasks: usize,
     experimental_limit_batched_tasks_total_size: u64,
     experimental_network: bool,
+    experimental_chat_completions: bool,
     experimental_get_task_documents_route: bool,
     experimental_composite_embedders: bool,
     experimental_embedding_cache_entries: usize,
@@ -296,6 +297,7 @@ impl Infos {
             network,
             get_task_documents_route,
             composite_embedders,
+            chat_completions,
         } = features;
 
         // We're going to override every sensible information.
@@ -314,6 +316,7 @@ impl Infos {
             experimental_enable_logs_route: experimental_enable_logs_route | logs_route,
             experimental_reduce_indexing_memory_usage,
             experimental_network: network,
+            experimental_chat_completions: chat_completions,
             experimental_get_task_documents_route: get_task_documents_route,
             experimental_composite_embedders: composite_embedders,
             experimental_embedding_cache_entries,

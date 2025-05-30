@@ -6,7 +6,7 @@ use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::settings::{
-    settings, SecretPolicy, SettingEmbeddingSettings, Settings, Unchecked,
+    settings, ChatSettings, SecretPolicy, SettingEmbeddingSettings, Settings, Unchecked,
 };
 use meilisearch_types::tasks::KindWithContent;
 use tracing::debug;
@@ -508,6 +508,17 @@ make_setting_routes!(
         camelcase_attr: "prefixSearch",
         analytics: PrefixSearchAnalytics
     },
+    {
+        route: "/chat",
+        update_verb: put,
+        value_type: ChatSettings,
+        err_type: meilisearch_types::deserr::DeserrJsonError<
+            meilisearch_types::error::deserr_codes::InvalidSettingsIndexChat,
+        >,
+        attr: chat,
+        camelcase_attr: "chat",
+        analytics: ChatAnalytics
+    },
 );
 
 #[utoipa::path(
@@ -597,6 +608,7 @@ pub async fn update_all(
             ),
             facet_search: FacetSearchAnalytics::new(new_settings.facet_search.as_ref().set()),
             prefix_search: PrefixSearchAnalytics::new(new_settings.prefix_search.as_ref().set()),
+            chat: ChatAnalytics::new(new_settings.chat.as_ref().set()),
         },
         &req,
     );
