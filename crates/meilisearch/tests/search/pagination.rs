@@ -7,7 +7,7 @@ async fn default_search_should_return_estimated_total_hit() {
     let index = shared_index_with_documents().await;
     index
         .search(json!({}), |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             assert!(response.get("estimatedTotalHits").is_some());
             assert!(response.get("limit").is_some());
             assert!(response.get("offset").is_some());
@@ -25,7 +25,7 @@ async fn simple_search() {
     let index = shared_index_with_documents().await;
     index
         .search(json!({"page": 1}), |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             assert_eq!(response["hits"].as_array().unwrap().len(), 5);
             assert!(response.get("totalHits").is_some());
             assert_eq!(response["page"], 1);
@@ -44,7 +44,7 @@ async fn page_zero_should_not_return_any_result() {
     let index = shared_index_with_documents().await;
     index
         .search(json!({"page": 0}), |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             assert_eq!(response["hits"].as_array().unwrap().len(), 0);
             assert!(response.get("totalHits").is_some());
             assert_eq!(response["page"], 0);
@@ -58,7 +58,7 @@ async fn hits_per_page_1() {
     let index = shared_index_with_documents().await;
     index
         .search(json!({"hitsPerPage": 1}), |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             assert_eq!(response["hits"].as_array().unwrap().len(), 1);
             assert_eq!(response["totalHits"], 5);
             assert_eq!(response["page"], 1);
@@ -72,7 +72,7 @@ async fn hits_per_page_0_should_not_return_any_result() {
     let index = shared_index_with_documents().await;
     index
         .search(json!({"hitsPerPage": 0}), |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             assert_eq!(response["hits"].as_array().unwrap().len(), 0);
             assert_eq!(response["totalHits"], 5);
             assert_eq!(response["page"], 1);
@@ -126,7 +126,7 @@ async fn ensure_placeholder_search_hit_count_valid() {
     for page in 0..=4 {
         index
             .search(json!({"page": page, "hitsPerPage": 1}), |response, code| {
-                assert_eq!(code, 200, "{}", response);
+                assert_eq!(code, 200, "{response}");
                 assert_eq!(response["totalHits"], 4);
                 assert_eq!(response["totalPages"], 4);
             })
