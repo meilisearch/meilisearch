@@ -338,7 +338,8 @@ async fn non_streamed_chat(
     let client = Client::with_config(config);
 
     let auth_token = extract_token_from_request(&req)?.unwrap();
-    let FunctionSupport { report_progress, report_sources, append_to_conversation, report_errors } =
+    // TODO do function support later
+    let _function_support =
         setup_search_tool(&index_scheduler, filters, &mut chat_completion, &chat_settings.prompts)?;
 
     let mut response;
@@ -377,8 +378,9 @@ async fn non_streamed_chat(
                         Err(err) => Err(err.to_string()),
                     };
 
+                    // TODO report documents sources later
                     let text = match result {
-                        Ok((_, documents, text)) => text,
+                        Ok((_, _documents, text)) => text,
                         Err(err) => err,
                     };
 
