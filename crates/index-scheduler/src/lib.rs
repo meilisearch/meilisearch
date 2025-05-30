@@ -51,7 +51,9 @@ pub use features::RoFeatures;
 use flate2::bufread::GzEncoder;
 use flate2::Compression;
 use meilisearch_types::batches::Batch;
-use meilisearch_types::features::{InstanceTogglableFeatures, Network, RuntimeTogglableFeatures};
+use meilisearch_types::features::{
+    ChatCompletionSettings, InstanceTogglableFeatures, Network, RuntimeTogglableFeatures,
+};
 use meilisearch_types::heed::byteorder::BE;
 use meilisearch_types::heed::types::{SerdeJson, Str, I128};
 use meilisearch_types::heed::{self, Database, Env, RoTxn, RwTxn, WithoutTls};
@@ -154,7 +156,7 @@ pub struct IndexScheduler {
     features: features::FeatureData,
 
     /// Stores the custom chat prompts and other settings of the indexes.
-    pub(crate) chat_settings: Database<Str, SerdeJson<serde_json::Value>>,
+    pub(crate) chat_settings: Database<Str, SerdeJson<ChatCompletionSettings>>,
 
     /// Everything related to the processing of the tasks
     pub scheduler: scheduler::Scheduler,
@@ -898,7 +900,7 @@ impl IndexScheduler {
         res.map(EmbeddingConfigs::new)
     }
 
-    pub fn chat_settings(&self, rtxn: &RoTxn, uid: &str) -> Result<Option<serde_json::Value>> {
+    pub fn chat_settings(&self, rtxn: &RoTxn, uid: &str) -> Result<Option<ChatCompletionSettings>> {
         self.chat_settings.get(rtxn, uid).map_err(Into::into)
     }
 
@@ -906,7 +908,7 @@ impl IndexScheduler {
         &self,
         wtxn: &mut RwTxn,
         uid: &str,
-        settings: &serde_json::Value,
+        settings: &ChatCompletionSettings,
     ) -> Result<()> {
         self.chat_settings.put(wtxn, uid, settings).map_err(Into::into)
     }
