@@ -1,6 +1,9 @@
 use actix_web::web::{self, Data};
 use actix_web::HttpResponse;
+use deserr::Deserr;
 use index_scheduler::IndexScheduler;
+use meilisearch_types::deserr::DeserrJsonError;
+use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::features::{
     ChatCompletionPrompts as DbChatCompletionPrompts, ChatCompletionSettings,
@@ -11,6 +14,7 @@ use meilisearch_types::features::{
 use meilisearch_types::keys::actions;
 use meilisearch_types::milli::update::Setting;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::GuardedData;
@@ -154,8 +158,32 @@ async fn delete_settings(
     }
 }
 
-#[derive(Default, Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Deserr, ToSchema)]
+#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
+pub struct GlobalChatSettings {
+    #[serde(default)]
+    #[deserr(default)]
+    #[schema(value_type = Option<ChatCompletionSource>)]
+    pub source: Setting<ChatCompletionSource>,
+    #[serde(default)]
+    #[deserr(default, error = DeserrJsonError<InvalidChatCompletionBaseApi>)]
+    #[schema(value_type = Option<String>, example = json!("https://api.mistral.ai/v1"))]
+    pub base_api: Setting<String>,
+    #[serde(default)]
+    #[deserr(default, error = DeserrJsonError<InvalidChatCompletionApiKey>)]
+    #[schema(value_type = Option<String>, example = json!("abcd1234..."))]
+    pub api_key: Setting<String>,
+    #[serde(default)]
+    #[deserr(default)]
+    #[schema(inline, value_type = Option<ChatPrompts>)]
+    pub prompts: Setting<ChatPrompts>,
+}
+
+#[derive(Default, Debug, Clone, Copy, Serialize, Deserialize, Deserr, ToSchema)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub enum ChatCompletionSource {
     #[default]
     OpenAi,
@@ -169,80 +197,29 @@ impl From<ChatCompletionSource> for DbChatCompletionSource {
     }
 }
 
-// TODO Implement Deserr on that.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Deserr, ToSchema)]
+#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
-pub struct GlobalChatSettings {
-    #[serde(default)]
-    pub source: Setting<ChatCompletionSource>,
-    #[serde(default)]
-    pub base_api: Setting<String>,
-    #[serde(default)]
-    pub api_key: Setting<String>,
-    #[serde(default)]
-    pub prompts: Setting<ChatPrompts>,
-}
-
-// TODO Implement Deserr on that.
-// TODO Declare DbChatPrompts (alias it).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
 pub struct ChatPrompts {
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[serde(default)]
+    #[deserr(default, error = DeserrJsonError<InvalidChatCompletionSystemPrompt>)]
+    #[schema(value_type = Option<String>, example = json!("You are a helpful assistant..."))]
     pub system: Setting<String>,
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[serde(default)]
+    #[deserr(default, error = DeserrJsonError<InvalidChatCompletionSearchDescriptionPrompt>)]
+    #[schema(value_type = Option<String>, example = json!("This is the search function..."))]
     pub search_description: Setting<String>,
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[serde(default)]
+    #[deserr(default, error = DeserrJsonError<InvalidChatCompletionSearchQueryParamPrompt>)]
+    #[schema(value_type = Option<String>, example = json!("This is query parameter..."))]
     pub search_q_param: Setting<String>,
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[serde(default)]
+    #[deserr(default, error = DeserrJsonError<InvalidChatCompletionSearchIndexUidParamPrompt>)]
+    #[schema(value_type = Option<String>, example = json!("This is index you want to search in..."))]
     pub search_index_uid_param: Setting<String>,
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[serde(default)]
+    #[deserr(default, error = DeserrJsonError<InvalidChatCompletionPreQueryPrompt>)]
+    #[schema(value_type = Option<String>)]
     pub pre_query: Setting<String>,
-}
-
-const DEFAULT_SYSTEM_MESSAGE: &str = "You are a highly capable research assistant with access to powerful search tools. IMPORTANT INSTRUCTIONS:\
-    1. When answering questions, you MUST make multiple tool calls (at least 2-3) to gather comprehensive information.\
-    2. Use different search queries for each tool call - vary keywords, rephrase questions, and explore different semantic angles to ensure broad coverage.\
-    3. Always explicitly announce BEFORE making each tool call by saying: \"I'll search for [specific information] now.\"\
-    4. Combine information from ALL tool calls to provide complete, nuanced answers rather than relying on a single source.\
-    5. For complex topics, break down your research into multiple targeted queries rather than using a single generic search.";
-
-/// The default description of the searchInIndex tool provided to OpenAI.
-const DEFAULT_SEARCH_IN_INDEX_TOOL_DESCRIPTION: &str =
-    "Search the database for relevant JSON documents using an optional query.";
-/// The default description of the searchInIndex `q` parameter tool provided to OpenAI.
-const DEFAULT_SEARCH_IN_INDEX_Q_PARAMETER_TOOL_DESCRIPTION: &str =
-    "The search query string used to find relevant documents in the index. \
-This should contain keywords or phrases that best represent what the user is looking for. \
-More specific queries will yield more precise results.";
-/// The default description of the searchInIndex `index` parameter tool provided to OpenAI.
-const DEFAULT_SEARCH_IN_INDEX_INDEX_PARAMETER_TOOL_DESCRIPTION: &str =
-"The name of the index to search within. An index is a collection of documents organized for search. \
-Selecting the right index ensures the most relevant results for the user query";
-
-impl Default for GlobalChatSettings {
-    fn default() -> Self {
-        GlobalChatSettings {
-            source: Setting::NotSet,
-            base_api: Setting::NotSet,
-            api_key: Setting::NotSet,
-            prompts: Setting::Set(ChatPrompts::default()),
-        }
-    }
-}
-
-impl Default for ChatPrompts {
-    fn default() -> Self {
-        ChatPrompts {
-            system: Setting::Set(DEFAULT_SYSTEM_MESSAGE.to_string()),
-            search_description: Setting::Set(DEFAULT_SEARCH_IN_INDEX_TOOL_DESCRIPTION.to_string()),
-            search_q_param: Setting::Set(
-                DEFAULT_SEARCH_IN_INDEX_Q_PARAMETER_TOOL_DESCRIPTION.to_string(),
-            ),
-            search_index_uid_param: Setting::Set(
-                DEFAULT_SEARCH_IN_INDEX_INDEX_PARAMETER_TOOL_DESCRIPTION.to_string(),
-            ),
-            pre_query: Setting::Set(Default::default()),
-        }
-    }
 }

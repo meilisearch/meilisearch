@@ -23,7 +23,6 @@ use crate::{
 
 use super::Pagination;
 
-// TODO supports chats/$workspace/settings + /chats/$workspace/chat/completions
 pub mod chat_completions;
 pub mod settings;
 
