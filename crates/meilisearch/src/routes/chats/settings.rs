@@ -38,6 +38,8 @@ async fn get_settings(
     >,
     chats_param: web::Path<ChatsParam>,
 ) -> Result<HttpResponse, ResponseError> {
+    index_scheduler.features().check_chat_completions("Using the /chats settings route")?;
+
     let ChatsParam { workspace_uid } = chats_param.into_inner();
 
     // TODO do a spawn_blocking here ???
@@ -63,6 +65,7 @@ async fn patch_settings(
     chats_param: web::Path<ChatsParam>,
     web::Json(new): web::Json<GlobalChatSettings>,
 ) -> Result<HttpResponse, ResponseError> {
+    index_scheduler.features().check_chat_completions("Using the /chats settings route")?;
     let ChatsParam { workspace_uid } = chats_param.into_inner();
 
     // TODO do a spawn_blocking here
@@ -143,6 +146,8 @@ async fn delete_settings(
     >,
     chats_param: web::Path<ChatsParam>,
 ) -> Result<HttpResponse, ResponseError> {
+    index_scheduler.features().check_chat_completions("Using the /chats settings route")?;
+
     let ChatsParam { workspace_uid } = chats_param.into_inner();
 
     // TODO do a spawn_blocking here
