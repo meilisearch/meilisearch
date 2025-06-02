@@ -107,7 +107,7 @@ impl JsonTemplate {
     /// # Error
     ///
     /// - If any of the strings contains a template that cannot be rendered from the contents of the search query
-    pub fn render_search(&self, q: Option<String>, media: Value) -> Result<Value, Error> {
+    pub fn render_search(&self, q: Option<&str>, media: &Value) -> Result<Value, Error> {
         let search_data = liquid::object!({
             "q": q,
             "media": media
