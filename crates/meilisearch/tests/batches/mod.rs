@@ -8,8 +8,8 @@ use crate::json;
 
 #[actix_rt::test]
 async fn error_get_unexisting_batch_status() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     let (task, _coder) = index.create(None).await;
     index.wait_task(task.uid()).await.succeeded();
     let (response, code) = index.get_batch(1).await;
@@ -27,8 +27,8 @@ async fn error_get_unexisting_batch_status() {
 
 #[actix_rt::test]
 async fn get_batch_status() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     let (task, _status_code) = index.create(None).await;
     index.wait_task(task.uid()).await.succeeded();
     let (_response, code) = index.get_batch(0).await;
@@ -37,8 +37,8 @@ async fn get_batch_status() {
 
 #[actix_rt::test]
 async fn list_batches() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     let (task, _status_code) = index.create(None).await;
     index.wait_task(task.uid()).await.succeeded();
     let (task, _status_code) = index.create(None).await;
@@ -62,7 +62,7 @@ async fn list_batches_pagination_and_reverse() {
         let index = server.index(format!("test-{i}"));
         last_batch = Some(index.create(None).await.0.uid());
     }
-    server.wait_task(last_batch.unwrap()).await;
+    server.wait_task(last_batch.unwrap()).await.succeeded();
 
     let (response, code) = server.batches_filter("limit=3").await;
     assert_eq!(code, 200);
@@ -139,8 +139,8 @@ async fn list_batches_with_star_filters() {
 
 #[actix_rt::test]
 async fn list_batches_status_filtered() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     let (task, _status_code) = index.create(None).await;
     index.wait_task(task.uid()).await.succeeded();
     let (task, _status_code) = index.create(None).await;
@@ -161,8 +161,8 @@ async fn list_batches_status_filtered() {
 
 #[actix_rt::test]
 async fn list_batches_type_filtered() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     let (task, _) = index.create(None).await;
     index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.delete().await;
@@ -183,8 +183,8 @@ async fn list_batches_type_filtered() {
 
 #[actix_rt::test]
 async fn list_batches_invalid_canceled_by_filter() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     let (task, _status_code) = index.create(None).await;
     index.wait_task(task.uid()).await.succeeded();
 
@@ -195,8 +195,8 @@ async fn list_batches_invalid_canceled_by_filter() {
 
 #[actix_rt::test]
 async fn list_batches_status_and_type_filtered() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     let (task, _status_code) = index.create(None).await;
     index.wait_task(task.uid()).await.succeeded();
     let (task, _status_code) = index.update(Some("id")).await;
@@ -219,7 +219,7 @@ async fn list_batches_status_and_type_filtered() {
 
 #[actix_rt::test]
 async fn list_batch_filter_error() {
-    let server = Server::new().await;
+    let server = Server::new_shared();
 
     let (response, code) = server.batches_filter("lol=pied").await;
     assert_eq!(code, 400, "{}", response);
@@ -268,14 +268,15 @@ async fn list_batch_filter_error() {
 
 #[actix_web::test]
 async fn test_summarized_document_addition_or_update() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     let (task, _status_code) =
         index.add_documents(json!({ "id": 42, "content": "doggos & fluff" }), None).await;
     index.wait_task(task.uid()).await.succeeded();
-    let (batch, _) = index.get_batch(0).await;
+    let (batch, _) = index.get_batch(task.uid() as u32).await;
     assert_json_snapshot!(batch,
         {
+            ".uid" => "[uid]",
             ".duration" => "[duration]",
             ".enqueuedAt" => "[date]",
             ".startedAt" => "[date]",
@@ -286,7 +287,7 @@ async fn test_summarized_document_addition_or_update() {
         },
         @r###"
     {
-      "uid": 0,
+      "uid": "[uid]",
       "progress": null,
       "details": {
         "receivedDocuments": 1,
@@ -320,6 +321,7 @@ async fn test_summarized_document_addition_or_update() {
     let (batch, _) = index.get_batch(1).await;
     assert_json_snapshot!(batch,
         {
+            ".uid" => "[uid]",
             ".duration" => "[duration]",
             ".enqueuedAt" => "[date]",
             ".startedAt" => "[date]",
@@ -330,7 +332,7 @@ async fn test_summarized_document_addition_or_update() {
         },
         @r###"
     {
-      "uid": 1,
+      "uid": "[uid]",
       "progress": null,
       "details": {
         "receivedDocuments": 1,
@@ -360,23 +362,25 @@ async fn test_summarized_document_addition_or_update() {
 
 #[actix_web::test]
 async fn test_summarized_delete_documents_by_batch() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     let (task, _status_code) = index.delete_batch(vec![1, 2, 3]).await;
     index.wait_task(task.uid()).await.failed();
-    let (batch, _) = index.get_batch(0).await;
+    let (batch, _) = index.get_batch(task.uid() as u32).await;
     assert_json_snapshot!(batch,
         {
+            ".uid" => "[uid]",
             ".duration" => "[duration]",
             ".enqueuedAt" => "[date]",
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
-            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
+            ".stats.indexUids" => "{\n\t\"test\": 1}"
         },
         @r###"
     {
-      "uid": 0,
+      "uid": "[uid]",
       "progress": null,
       "details": {
         "providedIds": 3,
@@ -447,25 +451,27 @@ async fn test_summarized_delete_documents_by_batch() {
 
 #[actix_web::test]
 async fn test_summarized_delete_documents_by_filter() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (task, _status_code) =
         index.delete_document_by_filter(json!({ "filter": "doggo = bernese" })).await;
     index.wait_task(task.uid()).await.failed();
-    let (batch, _) = index.get_batch(0).await;
+    let (batch, _) = index.get_batch(task.uid() as u32).await;
     assert_json_snapshot!(batch,
         {
+            ".uid" => "[uid]",
             ".duration" => "[duration]",
             ".enqueuedAt" => "[date]",
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
-            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
+            ".stats.indexUids" => "{\n\t\"test\": 1}"
         },
         @r###"
     {
-      "uid": 0,
+      "uid": "[uid]",
       "progress": null,
       "details": {
         "providedIds": 0,
@@ -583,11 +589,11 @@ async fn test_summarized_delete_documents_by_filter() {
 
 #[actix_web::test]
 async fn test_summarized_delete_document_by_id() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     let (task, _status_code) = index.delete_document(1).await;
     index.wait_task(task.uid()).await.failed();
-    let (batch, _) = index.get_batch(0).await;
+    let (batch, _) = index.get_batch(task.uid() as u32).await;
     assert_json_snapshot!(batch,
         {
             ".uid" => "[uid]",
@@ -596,7 +602,8 @@ async fn test_summarized_delete_document_by_id() {
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
-            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
+            ".stats.indexUids" => "{\n\t\"test\": 1}"
         },
         @r###"
     {
@@ -671,8 +678,8 @@ async fn test_summarized_delete_document_by_id() {
 
 #[actix_web::test]
 async fn test_summarized_settings_update() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     // here we should find my payload even in the failed batch.
     let (response, code) = index.update_settings(json!({ "rankingRules": ["custom"] })).await;
     meili_snap::snapshot!(code, @"400 Bad Request");
@@ -687,20 +694,24 @@ async fn test_summarized_settings_update() {
 
     let (task,_status_code) = index.update_settings(json!({ "displayedAttributes": ["doggos", "name"], "filterableAttributes": ["age", "nb_paw_pads"], "sortableAttributes": ["iq"] })).await;
     index.wait_task(task.uid()).await.succeeded();
-    let (batch, _) = index.get_batch(0).await;
+    let (batch, _) = index.get_batch(task.uid() as u32).await;
     assert_json_snapshot!(batch,
         {
+            ".uid" => "[uid]",
             ".duration" => "[duration]",
             ".enqueuedAt" => "[date]",
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
-            ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]"
+            ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]",
+            ".stats.indexUids" => "{\n\t\"test\": 1}",
+            ".batchCreationComplete" => "batched all enqueued tasks for index `[uuid]`"
+
         },
         @r###"
     {
-      "uid": 0,
+      "uid": "[uid]",
       "progress": null,
       "details": {
         "displayedAttributes": [
@@ -731,30 +742,33 @@ async fn test_summarized_settings_update() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "batched all enqueued tasks"
+      "batchCreationComplete": "batched all enqueued tasks for index `[uuid]`"
     }
     "###);
 }
 
 #[actix_web::test]
 async fn test_summarized_index_creation() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     let (task, _status_code) = index.create(None).await;
     index.wait_task(task.uid()).await.succeeded();
-    let (batch, _) = index.get_batch(0).await;
+    let (batch, _) = index.get_batch(task.uid() as u32).await;
     assert_json_snapshot!(batch,
         {
+            ".uid" => "[uid]",
             ".duration" => "[duration]",
             ".enqueuedAt" => "[date]",
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
-            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
+            ".stats.indexUids" => "{\n\t\"test\": 1}",
+            ".batchCreationComplete" => "task with id X of type `indexCreation` cannot be batched"
         },
         @r###"
     {
-      "uid": 0,
+      "uid": "[uid]",
       "progress": null,
       "details": {},
       "stats": {
@@ -773,7 +787,7 @@ async fn test_summarized_index_creation() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "task with id 0 of type `indexCreation` cannot be batched"
+      "batchCreationComplete": "task with id X of type `indexCreation` cannot be batched"
     }
     "###);
 
@@ -819,8 +833,8 @@ async fn test_summarized_index_creation() {
 
 #[actix_web::test]
 async fn test_summarized_index_deletion() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     let (ret, _code) = index.delete().await;
     let batch = index.wait_task(ret.uid()).await.failed();
     snapshot!(batch,
@@ -828,7 +842,7 @@ async fn test_summarized_index_deletion() {
     {
       "uid": "[uid]",
       "batchUid": "[batch_uid]",
-      "indexUid": "test",
+      "indexUid": "[uuid]",
       "status": "failed",
       "type": "indexDeletion",
       "canceledBy": null,
@@ -836,7 +850,7 @@ async fn test_summarized_index_deletion() {
         "deletedDocuments": 0
       },
       "error": {
-        "message": "Index `test` not found.",
+        "message": "Index `[uuid]` not found.",
         "code": "index_not_found",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#index_not_found"
@@ -859,7 +873,7 @@ async fn test_summarized_index_deletion() {
     {
       "uid": "[uid]",
       "batchUid": "[batch_uid]",
-      "indexUid": "test",
+      "indexUid": "[uuid]",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -928,24 +942,27 @@ async fn test_summarized_index_deletion() {
 
 #[actix_web::test]
 async fn test_summarized_index_update() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     // If the index doesn't exist yet, we should get errors with or without the primary key.
     let (task, _status_code) = index.update(None).await;
     index.wait_task(task.uid()).await.failed();
-    let (batch, _) = index.get_batch(0).await;
+    let (batch, _) = index.get_batch(task.uid()  as u32).await;
     assert_json_snapshot!(batch,
         {
+            ".uid" => "[uid]",
             ".duration" => "[duration]",
             ".enqueuedAt" => "[date]",
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
-            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
+            ".stats.indexUids" => "{\n\t\"test\": 1}",
+            ".batchCreationComplete" => "task with id X of type `indexUpdate` cannot be batched"
         },
         @r###"
     {
-      "uid": 0,
+      "uid": "[uid]",
       "progress": null,
       "details": {},
       "stats": {
@@ -964,7 +981,7 @@ async fn test_summarized_index_update() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "task with id 0 of type `indexUpdate` cannot be batched"
+      "batchCreationComplete": "task with id X of type `indexUpdate` cannot be batched"
     }
     "###);
 
@@ -1089,26 +1106,28 @@ async fn test_summarized_index_update() {
 
 #[actix_web::test]
 async fn test_summarized_index_swap() {
-    let server = Server::new().await;
+    let server = Server::new_shared();
     let (task, _status_code) = server
         .index_swap(json!([
             { "indexes": ["doggos", "cattos"] }
         ]))
         .await;
     server.wait_task(task.uid()).await.failed();
-    let (batch, _) = server.get_batch(0).await;
+    let (batch, _) = server.get_batch(task.uid() as u32).await;
     assert_json_snapshot!(batch,
         {
+            ".uid" => "[uid]",
             ".duration" => "[duration]",
             ".enqueuedAt" => "[date]",
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
-            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
+            ".batchCreationComplete" => "task with id X of type `indexSwap` cannot be batched"
         },
         @r###"
     {
-      "uid": 0,
+      "uid": "[uid]",
       "progress": null,
       "details": {
         "swaps": [
@@ -1134,31 +1153,35 @@ async fn test_summarized_index_swap() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "task with id 0 of type `indexSwap` cannot be batched"
+      "batchCreationComplete": "task with id X of type `indexSwap` cannot be batched"
     }
     "###);
 
-    server.index("doggos").create(None).await;
-    let (task, _status_code) = server.index("cattos").create(None).await;
+    let doggos_index = server.unique_index();
+    doggos_index.create(None).await;
+    let cattos_index = server.unique_index();
+    let (task, _status_code) = cattos_index.create(None).await;
     server
         .index_swap(json!([
-            { "indexes": ["doggos", "cattos"] }
+            { "indexes": [doggos_index.uid, cattos_index.uid] }
         ]))
         .await;
     server.wait_task(task.uid()).await.succeeded();
     let (batch, _) = server.get_batch(1).await;
     assert_json_snapshot!(batch,
         {
+            ".uid" => "[uid]",
             ".duration" => "[duration]",
             ".enqueuedAt" => "[date]",
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
-            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
+            ".stats.indexUids" => "{\n\t\"doggos\": 1}"
         },
         @r###"
     {
-      "uid": 1,
+      "uid": "[uid]",
       "progress": null,
       "details": {},
       "stats": {
@@ -1184,12 +1207,12 @@ async fn test_summarized_index_swap() {
 
 #[actix_web::test]
 async fn test_summarized_batch_cancelation() {
-    let server = Server::new().await;
-    let index = server.index("doggos");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     // to avoid being flaky we're only going to cancel an already finished batch :(
     let (task, _status_code) = index.create(None).await;
     index.wait_task(task.uid()).await.succeeded();
-    let (task, _status_code) = server.cancel_tasks("uids=0").await;
+    let (task, _status_code) = server.cancel_tasks(format!("uids={}", task.uid()).as_str()).await;
     index.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(1).await;
     assert_json_snapshot!(batch,
@@ -1231,31 +1254,33 @@ async fn test_summarized_batch_cancelation() {
 
 #[actix_web::test]
 async fn test_summarized_batch_deletion() {
-    let server = Server::new().await;
-    let index = server.index("doggos");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     // to avoid being flaky we're only going to delete an already finished batch :(
     let (task, _status_code) = index.create(None).await;
     index.wait_task(task.uid()).await.succeeded();
-    let (task, _status_code) = server.delete_tasks("uids=0").await;
+    let (task, _status_code) = server.delete_tasks(format!("uids={}", task.uid()).as_str()).await;
     index.wait_task(task.uid()).await.succeeded();
-    let (batch, _) = index.get_batch(1).await;
+    let (batch, _) = index.get_batch(task.uid() as u32).await;
     assert_json_snapshot!(batch,
         {
+            ".uid" => "[uid]",
             ".duration" => "[duration]",
             ".enqueuedAt" => "[date]",
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
-            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
+            ".details.originalFilter" => "?uids=X"
         },
         @r###"
     {
-      "uid": 1,
+      "uid": "[uid]",
       "progress": null,
       "details": {
         "matchedTasks": 1,
         "deletedTasks": 1,
-        "originalFilter": "?uids=0"
+        "originalFilter": "?uids=X"
       },
       "stats": {
         "totalNbTasks": 1,
@@ -1278,12 +1303,13 @@ async fn test_summarized_batch_deletion() {
 
 #[actix_web::test]
 async fn test_summarized_dump_creation() {
-    let server = Server::new().await;
+    let server = Server::new_shared();
     let (task, _status_code) = server.create_dump().await;
-    server.wait_task(task.uid()).await;
-    let (batch, _) = server.get_batch(0).await;
+    server.wait_task(task.uid()).await.succeeded();
+    let (batch, _) = server.get_batch(task.uid() as u32).await;
     assert_json_snapshot!(batch,
         {
+            ".uid" => "[uid]",
             ".details.dumpUid" => "[dumpUid]",
             ".duration" => "[duration]",
             ".enqueuedAt" => "[date]",
@@ -1294,7 +1320,7 @@ async fn test_summarized_dump_creation() {
         },
         @r###"
     {
-      "uid": 0,
+      "uid": "[uid]",
       "progress": null,
       "details": {
         "dumpUid": "[dumpUid]"
