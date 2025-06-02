@@ -26,8 +26,8 @@ static DOCUMENTS: Lazy<crate::common::Value> = Lazy::new(|| {
 
 #[actix_rt::test]
 async fn attribute_scale_search() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (task, _status_code) = index.add_documents(DOCUMENTS.clone(), None).await;
     index.wait_task(task.uid()).await.succeeded();
@@ -38,7 +38,7 @@ async fn attribute_scale_search() {
             "rankingRules": ["words", "typo", "proximity"],
         }))
         .await;
-    assert_eq!("202", code.as_str(), "{:?}", response);
+    assert_eq!("202", code.as_str(), "{response:?}");
     index.wait_task(response.uid()).await.succeeded();
 
     // the expected order is [1, 3, 2] instead of [3, 1, 2]
@@ -99,8 +99,8 @@ async fn attribute_scale_search() {
 
 #[actix_rt::test]
 async fn attribute_scale_phrase_search() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (task, _status_code) = index.add_documents(DOCUMENTS.clone(), None).await;
     index.wait_task(task.uid()).await.succeeded();
@@ -167,8 +167,8 @@ async fn attribute_scale_phrase_search() {
 
 #[actix_rt::test]
 async fn word_scale_set_and_reset() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (task, _status_code) = index.add_documents(DOCUMENTS.clone(), None).await;
     index.wait_task(task.uid()).await.succeeded();
@@ -282,8 +282,8 @@ async fn word_scale_set_and_reset() {
 
 #[actix_rt::test]
 async fn attribute_scale_default_ranking_rules() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (task, _status_code) = index.add_documents(DOCUMENTS.clone(), None).await;
     index.wait_task(task.uid()).await.succeeded();
@@ -293,7 +293,7 @@ async fn attribute_scale_default_ranking_rules() {
             "proximityPrecision": "byAttribute"
         }))
         .await;
-    assert_eq!("202", code.as_str(), "{:?}", response);
+    assert_eq!("202", code.as_str(), "{response:?}");
     index.wait_task(response.uid()).await.succeeded();
 
     // the expected order is [3, 1, 2]
