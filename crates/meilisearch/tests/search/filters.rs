@@ -36,8 +36,9 @@ async fn search_with_filter_string_notation() {
 
     let nested_index = server.unique_index();
 
-    let (_, code) =
-        nested_index.update_settings(json!({"filterableAttributes": ["cattos", "doggos.age"]})).await;
+    let (_, code) = nested_index
+        .update_settings(json!({"filterableAttributes": ["cattos", "doggos.age"]}))
+        .await;
     snapshot!(code, @"202 Accepted");
 
     let documents = NESTED_DOCUMENTS.clone();
