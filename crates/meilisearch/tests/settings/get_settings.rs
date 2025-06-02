@@ -414,7 +414,6 @@ async fn reset_all_settings() {
 
     let (response, code) = index.add_documents(documents, None).await;
     assert_eq!(code, 202);
-    assert!(response["taskUid"].as_i64().unwrap() >= 0);
     index.wait_task(response.uid()).await.succeeded();
 
     let (update_task,_status_code) = index
