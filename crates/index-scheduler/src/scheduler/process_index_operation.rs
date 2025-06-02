@@ -5,7 +5,7 @@ use meilisearch_types::milli::documents::PrimaryKey;
 use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::update::new::indexer::{self, UpdateByFunction};
 use meilisearch_types::milli::update::DocumentAdditionResult;
-use meilisearch_types::milli::{self, ChannelCongestion, Filter, ThreadPoolNoAbortBuilder};
+use meilisearch_types::milli::{self, ChannelCongestion, Filter};
 use meilisearch_types::settings::apply_settings_to_builder;
 use meilisearch_types::tasks::{Details, KindWithContent, Status, Task};
 use meilisearch_types::Index;
@@ -113,18 +113,8 @@ impl IndexScheduler {
                     }
                 }
 
-                let local_pool;
                 let indexer_config = self.index_mapper.indexer_config();
-                let pool = match &indexer_config.thread_pool {
-                    Some(pool) => pool,
-                    None => {
-                        local_pool = ThreadPoolNoAbortBuilder::new()
-                            .thread_name(|i| format!("indexing-thread-{i}"))
-                            .build()
-                            .unwrap();
-                        &local_pool
-                    }
-                };
+                let pool = &indexer_config.thread_pool;
 
                 progress.update_progress(DocumentOperationProgress::ComputingDocumentChanges);
                 let (document_changes, operation_stats, primary_key) = indexer
@@ -266,18 +256,8 @@ impl IndexScheduler {
 
                 let mut congestion = None;
                 if task.error.is_none() {
-                    let local_pool;
                     let indexer_config = self.index_mapper.indexer_config();
-                    let pool = match &indexer_config.thread_pool {
-                        Some(pool) => pool,
-                        None => {
-                            local_pool = ThreadPoolNoAbortBuilder::new()
-                                .thread_name(|i| format!("indexing-thread-{i}"))
-                                .build()
-                                .unwrap();
-                            &local_pool
-                        }
-                    };
+                    let pool = &indexer_config.thread_pool;
 
                     let candidates_count = candidates.len();
                     progress.update_progress(DocumentEditionProgress::ComputingDocumentChanges);
@@ -429,18 +409,8 @@ impl IndexScheduler {
 
                 let mut congestion = None;
                 if !tasks.iter().all(|res| res.error.is_some()) {
-                    let local_pool;
                     let indexer_config = self.index_mapper.indexer_config();
-                    let pool = match &indexer_config.thread_pool {
-                        Some(pool) => pool,
-                        None => {
-                            local_pool = ThreadPoolNoAbortBuilder::new()
-                                .thread_name(|i| format!("indexing-thread-{i}"))
-                                .build()
-                                .unwrap();
-                            &local_pool
-                        }
-                    };
+                    let pool = &indexer_config.thread_pool;
 
                     progress.update_progress(DocumentDeletionProgress::DeleteDocuments);
                     let mut indexer = indexer::DocumentDeletion::new();
