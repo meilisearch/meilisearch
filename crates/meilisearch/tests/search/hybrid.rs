@@ -2,31 +2,31 @@ use meili_snap::snapshot;
 use once_cell::sync::Lazy;
 
 use crate::common::index::Index;
-use crate::common::{Server, Value};
+use crate::common::{Server, Shared, Value};
 use crate::json;
 
 async fn index_with_documents_user_provided<'a>(
-    server: &'a Server,
+    server: &'a Server<Shared>,
     documents: &Value,
 ) -> Index<'a> {
-    let index = server.index("test");
+    let index = server.unique_index();
 
     let (response, code) = index
         .update_settings(json!({ "embedders": {"default": {
                 "source": "userProvided",
                 "dimensions": 2}}} ))
         .await;
-    assert_eq!(202, code, "{:?}", response);
+    assert_eq!(202, code, "{response:?}");
     index.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index.add_documents(documents.clone(), None).await;
-    assert_eq!(202, code, "{:?}", response);
+    assert_eq!(202, code, "{response:?}");
     index.wait_task(response.uid()).await.succeeded();
     index
 }
 
-async fn index_with_documents_hf<'a>(server: &'a Server, documents: &Value) -> Index<'a> {
-    let index = server.index("test");
+async fn index_with_documents_hf<'a>(server: &'a Server<Shared>, documents: &Value) -> Index<'a> {
+    let index = server.unique_index();
 
     let (response, code) = index
         .update_settings(json!({ "embedders": {"default": {
@@ -36,11 +36,11 @@ async fn index_with_documents_hf<'a>(server: &'a Server, documents: &Value) -> I
             "documentTemplate": "{{doc.title}}, {{doc.desc}}"
         }}} ))
         .await;
-    assert_eq!(202, code, "{:?}", response);
+    assert_eq!(202, code, "{response:?}");
     index.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index.add_documents(documents.clone(), None).await;
-    assert_eq!(202, code, "{:?}", response);
+    assert_eq!(202, code, "{response:?}");
     index.wait_task(response.uid()).await.succeeded();
     index
 }
@@ -139,8 +139,8 @@ static SIMPLE_SEARCH_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
 
 #[actix_rt::test]
 async fn simple_search() {
-    let server = Server::new().await;
-    let index = index_with_documents_user_provided(&server, &SIMPLE_SEARCH_DOCUMENTS_VEC).await;
+    let server = Server::new_shared();
+    let index = index_with_documents_user_provided(server, &SIMPLE_SEARCH_DOCUMENTS_VEC).await;
 
     let (response, code) = index
         .search_post(
@@ -172,8 +172,8 @@ async fn simple_search() {
 
 #[actix_rt::test]
 async fn limit_offset() {
-    let server = Server::new().await;
-    let index = index_with_documents_user_provided(&server, &SIMPLE_SEARCH_DOCUMENTS_VEC).await;
+    let server = Server::new_shared();
+    let index = index_with_documents_user_provided(server, &SIMPLE_SEARCH_DOCUMENTS_VEC).await;
 
     let (response, code) = index
         .search_post(
@@ -185,8 +185,8 @@ async fn limit_offset() {
     snapshot!(response["semanticHitCount"], @"0");
     assert_eq!(response["hits"].as_array().unwrap().len(), 1);
 
-    let server = Server::new().await;
-    let index = index_with_documents_user_provided(&server, &SIMPLE_SEARCH_DOCUMENTS_VEC).await;
+    let server = Server::new_shared();
+    let index = index_with_documents_user_provided(server, &SIMPLE_SEARCH_DOCUMENTS_VEC).await;
 
     let (response, code) = index
         .search_post(
@@ -201,8 +201,8 @@ async fn limit_offset() {
 
 #[actix_rt::test]
 async fn simple_search_hf() {
-    let server = Server::new().await;
-    let index = index_with_documents_hf(&server, &SIMPLE_SEARCH_DOCUMENTS).await;
+    let server = Server::new_shared();
+    let index = index_with_documents_hf(server, &SIMPLE_SEARCH_DOCUMENTS).await;
 
     let (response, code) = index
         .search_post(
@@ -253,8 +253,8 @@ async fn simple_search_hf() {
 
 #[actix_rt::test]
 async fn distribution_shift() {
-    let server = Server::new().await;
-    let index = index_with_documents_user_provided(&server, &SIMPLE_SEARCH_DOCUMENTS_VEC).await;
+    let server = Server::new_shared();
+    let index = index_with_documents_user_provided(server, &SIMPLE_SEARCH_DOCUMENTS_VEC).await;
 
     let search = json!({"q": "Captain", "vector": [1.0, 1.0], "showRankingScore": true, "hybrid": {"embedder": "default", "semanticRatio": 1.0}, "retrieveVectors": true});
     let (response, code) = index.search_post(search.clone()).await;
@@ -275,7 +275,7 @@ async fn distribution_shift() {
         .await;
 
     snapshot!(code, @"202 Accepted");
-    let response = server.wait_task(response.uid()).await;
+    let response = server.wait_task(response.uid()).await.succeeded();
     snapshot!(response["details"], @r#"{"embedders":{"default":{"distribution":{"mean":0.998,"sigma":0.01}}}}"#);
 
     let (response, code) = index.search_post(search).await;
@@ -285,8 +285,8 @@ async fn distribution_shift() {
 
 #[actix_rt::test]
 async fn highlighter() {
-    let server = Server::new().await;
-    let index = index_with_documents_user_provided(&server, &SIMPLE_SEARCH_DOCUMENTS_VEC).await;
+    let server = Server::new_shared();
+    let index = index_with_documents_user_provided(server, &SIMPLE_SEARCH_DOCUMENTS_VEC).await;
 
     let (response, code) = index
         .search_post(json!({"q": "Captain Marvel", "vector": [1.0, 1.0],
@@ -340,8 +340,8 @@ async fn highlighter() {
 
 #[actix_rt::test]
 async fn invalid_semantic_ratio() {
-    let server = Server::new().await;
-    let index = index_with_documents_user_provided(&server, &SIMPLE_SEARCH_DOCUMENTS_VEC).await;
+    let server = Server::new_shared();
+    let index = index_with_documents_user_provided(server, &SIMPLE_SEARCH_DOCUMENTS_VEC).await;
 
     let (response, code) = index
         .search_post(
@@ -412,8 +412,8 @@ async fn invalid_semantic_ratio() {
 
 #[actix_rt::test]
 async fn single_document() {
-    let server = Server::new().await;
-    let index = index_with_documents_user_provided(&server, &SINGLE_DOCUMENT_VEC).await;
+    let server = Server::new_shared();
+    let index = index_with_documents_user_provided(server, &SINGLE_DOCUMENT_VEC).await;
 
     let (response, code) = index
     .search_post(
@@ -428,8 +428,8 @@ async fn single_document() {
 
 #[actix_rt::test]
 async fn query_combination() {
-    let server = Server::new().await;
-    let index = index_with_documents_user_provided(&server, &SIMPLE_SEARCH_DOCUMENTS_VEC).await;
+    let server = Server::new_shared();
+    let index = index_with_documents_user_provided(server, &SIMPLE_SEARCH_DOCUMENTS_VEC).await;
 
     // search without query and vector, but with hybrid => still placeholder
     let (response, code) = index
@@ -581,7 +581,7 @@ async fn distinct_is_applied() {
 
 #[actix_rt::test]
 async fn retrieve_vectors() {
-    let server = Server::new().await;
+    let server = Server::new_shared();
     let index = index_with_documents_hf(&server, &SIMPLE_SEARCH_DOCUMENTS).await;
 
     let (response, code) = index
@@ -632,7 +632,7 @@ async fn retrieve_vectors() {
     let (response, code) = index
         .update_settings(json!({ "displayedAttributes": ["id", "title", "desc", "_vectors"]} ))
         .await;
-    assert_eq!(202, code, "{:?}", response);
+    assert_eq!(202, code, "{response:?}");
     index.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index
@@ -682,7 +682,7 @@ async fn retrieve_vectors() {
     // remove `_vectors` from displayed attributes
     let (response, code) =
         index.update_settings(json!({ "displayedAttributes": ["id", "title", "desc"]} )).await;
-    assert_eq!(202, code, "{:?}", response);
+    assert_eq!(202, code, "{response:?}");
     index.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index
