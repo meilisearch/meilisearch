@@ -3,8 +3,8 @@ use crate::json;
 
 #[actix_rt::test]
 async fn set_and_reset_distinct_attribute() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (task1, _code) = index.update_settings(json!({ "distinctAttribute": "test"})).await;
     index.wait_task(task1.uid()).await.succeeded();
@@ -24,8 +24,8 @@ async fn set_and_reset_distinct_attribute() {
 
 #[actix_rt::test]
 async fn set_and_reset_distinct_attribute_with_dedicated_route() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (update_task1, _code) = index.update_distinct_attribute(json!("test")).await;
     index.wait_task(update_task1.uid()).await.succeeded();
