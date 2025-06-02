@@ -6,8 +6,8 @@ use crate::vector::generate_default_user_provided_documents;
 
 #[actix_rt::test]
 async fn retrieve_binary_quantize_status_in_the_settings() {
-    let server = Server::new().await;
-    let index = server.index("doggo");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) = index
         .update_settings(json!({
@@ -65,8 +65,8 @@ async fn retrieve_binary_quantize_status_in_the_settings() {
 
 #[actix_rt::test]
 async fn binary_quantize_before_sending_documents() {
-    let server = Server::new().await;
-    let index = server.index("doggo");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) = index
         .update_settings(json!({
@@ -139,8 +139,8 @@ async fn binary_quantize_before_sending_documents() {
 
 #[actix_rt::test]
 async fn binary_quantize_after_sending_documents() {
-    let server = Server::new().await;
-    let index = server.index("doggo");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) = index
         .update_settings(json!({
@@ -226,8 +226,8 @@ async fn binary_quantize_after_sending_documents() {
 
 #[actix_rt::test]
 async fn try_to_disable_binary_quantization() {
-    let server = Server::new().await;
-    let index = server.index("doggo");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) = index
         .update_settings(json!({
@@ -256,11 +256,11 @@ async fn try_to_disable_binary_quantization() {
         .await;
     snapshot!(code, @"202 Accepted");
     let ret = server.wait_task(response.uid()).await;
-    snapshot!(ret, @r#"
+    snapshot!(json_string!(ret, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".finishedAt" => "[date]", ".startedAt" => "[date]" }), @r#"
     {
       "uid": "[uid]",
       "batchUid": "[batch_uid]",
-      "indexUid": "doggo",
+      "indexUid": "[uuid]",
       "status": "failed",
       "type": "settingsUpdate",
       "canceledBy": null,
@@ -274,7 +274,7 @@ async fn try_to_disable_binary_quantization() {
         }
       },
       "error": {
-        "message": "Index `doggo`: `.embedders.manual.binaryQuantized`: Cannot disable the binary quantization.\n - Note: Binary quantization is a lossy operation that cannot be reverted.\n - Hint: Add a new embedder that is non-quantized and regenerate the vectors.",
+        "message": "Index `[uuid]`: `.embedders.manual.binaryQuantized`: Cannot disable the binary quantization.\n - Note: Binary quantization is a lossy operation that cannot be reverted.\n - Hint: Add a new embedder that is non-quantized and regenerate the vectors.",
         "code": "invalid_settings_embedders",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_settings_embedders"
