@@ -1,7 +1,6 @@
 mod errors;
 mod webhook;
 
-use insta::assert_json_snapshot;
 use meili_snap::{json_string, snapshot};
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
@@ -18,7 +17,7 @@ async fn error_get_unexisting_task_status() {
     let (response, code) = index.get_task(u32::MAX as u64).await;
 
     let expected_response = json!({
-        "message": "Task `1` not found.",
+        "message": "Task `4294967295` not found.",
         "code": "task_not_found",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#task_not_found"
@@ -64,11 +63,12 @@ async fn list_tasks() {
 
 #[actix_rt::test]
 async fn list_tasks_pagination_and_reverse() {
-    let server = Server::new_shared();
+    // do not use a shared server here, as we want to assert tasks ids and we need them to be stable
+    let server = Server::new().await;
     // First of all we want to create a lot of tasks very quickly. The fastest way is to delete a lot of unexisting indexes
     let mut last_task = None;
-    for _ in 0..10 {
-        let index = server.unique_index();
+    for i in 0..10 {
+        let index = server.index(format!("test-{i}"));
         last_task = Some(index.create(None).await.0.uid());
     }
     server.wait_task(last_task.unwrap()).await.succeeded();
@@ -102,8 +102,9 @@ async fn list_tasks_pagination_and_reverse() {
 
 #[actix_rt::test]
 async fn list_tasks_with_star_filters() {
-    let server = Server::new_shared();
-    let index = server.unique_index();
+    let server = Server::new().await;
+    // Do not use a unique index here, as we want to test the `indexUids=*` filter.
+    let index = server.index("test");
     let (task, _code) = index.create(None).await;
     index.wait_task(task.uid()).await.succeeded();
     index
@@ -132,7 +133,10 @@ async fn list_tasks_with_star_filters() {
 
     let (response, code) = index
         .service
-        .get(format!("/tasks?types=*,documentAdditionOrUpdate&statuses=*,failed&indexUids={}", index.uid))
+        .get(format!(
+            "/tasks?types=*,documentAdditionOrUpdate&statuses=*,failed&indexUids={}",
+            index.uid
+        ))
         .await;
     assert_eq!(code, 200, "{response:?}");
     assert_eq!(response["results"].as_array().unwrap().len(), 2);
@@ -278,6 +282,7 @@ async fn test_summarized_document_addition_or_update() {
     let (task, _status_code) =
         index.add_documents(json!({ "id": 42, "content": "doggos & fluff" }), None).await;
     index.wait_task(task.uid()).await.succeeded();
+    let (task, _) = index.get_task(task.uid()).await;
     snapshot!(json_string!(task,
         { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
@@ -303,14 +308,14 @@ async fn test_summarized_document_addition_or_update() {
     let (task, _status_code) =
         index.add_documents(json!({ "id": 42, "content": "doggos & fluff" }), Some("id")).await;
     index.wait_task(task.uid()).await.succeeded();
-    let (task, _) = index.get_task(1).await;
-    assert_json_snapshot!(task,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" },
+    let (task, _) = index.get_task(task.uid()).await;
+    snapshot!(json_string!(task,
+        { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "uid": 1,
-      "batchUid": 1,
-      "indexUid": "test",
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "[uuid]",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -331,14 +336,20 @@ async fn test_summarized_document_addition_or_update() {
 async fn test_summarized_delete_documents_by_batch() {
     let server = Server::new_shared();
     let index = server.unique_index();
-    let (task, _status_code) = index.delete_batch(vec![1, 2, 3]).await;
+    let non_existing_task_id1 = u32::MAX as u64;
+    let non_existing_task_id2 = non_existing_task_id1 - 1;
+    let non_existing_task_id3 = non_existing_task_id1 - 2;
+    let (task, _status_code) = index
+        .delete_batch(vec![non_existing_task_id1, non_existing_task_id2, non_existing_task_id3])
+        .await;
     index.wait_task(task.uid()).await.failed();
+    let (task, _) = index.get_task(task.uid()).await;
     snapshot!(json_string!(task,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "uid": 0,
-      "batchUid": 0,
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentDeletion",
@@ -349,7 +360,7 @@ async fn test_summarized_delete_documents_by_batch() {
         "originalFilter": null
       },
       "error": {
-        "message": "Index `test` not found.",
+        "message": "Index `[uuid]` not found.",
         "code": "index_not_found",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#index_not_found"
@@ -366,11 +377,11 @@ async fn test_summarized_delete_documents_by_batch() {
     index.wait_task(del_task.uid()).await.succeeded();
     let (task, _) = index.get_task(del_task.uid()).await;
     snapshot!(json_string!(task,
-        { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "uid": 2,
-      "batchUid": 2,
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
       "indexUid": "[uuid]",
       "status": "succeeded",
       "type": "documentDeletion",
@@ -975,12 +986,13 @@ async fn test_summarized_task_cancelation() {
     let index = server.unique_index();
     // to avoid being flaky we're only going to cancel an already finished task :(
     let (task, _status_code) = index.create(None).await;
-    index.wait_task(task.uid()).await.succeeded();
-    let (task, _status_code) = server.cancel_tasks("uids=0").await;
+    let task_uid = task.uid();
+    index.wait_task(task_uid).await.succeeded();
+    let (task, _status_code) = server.cancel_tasks(format!("uids={task_uid}").as_str()).await;
     index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.get_task(task.uid()).await;
     snapshot!(json_string!(task,
-        { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".**.originalFilter" => "[of]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
       "uid": "[uid]",
@@ -992,7 +1004,7 @@ async fn test_summarized_task_cancelation() {
       "details": {
         "matchedTasks": 1,
         "canceledTasks": 0,
-        "originalFilter": "?uids=0"
+        "originalFilter": "[of]"
       },
       "error": null,
       "duration": "[duration]",
