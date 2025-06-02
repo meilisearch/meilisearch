@@ -43,8 +43,8 @@ static DOCUMENTS: Lazy<Value> = Lazy::new(|| {
 
 #[actix_rt::test]
 async fn geo_sort_with_geo_strings() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let documents = DOCUMENTS.clone();
     index.update_settings_filterable_attributes(json!(["_geo"])).await;
@@ -59,7 +59,7 @@ async fn geo_sort_with_geo_strings() {
                 "sort": ["_geoPoint(0.0, 0.0):asc"]
             }),
             |response, code| {
-                assert_eq!(code, 200, "{}", response);
+                assert_eq!(code, 200, "{response}");
             },
         )
         .await;
@@ -67,8 +67,8 @@ async fn geo_sort_with_geo_strings() {
 
 #[actix_rt::test]
 async fn geo_bounding_box_with_string_and_number() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let documents = DOCUMENTS.clone();
     index.update_settings_filterable_attributes(json!(["_geo"])).await;
@@ -82,7 +82,7 @@ async fn geo_bounding_box_with_string_and_number() {
                 "filter": "_geoBoundingBox([89, 179], [-89, -179])",
             }),
             |response, code| {
-                assert_eq!(code, 200, "{}", response);
+                assert_eq!(code, 200, "{response}");
                 snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r###"
                 {
                   "hits": [
@@ -124,8 +124,8 @@ async fn geo_bounding_box_with_string_and_number() {
 #[actix_rt::test]
 async fn bug_4640() {
     // https://github.com/meilisearch/meilisearch/issues/4640
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let documents = DOCUMENTS.clone();
     index.add_documents(documents, None).await;
@@ -140,7 +140,7 @@ async fn bug_4640() {
                 "sort": ["_geoPoint(45.4777599, 9.1967508):asc"],
             }),
             |response, code| {
-                assert_eq!(code, 200, "{}", response);
+                assert_eq!(code, 200, "{response}");
                 snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r###"
                 {
                   "hits": [
@@ -203,7 +203,7 @@ async fn geo_asc_with_words() {
         &json!({"searchableAttributes": ["id", "doggo"], "rankingRules": ["words", "geo:asc"]}),
         &json!({"q": "jean"}),
         |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r###"
             {
               "hits": [
@@ -248,7 +248,7 @@ async fn geo_asc_with_words() {
         &json!({"searchableAttributes": ["id", "doggo"], "rankingRules": ["words", "geo:asc"]}),
         &json!({"q": "bob"}),
         |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r###"
             {
               "hits": [
@@ -285,7 +285,7 @@ async fn geo_asc_with_words() {
         &json!({"searchableAttributes": ["id", "doggo"], "rankingRules": ["words", "geo:asc"]}),
         &json!({"q": "intel"}),
         |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r###"
             {
               "hits": [
@@ -325,7 +325,7 @@ async fn geo_sort_with_words() {
       &json!({"searchableAttributes": ["id", "doggo"], "rankingRules": ["words", "sort"], "sortableAttributes": [RESERVED_GEO_FIELD_NAME]}),
       &json!({"q": "jean", "sort": ["_geoPoint(0.0, 0.0):asc"]}),
       |response, code| {
-          assert_eq!(code, 200, "{}", response);
+          assert_eq!(code, 200, "{response}");
           snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r###"
           {
             "hits": [
