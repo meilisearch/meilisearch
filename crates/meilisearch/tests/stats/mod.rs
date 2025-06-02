@@ -27,8 +27,8 @@ async fn test_healthyness() {
 
 #[actix_rt::test]
 async fn stats() {
-    let server = Server::new_shared();
-    let index = server.unique_index();
+    let server = Server::new().await;
+    let index = server.index("test");
     let (task, code) = index.create(Some("id")).await;
 
     assert_eq!(code, 202);
