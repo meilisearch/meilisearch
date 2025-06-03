@@ -832,8 +832,8 @@ async fn get_document_by_ids_and_filter() {
 
 #[actix_rt::test]
 async fn get_document_with_vectors() {
-    let server = Server::new().await;
-    let index = server.index("doggo");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) = index
         .update_settings(json!({
