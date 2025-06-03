@@ -12,10 +12,10 @@ async fn error_get_unexisting_batch_status() {
     let index = server.unique_index();
     let (task, _coder) = index.create(None).await;
     index.wait_task(task.uid()).await.succeeded();
-    let (response, code) = index.get_batch(task.uid() as u32).await;
+    let (response, code) = index.get_batch(u32::MAX).await;
 
     let expected_response = json!({
-        "message": format!("Batch `{}` not found.", task.uid()),
+        "message": format!("Batch `{}` not found.", u32::MAX),
         "code": "batch_not_found",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#batch_not_found"
@@ -31,7 +31,7 @@ async fn get_batch_status() {
     let index = server.unique_index();
     let (task, _status_code) = index.create(None).await;
     index.wait_task(task.uid()).await.succeeded();
-    let (_response, code) = index.get_batch(0).await;
+    let (_response, code) = index.get_batch(task.uid() as u32).await;
     assert_eq!(code, 200);
 }
 
@@ -284,7 +284,8 @@ async fn test_summarized_document_addition_or_update() {
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
             ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]",
-            ".stats.indexUids" => r#"""{"test": 1}"""#
+            ".stats.indexUids" => r#"{"[uuid]": 1}"#,
+            ".batchCreationComplete" => "batched all enqueued tasks for index `[uuid]`"
         },
         @r###"
     {
@@ -302,7 +303,7 @@ async fn test_summarized_document_addition_or_update() {
         "types": {
           "documentAdditionOrUpdate": 1
         },
-        "indexUids": {"test": 1},
+        "indexUids": "{\"[uuid]\": 1}",
         "progressTrace": "[progressTrace]",
         "writeChannelCongestion": "[writeChannelCongestion]",
         "internalDatabaseSizes": "[internalDatabaseSizes]"
@@ -310,14 +311,14 @@ async fn test_summarized_document_addition_or_update() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "batched all enqueued tasks"
+      "batchCreationComplete": "batched all enqueued tasks for index `[uuid]`"
     }
     "###);
 
     let (task, _status_code) =
         index.add_documents(json!({ "id": 42, "content": "doggos & fluff" }), Some("id")).await;
     index.wait_task(task.uid()).await.succeeded();
-    let (batch, _) = index.get_batch(1).await;
+    let (batch, _) = index.get_batch(task.uid() as u32).await;
     assert_json_snapshot!(batch,
         {
             ".uid" => "[uid]",
@@ -327,7 +328,9 @@ async fn test_summarized_document_addition_or_update() {
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
-            ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]"
+            ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]",
+            ".stats.indexUids" => r#"{"[uuid]": 1}"#,
+            ".batchCreationComplete" => "batched all enqueued tasks for index `[uuid]`"
         },
         @r###"
     {
@@ -345,16 +348,14 @@ async fn test_summarized_document_addition_or_update() {
         "types": {
           "documentAdditionOrUpdate": 1
         },
-        "indexUids": {
-          "test": 1
-        },
+        "indexUids": "{\"[uuid]\": 1}",
         "progressTrace": "[progressTrace]",
         "writeChannelCongestion": "[writeChannelCongestion]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "batched all enqueued tasks"
+      "batchCreationComplete": "batched all enqueued tasks for index `[uuid]`"
     }
     "###);
 }
@@ -363,7 +364,10 @@ async fn test_summarized_document_addition_or_update() {
 async fn test_summarized_delete_documents_by_batch() {
     let server = Server::new_shared();
     let index = server.unique_index();
-    let (task, _status_code) = index.delete_batch(vec![1, 2, 3]).await;
+    let task_uid_1 = (u32::MAX - 1) as u64;
+    let task_uid_2 = (u32::MAX - 2) as u64;
+    let task_uid_3 = (u32::MAX - 3) as u64;
+    let (task, _status_code) = index.delete_batch(vec![task_uid_1, task_uid_2, task_uid_3]).await;
     index.wait_task(task.uid()).await.failed();
     let (batch, _) = index.get_batch(task.uid() as u32).await;
     assert_json_snapshot!(batch,
@@ -375,7 +379,8 @@ async fn test_summarized_delete_documents_by_batch() {
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
-            ".stats.indexUids" => r#"""{"test": 1}"""#
+            ".stats.indexUids" => r#"{"[uuid]": 1}"#,
+            ".batchCreationComplete" => "batched all enqueued tasks for index `[uuid]`"
         },
         @r###"
     {
@@ -393,33 +398,35 @@ async fn test_summarized_delete_documents_by_batch() {
         "types": {
           "documentDeletion": 1
         },
-        "indexUids": {"test": 1},
+        "indexUids": "{\"[uuid]\": 1}",
         "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "batched all enqueued tasks"
+      "batchCreationComplete": "batched all enqueued tasks for index `[uuid]`"
     }
     "###);
 
     index.create(None).await;
     let (task, _status_code) = index.delete_batch(vec![42]).await;
     index.wait_task(task.uid()).await.succeeded();
-    let (batch, _) = index.get_batch(2).await;
+    let (batch, _) = index.get_batch(task.uid() as u32).await;
     assert_json_snapshot!(batch,
         {
+            ".uid" => "[uid]",
             ".duration" => "[duration]",
             ".enqueuedAt" => "[date]",
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
-            ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]"
+            ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]",
+            ".stats.indexUids" => r#"{"[uuid]": 1}"#,
         },
         @r###"
     {
-      "uid": 2,
+      "uid": "[uid]",
       "progress": null,
       "details": {
         "providedIds": 1,
@@ -433,9 +440,7 @@ async fn test_summarized_delete_documents_by_batch() {
         "types": {
           "documentDeletion": 1
         },
-        "indexUids": {
-          "test": 1
-        },
+        "indexUids": "{\"[uuid]\": 1}",
         "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
@@ -464,8 +469,8 @@ async fn test_summarized_delete_documents_by_filter() {
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
-            ".stats.indexUids" => r#"""{"test": 1}"""#,
-            ".batchCreationComplete" => "batched all enqueued tasks for index `[uuid`"
+            ".stats.indexUids" => r#"{"[uuid]": 1}"#,
+            ".batchCreationComplete" => "batched all enqueued tasks for index `[uuid]`"
         },
         @r###"
     {
@@ -484,13 +489,13 @@ async fn test_summarized_delete_documents_by_filter() {
         "types": {
           "documentDeletion": 1
         },
-        "indexUids": {"test": 1},
+        "indexUids": "{\"[uuid]\": 1}",
         "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "batched all enqueued tasks for index `[uuid`"
+      "batchCreationComplete": "batched all enqueued tasks for index `[uuid]`"
     }
     "###);
 
@@ -498,20 +503,23 @@ async fn test_summarized_delete_documents_by_filter() {
     let (task, _status_code) =
         index.delete_document_by_filter(json!({ "filter": "doggo = bernese" })).await;
     index.wait_task(task.uid()).await.failed();
-    let (batch, _) = index.get_batch(2).await;
+    let (batch, _) = index.get_batch(task.uid() as u32).await;
     assert_json_snapshot!(batch,
         {
+            ".uid" => "[uid]",
             ".duration" => "[duration]",
             ".enqueuedAt" => "[date]",
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
-            ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]"
+            ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]",
+            ".stats.indexUids" => r#"{"[uuid]": 1}"#,
+            ".batchCreationComplete" => "batched all enqueued tasks for index `[uuid]`"
         },
         @r###"
     {
-      "uid": 2,
+      "uid": "[uid]",
       "progress": null,
       "details": {
         "providedIds": 0,
@@ -526,15 +534,13 @@ async fn test_summarized_delete_documents_by_filter() {
         "types": {
           "documentDeletion": 1
         },
-        "indexUids": {
-          "test": 1
-        },
+        "indexUids": "{\"[uuid]\": 1}",
         "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "batched all enqueued tasks"
+      "batchCreationComplete": "batched all enqueued tasks for index `[uuid]`"
     }
     "###);
 
@@ -542,20 +548,23 @@ async fn test_summarized_delete_documents_by_filter() {
     let (task, _status_code) =
         index.delete_document_by_filter(json!({ "filter": "doggo = bernese" })).await;
     index.wait_task(task.uid()).await.succeeded();
-    let (batch, _) = index.get_batch(4).await;
+    let (batch, _) = index.get_batch(task.uid() as u32).await;
     assert_json_snapshot!(batch,
         {
+            ".uid" => "[uid]",
             ".duration" => "[duration]",
             ".enqueuedAt" => "[date]",
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
-            ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]"
+            ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]",
+            ".stats.indexUids" => r#"{"[uuid]": 1}"#,
+            ".batchCreationComplete" => "batched all enqueued tasks for index `[uuid]`"
         },
         @r###"
     {
-      "uid": 4,
+      "uid": "[uid]",
       "progress": null,
       "details": {
         "providedIds": 0,
@@ -570,15 +579,13 @@ async fn test_summarized_delete_documents_by_filter() {
         "types": {
           "documentDeletion": 1
         },
-        "indexUids": {
-          "test": 1
-        },
+        "indexUids": "{\"[uuid]\": 1}",
         "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "batched all enqueued tasks"
+      "batchCreationComplete": "batched all enqueued tasks for index `[uuid]`"
     }
     "###);
 }
@@ -599,7 +606,8 @@ async fn test_summarized_delete_document_by_id() {
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
-            ".stats.indexUids" => r#"""{"test": 1}"""#
+            ".stats.indexUids" => r#"{"[uuid]": 1}"#,
+            ".batchCreationComplete" => "batched all enqueued tasks for index `[uuid]`"
         },
         @r###"
     {
@@ -617,33 +625,36 @@ async fn test_summarized_delete_document_by_id() {
         "types": {
           "documentDeletion": 1
         },
-        "indexUids": {"test": 1},
+        "indexUids": "{\"[uuid]\": 1}",
         "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "batched all enqueued tasks"
+      "batchCreationComplete": "batched all enqueued tasks for index `[uuid]`"
     }
     "###);
 
     index.create(None).await;
     let (task, _status_code) = index.delete_document(42).await;
     index.wait_task(task.uid()).await.succeeded();
-    let (batch, _) = index.get_batch(2).await;
+    let (batch, _) = index.get_batch(task.uid() as u32).await;
     assert_json_snapshot!(batch,
         {
+            ".uid" => "[uid]",
             ".duration" => "[duration]",
             ".enqueuedAt" => "[date]",
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
-            ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]"
+            ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]",
+            ".stats.indexUids" => r#"{"[uuid]": 1}"#,
+            ".batchCreationComplete" => "batched all enqueued tasks for index `[uuid]`"
         },
         @r###"
     {
-      "uid": 2,
+      "uid": "[uid]",
       "progress": null,
       "details": {
         "providedIds": 1,
@@ -657,15 +668,13 @@ async fn test_summarized_delete_document_by_id() {
         "types": {
           "documentDeletion": 1
         },
-        "indexUids": {
-          "test": 1
-        },
+        "indexUids": "{\"[uuid]\": 1}",
         "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "batched all enqueued tasks"
+      "batchCreationComplete": "batched all enqueued tasks for index `[uuid]`"
     }
     "###);
 }
@@ -699,7 +708,7 @@ async fn test_summarized_settings_update() {
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
             ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]",
-            ".stats.indexUids" => r#"""{"test": 1}"""#,
+            ".stats.indexUids" => r#"{"[uuid]": 1}"#,
             ".batchCreationComplete" => "batched all enqueued tasks for index `[uuid]`"
 
         },
@@ -728,7 +737,7 @@ async fn test_summarized_settings_update() {
         "types": {
           "settingsUpdate": 1
         },
-        "indexUids": {"test": 1},
+        "indexUids": "{\"[uuid]\": 1}",
         "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
@@ -755,7 +764,7 @@ async fn test_summarized_index_creation() {
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
-            ".stats.indexUids" => r#"""{"test": 1}"""#,
+            ".stats.indexUids" => r#"{"[uuid]": 1}"#,
             ".batchCreationComplete" => "task with id X of type `indexCreation` cannot be batched"
         },
         @r###"
@@ -771,7 +780,7 @@ async fn test_summarized_index_creation() {
         "types": {
           "indexCreation": 1
         },
-        "indexUids": {"test": 1},
+        "indexUids": "{\"[uuid]\": 1}",
         "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
@@ -783,19 +792,22 @@ async fn test_summarized_index_creation() {
 
     let (task, _status_code) = index.create(Some("doggos")).await;
     index.wait_task(task.uid()).await.failed();
-    let (batch, _) = index.get_batch(1).await;
+    let (batch, _) = index.get_batch(task.uid() as u32).await;
     assert_json_snapshot!(batch,
         {
+            ".uid" => "[uid]",
             ".duration" => "[duration]",
             ".enqueuedAt" => "[date]",
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
-            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
+            ".stats.indexUids" => r#"{"[uuid]": 1}"#,
+            ".batchCreationComplete" => "task with id X of type `indexCreation` cannot be batched"
         },
         @r###"
     {
-      "uid": 1,
+      "uid": "[uid]",
       "progress": null,
       "details": {
         "primaryKey": "doggos"
@@ -808,15 +820,13 @@ async fn test_summarized_index_creation() {
         "types": {
           "indexCreation": 1
         },
-        "indexUids": {
-          "test": 1
-        },
+        "indexUids": "{\"[uuid]\": 1}",
         "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "task with id 1 of type `indexCreation` cannot be batched"
+      "batchCreationComplete": "task with id X of type `indexCreation` cannot be batched"
     }
     "###);
 }
@@ -947,7 +957,7 @@ async fn test_summarized_index_update() {
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
-            ".stats.indexUids" => r#"{"test": 1}"#,
+            ".stats.indexUids" => r#"{"[uuid]": 1}"#,
             ".batchCreationComplete" => "task with id X of type `indexUpdate` cannot be batched"
         },
         @r###"
@@ -963,7 +973,7 @@ async fn test_summarized_index_update() {
         "types": {
           "indexUpdate": 1
         },
-        "indexUids": {"test": 1},
+        "indexUids": "{\"[uuid]\": 1}",
         "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
@@ -975,19 +985,22 @@ async fn test_summarized_index_update() {
 
     let (task, _status_code) = index.update(Some("bones")).await;
     index.wait_task(task.uid()).await.failed();
-    let (batch, _) = index.get_batch(1).await;
+    let (batch, _) = index.get_batch(task.uid() as u32).await;
     assert_json_snapshot!(batch,
         {
+            ".uid" => "[uid]",
             ".duration" => "[duration]",
             ".enqueuedAt" => "[date]",
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
-            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
+            ".stats.indexUids" => r#"{"[uuid]": 1}"#,
+            ".batchCreationComplete" => "task with id X of type `indexUpdate` cannot be batched"
         },
         @r###"
     {
-      "uid": 1,
+      "uid": "[uid]",
       "progress": null,
       "details": {
         "primaryKey": "bones"
@@ -1000,15 +1013,13 @@ async fn test_summarized_index_update() {
         "types": {
           "indexUpdate": 1
         },
-        "indexUids": {
-          "test": 1
-        },
+        "indexUids": "{\"[uuid]\": 1}",
         "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "task with id 1 of type `indexUpdate` cannot be batched"
+      "batchCreationComplete": "task with id X of type `indexUpdate` cannot be batched"
     }
     "###);
 
@@ -1017,19 +1028,22 @@ async fn test_summarized_index_update() {
 
     let (task, _status_code) = index.update(None).await;
     index.wait_task(task.uid()).await.succeeded();
-    let (batch, _) = index.get_batch(3).await;
+    let (batch, _) = index.get_batch(task.uid() as u32).await;
     assert_json_snapshot!(batch,
         {
+            ".uid" => "[uid]",
             ".duration" => "[duration]",
             ".enqueuedAt" => "[date]",
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
-            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
+            ".stats.indexUids" => r#"{"[uuid]": 1}"#,
+            ".batchCreationComplete" => "task with id X of type `indexUpdate` cannot be batched"
         },
         @r###"
     {
-      "uid": 3,
+      "uid": "[uid]",
       "progress": null,
       "details": {},
       "stats": {
@@ -1040,33 +1054,34 @@ async fn test_summarized_index_update() {
         "types": {
           "indexUpdate": 1
         },
-        "indexUids": {
-          "test": 1
-        },
+        "indexUids": "{\"[uuid]\": 1}",
         "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "task with id 3 of type `indexUpdate` cannot be batched"
+      "batchCreationComplete": "task with id X of type `indexUpdate` cannot be batched"
     }
     "###);
 
     let (task, _status_code) = index.update(Some("bones")).await;
     index.wait_task(task.uid()).await.succeeded();
-    let (batch, _) = index.get_batch(4).await;
+    let (batch, _) = index.get_batch(task.uid() as u32).await;
     assert_json_snapshot!(batch,
         {
+            ".uid" => "[uid]",
             ".duration" => "[duration]",
             ".enqueuedAt" => "[date]",
             ".startedAt" => "[date]",
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
-            ".stats.writeChannelCongestion" => "[writeChannelCongestion]"
+            ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
+            ".stats.indexUids" => r#"{"[uuid]": 1}"#,
+            ".batchCreationComplete" => "task with id X of type `indexUpdate` cannot be batched"
         },
         @r###"
     {
-      "uid": 4,
+      "uid": "[uid]",
       "progress": null,
       "details": {
         "primaryKey": "bones"
@@ -1079,15 +1094,13 @@ async fn test_summarized_index_update() {
         "types": {
           "indexUpdate": 1
         },
-        "indexUids": {
-          "test": 1
-        },
+        "indexUids": "{\"[uuid]\": 1}",
         "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "task with id 4 of type `indexUpdate` cannot be batched"
+      "batchCreationComplete": "task with id X of type `indexUpdate` cannot be batched"
     }
     "###);
 }
@@ -1155,7 +1168,7 @@ async fn test_summarized_index_swap() {
         ]))
         .await;
     server.wait_task(task.uid()).await.succeeded();
-    let (batch, _) = server.get_batch(1).await;
+    let (batch, _) = server.get_batch(task.uid() as u32).await;
     assert_json_snapshot!(batch,
         {
             ".uid" => "[uid]",
@@ -1165,7 +1178,8 @@ async fn test_summarized_index_swap() {
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
-            ".stats.indexUids" => r#"""{"doggos": 1}"""#
+            ".stats.indexUids" => r#"{"[uuid]": 1}"#,
+            ".batchCreationComplete" => "task with id X of type `indexCreation` cannot be batched"
         },
         @r###"
     {
@@ -1180,13 +1194,13 @@ async fn test_summarized_index_swap() {
         "types": {
           "indexCreation": 1
         },
-        "indexUids": {"doggos": 1},
+        "indexUids": "{\"[uuid]\": 1}",
         "progressTrace": "[progressTrace]"
       },
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "task with id 1 of type `indexCreation` cannot be batched"
+      "batchCreationComplete": "task with id X of type `indexCreation` cannot be batched"
     }
     "###);
 }
@@ -1210,7 +1224,8 @@ async fn test_summarized_batch_cancelation() {
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
-            ".batchCreationComplete" => "task with id X of type `taskCancelation` cannot be batched"
+            ".batchCreationComplete" => "task with id X of type `taskCancelation` cannot be batched",
+            ".details.originalFilter" => "?uids=X",
         },
         @r###"
     {
@@ -1219,7 +1234,7 @@ async fn test_summarized_batch_cancelation() {
       "details": {
         "matchedTasks": 1,
         "canceledTasks": 0,
-        "originalFilter": "?uids=0"
+        "originalFilter": "?uids=X"
       },
       "stats": {
         "totalNbTasks": 1,
