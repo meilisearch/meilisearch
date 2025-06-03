@@ -204,7 +204,7 @@ impl std::convert::TryFrom<f64> for RankingScoreThreshold {
 impl From<index::RankingScoreThreshold> for RankingScoreThreshold {
     fn from(threshold: index::RankingScoreThreshold) -> Self {
         let threshold = threshold.as_f64();
-        assert!(threshold >= 0.0 && threshold <= 1.0);
+        assert!((0.0..=1.0).contains(&threshold));
         RankingScoreThreshold(threshold)
     }
 }

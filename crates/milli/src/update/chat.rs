@@ -69,11 +69,6 @@ impl From<ChatConfig> for ChatSettings {
                     HybridQuery { semantic_ratio: SemanticRatio(semantic_ratio), embedder }
                 });
 
-                let matching_strategy = matching_strategy.map(MatchingStrategy::from);
-
-                let ranking_score_threshold =
-                    ranking_score_threshold.map(RankingScoreThreshold::from);
-
                 ChatSearchParams {
                     hybrid: Setting::some_or_not_set(hybrid),
                     limit: Setting::some_or_not_set(limit),

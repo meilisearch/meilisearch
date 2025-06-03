@@ -16,11 +16,10 @@ use meilisearch_types::milli::update::Setting;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
+use super::ChatsParam;
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
-
-use super::ChatsParam;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
@@ -70,8 +69,7 @@ async fn patch_settings(
 
     // TODO do a spawn_blocking here
     let mut wtxn = index_scheduler.write_txn()?;
-    let old_settings =
-        index_scheduler.chat_settings(&mut wtxn, &workspace_uid)?.unwrap_or_default();
+    let old_settings = index_scheduler.chat_settings(&wtxn, &workspace_uid)?.unwrap_or_default();
 
     let prompts = match new.prompts {
         Setting::Set(new_prompts) => DbChatCompletionPrompts {
