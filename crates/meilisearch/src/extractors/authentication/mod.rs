@@ -309,7 +309,7 @@ pub mod policies {
             token: &str,
         ) -> Result<TenantTokenOutcome, AuthError> {
             // Only search and chat actions can be accessed by a tenant token.
-            if A != actions::SEARCH && A != actions::CHAT {
+            if A != actions::SEARCH && A != actions::CHAT_COMPLETIONS {
                 return Ok(TenantTokenOutcome::NotATenantToken);
             }
 

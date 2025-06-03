@@ -53,7 +53,7 @@ pub struct CreateApiKey {
     #[schema(example = json!(["documents.add"]))]
     #[deserr(error = DeserrJsonError<InvalidApiKeyActions>, missing_field_error = DeserrJsonError::missing_api_key_actions)]
     pub actions: Vec<Action>,
-    /// A list of accesible indexes permitted for the key. `["*"]` for all indexes. The `*` character can be used as a wildcard when located at the last position. e.g. `products_*` to allow access to all indexes whose names start with `products_`.
+    /// A list of accessible indexes permitted for the key. `["*"]` for all indexes. The `*` character can be used as a wildcard when located at the last position. e.g. `products_*` to allow access to all indexes whose names start with `products_`.
     #[deserr(error = DeserrJsonError<InvalidApiKeyIndexes>, missing_field_error = DeserrJsonError::missing_api_key_indexes)]
     #[schema(value_type = Vec<String>, example = json!(["products"]))]
     pub indexes: Vec<IndexUidPattern>,
@@ -166,7 +166,7 @@ impl Key {
             name: Some("Default Chat API Key".to_string()),
             description: Some("Use it to chat and search from the frontend".to_string()),
             uid,
-            actions: vec![Action::Chat, Action::Search],
+            actions: vec![Action::ChatCompletions, Action::Search],
             indexes: vec![IndexUidPattern::all()],
             expires_at: None,
             created_at: now,
@@ -324,9 +324,9 @@ pub enum Action {
     #[deserr(rename = "network.update")]
     NetworkUpdate,
     // TODO should we rename it chatCompletions.get ?
-    #[serde(rename = "chat")]
-    #[deserr(rename = "chat")]
-    Chat,
+    #[serde(rename = "chatCompletion")]
+    #[deserr(rename = "chatCompletion")]
+    ChatCompletions,
     #[serde(rename = "chats.get")]
     #[deserr(rename = "chats.get")]
     ChatsGet,
@@ -367,7 +367,7 @@ impl Action {
             SETTINGS_ALL => Some(Self::SettingsAll),
             SETTINGS_GET => Some(Self::SettingsGet),
             SETTINGS_UPDATE => Some(Self::SettingsUpdate),
-            CHAT => Some(Self::Chat),
+            CHAT_COMPLETIONS => Some(Self::ChatCompletions),
             CHATS_GET => Some(Self::ChatsGet),
             CHATS_SETTINGS_ALL => Some(Self::ChatsSettingsAll),
             CHATS_SETTINGS_GET => Some(Self::ChatsSettingsGet),
@@ -438,7 +438,7 @@ pub mod actions {
     pub const NETWORK_GET: u8 = NetworkGet.repr();
     pub const NETWORK_UPDATE: u8 = NetworkUpdate.repr();
 
-    pub const CHAT: u8 = Chat.repr();
+    pub const CHAT_COMPLETIONS: u8 = ChatCompletions.repr();
     pub const CHATS_GET: u8 = ChatsGet.repr();
     pub const CHATS_SETTINGS_ALL: u8 = ChatsSettingsAll.repr();
     pub const CHATS_SETTINGS_GET: u8 = ChatsSettingsGet.repr();
