@@ -453,3 +453,57 @@ pub async fn shared_index_with_test_set() -> &'static Index<'static, Shared> {
         })
         .await
 }
+
+pub static GEO_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
+    json!([
+        {
+            "id": 1,
+            "name": "Taco Truck",
+            "address": "444 Salsa Street, Burritoville",
+            "type": "Mexican",
+            "rating": 9,
+            "_geo": {
+                "lat": 34.0522,
+                "lng": -118.2437
+            }
+        },
+        {
+            "id": 2,
+            "name": "La Bella Italia",
+            "address": "456 Elm Street, Townsville",
+            "type": "Italian",
+            "rating": 9,
+            "_geo": {
+                "lat": "45.4777599",
+                "lng": "9.1967508"
+            }
+        },
+        {
+            "id": 3,
+            "name": "Crêpe Truck",
+            "address": "2 Billig Avenue, Rouenville",
+            "type": "French",
+            "rating": 10
+        }
+    ])
+});
+
+pub async fn shared_index_with_geo_documents() -> &'static Index<'static, Shared> {
+    static INDEX: OnceCell<Index<'static, Shared>> = OnceCell::const_new();
+    INDEX
+        .get_or_init(|| async {
+            let server = Server::new_shared();
+            let index = server._index("SHARED_GEO_DOCUMENTS").to_shared();
+            let (response, _code) = index._add_documents(GEO_DOCUMENTS.clone(), None).await;
+            index.wait_task(response.uid()).await.succeeded();
+
+            let (response, _code) = index
+                ._update_settings(
+                    json!({"filterableAttributes": ["_geo"], "sortableAttributes": ["_geo"]}),
+                )
+                .await;
+            index.wait_task(response.uid()).await.succeeded();
+            index
+        })
+        .await
+}
