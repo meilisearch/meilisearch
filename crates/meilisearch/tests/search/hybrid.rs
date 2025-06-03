@@ -582,7 +582,7 @@ async fn distinct_is_applied() {
 #[actix_rt::test]
 async fn retrieve_vectors() {
     let server = Server::new_shared();
-    let index = index_with_documents_hf(&server, &SIMPLE_SEARCH_DOCUMENTS).await;
+    let index = index_with_documents_hf(server, &SIMPLE_SEARCH_DOCUMENTS).await;
 
     let (response, code) = index
         .search_post(
