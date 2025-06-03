@@ -187,6 +187,7 @@ impl CompatV5ToV6 {
                         v5::StarOr::Other(uid) => v6::IndexUidPattern::new_unchecked(uid.as_str()),
                     })
                     .collect(),
+                chats: vec![],
                 expires_at: key.expires_at,
                 created_at: key.created_at,
                 updated_at: key.updated_at,

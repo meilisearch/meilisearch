@@ -57,6 +57,10 @@ pub struct CreateApiKey {
     #[deserr(error = DeserrJsonError<InvalidApiKeyIndexes>, missing_field_error = DeserrJsonError::missing_api_key_indexes)]
     #[schema(value_type = Vec<String>, example = json!(["products"]))]
     pub indexes: Vec<IndexUidPattern>,
+    /// A list of accessible chats permitted for the key. `["*"]` for all chats. The `*` character can be used as a wildcard when located at the last position. e.g. `chats_*` to allow access to all indexes whose names start with `chats_`.
+    #[deserr(default, error = DeserrJsonError<InvalidApiKeyChats>)]
+    #[schema(value_type = Vec<String>, example = json!(["OpenAI", "ChatGPT"]))]
+    pub chats: Vec<IndexUidPattern>,
     /// Represent the expiration date and time as RFC 3339 format. `null` equals to no expiration time.
     #[deserr(error = DeserrJsonError<InvalidApiKeyExpiresAt>, try_from(Option<String>) = parse_expiration_date -> ParseOffsetDateTimeError, missing_field_error = DeserrJsonError::missing_api_key_expires_at)]
     pub expires_at: Option<OffsetDateTime>,
@@ -64,7 +68,7 @@ pub struct CreateApiKey {
 
 impl CreateApiKey {
     pub fn to_key(self) -> Key {
-        let CreateApiKey { description, name, uid, actions, indexes, expires_at } = self;
+        let CreateApiKey { description, name, uid, actions, indexes, chats, expires_at } = self;
         let now = OffsetDateTime::now_utc();
         Key {
             description,
@@ -72,6 +76,7 @@ impl CreateApiKey {
             uid,
             actions,
             indexes,
+            chats,
             expires_at,
             created_at: now,
             updated_at: now,
@@ -120,6 +125,7 @@ pub struct Key {
     pub uid: KeyId,
     pub actions: Vec<Action>,
     pub indexes: Vec<IndexUidPattern>,
+    pub chats: Vec<IndexUidPattern>,
     #[serde(with = "time::serde::rfc3339::option")]
     pub expires_at: Option<OffsetDateTime>,
     #[serde(with = "time::serde::rfc3339")]
@@ -138,6 +144,7 @@ impl Key {
             uid,
             actions: vec![Action::All],
             indexes: vec![IndexUidPattern::all()],
+            chats: vec![IndexUidPattern::all()],
             expires_at: None,
             created_at: now,
             updated_at: now,
@@ -153,6 +160,7 @@ impl Key {
             uid,
             actions: vec![Action::Search],
             indexes: vec![IndexUidPattern::all()],
+            chats: vec![],
             expires_at: None,
             created_at: now,
             updated_at: now,
@@ -168,6 +176,7 @@ impl Key {
             uid,
             actions: vec![Action::ChatCompletions, Action::Search],
             indexes: vec![IndexUidPattern::all()],
+            chats: vec![IndexUidPattern::all()],
             expires_at: None,
             created_at: now,
             updated_at: now,

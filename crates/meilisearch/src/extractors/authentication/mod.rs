@@ -165,16 +165,22 @@ pub mod policies {
         ExpiredTenantToken { exp: i64, now: i64 },
         #[error("The provided API key is invalid.")]
         InvalidApiKey,
-        #[error("The provided tenant token cannot acces the index `{index}`, allowed indexes are {allowed:?}.")]
+        #[error("The provided tenant token cannot access the index `{index}`, allowed indexes are {allowed:?}.")]
         TenantTokenAccessingnUnauthorizedIndex { index: String, allowed: Vec<String> },
         #[error(
-            "The API key used to generate this tenant token cannot acces the index `{index}`."
+            "The API key used to generate this tenant token cannot access the index `{index}`."
         )]
         TenantTokenApiKeyAccessingnUnauthorizedIndex { index: String },
         #[error(
-            "The API key cannot acces the index `{index}`, authorized indexes are {allowed:?}."
+            "The API key cannot access the index `{index}`, authorized indexes are {allowed:?}."
         )]
         ApiKeyAccessingnUnauthorizedIndex { index: String, allowed: Vec<String> },
+        #[error("The provided tenant token cannot access the chats `{chat}`, allowed chats are {allowed:?}.")]
+        TenantTokenAccessingnUnauthorizedChat { chat: String, allowed: Vec<String> },
+        #[error("The API key used to generate this tenant token cannot access the chat `{chat}`.")]
+        TenantTokenApiKeyAccessingnUnauthorizedChat { chat: String },
+        #[error("The API key cannot access the chat `{chat}`, authorized chats are {allowed:?}.")]
+        ApiKeyAccessingnUnauthorizedChat { chat: String, allowed: Vec<String> },
         #[error("The provided tenant token is invalid.")]
         InvalidTenantToken,
         #[error("Could not decode tenant token, {0}.")]
@@ -231,8 +237,8 @@ pub mod policies {
     pub struct ActionPolicy<const A: u8>;
 
     impl<const A: u8> Policy for ActionPolicy<A> {
-        /// Attempts to grant authentication from a bearer token (that can be a tenant token or an API key), the requested Action,
-        /// and a list of requested indexes.
+        /// Attempts to grant authentication from a bearer token (that can be a tenant token or an API key),
+        /// the requested Action, and a list of requested indexes.
         ///
         /// If the bearer token is not allowed for the specified indexes and action, returns `None`.
         /// Otherwise, returns an object containing the generated permissions: the search filters to add to a search, and the list of allowed indexes
