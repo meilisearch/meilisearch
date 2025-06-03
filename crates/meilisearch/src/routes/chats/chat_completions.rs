@@ -56,7 +56,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 
 /// Get a chat completion
 async fn chat(
-    index_scheduler: GuardedData<ActionPolicy<{ actions::CHAT }>, Data<IndexScheduler>>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::CHAT_COMPLETIONS }>, Data<IndexScheduler>>,
     auth_ctrl: web::Data<AuthController>,
     chats_param: web::Path<ChatsParam>,
     req: HttpRequest,
@@ -208,7 +208,10 @@ fn setup_search_tool(
 
 /// Process search request and return formatted results
 async fn process_search_request(
-    index_scheduler: &GuardedData<ActionPolicy<{ actions::CHAT }>, Data<IndexScheduler>>,
+    index_scheduler: &GuardedData<
+        ActionPolicy<{ actions::CHAT_COMPLETIONS }>,
+        Data<IndexScheduler>,
+    >,
     auth_ctrl: web::Data<AuthController>,
     search_queue: &web::Data<SearchQueue>,
     auth_token: &str,
@@ -288,7 +291,7 @@ async fn process_search_request(
 }
 
 async fn non_streamed_chat(
-    index_scheduler: GuardedData<ActionPolicy<{ actions::CHAT }>, Data<IndexScheduler>>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::CHAT_COMPLETIONS }>, Data<IndexScheduler>>,
     auth_ctrl: web::Data<AuthController>,
     search_queue: web::Data<SearchQueue>,
     workspace_uid: &str,
@@ -388,7 +391,7 @@ async fn non_streamed_chat(
 }
 
 async fn streamed_chat(
-    index_scheduler: GuardedData<ActionPolicy<{ actions::CHAT }>, Data<IndexScheduler>>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::CHAT_COMPLETIONS }>, Data<IndexScheduler>>,
     auth_ctrl: web::Data<AuthController>,
     search_queue: web::Data<SearchQueue>,
     workspace_uid: &str,
@@ -463,7 +466,10 @@ async fn streamed_chat(
 /// and report progress and errors.
 #[allow(clippy::too_many_arguments)]
 async fn run_conversation<C: Config>(
-    index_scheduler: &GuardedData<ActionPolicy<{ actions::CHAT }>, Data<IndexScheduler>>,
+    index_scheduler: &GuardedData<
+        ActionPolicy<{ actions::CHAT_COMPLETIONS }>,
+        Data<IndexScheduler>,
+    >,
     auth_ctrl: &web::Data<AuthController>,
     search_queue: &web::Data<SearchQueue>,
     auth_token: &str,
@@ -589,7 +595,10 @@ async fn run_conversation<C: Config>(
 
 #[allow(clippy::too_many_arguments)]
 async fn handle_meili_tools(
-    index_scheduler: &GuardedData<ActionPolicy<{ actions::CHAT }>, Data<IndexScheduler>>,
+    index_scheduler: &GuardedData<
+        ActionPolicy<{ actions::CHAT_COMPLETIONS }>,
+        Data<IndexScheduler>,
+    >,
     auth_ctrl: &web::Data<AuthController>,
     search_queue: &web::Data<SearchQueue>,
     auth_token: &str,
