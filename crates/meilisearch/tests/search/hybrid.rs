@@ -538,8 +538,8 @@ async fn query_combination() {
 // see <https://github.com/meilisearch/meilisearch/issues/5526>
 #[actix_rt::test]
 async fn distinct_is_applied() {
-    let server = Server::new().await;
-    let index = index_with_documents_user_provided(&server, &TEST_DISTINCT_DOCUMENTS).await;
+    let server = Server::new_shared();
+    let index = index_with_documents_user_provided(server, &TEST_DISTINCT_DOCUMENTS).await;
 
     let (response, code) = index.update_settings(json!({ "distinctAttribute": "distinct" } )).await;
     assert_eq!(202, code, "{:?}", response);
