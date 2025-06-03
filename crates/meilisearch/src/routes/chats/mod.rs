@@ -1,30 +1,35 @@
-use actix_web::{
-    web::{self, Data},
-    HttpResponse,
-};
-use deserr::{actix_web::AwebQueryParameter, Deserr};
+use actix_web::web::{self, Data};
+use actix_web::HttpResponse;
+use deserr::actix_web::AwebQueryParameter;
+use deserr::Deserr;
 use index_scheduler::IndexScheduler;
-use meilisearch_types::{
-    deserr::{query_params::Param, DeserrQueryParamError},
-    error::{
-        deserr_codes::{InvalidIndexLimit, InvalidIndexOffset},
-        ResponseError,
-    },
-    keys::actions,
-};
+use meilisearch_types::deserr::query_params::Param;
+use meilisearch_types::deserr::DeserrQueryParamError;
+use meilisearch_types::error::deserr_codes::{InvalidIndexLimit, InvalidIndexOffset};
+use meilisearch_types::error::ResponseError;
+use meilisearch_types::keys::actions;
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 use utoipa::{IntoParams, ToSchema};
 
-use crate::{
-    extractors::authentication::{policies::ActionPolicy, GuardedData},
-    routes::PAGINATION_DEFAULT_LIMIT,
-};
-
 use super::Pagination;
+use crate::extractors::authentication::policies::ActionPolicy;
+use crate::extractors::authentication::GuardedData;
+use crate::routes::PAGINATION_DEFAULT_LIMIT;
 
 pub mod chat_completions;
+mod errors;
 pub mod settings;
+mod utils;
+
+/// The function name to report search progress.
+const MEILI_SEARCH_PROGRESS_NAME: &str = "_meiliSearchProgress";
+/// The function name to append a conversation message in the user conversation.
+const MEILI_APPEND_CONVERSATION_MESSAGE_NAME: &str = "_meiliAppendConversationMessage";
+/// The function name to report sources to the frontend.
+const MEILI_SEARCH_SOURCES_NAME: &str = "_meiliSearchSources";
+/// The *internal* function name to provide to the LLM to search in indexes.
+const MEILI_SEARCH_IN_INDEX_FUNCTION_NAME: &str = "_meiliSearchInIndex";
 
 #[derive(Deserialize)]
 pub struct ChatsParam {
