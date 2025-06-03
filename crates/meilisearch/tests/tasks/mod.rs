@@ -210,8 +210,9 @@ async fn list_tasks_invalid_canceled_by_filter() {
 
 #[actix_rt::test]
 async fn list_tasks_status_and_type_filtered() {
-    let server = Server::new_shared();
-    let index = server.unique_index();
+    // Do not use a shared server because we want to assert stuff against the global list of tasks
+    let server = Server::new().await;
+    let index = server.index("test");
     let (task, _status_code) = index.create(None).await;
     index.wait_task(task.uid()).await.succeeded();
     index
@@ -285,8 +286,7 @@ async fn test_summarized_document_addition_or_update() {
         index.add_documents(json!({ "id": 42, "content": "doggos & fluff" }), None).await;
     index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.get_task(task.uid()).await;
-    snapshot!(json_string!(task,
-        { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(task,
         @r###"
     {
       "uid": "[uid]",
@@ -311,8 +311,7 @@ async fn test_summarized_document_addition_or_update() {
         index.add_documents(json!({ "id": 42, "content": "doggos & fluff" }), Some("id")).await;
     index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.get_task(task.uid()).await;
-    snapshot!(json_string!(task,
-        { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(task,
         @r###"
     {
       "uid": "[uid]",
@@ -346,8 +345,7 @@ async fn test_summarized_delete_documents_by_batch() {
         .await;
     index.wait_task(task.uid()).await.failed();
     let (task, _) = index.get_task(task.uid()).await;
-    snapshot!(json_string!(task,
-        { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(task,
         @r###"
     {
       "uid": "[uid]",
@@ -378,8 +376,7 @@ async fn test_summarized_delete_documents_by_batch() {
     let (del_task, _status_code) = index.delete_batch(vec![42]).await;
     index.wait_task(del_task.uid()).await.succeeded();
     let (task, _) = index.get_task(del_task.uid()).await;
-    snapshot!(json_string!(task,
-        { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(task,
         @r###"
     {
       "uid": "[uid]",
@@ -411,8 +408,7 @@ async fn test_summarized_delete_documents_by_filter() {
         index.delete_document_by_filter(json!({ "filter": "doggo = bernese" })).await;
     index.wait_task(task.uid()).await.failed();
     let (task, _) = index.get_task(task.uid()).await;
-    snapshot!(json_string!(task,
-        { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(task,
         @r###"
     {
       "uid": "[uid]",
@@ -444,8 +440,7 @@ async fn test_summarized_delete_documents_by_filter() {
         index.delete_document_by_filter(json!({ "filter": "doggo = bernese" })).await;
     index.wait_task(task.uid()).await.failed();
     let (task, _) = index.get_task(task.uid()).await;
-    snapshot!(json_string!(task,
-        { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(task,
         @r###"
     {
       "uid": "[uid]",
@@ -477,8 +472,7 @@ async fn test_summarized_delete_documents_by_filter() {
         index.delete_document_by_filter(json!({ "filter": "doggo = bernese" })).await;
     index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.get_task(task.uid()).await;
-    snapshot!(json_string!(task,
-        { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(task,
         @r###"
     {
       "uid": "[uid]",
@@ -508,8 +502,7 @@ async fn test_summarized_delete_document_by_id() {
     let (task, _status_code) = index.delete_document(1).await;
     index.wait_task(task.uid()).await.failed();
     let (task, _) = index.get_task(task.uid()).await;
-    snapshot!(json_string!(task,
-        { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(task,
         @r###"
     {
       "uid": "[uid]",
@@ -540,8 +533,7 @@ async fn test_summarized_delete_document_by_id() {
     let (task, _status_code) = index.delete_document(42).await;
     index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.get_task(task.uid()).await;
-    snapshot!(json_string!(task,
-        { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(task,
         @r###"
     {
       "uid": "[uid]",
@@ -583,8 +575,7 @@ async fn test_summarized_settings_update() {
     let (task,_status_code) = index.update_settings(json!({ "displayedAttributes": ["doggos", "name"], "filterableAttributes": ["age", "nb_paw_pads"], "sortableAttributes": ["iq"] })).await;
     index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.get_task(task.uid()).await;
-    snapshot!(json_string!(task,
-        { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(task,
         @r###"
     {
       "uid": "[uid]",
@@ -622,8 +613,7 @@ async fn test_summarized_index_creation() {
     let (task, _status_code) = index.create(None).await;
     index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.get_task(task.uid()).await;
-    snapshot!(json_string!(task,
-        { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(task,
         @r###"
     {
       "uid": "[uid]",
@@ -646,8 +636,7 @@ async fn test_summarized_index_creation() {
     let (task, _status_code) = index.create(Some("doggos")).await;
     index.wait_task(task.uid()).await.failed();
     let (task, _) = index.get_task(task.uid()).await;
-    snapshot!(json_string!(task,
-        { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(task,
         @r###"
     {
       "uid": "[uid]",
@@ -790,8 +779,7 @@ async fn test_summarized_index_update() {
     let (task, _status_code) = index.update(None).await;
     index.wait_task(task.uid()).await.failed();
     let (task, _) = index.get_task(task.uid()).await;
-    snapshot!(json_string!(task,
-        { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(task,
         @r###"
     {
       "uid": "[uid]",
@@ -819,8 +807,7 @@ async fn test_summarized_index_update() {
     let (task, _status_code) = index.update(Some("bones")).await;
     index.wait_task(task.uid()).await.failed();
     let (task, _) = index.get_task(task.uid()).await;
-    snapshot!(json_string!(task,
-        { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(task,
         @r###"
     {
       "uid": "[uid]",
@@ -851,8 +838,7 @@ async fn test_summarized_index_update() {
     let (task, _status_code) = index.update(None).await;
     index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.get_task(task.uid()).await;
-    snapshot!(json_string!(task,
-        { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(task,
         @r###"
     {
       "uid": "[uid]",
@@ -875,8 +861,7 @@ async fn test_summarized_index_update() {
     let (task, _status_code) = index.update(Some("bones")).await;
     index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.get_task(task.uid()).await;
-    snapshot!(json_string!(task,
-        { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(task,
         @r###"
     {
       "uid": "[uid]",
@@ -907,8 +892,7 @@ async fn test_summarized_index_swap() {
         .await;
     server.wait_task(task.uid()).await.failed();
     let (task, _) = server.get_task(task.uid()).await;
-    snapshot!(json_string!(task,
-        { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(task,
         @r###"
     {
       "uid": "[uid]",
@@ -1027,8 +1011,7 @@ async fn test_summarized_task_deletion() {
     let (task, _status_code) = server.delete_tasks("uids=0").await;
     index.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.get_task(task.uid()).await;
-    snapshot!(json_string!(task,
-        { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(task,
         @r###"
     {
       "uid": "[uid]",
@@ -1057,8 +1040,7 @@ async fn test_summarized_dump_creation() {
     let (task, _status_code) = server.create_dump().await;
     server.wait_task(task.uid()).await;
     let (task, _) = server.get_task(task.uid()).await;
-    snapshot!(json_string!(task,
-        { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".details.dumpUid" => "[dumpUid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(task,
         @r###"
     {
       "uid": "[uid]",
