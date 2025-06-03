@@ -2,10 +2,9 @@ use std::time::Instant;
 
 use big_s::S;
 use meili_snap::snapshot;
-use meilisearch_types::milli::obkv_to_json;
 use meilisearch_types::milli::update::IndexDocumentsMethod::*;
 use meilisearch_types::milli::update::Setting;
-use meilisearch_types::milli::FilterableAttributesRule;
+use meilisearch_types::milli::{obkv_to_json, FilterableAttributesRule};
 use meilisearch_types::tasks::{Kind, KindWithContent};
 
 use crate::insta_snapshot::snapshot_index_scheduler;

@@ -1,10 +1,9 @@
-use heed::{
-    types::{SerdeJson, Str},
-    RoTxn, RwTxn,
-};
+use heed::types::{SerdeJson, Str};
+use heed::{RoTxn, RwTxn};
 use serde::{Deserialize, Serialize};
 
-use crate::{index::main_key, Index};
+use crate::index::main_key;
+use crate::Index;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]

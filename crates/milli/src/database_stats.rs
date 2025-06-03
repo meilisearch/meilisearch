@@ -1,9 +1,6 @@
 use std::mem;
 
-use heed::Database;
-use heed::DatabaseStat;
-use heed::RoTxn;
-use heed::Unspecified;
+use heed::{Database, DatabaseStat, RoTxn, Unspecified};
 use serde::{Deserialize, Serialize};
 
 use crate::BEU32;
