@@ -12,8 +12,6 @@ use crate::json;
 async fn error_get_unexisting_task_status() {
     let server = Server::new_shared();
     let index = server.unique_index();
-    let (task, _status_code) = index.create(None).await;
-    index.wait_task(task.uid()).await.succeeded();
     let (response, code) = index.get_task(u32::MAX as u64).await;
 
     let expected_response = json!({
