@@ -1,6 +1,5 @@
 use meili_snap::{json_string, snapshot};
 use meilisearch_types::milli::constants::RESERVED_GEO_FIELD_NAME;
-use once_cell::sync::Lazy;
 
 use crate::common::shared_index_with_geo_documents;
 use crate::json;
