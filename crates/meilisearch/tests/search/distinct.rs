@@ -146,8 +146,8 @@ static DOCUMENT_DISTINCT_KEY: &str = "product_id";
 /// testing: https://github.com/meilisearch/meilisearch/issues/4078
 #[actix_rt::test]
 async fn distinct_search_with_offset_no_ranking() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let documents = DOCUMENTS.clone();
     index.add_documents(documents, Some(DOCUMENT_PRIMARY_KEY)).await;
@@ -163,50 +163,50 @@ async fn distinct_search_with_offset_no_ranking() {
     let hits = get_hits(&response);
     snapshot!(code, @"200 OK");
     snapshot!(hits.len(), @"2");
-    snapshot!(format!("{:?}", hits), @r#"["123456", "789012"]"#);
+    snapshot!(format!("{hits:?}"), @r#"["123456", "789012"]"#);
     snapshot!(response["estimatedTotalHits"] , @"11");
 
     let (response, code) = index.search_post(json!({"offset": 2, "limit": 2})).await;
     let hits = get_hits(&response);
     snapshot!(code, @"200 OK");
     snapshot!(hits.len(), @"2");
-    snapshot!(format!("{:?}", hits), @r#"["456789", "987654"]"#);
+    snapshot!(format!("{hits:?}"), @r#"["456789", "987654"]"#);
     snapshot!(response["estimatedTotalHits"], @"10");
 
     let (response, code) = index.search_post(json!({"offset": 4, "limit": 2})).await;
     let hits = get_hits(&response);
     snapshot!(code, @"200 OK");
     snapshot!(hits.len(), @"2");
-    snapshot!(format!("{:?}", hits), @r#"["234567", "345678"]"#);
+    snapshot!(format!("{hits:?}"), @r#"["234567", "345678"]"#);
     snapshot!(response["estimatedTotalHits"], @"6");
 
     let (response, code) = index.search_post(json!({"offset": 5, "limit": 2})).await;
     let hits = get_hits(&response);
     snapshot!(code, @"200 OK");
     snapshot!(hits.len(), @"1");
-    snapshot!(format!("{:?}", hits), @r#"["345678"]"#);
+    snapshot!(format!("{hits:?}"), @r#"["345678"]"#);
     snapshot!(response["estimatedTotalHits"], @"6");
 
     let (response, code) = index.search_post(json!({"offset": 6, "limit": 2})).await;
     let hits = get_hits(&response);
     snapshot!(code, @"200 OK");
     snapshot!(hits.len(), @"0");
-    snapshot!(format!("{:?}", hits), @r#"[]"#);
+    snapshot!(format!("{hits:?}"), @r#"[]"#);
     snapshot!(response["estimatedTotalHits"], @"6");
 
     let (response, code) = index.search_post(json!({"offset": 7, "limit": 2})).await;
     let hits = get_hits(&response);
     snapshot!(code, @"200 OK");
     snapshot!(hits.len(), @"0");
-    snapshot!(format!("{:?}", hits), @r#"[]"#);
+    snapshot!(format!("{hits:?}"), @r#"[]"#);
     snapshot!(response["estimatedTotalHits"], @"6");
 }
 
 /// testing: https://github.com/meilisearch/meilisearch/issues/4130
 #[actix_rt::test]
 async fn distinct_search_with_pagination_no_ranking() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let documents = DOCUMENTS.clone();
     index.add_documents(documents, Some(DOCUMENT_PRIMARY_KEY)).await;
@@ -222,7 +222,7 @@ async fn distinct_search_with_pagination_no_ranking() {
     let hits = get_hits(&response);
     snapshot!(code, @"200 OK");
     snapshot!(hits.len(), @"0");
-    snapshot!(format!("{:?}", hits), @r#"[]"#);
+    snapshot!(format!("{hits:?}"), @r#"[]"#);
     snapshot!(response["page"], @"0");
     snapshot!(response["totalPages"], @"3");
     snapshot!(response["totalHits"], @"6");
@@ -231,7 +231,7 @@ async fn distinct_search_with_pagination_no_ranking() {
     let hits = get_hits(&response);
     snapshot!(code, @"200 OK");
     snapshot!(hits.len(), @"2");
-    snapshot!(format!("{:?}", hits), @r#"["123456", "789012"]"#);
+    snapshot!(format!("{hits:?}"), @r#"["123456", "789012"]"#);
     snapshot!(response["page"], @"1");
     snapshot!(response["totalPages"], @"3");
     snapshot!(response["totalHits"], @"6");
@@ -240,7 +240,7 @@ async fn distinct_search_with_pagination_no_ranking() {
     let hits = get_hits(&response);
     snapshot!(code, @"200 OK");
     snapshot!(hits.len(), @"2");
-    snapshot!(format!("{:?}", hits), @r#"["456789", "987654"]"#);
+    snapshot!(format!("{hits:?}"), @r#"["456789", "987654"]"#);
     snapshot!(response["page"], @"2");
     snapshot!(response["totalPages"], @"3");
     snapshot!(response["totalHits"], @"6");
@@ -249,7 +249,7 @@ async fn distinct_search_with_pagination_no_ranking() {
     let hits = get_hits(&response);
     snapshot!(code, @"200 OK");
     snapshot!(hits.len(), @"2");
-    snapshot!(format!("{:?}", hits), @r#"["234567", "345678"]"#);
+    snapshot!(format!("{hits:?}"), @r#"["234567", "345678"]"#);
     snapshot!(response["page"], @"3");
     snapshot!(response["totalPages"], @"3");
     snapshot!(response["totalHits"], @"6");
@@ -258,7 +258,7 @@ async fn distinct_search_with_pagination_no_ranking() {
     let hits = get_hits(&response);
     snapshot!(code, @"200 OK");
     snapshot!(hits.len(), @"0");
-    snapshot!(format!("{:?}", hits), @r#"[]"#);
+    snapshot!(format!("{hits:?}"), @r#"[]"#);
     snapshot!(response["page"], @"4");
     snapshot!(response["totalPages"], @"3");
     snapshot!(response["totalHits"], @"6");
@@ -267,7 +267,7 @@ async fn distinct_search_with_pagination_no_ranking() {
     let hits = get_hits(&response);
     snapshot!(code, @"200 OK");
     snapshot!(hits.len(), @"3");
-    snapshot!(format!("{:?}", hits), @r#"["987654", "234567", "345678"]"#);
+    snapshot!(format!("{hits:?}"), @r#"["987654", "234567", "345678"]"#);
     snapshot!(response["page"], @"2");
     snapshot!(response["totalPages"], @"2");
     snapshot!(response["totalHits"], @"6");
@@ -275,13 +275,13 @@ async fn distinct_search_with_pagination_no_ranking() {
 
 #[actix_rt::test]
 async fn distinct_at_search_time() {
-    let server = Server::new().await;
-    let index = server.index("tamo");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let documents = NESTED_DOCUMENTS.clone();
     index.add_documents(documents, Some(DOCUMENT_PRIMARY_KEY)).await;
     let (task, _) = index.update_settings_filterable_attributes(json!(["color.main"])).await;
-    let task = index.wait_task(task.uid()).await;
+    let task = index.wait_task(task.uid()).await.succeeded();
     snapshot!(task, name: "succeed");
 
     fn get_hits(response: &Value) -> Vec<String> {
@@ -299,7 +299,7 @@ async fn distinct_at_search_time() {
     let hits = get_hits(&response);
     snapshot!(code, @"200 OK");
     snapshot!(hits.len(), @"3");
-    snapshot!(format!("{:?}", hits), @r###"["1", "2", "3"]"###);
+    snapshot!(format!("{hits:?}"), @r###"["1", "2", "3"]"###);
     snapshot!(response["page"], @"1");
     snapshot!(response["totalPages"], @"1");
     snapshot!(response["totalHits"], @"3");
