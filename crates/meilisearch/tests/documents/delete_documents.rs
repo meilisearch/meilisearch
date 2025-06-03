@@ -1,13 +1,12 @@
 use meili_snap::{json_string, snapshot};
 
-use crate::common::{GetAllDocumentsOptions, Server};
+use crate::common::{shared_does_not_exists_index, GetAllDocumentsOptions, Server};
 use crate::json;
 
 #[actix_rt::test]
 async fn delete_one_document_unexisting_index() {
-    let server = Server::new_shared();
-    let index = server.unique_index();
-    let (task, code) = index.delete_document(0).await;
+    let index = shared_does_not_exists_index().await;
+    let (task, code) = index.delete_document_by_filter_fail(json!({"filter": "a = b"})).await;
     assert_eq!(code, 202);
 
     index.wait_task(task.uid()).await.failed();
