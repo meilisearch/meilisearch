@@ -75,7 +75,7 @@ pub async fn list_workspaces(
     index_scheduler: GuardedData<ActionPolicy<{ actions::CHATS_GET }>, Data<IndexScheduler>>,
     paginate: AwebQueryParameter<ListChats, DeserrQueryParamError>,
 ) -> Result<HttpResponse, ResponseError> {
-    index_scheduler.features().check_chat_completions("Using the /chats settings route")?;
+    index_scheduler.features().check_chat_completions("listing the chats")?;
 
     debug!(parameters = ?paginate, "List chat workspaces");
     let filters = index_scheduler.filters();

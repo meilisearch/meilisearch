@@ -298,7 +298,7 @@ async fn non_streamed_chat(
     req: HttpRequest,
     mut chat_completion: CreateChatCompletionRequest,
 ) -> Result<HttpResponse, ResponseError> {
-    index_scheduler.features().check_chat_completions("Using the /chats chat completions route")?;
+    index_scheduler.features().check_chat_completions("using the /chats chat completions route")?;
     let filters = index_scheduler.filters();
 
     let rtxn = index_scheduler.read_txn()?;
@@ -398,7 +398,7 @@ async fn streamed_chat(
     req: HttpRequest,
     mut chat_completion: CreateChatCompletionRequest,
 ) -> Result<impl Responder, ResponseError> {
-    index_scheduler.features().check_chat_completions("Using the /chats chat completions route")?;
+    index_scheduler.features().check_chat_completions("using the /chats chat completions route")?;
     let filters = index_scheduler.filters();
 
     let rtxn = index_scheduler.read_txn()?;
