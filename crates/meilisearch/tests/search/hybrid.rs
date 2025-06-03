@@ -76,6 +76,48 @@ static SINGLE_DOCUMENT_VEC: Lazy<Value> = Lazy::new(|| {
     }])
 });
 
+static TEST_DISTINCT_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
+    // for query "Captain Marvel" and vector [1.0, 1.0]
+    json!([
+        {
+            "id": 0,
+            "search": "Captain Planet",
+            "desc": "#2 for keyword search, #3 for hybrid search",
+            "_vectors": {
+                "default": [-1.0, 0.0],
+            },
+            "distinct": 0
+        },
+        {
+            "id": 1,
+            "search": "Captain Marvel",
+            "desc": "#1 for keyword search, #4 for hybrid search",
+            "_vectors": {
+                "default": [-1.0, -1.0],
+            },
+            "distinct": 1
+        },
+        {
+            "id": 2,
+            "search": "Some Captain at least",
+            "desc": "#3 for keyword search, #1 for hybrid search",
+            "_vectors": {
+                "default": [1.0, 1.0],
+            },
+            "distinct": 0
+        },
+        {
+            "id": 3,
+            "search": "Irrelevant Capitaine",
+            "desc": "#4 for keyword search, #2 for hybrid search",
+            "_vectors": {
+                "default": [1.0, 0.0],
+            },
+            "distinct": 1
+        },
+    ])
+});
+
 static SIMPLE_SEARCH_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
     json!([
     {
@@ -491,6 +533,50 @@ async fn query_combination() {
     snapshot!(code, @"200 OK");
     snapshot!(response["hits"], @r###"[{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":{"embeddings":[[1.0,2.0]],"regenerate":false}},"_rankingScore":0.9242424242424242}]"###);
     snapshot!(response["semanticHitCount"], @"0");
+}
+
+// see <https://github.com/meilisearch/meilisearch/issues/5526>
+#[actix_rt::test]
+async fn distinct_is_applied() {
+    let server = Server::new().await;
+    let index = index_with_documents_user_provided(&server, &TEST_DISTINCT_DOCUMENTS).await;
+
+    let (response, code) = index.update_settings(json!({ "distinctAttribute": "distinct" } )).await;
+    assert_eq!(202, code, "{:?}", response);
+    index.wait_task(response.uid()).await.succeeded();
+
+    // pure keyword
+    let (response, code) = index
+        .search_post(
+            json!({"q": "Captain Marvel", "vector": [1.0, 1.0], "hybrid": {"semanticRatio": 0.0, "embedder": "default"}}),
+        )
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(response["hits"], @r###"[{"id":1,"search":"Captain Marvel","desc":"#1 for keyword search, #4 for hybrid search","distinct":1},{"id":0,"search":"Captain Planet","desc":"#2 for keyword search, #3 for hybrid search","distinct":0}]"###);
+    snapshot!(response["semanticHitCount"], @"null");
+    snapshot!(response["estimatedTotalHits"], @"2");
+
+    // pure semantic
+    let (response, code) = index
+    .search_post(
+        json!({"q": "Captain Marvel", "vector": [1.0, 1.0], "hybrid": {"semanticRatio": 1.0, "embedder": "default"}}),
+    )
+    .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(response["hits"], @r###"[{"id":2,"search":"Some Captain at least","desc":"#3 for keyword search, #1 for hybrid search","distinct":0},{"id":3,"search":"Irrelevant Capitaine","desc":"#4 for keyword search, #2 for hybrid search","distinct":1}]"###);
+    snapshot!(response["semanticHitCount"], @"2");
+    snapshot!(response["estimatedTotalHits"], @"2");
+
+    // hybrid
+    let (response, code) = index
+    .search_post(
+        json!({"q": "Captain Marvel", "vector": [1.0, 1.0], "hybrid": {"semanticRatio": 0.5, "embedder": "default"}}),
+    )
+    .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(response["hits"], @r###"[{"id":2,"search":"Some Captain at least","desc":"#3 for keyword search, #1 for hybrid search","distinct":0},{"id":1,"search":"Captain Marvel","desc":"#1 for keyword search, #4 for hybrid search","distinct":1}]"###);
+    snapshot!(response["semanticHitCount"], @"1");
+    snapshot!(response["estimatedTotalHits"], @"2");
 }
 
 #[actix_rt::test]
