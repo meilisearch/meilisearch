@@ -375,8 +375,10 @@ impl IndexScheduler {
                 post_commit_dabases_sizes
                     .get(dbname)
                     .map(|post_size| {
-                        use byte_unit::{Byte, UnitType::Binary};
                         use std::cmp::Ordering::{Equal, Greater, Less};
+
+                        use byte_unit::Byte;
+                        use byte_unit::UnitType::Binary;
 
                         let post = Byte::from_u64(*post_size as u64).get_appropriate_unit(Binary);
                         let diff_size = post_size.abs_diff(*pre_size) as u64;

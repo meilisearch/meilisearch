@@ -1,5 +1,4 @@
-use std::collections::BTreeSet;
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::convert::Infallible;
 use std::fmt::Write;
 use std::{io, str};

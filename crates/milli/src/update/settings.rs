@@ -23,8 +23,8 @@ use crate::error::UserError;
 use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
 use crate::filterable_attributes_rules::match_faceted_field;
 use crate::index::{
-    ChatConfig, IndexEmbeddingConfig, PrefixSearch,
-    SearchParameters, DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS,
+    ChatConfig, IndexEmbeddingConfig, PrefixSearch, SearchParameters,
+    DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS,
 };
 use crate::order_by_map::OrderByMap;
 use crate::prompt::{default_max_bytes, default_template_text, PromptData};
@@ -1325,9 +1325,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                                 Setting::NotSet => search_parameters.distinct.clone(),
                             },
                             matching_strategy: match matching_strategy {
-                                Setting::Set(matching_strategy) => {
-                                    Some(*matching_strategy)
-                                }
+                                Setting::Set(matching_strategy) => Some(*matching_strategy),
                                 Setting::Reset => None,
                                 Setting::NotSet => search_parameters.matching_strategy,
                             },

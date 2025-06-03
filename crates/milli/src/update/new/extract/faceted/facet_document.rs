@@ -4,14 +4,13 @@ use serde_json::Value;
 
 use crate::attribute_patterns::PatternMatch;
 use crate::fields_ids_map::metadata::Metadata;
+use crate::filterable_attributes_rules::match_faceted_field;
 use crate::update::new::document::Document;
 use crate::update::new::extract::geo::extract_geo_coordinates;
 use crate::update::new::extract::perm_json_p;
 use crate::{
     FieldId, FilterableAttributesRule, GlobalFieldsIdsMap, InternalError, Result, UserError,
 };
-
-use crate::filterable_attributes_rules::match_faceted_field;
 
 #[allow(clippy::too_many_arguments)]
 pub fn extract_document_facets<'doc>(
