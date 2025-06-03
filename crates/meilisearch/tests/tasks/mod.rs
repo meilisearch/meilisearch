@@ -49,8 +49,9 @@ async fn get_task_status() {
 
 #[actix_rt::test]
 async fn list_tasks() {
-    let server = Server::new_shared();
-    let index = server.unique_index();
+    // Do not use a shared server because we want to assert stuff against the global list of tasks
+    let server = Server::new().await;
+    let index = server.index("test");
     let (task, _status_code) = index.create(None).await;
     index.wait_task(task.uid()).await.succeeded();
     index
