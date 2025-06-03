@@ -208,8 +208,8 @@ impl SseEventSender {
 /// Format documents based on the provided template and maximum bytes.
 ///
 /// This formatting function is usually used to generate a summary of the documents for LLMs.
-pub fn format_documents<'t, 'doc>(
-    rtxn: &RoTxn<'t>,
+pub fn format_documents<'doc>(
+    rtxn: &RoTxn<'_>,
     index: &Index,
     doc_alloc: &'doc Bump,
     internal_docids: Vec<DocumentId>,

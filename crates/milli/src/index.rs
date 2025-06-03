@@ -1984,7 +1984,7 @@ impl TryFrom<f64> for RankingScoreThreshold {
     type Error = InvalidSearchRankingScoreThreshold;
 
     fn try_from(value: f64) -> StdResult<Self, Self::Error> {
-        if value < 0.0 || value > 1.0 {
+        if !(0.0..=1.0).contains(&value) {
             Err(InvalidSearchRankingScoreThreshold)
         } else {
             Ok(RankingScoreThreshold(value))

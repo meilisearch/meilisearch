@@ -119,7 +119,7 @@ fn setup_search_tool(
     prompts: &DbChatCompletionPrompts,
 ) -> Result<FunctionSupport, ResponseError> {
     let tools = chat_completion.tools.get_or_insert_default();
-    if tools.iter().find(|t| t.function.name == MEILI_SEARCH_IN_INDEX_FUNCTION_NAME).is_some() {
+    if tools.iter().any(|t| t.function.name == MEILI_SEARCH_IN_INDEX_FUNCTION_NAME) {
         panic!("{MEILI_SEARCH_IN_INDEX_FUNCTION_NAME} function already set");
     }
 
@@ -149,7 +149,7 @@ fn setup_search_tool(
     let mut function_description = prompts.search_description.clone();
     index_scheduler.try_for_each_index::<_, ()>(|name, index| {
         // Make sure to skip unauthorized indexes
-        if !filters.is_index_authorized(&name) {
+        if !filters.is_index_authorized(name) {
             return Ok(());
         }
 
@@ -350,7 +350,7 @@ async fn non_streamed_chat(
                             &index_scheduler,
                             auth_ctrl.clone(),
                             &search_queue,
-                            &auth_token,
+                            auth_token,
                             index_uid,
                             q,
                         )
@@ -461,6 +461,7 @@ async fn streamed_chat(
 
 /// Updates the chat completion with the new messages, streams the LLM tokens,
 /// and report progress and errors.
+#[allow(clippy::too_many_arguments)]
 async fn run_conversation<C: Config>(
     index_scheduler: &GuardedData<ActionPolicy<{ actions::CHAT }>, Data<IndexScheduler>>,
     auth_ctrl: &web::Data<AuthController>,
@@ -515,7 +516,7 @@ async fn run_conversation<C: Config>(
                                     }
                                 });
 
-                            if global_tool_calls.get(index).map_or(false, Call::is_external) {
+                            if global_tool_calls.get(index).is_some_and(Call::is_external) {
                                 todo!("Support forwarding external tool calls");
                             }
                         }
@@ -553,10 +554,10 @@ async fn run_conversation<C: Config>(
                             );
 
                             handle_meili_tools(
-                                &index_scheduler,
-                                &auth_ctrl,
-                                &search_queue,
-                                &auth_token,
+                                index_scheduler,
+                                auth_ctrl,
+                                search_queue,
+                                auth_token,
                                 chat_settings,
                                 tx,
                                 meili_calls,
@@ -586,6 +587,7 @@ async fn run_conversation<C: Config>(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn handle_meili_tools(
     index_scheduler: &GuardedData<ActionPolicy<{ actions::CHAT }>, Data<IndexScheduler>>,
     auth_ctrl: &web::Data<AuthController>,
@@ -621,10 +623,10 @@ async fn handle_meili_tools(
 
         let result = match serde_json::from_str(&call.function.arguments) {
             Ok(SearchInIndexParameters { index_uid, q }) => process_search_request(
-                &index_scheduler,
+                index_scheduler,
                 auth_ctrl.clone(),
-                &search_queue,
-                &auth_token,
+                search_queue,
+                auth_token,
                 index_uid,
                 q,
             )
