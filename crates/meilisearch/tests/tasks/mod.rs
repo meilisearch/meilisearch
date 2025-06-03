@@ -200,11 +200,12 @@ async fn list_tasks_invalid_canceled_by_filter() {
     let index = server.unique_index();
     let (task, _status_code) = index.create(None).await;
     index.wait_task(task.uid()).await.succeeded();
-    index
+    let (task, _code) = index
         .add_documents(serde_json::from_str(include_str!("../assets/test_set.json")).unwrap(), None)
         .await;
 
-    let (response, code) = index.filtered_tasks(&[], &[], &["0"]).await;
+    let (response, code) =
+        index.filtered_tasks(&[], &[], &[format!("{}", task.uid()).as_str()]).await;
     assert_eq!(code, 200, "{response}");
     assert_eq!(response["results"].as_array().unwrap().len(), 0);
 }
