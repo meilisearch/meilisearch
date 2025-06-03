@@ -4,22 +4,22 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, labeled, unlabeled]
 
-env:
-  GH_TOKEN: ${{ secrets.MEILI_BOT_GH_PAT }}
-
 jobs:
   check-labels:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Check db change labels
         id: check_labels
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           URL=/repos/meilisearch/meilisearch/pulls/${{ github.event.pull_request.number }}/labels
           echo ${{ github.event.pull_request.number }}
           echo $URL
           LABELS=$(gh api -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" /repos/meilisearch/meilisearch/issues/${{ github.event.pull_request.number }}/labels -q .[].name)
+          echo "Labels: $LABELS"
           if [[ ! "$LABELS" =~ "db change" && ! "$LABELS" =~ "no db change" ]]; then
             echo "::error::Pull request must contain either the 'db change' or 'no db change' label."
             exit 1
