@@ -1309,7 +1309,7 @@ async fn test_summarized_dump_creation() {
     let server = Server::new_shared();
     let (task, _status_code) = server.create_dump().await;
     server.wait_task(task.uid()).await.succeeded();
-    let (batch, _) = server.get_batch(task.uid() as u32).await;
+    let (batch, _) = server.get_latest_batch().await;
     assert_json_snapshot!(batch,
         {
             ".uid" => "[uid]",
