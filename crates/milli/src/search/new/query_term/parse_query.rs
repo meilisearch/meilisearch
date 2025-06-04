@@ -386,51 +386,56 @@ mod tests {
         let temp_index = temp_index_with_documents();
         let rtxn = temp_index.read_txn()?;
         let ctx = SearchContext::new(&temp_index, &rtxn)?;
-        
+
         let nbr_typos = number_of_typos_allowed(&ctx)?;
-        
+
         // ASCII word "doggy" (5 chars, 5 bytes)
         let ascii_word = "doggy";
         let ascii_typos = nbr_typos(ascii_word);
-        
-        // Cyrillic word "собак" (5 chars, 10 bytes)  
+
+        // Cyrillic word "собак" (5 chars, 10 bytes)
         let cyrillic_word = "собак";
         let cyrillic_typos = nbr_typos(cyrillic_word);
-        
+
         // Both words have 5 characters, so they should have the same typo tolerance
-        assert_eq!(ascii_typos, cyrillic_typos,
-            "Words with same character count should get same typo tolerance");
-        
+        assert_eq!(
+            ascii_typos, cyrillic_typos,
+            "Words with same character count should get same typo tolerance"
+        );
+
         // With default settings (oneTypo=5, twoTypos=9), 5-char words should get 1 typo
         assert_eq!(ascii_typos, 1, "5-character word should get 1 typo tolerance");
         assert_eq!(cyrillic_typos, 1, "5-character word should get 1 typo tolerance");
-        
+
         Ok(())
     }
 
-    #[test] 
+    #[test]
     fn test_various_unicode_scripts() -> Result<()> {
         let temp_index = temp_index_with_documents();
         let rtxn = temp_index.read_txn()?;
         let ctx = SearchContext::new(&temp_index, &rtxn)?;
-        
+
         let nbr_typos = number_of_typos_allowed(&ctx)?;
-        
+
         // Let's use 5-character words for consistent testing
         let five_char_words = vec![
-            ("doggy", "ASCII"),           // 5 chars, 5 bytes
-            ("café!", "Accented"),        // 5 chars, 7 bytes
-            ("собак", "Cyrillic"),        // 5 chars, 10 bytes 
+            ("doggy", "ASCII"),    // 5 chars, 5 bytes
+            ("café!", "Accented"), // 5 chars, 7 bytes
+            ("собак", "Cyrillic"), // 5 chars, 10 bytes
         ];
-        
+
         let expected_typos = 1; // With default settings, 5-char words get 1 typo
-        
+
         for (word, script) in five_char_words {
             let typos = nbr_typos(word);
-            assert_eq!(typos, expected_typos,
-                "{} word '{}' should get {} typo(s)", script, word, expected_typos);
+            assert_eq!(
+                typos, expected_typos,
+                "{} word '{}' should get {} typo(s)",
+                script, word, expected_typos
+            );
         }
-        
+
         Ok(())
     }
 }
