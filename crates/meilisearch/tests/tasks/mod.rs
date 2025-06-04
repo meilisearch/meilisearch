@@ -1050,7 +1050,7 @@ async fn test_summarized_dump_creation() {
       "type": "dumpCreation",
       "canceledBy": null,
       "details": {
-        "dumpUid": "[dumpUid]"
+        "dumpUid": "[dump_uid]"
       },
       "error": null,
       "duration": "[duration]",
