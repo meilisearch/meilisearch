@@ -128,7 +128,8 @@ impl Display for Value {
                 ".finishedAt" => "[date]",
                 ".duration" => "[duration]",
                 ".processingTimeMs" => "[duration]",
-                ".details.embedders.*.url" => "[url]"
+                ".details.embedders.*.url" => "[url]",
+                ".details.dumpUid" => "[dump_uid]",
             })
         )
     }
