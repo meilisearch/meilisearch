@@ -24,7 +24,8 @@ async fn experimental_features() {
       "containsFilter": false,
       "network": false,
       "getTaskDocumentsRoute": false,
-      "compositeEmbedders": false
+      "compositeEmbedders": false,
+      "chatCompletions": false
     }
     "###);
 
@@ -39,7 +40,8 @@ async fn experimental_features() {
       "containsFilter": false,
       "network": false,
       "getTaskDocumentsRoute": false,
-      "compositeEmbedders": false
+      "compositeEmbedders": false,
+      "chatCompletions": false
     }
     "###);
 
@@ -54,7 +56,8 @@ async fn experimental_features() {
       "containsFilter": false,
       "network": false,
       "getTaskDocumentsRoute": false,
-      "compositeEmbedders": false
+      "compositeEmbedders": false,
+      "chatCompletions": false
     }
     "###);
 
@@ -70,7 +73,8 @@ async fn experimental_features() {
       "containsFilter": false,
       "network": false,
       "getTaskDocumentsRoute": false,
-      "compositeEmbedders": false
+      "compositeEmbedders": false,
+      "chatCompletions": false
     }
     "###);
 
@@ -86,7 +90,8 @@ async fn experimental_features() {
       "containsFilter": false,
       "network": false,
       "getTaskDocumentsRoute": false,
-      "compositeEmbedders": false
+      "compositeEmbedders": false,
+      "chatCompletions": false
     }
     "###);
 }
@@ -109,7 +114,8 @@ async fn experimental_feature_metrics() {
       "containsFilter": false,
       "network": false,
       "getTaskDocumentsRoute": false,
-      "compositeEmbedders": false
+      "compositeEmbedders": false,
+      "chatCompletions": false
     }
     "###);
 
@@ -156,7 +162,7 @@ async fn errors() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "Unknown field `NotAFeature`: expected one of `metrics`, `logsRoute`, `editDocumentsByFunction`, `containsFilter`, `network`, `getTaskDocumentsRoute`, `compositeEmbedders`",
+      "message": "Unknown field `NotAFeature`: expected one of `metrics`, `logsRoute`, `editDocumentsByFunction`, `containsFilter`, `network`, `getTaskDocumentsRoute`, `compositeEmbedders`, `chatCompletions`",
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad_request"
