@@ -3,7 +3,6 @@ use meilisearch::Opt;
 use tempfile::TempDir;
 
 use super::test_settings_documents_indexing_swapping_and_search;
-use crate::common::shared_index_with_nested_documents;
 use crate::{
     common::{default_settings, shared_index_with_documents, Server, DOCUMENTS, NESTED_DOCUMENTS},
     json,
