@@ -3,6 +3,7 @@ use meilisearch::Opt;
 use tempfile::TempDir;
 
 use super::test_settings_documents_indexing_swapping_and_search;
+use crate::common::shared_index_with_nested_documents;
 use crate::{
     common::{default_settings, shared_index_with_documents, Server, DOCUMENTS, NESTED_DOCUMENTS},
     json,
@@ -10,17 +11,7 @@ use crate::{
 
 #[actix_rt::test]
 async fn search_with_filter_string_notation() {
-    let server = Server::new_shared();
-    let index = server.unique_index();
-
-    let (_, code) = index.update_settings(json!({"filterableAttributes": ["title"]})).await;
-    snapshot!(code, @"202 Accepted");
-
-    let documents = DOCUMENTS.clone();
-    let (task, code) = index.add_documents(documents, None).await;
-    snapshot!(code, @"202 Accepted");
-    let res = index.wait_task(task.uid()).await.succeeded();
-    snapshot!(res["status"], @r###""succeeded""###);
+    let index = shared_index_with_documents().await;
 
     index
         .search(
@@ -34,6 +25,7 @@ async fn search_with_filter_string_notation() {
         )
         .await;
 
+    let server = Server::new_shared();
     let nested_index = server.unique_index();
 
     let (_, code) = nested_index
@@ -44,8 +36,7 @@ async fn search_with_filter_string_notation() {
     let documents = NESTED_DOCUMENTS.clone();
     let (task, code) = nested_index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let res = nested_index.wait_task(task.uid()).await.succeeded();
-    snapshot!(res["status"], @r###""succeeded""###);
+    nested_index.wait_task(task.uid()).await.succeeded();
 
     nested_index
         .search(
@@ -278,8 +269,7 @@ async fn search_with_pattern_filter_settings_scenario_1() {
 
     let (task, code) = index.add_documents(NESTED_DOCUMENTS.clone(), None).await;
     assert_eq!(code, 202, "{task}");
-    let response = index.wait_task(task.uid()).await.succeeded();
-    snapshot!(response["status"], @r###""succeeded""###);
+    index.wait_task(task.uid()).await.succeeded();
 
     let (task, code) = index
         .update_settings(json!({"filterableAttributes": [{
@@ -291,8 +281,7 @@ async fn search_with_pattern_filter_settings_scenario_1() {
         }]}))
         .await;
     assert_eq!(code, 202, "{task}");
-    let response = index.wait_task(task.uid()).await.succeeded();
-    snapshot!(response["status"], @r###""succeeded""###);
+    index.wait_task(task.uid()).await.succeeded();
 
     // Check if the Equality filter works
     index
@@ -357,8 +346,7 @@ async fn search_with_pattern_filter_settings_scenario_1() {
         }]}))
         .await;
     assert_eq!(code, 202, "{task}");
-    let response = index.wait_task(task.uid()).await.succeeded();
-    snapshot!(response["status"], @r###""succeeded""###);
+    index.wait_task(task.uid()).await.succeeded();
 
     // Check if the Equality filter works
     index
@@ -469,8 +457,7 @@ async fn search_with_pattern_filter_settings_scenario_1() {
         }]}))
         .await;
     assert_eq!(code, 202, "{task}");
-    let response = index.wait_task(task.uid()).await.succeeded();
-    snapshot!(response["status"], @r###""succeeded""###);
+    index.wait_task(task.uid()).await.succeeded();
 
     // Check if the Equality filter returns an error
     index
@@ -569,8 +556,7 @@ async fn search_with_pattern_filter_settings_scenario_1() {
         }]}))
         .await;
     assert_eq!(code, 202, "{task}");
-    let response = index.wait_task(task.uid()).await.succeeded();
-    snapshot!(response["status"], @r###""succeeded""###);
+    index.wait_task(task.uid()).await.succeeded();
 
     // Check if the Equality filter works
     index
