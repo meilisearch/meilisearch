@@ -147,23 +147,20 @@ async fn simple_search() {
         .search(
             json!({"q": "進撃", "locales": ["jpn"], "attributesToRetrieve": ["id"]}),
             |response, code| {
-                snapshot!(response, @r###"
+                snapshot!(response, @r#"
                 {
                   "hits": [
                     {
                       "id": 852
-                    },
-                    {
-                      "id": 853
                     }
                   ],
                   "query": "進撃",
                   "processingTimeMs": "[duration]",
                   "limit": 20,
                   "offset": 0,
-                  "estimatedTotalHits": 2
+                  "estimatedTotalHits": 1
                 }
-                "###);
+                "#);
                 snapshot!(code, @"200 OK");
             },
         )
@@ -172,23 +169,20 @@ async fn simple_search() {
     // chinese
     index
         .search(json!({"q": "进击", "attributesToRetrieve": ["id"]}), |response, code| {
-            snapshot!(response, @r###"
+            snapshot!(response, @r#"
             {
               "hits": [
                 {
                   "id": 853
-                },
-                {
-                  "id": 852
                 }
               ],
               "query": "进击",
               "processingTimeMs": "[duration]",
               "limit": 20,
               "offset": 0,
-              "estimatedTotalHits": 2
+              "estimatedTotalHits": 1
             }
-            "###);
+            "#);
             snapshot!(code, @"200 OK");
         })
         .await;
