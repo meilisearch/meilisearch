@@ -821,22 +821,6 @@ async fn list_api_keys() {
           "updatedAt": "[ignored]"
         },
         {
-          "name": "Default Chat API Key",
-          "description": "Use it to chat and search from the frontend",
-          "key": "[ignored]",
-          "uid": "[ignored]",
-          "actions": [
-            "chatCompletion",
-            "search"
-          ],
-          "indexes": [
-            "*"
-          ],
-          "expiresAt": null,
-          "createdAt": "[ignored]",
-          "updatedAt": "[ignored]"
-        },
-        {
           "name": "Default Search API Key",
           "description": "Use it to search from the frontend",
           "key": "[ignored]",
@@ -858,6 +842,22 @@ async fn list_api_keys() {
           "uid": "[ignored]",
           "actions": [
             "*"
+          ],
+          "indexes": [
+            "*"
+          ],
+          "expiresAt": null,
+          "createdAt": "[ignored]",
+          "updatedAt": "[ignored]"
+        },
+        {
+          "name": "Default Chat API Key",
+          "description": "Use it to chat and search from the frontend",
+          "key": "[ignored]",
+          "uid": "[ignored]",
+          "actions": [
+            "chatCompletion",
+            "search"
           ],
           "indexes": [
             "*"
