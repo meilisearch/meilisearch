@@ -623,3 +623,88 @@ async fn get_and_set_network() {
     }
     "###);
 }
+
+
+#[actix_rt::test]
+async fn index_with_shards() {
+    let server = Server::new().await;
+
+    let (response, code) = server.set_features(json!({"network": true})).await;
+    meili_snap::snapshot!(code, @"200 OK");
+    meili_snap::snapshot!(meili_snap::json_string!(response["network"]), @r#"true"#);
+
+    // adding self
+    let (response, code) = server.set_network(json!({"self": "myself"})).await;
+    meili_snap::snapshot!(code, @"200 OK");
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    {
+      "self": "myself",
+      "remotes": {}
+    }
+    "###);
+
+    // adding remotes
+    let (response, code) = server
+        .set_network(json!({
+          "self": "myself",
+          "remotes": {
+            "myself": {
+                "url": "http://localhost:7700"
+            },
+            "thy": {
+                "url": "http://localhost:7701",
+                "searchApiKey": "foo"
+            }
+        }}))
+        .await;
+
+    meili_snap::snapshot!(code, @"200 OK");
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    {
+      "self": "myself",
+      "remotes": {
+        "myself": {
+          "url": "http://localhost:7700",
+          "searchApiKey": null
+        },
+        "thy": {
+          "url": "http://localhost:7701",
+          "searchApiKey": "foo"
+        }
+      }
+    }
+    "###);
+
+    // adding one remote
+    let (response, code) = server
+        .set_network(json!({"remotes": {
+            "them": {
+                "url": "http://localhost:7702",
+                "searchApiKey": "baz"
+            }
+        }}))
+        .await;
+
+    meili_snap::snapshot!(code, @"200 OK");
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    {
+      "self": "myself",
+      "remotes": {
+        "myself": {
+          "url": "http://localhost:7700",
+          "searchApiKey": null
+        },
+        "them": {
+          "url": "http://localhost:7702",
+          "searchApiKey": "baz"
+        },
+        "thy": {
+          "url": "http://localhost:7701",
+          "searchApiKey": "bar"
+        }
+      }
+    }
+    "###);
+
+
+}

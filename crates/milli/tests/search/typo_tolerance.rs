@@ -138,6 +138,7 @@ fn test_typo_disabled_on_word() {
             &mut new_fields_ids_map,
             &|| false,
             Progress::default(),
+            &[],
         )
         .unwrap();
 

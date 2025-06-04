@@ -329,6 +329,7 @@ fn criteria_ascdesc() {
             &mut new_fields_ids_map,
             &|| false,
             Progress::default(),
+            &[],
         )
         .unwrap();
 

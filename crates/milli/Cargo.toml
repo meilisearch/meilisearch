@@ -111,6 +111,7 @@ utoipa = { version = "5.3.1", features = [
     "openapi_extensions",
 ] }
 lru = "0.13.0"
+blake2 = "0.10.6"
 
 [dev-dependencies]
 mimalloc = { version = "0.1.43", default-features = false }

@@ -84,6 +84,7 @@ impl TempIndex {
             &mut new_fields_ids_map,
             &|| false,
             Progress::default(),
+            &[],
         )?;
 
         if let Some(error) = operation_stats.into_iter().find_map(|stat| stat.error) {
@@ -166,6 +167,7 @@ impl TempIndex {
             &mut new_fields_ids_map,
             &|| false,
             Progress::default(),
+            &[],
         )?;
 
         if let Some(error) = operation_stats.into_iter().find_map(|stat| stat.error) {
@@ -240,6 +242,7 @@ fn aborting_indexation() {
             &mut new_fields_ids_map,
             &|| false,
             Progress::default(),
+            &[],
         )
         .unwrap();
 

@@ -1,5 +1,6 @@
 use std::sync::atomic::Ordering;
 
+use blake2::{Blake2b512, Digest};
 use bumpalo::collections::CollectIn;
 use bumpalo::Bump;
 use bumparaw_collections::RawMap;
@@ -71,6 +72,7 @@ impl<'pl> DocumentOperation<'pl> {
         new_fields_ids_map: &mut FieldsIdsMap,
         must_stop_processing: &MSP,
         progress: Progress,
+        shards: &[&str],
     ) -> Result<(DocumentOperationChanges<'pl>, Vec<PayloadStats>, Option<PrimaryKey<'pl>>)>
     where
         MSP: Fn() -> bool,
@@ -108,6 +110,7 @@ impl<'pl> DocumentOperation<'pl> {
                     &docids_version_offsets,
                     IndexDocumentsMethod::ReplaceDocuments,
                     payload,
+                    shards,
                 ),
                 Payload::Update(payload) => extract_addition_payload_changes(
                     indexer,
@@ -121,6 +124,7 @@ impl<'pl> DocumentOperation<'pl> {
                     &docids_version_offsets,
                     IndexDocumentsMethod::UpdateDocuments,
                     payload,
+                    shards,
                 ),
                 Payload::Deletion(to_delete) => extract_deletion_payload_changes(
                     index,
@@ -128,6 +132,7 @@ impl<'pl> DocumentOperation<'pl> {
                     &mut available_docids,
                     &docids_version_offsets,
                     to_delete,
+                    shards,
                 ),
             };
 
@@ -174,6 +179,7 @@ fn extract_addition_payload_changes<'r, 'pl: 'r>(
     main_docids_version_offsets: &hashbrown::HashMap<&'pl str, PayloadOperations<'pl>>,
     method: IndexDocumentsMethod,
     payload: &'pl [u8],
+    shards: &[&str],
 ) -> Result<hashbrown::HashMap<&'pl str, PayloadOperations<'pl>>> {
     use IndexDocumentsMethod::{ReplaceDocuments, UpdateDocuments};
 
@@ -184,7 +190,7 @@ fn extract_addition_payload_changes<'r, 'pl: 'r>(
     while let Some(doc) = iter.next().transpose().map_err(InternalError::SerdeJson)? {
         *bytes = previous_offset as u64;
 
-        // Only guess the primary key if it is the first document
+        // Only guess the primary key if it is the first document and whatever the shard is
         let retrieved_primary_key = if previous_offset == 0 {
             let doc = RawMap::from_raw_value_and_hasher(doc, FxBuildHasher, indexer)
                 .map(Some)
@@ -212,6 +218,11 @@ fn extract_addition_payload_changes<'r, 'pl: 'r>(
 
         let external_id =
             retrieved_primary_key.extract_fields_and_docid(doc, new_fields_ids_map, indexer)?;
+
+        if must_be_skipped(external_id.to_de(), shards) {
+            previous_offset = iter.byte_offset();
+            continue;
+        }
 
         let external_id = external_id.to_de();
         let current_offset = iter.byte_offset();
@@ -330,10 +341,15 @@ fn extract_deletion_payload_changes<'s, 'pl: 's>(
     available_docids: &mut AvailableIds,
     main_docids_version_offsets: &hashbrown::HashMap<&'s str, PayloadOperations<'pl>>,
     to_delete: &'pl [&'pl str],
+    shards: &[&str],
 ) -> Result<hashbrown::HashMap<&'s str, PayloadOperations<'pl>>> {
     let mut new_docids_version_offsets = hashbrown::HashMap::<&str, PayloadOperations<'pl>>::new();
 
     for external_id in to_delete {
+        if must_be_skipped(external_id, shards) {
+            continue;
+        }
+
         match main_docids_version_offsets.get(external_id) {
             None => {
                 match index.external_documents_ids().get(rtxn, external_id) {
@@ -610,5 +626,27 @@ pub fn first_update_pointer(docops: &[InnerDocOp]) -> Option<usize> {
         InnerDocOp::Replace(replace) => Some(replace.content.as_ptr() as usize),
         InnerDocOp::Update(update) => Some(update.content.as_ptr() as usize),
         InnerDocOp::Deletion => None,
+    })
+}
+
+fn must_be_skipped(pk: &str, shards: &[&str]) -> bool {
+    // Special case for no shard, it means we must index the document
+    if shards.is_empty() {
+        return false;
+    }
+
+    // If there is multiple shards, the fisrt shard is ourselves
+    let mut hasher = Blake2b512::new();
+    hasher.update(shards[0].as_bytes());
+    hasher.update(pk.as_bytes());
+    let me = hasher.finalize();
+
+    shards.iter().skip(1).any(|shard| {
+        let mut hasher = Blake2b512::new();
+        hasher.update(shard.as_bytes());
+        hasher.update(pk.as_bytes());
+        let them = hasher.finalize();
+
+        me < them
     })
 }

@@ -115,6 +115,19 @@ impl IndexScheduler {
 
                 let indexer_config = self.index_mapper.indexer_config();
                 let pool = &indexer_config.thread_pool;
+                let network = self.network();
+                let shards: Vec<&str> = network
+                    .local
+                    .as_deref()
+                    .into_iter()
+                    .chain(
+                        network
+                            .remotes
+                            .keys()
+                            .map(|s| s.as_str())
+                            .filter(|s| Some(s) != network.local.as_deref().as_ref()),
+                    )
+                    .collect();
 
                 progress.update_progress(DocumentOperationProgress::ComputingDocumentChanges);
                 let (document_changes, operation_stats, primary_key) = indexer
@@ -126,6 +139,7 @@ impl IndexScheduler {
                         &mut new_fields_ids_map,
                         &|| must_stop_processing.get(),
                         progress.clone(),
+                        &shards,
                     )
                     .map_err(|e| Error::from_milli(e, Some(index_uid.clone())))?;
 

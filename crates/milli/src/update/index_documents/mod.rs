@@ -1955,6 +1955,7 @@ mod tests {
                 &mut new_fields_ids_map,
                 &|| false,
                 Progress::default(),
+                &[],
             )
             .unwrap();
 
@@ -2007,6 +2008,7 @@ mod tests {
                 &mut new_fields_ids_map,
                 &|| false,
                 Progress::default(),
+                &[],
             )
             .unwrap();
 
@@ -2094,6 +2096,7 @@ mod tests {
                 &mut new_fields_ids_map,
                 &|| false,
                 Progress::default(),
+                &[],
             )
             .unwrap();
 
@@ -2282,6 +2285,7 @@ mod tests {
                 &mut new_fields_ids_map,
                 &|| false,
                 Progress::default(),
+                &[],
             )
             .unwrap();
 
@@ -2344,6 +2348,7 @@ mod tests {
                 &mut new_fields_ids_map,
                 &|| false,
                 Progress::default(),
+                &[],
             )
             .unwrap();
 
@@ -2397,6 +2402,7 @@ mod tests {
                 &mut new_fields_ids_map,
                 &|| false,
                 Progress::default(),
+                &[],
             )
             .unwrap();
 
@@ -2449,6 +2455,7 @@ mod tests {
                 &mut new_fields_ids_map,
                 &|| false,
                 Progress::default(),
+                &[],
             )
             .unwrap();
 
@@ -2503,6 +2510,7 @@ mod tests {
                 &mut new_fields_ids_map,
                 &|| false,
                 Progress::default(),
+                &[],
             )
             .unwrap();
 
@@ -2562,6 +2570,7 @@ mod tests {
                 &mut new_fields_ids_map,
                 &|| false,
                 Progress::default(),
+                &[],
             )
             .unwrap();
 
@@ -2614,6 +2623,7 @@ mod tests {
                 &mut new_fields_ids_map,
                 &|| false,
                 Progress::default(),
+                &[],
             )
             .unwrap();
 
@@ -2666,6 +2676,7 @@ mod tests {
                 &mut new_fields_ids_map,
                 &|| false,
                 Progress::default(),
+                &[],
             )
             .unwrap();
 
@@ -2864,6 +2875,7 @@ mod tests {
                 &mut new_fields_ids_map,
                 &|| false,
                 Progress::default(),
+                &[],
             )
             .unwrap();
 
@@ -2923,6 +2935,7 @@ mod tests {
                 &mut new_fields_ids_map,
                 &|| false,
                 Progress::default(),
+                &[],
             )
             .unwrap();
 
@@ -2979,6 +2992,7 @@ mod tests {
                 &mut new_fields_ids_map,
                 &|| false,
                 Progress::default(),
+                &[],
             )
             .unwrap();
 
