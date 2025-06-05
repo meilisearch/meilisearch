@@ -62,7 +62,7 @@ pub enum Error {
     SwapDuplicateIndexFound(String),
     #[error(
         "Indexes must be declared only once during a swap. {} were specified several times.",
-        .0.iter().map(|s| format!("`{}`", s)).collect::<Vec<_>>().join(", ")
+        .0.iter().map(|s| format!("`{s}`")).collect::<Vec<_>>().join(", ")
     )]
     SwapDuplicateIndexesFound(Vec<String>),
     #[error("Index `{0}` not found.")]
@@ -71,7 +71,7 @@ pub enum Error {
     NoSpaceLeftInTaskQueue,
     #[error(
         "Indexes {} not found.",
-        .0.iter().map(|s| format!("`{}`", s)).collect::<Vec<_>>().join(", ")
+        .0.iter().map(|s| format!("`{s}`")).collect::<Vec<_>>().join(", ")
     )]
     SwapIndexesNotFound(Vec<String>),
     #[error("Corrupted dump.")]
@@ -126,7 +126,7 @@ pub enum Error {
     #[error(transparent)]
     Heed(#[from] heed::Error),
     #[error("{}", match .index_uid {
-        Some(uid) if !uid.is_empty() => format!("Index `{}`: {error}", uid),
+        Some(uid) if !uid.is_empty() => format!("Index `{uid}`: {error}"),
         _ => format!("{error}")
     })]
     Milli { error: milli::Error, index_uid: Option<String> },

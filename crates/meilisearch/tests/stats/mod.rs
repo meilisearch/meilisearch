@@ -55,7 +55,7 @@ async fn stats() {
     ]);
 
     let (response, code) = index.add_documents(documents, None).await;
-    assert_eq!(code, 202, "{}", response);
+    assert_eq!(code, 202, "{response}");
     assert_eq!(response["taskUid"], 1);
 
     index.wait_task(response.uid()).await.succeeded();

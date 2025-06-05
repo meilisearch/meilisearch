@@ -318,6 +318,6 @@ fn valid_parameter(source: &'static str, parameter: &'static str) -> Value {
         ("rest", "response") => crate::json!({ "test": "test" }),
         ("rest", "headers") => crate::json!({ "test": "test" }),
         ("rest", "distribution") => crate::json!("normal"),
-        _ => panic!("Invalid parameter {} for source {}", parameter, source),
+        _ => panic!("Invalid parameter {parameter} for source {source}"),
     }
 }

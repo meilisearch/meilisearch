@@ -366,10 +366,10 @@ impl<State> Index<'_, State> {
 
     pub async fn wait_task(&self, update_id: u64) -> Value {
         // try several times to get status, or panic to not wait forever
-        let url = format!("/tasks/{}", update_id);
+        let url = format!("/tasks/{update_id}");
         for _ in 0..100 {
             let (response, status_code) = self.service.get(&url).await;
-            assert_eq!(200, status_code, "response: {}", response);
+            assert_eq!(200, status_code, "response: {response}");
 
             if response["status"] == "succeeded" || response["status"] == "failed" {
                 return response;
@@ -382,7 +382,7 @@ impl<State> Index<'_, State> {
     }
 
     pub async fn get_task(&self, update_id: u64) -> (Value, StatusCode) {
-        let url = format!("/tasks/{}", update_id);
+        let url = format!("/tasks/{update_id}");
         self.service.get(url).await
     }
 
@@ -406,7 +406,7 @@ impl<State> Index<'_, State> {
     }
 
     pub async fn get_batch(&self, batch_id: u32) -> (Value, StatusCode) {
-        let url = format!("/batches/{}", batch_id);
+        let url = format!("/batches/{batch_id}");
         self.service.get(url).await
     }
 

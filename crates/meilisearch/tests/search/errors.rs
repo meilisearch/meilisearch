@@ -30,7 +30,7 @@ async fn search_unexisting_parameter() {
 
     index
         .search(json!({"marin": "hello"}), |response, code| {
-            assert_eq!(code, 400, "{}", response);
+            assert_eq!(code, 400, "{response}");
             assert_eq!(response["code"], "bad_request");
         })
         .await;

@@ -1040,7 +1040,7 @@ async fn error_single_search_forbidden_token() {
     ];
 
     let failed_query_indexes: Vec<_> =
-        std::iter::repeat(Some(0)).take(5).chain(std::iter::repeat(None).take(6)).collect();
+        std::iter::repeat_n(Some(0), 5).chain(std::iter::repeat_n(None, 6)).collect();
 
     let failed_query_indexes = vec![failed_query_indexes; ACCEPTED_KEYS_SINGLE.len()];
 
@@ -1118,10 +1118,9 @@ async fn error_multi_search_forbidden_token() {
         },
     ];
 
-    let failed_query_indexes: Vec<_> = std::iter::repeat(Some(0))
-        .take(5)
-        .chain(std::iter::repeat(Some(1)).take(5))
-        .chain(std::iter::repeat(None).take(6))
+    let failed_query_indexes: Vec<_> = std::iter::repeat_n(Some(0), 5)
+        .chain(std::iter::repeat_n(Some(1), 5))
+        .chain(std::iter::repeat_n(None, 6))
         .collect();
 
     let failed_query_indexes = vec![failed_query_indexes; ACCEPTED_KEYS_BOTH.len()];

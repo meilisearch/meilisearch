@@ -847,7 +847,7 @@ impl FromStr for MaxThreads {
 impl fmt::Display for MaxThreads {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.0 {
-            Some(threads) => write!(f, "{}", threads),
+            Some(threads) => write!(f, "{threads}"),
             None => write!(f, "unlimited"),
         }
     }
@@ -1016,7 +1016,7 @@ impl Display for ScheduleSnapshot {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ScheduleSnapshot::Disabled => write!(f, ""),
-            ScheduleSnapshot::Enabled(value) => write!(f, "{}", value),
+            ScheduleSnapshot::Enabled(value) => write!(f, "{value}"),
         }
     }
 }

@@ -340,11 +340,11 @@ fn export_a_dump(
                     eprintln!("Dumping the enqueued tasks reading them in obkv format...");
                     let reader =
                         DocumentsBatchReader::from_reader(content_file).with_context(|| {
-                            format!("While reading content file {:?}", content_file_uuid)
+                            format!("While reading content file {content_file_uuid:?}")
                         })?;
                     let (mut cursor, documents_batch_index) = reader.into_cursor_and_fields_index();
                     while let Some(doc) = cursor.next_document().with_context(|| {
-                        format!("While iterating on content file {:?}", content_file_uuid)
+                        format!("While iterating on content file {content_file_uuid:?}")
                     })? {
                         dump_content_file
                             .push_document(&obkv_to_object(doc, &documents_batch_index)?)?;
@@ -355,7 +355,7 @@ fn export_a_dump(
                         serde_json::de::Deserializer::from_reader(content_file).into_iter()
                     {
                         let document = document.with_context(|| {
-                            format!("While reading content file {:?}", content_file_uuid)
+                            format!("While reading content file {content_file_uuid:?}")
                         })?;
                         dump_content_file.push_document(&document)?;
                     }
@@ -433,7 +433,7 @@ fn export_a_dump(
         "[year repr:full][month repr:numerical][day padding:zero]-[hour padding:zero][minute padding:zero][second padding:zero][subsecond digits:3]"
     )).unwrap();
 
-    let path = dump_dir.join(format!("{}.dump", dump_uid));
+    let path = dump_dir.join(format!("{dump_uid}.dump"));
     let file = File::create(&path)?;
     dump.persist_to(BufWriter::new(file))?;
 

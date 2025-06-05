@@ -44,6 +44,6 @@ mod tests {
         let e = 43.0;
 
         let vec: Vec<_> = [a, b, c, d, e].iter().cloned().map(f64_into_bytes).collect();
-        assert!(is_sorted(&vec), "{:?}", vec);
+        assert!(is_sorted(&vec), "{vec:?}");
     }
 }

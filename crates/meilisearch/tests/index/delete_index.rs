@@ -51,14 +51,14 @@ async fn loop_delete_add_documents() {
     for _ in 0..50 {
         let (response, code) = index.add_documents(documents.clone(), None).await;
         tasks.push(response["taskUid"].as_u64().unwrap());
-        assert_eq!(code, 202, "{}", response);
+        assert_eq!(code, 202, "{response}");
         let (response, code) = index.delete().await;
         tasks.push(response["taskUid"].as_u64().unwrap());
-        assert_eq!(code, 202, "{}", response);
+        assert_eq!(code, 202, "{response}");
     }
 
     for task in tasks {
         let response = index.wait_task(task).await.succeeded();
-        assert_eq!(response["status"], "succeeded", "{}", response);
+        assert_eq!(response["status"], "succeeded", "{response}");
     }
 }

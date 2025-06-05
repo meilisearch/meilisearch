@@ -135,14 +135,14 @@ pub fn objects_from_json_value(json: serde_json::Value) -> Vec<crate::Object> {
         object @ serde_json::Value::Object(_) => vec![object],
         serde_json::Value::Array(objects) => objects,
         invalid => {
-            panic!("an array of objects must be specified, {:#?} is not an array", invalid)
+            panic!("an array of objects must be specified, {invalid:#?} is not an array")
         }
     };
     let mut objects = vec![];
     for document in documents {
         let object = match document {
             serde_json::Value::Object(object) => object,
-            invalid => panic!("an object must be specified, {:#?} is not an object", invalid),
+            invalid => panic!("an object must be specified, {invalid:#?} is not an object"),
         };
         objects.push(object);
     }

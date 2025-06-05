@@ -101,7 +101,7 @@ impl IndexScheduler {
         let db_name = base_path.file_name().and_then(OsStr::to_str).unwrap_or("data.ms");
 
         // 5.2 Tarball the content of the snapshot in a tempfile with a .snapshot extension
-        let snapshot_path = self.scheduler.snapshots_path.join(format!("{}.snapshot", db_name));
+        let snapshot_path = self.scheduler.snapshots_path.join(format!("{db_name}.snapshot"));
         let temp_snapshot_file = tempfile::NamedTempFile::new_in(&self.scheduler.snapshots_path)?;
         compression::to_tar_gz(temp_snapshot_dir.path(), temp_snapshot_file.path())?;
         let file = temp_snapshot_file.persist(snapshot_path)?;

@@ -96,7 +96,7 @@ impl Server<Owned> {
     pub async fn use_admin_key(&mut self, master_key: impl AsRef<str>) {
         self.use_api_key(master_key);
         let (response, code) = self.list_api_keys("").await;
-        assert_eq!(200, code, "{:?}", response);
+        assert_eq!(200, code, "{response:?}");
         let admin_key = &response["results"][1]["key"];
         self.use_api_key(admin_key.as_str().unwrap());
     }
@@ -365,11 +365,11 @@ impl<State> Server<State> {
     }
 
     pub async fn tasks_filter(&self, filter: &str) -> (Value, StatusCode) {
-        self.service.get(format!("/tasks?{}", filter)).await
+        self.service.get(format!("/tasks?{filter}")).await
     }
 
     pub async fn batches_filter(&self, filter: &str) -> (Value, StatusCode) {
-        self.service.get(format!("/batches?{}", filter)).await
+        self.service.get(format!("/batches?{filter}")).await
     }
 
     pub async fn version(&self) -> (Value, StatusCode) {
@@ -389,16 +389,16 @@ impl<State> Server<State> {
     }
 
     pub async fn cancel_tasks(&self, value: &str) -> (Value, StatusCode) {
-        self.service.post(format!("/tasks/cancel?{}", value), json!(null)).await
+        self.service.post(format!("/tasks/cancel?{value}"), json!(null)).await
     }
 
     pub async fn delete_tasks(&self, value: &str) -> (Value, StatusCode) {
-        self.service.delete(format!("/tasks?{}", value)).await
+        self.service.delete(format!("/tasks?{value}")).await
     }
 
     pub async fn wait_task(&self, update_id: u64) -> Value {
         // try several times to get status, or panic to not wait forever
-        let url = format!("/tasks/{}", update_id);
+        let url = format!("/tasks/{update_id}");
         // Increase timeout for vector-related tests
         let max_attempts = if url.contains("/tasks/") {
             if update_id > 1000 {
@@ -412,7 +412,7 @@ impl<State> Server<State> {
 
         for _ in 0..max_attempts {
             let (response, status_code) = self.service.get(&url).await;
-            assert_eq!(200, status_code, "response: {}", response);
+            assert_eq!(200, status_code, "response: {response}");
 
             if response["status"] == "succeeded" || response["status"] == "failed" {
                 return response;
@@ -425,12 +425,12 @@ impl<State> Server<State> {
     }
 
     pub async fn get_task(&self, update_id: u64) -> (Value, StatusCode) {
-        let url = format!("/tasks/{}", update_id);
+        let url = format!("/tasks/{update_id}");
         self.service.get(url).await
     }
 
     pub async fn get_batch(&self, batch_id: u32) -> (Value, StatusCode) {
-        let url = format!("/batches/{}", batch_id);
+        let url = format!("/batches/{batch_id}");
         self.service.get(url).await
     }
 

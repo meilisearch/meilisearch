@@ -3214,8 +3214,7 @@ mod tests {
         for id in results.documents_ids.iter() {
             assert!(
                 !deleted_internal_ids.contains(id),
-                "The document {} was supposed to be deleted",
-                id
+                "The document {id} was supposed to be deleted"
             );
         }
 
@@ -3271,8 +3270,7 @@ mod tests {
         for id in results.documents_ids.iter() {
             assert!(
                 !deleted_internal_ids.contains(id),
-                "The document {} was supposed to be deleted",
-                id
+                "The document {id} was supposed to be deleted"
             );
         }
     }
@@ -3329,8 +3327,7 @@ mod tests {
         for id in results.documents_ids.iter() {
             assert!(
                 !deleted_internal_ids.contains(id),
-                "The document {} was supposed to be deleted",
-                id
+                "The document {id} was supposed to be deleted"
             );
         }
 
@@ -3395,8 +3392,7 @@ mod tests {
             let (id, _) = result.unwrap();
             assert!(
                 !deleted_internal_ids.contains(&id),
-                "The document {} was supposed to be deleted",
-                id
+                "The document {id} was supposed to be deleted"
             );
         }
 
@@ -3405,8 +3401,7 @@ mod tests {
         for id in results {
             assert!(
                 !deleted_internal_ids.contains(&id),
-                "The document {} was supposed to be deleted",
-                id
+                "The document {id} was supposed to be deleted"
             );
         }
 
@@ -3415,8 +3410,7 @@ mod tests {
         for id in deleted_external_ids {
             assert!(
                 results.get(&rtxn, id).unwrap().is_none(),
-                "The document {} was supposed to be deleted",
-                id
+                "The document {id} was supposed to be deleted"
             );
         }
         drop(rtxn);

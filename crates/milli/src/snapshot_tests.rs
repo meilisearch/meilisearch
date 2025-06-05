@@ -356,7 +356,7 @@ pub fn snap_words_fst(index: &Index) -> String {
     let bytes = words_fst.into_fst().as_bytes().to_owned();
     let mut snap = String::new();
     for byte in bytes {
-        write!(&mut snap, "{:x}", byte).unwrap();
+        write!(&mut snap, "{byte:x}").unwrap();
     }
     snap
 }
@@ -366,7 +366,7 @@ pub fn snap_words_prefixes_fst(index: &Index) -> String {
     let bytes = words_prefixes_fst.into_fst().as_bytes().to_owned();
     let mut snap = String::new();
     for byte in bytes {
-        write!(&mut snap, "{:x}", byte).unwrap();
+        write!(&mut snap, "{byte:x}").unwrap();
     }
     snap
 }

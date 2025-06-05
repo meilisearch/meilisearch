@@ -83,7 +83,7 @@ pub fn map_leaf_values_in_object(
         let base_key = if base_key.is_empty() {
             key.to_string()
         } else {
-            format!("{}{}{}", base_key, SPLIT_SYMBOL, key)
+            format!("{base_key}{SPLIT_SYMBOL}{key}")
         };
 
         // here if the user only specified `doggo` we need to iterate in all the fields of `doggo`

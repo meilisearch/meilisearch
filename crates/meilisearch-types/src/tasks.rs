@@ -843,7 +843,7 @@ pub fn serialize_duration<S: Serializer>(
             write!(&mut res, "P").unwrap();
 
             if hasdate {
-                write!(&mut res, "{}D", days).unwrap();
+                write!(&mut res, "{days}D").unwrap();
             }
 
             const NANOS_PER_MILLI: i32 = Duration::MILLISECOND.subsec_nanoseconds();
@@ -851,13 +851,13 @@ pub fn serialize_duration<S: Serializer>(
 
             if hastime {
                 if nanos == 0 {
-                    write!(&mut res, "T{}S", secs).unwrap();
+                    write!(&mut res, "T{secs}S").unwrap();
                 } else if nanos % NANOS_PER_MILLI == 0 {
                     write!(&mut res, "T{}.{:03}S", secs, nanos / NANOS_PER_MILLI).unwrap();
                 } else if nanos % NANOS_PER_MICRO == 0 {
                     write!(&mut res, "T{}.{:06}S", secs, nanos / NANOS_PER_MICRO).unwrap();
                 } else {
-                    write!(&mut res, "T{}.{:09}S", secs, nanos).unwrap();
+                    write!(&mut res, "T{secs}.{nanos:09}S").unwrap();
                 }
             }
 

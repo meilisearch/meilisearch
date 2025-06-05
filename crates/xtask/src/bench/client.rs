@@ -33,7 +33,7 @@ impl Client {
             if route.is_empty() {
                 self.client.request(method, base_url)
             } else {
-                self.client.request(method, format!("{}/{}", base_url, route))
+                self.client.request(method, format!("{base_url}/{route}"))
             }
         } else {
             self.client.request(method, route)

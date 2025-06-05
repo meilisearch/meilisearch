@@ -78,10 +78,10 @@ fn main() -> anyhow::Result<()> {
             );
             continue;
         }
-        let url = format!("{}/{}.{}.gz", BASE_URL, dataset, extension);
-        eprintln!("downloading: {}", url);
+        let url = format!("{BASE_URL}/{dataset}.{extension}.gz");
+        eprintln!("downloading: {url}");
         let bytes = retry(|| download_dataset(url.clone()), 10)?;
-        eprintln!("{} downloaded successfully", url);
+        eprintln!("{url} downloaded successfully");
         eprintln!("uncompressing in {}", out_file.display());
         uncompress_in_file(bytes, &out_file)?;
     }

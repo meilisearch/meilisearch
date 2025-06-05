@@ -730,7 +730,7 @@ async fn error_add_malformed_json_documents() {
     // length = 100
     let long = "0123456789".repeat(10);
 
-    let document = format!("\"{}\"", long);
+    let document = format!("\"{long}\"");
     let req = test::TestRequest::put()
         .uri(format!("/indexes/{index_name}/documents").as_str())
         .set_payload(document)
@@ -751,7 +751,7 @@ async fn error_add_malformed_json_documents() {
     "###);
 
     // add one more char to the long string to test if the truncating works.
-    let document = format!("\"{}m\"", long);
+    let document = format!("\"{long}m\"");
     let req = test::TestRequest::put()
         .uri(format!("/indexes/{index_name}/documents").as_str())
         .set_payload(document)
@@ -1343,7 +1343,7 @@ async fn add_larger_dataset() {
     let (response, code) = index
         .get_all_documents(GetAllDocumentsOptions { limit: Some(1000), ..Default::default() })
         .await;
-    assert_eq!(code, 200, "failed with `{}`", response);
+    assert_eq!(code, 200, "failed with `{response}`");
     assert_eq!(response["results"].as_array().unwrap().len(), 77);
 }
 
@@ -2949,7 +2949,7 @@ async fn batch_several_documents_addition() {
     let (response, code) = index
         .get_all_documents(GetAllDocumentsOptions { limit: Some(200), ..Default::default() })
         .await;
-    assert_eq!(code, 200, "failed with `{}`", response);
+    assert_eq!(code, 200, "failed with `{response}`");
     assert_eq!(response["results"].as_array().unwrap().len(), 120);
 }
 

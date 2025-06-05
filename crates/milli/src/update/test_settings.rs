@@ -232,7 +232,7 @@ fn set_filterable_fields() {
         let document = document.unwrap();
         let json =
             crate::obkv_to_json(&fidmap.ids().collect::<Vec<_>>(), &fidmap, document.1).unwrap();
-        println!("json: {:?}", json);
+        println!("json: {json:?}");
     }
     let count = index
         .facet_id_f64_docids

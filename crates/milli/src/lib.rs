@@ -258,9 +258,9 @@ pub fn json_to_string(value: &Value) -> Option<String> {
         use std::fmt::Write;
         match value {
             Value::Null => false,
-            Value::Bool(boolean) => write!(output, "{}", boolean).is_ok(),
-            Value::Number(number) => write!(output, "{}", number).is_ok(),
-            Value::String(string) => write!(output, "{}", string).is_ok(),
+            Value::Bool(boolean) => write!(output, "{boolean}").is_ok(),
+            Value::Number(number) => write!(output, "{number}").is_ok(),
+            Value::String(string) => write!(output, "{string}").is_ok(),
             Value::Array(array) => {
                 let mut count = 0;
                 for value in array {
@@ -277,7 +277,7 @@ pub fn json_to_string(value: &Value) -> Option<String> {
                 let mut count = 0;
                 for (key, value) in object {
                     buffer.clear();
-                    let _ = write!(&mut buffer, "{}: ", key);
+                    let _ = write!(&mut buffer, "{key}: ");
                     if inner(value, &mut buffer) {
                         buffer.push_str(". ");
                         // We write the "key: value. " pair only when

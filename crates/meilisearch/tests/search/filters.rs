@@ -28,7 +28,7 @@ async fn search_with_filter_string_notation() {
                 "filter": "title = Gläss"
             }),
             |response, code| {
-                assert_eq!(code, 200, "{}", response);
+                assert_eq!(code, 200, "{response}");
                 assert_eq!(response["hits"].as_array().unwrap().len(), 1);
             },
         )
@@ -52,7 +52,7 @@ async fn search_with_filter_string_notation() {
                 "filter": "cattos = pésti"
             }),
             |response, code| {
-                assert_eq!(code, 200, "{}", response);
+                assert_eq!(code, 200, "{response}");
                 assert_eq!(response["hits"].as_array().unwrap().len(), 1);
                 assert_eq!(response["hits"][0]["id"], json!(852));
             },
@@ -65,7 +65,7 @@ async fn search_with_filter_string_notation() {
                 "filter": "doggos.age > 5"
             }),
             |response, code| {
-                assert_eq!(code, 200, "{}", response);
+                assert_eq!(code, 200, "{response}");
                 assert_eq!(response["hits"].as_array().unwrap().len(), 2);
                 assert_eq!(response["hits"][0]["id"], json!(654));
                 assert_eq!(response["hits"][1]["id"], json!(951));
@@ -82,7 +82,7 @@ async fn search_with_filter_array_notation() {
             "filter": ["title = Gläss"]
         }))
         .await;
-    assert_eq!(code, 200, "{}", response);
+    assert_eq!(code, 200, "{response}");
     assert_eq!(response["hits"].as_array().unwrap().len(), 1);
 
     let (response, code) = index
@@ -90,7 +90,7 @@ async fn search_with_filter_array_notation() {
             "filter": [["title = Gläss", "title = \"Shazam!\"", "title = \"Escape Room\""]]
         }))
         .await;
-    assert_eq!(code, 200, "{}", response);
+    assert_eq!(code, 200, "{response}");
     assert_eq!(response["hits"].as_array().unwrap().len(), 3);
 }
 
@@ -116,7 +116,7 @@ async fn search_with_contains_filter() {
             "filter": "title CONTAINS cap"
         }))
         .await;
-    assert_eq!(code, 200, "{}", response);
+    assert_eq!(code, 200, "{response}");
     assert_eq!(response["hits"].as_array().unwrap().len(), 2);
 }
 
@@ -276,7 +276,7 @@ async fn search_with_pattern_filter_settings_scenario_1() {
     let index = server.index("test");
 
     let (task, code) = index.add_documents(NESTED_DOCUMENTS.clone(), None).await;
-    assert_eq!(code, 202, "{}", task);
+    assert_eq!(code, 202, "{task}");
     let response = index.wait_task(task.uid()).await;
     snapshot!(response["status"], @r###""succeeded""###);
 
@@ -289,7 +289,7 @@ async fn search_with_pattern_filter_settings_scenario_1() {
             }
         }]}))
         .await;
-    assert_eq!(code, 202, "{}", task);
+    assert_eq!(code, 202, "{task}");
     let response = index.wait_task(task.uid()).await;
     snapshot!(response["status"], @r###""succeeded""###);
 
@@ -355,7 +355,7 @@ async fn search_with_pattern_filter_settings_scenario_1() {
             }
         }]}))
         .await;
-    assert_eq!(code, 202, "{}", task);
+    assert_eq!(code, 202, "{task}");
     let response = index.wait_task(task.uid()).await;
     snapshot!(response["status"], @r###""succeeded""###);
 
@@ -467,7 +467,7 @@ async fn search_with_pattern_filter_settings_scenario_1() {
             }
         }]}))
         .await;
-    assert_eq!(code, 202, "{}", task);
+    assert_eq!(code, 202, "{task}");
     let response = index.wait_task(task.uid()).await;
     snapshot!(response["status"], @r###""succeeded""###);
 
@@ -567,7 +567,7 @@ async fn search_with_pattern_filter_settings_scenario_1() {
             }
         }]}))
         .await;
-    assert_eq!(code, 202, "{}", task);
+    assert_eq!(code, 202, "{task}");
     let response = index.wait_task(task.uid()).await;
     snapshot!(response["status"], @r###""succeeded""###);
 

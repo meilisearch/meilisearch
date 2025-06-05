@@ -63,7 +63,7 @@ pub mod perm_json_p {
             let base_key = if base_key.is_empty() {
                 key.to_string()
             } else {
-                format!("{}{}{}", base_key, SPLIT_SYMBOL, key)
+                format!("{base_key}{SPLIT_SYMBOL}{key}")
             };
 
             let selection = seeker(&base_key, Depth::OnBaseKey, value)?;

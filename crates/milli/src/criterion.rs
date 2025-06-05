@@ -101,8 +101,8 @@ impl fmt::Display for Criterion {
             Attribute => f.write_str("attribute"),
             Sort => f.write_str("sort"),
             Exactness => f.write_str("exactness"),
-            Asc(attr) => write!(f, "{}:asc", attr),
-            Desc(attr) => write!(f, "{}:desc", attr),
+            Asc(attr) => write!(f, "{attr}:asc"),
+            Desc(attr) => write!(f, "{attr}:desc"),
         }
     }
 }
@@ -136,10 +136,7 @@ mod tests {
             let res = input.parse::<Criterion>();
             assert!(
                 res.is_ok(),
-                "Failed to parse `{}`, was expecting `{:?}` but instead got `{:?}`",
-                input,
-                expected,
-                res
+                "Failed to parse `{input}`, was expecting `{expected:?}` but instead got `{res:?}`"
             );
             assert_eq!(res.unwrap(), expected);
         }
@@ -171,18 +168,13 @@ mod tests {
             let res = input.parse::<Criterion>();
             assert!(
                 res.is_err(),
-                "Should no be able to parse `{}`, was expecting an error but instead got: `{:?}`",
-                input,
-                res
+                "Should no be able to parse `{input}`, was expecting an error but instead got: `{res:?}`"
             );
             let res = res.unwrap_err();
             assert_eq!(
                 res.to_string(),
                 expected.to_string(),
-                "Bad error for input {}: got `{:?}` instead of `{:?}`",
-                input,
-                res,
-                expected
+                "Bad error for input {input}: got `{res:?}` instead of `{expected:?}`"
             );
         }
     }

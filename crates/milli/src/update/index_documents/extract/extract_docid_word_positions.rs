@@ -260,9 +260,9 @@ fn json_to_string<'a>(value: &'a Value, buffer: &'a mut String) -> Option<&'a st
         use std::fmt::Write;
         match value {
             Value::Null | Value::Object(_) => false,
-            Value::Bool(boolean) => write!(output, "{}", boolean).is_ok(),
-            Value::Number(number) => write!(output, "{}", number).is_ok(),
-            Value::String(string) => write!(output, "{}", string).is_ok(),
+            Value::Bool(boolean) => write!(output, "{boolean}").is_ok(),
+            Value::Number(number) => write!(output, "{number}").is_ok(),
+            Value::String(string) => write!(output, "{string}").is_ok(),
             Value::Array(array) => {
                 let mut count = 0;
                 for value in array {

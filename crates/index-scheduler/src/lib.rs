@@ -721,13 +721,8 @@ impl IndexScheduler {
                                     .queue
                                     .tasks
                                     .get_task(self.rtxn, task_id)
-                                    .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?
-                                    .ok_or_else(|| {
-                                        io::Error::new(
-                                            io::ErrorKind::Other,
-                                            Error::CorruptedTaskQueue,
-                                        )
-                                    })?;
+                                    .map_err(io::Error::other)?
+                                    .ok_or_else(|| io::Error::other(Error::CorruptedTaskQueue))?;
 
                                 serde_json::to_writer(
                                     &mut self.buffer,

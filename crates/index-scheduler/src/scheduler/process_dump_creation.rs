@@ -266,7 +266,7 @@ impl IndexScheduler {
             return Err(Error::AbortedTask);
         }
         progress.update_progress(DumpCreationProgress::CompressTheDump);
-        let path = self.scheduler.dumps_path.join(format!("{}.dump", dump_uid));
+        let path = self.scheduler.dumps_path.join(format!("{dump_uid}.dump"));
         let file = File::create(path)?;
         dump.persist_to(BufWriter::new(file))?;
 

@@ -119,21 +119,21 @@ async fn list_batches_with_star_filters() {
 
     let (response, code) =
         index.service.get("/batches?types=*,documentAdditionOrUpdate&statuses=*").await;
-    assert_eq!(code, 200, "{:?}", response);
+    assert_eq!(code, 200, "{response:?}");
     assert_eq!(response["results"].as_array().unwrap().len(), 2);
 
     let (response, code) = index
         .service
         .get("/batches?types=*,documentAdditionOrUpdate&statuses=*,failed&indexUids=test")
         .await;
-    assert_eq!(code, 200, "{:?}", response);
+    assert_eq!(code, 200, "{response:?}");
     assert_eq!(response["results"].as_array().unwrap().len(), 2);
 
     let (response, code) = index
         .service
         .get("/batches?types=*,documentAdditionOrUpdate&statuses=*,failed&indexUids=test,*")
         .await;
-    assert_eq!(code, 200, "{:?}", response);
+    assert_eq!(code, 200, "{response:?}");
     assert_eq!(response["results"].as_array().unwrap().len(), 2);
 }
 
@@ -147,15 +147,15 @@ async fn list_batches_status_filtered() {
     index.wait_task(task.uid()).await.failed();
 
     let (response, code) = index.filtered_batches(&[], &["succeeded"], &[]).await;
-    assert_eq!(code, 200, "{}", response);
+    assert_eq!(code, 200, "{response}");
     assert_eq!(response["results"].as_array().unwrap().len(), 1);
 
     let (response, code) = index.filtered_batches(&[], &["succeeded"], &[]).await;
-    assert_eq!(code, 200, "{}", response);
+    assert_eq!(code, 200, "{response}");
     assert_eq!(response["results"].as_array().unwrap().len(), 1);
 
     let (response, code) = index.filtered_batches(&[], &["succeeded", "failed"], &[]).await;
-    assert_eq!(code, 200, "{}", response);
+    assert_eq!(code, 200, "{response}");
     assert_eq!(response["results"].as_array().unwrap().len(), 2);
 }
 
@@ -168,16 +168,16 @@ async fn list_batches_type_filtered() {
     let (task, _) = index.delete().await;
     index.wait_task(task.uid()).await.succeeded();
     let (response, code) = index.filtered_batches(&["indexCreation"], &[], &[]).await;
-    assert_eq!(code, 200, "{}", response);
+    assert_eq!(code, 200, "{response}");
     assert_eq!(response["results"].as_array().unwrap().len(), 1);
 
     let (response, code) =
         index.filtered_batches(&["indexCreation", "IndexDeletion"], &[], &[]).await;
-    assert_eq!(code, 200, "{}", response);
+    assert_eq!(code, 200, "{response}");
     assert_eq!(response["results"].as_array().unwrap().len(), 2);
 
     let (response, code) = index.filtered_batches(&["indexCreation"], &[], &[]).await;
-    assert_eq!(code, 200, "{}", response);
+    assert_eq!(code, 200, "{response}");
     assert_eq!(response["results"].as_array().unwrap().len(), 1);
 }
 
@@ -189,7 +189,7 @@ async fn list_batches_invalid_canceled_by_filter() {
     index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = index.filtered_batches(&[], &[], &["0"]).await;
-    assert_eq!(code, 200, "{}", response);
+    assert_eq!(code, 200, "{response}");
     assert_eq!(response["results"].as_array().unwrap().len(), 0);
 }
 
@@ -203,7 +203,7 @@ async fn list_batches_status_and_type_filtered() {
     index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = index.filtered_batches(&["indexCreation"], &["failed"], &[]).await;
-    assert_eq!(code, 200, "{}", response);
+    assert_eq!(code, 200, "{response}");
     assert_eq!(response["results"].as_array().unwrap().len(), 0);
 
     let (response, code) = index
@@ -213,7 +213,7 @@ async fn list_batches_status_and_type_filtered() {
             &[],
         )
         .await;
-    assert_eq!(code, 200, "{}", response);
+    assert_eq!(code, 200, "{response}");
     assert_eq!(response["results"].as_array().unwrap().len(), 2);
 }
 
@@ -222,7 +222,7 @@ async fn list_batch_filter_error() {
     let server = Server::new().await;
 
     let (response, code) = server.batches_filter("lol=pied").await;
-    assert_eq!(code, 400, "{}", response);
+    assert_eq!(code, 400, "{response}");
     meili_snap::snapshot!(meili_snap::json_string!(response), @r#"
     {
       "message": "Unknown parameter `lol`: expected one of `limit`, `from`, `reverse`, `batchUids`, `uids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt`",
@@ -233,7 +233,7 @@ async fn list_batch_filter_error() {
     "#);
 
     let (response, code) = server.batches_filter("uids=pied").await;
-    assert_eq!(code, 400, "{}", response);
+    assert_eq!(code, 400, "{response}");
     meili_snap::snapshot!(meili_snap::json_string!(response), @r#"
     {
       "message": "Invalid value in parameter `uids`: could not parse `pied` as a positive integer",
@@ -244,7 +244,7 @@ async fn list_batch_filter_error() {
     "#);
 
     let (response, code) = server.batches_filter("from=pied").await;
-    assert_eq!(code, 400, "{}", response);
+    assert_eq!(code, 400, "{response}");
     meili_snap::snapshot!(meili_snap::json_string!(response), @r#"
     {
       "message": "Invalid value in parameter `from`: could not parse `pied` as a positive integer",
@@ -255,7 +255,7 @@ async fn list_batch_filter_error() {
     "#);
 
     let (response, code) = server.batches_filter("beforeStartedAt=pied").await;
-    assert_eq!(code, 400, "{}", response);
+    assert_eq!(code, 400, "{response}");
     meili_snap::snapshot!(meili_snap::json_string!(response), @r#"
     {
       "message": "Invalid value in parameter `beforeStartedAt`: `pied` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",

@@ -14,7 +14,7 @@ use crate::{
 /// This function goes through all characters in the [Span] if it finds any escaped character (`\`).
 /// It generates a new string with all `\` removed from the [Span].
 fn unescape(buf: Span, char_to_escape: char) -> String {
-    let to_escape = format!("\\{}", char_to_escape);
+    let to_escape = format!("\\{char_to_escape}");
     buf.replace(&to_escape, &char_to_escape.to_string())
 }
 
@@ -262,7 +262,7 @@ pub mod test {
                 result.unwrap_err()
             );
             let token = result.unwrap().1;
-            assert_eq!(token, expected, "Filter `{}` failed.", input);
+            assert_eq!(token, expected, "Filter `{input}` failed.");
         }
     }
 
@@ -367,8 +367,7 @@ pub mod test {
             assert_eq!(
                 token.value.is_some(),
                 escaped,
-                "Filter `{}` was not supposed to be escaped",
-                input
+                "Filter `{input}` was not supposed to be escaped"
             );
             assert_eq!(
                 token.value(),
@@ -403,7 +402,7 @@ pub mod test {
             );
             // get the inner string referenced in the error
             let value = *result.finish().unwrap_err().context().fragment();
-            assert_eq!(value, expected, "Filter `{}` was supposed to fail with the following value: `{}`, but it failed with: `{}`.", input, expected, value);
+            assert_eq!(value, expected, "Filter `{input}` was supposed to fail with the following value: `{expected}`, but it failed with: `{value}`.");
         }
     }
 }

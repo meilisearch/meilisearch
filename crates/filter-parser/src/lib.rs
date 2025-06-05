@@ -611,7 +611,7 @@ pub mod tests {
     /// Create a raw [Token]. You must specify the string that appear BEFORE your element followed by your element
     pub fn rtok<'a>(before: &'a str, value: &'a str) -> Token<'a> {
         // if the string is empty we still need to return 1 for the line number
-        let lines = before.is_empty().then_some(1).unwrap_or_else(|| before.lines().count());
+        let lines = if before.is_empty() { 1 } else { before.lines().count() };
         let offset = before.chars().count();
         // the extra field is not checked in the tests so we can set it to nothing
         unsafe { Span::new_from_raw_offset(offset, lines as u32, value, "") }.into()

@@ -256,7 +256,7 @@ fn fetch_matching_values_in_object(
         let base_key = if base_key.is_empty() {
             key.to_string()
         } else {
-            format!("{}{}{}", base_key, PRIMARY_KEY_SPLIT_SYMBOL, key)
+            format!("{base_key}{PRIMARY_KEY_SPLIT_SYMBOL}{key}")
         };
 
         if starts_with(selector, &base_key) {

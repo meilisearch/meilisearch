@@ -78,7 +78,7 @@ fn main() {
                     let mut data = Unstructured::new(&v);
                     let batches = <[Batch; 5]>::arbitrary(&mut data).unwrap();
                     // will be used to display the error once a thread crashes
-                    let dbg_input = format!("{:#?}", batches);
+                    let dbg_input = format!("{batches:#?}");
 
                     let handle = s.spawn(|| {
                         let mut wtxn = index.write_txn().unwrap();
