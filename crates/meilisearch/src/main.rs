@@ -155,16 +155,21 @@ async fn prompt_for_contact_email() -> anyhow::Result<Option<String>> {
         return Ok(None);
     }
 
-    println!("Would you mind providing your contact email for support and news?");
-    println!("We will use it to contact you with news only.");
+    println!("Would you mind providing your contact email for support and news? We will use it to contact you with news only.");
+    println!("Press enter to skip.");
     print!("contact email> ");
     std::io::stdout().flush()?;
 
     let mut email = String::new();
     let mut stdin = BufReader::new(stdin);
     let _ = stdin.read_line(&mut email).await?;
+    let email = email.trim();
 
-    Ok(Some(email.trim().to_string()))
+    if email.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(email.to_string()))
+    }
 }
 
 async fn run_http(
