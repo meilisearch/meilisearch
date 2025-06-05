@@ -12,7 +12,7 @@ use actix_web::web::Data;
 use actix_web::HttpServer;
 use index_scheduler::IndexScheduler;
 use is_terminal::IsTerminal;
-use meilisearch::analytics::Analytics;
+use meilisearch::analytics::{Analytics, MEILISEARCH_CONFIG_PATH};
 use meilisearch::option::LogMode;
 use meilisearch::search_queue::SearchQueue;
 use meilisearch::{
@@ -132,12 +132,14 @@ async fn try_main() -> anyhow::Result<()> {
     let (index_scheduler, auth_controller) = setup_meilisearch(&opt)?;
 
     // We ask users their emails just after the data.ms is created
-    let skip_email_path = opt.db_path.join(SKIP_EMAIL_FILENAME);
+    let skip_email_path = MEILISEARCH_CONFIG_PATH.as_ref().map(|conf| conf.join(SKIP_EMAIL_FILENAME));
+    // If the config path does not exist, it means the user don't have a home directory
+    let skip_email = skip_email_path.as_ref().map_or(true, |path| path.exists());
     opt.contact_email = match opt.contact_email.as_ref().map(|email| email.as_deref()) {
-        Some(Some("false")) | None if !skip_email_path.exists() => {
+        Some(Some("false")) | None if !skip_email => {
             prompt_for_contact_email().await.map(Some)?
         }
-        Some(Some(email)) if !skip_email_path.exists() => Some(Some(email.to_string())),
+        Some(Some(email)) if !skip_email => Some(Some(email.to_string())),
         _otherwise => None,
     };
 
@@ -146,8 +148,14 @@ async fn try_main() -> anyhow::Result<()> {
         // We spawn a task to register the email and create the skip email
         // file to avoid blocking the Meilisearch launch further.
         let _ = tokio::spawn(async move {
-            if let Err(e) = tokio::fs::File::create_new(skip_email_path).await {
-                eprintln!("Failed to create skip email file: {e}");
+            if let Some(skip_email_path) = skip_email_path {
+                // If the analytics are disabled the directory might not exist at all
+                if let Err(e) = tokio::fs::create_dir_all(skip_email_path.parent().unwrap()).await {
+                    eprintln!("Failed to create skip email file: {e}");
+                }
+                if let Err(e) = tokio::fs::File::create_new(skip_email_path).await {
+                    eprintln!("Failed to create skip email file: {e}");
+                }
             }
             if let Err(err) = register_contact_email(&email).await {
                 eprintln!("Failed to register email: {}", err);

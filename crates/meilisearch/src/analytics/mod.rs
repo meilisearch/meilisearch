@@ -45,7 +45,7 @@ macro_rules! empty_analytics {
 /// `~/.config/Meilisearch` on *NIX or *BSD.
 /// `~/Library/ApplicationSupport` on macOS.
 /// `%APPDATA` (= `C:\Users%USERNAME%\AppData\Roaming`) on windows.
-static MEILISEARCH_CONFIG_PATH: Lazy<Option<PathBuf>> =
+pub static MEILISEARCH_CONFIG_PATH: Lazy<Option<PathBuf>> =
     Lazy::new(|| AppDirs::new(Some("Meilisearch"), false).map(|appdir| appdir.config_dir));
 
 fn config_user_id_path(db_path: &Path) -> Option<PathBuf> {
