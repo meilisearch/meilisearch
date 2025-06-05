@@ -14,7 +14,7 @@ async fn get_indexes_bad_offset() {
       "message": "Invalid value in parameter `offset`: could not parse `doggo` as a positive integer",
       "code": "invalid_index_offset",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_index_offset"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-index-offset"
     }
     "###);
 }
@@ -30,7 +30,7 @@ async fn get_indexes_bad_limit() {
       "message": "Invalid value in parameter `limit`: could not parse `doggo` as a positive integer",
       "code": "invalid_index_limit",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_index_limit"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-index-limit"
     }
     "###);
 }
@@ -46,7 +46,7 @@ async fn get_indexes_unknown_field() {
       "message": "Unknown parameter `doggo`: expected one of `offset`, `limit`",
       "code": "bad_request",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#bad_request"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#bad-request"
     }
     "###);
 }
@@ -62,7 +62,7 @@ async fn create_index_missing_uid() {
       "message": "Missing field `uid`",
       "code": "missing_index_uid",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#missing_index_uid"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-index-uid"
     }
     "###);
 }
@@ -78,7 +78,7 @@ async fn create_index_bad_uid() {
       "message": "Invalid value at `.uid`: `the best doggo` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_), and can not be more than 512 bytes.",
       "code": "invalid_index_uid",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_index_uid"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-index-uid"
     }
     "###);
 
@@ -89,7 +89,7 @@ async fn create_index_bad_uid() {
       "message": "Invalid value type at `.uid`: expected a string, but found a boolean: `true`",
       "code": "invalid_index_uid",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_index_uid"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-index-uid"
     }
     "###);
 }
@@ -107,7 +107,7 @@ async fn create_index_bad_primary_key() {
       "message": "Invalid value type at `.primaryKey`: expected a string, but found an array: `[\"the\",\"best\",\"doggo\"]`",
       "code": "invalid_index_primary_key",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_index_primary_key"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-index-primary-key"
     }
     "###);
 }
@@ -124,7 +124,7 @@ async fn create_index_unknown_field() {
       "message": "Unknown field `doggo`: expected one of `uid`, `primaryKey`",
       "code": "bad_request",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#bad_request"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#bad-request"
     }
     "###);
 }
@@ -139,7 +139,7 @@ async fn get_index_bad_uid() {
       "message": "`the good doggo` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_), and can not be more than 512 bytes.",
       "code": "invalid_index_uid",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_index_uid"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-index-uid"
     }
     "###);
 }
@@ -155,7 +155,7 @@ async fn update_index_bad_primary_key() {
       "message": "Invalid value type at `.primaryKey`: expected a string, but found an array: `[\"doggo\"]`",
       "code": "invalid_index_primary_key",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_index_primary_key"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-index-primary-key"
     }
     "###);
 }
@@ -171,7 +171,7 @@ async fn update_index_immutable_uid() {
       "message": "Immutable field `uid`: expected one of `primaryKey`",
       "code": "immutable_index_uid",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#immutable_index_uid"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#immutable-index-uid"
     }
     "###);
 }
@@ -187,7 +187,7 @@ async fn update_index_immutable_created_at() {
       "message": "Immutable field `createdAt`: expected one of `primaryKey`",
       "code": "immutable_index_created_at",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#immutable_index_created_at"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#immutable_index_created_at"
     }
     "###);
 }
@@ -203,7 +203,7 @@ async fn update_index_immutable_updated_at() {
       "message": "Immutable field `updatedAt`: expected one of `primaryKey`",
       "code": "immutable_index_updated_at",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#immutable_index_updated_at"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#immutable-index-updated-at"
     }
     "###);
 }
@@ -219,7 +219,7 @@ async fn update_index_unknown_field() {
       "message": "Unknown field `doggo`: expected one of `primaryKey`",
       "code": "bad_request",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#bad_request"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#bad-request"
     }
     "###);
 }
@@ -235,7 +235,7 @@ async fn update_index_bad_uid() {
       "message": "`the good doggo` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_), and can not be more than 512 bytes.",
       "code": "invalid_index_uid",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_index_uid"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-index-uid"
     }
     "###);
 }
@@ -250,7 +250,7 @@ async fn delete_index_bad_uid() {
       "message": "`the good doggo` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_), and can not be more than 512 bytes.",
       "code": "invalid_index_uid",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_index_uid"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-index-uid"
     }
     "###);
 }

@@ -204,7 +204,7 @@ async fn user_provide_mismatched_embedding_dimension() {
         "message": "Index `doggo`: Invalid vector dimensions in document with id `0` in `._vectors.manual`.\n  - note: embedding #0 has dimensions 2\n  - note: embedder `manual` requires 3",
         "code": "invalid_vector_dimensions",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_vector_dimensions"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid_vector_dimensions"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -235,7 +235,7 @@ async fn user_provide_mismatched_embedding_dimension() {
         "message": "Index `doggo`: Invalid vector dimensions in document with id `0` in `._vectors.manual`.\n  - note: embedding #0 has dimensions 2\n  - note: embedder `manual` requires 3",
         "code": "invalid_vector_dimensions",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_vector_dimensions"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid_vector_dimensions"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -302,7 +302,7 @@ async fn user_provided_embeddings_error() {
         "message": "Index `doggo`: Bad embedder configuration in the document with id: `0`. Missing field `._vectors.manual.regenerate`\n  - note: `._vectors.manual` must be an array of floats, an array of arrays of floats, or an object with field `regenerate`",
         "code": "invalid_vectors_type",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_vectors_type"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid_vectors_type"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -332,7 +332,7 @@ async fn user_provided_embeddings_error() {
         "message": "Index `doggo`: Bad embedder configuration in the document with id: `0`. Missing field `._vectors.manual.regenerate`\n  - note: `._vectors.manual` must be an array of floats, an array of arrays of floats, or an object with field `regenerate`",
         "code": "invalid_vectors_type",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_vectors_type"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid_vectors_type"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -363,7 +363,7 @@ async fn user_provided_embeddings_error() {
         "message": "Index `doggo`: Bad embedder configuration in the document with id: `0`. Could not parse `._vectors.manual.regenerate`: invalid type: string \"yes please\", expected a boolean at line 1 column 26",
         "code": "invalid_vectors_type",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_vectors_type"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid_vectors_type"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -392,7 +392,7 @@ async fn user_provided_embeddings_error() {
         "message": "Index `doggo`: Bad embedder configuration in the document with id: `0`. Invalid value type at `._vectors.manual.embeddings`: expected null or an array, but found a boolean: `true`",
         "code": "invalid_vectors_type",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_vectors_type"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid_vectors_type"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -421,7 +421,7 @@ async fn user_provided_embeddings_error() {
         "message": "Index `doggo`: Bad embedder configuration in the document with id: `0`. Invalid value type at `._vectors.manual.embeddings[0]`: expected a number or an array, but found a boolean: `true`",
         "code": "invalid_vectors_type",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_vectors_type"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid_vectors_type"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -450,7 +450,7 @@ async fn user_provided_embeddings_error() {
         "message": "Index `doggo`: Bad embedder configuration in the document with id: `0`. Invalid value type at `._vectors.manual.embeddings[0][0]`: expected a number, but found a boolean: `true`",
         "code": "invalid_vectors_type",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_vectors_type"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid_vectors_type"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -492,7 +492,7 @@ async fn user_provided_embeddings_error() {
         "message": "Index `doggo`: Bad embedder configuration in the document with id: `0`. Invalid value type at `._vectors.manual.embeddings[1]`: expected a number, but found an array: `[0.2,0.3]`",
         "code": "invalid_vectors_type",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_vectors_type"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid_vectors_type"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -521,7 +521,7 @@ async fn user_provided_embeddings_error() {
         "message": "Index `doggo`: Bad embedder configuration in the document with id: `0`. Invalid value type at `._vectors.manual.embeddings[1]`: expected an array, but found a number: `0.3`",
         "code": "invalid_vectors_type",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_vectors_type"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid_vectors_type"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -550,7 +550,7 @@ async fn user_provided_embeddings_error() {
         "message": "Index `doggo`: Bad embedder configuration in the document with id: `0`. Invalid value type at `._vectors.manual.embeddings[0][1]`: expected a number, but found a boolean: `true`",
         "code": "invalid_vectors_type",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_vectors_type"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid_vectors_type"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -591,7 +591,7 @@ async fn user_provided_vectors_error() {
         "message": "Index `doggo`: While embedding documents for embedder `manual`: no vectors provided for document `40` and at least 4 other document(s)\n- Note: `manual` has `source: userProvided`, so documents must provide embeddings as an array in `_vectors.manual`.\n- Hint: opt-out for a document with `_vectors.manual: null`",
         "code": "vector_embedding_error",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#vector-embedding-error"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -621,7 +621,7 @@ async fn user_provided_vectors_error() {
         "message": "Index `doggo`: While embedding documents for embedder `manual`: no vectors provided for document `42`\n- Note: `manual` has `source: userProvided`, so documents must provide embeddings as an array in `_vectors.manual`.\n- Hint: try replacing `_vector` by `_vectors` in 1 document(s).",
         "code": "vector_embedding_error",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#vector-embedding-error"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -651,7 +651,7 @@ async fn user_provided_vectors_error() {
         "message": "Index `doggo`: While embedding documents for embedder `manual`: no vectors provided for document `42`\n- Note: `manual` has `source: userProvided`, so documents must provide embeddings as an array in `_vectors.manual`.\n- Hint: try replacing `_vectors.manaul` by `_vectors.manual` in 1 document(s).",
         "code": "vector_embedding_error",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#vector-embedding-error"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
