@@ -28,6 +28,7 @@ use tracing::level_filters::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt as _;
 use tracing_subscriber::Layer;
 
+const SKIP_EMAIL_FILENAME: &str = "skip-email";
 const PORTAL_ID: &str = "25945010";
 const FORM_GUID: &str = "991e2a09-77c2-4428-9242-ebf26bfc6c64";
 
@@ -99,22 +100,6 @@ async fn try_main() -> anyhow::Result<()> {
 
     std::panic::set_hook(Box::new(on_panic));
 
-    opt.contact_email = match opt.contact_email.as_ref().map(|email| email.as_deref()) {
-        Some(Some("false")) | None => prompt_for_contact_email().await.map(Some)?,
-        Some(Some("")) | Some(None) => None,
-        Some(Some(email)) => Some(Some(email.to_string())),
-    };
-
-    if let Some(Some(email)) = opt.contact_email.as_ref() {
-        let email = email.clone();
-        let _ = tokio::spawn(async move {
-            dbg!(&email);
-            if let Err(err) = register_contact_email(&email).await {
-                eprintln!("Failed to register email: {}", err);
-            }
-        });
-    }
-
     anyhow::ensure!(
         !(cfg!(windows) && opt.experimental_reduce_indexing_memory_usage),
         "The `experimental-reduce-indexing-memory-usage` flag is not supported on Windows"
@@ -145,6 +130,30 @@ async fn try_main() -> anyhow::Result<()> {
     }
 
     let (index_scheduler, auth_controller) = setup_meilisearch(&opt)?;
+
+    // We ask users their emails just after the data.ms is created
+    let skip_email_path = opt.db_path.join(SKIP_EMAIL_FILENAME);
+    opt.contact_email = match opt.contact_email.as_ref().map(|email| email.as_deref()) {
+        Some(Some("false")) | None if !skip_email_path.exists() => {
+            prompt_for_contact_email().await.map(Some)?
+        }
+        Some(Some(email)) if !skip_email_path.exists() => Some(Some(email.to_string())),
+        _otherwise => None,
+    };
+
+    if let Some(Some(email)) = opt.contact_email.as_ref() {
+        let email = email.clone();
+        // We spawn a task to register the email and create the skip email
+        // file to avoid blocking the Meilisearch launch further.
+        let _ = tokio::spawn(async move {
+            if let Err(e) = tokio::fs::File::create_new(skip_email_path).await {
+                eprintln!("Failed to create skip email file: {e}");
+            }
+            if let Err(err) = register_contact_email(&email).await {
+                eprintln!("Failed to register email: {}", err);
+            }
+        });
+    }
 
     let analytics =
         analytics::Analytics::new(&opt, index_scheduler.clone(), auth_controller.clone()).await;
