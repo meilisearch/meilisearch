@@ -3,6 +3,7 @@ use meilisearch::Opt;
 use tempfile::TempDir;
 
 use super::test_settings_documents_indexing_swapping_and_search;
+use crate::common::shared_index_with_nested_documents;
 use crate::{
     common::{default_settings, shared_index_with_documents, Server, DOCUMENTS, NESTED_DOCUMENTS},
     json,
@@ -24,18 +25,7 @@ async fn search_with_filter_string_notation() {
         )
         .await;
 
-    let server = Server::new_shared();
-    let nested_index = server.unique_index();
-
-    let (_, code) = nested_index
-        .update_settings(json!({"filterableAttributes": ["cattos", "doggos.age"]}))
-        .await;
-    snapshot!(code, @"202 Accepted");
-
-    let documents = NESTED_DOCUMENTS.clone();
-    let (task, code) = nested_index.add_documents(documents, None).await;
-    snapshot!(code, @"202 Accepted");
-    nested_index.wait_task(task.uid()).await.succeeded();
+    let nested_index = shared_index_with_nested_documents().await;
 
     nested_index
         .search(
@@ -260,11 +250,10 @@ async fn search_with_pattern_filter_settings() {
 
 #[actix_rt::test]
 async fn search_with_pattern_filter_settings_scenario_1() {
-    let temp = TempDir::new().unwrap();
-    let server = Server::new_with_options(Opt { ..default_settings(temp.path()) }).await.unwrap();
+    let server = Server::new_shared();
 
     eprintln!("Documents -> Settings -> test");
-    let index = server.index("test");
+    let index = server.unique_index();
 
     let (task, code) = index.add_documents(NESTED_DOCUMENTS.clone(), None).await;
     assert_eq!(code, 202, "{task}");
@@ -324,7 +313,7 @@ async fn search_with_pattern_filter_settings_scenario_1() {
                 snapshot!(code, @"400 Bad Request");
                 snapshot!(json_string!(response), @r###"
                 {
-                  "message": "Index `test`: Filter operator `>` is not allowed for the attribute `doggos.age`.\n  - Note: allowed operators: OR, AND, NOT, =, !=, IN, IS EMPTY, IS NULL, EXISTS.\n  - Note: field `doggos.age` matched rule #0 in `filterableAttributes`\n  - Hint: enable comparison in rule #0 by modifying the features.filter object\n  - Hint: prepend another rule matching `doggos.age` with appropriate filter features before rule #0",
+                  "message": "Index `[uuid]`: Filter operator `>` is not allowed for the attribute `doggos.age`.\n  - Note: allowed operators: OR, AND, NOT, =, !=, IN, IS EMPTY, IS NULL, EXISTS.\n  - Note: field `doggos.age` matched rule #0 in `filterableAttributes`\n  - Hint: enable comparison in rule #0 by modifying the features.filter object\n  - Hint: prepend another rule matching `doggos.age` with appropriate filter features before rule #0",
                   "code": "invalid_search_filter",
                   "type": "invalid_request",
                   "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -468,7 +457,7 @@ async fn search_with_pattern_filter_settings_scenario_1() {
                 snapshot!(code, @"400 Bad Request");
                 snapshot!(json_string!(response), @r###"
                 {
-                  "message": "Index `test`: Filter operator `=` is not allowed for the attribute `cattos`.\n  - Note: allowed operators: OR, AND, NOT, <, >, <=, >=, TO, IS EMPTY, IS NULL, EXISTS.\n  - Note: field `cattos` matched rule #0 in `filterableAttributes`\n  - Hint: enable equality in rule #0 by modifying the features.filter object\n  - Hint: prepend another rule matching `cattos` with appropriate filter features before rule #0",
+                  "message": "Index `[uuid]`: Filter operator `=` is not allowed for the attribute `cattos`.\n  - Note: allowed operators: OR, AND, NOT, <, >, <=, >=, TO, IS EMPTY, IS NULL, EXISTS.\n  - Note: field `cattos` matched rule #0 in `filterableAttributes`\n  - Hint: enable equality in rule #0 by modifying the features.filter object\n  - Hint: prepend another rule matching `cattos` with appropriate filter features before rule #0",
                   "code": "invalid_search_filter",
                   "type": "invalid_request",
                   "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -599,7 +588,7 @@ async fn search_with_pattern_filter_settings_scenario_1() {
                 snapshot!(code, @"400 Bad Request");
                 snapshot!(json_string!(response), @r###"
                 {
-                  "message": "Index `test`: Filter operator `>` is not allowed for the attribute `doggos.age`.\n  - Note: allowed operators: OR, AND, NOT, =, !=, IN, IS EMPTY, IS NULL, EXISTS.\n  - Note: field `doggos.age` matched rule #0 in `filterableAttributes`\n  - Hint: enable comparison in rule #0 by modifying the features.filter object\n  - Hint: prepend another rule matching `doggos.age` with appropriate filter features before rule #0",
+                  "message": "Index `[uuid]`: Filter operator `>` is not allowed for the attribute `doggos.age`.\n  - Note: allowed operators: OR, AND, NOT, =, !=, IN, IS EMPTY, IS NULL, EXISTS.\n  - Note: field `doggos.age` matched rule #0 in `filterableAttributes`\n  - Hint: enable comparison in rule #0 by modifying the features.filter object\n  - Hint: prepend another rule matching `doggos.age` with appropriate filter features before rule #0",
                   "code": "invalid_search_filter",
                   "type": "invalid_request",
                   "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
