@@ -25,7 +25,7 @@ LABEL   org.opencontainers.image.source="https://github.com/meilisearch/meilisea
 
 ENV     MEILI_HTTP_ADDR 0.0.0.0:7700
 ENV     MEILI_SERVER_PROVIDER docker
-ENV     MEILI_CONTACT_EMAIL
+ENV     MEILI_CONTACT_EMAIL ""
 
 RUN     apk add -q --no-cache libgcc tini curl
 
