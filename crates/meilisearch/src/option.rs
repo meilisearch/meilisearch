@@ -349,6 +349,9 @@ pub struct Opt {
     pub log_level: LogLevel,
 
     /// Sets the email address to contact for support and news.
+    ///
+    /// Use this option to disable contact email prompting. Leave
+    /// blank or without value to disable contact email prompting.
     #[clap(long, env = MEILI_CONTACT_EMAIL)]
     pub contact_email: Option<Option<String>>,
 
