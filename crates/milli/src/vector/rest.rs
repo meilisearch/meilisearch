@@ -8,7 +8,7 @@ use rayon::slice::ParallelSlice as _;
 use serde::{Deserialize, Serialize};
 
 use super::error::EmbedErrorKind;
-use super::json_template::ValueTemplate;
+use super::json_template::InjectableValue;
 use super::{
     DistributionShift, EmbedError, Embedding, EmbeddingCache, NewEmbedderError, REQUEST_PARALLELISM,
 };
@@ -417,12 +417,13 @@ pub(super) const REPEAT_PLACEHOLDER: &str = "{{..}}";
 
 #[derive(Debug)]
 pub struct Request {
-    template: ValueTemplate,
+    template: InjectableValue,
 }
 
 impl Request {
     pub fn new(template: serde_json::Value) -> Result<Self, NewEmbedderError> {
-        let template = match ValueTemplate::new(template, REQUEST_PLACEHOLDER, REPEAT_PLACEHOLDER) {
+        let template = match InjectableValue::new(template, REQUEST_PLACEHOLDER, REPEAT_PLACEHOLDER)
+        {
             Ok(template) => template,
             Err(error) => {
                 let message =
@@ -452,20 +453,20 @@ impl Request {
 
 #[derive(Debug)]
 pub struct Response {
-    template: ValueTemplate,
+    template: InjectableValue,
 }
 
 impl Response {
     pub fn new(template: serde_json::Value, request: &Request) -> Result<Self, NewEmbedderError> {
-        let template = match ValueTemplate::new(template, RESPONSE_PLACEHOLDER, REPEAT_PLACEHOLDER)
-        {
-            Ok(template) => template,
-            Err(error) => {
-                let message =
-                    error.error_message("response", RESPONSE_PLACEHOLDER, REPEAT_PLACEHOLDER);
-                return Err(NewEmbedderError::rest_could_not_parse_template(message));
-            }
-        };
+        let template =
+            match InjectableValue::new(template, RESPONSE_PLACEHOLDER, REPEAT_PLACEHOLDER) {
+                Ok(template) => template,
+                Err(error) => {
+                    let message =
+                        error.error_message("response", RESPONSE_PLACEHOLDER, REPEAT_PLACEHOLDER);
+                    return Err(NewEmbedderError::rest_could_not_parse_template(message));
+                }
+            };
 
         match (template.has_array_value(), request.template.has_array_value()) {
             (true, true) | (false, false) => Ok(Self {template}),
