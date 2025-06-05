@@ -179,9 +179,9 @@ async fn prompt_for_contact_email() -> anyhow::Result<Option<String>> {
         return Ok(None);
     }
 
-    println!("Enter your email to receive occasional updates and tips about Meilisearch.");
-    println!("Leave blank to skip.");
-    print!("contact email> ");
+    println!("Stay up to date! Get monthly updates about new features and tips to get the most out of Meilisearch.");
+    println!("You can use the `--contact-email` parameter to disable this prompt.");
+    print!("Enter your email or leave blank to skip> ");
     std::io::stdout().flush()?;
 
     let mut email = String::new();
