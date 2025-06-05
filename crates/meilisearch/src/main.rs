@@ -12,7 +12,7 @@ use actix_web::web::Data;
 use actix_web::HttpServer;
 use index_scheduler::IndexScheduler;
 use is_terminal::IsTerminal;
-use meilisearch::analytics::Analytics;
+use meilisearch::analytics::{Analytics, MEILISEARCH_CONFIG_PATH};
 use meilisearch::option::LogMode;
 use meilisearch::search_queue::SearchQueue;
 use meilisearch::{
@@ -20,10 +20,17 @@ use meilisearch::{
     LogStderrType, Opt, SubscriberForSecondLayer,
 };
 use meilisearch_auth::{generate_master_key, AuthController, MASTER_KEY_MIN_SIZE};
+use meilisearch_types::versioning::{VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH};
+use serde_json::json;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt as _;
 use tracing_subscriber::Layer;
+
+const SKIP_EMAIL_FILENAME: &str = "skip-email";
+const PORTAL_ID: &str = "25945010";
+const FORM_GUID: &str = "991e2a09-77c2-4428-9242-ebf26bfc6c64";
 
 #[cfg(not(windows))]
 #[global_allocator]
@@ -89,7 +96,7 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn try_main() -> anyhow::Result<()> {
-    let (opt, config_read_from) = Opt::try_build()?;
+    let (mut opt, config_read_from) = Opt::try_build()?;
 
     std::panic::set_hook(Box::new(on_panic));
 
@@ -124,6 +131,38 @@ async fn try_main() -> anyhow::Result<()> {
 
     let (index_scheduler, auth_controller) = setup_meilisearch(&opt)?;
 
+    // We ask users their emails just after the data.ms is created
+    let skip_email_path =
+        MEILISEARCH_CONFIG_PATH.as_ref().map(|conf| conf.join(SKIP_EMAIL_FILENAME));
+    // If the config path does not exist, it means the user don't have a home directory
+    let skip_email = skip_email_path.as_ref().is_none_or(|path| path.exists());
+    opt.contact_email = match opt.contact_email.as_ref().map(|email| email.as_deref()) {
+        Some(Some("false")) | None if !skip_email => prompt_for_contact_email().await.map(Some)?,
+        Some(Some(email)) if !skip_email => Some(Some(email.to_string())),
+        _otherwise => None,
+    };
+
+    if let Some(Some(email)) = opt.contact_email.as_ref() {
+        let email = email.clone();
+        // We spawn a task to register the email and create the skip email
+        // file to avoid blocking the Meilisearch launch further.
+        let handle = tokio::spawn(async move {
+            if let Some(skip_email_path) = skip_email_path {
+                // If the analytics are disabled the directory might not exist at all
+                if let Err(e) = tokio::fs::create_dir_all(skip_email_path.parent().unwrap()).await {
+                    eprintln!("Failed to create skip email file: {e}");
+                }
+                if let Err(e) = tokio::fs::File::create_new(skip_email_path).await {
+                    eprintln!("Failed to create skip email file: {e}");
+                }
+            }
+            if let Err(err) = register_contact_email(&email).await {
+                eprintln!("Failed to register email: {}", err);
+            }
+        });
+        drop(handle);
+    }
+
     let analytics =
         analytics::Analytics::new(&opt, index_scheduler.clone(), auth_controller.clone()).await;
 
@@ -135,6 +174,76 @@ async fn try_main() -> anyhow::Result<()> {
     });
 
     run_http(index_scheduler, auth_controller, opt, log_handle, Arc::new(analytics)).await?;
+
+    Ok(())
+}
+
+/// Prompt the user about the contact email for support and news.
+/// It only displays the prompt if the input is an interactive terminal.
+async fn prompt_for_contact_email() -> anyhow::Result<Option<String>> {
+    let stdin = tokio::io::stdin();
+
+    if !stdin.is_terminal() {
+        return Ok(None);
+    }
+
+    println!("Get monthly updates about new features and tips to get the most out of Meilisearch.");
+    println!("Use the --contact-email option to disable this prompt.");
+    print!("Enter your email or leave blank to skip> ");
+    std::io::stdout().flush()?;
+
+    let mut email = String::new();
+    let mut stdin = BufReader::new(stdin);
+    let _ = stdin.read_line(&mut email).await?;
+    let email = email.trim();
+
+    if email.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(email.to_string()))
+    }
+}
+
+async fn register_contact_email(email: &str) -> anyhow::Result<()> {
+    let url = format!(
+        "https://api.hsforms.com/submissions/v3/integration/submit/{PORTAL_ID}/{FORM_GUID}"
+    );
+
+    let page_name = format!(
+        "Meilisearch terminal prompt v{}.{}.{}",
+        VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH
+    );
+    let response = reqwest::Client::new()
+        .post(url)
+        .json(&json!({
+          "fields": [{
+            "objectTypeId": "0-1",
+            "name": "email",
+            "value": email,
+        }],
+        "context": {
+            "pageName": page_name,
+        },
+        "legalConsentOptions": {
+            "consent": {
+                "consentToProcess": true,
+                "text": "I agree to allow Meilisearch to store and process my personal data.",
+                "communications": [{
+                    "value": true,
+                    "subscriptionTypeId": 999,
+                    "text": "I agree to receive marketing communications from Meilisearch.",
+                }],
+            },
+        },
+        }))
+        .send()
+        .await?;
+
+    let status = response.status();
+    if status.is_client_error() || status.is_server_error() {
+        let response: serde_json::Value = response.json().await?;
+        eprintln!("Failed to register email: {response:?}");
+    }
 
     Ok(())
 }
