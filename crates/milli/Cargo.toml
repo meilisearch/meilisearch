@@ -47,7 +47,8 @@ ordered-float = "4.6.0"
 rayon = "1.10.0"
 roaring = { version = "0.10.10", features = ["serde"] }
 rstar = { version = "0.12.2", features = ["serde"] }
-serde = { version = "1.0.217", features = ["derive"] }
+serde = { version = "1.0.217" }
+serde_derive = { version = "1.0.217" }
 serde_json = { version = "1.0.135", features = ["preserve_order", "raw_value"] }
 slice-group-by = "0.3.1"
 smallstr = { version = "0.3.0", features = ["serde"] }
