@@ -10,7 +10,7 @@ use std::io::LineWriter;
 use std::path::PathBuf;
 
 use anyhow::Context;
-use clap::Parser;
+use clap_derive::Parser;
 use tracing_subscriber::fmt::format::FmtSpan;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::Layer;

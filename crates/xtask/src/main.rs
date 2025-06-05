@@ -4,7 +4,7 @@ use clap::Parser;
 use xtask::bench::BenchDeriveArgs;
 
 /// List features available in the workspace
-#[derive(Parser, Debug)]
+#[derive(clap_derive::Parser, Debug)]
 struct ListFeaturesDeriveArgs {
     /// Feature to exclude from the list. Use a comma to separate multiple features.
     #[arg(short, long, value_delimiter = ',')]
@@ -12,7 +12,7 @@ struct ListFeaturesDeriveArgs {
 }
 
 /// Utilitary commands
-#[derive(Parser, Debug)]
+#[derive(clap_derive::Parser, Debug)]
 #[command(author, version, about, long_about)]
 #[command(name = "cargo xtask")]
 #[command(bin_name = "cargo xtask")]
