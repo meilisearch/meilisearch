@@ -1,7 +1,7 @@
 mod errors;
 
 use meili_snap::insta::assert_json_snapshot;
-use meili_snap::snapshot;
+use meili_snap::{json_string, snapshot};
 
 use crate::common::Server;
 use crate::json;
@@ -119,21 +119,21 @@ async fn list_batches_with_star_filters() {
 
     let (response, code) =
         index.service.get("/batches?types=*,documentAdditionOrUpdate&statuses=*").await;
-    assert_eq!(code, 200, "{:?}", response);
+    assert_eq!(code, 200, "{response:?}");
     assert_eq!(response["results"].as_array().unwrap().len(), 2);
 
     let (response, code) = index
         .service
         .get("/batches?types=*,documentAdditionOrUpdate&statuses=*,failed&indexUids=test")
         .await;
-    assert_eq!(code, 200, "{:?}", response);
+    assert_eq!(code, 200, "{response:?}");
     assert_eq!(response["results"].as_array().unwrap().len(), 2);
 
     let (response, code) = index
         .service
         .get("/batches?types=*,documentAdditionOrUpdate&statuses=*,failed&indexUids=test,*")
         .await;
-    assert_eq!(code, 200, "{:?}", response);
+    assert_eq!(code, 200, "{response:?}");
     assert_eq!(response["results"].as_array().unwrap().len(), 2);
 }
 
@@ -223,7 +223,7 @@ async fn list_batch_filter_error() {
 
     let (response, code) = server.batches_filter("lol=pied").await;
     assert_eq!(code, 400, "{response}");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r#"
+    snapshot!(json_string!(response), @r#"
     {
       "message": "Unknown parameter `lol`: expected one of `limit`, `from`, `reverse`, `batchUids`, `uids`, `canceledBy`, `types`, `statuses`, `indexUids`, `afterEnqueuedAt`, `beforeEnqueuedAt`, `afterStartedAt`, `beforeStartedAt`, `afterFinishedAt`, `beforeFinishedAt`",
       "code": "bad_request",
@@ -234,7 +234,7 @@ async fn list_batch_filter_error() {
 
     let (response, code) = server.batches_filter("uids=pied").await;
     assert_eq!(code, 400, "{response}");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r#"
+    snapshot!(json_string!(response), @r#"
     {
       "message": "Invalid value in parameter `uids`: could not parse `pied` as a positive integer",
       "code": "invalid_task_uids",
@@ -245,7 +245,7 @@ async fn list_batch_filter_error() {
 
     let (response, code) = server.batches_filter("from=pied").await;
     assert_eq!(code, 400, "{response}");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r#"
+    snapshot!(json_string!(response), @r#"
     {
       "message": "Invalid value in parameter `from`: could not parse `pied` as a positive integer",
       "code": "invalid_task_from",
@@ -256,7 +256,7 @@ async fn list_batch_filter_error() {
 
     let (response, code) = server.batches_filter("beforeStartedAt=pied").await;
     assert_eq!(code, 400, "{response}");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r#"
+    snapshot!(json_string!(response), @r#"
     {
       "message": "Invalid value in parameter `beforeStartedAt`: `pied` is an invalid date-time. It should follow the YYYY-MM-DD or RFC 3339 date-time format.",
       "code": "invalid_task_before_started_at",
@@ -685,8 +685,8 @@ async fn test_summarized_settings_update() {
     let index = server.unique_index();
     // here we should find my payload even in the failed batch.
     let (response, code) = index.update_settings(json!({ "rankingRules": ["custom"] })).await;
-    meili_snap::snapshot!(code, @"400 Bad Request");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
     {
       "message": "Invalid value at `.rankingRules[0]`: `custom` ranking rule is invalid. Valid ranking rules are words, typo, sort, proximity, attribute, exactness and custom ranking rules.",
       "code": "invalid_settings_ranking_rules",
