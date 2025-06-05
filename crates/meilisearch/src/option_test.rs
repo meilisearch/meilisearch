@@ -29,7 +29,7 @@ fn test_meilli_config_file_path_invalid() {
         let error_message = Opt::try_build().unwrap_err().to_string();
         assert!(
             possible_error_messages.contains(&error_message.as_str()),
-            "Expected onf of {possible_error_messages:?}, got {error_message:?}."
+            "Expected one of {possible_error_messages:?}, got {error_message:?}."
         );
     });
 }

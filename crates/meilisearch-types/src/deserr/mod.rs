@@ -120,11 +120,7 @@ impl<C: Default + ErrorCode> DeserializeError for DeserrQueryParamError<C> {
 pub fn immutable_field_error(field: &str, accepted: &[&str], code: Code) -> DeserrJsonError {
     let msg = format!(
         "Immutable field `{field}`: expected one of {}",
-        accepted
-            .iter()
-            .map(|accepted| format!("`{accepted}`"))
-            .collect::<Vec<String>>()
-            .join(", ")
+        accepted.iter().map(|accepted| format!("`{accepted}`")).collect::<Vec<String>>().join(", ")
     );
 
     DeserrJsonError::new(msg, code)
