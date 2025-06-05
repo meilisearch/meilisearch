@@ -20,11 +20,16 @@ use meilisearch::{
     LogStderrType, Opt, SubscriberForSecondLayer,
 };
 use meilisearch_auth::{generate_master_key, AuthController, MASTER_KEY_MIN_SIZE};
+use meilisearch_types::versioning::{VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH};
+use serde_json::json;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt as _;
 use tracing_subscriber::Layer;
+
+const PORTAL_ID: &str = "25945010";
+const FORM_GUID: &str = "991e2a09-77c2-4428-9242-ebf26bfc6c64";
 
 #[cfg(not(windows))]
 #[global_allocator]
@@ -96,9 +101,19 @@ async fn try_main() -> anyhow::Result<()> {
 
     opt.contact_email = match opt.contact_email.as_ref().map(|email| email.as_deref()) {
         Some(Some("false")) | None => prompt_for_contact_email().await.map(Some)?,
+        Some(Some("")) | Some(None) => None,
         Some(Some(email)) => Some(Some(email.to_string())),
-        Some(None) => None,
     };
+
+    if let Some(Some(email)) = opt.contact_email.as_ref() {
+        let email = email.clone();
+        let _ = tokio::spawn(async move {
+            dbg!(&email);
+            if let Err(err) = register_contact_email(&email).await {
+                eprintln!("Failed to register email: {}", err);
+            }
+        });
+    }
 
     anyhow::ensure!(
         !(cfg!(windows) && opt.experimental_reduce_indexing_memory_usage),
@@ -170,6 +185,50 @@ async fn prompt_for_contact_email() -> anyhow::Result<Option<String>> {
     } else {
         Ok(Some(email.to_string()))
     }
+}
+
+async fn register_contact_email(email: &str) -> anyhow::Result<()> {
+    let url = format!(
+        "https://api.hsforms.com/submissions/v3/integration/submit/{PORTAL_ID}/{FORM_GUID}"
+    );
+
+    let page_name = format!(
+        "Meilisearch terminal prompt v{}.{}.{}",
+        VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH
+    );
+    let response = reqwest::Client::new()
+        .post(url)
+        .json(&json!({
+          "fields": [{
+            "objectTypeId": "0-1",
+            "name": "email",
+            "value": email,
+        }],
+        "context": {
+            "pageName": page_name,
+        },
+        "legalConsentOptions": {
+            "consent": {
+                "consentToProcess": true,
+                "text": "I agree to allow Meilisearch to store and process my personal data.",
+                "communications": [{
+                    "value": true,
+                    "subscriptionTypeId": 999,
+                    "text": "I agree to receive marketing communications from Meilisearch.",
+                }],
+            },
+        },
+        }))
+        .send()
+        .await?;
+
+    let status = response.status();
+    if status.is_client_error() || status.is_server_error() {
+        let response: serde_json::Value = response.json().await?;
+        eprintln!("Failed to register email: {response:?}");
+    }
+
+    Ok(())
 }
 
 async fn run_http(
