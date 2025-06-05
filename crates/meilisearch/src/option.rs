@@ -177,7 +177,7 @@ impl FromStr for LogLevel {
     }
 }
 
-#[derive(Debug, Clone, Parser, Deserialize)]
+#[derive(Debug, Clone, clap_derive::Parser, Deserialize)]
 #[clap(version, next_display_order = None)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct Opt {
@@ -711,7 +711,7 @@ impl Opt {
     }
 }
 
-#[derive(Debug, Default, Clone, Parser, Deserialize)]
+#[derive(Debug, Default, Clone, clap_derive::Parser, Deserialize)]
 pub struct IndexerOpts {
     /// Sets the maximum amount of RAM Meilisearch can use when indexing. By default, Meilisearch
     /// uses no more than two thirds of available memory.

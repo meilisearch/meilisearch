@@ -18,10 +18,10 @@ use milli::Index;
 use serde_json::Value;
 use tempfile::TempDir;
 
-#[derive(Debug, Arbitrary)]
+#[derive(Debug, derive_arbitrary::Arbitrary)]
 struct Batch([Operation; 5]);
 
-#[derive(Debug, Clone, Parser)]
+#[derive(Debug, Clone, clap_derive::Parser)]
 struct Opt {
     /// The number of fuzzer to run in parallel.
     #[clap(long)]
