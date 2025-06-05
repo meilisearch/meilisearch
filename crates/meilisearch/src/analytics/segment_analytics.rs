@@ -277,6 +277,7 @@ impl Infos {
             log_level,
             indexer_options,
             config_file_path,
+            contact_email: _,
             no_analytics: _,
         } = options;
 

@@ -21,6 +21,7 @@ use meilisearch::{
 };
 use meilisearch_auth::{generate_master_key, AuthController, MASTER_KEY_MIN_SIZE};
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt as _;
 use tracing_subscriber::Layer;
@@ -89,9 +90,15 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn try_main() -> anyhow::Result<()> {
-    let (opt, config_read_from) = Opt::try_build()?;
+    let (mut opt, config_read_from) = Opt::try_build()?;
 
     std::panic::set_hook(Box::new(on_panic));
+
+    opt.contact_email = match opt.contact_email.as_ref().map(|email| email.as_deref()) {
+        Some(Some("false")) | None => prompt_for_contact_email().await.map(Some)?,
+        Some(Some(email)) => Some(Some(email.to_string())),
+        Some(None) => None,
+    };
 
     anyhow::ensure!(
         !(cfg!(windows) && opt.experimental_reduce_indexing_memory_usage),
@@ -137,6 +144,27 @@ async fn try_main() -> anyhow::Result<()> {
     run_http(index_scheduler, auth_controller, opt, log_handle, Arc::new(analytics)).await?;
 
     Ok(())
+}
+
+/// Prompt the user about the contact email for support and news.
+/// It only displays the prompt if the input is an interactive terminal.
+async fn prompt_for_contact_email() -> anyhow::Result<Option<String>> {
+    let stdin = tokio::io::stdin();
+
+    if !stdin.is_terminal() {
+        return Ok(None);
+    }
+
+    println!("Would you mind providing your contact email for support and news?");
+    println!("We will use it to contact you with news only.");
+    print!("contact email> ");
+    std::io::stdout().flush()?;
+
+    let mut email = String::new();
+    let mut stdin = BufReader::new(stdin);
+    let _ = stdin.read_line(&mut email).await?;
+
+    Ok(Some(email.trim().to_string()))
 }
 
 async fn run_http(

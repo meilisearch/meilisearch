@@ -66,6 +66,7 @@ const MEILI_EXPERIMENTAL_LIMIT_BATCHED_TASKS_TOTAL_SIZE: &str =
 const MEILI_EXPERIMENTAL_EMBEDDING_CACHE_ENTRIES: &str =
     "MEILI_EXPERIMENTAL_EMBEDDING_CACHE_ENTRIES";
 const MEILI_EXPERIMENTAL_NO_SNAPSHOT_COMPACTION: &str = "MEILI_EXPERIMENTAL_NO_SNAPSHOT_COMPACTION";
+const MEILI_CONTACT_EMAIL: &str = "MEILI_CONTACT_EMAIL";
 const DEFAULT_CONFIG_FILE_PATH: &str = "./config.toml";
 const DEFAULT_DB_PATH: &str = "./data.ms";
 const DEFAULT_HTTP_ADDR: &str = "localhost:7700";
@@ -347,6 +348,10 @@ pub struct Opt {
     #[serde(default)]
     pub log_level: LogLevel,
 
+    /// Sets the email address to contact for support and news.
+    #[clap(long, env = MEILI_CONTACT_EMAIL)]
+    pub contact_email: Option<Option<String>>,
+
     /// Experimental contains filter feature. For more information,
     /// see: <https://github.com/orgs/meilisearch/discussions/763>
     ///
@@ -556,6 +561,7 @@ impl Opt {
             ignore_dump_if_db_exists: _,
             config_file_path: _,
             no_analytics,
+            contact_email,
             experimental_contains_filter,
             experimental_enable_metrics,
             experimental_search_queue_size,
@@ -588,6 +594,10 @@ impl Opt {
         }
 
         export_to_env_if_not_present(MEILI_NO_ANALYTICS, no_analytics.to_string());
+        export_to_env_if_not_present(
+            MEILI_CONTACT_EMAIL,
+            contact_email.flatten().unwrap_or_else(|| "false".to_string()),
+        );
         export_to_env_if_not_present(
             MEILI_HTTP_PAYLOAD_SIZE_LIMIT,
             http_payload_size_limit.to_string(),
