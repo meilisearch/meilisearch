@@ -3728,6 +3728,7 @@ version = "1.15.0"
 dependencies = [
  "actix-web",
  "anyhow",
+ "bitflags 2.9.0",
  "bumpalo",
  "bumparaw-collections",
  "convert_case",
