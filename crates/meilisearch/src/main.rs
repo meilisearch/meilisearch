@@ -170,8 +170,8 @@ async fn prompt_for_contact_email() -> anyhow::Result<Option<String>> {
         return Ok(None);
     }
 
-    println!("Would you mind providing your contact email for support and news? We will use it to contact you with news only.");
-    println!("Press enter to skip.");
+    println!("Enter your email to receive occasional updates and tips about Meilisearch.");
+    println!("Leave blank to skip.");
     print!("contact email> ");
     std::io::stdout().flush()?;
 
