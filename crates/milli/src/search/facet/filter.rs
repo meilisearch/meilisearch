@@ -49,13 +49,11 @@ impl Display for BadGeoError {
             }
             Self::Lat(lat) => write!(
                 f,
-                "Bad latitude `{}`. Latitude must be contained between -90 and 90 degrees. ",
-                lat
+                "Bad latitude `{lat}`. Latitude must be contained between -90 and 90 degrees. "
             ),
             Self::Lng(lng) => write!(
                 f,
-                "Bad longitude `{}`. Longitude must be contained between -180 and 180 degrees. ",
-                lng
+                "Bad longitude `{lng}`. Longitude must be contained between -180 and 180 degrees. "
             ),
         }
     }
@@ -98,10 +96,9 @@ impl Display for FilterError<'_> {
             }
             Self::TooDeep => write!(
                 f,
-                "Too many filter conditions, can't process more than {} filters.",
-                MAX_FILTER_DEPTH
+                "Too many filter conditions, can't process more than {MAX_FILTER_DEPTH} filters."
             ),
-            Self::ParseGeoError(error) => write!(f, "{}", error),
+            Self::ParseGeoError(error) => write!(f, "{error}"),
         }
     }
 }
@@ -1236,7 +1233,7 @@ mod tests {
         let tipic_filter = "account_ids=14361 OR ";
         let mut filter_string = String::with_capacity(tipic_filter.len() * 14360);
         for i in 1..=14361 {
-            let _ = write!(&mut filter_string, "account_ids={}", i);
+            let _ = write!(&mut filter_string, "account_ids={i}");
             if i != 14361 {
                 let _ = write!(&mut filter_string, " OR ");
             }

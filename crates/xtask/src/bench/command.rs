@@ -124,7 +124,7 @@ async fn wait_for_tasks(client: &Client) -> anyhow::Result<()> {
         match response.get("total") {
             Some(serde_json::Value::Number(number)) => {
                 let number = number.as_u64().with_context(|| {
-                    format!("waiting for tasks: could not parse 'total' as integer, got {}", number)
+                    format!("waiting for tasks: could not parse 'total' as integer, got {number}")
                 })?;
                 if number == 0 {
                     break;
@@ -169,7 +169,7 @@ pub async fn run(
     };
 
     let response =
-        request.send().await.with_context(|| format!("error sending command: {}", command))?;
+        request.send().await.with_context(|| format!("error sending command: {command}"))?;
 
     let code = response.status();
     if code.is_client_error() {

@@ -127,7 +127,7 @@ impl V2Reader {
                         .path()
                         .join("updates")
                         .join("update_files")
-                        .join(format!("update_{}", uuid));
+                        .join(format!("update_{uuid}"));
                     Ok((task, Some(UpdateFile::new(&update_file_path)?)))
                 } else {
                     Ok((task, None))

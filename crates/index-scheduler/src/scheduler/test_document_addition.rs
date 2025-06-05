@@ -167,10 +167,9 @@ fn test_document_replace() {
     for i in 0..10 {
         let content = format!(
             r#"{{
-                    "id": {},
-                    "doggo": "bob {}"
-                }}"#,
-            i, i
+                    "id": {i},
+                    "doggo": "bob {i}"
+                }}"#
         );
 
         let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(i).unwrap();
@@ -218,10 +217,9 @@ fn test_document_update() {
     for i in 0..10 {
         let content = format!(
             r#"{{
-                    "id": {},
-                    "doggo": "bob {}"
-                }}"#,
-            i, i
+                    "id": {i},
+                    "doggo": "bob {i}"
+                }}"#
         );
 
         let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(i).unwrap();
@@ -271,10 +269,9 @@ fn test_mixed_document_addition() {
 
         let content = format!(
             r#"{{
-                    "id": {},
-                    "doggo": "bob {}"
-                }}"#,
-            i, i
+                    "id": {i},
+                    "doggo": "bob {i}"
+                }}"#
         );
 
         let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(i).unwrap();
@@ -322,10 +319,9 @@ fn test_document_replace_without_autobatching() {
     for i in 0..10 {
         let content = format!(
             r#"{{
-                    "id": {},
-                    "doggo": "bob {}"
-                }}"#,
-            i, i
+                    "id": {i},
+                    "doggo": "bob {i}"
+                }}"#
         );
 
         let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(i).unwrap();
@@ -377,10 +373,9 @@ fn test_document_update_without_autobatching() {
     for i in 0..10 {
         let content = format!(
             r#"{{
-                    "id": {},
-                    "doggo": "bob {}"
-                }}"#,
-            i, i
+                    "id": {i},
+                    "doggo": "bob {i}"
+                }}"#
         );
 
         let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(i).unwrap();
@@ -436,10 +431,9 @@ fn test_document_addition_cant_create_index_without_index() {
     for i in 0..10 {
         let content = format!(
             r#"{{
-                    "id": {},
-                    "doggo": "bob {}"
-                }}"#,
-            i, i
+                    "id": {i},
+                    "doggo": "bob {i}"
+                }}"#
         );
 
         let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(i).unwrap();
@@ -488,10 +482,9 @@ fn test_document_addition_cant_create_index_without_index_without_autobatching()
     for i in 0..10 {
         let content = format!(
             r#"{{
-                    "id": {},
-                    "doggo": "bob {}"
-                }}"#,
-            i, i
+                    "id": {i},
+                    "doggo": "bob {i}"
+                }}"#
         );
 
         let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(i).unwrap();
@@ -550,10 +543,9 @@ fn test_document_addition_cant_create_index_with_index() {
     for i in 0..10 {
         let content = format!(
             r#"{{
-                    "id": {},
-                    "doggo": "bob {}"
-                }}"#,
-            i, i
+                    "id": {i},
+                    "doggo": "bob {i}"
+                }}"#
         );
 
         let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(i).unwrap();
@@ -617,10 +609,9 @@ fn test_document_addition_cant_create_index_with_index_without_autobatching() {
     for i in 0..10 {
         let content = format!(
             r#"{{
-                    "id": {},
-                    "doggo": "bob {}"
-                }}"#,
-            i, i
+                    "id": {i},
+                    "doggo": "bob {i}"
+                }}"#
         );
 
         let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(i).unwrap();
@@ -688,10 +679,9 @@ fn test_document_addition_mixed_rights_with_index() {
     for i in 0..10 {
         let content = format!(
             r#"{{
-                    "id": {},
-                    "doggo": "bob {}"
-                }}"#,
-            i, i
+                    "id": {i},
+                    "doggo": "bob {i}"
+                }}"#
         );
         let allow_index_creation = i % 2 != 0;
 
@@ -745,10 +735,9 @@ fn test_document_addition_mixed_right_without_index_starts_with_cant_create() {
     for i in 0..10 {
         let content = format!(
             r#"{{
-                    "id": {},
-                    "doggo": "bob {}"
-                }}"#,
-            i, i
+                    "id": {i},
+                    "doggo": "bob {i}"
+                }}"#
         );
         let allow_index_creation = i % 2 != 0;
 

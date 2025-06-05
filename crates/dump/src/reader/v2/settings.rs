@@ -262,8 +262,8 @@ impl fmt::Display for Criterion {
             Attribute => f.write_str("attribute"),
             Sort => f.write_str("sort"),
             Exactness => f.write_str("exactness"),
-            Asc(attr) => write!(f, "{}:asc", attr),
-            Desc(attr) => write!(f, "{}:desc", attr),
+            Asc(attr) => write!(f, "{attr}:asc"),
+            Desc(attr) => write!(f, "{attr}:desc"),
         }
     }
 }

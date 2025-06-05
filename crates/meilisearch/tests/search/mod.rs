@@ -1922,7 +1922,7 @@ async fn change_facet_casing() {
             "filterableAttributes": ["dog"],
         }))
         .await;
-    assert_eq!("202", code.as_str(), "{:?}", response);
+    assert_eq!("202", code.as_str(), "{response:?}");
     index.wait_task(response.uid()).await.succeeded();
 
     let (response, _code) = index

@@ -122,7 +122,7 @@ pub fn immutable_field_error(field: &str, accepted: &[&str], code: Code) -> Dese
         "Immutable field `{field}`: expected one of {}",
         accepted
             .iter()
-            .map(|accepted| format!("`{}`", accepted))
+            .map(|accepted| format!("`{accepted}`"))
             .collect::<Vec<String>>()
             .join(", ")
     );

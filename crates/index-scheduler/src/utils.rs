@@ -460,7 +460,7 @@ impl crate::IndexScheduler {
                                 match status {
                                     Status::Succeeded => assert!(indexed_documents <= received_documents),
                                     Status::Failed | Status::Canceled => assert_eq!(indexed_documents, 0),
-                                    status => panic!("DocumentAddition can't have an indexed_documents set if it's {}", status),
+                                    status => panic!("DocumentAddition can't have an indexed_documents set if it's {status}"),
                                 }
                             }
                             None => {
@@ -479,7 +479,7 @@ impl crate::IndexScheduler {
                                 match status {
                                     Status::Succeeded => (),
                                     Status::Failed | Status::Canceled => assert_eq!(edited_documents, 0),
-                                    status => panic!("DocumentEdition can't have an edited_documents set if it's {}", status),
+                                    status => panic!("DocumentEdition can't have an edited_documents set if it's {status}"),
                                 }
                             }
                             None => {

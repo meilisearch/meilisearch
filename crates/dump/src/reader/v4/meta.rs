@@ -127,7 +127,7 @@ where
                     "*" => Ok(StarOr::Star),
                     v => {
                         let other = FromStr::from_str(v).map_err(|e: T::Err| {
-                            SE::custom(format!("Invalid `other` value: {}", e))
+                            SE::custom(format!("Invalid `other` value: {e}"))
                         })?;
                         Ok(StarOr::Other(other))
                     }

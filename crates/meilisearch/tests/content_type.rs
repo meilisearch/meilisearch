@@ -73,7 +73,7 @@ async fn error_json_bad_content_type() {
         let res = test::call_service(&app, req).await;
         let status_code = res.status();
         assert_ne!(status_code, 415,
-        "calling the route `{}` with a content-type of json isn't supposed to throw a bad media type error", route);
+        "calling the route `{route}` with a content-type of json isn't supposed to throw a bad media type error");
 
         // No content-type.
         let req = verb.test_request().uri(route).set_payload(document).to_request();
@@ -90,8 +90,7 @@ async fn error_json_bad_content_type() {
                     "type": "invalid_request",
                     "link": "https://docs.meilisearch.com/errors#missing_content_type",
             }),
-            "when calling the route `{}` with no content-type",
-            route,
+            "when calling the route `{route}` with no content-type",
         );
 
         for bad_content_type in bad_content_types {
@@ -108,8 +107,7 @@ async fn error_json_bad_content_type() {
             let response: Value = serde_json::from_slice(&body).unwrap_or_default();
             assert_eq!(status_code, 415);
             let expected_error_message = format!(
-                r#"The Content-Type `{}` is invalid. Accepted values for the Content-Type header are: `application/json`"#,
-                bad_content_type
+                r#"The Content-Type `{bad_content_type}` is invalid. Accepted values for the Content-Type header are: `application/json`"#
             );
             assert_eq!(
                 response,
@@ -119,9 +117,7 @@ async fn error_json_bad_content_type() {
                         "type": "invalid_request",
                         "link": "https://docs.meilisearch.com/errors#invalid_content_type",
                 }),
-                "when calling the route `{}` with a content-type of `{}`",
-                route,
-                bad_content_type,
+                "when calling the route `{route}` with a content-type of `{bad_content_type}`",
             );
         }
     }
@@ -144,7 +140,7 @@ async fn extract_actual_content_type() {
     let res = test::call_service(&app, req).await;
     let status_code = res.status();
     assert_ne!(status_code, 415,
-    "calling the route `{}` with a content-type of json isn't supposed to throw a bad media type error", route);
+    "calling the route `{route}` with a content-type of json isn't supposed to throw a bad media type error");
 
     let req = test::TestRequest::put()
         .uri(route)
@@ -154,5 +150,5 @@ async fn extract_actual_content_type() {
     let res = test::call_service(&app, req).await;
     let status_code = res.status();
     assert_ne!(status_code, 415,
-    "calling the route `{}` with a content-type of json isn't supposed to throw a bad media type error", route);
+    "calling the route `{route}` with a content-type of json isn't supposed to throw a bad media type error");
 }

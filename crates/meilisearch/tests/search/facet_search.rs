@@ -49,11 +49,11 @@ async fn test_settings_documents_indexing_swapping_and_facet_search(
     let index = server.index("test");
 
     let (task, code) = index.add_documents(documents.clone(), None).await;
-    assert_eq!(code, 202, "{}", task);
+    assert_eq!(code, 202, "{task}");
     index.wait_task(task.uid()).await.succeeded();
 
     let (task, code) = index.update_settings(settings.clone()).await;
-    assert_eq!(code, 202, "{}", task);
+    assert_eq!(code, 202, "{task}");
     index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = index.facet_search(query.clone()).await;
@@ -62,18 +62,18 @@ async fn test_settings_documents_indexing_swapping_and_facet_search(
     }
 
     let (task, code) = server.delete_index("test").await;
-    assert_eq!(code, 202, "{}", task);
+    assert_eq!(code, 202, "{task}");
     server.wait_task(task.uid()).await.succeeded();
 
     eprintln!("Settings -> Documents -> test");
     let index = server.index("test");
 
     let (task, code) = index.update_settings(settings.clone()).await;
-    assert_eq!(code, 202, "{}", task);
+    assert_eq!(code, 202, "{task}");
     index.wait_task(task.uid()).await.succeeded();
 
     let (task, code) = index.add_documents(documents.clone(), None).await;
-    assert_eq!(code, 202, "{}", task);
+    assert_eq!(code, 202, "{task}");
     index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = index.facet_search(query.clone()).await;
@@ -82,7 +82,7 @@ async fn test_settings_documents_indexing_swapping_and_facet_search(
     }
 
     let (task, code) = server.delete_index("test").await;
-    assert_eq!(code, 202, "{}", task);
+    assert_eq!(code, 202, "{task}");
     server.wait_task(task.uid()).await.succeeded();
 }
 

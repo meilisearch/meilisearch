@@ -1,6 +1,6 @@
 fn main() {
     if let Err(err) = emit_git_variables() {
-        println!("cargo:warning=vergen: {}", err);
+        println!("cargo:warning=vergen: {err}");
     }
 }
 

@@ -38,7 +38,7 @@ async fn search_formatted_from_sdk() {
               "attributesToRetrieve": ["title"]
             }),
             |response, code| {
-                assert_eq!(code, 200, "{}", response);
+                assert_eq!(code, 200, "{response}");
                 allow_duplicates! {
                   assert_json_snapshot!(response["hits"][0],
                         { "._rankingScore" => "[score]" },
@@ -70,7 +70,7 @@ async fn formatted_contain_wildcard() {
     index.search(json!({ "q": "pésti", "attributesToRetrieve": ["father", "mother"], "attributesToHighlight": ["father", "mother", "*"], "attributesToCrop": ["doggos"], "showMatchesPosition": true }),
         |response, code|
         {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             allow_duplicates! {
               assert_json_snapshot!(response["hits"][0],
                     { "._rankingScore" => "[score]" },
@@ -97,7 +97,7 @@ async fn formatted_contain_wildcard() {
 
     index
         .search(json!({ "q": "pésti", "attributesToRetrieve": ["*"] }), |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             allow_duplicates! {
                 assert_json_snapshot!(response["hits"][0],
                 { "._rankingScore" => "[score]" },
@@ -115,7 +115,7 @@ async fn formatted_contain_wildcard() {
         .search(
             json!({ "q": "pésti", "attributesToRetrieve": ["*"], "attributesToHighlight": ["id"], "showMatchesPosition": true }),
             |response, code| {
-                assert_eq!(code, 200, "{}", response);
+                assert_eq!(code, 200, "{response}");
                 allow_duplicates! {
                   assert_json_snapshot!(response["hits"][0],
                  { "._rankingScore" => "[score]" },
@@ -145,7 +145,7 @@ async fn formatted_contain_wildcard() {
         .search(
             json!({ "q": "pésti", "attributesToRetrieve": ["*"], "attributesToCrop": ["*"] }),
             |response, code| {
-                assert_eq!(code, 200, "{}", response);
+                assert_eq!(code, 200, "{response}");
                 allow_duplicates! {
                     assert_json_snapshot!(response["hits"][0],
                     { "._rankingScore" => "[score]" },
@@ -166,7 +166,7 @@ async fn formatted_contain_wildcard() {
 
     index
         .search(json!({ "q": "pésti", "attributesToCrop": ["*"] }), |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             allow_duplicates! {
                 assert_json_snapshot!(response["hits"][0],
                 { "._rankingScore" => "[score]" },
@@ -191,7 +191,7 @@ async fn format_nested() {
 
     index
         .search(json!({ "q": "pésti", "attributesToRetrieve": ["doggos"] }), |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             allow_duplicates! {
                 assert_json_snapshot!(response["hits"][0],
                 { "._rankingScore" => "[score]" },
@@ -217,7 +217,7 @@ async fn format_nested() {
         .search(
             json!({ "q": "pésti", "attributesToRetrieve": ["doggos.name"] }),
             |response, code| {
-                assert_eq!(code, 200, "{}", response);
+                assert_eq!(code, 200, "{response}");
                 allow_duplicates! {
                     assert_json_snapshot!(response["hits"][0],
                     { "._rankingScore" => "[score]" },
@@ -242,7 +242,7 @@ async fn format_nested() {
         .search(
             json!({ "q": "bobby", "attributesToRetrieve": ["doggos.name"], "showMatchesPosition": true }),
             |response, code| {
-                assert_eq!(code, 200, "{}", response);
+                assert_eq!(code, 200, "{response}");
                 allow_duplicates! {
                     assert_json_snapshot!(response["hits"][0],
                     { "._rankingScore" => "[score]" },
@@ -277,7 +277,7 @@ async fn format_nested() {
     index
         .search(json!({ "q": "pésti", "attributesToRetrieve": [], "attributesToHighlight": ["doggos.name"] }),
         |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             allow_duplicates! {
                 assert_json_snapshot!(response["hits"][0],
                 { "._rankingScore" => "[score]" },
@@ -302,7 +302,7 @@ async fn format_nested() {
     index
         .search(json!({ "q": "pésti", "attributesToRetrieve": [], "attributesToCrop": ["doggos.name"] }),
         |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             allow_duplicates! {
                 assert_json_snapshot!(response["hits"][0],
                 { "._rankingScore" => "[score]" },
@@ -327,7 +327,7 @@ async fn format_nested() {
     index
         .search(json!({ "q": "pésti", "attributesToRetrieve": ["doggos.name"], "attributesToHighlight": ["doggos.age"] }),
         |response, code| {
-    assert_eq!(code, 200, "{}", response);
+    assert_eq!(code, 200, "{response}");
     allow_duplicates! {
         assert_json_snapshot!(response["hits"][0],
         { "._rankingScore" => "[score]" },
@@ -362,7 +362,7 @@ async fn format_nested() {
     index
         .search(json!({ "q": "pésti", "attributesToRetrieve": [], "attributesToHighlight": ["doggos.age"], "attributesToCrop": ["doggos.name"] }),
         |response, code| {
-                assert_eq!(code, 200, "{}", response);
+                assert_eq!(code, 200, "{response}");
                 allow_duplicates! {
                     assert_json_snapshot!(response["hits"][0],
                     { "._rankingScore" => "[score]" },
@@ -403,7 +403,7 @@ async fn displayedattr_2_smol() {
     index
         .search(json!({ "attributesToRetrieve": ["father", "id"], "attributesToHighlight": ["mother"], "attributesToCrop": ["cattos"] }),
         |response, code| {
-    assert_eq!(code, 200, "{}", response);
+    assert_eq!(code, 200, "{response}");
     allow_duplicates! {
         assert_json_snapshot!(response["hits"][0],
         { "._rankingScore" => "[score]" },
@@ -418,7 +418,7 @@ async fn displayedattr_2_smol() {
 
     index
         .search(json!({ "attributesToRetrieve": ["id"] }), |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             allow_duplicates! {
                 assert_json_snapshot!(response["hits"][0],
                 { "._rankingScore" => "[score]" },
@@ -433,7 +433,7 @@ async fn displayedattr_2_smol() {
 
     index
         .search(json!({ "attributesToHighlight": ["id"] }), |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             allow_duplicates! {
                 assert_json_snapshot!(response["hits"][0],
                 { "._rankingScore" => "[score]" },
@@ -451,7 +451,7 @@ async fn displayedattr_2_smol() {
 
     index
         .search(json!({ "attributesToCrop": ["id"] }), |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             allow_duplicates! {
                 assert_json_snapshot!(response["hits"][0],
                 { "._rankingScore" => "[score]" },
@@ -471,7 +471,7 @@ async fn displayedattr_2_smol() {
         .search(
             json!({ "attributesToHighlight": ["id"], "attributesToCrop": ["id"] }),
             |response, code| {
-                assert_eq!(code, 200, "{}", response);
+                assert_eq!(code, 200, "{response}");
                 allow_duplicates! {
                     assert_json_snapshot!(response["hits"][0],
                     { "._rankingScore" => "[score]" },
@@ -490,7 +490,7 @@ async fn displayedattr_2_smol() {
 
     index
         .search(json!({ "attributesToHighlight": ["cattos"] }), |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             allow_duplicates! {
                 assert_json_snapshot!(response["hits"][0],
                 { "._rankingScore" => "[score]" },
@@ -505,7 +505,7 @@ async fn displayedattr_2_smol() {
 
     index
         .search(json!({ "attributesToCrop": ["cattos"] }), |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             allow_duplicates! {
                 assert_json_snapshot!(response["hits"][0],
                 { "._rankingScore" => "[score]" },
@@ -520,7 +520,7 @@ async fn displayedattr_2_smol() {
 
     index
         .search(json!({ "attributesToRetrieve": ["cattos"] }), |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             allow_duplicates! {
                 assert_json_snapshot!(response["hits"][0],
                 { "._rankingScore" => "[score]" },
@@ -533,7 +533,7 @@ async fn displayedattr_2_smol() {
         .search(
             json!({ "attributesToRetrieve": ["cattos"], "attributesToHighlight": ["cattos"], "attributesToCrop": ["cattos"] }),
             |response, code| {
-    assert_eq!(code, 200, "{}", response);
+    assert_eq!(code, 200, "{response}");
     allow_duplicates! {
         assert_json_snapshot!(response["hits"][0],
         { "._rankingScore" => "[score]" },
@@ -548,7 +548,7 @@ async fn displayedattr_2_smol() {
         .search(
             json!({ "attributesToRetrieve": ["cattos"], "attributesToHighlight": ["id"] }),
             |response, code| {
-                assert_eq!(code, 200, "{}", response);
+                assert_eq!(code, 200, "{response}");
                 allow_duplicates! {
                     assert_json_snapshot!(response["hits"][0],
                     { "._rankingScore" => "[score]" },
@@ -568,7 +568,7 @@ async fn displayedattr_2_smol() {
         .search(
             json!({ "attributesToRetrieve": ["cattos"], "attributesToCrop": ["id"] }),
             |response, code| {
-                assert_eq!(code, 200, "{}", response);
+                assert_eq!(code, 200, "{response}");
                 allow_duplicates! {
                     assert_json_snapshot!(response["hits"][0],
                     { "._rankingScore" => "[score]" },
@@ -600,7 +600,7 @@ async fn test_cjk_highlight() {
 
     index
         .search(json!({"q": "で", "attributesToHighlight": ["title"]}), |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             assert_eq!(
                 response["hits"][0]["_formatted"]["title"],
                 json!("この度、クーポン<em>で</em>無料<em>で</em>頂きました。")
@@ -610,7 +610,7 @@ async fn test_cjk_highlight() {
 
     index
         .search(json!({"q": "大卫", "attributesToHighlight": ["title"]}), |response, code| {
-            assert_eq!(code, 200, "{}", response);
+            assert_eq!(code, 200, "{response}");
             assert_eq!(
                 response["hits"][0]["_formatted"]["title"],
                 json!("<em>大卫</em>到了扫罗那里")

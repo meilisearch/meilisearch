@@ -180,7 +180,7 @@ pub enum DocumentId {
 
 impl DocumentId {
     fn debug(&self) -> String {
-        format!("{:?}", self)
+        format!("{self:?}")
     }
 
     pub fn is_generated(&self) -> bool {
@@ -198,9 +198,9 @@ impl DocumentId {
 impl fmt::Debug for DocumentId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            DocumentId::Retrieved { value } => write!(f, "{:?}", value),
+            DocumentId::Retrieved { value } => write!(f, "{value:?}"),
             DocumentId::Generated { value, document_nth } => {
-                write!(f, "{{{:?}}} of the {}nth document", value, document_nth)
+                write!(f, "{{{value:?}}} of the {document_nth}nth document")
             }
         }
     }

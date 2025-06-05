@@ -74,7 +74,7 @@ async fn update_document() {
     ]);
 
     let (response, code) = index.update_documents(documents, None).await;
-    assert_eq!(code, 202, "response: {}", response);
+    assert_eq!(code, 202, "response: {response}");
 
     index.wait_task(response.uid()).await.succeeded();
 
@@ -118,7 +118,7 @@ async fn update_document_gzip_encoded() {
     ]);
 
     let (response, code) = index.update_documents(documents, None).await;
-    assert_eq!(code, 202, "response: {}", response);
+    assert_eq!(code, 202, "response: {response}");
 
     index.wait_task(response.uid()).await.succeeded();
 
@@ -219,7 +219,7 @@ async fn update_faceted_document() {
             "rankingRules": ["facet:asc"],
         }))
         .await;
-    assert_eq!("202", code.as_str(), "{:?}", response);
+    assert_eq!("202", code.as_str(), "{response:?}");
     index.wait_task(response.uid()).await.succeeded();
 
     let documents: Vec<_> = (0..1000)
@@ -244,7 +244,7 @@ async fn update_faceted_document() {
     ]);
 
     let (response, code) = index.update_documents(documents, None).await;
-    assert_eq!(code, 202, "response: {}", response);
+    assert_eq!(code, 202, "response: {response}");
 
     index.wait_task(response.uid()).await.succeeded();
 

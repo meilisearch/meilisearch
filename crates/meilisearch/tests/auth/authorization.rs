@@ -124,7 +124,7 @@ async fn error_access_expired_key() {
         let (mut response, code) = server.dummy_request(method, route).await;
         response["message"] = serde_json::json!(null);
 
-        assert_eq!(response, INVALID_RESPONSE.clone(), "on route: {:?} - {:?}", method, route);
+        assert_eq!(response, INVALID_RESPONSE.clone(), "on route: {method:?} - {route:?}");
         assert_eq!(403, code, "{:?}", &response);
     }
 }
@@ -155,7 +155,7 @@ async fn error_access_unauthorized_index() {
         let (mut response, code) = server.dummy_request(method, route).await;
         response["message"] = serde_json::json!(null);
 
-        assert_eq!(response, INVALID_RESPONSE.clone(), "on route: {:?} - {:?}", method, route);
+        assert_eq!(response, INVALID_RESPONSE.clone(), "on route: {method:?} - {route:?}");
         assert_eq!(403, code, "{:?}", &response);
     }
 }
@@ -183,7 +183,7 @@ async fn error_access_unauthorized_action() {
         let (mut response, code) = server.dummy_request(method, route).await;
         response["message"] = serde_json::json!(null);
 
-        assert_eq!(response, INVALID_RESPONSE.clone(), "on route: {:?} - {:?}", method, route);
+        assert_eq!(response, INVALID_RESPONSE.clone(), "on route: {method:?} - {route:?}");
         assert_eq!(403, code, "{:?}", &response);
     }
 }
@@ -197,7 +197,7 @@ async fn access_authorized_master_key() {
     for ((method, route), _) in AUTHORIZATIONS.iter() {
         let (response, code) = server.dummy_request(method, route).await;
 
-        assert_ne!(response, INVALID_RESPONSE.clone(), "on route: {:?} - {:?}", method, route);
+        assert_ne!(response, INVALID_RESPONSE.clone(), "on route: {method:?} - {route:?}");
         assert_ne!(code, 403);
     }
 }
@@ -232,20 +232,14 @@ async fn access_authorized_restricted_index() {
                 assert_eq!(
                     response,
                     INVALID_METRICS_RESPONSE.clone(),
-                    "on route: {:?} - {:?} with action: {:?}",
-                    method,
-                    route,
-                    action
+                    "on route: {method:?} - {route:?} with action: {action:?}"
                 );
                 assert_eq!(code, 403);
             } else {
                 assert_ne!(
                     response,
                     INVALID_RESPONSE.clone(),
-                    "on route: {:?} - {:?} with action: {:?}",
-                    method,
-                    route,
-                    action
+                    "on route: {method:?} - {route:?} with action: {action:?}"
                 );
                 assert_ne!(code, 403);
             }
@@ -280,12 +274,9 @@ async fn access_authorized_no_index_restriction() {
             assert_ne!(
                 response,
                 INVALID_RESPONSE.clone(),
-                "on route: {:?} - {:?} with action: {:?}",
-                method,
-                route,
-                action
+                "on route: {method:?} - {route:?} with action: {action:?}"
             );
-            assert_ne!(code, 403, "on route: {:?} - {:?} with action: {:?}", method, route, action);
+            assert_ne!(code, 403, "on route: {method:?} - {route:?} with action: {action:?}");
         }
     }
 }

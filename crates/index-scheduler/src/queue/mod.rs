@@ -325,7 +325,7 @@ impl Queue {
         );
 
         // it's safe to unwrap here because we checked the len above
-        let newest_task_id = to_delete.iter().last().unwrap();
+        let newest_task_id = to_delete.iter().next_back().unwrap();
         let last_task_to_delete =
             self.tasks.get_task(wtxn, newest_task_id)?.ok_or(Error::CorruptedTaskQueue)?;
 

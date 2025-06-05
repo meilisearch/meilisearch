@@ -97,7 +97,7 @@ impl fmt::Display for Member {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Member::Field(name) => f.write_str(name),
-            Member::Geo([lat, lng]) => write!(f, "_geoPoint({}, {})", lat, lng),
+            Member::Geo([lat, lng]) => write!(f, "_geoPoint({lat}, {lng})"),
         }
     }
 }
@@ -229,10 +229,7 @@ mod tests {
             let res = req.parse::<AscDesc>();
             assert!(
                 res.is_ok(),
-                "Failed to parse `{}`, was expecting `{:?}` but instead got `{:?}`",
-                req,
-                expected,
-                res
+                "Failed to parse `{req}`, was expecting `{expected:?}` but instead got `{res:?}`"
             );
             assert_eq!(res.unwrap(), expected);
         }
@@ -281,18 +278,13 @@ mod tests {
             let res = req.parse::<AscDesc>();
             assert!(
                 res.is_err(),
-                "Should no be able to parse `{}`, was expecting an error but instead got: `{:?}`",
-                req,
-                res,
+                "Should no be able to parse `{req}`, was expecting an error but instead got: `{res:?}`",
             );
             let res = res.unwrap_err();
             assert_eq!(
                 res.to_string(),
                 expected_error.to_string(),
-                "Bad error for input {}: got `{:?}` instead of `{:?}`",
-                req,
-                res,
-                expected_error
+                "Bad error for input {req}: got `{res:?}` instead of `{expected_error:?}`"
             );
         }
     }

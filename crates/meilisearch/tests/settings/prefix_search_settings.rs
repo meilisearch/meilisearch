@@ -38,7 +38,7 @@ async fn add_docs_and_disable() {
             "rankingRules": ["words", "typo", "proximity"],
         }))
         .await;
-    assert_eq!("202", code.as_str(), "{:?}", response);
+    assert_eq!("202", code.as_str(), "{response:?}");
     index.wait_task(response.uid()).await;
 
     // only 1 document should match
@@ -95,7 +95,7 @@ async fn disable_and_add_docs() {
             "rankingRules": ["words", "typo", "proximity"],
         }))
         .await;
-    assert_eq!("202", code.as_str(), "{:?}", response);
+    assert_eq!("202", code.as_str(), "{response:?}");
     index.wait_task(response.uid()).await;
 
     let (response, _code) = index.add_documents(DOCUMENTS.clone(), None).await;
@@ -154,7 +154,7 @@ async fn disable_add_docs_and_enable() {
             "rankingRules": ["words", "typo", "proximity"],
         }))
         .await;
-    assert_eq!("202", code.as_str(), "{:?}", response);
+    assert_eq!("202", code.as_str(), "{response:?}");
     index.wait_task(response.uid()).await;
 
     let (response, _code) = index.add_documents(DOCUMENTS.clone(), None).await;
@@ -166,7 +166,7 @@ async fn disable_add_docs_and_enable() {
             "rankingRules": ["words", "typo", "proximity"],
         }))
         .await;
-    assert_eq!("202", code.as_str(), "{:?}", response);
+    assert_eq!("202", code.as_str(), "{response:?}");
     index.wait_task(2).await;
 
     // all documents should match
@@ -262,7 +262,7 @@ async fn disable_add_docs_and_reset() {
             "rankingRules": ["words", "typo", "proximity"],
         }))
         .await;
-    assert_eq!("202", code.as_str(), "{:?}", response);
+    assert_eq!("202", code.as_str(), "{response:?}");
     index.wait_task(response.uid()).await;
 
     let (response, _code) = index.add_documents(DOCUMENTS.clone(), None).await;
@@ -274,7 +274,7 @@ async fn disable_add_docs_and_reset() {
             "rankingRules": ["words", "typo", "proximity"],
         }))
         .await;
-    assert_eq!("202", code.as_str(), "{:?}", response);
+    assert_eq!("202", code.as_str(), "{response:?}");
     index.wait_task(2).await;
 
     // all documents should match
@@ -369,7 +369,7 @@ async fn default_behavior() {
             "rankingRules": ["words", "typo", "proximity"],
         }))
         .await;
-    assert_eq!("202", code.as_str(), "{:?}", response);
+    assert_eq!("202", code.as_str(), "{response:?}");
     index.wait_task(response.uid()).await;
 
     let (response, _code) = index.add_documents(DOCUMENTS.clone(), None).await;

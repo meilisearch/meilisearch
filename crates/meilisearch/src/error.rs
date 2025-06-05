@@ -12,7 +12,7 @@ use tokio::task::JoinError;
 #[derive(Debug, thiserror::Error)]
 pub enum MeilisearchHttpError {
     #[error("A Content-Type header is missing. Accepted values for the Content-Type header are: {}",
-            .0.iter().map(|s| format!("`{}`", s)).collect::<Vec<_>>().join(", "))]
+            .0.iter().map(|s| format!("`{s}`")).collect::<Vec<_>>().join(", "))]
     MissingContentType(Vec<String>),
     #[error("The `/logs/stream` route is currently in use by someone else.")]
     AlreadyUsedLogRoute,
@@ -20,7 +20,7 @@ pub enum MeilisearchHttpError {
     CsvDelimiterWithWrongContentType(String),
     #[error(
         "The Content-Type `{}` is invalid. Accepted values for the Content-Type header are: {}",
-        .0, .1.iter().map(|s| format!("`{}`", s)).collect::<Vec<_>>().join(", ")
+        .0, .1.iter().map(|s| format!("`{s}`")).collect::<Vec<_>>().join(", ")
     )]
     InvalidContentType(String, Vec<String>),
     #[error("Document `{0}` not found.")]
@@ -64,7 +64,7 @@ pub enum MeilisearchHttpError {
     #[error(transparent)]
     IndexScheduler(#[from] index_scheduler::Error),
     #[error("{}", match .index_name {
-        Some(name) if !name.is_empty() => format!("Index `{}`: {error}", name),
+        Some(name) if !name.is_empty() => format!("Index `{name}`: {error}"),
         _ => format!("{error}")
     })]
     Milli { error: milli::Error, index_name: Option<String> },

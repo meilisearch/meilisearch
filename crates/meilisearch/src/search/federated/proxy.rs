@@ -76,7 +76,7 @@ mod error {
     fn response_from_remote(response: &Result<String, ReqwestErrorWithoutUrl>) -> String {
         match response {
             Ok(response) => {
-                format!(":\n  - response from remote: {}", response)
+                format!(":\n  - response from remote: {response}")
             }
             Err(error) => {
                 format!(":\n  - additionally, could not retrieve response from remote: {error}")

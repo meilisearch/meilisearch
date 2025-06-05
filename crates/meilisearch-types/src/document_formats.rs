@@ -72,11 +72,10 @@ impl Display for DocumentFormatError {
 
                     write!(
                         f,
-                        "The `{}` payload provided is malformed. `Couldn't serialize document value: {}`.",
-                        b, message
+                        "The `{b}` payload provided is malformed. `Couldn't serialize document value: {message}`."
                     )
                 }
-                _ => write!(f, "The `{}` payload provided is malformed: `{}`.", b, me),
+                _ => write!(f, "The `{b}` payload provided is malformed: `{me}`."),
             },
         }
     }

@@ -273,7 +273,7 @@ fn expected_component(component: Option<&PathComponent>) -> String {
             format!(r#"an array with at least {} item(s)"#, index.saturating_add(1))
         }
         Some(PathComponent::MapKey(key)) => {
-            format!("an object with key `{}`", key)
+            format!("an object with key `{key}`")
         }
         None => "unknown".to_string(),
     }

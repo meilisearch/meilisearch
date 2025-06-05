@@ -99,7 +99,7 @@ pub async fn fetch_assets(
         }
 
         // checking asset store
-        let store_filename = format!("{}/{}", asset_folder, name);
+        let store_filename = format!("{asset_folder}/{name}");
 
         match std::fs::File::open(&store_filename) {
             Ok(file) => {
@@ -148,7 +148,7 @@ fn check_sha256(name: &str, asset: &Asset, mut file: std::fs::File) -> anyhow::R
     let mut file_hash = sha2::Sha256::new();
     file_hash.update(&bytes);
     let file_hash = file_hash.finalize();
-    let file_hash = format!("{:x}", file_hash);
+    let file_hash = format!("{file_hash:x}");
     tracing::debug!(hash = file_hash, "hashed local file");
 
     Ok(match &asset.sha256 {

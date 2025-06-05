@@ -382,7 +382,7 @@ impl IndexSchedulerHandle {
                         while self.advance() != Start {}
                         panic!("The batch failed.\n{}", snapshot_index_scheduler(&self.index_scheduler))
                     },
-                    breakpoint => panic!("Encountered an impossible breakpoint `{:?}`, this is probably an issue with the test suite.", breakpoint),
+                    breakpoint => panic!("Encountered an impossible breakpoint `{breakpoint:?}`, this is probably an issue with the test suite."),
                 }
         }
 
@@ -402,7 +402,7 @@ impl IndexSchedulerHandle {
                     ProcessBatchFailed => break,
                     ProcessBatchSucceeded => panic!("The batch succeeded. (and it wasn't supposed to sorry)\n{}", snapshot_index_scheduler(&self.index_scheduler)),
                     AbortedIndexation => panic!("The batch was aborted.\n{}", snapshot_index_scheduler(&self.index_scheduler)),
-                    breakpoint => panic!("Encountered an impossible breakpoint `{:?}`, this is probably an issue with the test suite.", breakpoint),
+                    breakpoint => panic!("Encountered an impossible breakpoint `{breakpoint:?}`, this is probably an issue with the test suite."),
                 }
         }
         self.advance_till([AfterProcessing]);

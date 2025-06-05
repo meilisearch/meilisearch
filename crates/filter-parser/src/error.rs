@@ -98,7 +98,7 @@ impl<'a> Error<'a> {
     pub fn char(self) -> char {
         match self.kind {
             ErrorKind::Char(c) => c,
-            error => panic!("Internal filter parser error: {:?}", error),
+            error => panic!("Internal filter parser error: {error:?}"),
         }
     }
 }
@@ -136,23 +136,23 @@ impl Display for Error<'_> {
                 writeln!(f, "Was expecting a value but instead got `{escaped_input}`, which is a reserved keyword. To use `{escaped_input}` as a field name or a value, surround it by quotes.")?
             }
             ErrorKind::ExpectedValue(ExpectedValueKind::Other) => {
-                writeln!(f, "Was expecting a value but instead got `{}`.", escaped_input)?
+                writeln!(f, "Was expecting a value but instead got `{escaped_input}`.")?
             }
             ErrorKind::MalformedValue => {
-                writeln!(f, "Malformed value: `{}`.", escaped_input)?
+                writeln!(f, "Malformed value: `{escaped_input}`.")?
             }
             ErrorKind::MissingClosingDelimiter(c) => {
-                writeln!(f, "Expression `{}` is missing the following closing delimiter: `{}`.", escaped_input, c)?
+                writeln!(f, "Expression `{escaped_input}` is missing the following closing delimiter: `{c}`.")?
             }
             ErrorKind::InvalidPrimary => {
-                let text = if input.trim().is_empty() { "but instead got nothing.".to_string() } else { format!("at `{}`.", escaped_input) };
-                writeln!(f, "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` {}", text)?
+                let text = if input.trim().is_empty() { "but instead got nothing.".to_string() } else { format!("at `{escaped_input}`.") };
+                writeln!(f, "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` {text}")?
             }
             ErrorKind::InvalidEscapedNumber => {
-                writeln!(f, "Found an invalid escaped sequence number: `{}`.", escaped_input)?
+                writeln!(f, "Found an invalid escaped sequence number: `{escaped_input}`.")?
             }
             ErrorKind::ExpectedEof => {
-                writeln!(f, "Found unexpected characters at the end of the filter: `{}`. You probably forgot an `OR` or an `AND` rule.", escaped_input)?
+                writeln!(f, "Found unexpected characters at the end of the filter: `{escaped_input}`. You probably forgot an `OR` or an `AND` rule.")?
             }
             ErrorKind::GeoRadius => {
                 writeln!(f, "The `_geoRadius` filter expects three arguments: `_geoRadius(latitude, longitude, radius)`.")?
@@ -188,7 +188,7 @@ impl Display for Error<'_> {
                 writeln!(f, "Expected only comma-separated field names inside `IN[..]` but instead found `{escaped_input}`.")?
             }
             ErrorKind::Char(c) => {
-                panic!("Tried to display a char error with `{}`", c)
+                panic!("Tried to display a char error with `{c}`")
             }
             ErrorKind::DepthLimitReached => writeln!(
                 f,
@@ -196,9 +196,9 @@ impl Display for Error<'_> {
             )?,
             ErrorKind::InternalError(kind) => writeln!(
                 f,
-                "Encountered an internal `{:?}` error while parsing your filter. Please fill an issue", kind
+                "Encountered an internal `{kind:?}` error while parsing your filter. Please fill an issue"
             )?,
-            ErrorKind::External(ref error) => writeln!(f, "{}", error)?,
+            ErrorKind::External(ref error) => writeln!(f, "{error}")?,
         }
         let base_column = self.context.get_utf8_column();
         let size = self.context.fragment().chars().count();

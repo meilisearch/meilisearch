@@ -39,7 +39,7 @@ fn bench_songs(c: &mut criterion::Criterion) {
         .queries
         .iter()
         .map(|s| {
-            s.trim().split(' ').map(|s| format!(r#""{}""#, s)).collect::<Vec<String>>().join(" ")
+            s.trim().split(' ').map(|s| format!(r#""{s}""#)).collect::<Vec<String>>().join(" ")
         })
         .collect();
     let basic_with_quote: &[&str] =

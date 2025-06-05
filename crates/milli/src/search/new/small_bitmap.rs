@@ -220,8 +220,7 @@ impl SmallBitmapInternal {
             SmallBitmapInternal::Tiny(set) => {
                 assert!(
                     x < 64,
-                    "index out of bounds: the universe length is 64 but the index is {}",
-                    x
+                    "index out of bounds: the universe length is 64 but the index is {x}"
                 );
                 (*set, x)
             }
@@ -243,8 +242,7 @@ impl SmallBitmapInternal {
             SmallBitmapInternal::Tiny(set) => {
                 assert!(
                     x < 64,
-                    "index out of bounds: the universe length is 64 but the index is {}",
-                    x
+                    "index out of bounds: the universe length is 64 but the index is {x}"
                 );
                 (set, x)
             }

@@ -125,10 +125,9 @@ and can not be more than 511 bytes.", .document_id.to_string()
         if .invalid_facets_name.len() == 1 {
             let field = .invalid_facets_name.iter().next().unwrap();
             match .matching_rule_indices.get(field) {
-                Some(rule_index) => format!("Attribute `{}` matched rule #{} in filterableAttributes, but this rule does not enable filtering.\nHint: enable filtering in rule #{} by modifying the features.filter object\nHint: prepend another rule matching `{}` with appropriate filter features before rule #{}",
-                    field, rule_index, rule_index, field, rule_index),
+                Some(rule_index) => format!("Attribute `{field}` matched rule #{rule_index} in filterableAttributes, but this rule does not enable filtering.\nHint: enable filtering in rule #{rule_index} by modifying the features.filter object\nHint: prepend another rule matching `{field}` with appropriate filter features before rule #{rule_index}"),
                 None => match .valid_patterns.is_empty() {
-                    true => format!("Attribute `{}` is not filterable. This index does not have configured filterable attributes.", field),
+                    true => format!("Attribute `{field}` is not filterable. This index does not have configured filterable attributes."),
                     false => format!("Attribute `{}` is not filterable. Available filterable attributes patterns are: `{}`.",
                         field,
                         .valid_patterns.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", ")),
@@ -309,7 +308,7 @@ and can not be more than 511 bytes.", .document_id.to_string()
                 field.name(),
                 allowed_sources_for_field
                 .iter()
-                .map(|accepted| format!("`{}`", accepted))
+                .map(|accepted| format!("`{accepted}`"))
                 .collect::<Vec<String>>()
                 .join(", "),
             )
@@ -319,7 +318,7 @@ and can not be more than 511 bytes.", .document_id.to_string()
             let allowed_fields_for_source = EmbeddingSettings::allowed_fields_for_source(*source_, *context);
             format!("\n  - note: available fields for source `{source_}`{}: {}",context.in_context(), allowed_fields_for_source
             .iter()
-            .map(|accepted| format!("`{}`", accepted))
+            .map(|accepted| format!("`{accepted}`"))
             .collect::<Vec<String>>()
             .join(", "),)
         },
@@ -579,7 +578,7 @@ impl From<HeedError> for Error {
             // TODO use the encoding
             HeedError::Encoding(_) => InternalError(Serialization(Encoding { db_name: None })),
             HeedError::Decoding(_) => InternalError(Serialization(Decoding { db_name: None })),
-            HeedError::EnvAlreadyOpened { .. } => UserError(EnvAlreadyOpened),
+            HeedError::EnvAlreadyOpened => UserError(EnvAlreadyOpened),
         }
     }
 }
@@ -619,6 +618,6 @@ fn conditionally_lookup_for_error_message() {
             hidden_fields: false,
         };
 
-        assert_eq!(err.to_string(), format!("{} {}", prefix, suffix));
+        assert_eq!(err.to_string(), format!("{prefix} {suffix}"));
     }
 }

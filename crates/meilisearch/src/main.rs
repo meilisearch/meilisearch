@@ -202,7 +202,7 @@ pub fn print_launch_resume(opt: &Opt, analytics: Analytics, config_read_from: Op
 888       888  "Y8888  888 888 888  88888P'  "Y8888  "Y888888 888     "Y8888P 888  888
 "#;
 
-    eprintln!("{}", ascii_name);
+    eprintln!("{ascii_name}");
 
     eprintln!(
         "Config file path:\t{:?}",
@@ -225,7 +225,7 @@ pub fn print_launch_resume(opt: &Opt, analytics: Analytics, config_read_from: Op
     );
     eprintln!("Package version:\t{:?}", env!("CARGO_PKG_VERSION").to_string());
     if let Some(prototype) = build_info.describe.and_then(|describe| describe.as_prototype()) {
-        eprintln!("Prototype:\t\t{:?}", prototype);
+        eprintln!("Prototype:\t\t{prototype:?}");
     }
 
     {
@@ -244,7 +244,7 @@ Anonymous telemetry:\t\"Enabled\""
     }
 
     if let Some(instance_uid) = analytics.instance_uid() {
-        eprintln!("Instance UID:\t\t\"{}\"", instance_uid);
+        eprintln!("Instance UID:\t\t\"{instance_uid}\"");
     }
 
     eprintln!();

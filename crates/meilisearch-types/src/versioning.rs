@@ -24,7 +24,7 @@ pub fn create_version_file(
     let version_path = db_path.join(VERSION_FILE_NAME);
     // In order to persist the file later we must create it in the `data.ms` and not in `/tmp`
     let mut file = NamedTempFile::new_in(db_path)?;
-    file.write_all(format!("{}.{}.{}", major, minor, patch).as_bytes())?;
+    file.write_all(format!("{major}.{minor}.{patch}").as_bytes())?;
     file.flush()?;
     file.persist(version_path)?;
     Ok(())

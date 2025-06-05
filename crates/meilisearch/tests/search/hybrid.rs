@@ -542,7 +542,7 @@ async fn distinct_is_applied() {
     let index = index_with_documents_user_provided(server, &TEST_DISTINCT_DOCUMENTS).await;
 
     let (response, code) = index.update_settings(json!({ "distinctAttribute": "distinct" } )).await;
-    assert_eq!(202, code, "{:?}", response);
+    assert_eq!(202, code, "{response:?}");
     index.wait_task(response.uid()).await.succeeded();
 
     // pure keyword

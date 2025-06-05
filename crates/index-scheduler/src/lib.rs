@@ -721,10 +721,9 @@ impl IndexScheduler {
                                     .queue
                                     .tasks
                                     .get_task(self.rtxn, task_id)
-                                    .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?
+                                    .map_err(io::Error::other)?
                                     .ok_or_else(|| {
-                                        io::Error::new(
-                                            io::ErrorKind::Other,
+                                        io::Error::other(
                                             Error::CorruptedTaskQueue,
                                         )
                                     })?;

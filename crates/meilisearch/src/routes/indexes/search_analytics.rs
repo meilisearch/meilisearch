@@ -188,7 +188,7 @@ impl<Method: AggregateMethod> SearchAggregator<Method> {
             ret.finite_pagination = 0;
         }
 
-        ret.matching_strategy.insert(format!("{:?}", matching_strategy), 1);
+        ret.matching_strategy.insert(format!("{matching_strategy:?}"), 1);
 
         if let Some(locales) = locales {
             ret.locales = locales.iter().copied().collect();
@@ -419,7 +419,7 @@ impl<Method: AggregateMethod> Aggregate for SearchAggregator<Method> {
 
         json!({
             "requests": {
-                "99th_response_time": time_spent.map(|t| format!("{:.2}", t)),
+                "99th_response_time": time_spent.map(|t| format!("{t:.2}")),
                 "total_succeeded": total_succeeded,
                 "total_failed": total_received.saturating_sub(total_succeeded), // just to be sure we never panics
                 "total_received": total_received,

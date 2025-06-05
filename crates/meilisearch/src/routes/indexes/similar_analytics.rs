@@ -202,7 +202,7 @@ impl<Method: AggregateMethod> Aggregate for SimilarAggregator<Method> {
 
         json!({
             "requests": {
-                "99th_response_time": time_spent.map(|t| format!("{:.2}", t)),
+                "99th_response_time": time_spent.map(|t| format!("{t:.2}")),
                 "total_succeeded": total_succeeded,
                 "total_failed": total_received.saturating_sub(total_succeeded), // just to be sure we never panics
                 "total_received": total_received,

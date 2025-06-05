@@ -113,7 +113,7 @@ fn print_extracted_spantraces(error: &(dyn std::error::Error + 'static)) {
         if let Some(spantrace) = err.span_trace() {
             eprintln!("found a spantrace:\n{}", color_spantrace::colorize(spantrace));
         } else {
-            eprintln!("{:>4}: {}", ind, err);
+            eprintln!("{ind:>4}: {err}");
         }
 
         error = err.source();

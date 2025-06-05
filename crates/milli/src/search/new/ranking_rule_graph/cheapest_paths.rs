@@ -195,9 +195,7 @@ impl<G: RankingRuleGraphTrait> VisitorState<G> {
     ) -> Result<ControlFlow<(), bool>> {
         if !ctx
             .all_costs_from_node
-            .get(dest_node)
-            .iter()
-            .any(|next_cost| *next_cost == self.remaining_cost)
+            .get(dest_node).contains(&self.remaining_cost)
         {
             return Ok(ControlFlow::Continue(false));
         }
@@ -245,9 +243,7 @@ impl<G: RankingRuleGraphTrait> VisitorState<G> {
         // one cost that we can visit that corresponds to our remaining budget.
         if !ctx
             .all_costs_from_node
-            .get(dest_node)
-            .iter()
-            .any(|next_cost| *next_cost == self.remaining_cost)
+            .get(dest_node).contains(&self.remaining_cost)
         {
             return Ok(ControlFlow::Continue(false));
         }

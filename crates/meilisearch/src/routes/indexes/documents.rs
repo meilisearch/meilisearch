@@ -673,7 +673,7 @@ fn from_char_csv_delimiter(
         Ok(Some(c as u8))
     } else {
         Err(DeserrQueryParamError::new(
-            format!("csv delimiter must be an ascii character. Found: `{}`", c),
+            format!("csv delimiter must be an ascii character. Found: `{c}`"),
             Code::InvalidDocumentCsvDelimiter,
         ))
     }
@@ -950,7 +950,7 @@ async fn document_addition(
         }
         (Some((type_, subtype)), _) => {
             return Err(MeilisearchHttpError::InvalidContentType(
-                format!("{}/{}", type_, subtype),
+                format!("{type_}/{subtype}"),
                 ACCEPTED_CONTENT_TYPE.clone(),
             ))
         }
