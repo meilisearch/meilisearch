@@ -400,12 +400,8 @@ impl<State> Server<State> {
         // try several times to get status, or panic to not wait forever
         let url = format!("/tasks/{}", update_id);
         // Increase timeout for vector-related tests
-        let max_attempts = if url.contains("/tasks/") {
-            if update_id > 1000 {
-                400 // 200 seconds for vector tests
-            } else {
-                100 // 50 seconds for other tests
-            }
+        let max_attempts = if update_id > 1000 {
+            400 // 200 seconds for vector tests
         } else {
             100 // 50 seconds for other tests
         };
@@ -420,6 +416,14 @@ impl<State> Server<State> {
 
             // wait 0.5 second.
             sleep(Duration::from_millis(500)).await;
+        }
+        let handle = tokio::runtime::Handle::current();
+        if let Ok(dump) = tokio::time::timeout(Duration::from_secs(2), handle.dump()).await {
+            for (i, task) in dump.tasks().iter().enumerate() {
+                let trace = task.trace();
+                println!("TASK {i}:");
+                println!("{trace}\n");
+            }
         }
         panic!("Timeout waiting for update id");
     }

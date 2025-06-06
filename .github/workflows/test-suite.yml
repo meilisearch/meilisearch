@@ -158,6 +158,8 @@ jobs:
         uses: Swatinem/rust-cache@v2.7.8
       - name: Run tests in debug
         uses: actions-rs/cargo@v1
+        env:
+          RUSTFLAGS: "--cfg tokio_unstable --cfg tokio_taskdump"
         with:
           command: test
           args: --locked --all
