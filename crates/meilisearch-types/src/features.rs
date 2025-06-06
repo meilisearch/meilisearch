@@ -102,16 +102,24 @@ pub enum ChatCompletionSource {
     VLlm,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SystemRole {
+    System,
+    Developer,
+}
+
 impl ChatCompletionSource {
-    pub fn system_role(&self, model: &str) -> &'static str {
+    pub fn system_role(&self, model: &str) -> SystemRole {
+        use ChatCompletionSource::*;
+        use SystemRole::*;
         match self {
-            ChatCompletionSource::OpenAi if Self::old_openai_model(model) => "system",
-            ChatCompletionSource::OpenAi => "developer",
-            ChatCompletionSource::AzureOpenAi if Self::old_openai_model(model) => "system",
-            ChatCompletionSource::AzureOpenAi => "developer",
-            ChatCompletionSource::Mistral => "system",
-            ChatCompletionSource::Gemini => "system",
-            ChatCompletionSource::VLlm => "system",
+            OpenAi if Self::old_openai_model(model) => System,
+            OpenAi => Developer,
+            AzureOpenAi if Self::old_openai_model(model) => System,
+            AzureOpenAi => Developer,
+            Mistral => System,
+            Gemini => System,
+            VLlm => System,
         }
     }
 
