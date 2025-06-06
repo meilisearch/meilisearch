@@ -47,8 +47,7 @@ use sort::Sort;
 
 use self::distinct::facet_string_values;
 use self::geo_sort::GeoSort;
-pub use self::geo_sort::Parameter as GeoSortParameter;
-pub use self::geo_sort::Strategy as GeoSortStrategy;
+pub use self::geo_sort::{Parameter as GeoSortParameter, Strategy as GeoSortStrategy};
 use self::graph_based_ranking_rule::Words;
 use self::interner::Interned;
 use self::vector_sort::VectorSort;

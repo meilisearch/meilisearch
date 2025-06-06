@@ -131,6 +131,19 @@ impl RoFeatures {
             .into())
         }
     }
+
+    pub fn check_chat_completions(&self, disabled_action: &'static str) -> Result<()> {
+        if self.runtime.chat_completions {
+            Ok(())
+        } else {
+            Err(FeatureNotEnabledError {
+                disabled_action,
+                feature: "chat completions",
+                issue_link: "https://github.com/orgs/meilisearch/discussions/835",
+            }
+            .into())
+        }
+    }
 }
 
 impl FeatureData {

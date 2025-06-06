@@ -33,6 +33,7 @@ pub struct EmbeddingSettings {
     ///
     /// - Defaults to `openAi`
     pub source: Setting<EmbedderSource>,
+
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<String>)]
@@ -55,6 +56,7 @@ pub struct EmbeddingSettings {
     /// - For source `openAi`, defaults to `text-embedding-3-small`
     /// - For source `huggingFace`, defaults to `BAAI/bge-base-en-v1.5`
     pub model: Setting<String>,
+
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<String>)]
@@ -75,6 +77,7 @@ pub struct EmbeddingSettings {
     /// - When `model` is set to default, defaults to `617ca489d9e86b49b8167676d8220688b99db36e`
     /// - Otherwise, defaults to `null`
     pub revision: Setting<String>,
+
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<OverridePooling>)]
@@ -96,6 +99,7 @@ pub struct EmbeddingSettings {
     ///
     /// - Embedders created before this parameter was available default to `forceMean` to preserve the existing behavior.
     pub pooling: Setting<OverridePooling>,
+
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<String>)]
@@ -118,6 +122,7 @@ pub struct EmbeddingSettings {
     ///
     /// - This setting is partially hidden when returned by the settings
     pub api_key: Setting<String>,
+
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<String>)]
@@ -141,6 +146,7 @@ pub struct EmbeddingSettings {
     /// - For source `openAi`, the dimensions is the maximum allowed by the model.
     /// - For sources `ollama` and `rest`, the dimensions are inferred by embedding a sample text.
     pub dimensions: Setting<usize>,
+
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<bool>)]
@@ -167,6 +173,7 @@ pub struct EmbeddingSettings {
     /// first enabling it. If you are unsure of whether the performance-relevancy tradeoff is right for you,
     /// we recommend to use this parameter on a test index first.
     pub binary_quantized: Setting<bool>,
+
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<bool>)]
@@ -183,6 +190,7 @@ pub struct EmbeddingSettings {
     ///
     /// - 🏗️ When modified, embeddings are regenerated for documents whose rendering through the template produces a different text.
     pub document_template: Setting<String>,
+
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<usize>)]
@@ -201,6 +209,7 @@ pub struct EmbeddingSettings {
     ///
     /// - Defaults to 400
     pub document_template_max_bytes: Setting<usize>,
+
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<String>)]
@@ -219,6 +228,7 @@ pub struct EmbeddingSettings {
     /// - 🌱 When modified for source `openAi`, embeddings are never regenerated
     /// - 🏗️ When modified for sources `ollama` and `rest`, embeddings are always regenerated
     pub url: Setting<String>,
+
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<serde_json::Value>)]
@@ -236,6 +246,7 @@ pub struct EmbeddingSettings {
     ///
     /// - 🏗️ Changing the value of this parameter always regenerates embeddings
     pub request: Setting<serde_json::Value>,
+
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<serde_json::Value>)]
@@ -253,6 +264,7 @@ pub struct EmbeddingSettings {
     ///
     /// - 🏗️ Changing the value of this parameter always regenerates embeddings
     pub response: Setting<serde_json::Value>,
+
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<BTreeMap<String, String>>)]

@@ -1,8 +1,9 @@
+use std::collections::VecDeque;
+
 use heed::types::{Bytes, Unit};
 use heed::{RoPrefix, RoTxn};
 use roaring::RoaringBitmap;
 use rstar::RTree;
-use std::collections::VecDeque;
 
 use super::facet_string_values;
 use super::ranking_rules::{RankingRule, RankingRuleOutput, RankingRuleQueryTrait};

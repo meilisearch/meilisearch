@@ -2,10 +2,9 @@ use meili_snap::{json_string, snapshot};
 use meilisearch_types::milli::constants::RESERVED_GEO_FIELD_NAME;
 use once_cell::sync::Lazy;
 
+use super::test_settings_documents_indexing_swapping_and_search;
 use crate::common::{Server, Value};
 use crate::json;
-
-use super::test_settings_documents_indexing_swapping_and_search;
 
 static DOCUMENTS: Lazy<Value> = Lazy::new(|| {
     json!([

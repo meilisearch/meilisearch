@@ -305,6 +305,7 @@ pub(crate) mod test {
             localized_attributes: Setting::NotSet,
             facet_search: Setting::NotSet,
             prefix_search: Setting::NotSet,
+            chat: Setting::NotSet,
             _kind: std::marker::PhantomData,
         };
         settings.check()

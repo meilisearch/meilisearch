@@ -8,7 +8,7 @@ use crate::error::ResponseError;
 use crate::settings::{Settings, Unchecked};
 use crate::tasks::{serialize_duration, Details, IndexSwap, Kind, Status, Task, TaskId};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, ToSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct TaskView {
@@ -67,7 +67,7 @@ impl TaskView {
     }
 }
 
-#[derive(Default, Debug, PartialEq, Eq, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Default, Debug, PartialEq, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct DetailsView {

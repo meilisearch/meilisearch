@@ -1,9 +1,8 @@
 use meili_snap::*;
 
+use super::test_settings_documents_indexing_swapping_and_search;
 use crate::common::{shared_does_not_exists_index, Server, DOCUMENTS, NESTED_DOCUMENTS};
 use crate::json;
-
-use super::test_settings_documents_indexing_swapping_and_search;
 
 #[actix_rt::test]
 async fn search_unexisting_index() {

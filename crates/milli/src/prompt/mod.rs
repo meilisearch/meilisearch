@@ -64,7 +64,7 @@ fn default_template() -> liquid::Template {
     new_template(default_template_text()).unwrap()
 }
 
-fn default_template_text() -> &'static str {
+pub fn default_template_text() -> &'static str {
     "{% for field in fields %}\
     {% if field.is_searchable and field.value != nil %}\
     {{ field.name }}: {{ field.value }}\n\

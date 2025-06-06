@@ -51,10 +51,12 @@ pub use features::RoFeatures;
 use flate2::bufread::GzEncoder;
 use flate2::Compression;
 use meilisearch_types::batches::Batch;
-use meilisearch_types::features::{InstanceTogglableFeatures, Network, RuntimeTogglableFeatures};
+use meilisearch_types::features::{
+    ChatCompletionSettings, InstanceTogglableFeatures, Network, RuntimeTogglableFeatures,
+};
 use meilisearch_types::heed::byteorder::BE;
-use meilisearch_types::heed::types::I128;
-use meilisearch_types::heed::{self, Env, RoTxn, WithoutTls};
+use meilisearch_types::heed::types::{SerdeJson, Str, I128};
+use meilisearch_types::heed::{self, Database, Env, RoTxn, RwTxn, WithoutTls};
 use meilisearch_types::milli::index::IndexEmbeddingConfig;
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::vector::{Embedder, EmbedderOptions, EmbeddingConfigs};
@@ -153,6 +155,9 @@ pub struct IndexScheduler {
     /// In charge of fetching and setting the status of experimental features.
     features: features::FeatureData,
 
+    /// Stores the custom chat prompts and other settings of the indexes.
+    pub(crate) chat_settings: Database<Str, SerdeJson<ChatCompletionSettings>>,
+
     /// Everything related to the processing of the tasks
     pub scheduler: scheduler::Scheduler,
 
@@ -211,11 +216,16 @@ impl IndexScheduler {
             #[cfg(test)]
             run_loop_iteration: self.run_loop_iteration.clone(),
             features: self.features.clone(),
+            chat_settings: self.chat_settings,
         }
     }
 
     pub(crate) const fn nb_db() -> u32 {
-        Versioning::nb_db() + Queue::nb_db() + IndexMapper::nb_db() + features::FeatureData::nb_db()
+        Versioning::nb_db()
+            + Queue::nb_db()
+            + IndexMapper::nb_db()
+            + features::FeatureData::nb_db()
+            + 1 // chat-prompts
     }
 
     /// Create an index scheduler and start its run loop.
@@ -269,6 +279,7 @@ impl IndexScheduler {
         let features = features::FeatureData::new(&env, &mut wtxn, options.instance_features)?;
         let queue = Queue::new(&env, &mut wtxn, &options)?;
         let index_mapper = IndexMapper::new(&env, &mut wtxn, &options, budget)?;
+        let chat_settings = env.create_database(&mut wtxn, Some("chat-settings"))?;
         wtxn.commit()?;
 
         // allow unreachable_code to get rids of the warning in the case of a test build.
@@ -292,10 +303,19 @@ impl IndexScheduler {
             #[cfg(test)]
             run_loop_iteration: Arc::new(RwLock::new(0)),
             features,
+            chat_settings,
         };
 
         this.run();
         Ok(this)
+    }
+
+    pub fn write_txn(&self) -> Result<RwTxn> {
+        self.env.write_txn().map_err(|e| e.into())
+    }
+
+    pub fn read_txn(&self) -> Result<RoTxn<WithoutTls>> {
+        self.env.read_txn().map_err(|e| e.into())
     }
 
     /// Return `Ok(())` if the index scheduler is able to access one of its database.
@@ -372,10 +392,6 @@ impl IndexScheduler {
             // However transient errors are: 1) less likely than persistent errors 2) likely to cause other issues down the line anyway.
             false
         }
-    }
-
-    pub fn read_txn(&self) -> Result<RoTxn<WithoutTls>> {
-        self.env.read_txn().map_err(|e| e.into())
     }
 
     /// Start the run loop for the given index scheduler.
@@ -495,7 +511,7 @@ impl IndexScheduler {
 
     /// Returns the total number of indexes available for the specified filter.
     /// And a `Vec` of the index_uid + its stats
-    pub fn get_paginated_indexes_stats(
+    pub fn paginated_indexes_stats(
         &self,
         filters: &meilisearch_auth::AuthFilter,
         from: usize,
@@ -534,6 +550,25 @@ impl IndexScheduler {
         iter.for_each(drop);
 
         ret.map(|ret| (total, ret))
+    }
+
+    /// Returns the total number of chat workspaces available ~~for the specified filter~~.
+    /// And a `Vec` of the workspace_uids
+    pub fn paginated_chat_workspace_uids(
+        &self,
+        _filters: &meilisearch_auth::AuthFilter,
+        from: usize,
+        limit: usize,
+    ) -> Result<(usize, Vec<String>)> {
+        let rtxn = self.read_txn()?;
+        let total = self.chat_settings.len(&rtxn)?;
+        let mut iter = self.chat_settings.iter(&rtxn)?.skip(from);
+        iter.by_ref()
+            .take(limit)
+            .map(|ret| ret.map_err(Error::from))
+            .map(|ret| ret.map(|(uid, _)| uid.to_string()))
+            .collect::<Result<Vec<_>, Error>>()
+            .map(|ret| (total as usize, ret))
     }
 
     /// The returned structure contains:
@@ -863,6 +898,23 @@ impl IndexScheduler {
             )
             .collect();
         res.map(EmbeddingConfigs::new)
+    }
+
+    pub fn chat_settings(&self, rtxn: &RoTxn, uid: &str) -> Result<Option<ChatCompletionSettings>> {
+        self.chat_settings.get(rtxn, uid).map_err(Into::into)
+    }
+
+    pub fn put_chat_settings(
+        &self,
+        wtxn: &mut RwTxn,
+        uid: &str,
+        settings: &ChatCompletionSettings,
+    ) -> Result<()> {
+        self.chat_settings.put(wtxn, uid, settings).map_err(Into::into)
+    }
+
+    pub fn delete_chat_settings(&self, wtxn: &mut RwTxn, uid: &str) -> Result<bool> {
+        self.chat_settings.delete(wtxn, uid).map_err(Into::into)
     }
 }
 

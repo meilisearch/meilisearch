@@ -32,13 +32,13 @@ impl ExternalDocumentsIds {
         &self,
         rtxn: &RoTxn<'_>,
         external_id: A,
-    ) -> heed::Result<Option<u32>> {
+    ) -> heed::Result<Option<DocumentId>> {
         self.0.get(rtxn, external_id.as_ref())
     }
 
     /// An helper function to debug this type, returns an `HashMap` of both,
     /// soft and hard fst maps, combined.
-    pub fn to_hash_map(&self, rtxn: &RoTxn<'_>) -> heed::Result<HashMap<String, u32>> {
+    pub fn to_hash_map(&self, rtxn: &RoTxn<'_>) -> heed::Result<HashMap<String, DocumentId>> {
         let mut map = HashMap::default();
         for result in self.0.iter(rtxn)? {
             let (external, internal) = result?;

@@ -34,6 +34,7 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
         planned_failures: _,
         run_loop_iteration: _,
         embedders: _,
+        chat_settings: _,
     } = scheduler;
 
     let rtxn = env.read_txn().unwrap();
