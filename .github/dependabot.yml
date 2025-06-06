@@ -9,4 +9,6 @@ updates:
     labels:
       - 'skip changelog'
       - 'dependencies'
+    commit-message:
+      prefix: "chore(deps): "
     rebase-strategy: disabled
