@@ -31,15 +31,9 @@ jobs:
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2.8.0
       - name: Run cargo check without any default features
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --locked --release --no-default-features --all
+        run: cargo build --locked --release --no-default-features --all
       - name: Run cargo test
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --locked --release --all
+        run: cargo test --locked --release --all
 
   test-others:
     name: Tests on ${{ matrix.os }}
@@ -54,15 +48,9 @@ jobs:
         uses: Swatinem/rust-cache@v2.8.0
       - uses: dtolnay/rust-toolchain@1.85
       - name: Run cargo check without any default features
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --locked --release --no-default-features --all
+        run: cargo build --locked --release --no-default-features --all
       - name: Run cargo test
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --locked --release --all
+        run: cargo test --locked --release --all
 
   test-all-features:
     name: Tests almost all features
@@ -112,10 +100,7 @@ jobs:
           ollama pull all-minilm
 
       - name: Run cargo test
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --locked --release --all --features test-ollama ollama
+        run: cargo test --locked --release --all --features test-ollama ollama
 
   test-disabled-tokenization:
     name: Test disabled tokenization
@@ -157,10 +142,7 @@ jobs:
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2.8.0
       - name: Run tests in debug
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --locked --all
+        run: cargo test --locked --all
 
   clippy:
     name: Run Clippy
@@ -174,10 +156,7 @@ jobs:
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2.8.0
       - name: Run cargo clippy
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: --all-targets -- --deny warnings
+        run: cargo clippy --all-targets -- --deny warnings
 
   fmt:
     name: Run Rustfmt
@@ -193,7 +172,7 @@ jobs:
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2.8.0
       - name: Run cargo fmt
-        # Since we never ran the `build.rs` script in the benchmark directory we are missing one auto-generated import file.
+        # Since we never ran the `build.rs` script in the benchmark directory, we are missing one auto-generated import file.
         # Since we want to trigger (and fail) this action as fast as possible, instead of building the benchmark crate
         # we are going to create an empty file where rustfmt expects it.
         run: |
