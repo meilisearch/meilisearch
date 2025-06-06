@@ -109,6 +109,26 @@ async fn patch_settings(
             Setting::Reset => DbChatCompletionSource::default(),
             Setting::NotSet => old_settings.source,
         },
+        org_id: match new.org_id {
+            Setting::Set(new_org_id) => Some(new_org_id),
+            Setting::Reset => None,
+            Setting::NotSet => old_settings.org_id,
+        },
+        project_id: match new.project_id {
+            Setting::Set(new_project_id) => Some(new_project_id),
+            Setting::Reset => None,
+            Setting::NotSet => old_settings.project_id,
+        },
+        api_version: match new.api_version {
+            Setting::Set(new_api_version) => Some(new_api_version),
+            Setting::Reset => None,
+            Setting::NotSet => old_settings.api_version,
+        },
+        deployment_id: match new.deployment_id {
+            Setting::Set(new_deployment_id) => Some(new_deployment_id),
+            Setting::Reset => None,
+            Setting::NotSet => old_settings.deployment_id,
+        },
         base_api: match new.base_api {
             Setting::Set(new_base_api) => Some(new_base_api),
             Setting::Reset => None,
@@ -170,6 +190,22 @@ pub struct GlobalChatSettings {
     #[deserr(default)]
     #[schema(value_type = Option<ChatCompletionSource>)]
     pub source: Setting<ChatCompletionSource>,
+    #[serde(default)]
+    #[deserr(default, error = DeserrJsonError<InvalidChatCompletionOrgId>)]
+    #[schema(value_type = Option<String>, example = json!("dcba4321..."))]
+    pub org_id: Setting<String>,
+    #[serde(default)]
+    #[deserr(default, error = DeserrJsonError<InvalidChatCompletionProjectId>)]
+    #[schema(value_type = Option<String>, example = json!("4321dcba..."))]
+    pub project_id: Setting<String>,
+    #[serde(default)]
+    #[deserr(default, error = DeserrJsonError<InvalidChatCompletionApiVersion>)]
+    #[schema(value_type = Option<String>, example = json!("2024-02-01"))]
+    pub api_version: Setting<String>,
+    #[serde(default)]
+    #[deserr(default, error = DeserrJsonError<InvalidChatCompletionDeploymentId>)]
+    #[schema(value_type = Option<String>, example = json!("1234abcd..."))]
+    pub deployment_id: Setting<String>,
     #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidChatCompletionBaseApi>)]
     #[schema(value_type = Option<String>, example = json!("https://api.mistral.ai/v1"))]

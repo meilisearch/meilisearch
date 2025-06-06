@@ -18,6 +18,7 @@ use crate::extractors::authentication::GuardedData;
 use crate::routes::PAGINATION_DEFAULT_LIMIT;
 
 pub mod chat_completions;
+mod config;
 mod errors;
 pub mod settings;
 mod utils;

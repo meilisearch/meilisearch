@@ -391,6 +391,10 @@ EditDocumentsByFunctionError                   , InvalidRequest       , BAD_REQU
 InvalidSettingsIndexChat                       , InvalidRequest       , BAD_REQUEST ;
 // Experimental features - Chat Completions
 ChatWorkspaceNotFound                          , InvalidRequest       , NOT_FOUND   ;
+InvalidChatCompletionOrgId                     , InvalidRequest       , BAD_REQUEST ;
+InvalidChatCompletionProjectId                 , InvalidRequest       , BAD_REQUEST ;
+InvalidChatCompletionApiVersion                , InvalidRequest       , BAD_REQUEST ;
+InvalidChatCompletionDeploymentId              , InvalidRequest       , BAD_REQUEST ;
 InvalidChatCompletionSource                    , InvalidRequest       , BAD_REQUEST ;
 InvalidChatCompletionBaseApi                   , InvalidRequest       , BAD_REQUEST ;
 InvalidChatCompletionApiKey                    , InvalidRequest       , BAD_REQUEST ;

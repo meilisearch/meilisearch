@@ -7,7 +7,6 @@ use std::time::Duration;
 use actix_web::web::{self, Data};
 use actix_web::{Either, HttpRequest, HttpResponse, Responder};
 use actix_web_lab::sse::{Event, Sse};
-use async_openai::config::{Config, OpenAIConfig};
 use async_openai::types::{
     ChatCompletionMessageToolCall, ChatCompletionMessageToolCallChunk,
     ChatCompletionRequestAssistantMessageArgs, ChatCompletionRequestMessage,
@@ -35,6 +34,7 @@ use serde_json::json;
 use tokio::runtime::Handle;
 use tokio::sync::mpsc::error::SendError;
 
+use super::config::Config;
 use super::errors::StreamErrorEvent;
 use super::utils::format_documents;
 use super::{
@@ -312,15 +312,8 @@ async fn non_streamed_chat(
         }
     };
 
-    let mut config = OpenAIConfig::default();
-    if let Some(api_key) = chat_settings.api_key.as_ref() {
-        config = config.with_api_key(api_key);
-    }
-    if let Some(base_api) = chat_settings.base_api.as_ref() {
-        config = config.with_api_base(base_api);
-    }
+    let config = Config::new(&chat_settings);
     let client = Client::with_config(config);
-
     let auth_token = extract_token_from_request(&req)?.unwrap();
     // TODO do function support later
     let _function_support =
@@ -413,14 +406,7 @@ async fn streamed_chat(
     };
     drop(rtxn);
 
-    let mut config = OpenAIConfig::default();
-    if let Some(api_key) = chat_settings.api_key.as_ref() {
-        config = config.with_api_key(api_key);
-    }
-    if let Some(base_api) = chat_settings.base_api.as_ref() {
-        config = config.with_api_base(base_api);
-    }
-
+    let config = Config::new(&chat_settings);
     let auth_token = extract_token_from_request(&req)?.unwrap().to_string();
     let function_support =
         setup_search_tool(&index_scheduler, filters, &mut chat_completion, &chat_settings.prompts)?;
@@ -465,7 +451,7 @@ async fn streamed_chat(
 /// Updates the chat completion with the new messages, streams the LLM tokens,
 /// and report progress and errors.
 #[allow(clippy::too_many_arguments)]
-async fn run_conversation<C: Config>(
+async fn run_conversation<C: async_openai::config::Config>(
     index_scheduler: &GuardedData<
         ActionPolicy<{ actions::CHAT_COMPLETIONS }>,
         Data<IndexScheduler>,

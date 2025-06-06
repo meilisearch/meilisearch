@@ -3788,6 +3788,7 @@ dependencies = [
  "rustls",
  "rustls-pemfile",
  "rustls-pki-types",
+ "secrecy",
  "segment",
  "serde",
  "serde_json",
