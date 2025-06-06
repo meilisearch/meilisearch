@@ -1,5 +1,5 @@
 //! This file implements a queue of searches to process and the ability to control how many searches can be run in parallel.
-//! We need this because we don't want to process more search requests than we have cores.
+//! We need this because we don't want to process more search requests than the available CPU cores.
 //! That slows down everything and consumes RAM for no reason.
 //! The steps to do a search are to get the `SearchQueue` data structure and try to get a search permit.
 //! This can fail if the queue is full, and we need to drop your search request to register a new one.
@@ -8,7 +8,7 @@
 //!
 //! In order to do a search request you should try to get a search permit.
 //! Retrieve the `SearchQueue` structure from actix-web (`search_queue: Data<SearchQueue>`)
-//! and right before processing the search, calls the `SearchQueue::try_get_search_permit` method: `search_queue.try_get_search_permit().await?;`
+//! and right before processing the search, call the `SearchQueue::try_get_search_permit` method: `search_queue.try_get_search_permit().await?;`
 //!
 //! What is going to happen at this point is that you're going to send a oneshot::Sender over an async mpsc channel.
 //! Then, the queue/scheduler is going to either:
@@ -121,12 +121,12 @@ impl SearchQueue {
         let mut queue: Vec<oneshot::Sender<Permit>> = Default::default();
         let mut rng: StdRng = StdRng::from_entropy();
         let mut searches_running: usize = 0;
-        // By having a capacity of parallelism we ensures that every time a search finish it can release its RAM asap
+        // By having a capacity of parallelism we ensure that every time a search finish it can release its RAM asap
         let (sender, mut search_finished) = mpsc::channel(parallelism.into());
 
         loop {
             tokio::select! {
-                // biased select because we wants to free up space before trying to register new tasks
+                // biased select because we want to free up space before trying to register new tasks
                 biased;
                 _ = search_finished.recv() => {
                     searches_running = searches_running.saturating_sub(1);
@@ -148,11 +148,11 @@ impl SearchQueue {
 
                     if searches_running < usize::from(parallelism) && queue.is_empty() {
                         searches_running += 1;
-                        // if the search requests die it's not a hard error on our side
+                        // if the search requests die, it's not a hard error on our side
                         let _ = search_request.send(Permit { sender: sender.clone() });
                         continue;
                     } else if capacity == 0 {
-                        // in the very specific case where we have a capacity of zero
+                        // in the very specific case where we have a capacity of zero,
                         // we must refuse the request straight away without going through
                         // the queue stuff.
                         drop(search_request);
@@ -183,7 +183,7 @@ impl SearchQueue {
             .map_err(|_| MeilisearchHttpError::TooManySearchRequests(self.capacity))?;
 
         // If we've been for more than one minute to get a search permit, it's better to simply
-        // abort the search request than spending time processing something were the client
+        // abort the search request than spending time processing something where the client
         // most certainly exited or got a timeout a long time ago.
         // We may find a better solution in https://github.com/actix/actix-web/issues/3462.
         if now.elapsed() > self.time_to_abort {
