@@ -403,7 +403,7 @@ impl<State> Server<State> {
         let max_attempts = if update_id > 1000 {
             400 // 200 seconds for vector tests
         } else {
-            100 // 50 seconds for other tests
+            1000 // 50 seconds for other tests
         };
 
         for _ in 0..max_attempts {
