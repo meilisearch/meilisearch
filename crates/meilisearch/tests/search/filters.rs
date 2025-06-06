@@ -4,23 +4,16 @@ use tempfile::TempDir;
 
 use super::test_settings_documents_indexing_swapping_and_search;
 use crate::{
-    common::{default_settings, shared_index_with_documents, Server, DOCUMENTS, NESTED_DOCUMENTS},
+    common::{
+        default_settings, shared_index_with_documents, shared_index_with_nested_documents, Server,
+        DOCUMENTS, NESTED_DOCUMENTS,
+    },
     json,
 };
 
 #[actix_rt::test]
 async fn search_with_filter_string_notation() {
-    let server = Server::new().await;
-    let index = server.index("test");
-
-    let (_, code) = index.update_settings(json!({"filterableAttributes": ["title"]})).await;
-    meili_snap::snapshot!(code, @"202 Accepted");
-
-    let documents = DOCUMENTS.clone();
-    let (task, code) = index.add_documents(documents, None).await;
-    meili_snap::snapshot!(code, @"202 Accepted");
-    let res = index.wait_task(task.uid()).await;
-    meili_snap::snapshot!(res["status"], @r###""succeeded""###);
+    let index = shared_index_with_documents().await;
 
     index
         .search(
@@ -28,44 +21,34 @@ async fn search_with_filter_string_notation() {
                 "filter": "title = Gläss"
             }),
             |response, code| {
-                assert_eq!(code, 200, "{}", response);
+                assert_eq!(code, 200, "{response}");
                 assert_eq!(response["hits"].as_array().unwrap().len(), 1);
             },
         )
         .await;
 
-    let index = server.index("nested");
+    let nested_index = shared_index_with_nested_documents().await;
 
-    let (_, code) =
-        index.update_settings(json!({"filterableAttributes": ["cattos", "doggos.age"]})).await;
-    meili_snap::snapshot!(code, @"202 Accepted");
-
-    let documents = NESTED_DOCUMENTS.clone();
-    let (task, code) = index.add_documents(documents, None).await;
-    meili_snap::snapshot!(code, @"202 Accepted");
-    let res = index.wait_task(task.uid()).await;
-    meili_snap::snapshot!(res["status"], @r###""succeeded""###);
-
-    index
+    nested_index
         .search(
             json!({
                 "filter": "cattos = pésti"
             }),
             |response, code| {
-                assert_eq!(code, 200, "{}", response);
+                assert_eq!(code, 200, "{response}");
                 assert_eq!(response["hits"].as_array().unwrap().len(), 1);
                 assert_eq!(response["hits"][0]["id"], json!(852));
             },
         )
         .await;
 
-    index
+    nested_index
         .search(
             json!({
                 "filter": "doggos.age > 5"
             }),
             |response, code| {
-                assert_eq!(code, 200, "{}", response);
+                assert_eq!(code, 200, "{response}");
                 assert_eq!(response["hits"].as_array().unwrap().len(), 2);
                 assert_eq!(response["hits"][0]["id"], json!(654));
                 assert_eq!(response["hits"][1]["id"], json!(951));
@@ -82,7 +65,7 @@ async fn search_with_filter_array_notation() {
             "filter": ["title = Gläss"]
         }))
         .await;
-    assert_eq!(code, 200, "{}", response);
+    assert_eq!(code, 200, "{response}");
     assert_eq!(response["hits"].as_array().unwrap().len(), 1);
 
     let (response, code) = index
@@ -90,7 +73,7 @@ async fn search_with_filter_array_notation() {
             "filter": [["title = Gläss", "title = \"Shazam!\"", "title = \"Escape Room\""]]
         }))
         .await;
-    assert_eq!(code, 200, "{}", response);
+    assert_eq!(code, 200, "{response}");
     assert_eq!(response["hits"].as_array().unwrap().len(), 3);
 }
 
@@ -116,7 +99,7 @@ async fn search_with_contains_filter() {
             "filter": "title CONTAINS cap"
         }))
         .await;
-    assert_eq!(code, 200, "{}", response);
+    assert_eq!(code, 200, "{response}");
     assert_eq!(response["hits"].as_array().unwrap().len(), 2);
 }
 
@@ -269,16 +252,14 @@ async fn search_with_pattern_filter_settings() {
 
 #[actix_rt::test]
 async fn search_with_pattern_filter_settings_scenario_1() {
-    let temp = TempDir::new().unwrap();
-    let server = Server::new_with_options(Opt { ..default_settings(temp.path()) }).await.unwrap();
+    let server = Server::new_shared();
 
     eprintln!("Documents -> Settings -> test");
-    let index = server.index("test");
+    let index = server.unique_index();
 
     let (task, code) = index.add_documents(NESTED_DOCUMENTS.clone(), None).await;
-    assert_eq!(code, 202, "{}", task);
-    let response = index.wait_task(task.uid()).await;
-    snapshot!(response["status"], @r###""succeeded""###);
+    assert_eq!(code, 202, "{task}");
+    index.wait_task(task.uid()).await.succeeded();
 
     let (task, code) = index
         .update_settings(json!({"filterableAttributes": [{
@@ -289,9 +270,8 @@ async fn search_with_pattern_filter_settings_scenario_1() {
             }
         }]}))
         .await;
-    assert_eq!(code, 202, "{}", task);
-    let response = index.wait_task(task.uid()).await;
-    snapshot!(response["status"], @r###""succeeded""###);
+    assert_eq!(code, 202, "{task}");
+    index.wait_task(task.uid()).await.succeeded();
 
     // Check if the Equality filter works
     index
@@ -335,7 +315,7 @@ async fn search_with_pattern_filter_settings_scenario_1() {
                 snapshot!(code, @"400 Bad Request");
                 snapshot!(json_string!(response), @r###"
                 {
-                  "message": "Index `test`: Filter operator `>` is not allowed for the attribute `doggos.age`.\n  - Note: allowed operators: OR, AND, NOT, =, !=, IN, IS EMPTY, IS NULL, EXISTS.\n  - Note: field `doggos.age` matched rule #0 in `filterableAttributes`\n  - Hint: enable comparison in rule #0 by modifying the features.filter object\n  - Hint: prepend another rule matching `doggos.age` with appropriate filter features before rule #0",
+                  "message": "Index `[uuid]`: Filter operator `>` is not allowed for the attribute `doggos.age`.\n  - Note: allowed operators: OR, AND, NOT, =, !=, IN, IS EMPTY, IS NULL, EXISTS.\n  - Note: field `doggos.age` matched rule #0 in `filterableAttributes`\n  - Hint: enable comparison in rule #0 by modifying the features.filter object\n  - Hint: prepend another rule matching `doggos.age` with appropriate filter features before rule #0",
                   "code": "invalid_search_filter",
                   "type": "invalid_request",
                   "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -355,9 +335,8 @@ async fn search_with_pattern_filter_settings_scenario_1() {
             }
         }]}))
         .await;
-    assert_eq!(code, 202, "{}", task);
-    let response = index.wait_task(task.uid()).await;
-    snapshot!(response["status"], @r###""succeeded""###);
+    assert_eq!(code, 202, "{task}");
+    index.wait_task(task.uid()).await.succeeded();
 
     // Check if the Equality filter works
     index
@@ -467,9 +446,8 @@ async fn search_with_pattern_filter_settings_scenario_1() {
             }
         }]}))
         .await;
-    assert_eq!(code, 202, "{}", task);
-    let response = index.wait_task(task.uid()).await;
-    snapshot!(response["status"], @r###""succeeded""###);
+    assert_eq!(code, 202, "{task}");
+    index.wait_task(task.uid()).await.succeeded();
 
     // Check if the Equality filter returns an error
     index
@@ -481,7 +459,7 @@ async fn search_with_pattern_filter_settings_scenario_1() {
                 snapshot!(code, @"400 Bad Request");
                 snapshot!(json_string!(response), @r###"
                 {
-                  "message": "Index `test`: Filter operator `=` is not allowed for the attribute `cattos`.\n  - Note: allowed operators: OR, AND, NOT, <, >, <=, >=, TO, IS EMPTY, IS NULL, EXISTS.\n  - Note: field `cattos` matched rule #0 in `filterableAttributes`\n  - Hint: enable equality in rule #0 by modifying the features.filter object\n  - Hint: prepend another rule matching `cattos` with appropriate filter features before rule #0",
+                  "message": "Index `[uuid]`: Filter operator `=` is not allowed for the attribute `cattos`.\n  - Note: allowed operators: OR, AND, NOT, <, >, <=, >=, TO, IS EMPTY, IS NULL, EXISTS.\n  - Note: field `cattos` matched rule #0 in `filterableAttributes`\n  - Hint: enable equality in rule #0 by modifying the features.filter object\n  - Hint: prepend another rule matching `cattos` with appropriate filter features before rule #0",
                   "code": "invalid_search_filter",
                   "type": "invalid_request",
                   "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -567,9 +545,8 @@ async fn search_with_pattern_filter_settings_scenario_1() {
             }
         }]}))
         .await;
-    assert_eq!(code, 202, "{}", task);
-    let response = index.wait_task(task.uid()).await;
-    snapshot!(response["status"], @r###""succeeded""###);
+    assert_eq!(code, 202, "{task}");
+    index.wait_task(task.uid()).await.succeeded();
 
     // Check if the Equality filter works
     index
@@ -613,7 +590,7 @@ async fn search_with_pattern_filter_settings_scenario_1() {
                 snapshot!(code, @"400 Bad Request");
                 snapshot!(json_string!(response), @r###"
                 {
-                  "message": "Index `test`: Filter operator `>` is not allowed for the attribute `doggos.age`.\n  - Note: allowed operators: OR, AND, NOT, =, !=, IN, IS EMPTY, IS NULL, EXISTS.\n  - Note: field `doggos.age` matched rule #0 in `filterableAttributes`\n  - Hint: enable comparison in rule #0 by modifying the features.filter object\n  - Hint: prepend another rule matching `doggos.age` with appropriate filter features before rule #0",
+                  "message": "Index `[uuid]`: Filter operator `>` is not allowed for the attribute `doggos.age`.\n  - Note: allowed operators: OR, AND, NOT, =, !=, IN, IS EMPTY, IS NULL, EXISTS.\n  - Note: field `doggos.age` matched rule #0 in `filterableAttributes`\n  - Hint: enable comparison in rule #0 by modifying the features.filter object\n  - Hint: prepend another rule matching `doggos.age` with appropriate filter features before rule #0",
                   "code": "invalid_search_filter",
                   "type": "invalid_request",
                   "link": "https://docs.meilisearch.com/errors#invalid_search_filter"

@@ -352,7 +352,7 @@ pub async fn shared_index_with_nested_documents() -> &'static Index<'static, Sha
         index.wait_task(response.uid()).await.succeeded();
         let (response, _code) = index
             ._update_settings(
-                json!({"filterableAttributes": ["father", "doggos"], "sortableAttributes": ["doggos"]}),
+                json!({"filterableAttributes": ["father", "doggos", "cattos"], "sortableAttributes": ["doggos"]}),
             )
             .await;
         index.wait_task(response.uid()).await.succeeded();
