@@ -399,7 +399,7 @@ impl<State> Server<State> {
     pub async fn wait_task(&self, update_id: u64) -> Value {
         // try several times to get status, or panic to not wait forever
         let url = format!("/tasks/{}", update_id);
-        let max_attempts = 400; // 200 seconds total, 0.5s per attempt
+        let max_attempts = 100; // 50 seconds total, 0.5s per attempt
 
         for i in 0..max_attempts {
             let (response, status_code) = self.service.get(&url).await;

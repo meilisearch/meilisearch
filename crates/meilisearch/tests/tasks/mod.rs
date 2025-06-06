@@ -1038,7 +1038,8 @@ async fn test_summarized_task_deletion() {
 
 #[actix_web::test]
 async fn test_summarized_dump_creation() {
-    let server = Server::new_shared();
+    // Do not use a shared server because it takes too long to create a dump
+    let server = Server::new().await;
     let (task, _status_code) = server.create_dump().await;
     server.wait_task(task.uid()).await;
     let (task, _) = server.get_task(task.uid()).await;
