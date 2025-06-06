@@ -12,7 +12,7 @@ jobs:
       # Use ubuntu-22.04 to compile with glibc 2.35
       image: ubuntu:22.04
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Install needed dependencies
         run: |
           apt-get update && apt-get install -y curl
