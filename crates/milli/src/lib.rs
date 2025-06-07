@@ -79,8 +79,9 @@ pub use self::localized_attributes_rules::LocalizedAttributesRule;
 pub use self::search::facet::{FacetValueHit, SearchForFacetValues};
 pub use self::search::similar::Similar;
 pub use self::search::{
-    FacetDistribution, Filter, FormatOptions, MatchBounds, MatcherBuilder, MatchingWords, OrderBy,
-    Search, SearchResult, SemanticSearch, TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
+    FacetDistribution, Filter, FormatOptions, MarkerOptions, MatchBounds, MatcherBuilder,
+    MatchingWords, OrderBy, Search, SearchResult, SemanticSearch, TermsMatchingStrategy,
+    DEFAULT_VALUES_PER_FACET,
 };
 pub use self::update::ChannelCongestion;
 

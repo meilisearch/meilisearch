@@ -1,4 +1,5 @@
 use core::fmt;
+use std::borrow::Cow;
 use std::cmp::min;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::str::FromStr;
@@ -27,11 +28,11 @@ use meilisearch_types::{milli, Document};
 use milli::tokenizer::{Language, TokenizerBuilder};
 use milli::{
     AscDesc, FieldId, FieldsIdsMap, Filter, FormatOptions, Index, LocalizedAttributesRule,
-    MatchBounds, MatcherBuilder, SortError, TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
+    MarkerOptions, MatcherBuilder, SortError, TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
 };
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 #[cfg(test)]
 mod mod_test;
 use utoipa::ToSchema;
@@ -46,7 +47,9 @@ pub use federated::{
 
 mod ranking_rules;
 
-type MatchesPosition = BTreeMap<String, Vec<MatchBounds>>;
+// TODO: Adapt this type to support cropping
+// { "_matchesPosition": { "overview": { first: false, highlighted: [[0,4,6,11,5,234,6,241,5]] } } }
+// type MatchesPosition = BTreeMap<String, Vec<MatchBounds>>;
 
 pub const DEFAULT_SEARCH_OFFSET: fn() -> usize = || 0;
 pub const DEFAULT_SEARCH_LIMIT: fn() -> usize = || 20;
@@ -742,11 +745,9 @@ pub struct SearchHit {
     #[serde(flatten)]
     #[schema(additional_properties, inline, value_type = HashMap<String, Value>)]
     pub document: Document,
-    #[serde(default, rename = "_formatted", skip_serializing_if = "Document::is_empty")]
+    #[serde(default, rename = "_formatted", skip_serializing_if = "Option::is_none")]
     #[schema(additional_properties, value_type = HashMap<String, Value>)]
-    pub formatted: Document,
-    #[serde(default, rename = "_matchesPosition", skip_serializing_if = "Option::is_none")]
-    pub matches_position: Option<MatchesPosition>,
+    pub formatted: Option<Document>,
     #[serde(default, rename = "_rankingScore", skip_serializing_if = "Option::is_none")]
     pub ranking_score: Option<f64>,
     #[serde(default, rename = "_rankingScoreDetails", skip_serializing_if = "Option::is_none")]
@@ -1223,6 +1224,7 @@ struct AttributesFormat {
     crop_marker: String,
     highlight_pre_tag: String,
     highlight_post_tag: String,
+    // TODO: Might want to rename this to signify that this will not yield _formatted anymore, only positions
     show_matches_position: bool,
     sort: Option<Vec<String>>,
     show_ranking_score: bool,
@@ -1230,7 +1232,7 @@ struct AttributesFormat {
     locales: Option<Vec<Language>>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy)]
 pub enum RetrieveVectors {
     /// Remove the `_vectors` field
     ///
@@ -1250,6 +1252,10 @@ impl RetrieveVectors {
             Self::Hide
         }
     }
+
+    pub fn should_retrieve(&self) -> bool {
+        matches!(self, Self::Retrieve)
+    }
 }
 
 struct HitMaker<'a> {
@@ -1261,7 +1267,7 @@ struct HitMaker<'a> {
     retrieve_vectors: RetrieveVectors,
     to_retrieve_ids: BTreeSet<FieldId>,
     embedding_configs: Vec<milli::index::IndexEmbeddingConfig>,
-    formatter_builder: MatcherBuilder<'a>,
+    matcher_builder: MatcherBuilder<'a>,
     formatted_options: BTreeMap<FieldId, FormatOptions>,
     show_ranking_score: bool,
     show_ranking_score_details: bool,
@@ -1289,24 +1295,20 @@ impl<'a> HitMaker<'a> {
         tokenizer_builder.into_tokenizer()
     }
 
-    pub fn formatter_builder(
-        matching_words: milli::MatchingWords,
-        tokenizer: milli::tokenizer::Tokenizer<'_>,
-    ) -> MatcherBuilder<'_> {
-        let formatter_builder = MatcherBuilder::new(matching_words, tokenizer);
-
-        formatter_builder
-    }
-
     pub fn new(
+        matching_words: milli::MatchingWords,
+        tokenizer: milli::tokenizer::Tokenizer<'a>,
+        attr_fmt: AttributesFormat,
         index: &'a Index,
         rtxn: &'a RoTxn<'a>,
-        format: AttributesFormat,
-        mut formatter_builder: MatcherBuilder<'a>,
     ) -> milli::Result<Self> {
-        formatter_builder.crop_marker(format.crop_marker);
-        formatter_builder.highlight_prefix(format.highlight_pre_tag);
-        formatter_builder.highlight_suffix(format.highlight_post_tag);
+        let AttributesFormat { highlight_pre_tag, highlight_post_tag, crop_marker, .. } = attr_fmt;
+
+        let matcher_builder = MatcherBuilder::new(
+            matching_words,
+            tokenizer,
+            MarkerOptions { highlight_pre_tag, highlight_post_tag, crop_marker },
+        );
 
         let fields_ids_map = index.fields_ids_map(rtxn)?;
         let displayed_ids = index
@@ -1324,21 +1326,21 @@ impl<'a> HitMaker<'a> {
                 let displayed_names = index.displayed_fields(rtxn)?.unwrap();
                 !displayed_names.contains(&milli::constants::RESERVED_VECTORS_FIELD_NAME)
             }
-            // displayed_ids is a finit list, so hide if `_vectors` is not part of it
+            // displayed_ids is a finite list, so hide if `_vectors` is not part of it
             (Some(map), Some(vectors_fid)) => map.contains(&vectors_fid),
         };
 
         let displayed_ids =
             displayed_ids.unwrap_or_else(|| fields_ids_map.iter().map(|(id, _)| id).collect());
 
-        let retrieve_vectors = if let RetrieveVectors::Retrieve = format.retrieve_vectors {
+        let retrieve_vectors = if let RetrieveVectors::Retrieve = attr_fmt.retrieve_vectors {
             if vectors_is_hidden {
                 RetrieveVectors::Hide
             } else {
                 RetrieveVectors::Retrieve
             }
         } else {
-            format.retrieve_vectors
+            attr_fmt.retrieve_vectors
         };
 
         let fids = |attrs: &BTreeSet<String>| {
@@ -1355,7 +1357,7 @@ impl<'a> HitMaker<'a> {
             }
             ids
         };
-        let to_retrieve_ids: BTreeSet<_> = format
+        let to_retrieve_ids: BTreeSet<_> = attr_fmt
             .attributes_to_retrieve
             .as_ref()
             .map(fids)
@@ -1364,12 +1366,12 @@ impl<'a> HitMaker<'a> {
             .cloned()
             .collect();
 
-        let attr_to_highlight = format.attributes_to_highlight.unwrap_or_default();
-        let attr_to_crop = format.attributes_to_crop.unwrap_or_default();
+        let attr_to_highlight = attr_fmt.attributes_to_highlight.unwrap_or_default();
+        let attr_to_crop = attr_fmt.attributes_to_crop.unwrap_or_default();
         let formatted_options = compute_formatted_options(
             &attr_to_highlight,
             &attr_to_crop,
-            format.crop_length,
+            attr_fmt.crop_length,
             &to_retrieve_ids,
             &fields_ids_map,
             &displayed_ids,
@@ -1386,51 +1388,53 @@ impl<'a> HitMaker<'a> {
             retrieve_vectors,
             to_retrieve_ids,
             embedding_configs,
-            formatter_builder,
+            matcher_builder,
             formatted_options,
-            show_ranking_score: format.show_ranking_score,
-            show_ranking_score_details: format.show_ranking_score_details,
-            show_matches_position: format.show_matches_position,
-            sort: format.sort,
-            locales: format.locales,
+            show_ranking_score: attr_fmt.show_ranking_score,
+            show_ranking_score_details: attr_fmt.show_ranking_score_details,
+            show_matches_position: attr_fmt.show_matches_position,
+            sort: attr_fmt.sort,
+            locales: attr_fmt.locales,
         })
     }
 
-    pub fn make_hit(&self, id: u32, score: &[ScoreDetails]) -> milli::Result<SearchHit> {
-        let (_, obkv) =
-            self.index.iter_documents(self.rtxn, std::iter::once(id))?.next().unwrap()?;
+    fn make_document(&self, obkv: &obkv::KvReaderU16) -> milli::Result<Document> {
+        let mut document = serde_json::Map::new();
 
-        // First generate a document with all the displayed fields
-        let displayed_document = make_document(&self.displayed_ids, &self.fields_ids_map, obkv)?;
-
-        let add_vectors_fid =
-            self.vectors_fid.filter(|_fid| self.retrieve_vectors == RetrieveVectors::Retrieve);
-
-        // select the attributes to retrieve
-        let attributes_to_retrieve = self
-            .to_retrieve_ids
-            .iter()
-            // skip the vectors_fid if RetrieveVectors::Hide
-            .filter(|fid| match self.vectors_fid {
-                Some(vectors_fid) => {
-                    !(self.retrieve_vectors == RetrieveVectors::Hide && **fid == vectors_fid)
+        // recreate JSON with appropriate attributes
+        for (key, value) in obkv.iter() {
+            if self.vectors_fid.is_some_and(|vectors_fid| vectors_fid == key) {
+                // (vectors aren't considered in `displayedAttributes` and `attributesToRetrieve`, but rather with `retrieveVectors`)
+                if !self.retrieve_vectors.should_retrieve() {
+                    continue;
                 }
-                None => true,
-            })
-            // need to retrieve the existing `_vectors` field if the `RetrieveVectors::Retrieve`
-            .chain(add_vectors_fid.iter())
-            .map(|&fid| self.fields_ids_map.name(fid).expect("Missing field name"));
+            } else if !self.to_retrieve_ids.contains(&key) || !self.displayed_ids.contains(&key) {
+                // https://www.meilisearch.com/docs/reference/api/settings#displayed-attributes
+                // https://www.meilisearch.com/docs/reference/api/search#attributes-to-retrieve
+                continue;
+            }
 
-        let mut document =
-            permissive_json_pointer::select_values(&displayed_document, attributes_to_retrieve);
+            let value = serde_json::from_slice(value).map_err(InternalError::SerdeJson)?;
+            let key = self.fields_ids_map.name(key).expect("Missing field name").to_string();
 
-        if self.retrieve_vectors == RetrieveVectors::Retrieve {
-            // Clippy is wrong
+            document.insert(key, value);
+        }
+
+        Ok(document)
+    }
+
+    pub fn make_hit(&self, id: u32, score: &[ScoreDetails]) -> milli::Result<SearchHit> {
+        let obkv = self.index.document(self.rtxn, id)?;
+
+        let mut document = self.make_document(obkv)?;
+
+        if self.retrieve_vectors.should_retrieve() {
             #[allow(clippy::manual_unwrap_or_default)]
             let mut vectors = match document.remove("_vectors") {
                 Some(Value::Object(map)) => map,
                 _ => Default::default(),
             };
+
             for (name, vector) in self.index.embeddings(self.rtxn, id)? {
                 let user_provided = self
                     .embedding_configs
@@ -1439,6 +1443,7 @@ impl<'a> HitMaker<'a> {
                     .is_some_and(|conf| conf.user_provided.contains(id));
                 let embeddings =
                     ExplicitVectors { embeddings: Some(vector.into()), regenerate: !user_provided };
+
                 vectors.insert(
                     name,
                     serde_json::to_value(embeddings).map_err(InternalError::SerdeJson)?,
@@ -1450,10 +1455,10 @@ impl<'a> HitMaker<'a> {
         let localized_attributes =
             self.index.localized_attributes_rules(self.rtxn)?.unwrap_or_default();
 
-        let (matches_position, formatted) = format_fields(
-            &displayed_document,
+        let formatted = format_fields(
+            &mut document,
             &self.fields_ids_map,
-            &self.formatter_builder,
+            &self.matcher_builder,
             &self.formatted_options,
             self.show_matches_position,
             &self.displayed_ids,
@@ -1470,13 +1475,7 @@ impl<'a> HitMaker<'a> {
         let ranking_score_details =
             self.show_ranking_score_details.then(|| ScoreDetails::to_json_map(score.iter()));
 
-        let hit = SearchHit {
-            document,
-            formatted,
-            matches_position,
-            ranking_score_details,
-            ranking_score,
-        };
+        let hit = SearchHit { document, formatted, ranking_score_details, ranking_score };
 
         Ok(hit)
     }
@@ -1485,7 +1484,7 @@ impl<'a> HitMaker<'a> {
 fn make_hits<'a>(
     index: &Index,
     rtxn: &RoTxn<'_>,
-    format: AttributesFormat,
+    attributes_format: AttributesFormat,
     matching_words: milli::MatchingWords,
     documents_ids_scores: impl Iterator<Item = (u32, &'a Vec<ScoreDetails>)> + 'a,
 ) -> milli::Result<Vec<SearchHit>> {
@@ -1500,9 +1499,7 @@ fn make_hits<'a>(
 
     let tokenizer = HitMaker::tokenizer(dictionary.as_deref(), separators.as_deref());
 
-    let formatter_builder = HitMaker::formatter_builder(matching_words, tokenizer);
-
-    let hit_maker = HitMaker::new(index, rtxn, format, formatter_builder)?;
+    let hit_maker = HitMaker::new(matching_words, tokenizer, attributes_format, index, rtxn)?;
 
     for (id, score) in documents_ids_scores {
         documents.push(hit_maker.make_hit(id, score)?);
@@ -1818,59 +1815,100 @@ fn add_non_formatted_ids_to_formatted_options(
     }
 }
 
-fn make_document(
-    displayed_attributes: &BTreeSet<FieldId>,
-    field_ids_map: &FieldsIdsMap,
-    obkv: &obkv::KvReaderU16,
-) -> milli::Result<Document> {
-    let mut document = serde_json::Map::new();
-
-    // recreate the original json
-    for (key, value) in obkv.iter() {
-        let value = serde_json::from_slice(value).map_err(InternalError::SerdeJson)?;
-        let key = field_ids_map.name(key).expect("Missing field name").to_string();
-
-        document.insert(key, value);
-    }
-
-    // select the attributes to retrieve
-    let displayed_attributes = displayed_attributes
-        .iter()
-        .map(|&fid| field_ids_map.name(fid).expect("Missing field name"));
-
-    let document = permissive_json_pointer::select_values(&document, displayed_attributes);
-    Ok(document)
-}
-
 #[allow(clippy::too_many_arguments)]
 fn format_fields(
-    document: &Document,
+    document: &mut Document,
     field_ids_map: &FieldsIdsMap,
-    builder: &MatcherBuilder<'_>,
+    matcher_builder: &MatcherBuilder<'_>,
     formatted_options: &BTreeMap<FieldId, FormatOptions>,
-    compute_matches: bool,
+    show_matches_position: bool,
     displayable_ids: &BTreeSet<FieldId>,
     locales: Option<&[Language]>,
     localized_attributes: &[LocalizedAttributesRule],
-) -> milli::Result<(Option<MatchesPosition>, Document)> {
-    let mut matches_position = compute_matches.then(BTreeMap::new);
-    let mut document = document.clone();
-
+) -> milli::Result<Option<Document>> {
     // reduce the formatted option list to the attributes that should be formatted,
     // instead of all the attributes to display.
-    let formatting_fields_options: Vec<_> = formatted_options
+    let formatting_fields_options = formatted_options
         .iter()
         .filter(|(_, option)| option.should_format())
         .map(|(fid, option)| (field_ids_map.name(*fid).unwrap(), option))
-        .collect();
+        .collect::<Vec<_>>();
 
     // select the attributes to retrieve
     let displayable_names =
         displayable_ids.iter().map(|&fid| field_ids_map.name(fid).expect("Missing field name"));
+
+    let get_format_options = |key: Cow<'_, str>| {
+        formatting_fields_options
+            .iter()
+            .filter(|(name, ..)| {
+                milli::is_faceted_by(name, &key) || milli::is_faceted_by(&key, name)
+            })
+            .map(|(_, option)| **option)
+            .reduce(|acc, option| acc.merge(option))
+    };
+
+    let get_locales = |key: Cow<'_, str>| {
+        // TODO: Should this be re computed every time?
+        // if no locales has been provided, we try to find the locales in the localized_attributes.
+        locales.or_else(|| {
+            localized_attributes
+                .iter()
+                .find(|rule| matches!(rule.match_str(&key), PatternMatch::Match))
+                .map(LocalizedAttributesRule::locales)
+        })
+    };
+
+    fn get_text(value: &mut Value) -> Option<Cow<'_, String>> {
+        match value {
+            Value::String(text) => Some(Cow::Borrowed(text)),
+            Value::Number(number) => Some(Cow::Owned(number.to_string())),
+            // boolean and null can not be matched by meili, can not be formatted
+            // and array or object cannot be yielded by `permissive_json_pointer::map_leaf_values`
+            _ => None,
+        }
+    }
+
+    if show_matches_position {
+        permissive_json_pointer::map_leaf_values(document, displayable_names, |key, _, value| {
+            let Some(text) = get_text(value) else {
+                *value = Value::Object(Map::from_iter(std::iter::once((
+                    "value".to_string(),
+                    value.take(),
+                ))));
+
+                return;
+            };
+
+            let locales = get_locales(Cow::from(key));
+            let mut matcher = matcher_builder.build(&text, locales);
+            let format_options = get_format_options(Cow::from(key));
+            let match_bounds = matcher.get_match_bounds(format_options);
+
+            let value_iter = std::iter::once(("value".to_string(), value.take()));
+
+            // do not include `matches` in case there is nothing to format
+            let json_map = if let Some(mb) = match_bounds {
+                let matches_iter = std::iter::once((
+                    "matches".to_string(),
+                    serde_json::to_value(mb).expect("TODO"),
+                ));
+                Map::from_iter(value_iter.chain(matches_iter))
+            } else {
+                Map::from_iter(value_iter)
+            };
+
+            *value = Value::Object(json_map);
+        });
+
+        return Ok(None);
+    }
+
+    let mut formatted_document = document.clone();
     permissive_json_pointer::map_leaf_values(
-        &mut document,
+        &mut formatted_document,
         displayable_names,
-        |key, array_indices, value| {
+        |key, _, value| {
             // To get the formatting option of each key we need to see all the rules that applies
             // to the value and merge them together. eg. If a user said he wanted to highlight `doggo`
             // and crop `doggo.name`. `doggo.name` needs to be highlighted + cropped while `doggo.age` is only
@@ -1878,37 +1916,22 @@ fn format_fields(
             // Warn: The time to compute the format list scales with the number of fields to format;
             // cumulated with map_leaf_values that iterates over all the nested fields, it gives a quadratic complexity:
             // d*f where d is the total number of fields to display and f is the total number of fields to format.
-            let format = formatting_fields_options
-                .iter()
-                .filter(|(name, _option)| {
-                    milli::is_faceted_by(name, key) || milli::is_faceted_by(key, name)
-                })
-                .map(|(_, option)| **option)
-                .reduce(|acc, option| acc.merge(option));
-            let mut infos = Vec::new();
+            let Some(text) = get_text(value) else {
+                return;
+            };
 
-            // if no locales has been provided, we try to find the locales in the localized_attributes.
-            let locales = locales.or_else(|| {
-                localized_attributes
-                    .iter()
-                    .find(|rule| rule.match_str(key) == PatternMatch::Match)
-                    .map(LocalizedAttributesRule::locales)
-            });
+            let format_options = get_format_options(Cow::from(key));
 
-            *value = format_value(
-                std::mem::take(value),
-                builder,
-                format,
-                &mut infos,
-                compute_matches,
-                array_indices,
-                locales,
-            );
+            // there's nothing to format
+            if !format_options.is_some_and(|v| v.should_format()) {
+                return;
+            }
 
-            if let Some(matches) = matches_position.as_mut() {
-                if !infos.is_empty() {
-                    matches.insert(key.to_owned(), infos);
-                }
+            let locales = get_locales(Cow::from(key));
+
+            let mut matcher = matcher_builder.build(&text, locales);
+            if let Some(formatted_text) = matcher.get_formatted_text(format_options) {
+                *value = Value::String(formatted_text);
             }
         },
     );
@@ -1918,58 +1941,9 @@ fn format_fields(
         // This unwrap must be safe since we got the ids from the fields_ids_map just
         // before.
         .map(|&fid| field_ids_map.name(fid).unwrap());
-    let document = permissive_json_pointer::select_values(&document, selectors);
+    let formatted_document = permissive_json_pointer::select_values(&formatted_document, selectors);
 
-    Ok((matches_position, document))
-}
-
-fn format_value(
-    value: Value,
-    builder: &MatcherBuilder<'_>,
-    format_options: Option<FormatOptions>,
-    infos: &mut Vec<MatchBounds>,
-    compute_matches: bool,
-    array_indices: &[usize],
-    locales: Option<&[Language]>,
-) -> Value {
-    match value {
-        Value::String(old_string) => {
-            let mut matcher = builder.build(&old_string, locales);
-            if compute_matches {
-                let matches = matcher.matches(array_indices);
-                infos.extend_from_slice(&matches[..]);
-            }
-
-            match format_options {
-                Some(format_options) => {
-                    let value = matcher.format(format_options);
-                    Value::String(value.into_owned())
-                }
-                None => Value::String(old_string),
-            }
-        }
-        // `map_leaf_values` makes sure this is only called for leaf fields
-        Value::Array(_) => unreachable!(),
-        Value::Object(_) => unreachable!(),
-        Value::Number(number) => {
-            let s = number.to_string();
-
-            let mut matcher = builder.build(&s, locales);
-            if compute_matches {
-                let matches = matcher.matches(array_indices);
-                infos.extend_from_slice(&matches[..]);
-            }
-
-            match format_options {
-                Some(format_options) => {
-                    let value = matcher.format(format_options);
-                    Value::String(value.into_owned())
-                }
-                None => Value::String(s),
-            }
-        }
-        value => value,
-    }
+    Ok(Some(formatted_document))
 }
 
 pub(crate) fn parse_filter(
