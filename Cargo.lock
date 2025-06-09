@@ -1072,6 +1072,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fd60e63e9be68e5fb56422e397cf9baddded06dae1d2e523401542383bc72a9f"
 dependencies = [
  "clap_builder",
+ "clap_derive",
 ]
 
 [[package]]
