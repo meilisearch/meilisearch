@@ -18,7 +18,7 @@ maplit = "1.0.2"
 meilisearch-types = { path = "../meilisearch-types" }
 rand = "0.8.5"
 roaring = { version = "0.10.10", features = ["serde"] }
-serde = { version = "1.0.217" }
+serde = { version = "1.0.217", features = ["derive"] }
 serde_derive = { version = "1.0.217" }
 serde_json = { version = "1.0.135", features = ["preserve_order"] }
 sha2 = "0.10.8"

@@ -30,7 +30,7 @@ memmap2 = "0.9.5"
 page_size = "0.6.0"
 rayon = "1.10.0"
 roaring = { version = "0.10.10", features = ["serde"] }
-serde = { version = "1.0.217" }
+serde = { version = "1.0.217", features = ["derive"] }
 serde_derive = { version = "1.0.217" }
 serde_json = { version = "1.0.138", features = ["preserve_order"] }
 synchronoise = "1.0.1"

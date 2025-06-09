@@ -4,8 +4,7 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use anyhow::{bail, Context};
-use clap::Parser;
-use clap_derive::{Subcommand, ValueEnum};
+use clap::{Parser, Subcommand, ValueEnum};
 use dump::{DumpWriter, IndexMetadata};
 use file_store::FileStore;
 use meilisearch_auth::{open_auth_store_env, AuthController};
@@ -30,7 +29,7 @@ use uuid_codec::UuidCodec;
 mod upgrade;
 mod uuid_codec;
 
-#[derive(clap_derive::Parser)]
+#[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Cli {
     /// The database path where the Meilisearch is running.

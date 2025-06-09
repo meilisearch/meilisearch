@@ -11,15 +11,15 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-arbitrary = { version = "1.4.1" }
+arbitrary = { version = "1.4.1", features = ["derive"] }
 derive_arbitrary = { version = "1.4.1" }
 bumpalo = "3.16.0"
-clap = { version = "4.5.24" }
+clap = { version = "4.5.24", features = ["derive"] }
 clap_derive = { version = "4.5.24" }
 either = "1.13.0"
 fastrand = "2.3.0"
 milli = { path = "../milli" }
-serde = { version = "1.0.217" }
+serde = { version = "1.0.217", features = ["derive"] }
 serde_derive = { version = "1.0.217" }
 serde_json = { version = "1.0.135", features = ["preserve_order"] }
 tempfile = "3.15.0"

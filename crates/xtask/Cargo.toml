@@ -14,7 +14,7 @@ license.workspace = true
 anyhow = "1.0.95"
 build-info = { version = "1.7.0", path = "../build-info" }
 cargo_metadata = "0.19.1"
-clap = { version = "4.5.24" }
+clap = { version = "4.5.24", features = ["derive"] }
 clap_derive = { version = "4.5.24" }
 futures-core = "0.3.31"
 futures-util = "0.3.31"
@@ -23,7 +23,7 @@ reqwest = { version = "0.12.12", features = [
     "json",
     "rustls-tls",
 ], default-features = false }
-serde = { version = "1.0.217" }
+serde = { version = "1.0.217", features = ["derive"] }
 serde_derive = { version = "1.0.217" }
 serde_json = "1.0.135"
 sha2 = "0.10.8"

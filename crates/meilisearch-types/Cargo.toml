@@ -27,7 +27,7 @@ memmap2 = "0.9.5"
 milli = { path = "../milli" }
 roaring = { version = "0.10.10", features = ["serde"] }
 rustc-hash = "2.1.0"
-serde = { version = "1.0.217" }
+serde = { version = "1.0.217", features = ["derive"] }
 serde_derive = { version = "1.0.217" }
 serde-cs = "0.2.4"
 serde_json = { version = "1.0.135", features = ["preserve_order"] }

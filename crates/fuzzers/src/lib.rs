@@ -1,4 +1,4 @@
-use derive_arbitrary::Arbitrary;
+use arbitrary::Arbitrary;
 use serde_json::{json, Value};
 
 #[derive(Debug, Arbitrary)]
