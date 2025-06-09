@@ -5,7 +5,6 @@ name: Milestone's workflow
 # For each Milestone created (not opened!), and if the release is NOT a patch release (only the patch changed)
 # - the roadmap issue is created, see https://github.com/meilisearch/engine-team/blob/main/issue-templates/roadmap-issue.md
 # - the changelog issue is created, see https://github.com/meilisearch/engine-team/blob/main/issue-templates/changelog-issue.md
-# - update the ruleset to add the current release version to the list of allowed versions and be able to use the merge queue.
 
 # For each Milestone closed
 # - the `release_version` label is created
@@ -147,38 +146,6 @@ jobs:
             --label 'maintenance' \
             --body-file $ISSUE_TEMPLATE \
             --milestone $MILESTONE_VERSION
-
-  update-ruleset:
-    runs-on: ubuntu-latest
-    if: github.event.action == 'created'
-    steps:
-      - uses: actions/checkout@v3
-      - name: Install jq
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y jq
-      - name: Update ruleset
-        env:
-          # gh api repos/meilisearch/meilisearch/rulesets --jq '.[] | {name: .name, id: .id}'
-          RULESET_ID: 4253297
-          BRANCH_NAME: ${{ github.event.inputs.branch_name }}
-        run: |
-          echo "RULESET_ID: ${{ env.RULESET_ID }}"
-          echo "BRANCH_NAME: ${{ env.BRANCH_NAME }}"
-
-          # Get current ruleset conditions
-          CONDITIONS=$(gh api repos/meilisearch/meilisearch/rulesets/${{ env.RULESET_ID }} --jq '{ conditions: .conditions }')
-
-          # Update the conditions by appending the milestone version
-          UPDATED_CONDITIONS=$(echo $CONDITIONS | jq '.conditions.ref_name.include += ["refs/heads/release-'${{ env.MILESTONE_VERSION }}'"]')
-
-          # Update the ruleset from stdin (-)
-          echo $UPDATED_CONDITIONS |
-            gh api repos/meilisearch/meilisearch/rulesets/${{ env.RULESET_ID }} \
-              --method PUT \
-              -H "Accept: application/vnd.github+json" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              --input -
 
   # ----------------
   # MILESTONE CLOSED
