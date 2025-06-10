@@ -1971,7 +1971,7 @@ pub struct SearchParameters {
 }
 
 #[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Deserr, ToSchema)]
-#[deserr(try_from(f64) = TryFrom::try_from -> InvalidSearchRankingScoreThreshold)]
+#[deserr(try_from(f64) = TryFrom::try_from -> InvalidSettingsRankingScoreThreshold)]
 pub struct RankingScoreThreshold(f64);
 
 impl RankingScoreThreshold {
@@ -1981,11 +1981,11 @@ impl RankingScoreThreshold {
 }
 
 impl TryFrom<f64> for RankingScoreThreshold {
-    type Error = InvalidSearchRankingScoreThreshold;
+    type Error = InvalidSettingsRankingScoreThreshold;
 
     fn try_from(value: f64) -> StdResult<Self, Self::Error> {
         if !(0.0..=1.0).contains(&value) {
-            Err(InvalidSearchRankingScoreThreshold)
+            Err(InvalidSettingsRankingScoreThreshold)
         } else {
             Ok(RankingScoreThreshold(value))
         }
@@ -1993,11 +1993,11 @@ impl TryFrom<f64> for RankingScoreThreshold {
 }
 
 #[derive(Debug)]
-pub struct InvalidSearchRankingScoreThreshold;
+pub struct InvalidSettingsRankingScoreThreshold;
 
-impl Error for InvalidSearchRankingScoreThreshold {}
+impl Error for InvalidSettingsRankingScoreThreshold {}
 
-impl fmt::Display for InvalidSearchRankingScoreThreshold {
+impl fmt::Display for InvalidSettingsRankingScoreThreshold {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
