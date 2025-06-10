@@ -129,10 +129,10 @@ async fn patch_settings(
             Setting::Reset => None,
             Setting::NotSet => old_settings.deployment_id,
         },
-        base_api: match new.base_api {
-            Setting::Set(new_base_api) => Some(new_base_api),
+        base_url: match new.base_url {
+            Setting::Set(new_base_url) => Some(new_base_url),
             Setting::Reset => None,
-            Setting::NotSet => old_settings.base_api,
+            Setting::NotSet => old_settings.base_url,
         },
         api_key: match new.api_key {
             Setting::Set(new_api_key) => Some(new_api_key),
@@ -211,7 +211,7 @@ pub struct GlobalChatSettings {
     #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidChatCompletionBaseApi>)]
     #[schema(value_type = Option<String>, example = json!("https://api.mistral.ai/v1"))]
-    pub base_api: Setting<String>,
+    pub base_url: Setting<String>,
     #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidChatCompletionApiKey>)]
     #[schema(value_type = Option<String>, example = json!("abcd1234..."))]

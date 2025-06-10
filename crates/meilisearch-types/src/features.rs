@@ -59,7 +59,7 @@ pub struct ChatCompletionSettings {
     #[serde(default)]
     pub deployment_id: Option<String>,
     #[serde(default)]
-    pub base_api: Option<String>,
+    pub base_url: Option<String>,
     #[serde(default)]
     pub api_key: Option<String>,
     #[serde(default)]

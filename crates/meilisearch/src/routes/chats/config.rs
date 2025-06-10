@@ -24,8 +24,8 @@ impl Config {
                 if let Some(api_key) = chat_settings.api_key.as_ref() {
                     config = config.with_api_key(api_key);
                 }
-                if let Some(base_api) = chat_settings.base_api.as_ref() {
-                    config = config.with_api_base(base_api);
+                if let Some(base_url) = chat_settings.base_url.as_ref() {
+                    config = config.with_api_base(base_url);
                 }
                 Self::OpenAiCompatible(config)
             }
@@ -40,8 +40,8 @@ impl Config {
                 if let Some(api_key) = chat_settings.api_key.as_ref() {
                     config = config.with_api_key(api_key);
                 }
-                if let Some(base_api) = chat_settings.base_api.as_ref() {
-                    config = config.with_api_base(base_api);
+                if let Some(base_url) = chat_settings.base_url.as_ref() {
+                    config = config.with_api_base(base_url);
                 }
                 Self::AzureOpenAiCompatible(config)
             }
