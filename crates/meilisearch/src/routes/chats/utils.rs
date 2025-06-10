@@ -232,9 +232,8 @@ pub fn format_documents<'doc>(
     for (docid, external_docid) in internal_docids.into_iter().zip(external_ids) {
         let document = match DocumentFromDb::new(docid, rtxn, index, &fid_map)? {
             Some(doc) => doc,
-            None => continue,
+            None => unreachable!("Document with internal ID {docid} not found"),
         };
-
         let text = prompt.render_document(&external_docid, document, &gfid_map, doc_alloc).unwrap();
         renders.push(text);
     }
