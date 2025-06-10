@@ -62,7 +62,7 @@ async fn patch_settings(
         Data<IndexScheduler>,
     >,
     chats_param: web::Path<ChatsParam>,
-    web::Json(new): web::Json<GlobalChatSettings>,
+    web::Json(new): web::Json<ChatWorkspaceSettings>,
 ) -> Result<HttpResponse, ResponseError> {
     index_scheduler.features().check_chat_completions("using the /chats/settings route")?;
     let ChatsParam { workspace_uid } = chats_param.into_inner();
@@ -187,7 +187,7 @@ async fn reset_settings(
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
-pub struct GlobalChatSettings {
+pub struct ChatWorkspaceSettings {
     #[serde(default)]
     #[deserr(default)]
     #[schema(value_type = Option<ChatCompletionSource>)]
@@ -228,12 +228,21 @@ pub struct GlobalChatSettings {
 pub enum ChatCompletionSource {
     #[default]
     OpenAi,
+    Mistral,
+    Gemini,
+    AzureOpenAi,
+    VLlm,
 }
 
 impl From<ChatCompletionSource> for DbChatCompletionSource {
     fn from(source: ChatCompletionSource) -> Self {
+        use ChatCompletionSource::*;
         match source {
-            ChatCompletionSource::OpenAi => DbChatCompletionSource::OpenAi,
+            OpenAi => DbChatCompletionSource::OpenAi,
+            Mistral => DbChatCompletionSource::Mistral,
+            Gemini => DbChatCompletionSource::Gemini,
+            AzureOpenAi => DbChatCompletionSource::AzureOpenAi,
+            VLlm => DbChatCompletionSource::VLlm,
         }
     }
 }
