@@ -164,7 +164,7 @@ async fn federation_single_search_single_index() {
             "red"
           ],
           "_federation": {
-            "indexUid": "[uuid]",
+            "indexUid": "SHARED_DOCUMENTS",
             "queriesPosition": 0,
             "weightedRankingScore": 1.0
           }
@@ -1104,7 +1104,7 @@ async fn federation_sort_same_indexes_same_criterion_same_direction() {
         .await;
     index.wait_task(value.uid()).await.succeeded();
 
-    // two identical placeholder search should have all results from first query
+    // two identical placeholder searches should have all results from the first query
     let (response, code) = server
         .multi_search(json!({"federation": {}, "queries": [
           {"indexUid" : index.uid, "q": "", "sort": ["mother:asc"], "showRankingScore": true },
@@ -1317,7 +1317,7 @@ async fn federation_sort_same_indexes_same_criterion_opposite_direction() {
         .await;
     index.wait_task(value.uid()).await.succeeded();
 
-    // two identical placeholder search should have all results from first query
+    // two identical placeholder searches should have all results from the first query
     let (response, code) = server
         .multi_search(json!({"federation": {}, "queries": [
           {"indexUid" : index.uid, "q": "", "sort": ["mother:asc"], "showRankingScore": true },
@@ -1376,7 +1376,7 @@ async fn federation_sort_same_indexes_different_criterion_same_direction() {
         .await;
     index.wait_task(value.uid()).await.succeeded();
 
-    // return mothers and fathers ordered accross fields.
+    // return mothers and fathers ordered across fields.
     let (response, code) = server
         .multi_search(json!({"federation": {}, "queries": [
           {"indexUid" : index.uid, "q": "", "sort": ["mother:asc"], "showRankingScore": true },
@@ -1590,7 +1590,7 @@ async fn federation_sort_same_indexes_different_criterion_opposite_direction() {
         .await;
     index.wait_task(value.uid()).await.succeeded();
 
-    // two identical placeholder search should have all results from first query
+    // two identical placeholder searches should have all results from the first query
     let (response, code) = server
         .multi_search(json!({"federation": {}, "queries": [
           {"indexUid" : index.uid, "q": "", "sort": ["mother:asc"], "showRankingScore": true },
@@ -1670,7 +1670,7 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
         .await;
     batman_index.wait_task(value.uid()).await.succeeded();
 
-    // return titles ordered accross indexes
+    // return titles ordered across indexes
     let (response, code) = server
         .multi_search(json!({"federation": {}, "queries": [
           {"indexUid" : movies_index.uid, "q": "", "sort": ["title:asc"], "showRankingScore": true },
@@ -1940,7 +1940,7 @@ async fn federation_sort_different_ranking_rules() {
         .await;
     batman_index.wait_task(value.uid()).await.succeeded();
 
-    // return titles ordered accross indexes
+    // return titles ordered across indexes
     let (response, code) = server
         .multi_search(json!({"federation": {}, "queries": [
           {"indexUid" : movies_index.uid, "q": "", "sort": ["title:asc"], "showRankingScore": true },
@@ -2226,7 +2226,7 @@ async fn federation_sort_different_indexes_different_criterion_same_direction() 
         .await;
     batman_index.wait_task(value.uid()).await.succeeded();
 
-    // return titles ordered accross indexes
+    // return titles ordered across indexes
     let (response, code) = server
         .multi_search(json!({"federation": {}, "queries": [
           {"indexUid" : movies_index.uid, "q": "", "sort": ["title:asc"], "showRankingScore": true },
@@ -3377,7 +3377,7 @@ async fn federation_federated_contains_facets() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    insta::assert_json_snapshot!(response, { ".processingTimeMs" => "[time]" }, @r###"
+    insta::assert_json_snapshot!(response, { ".processingTimeMs" => "[time]", ".**.indexUid" => "[uuid]" }, @r###"
     {
       "hits": [
         {
@@ -4347,7 +4347,7 @@ async fn federation_facets_different_indexes_same_facet() {
         .await;
     batman_2_index.wait_task(value.uid()).await.succeeded();
 
-    // return titles ordered accross indexes
+    // return titles ordered across indexes
     let (response, code) = server
         .multi_search(json!({"federation": {
           "facetsByIndex": {
