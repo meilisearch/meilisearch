@@ -180,8 +180,7 @@ async fn run_http(
 
     if let Some(config) = opt_clone.get_ssl_config()? {
         http_server.bind_rustls_0_23(opt_clone.http_addr, config)?.run().await?;
-    }
-    else if cfg!(feature = "uds") && opt_clone.http_addr.starts_with("/") {
+    } else if cfg!(feature = "uds") && opt_clone.http_addr.starts_with("/") {
         http_server.bind_uds(&opt_clone.http_addr)?.run().await?;
     } else {
         http_server.bind(&opt_clone.http_addr)?.run().await?;
@@ -411,7 +410,7 @@ mod tests {
                 meilisearch_process.kill().await?;
                 meilisearch_process.wait().await?;
                 panic!("An error occurred while waiting for the UDS client: {err}")
-            },
+            }
         }
 
         Ok(())

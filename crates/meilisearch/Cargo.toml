@@ -122,7 +122,6 @@ brotli = "6.0.0"
 http-client-unix-domain-socket = { version = "0.1.1" }
 # fixed version due to format breakages in v1.40
 insta = { version = "=1.39.0", features = ["redactions"] }
-http-client-unix-domain-socket = { version = "0.1.1" }
 manifest-dir-macros = "0.1.18"
 maplit = "1.0.2"
 meili-snap = { path = "../meili-snap" }
