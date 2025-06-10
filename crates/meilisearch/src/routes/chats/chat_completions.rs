@@ -64,12 +64,6 @@ async fn chat(
 ) -> impl Responder {
     let ChatsParam { workspace_uid } = chats_param.into_inner();
 
-    assert_eq!(
-        chat_completion.n.unwrap_or(1),
-        1,
-        "Meilisearch /chat only support one completion at a time (n = 1, n = null)"
-    );
-
     if chat_completion.stream.unwrap_or(false) {
         Either::Right(
             streamed_chat(
@@ -309,6 +303,13 @@ async fn non_streamed_chat(
 ) -> Result<HttpResponse, ResponseError> {
     index_scheduler.features().check_chat_completions("using the /chats chat completions route")?;
 
+    if let Some(n) = chat_completion.n.filter(|&n| n != 1) {
+        return Err(ResponseError::from_msg(
+            format!("You tried to specify n = {n} but only single choices are supported (n = 1)."),
+            Code::UnimplementedMultiChoiceChatCompletions,
+        ));
+    }
+
     return Err(ResponseError::from_msg(
         "Non-streamed chat completions is not implemented".to_string(),
         Code::UnimplementedNonStreamingChatCompletions,
@@ -411,6 +412,13 @@ async fn streamed_chat(
 ) -> Result<impl Responder, ResponseError> {
     index_scheduler.features().check_chat_completions("using the /chats chat completions route")?;
     let filters = index_scheduler.filters();
+
+    if let Some(n) = chat_completion.n.filter(|&n| n != 1) {
+        return Err(ResponseError::from_msg(
+            format!("You tried to specify n = {n} but only single choices are supported (n = 1)."),
+            Code::UnimplementedMultiChoiceChatCompletions,
+        ));
+    }
 
     let chat_settings = match index_scheduler.chat_settings(workspace_uid)? {
         Some(settings) => settings,
