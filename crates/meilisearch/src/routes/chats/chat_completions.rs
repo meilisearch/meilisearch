@@ -301,17 +301,23 @@ async fn process_search_request(
     Ok((index, documents, text))
 }
 
+#[allow(unreachable_code, unused_variables)] // will be correctly implemented in the future
 async fn non_streamed_chat(
     index_scheduler: GuardedData<ActionPolicy<{ actions::CHAT_COMPLETIONS }>, Data<IndexScheduler>>,
     auth_ctrl: web::Data<AuthController>,
     search_queue: web::Data<SearchQueue>,
     workspace_uid: &str,
     req: HttpRequest,
-    mut chat_completion: CreateChatCompletionRequest,
+    chat_completion: CreateChatCompletionRequest,
 ) -> Result<HttpResponse, ResponseError> {
     index_scheduler.features().check_chat_completions("using the /chats chat completions route")?;
-    let filters = index_scheduler.filters();
 
+    return Err(ResponseError::from_msg(
+        format!("Non-streamed chat completions is not implemented"),
+        Code::UnimplementedNonStreamingChatCompletions,
+    ));
+
+    let filters = index_scheduler.filters();
     let rtxn = index_scheduler.read_txn()?;
     let chat_settings = match index_scheduler.chat_settings(&rtxn, workspace_uid).unwrap() {
         Some(settings) => settings,
