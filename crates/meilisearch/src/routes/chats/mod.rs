@@ -62,10 +62,7 @@ pub async fn get_chat(
     if index_scheduler.chat_workspace_exists(&workspace_uid)? {
         Ok(HttpResponse::Ok().json(json!({ "uid": workspace_uid })))
     } else {
-        Err(ResponseError::from_msg(
-            format!("chat {workspace_uid} not found"),
-            Code::ChatNotFound,
-        ))
+        Err(ResponseError::from_msg(format!("chat {workspace_uid} not found"), Code::ChatNotFound))
     }
 }
 
@@ -81,10 +78,7 @@ pub async fn delete_chat(
         wtxn.commit()?;
         Ok(HttpResponse::NoContent().finish())
     } else {
-        Err(ResponseError::from_msg(
-            format!("chat {workspace_uid} not found"),
-            Code::ChatNotFound,
-        ))
+        Err(ResponseError::from_msg(format!("chat {workspace_uid} not found"), Code::ChatNotFound))
     }
 }
 
