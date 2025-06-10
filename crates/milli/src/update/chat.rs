@@ -97,14 +97,6 @@ pub struct ChatSearchParams {
     #[schema(value_type = Option<usize>)]
     pub limit: Setting<usize>,
 
-    // #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    // #[deserr(default)]
-    // pub attributes_to_retrieve: Option<BTreeSet<String>>,
-
-    // #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    // #[deserr(default)]
-    // pub filter: Option<Value>,
-    //
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<Vec<String>>)]
