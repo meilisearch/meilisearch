@@ -315,8 +315,7 @@ async fn non_streamed_chat(
     ));
 
     let filters = index_scheduler.filters();
-    let rtxn = index_scheduler.read_txn()?;
-    let chat_settings = match index_scheduler.chat_settings(&rtxn, workspace_uid).unwrap() {
+    let chat_settings = match index_scheduler.chat_settings(workspace_uid).unwrap() {
         Some(settings) => settings,
         None => {
             return Err(ResponseError::from_msg(
@@ -413,8 +412,7 @@ async fn streamed_chat(
     index_scheduler.features().check_chat_completions("using the /chats chat completions route")?;
     let filters = index_scheduler.filters();
 
-    let rtxn = index_scheduler.read_txn()?;
-    let chat_settings = match index_scheduler.chat_settings(&rtxn, workspace_uid)? {
+    let chat_settings = match index_scheduler.chat_settings(workspace_uid)? {
         Some(settings) => settings,
         None => {
             return Err(ResponseError::from_msg(
@@ -423,7 +421,6 @@ async fn streamed_chat(
             ))
         }
     };
-    drop(rtxn);
 
     let config = Config::new(&chat_settings);
     let auth_token = extract_token_from_request(&req)?.unwrap().to_string();

@@ -72,10 +72,8 @@ pub async fn delete_chat(
 ) -> Result<HttpResponse, ResponseError> {
     index_scheduler.features().check_chat_completions("deleting a chat")?;
 
-    let mut wtxn = index_scheduler.write_txn()?;
     let workspace_uid = workspace_uid.into_inner();
-    if index_scheduler.delete_chat_settings(&mut wtxn, &workspace_uid)? {
-        wtxn.commit()?;
+    if index_scheduler.delete_chat_settings(&workspace_uid)? {
         Ok(HttpResponse::NoContent().finish())
     } else {
         Err(ResponseError::from_msg(format!("chat {workspace_uid} not found"), Code::ChatNotFound))

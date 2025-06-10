@@ -42,8 +42,7 @@ async fn get_settings(
     let ChatsParam { workspace_uid } = chats_param.into_inner();
 
     // TODO do a spawn_blocking here ???
-    let rtxn = index_scheduler.read_txn()?;
-    let mut settings = match index_scheduler.chat_settings(&rtxn, &workspace_uid)? {
+    let mut settings = match index_scheduler.chat_settings(&workspace_uid)? {
         Some(settings) => settings,
         None => {
             return Err(ResponseError::from_msg(
@@ -68,8 +67,7 @@ async fn patch_settings(
     let ChatsParam { workspace_uid } = chats_param.into_inner();
 
     // TODO do a spawn_blocking here
-    let mut wtxn = index_scheduler.write_txn()?;
-    let old_settings = index_scheduler.chat_settings(&wtxn, &workspace_uid)?.unwrap_or_default();
+    let old_settings = index_scheduler.chat_settings(&workspace_uid)?.unwrap_or_default();
 
     let prompts = match new.prompts {
         Setting::Set(new_prompts) => DbChatCompletionPrompts {
@@ -147,8 +145,7 @@ async fn patch_settings(
     // );
 
     settings.validate()?;
-    index_scheduler.put_chat_settings(&mut wtxn, &workspace_uid, &settings)?;
-    wtxn.commit()?;
+    index_scheduler.put_chat_settings(&workspace_uid, &settings)?;
 
     settings.hide_secrets();
 
@@ -165,11 +162,9 @@ async fn reset_settings(
     index_scheduler.features().check_chat_completions("using the /chats/settings route")?;
 
     let ChatsParam { workspace_uid } = chats_param.into_inner();
-    let mut wtxn = index_scheduler.write_txn()?;
-    if index_scheduler.chat_settings(&wtxn, &workspace_uid)?.is_some() {
+    if index_scheduler.chat_settings(&workspace_uid)?.is_some() {
         let settings = Default::default();
-        index_scheduler.put_chat_settings(&mut wtxn, &workspace_uid, &settings)?;
-        wtxn.commit()?;
+        index_scheduler.put_chat_settings(&workspace_uid, &settings)?;
         Ok(HttpResponse::Ok().json(settings))
     } else {
         Err(ResponseError::from_msg(

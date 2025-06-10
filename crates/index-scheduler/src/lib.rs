@@ -56,7 +56,7 @@ use meilisearch_types::features::{
 };
 use meilisearch_types::heed::byteorder::BE;
 use meilisearch_types::heed::types::{DecodeIgnore, SerdeJson, Str, I128};
-use meilisearch_types::heed::{self, Database, Env, RoTxn, RwTxn, WithoutTls};
+use meilisearch_types::heed::{self, Database, Env, RoTxn, WithoutTls};
 use meilisearch_types::milli::index::IndexEmbeddingConfig;
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::vector::{Embedder, EmbedderOptions, EmbeddingConfigs};
@@ -311,11 +311,7 @@ impl IndexScheduler {
         Ok(this)
     }
 
-    pub fn write_txn(&self) -> Result<RwTxn> {
-        self.env.write_txn().map_err(|e| e.into())
-    }
-
-    pub fn read_txn(&self) -> Result<RoTxn<WithoutTls>> {
+    fn read_txn(&self) -> Result<RoTxn<WithoutTls>> {
         self.env.read_txn().map_err(|e| e.into())
     }
 
@@ -901,8 +897,9 @@ impl IndexScheduler {
         res.map(EmbeddingConfigs::new)
     }
 
-    pub fn chat_settings(&self, rtxn: &RoTxn, uid: &str) -> Result<Option<ChatCompletionSettings>> {
-        self.chat_settings.get(rtxn, uid).map_err(Into::into)
+    pub fn chat_settings(&self, uid: &str) -> Result<Option<ChatCompletionSettings>> {
+        let rtxn = self.env.read_txn()?;
+        self.chat_settings.get(&rtxn, uid).map_err(Into::into)
     }
 
     /// Return true if chat workspace exists.
@@ -911,17 +908,18 @@ impl IndexScheduler {
         Ok(self.chat_settings.remap_data_type::<DecodeIgnore>().get(&rtxn, name)?.is_some())
     }
 
-    pub fn put_chat_settings(
-        &self,
-        wtxn: &mut RwTxn,
-        uid: &str,
-        settings: &ChatCompletionSettings,
-    ) -> Result<()> {
-        self.chat_settings.put(wtxn, uid, settings).map_err(Into::into)
+    pub fn put_chat_settings(&self, uid: &str, settings: &ChatCompletionSettings) -> Result<()> {
+        let mut wtxn = self.env.write_txn()?;
+        self.chat_settings.put(&mut wtxn, uid, settings)?;
+        wtxn.commit()?;
+        Ok(())
     }
 
-    pub fn delete_chat_settings(&self, wtxn: &mut RwTxn, uid: &str) -> Result<bool> {
-        self.chat_settings.delete(wtxn, uid).map_err(Into::into)
+    pub fn delete_chat_settings(&self, uid: &str) -> Result<bool> {
+        let mut wtxn = self.env.write_txn()?;
+        let deleted = self.chat_settings.delete(&mut wtxn, uid)?;
+        wtxn.commit()?;
+        Ok(deleted)
     }
 }
 
