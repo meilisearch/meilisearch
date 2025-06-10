@@ -447,6 +447,7 @@ impl ErrorCode for milli::Error {
                     | UserError::InvalidSettingsDimensions { .. }
                     | UserError::InvalidUrl { .. }
                     | UserError::InvalidSettingsDocumentTemplateMaxBytes { .. }
+                    | UserError::InvalidChatSettingsDocumentTemplateMaxBytes
                     | UserError::InvalidPrompt(_)
                     | UserError::InvalidDisableBinaryQuantization { .. }
                     | UserError::InvalidSourceForNested { .. }

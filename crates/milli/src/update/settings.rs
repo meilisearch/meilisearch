@@ -19,7 +19,7 @@ use crate::attribute_patterns::PatternMatch;
 use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::criterion::Criterion;
 use crate::disabled_typos_terms::DisabledTyposTerms;
-use crate::error::UserError;
+use crate::error::UserError::{self, InvalidChatSettingsDocumentTemplateMaxBytes};
 use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
 use crate::filterable_attributes_rules::match_faceted_field;
 use crate::index::{
@@ -1249,7 +1249,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         Ok(())
     }
 
-    fn update_chat_config(&mut self) -> heed::Result<bool> {
+    fn update_chat_config(&mut self) -> Result<bool> {
         match &mut self.chat {
             Setting::Set(ChatSettings {
                 description: new_description,
@@ -1273,7 +1273,10 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                         Setting::NotSet => prompt.template.clone(),
                     },
                     max_bytes: match new_document_template_max_bytes {
-                        Setting::Set(m) => NonZeroUsize::new(*m),
+                        Setting::Set(m) => Some(
+                            NonZeroUsize::new(*m)
+                                .ok_or(InvalidChatSettingsDocumentTemplateMaxBytes)?,
+                        ),
                         Setting::Reset => Some(default_max_bytes()),
                         Setting::NotSet => prompt.max_bytes,
                     },
@@ -1347,7 +1350,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
 
                 Ok(true)
             }
-            Setting::Reset => self.index.delete_chat_config(self.wtxn),
+            Setting::Reset => self.index.delete_chat_config(self.wtxn).map_err(Into::into),
             Setting::NotSet => Ok(false),
         }
     }
