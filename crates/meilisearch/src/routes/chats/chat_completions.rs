@@ -310,7 +310,7 @@ async fn non_streamed_chat(
     index_scheduler.features().check_chat_completions("using the /chats chat completions route")?;
 
     return Err(ResponseError::from_msg(
-        format!("Non-streamed chat completions is not implemented"),
+        "Non-streamed chat completions is not implemented".to_string(),
         Code::UnimplementedNonStreamingChatCompletions,
     ));
 
