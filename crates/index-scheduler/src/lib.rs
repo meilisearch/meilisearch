@@ -553,7 +553,6 @@ impl IndexScheduler {
     /// And a `Vec` of the workspace_uids
     pub fn paginated_chat_workspace_uids(
         &self,
-        _filters: &meilisearch_auth::AuthFilter,
         from: usize,
         limit: usize,
     ) -> Result<(usize, Vec<String>)> {

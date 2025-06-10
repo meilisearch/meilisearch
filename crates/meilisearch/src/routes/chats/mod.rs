@@ -114,12 +114,8 @@ pub async fn list_workspaces(
     index_scheduler.features().check_chat_completions("listing the chats")?;
 
     debug!(parameters = ?paginate, "List chat workspaces");
-    let filters = index_scheduler.filters();
-    let (total, workspaces) = index_scheduler.paginated_chat_workspace_uids(
-        filters,
-        *paginate.offset,
-        *paginate.limit,
-    )?;
+    let (total, workspaces) =
+        index_scheduler.paginated_chat_workspace_uids(*paginate.offset, *paginate.limit)?;
     let workspaces =
         workspaces.into_iter().map(|uid| ChatWorkspaceView { uid }).collect::<Vec<_>>();
     let ret = paginate.as_pagination().format_with(total, workspaces);
