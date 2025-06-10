@@ -43,20 +43,10 @@ pub fn default_snapshot_settings_for_test<'a>(
         }
     }
 
-    fn uuid_in_index_uid_redaction(content: Content, _content_path: ContentPath) -> Content {
-        match &content {
-            Content::String(s) => match uuid::Uuid::parse_str(s) {
-                Ok(_) => Content::String("[uuid]".to_owned()),
-                Err(_) => content,
-            },
-            _ => content,
-        }
-    }
-
     settings.add_dynamic_redaction(".message", uuid_in_message_redaction);
-    settings.add_dynamic_redaction(".error.message", uuid_in_message_redaction);
-    settings.add_dynamic_redaction(".indexUid", uuid_in_index_uid_redaction);
-    settings.add_dynamic_redaction(".**.indexUid", uuid_in_index_uid_redaction);
+    settings.add_dynamic_redaction(".**.message", uuid_in_message_redaction);
+    settings.add_dynamic_redaction(".indexUid", uuid_in_message_redaction);
+    settings.add_dynamic_redaction(".**.indexUid", uuid_in_message_redaction);
 
     let test_name = test_name.strip_suffix("::{{closure}}").unwrap_or(test_name);
     let test_name = test_name.rsplit("::").next().unwrap().to_owned();

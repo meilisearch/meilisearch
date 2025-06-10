@@ -1628,7 +1628,7 @@ async fn federation_sort_same_indexes_different_criterion_opposite_direction() {
 #[actix_rt::test]
 async fn federation_sort_different_indexes_same_criterion_same_direction() {
     let server = Server::new_shared();
-    let movies_index = server.unique_index();
+    let movies_index = server.unique_index_with_prefix("movies");
 
     let documents = DOCUMENTS.clone();
     let (value, _) = movies_index.add_documents(documents, None).await;
@@ -1649,7 +1649,7 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
         .await;
     movies_index.wait_task(value.uid()).await.succeeded();
 
-    let batman_index = server.unique_index();
+    let batman_index = server.unique_index_with_prefix("batman");
 
     let documents = SCORE_DOCUMENTS.clone();
     let (value, _) = batman_index.add_documents(documents, None).await;
@@ -1678,14 +1678,14 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    insta::assert_json_snapshot!(response, { ".processingTimeMs" => "[time]", ".**.indexUid" => "[uuid]" }, @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r###"
     {
       "hits": [
         {
           "title": "Badman",
           "id": "E",
           "_federation": {
-            "indexUid": "[uuid]",
+            "indexUid": "batman-[uuid]",
             "queriesPosition": 1,
             "weightedRankingScore": 1.0
           },
@@ -1695,7 +1695,7 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
           "title": "Batman",
           "id": "D",
           "_federation": {
-            "indexUid": "[uuid]",
+            "indexUid": "batman-[uuid]",
             "queriesPosition": 1,
             "weightedRankingScore": 1.0
           },
@@ -1705,7 +1705,7 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
           "title": "Batman Returns",
           "id": "C",
           "_federation": {
-            "indexUid": "[uuid]",
+            "indexUid": "batman-[uuid]",
             "queriesPosition": 1,
             "weightedRankingScore": 1.0
           },
@@ -1715,7 +1715,7 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
           "title": "Batman the dark knight returns: Part 1",
           "id": "A",
           "_federation": {
-            "indexUid": "[uuid]",
+            "indexUid": "batman-[uuid]",
             "queriesPosition": 1,
             "weightedRankingScore": 1.0
           },
@@ -1725,7 +1725,7 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
           "title": "Batman the dark knight returns: Part 2",
           "id": "B",
           "_federation": {
-            "indexUid": "[uuid]",
+            "indexUid": "batman-[uuid]",
             "queriesPosition": 1,
             "weightedRankingScore": 1.0
           },
@@ -1739,7 +1739,7 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
             "blue"
           ],
           "_federation": {
-            "indexUid": "[uuid]",
+            "indexUid": "movies-[uuid]",
             "queriesPosition": 0,
             "weightedRankingScore": 1.0
           },
@@ -1753,7 +1753,7 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
             "red"
           ],
           "_federation": {
-            "indexUid": "[uuid]",
+            "indexUid": "movies-[uuid]",
             "queriesPosition": 0,
             "weightedRankingScore": 1.0
           },
@@ -1767,7 +1767,7 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
             "red"
           ],
           "_federation": {
-            "indexUid": "[uuid]",
+            "indexUid": "movies-[uuid]",
             "queriesPosition": 0,
             "weightedRankingScore": 1.0
           },
@@ -1781,7 +1781,7 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
             "red"
           ],
           "_federation": {
-            "indexUid": "[uuid]",
+            "indexUid": "movies-[uuid]",
             "queriesPosition": 0,
             "weightedRankingScore": 1.0
           },
@@ -1795,7 +1795,7 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
             "blue"
           ],
           "_federation": {
-            "indexUid": "[uuid]",
+            "indexUid": "movies-[uuid]",
             "queriesPosition": 0,
             "weightedRankingScore": 1.0
           },
