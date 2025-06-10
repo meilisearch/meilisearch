@@ -26,7 +26,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         web::resource("")
             .route(web::get().to(SeqHandler(get_settings)))
             .route(web::patch().to(SeqHandler(patch_settings)))
-            .route(web::delete().to(SeqHandler(delete_settings))),
+            .route(web::delete().to(SeqHandler(reset_settings))),
     );
 }
 
@@ -159,9 +159,9 @@ async fn patch_settings(
     Ok(HttpResponse::Ok().json(settings))
 }
 
-async fn delete_settings(
+async fn reset_settings(
     index_scheduler: GuardedData<
-        ActionPolicy<{ actions::CHATS_SETTINGS_DELETE }>,
+        ActionPolicy<{ actions::CHATS_SETTINGS_UPDATE }>,
         Data<IndexScheduler>,
     >,
     chats_param: web::Path<ChatsParam>,
@@ -169,12 +169,12 @@ async fn delete_settings(
     index_scheduler.features().check_chat_completions("using the /chats/settings route")?;
 
     let ChatsParam { workspace_uid } = chats_param.into_inner();
-
-    // TODO do a spawn_blocking here
     let mut wtxn = index_scheduler.write_txn()?;
-    if index_scheduler.delete_chat_settings(&mut wtxn, &workspace_uid)? {
+    if index_scheduler.chat_settings(&wtxn, &workspace_uid)?.is_some() {
+        let settings = Default::default();
+        index_scheduler.put_chat_settings(&mut wtxn, &workspace_uid, &settings)?;
         wtxn.commit()?;
-        Ok(HttpResponse::NoContent().finish())
+        Ok(HttpResponse::Ok().json(settings))
     } else {
         Err(ResponseError::from_msg(
             format!("Chat `{workspace_uid}` not found"),

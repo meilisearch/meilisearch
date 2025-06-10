@@ -326,9 +326,15 @@ pub enum Action {
     #[serde(rename = "chatCompletions")]
     #[deserr(rename = "chatCompletions")]
     ChatCompletions,
+    #[serde(rename = "chats.*")]
+    #[deserr(rename = "chats.*")]
+    ChatsAll,
     #[serde(rename = "chats.get")]
     #[deserr(rename = "chats.get")]
     ChatsGet,
+    #[serde(rename = "chats.delete")]
+    #[deserr(rename = "chats.delete")]
+    ChatsDelete,
     #[serde(rename = "chatsSettings.*")]
     #[deserr(rename = "chatsSettings.*")]
     ChatsSettingsAll,
@@ -338,9 +344,6 @@ pub enum Action {
     #[serde(rename = "chatsSettings.update")]
     #[deserr(rename = "chatsSettings.update")]
     ChatsSettingsUpdate,
-    #[serde(rename = "chatsSettings.delete")]
-    #[deserr(rename = "chatsSettings.delete")]
-    ChatsSettingsDelete,
 }
 
 impl Action {
@@ -367,11 +370,12 @@ impl Action {
             SETTINGS_GET => Some(Self::SettingsGet),
             SETTINGS_UPDATE => Some(Self::SettingsUpdate),
             CHAT_COMPLETIONS => Some(Self::ChatCompletions),
+            CHATS_ALL => Some(Self::ChatsAll),
             CHATS_GET => Some(Self::ChatsGet),
+            CHATS_DELETE => Some(Self::ChatsDelete),
             CHATS_SETTINGS_ALL => Some(Self::ChatsSettingsAll),
             CHATS_SETTINGS_GET => Some(Self::ChatsSettingsGet),
             CHATS_SETTINGS_UPDATE => Some(Self::ChatsSettingsUpdate),
-            CHATS_SETTINGS_DELETE => Some(Self::ChatsSettingsDelete),
             STATS_ALL => Some(Self::StatsAll),
             STATS_GET => Some(Self::StatsGet),
             METRICS_ALL => Some(Self::MetricsAll),
@@ -438,9 +442,10 @@ pub mod actions {
     pub const NETWORK_UPDATE: u8 = NetworkUpdate.repr();
 
     pub const CHAT_COMPLETIONS: u8 = ChatCompletions.repr();
+    pub const CHATS_ALL: u8 = ChatsAll.repr();
     pub const CHATS_GET: u8 = ChatsGet.repr();
+    pub const CHATS_DELETE: u8 = ChatsDelete.repr();
     pub const CHATS_SETTINGS_ALL: u8 = ChatsSettingsAll.repr();
     pub const CHATS_SETTINGS_GET: u8 = ChatsSettingsGet.repr();
     pub const CHATS_SETTINGS_UPDATE: u8 = ChatsSettingsUpdate.repr();
-    pub const CHATS_SETTINGS_DELETE: u8 = ChatsSettingsDelete.repr();
 }

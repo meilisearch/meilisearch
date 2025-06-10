@@ -55,7 +55,7 @@ use meilisearch_types::features::{
     ChatCompletionSettings, InstanceTogglableFeatures, Network, RuntimeTogglableFeatures,
 };
 use meilisearch_types::heed::byteorder::BE;
-use meilisearch_types::heed::types::{SerdeJson, Str, I128};
+use meilisearch_types::heed::types::{DecodeIgnore, SerdeJson, Str, I128};
 use meilisearch_types::heed::{self, Database, Env, RoTxn, RwTxn, WithoutTls};
 use meilisearch_types::milli::index::IndexEmbeddingConfig;
 use meilisearch_types::milli::update::IndexerConfig;
@@ -902,6 +902,12 @@ impl IndexScheduler {
 
     pub fn chat_settings(&self, rtxn: &RoTxn, uid: &str) -> Result<Option<ChatCompletionSettings>> {
         self.chat_settings.get(rtxn, uid).map_err(Into::into)
+    }
+
+    /// Return true if chat workspace exists.
+    pub fn chat_workspace_exists(&self, name: &str) -> Result<bool> {
+        let rtxn = self.env.read_txn()?;
+        Ok(self.chat_settings.remap_data_type::<DecodeIgnore>().get(&rtxn, name)?.is_some())
     }
 
     pub fn put_chat_settings(

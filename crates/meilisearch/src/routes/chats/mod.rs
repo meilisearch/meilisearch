@@ -6,9 +6,11 @@ use index_scheduler::IndexScheduler;
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::DeserrQueryParamError;
 use meilisearch_types::error::deserr_codes::{InvalidIndexLimit, InvalidIndexOffset};
-use meilisearch_types::error::ResponseError;
+use meilisearch_types::error::{Code, ResponseError};
+use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::keys::actions;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use tracing::debug;
 use utoipa::{IntoParams, ToSchema};
 
@@ -40,9 +42,50 @@ pub struct ChatsParam {
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::resource("").route(web::get().to(list_workspaces))).service(
         web::scope("/{workspace_uid}")
+            .service(
+                web::resource("")
+                    .route(web::get().to(get_chat))
+                    .route(web::delete().to(delete_chat)),
+            )
             .service(web::scope("/chat/completions").configure(chat_completions::configure))
             .service(web::scope("/settings").configure(settings::configure)),
     );
+}
+
+pub async fn get_chat(
+    index_scheduler: GuardedData<ActionPolicy<{ actions::CHATS_GET }>, Data<IndexScheduler>>,
+    workspace_uid: web::Path<String>,
+) -> Result<HttpResponse, ResponseError> {
+    index_scheduler.features().check_chat_completions("displaying a chat")?;
+
+    let workspace_uid = IndexUid::try_from(workspace_uid.into_inner())?;
+    if index_scheduler.chat_workspace_exists(&workspace_uid)? {
+        Ok(HttpResponse::Ok().json(json!({ "uid": workspace_uid })))
+    } else {
+        Err(ResponseError::from_msg(
+            format!("chat {workspace_uid} not found"),
+            Code::ChatWorkspaceNotFound,
+        ))
+    }
+}
+
+pub async fn delete_chat(
+    index_scheduler: GuardedData<ActionPolicy<{ actions::CHATS_DELETE }>, Data<IndexScheduler>>,
+    workspace_uid: web::Path<String>,
+) -> Result<HttpResponse, ResponseError> {
+    index_scheduler.features().check_chat_completions("deleting a chat")?;
+
+    let mut wtxn = index_scheduler.write_txn()?;
+    let workspace_uid = workspace_uid.into_inner();
+    if index_scheduler.delete_chat_settings(&mut wtxn, &workspace_uid)? {
+        wtxn.commit()?;
+        Ok(HttpResponse::NoContent().finish())
+    } else {
+        Err(ResponseError::from_msg(
+            format!("chat {workspace_uid} not found"),
+            Code::ChatWorkspaceNotFound,
+        ))
+    }
 }
 
 #[derive(Deserr, Debug, Clone, Copy, IntoParams)]
