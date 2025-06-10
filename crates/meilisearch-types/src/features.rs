@@ -128,7 +128,8 @@ impl ChatCompletionSource {
     /// Old OpenAI models use the system role while new ones use the developer role.
     fn old_openai_model(model: &str) -> bool {
         ["gpt-3.5", "gpt-4", "gpt-4.1", "gpt-4.5", "gpt-4o", "chatgpt-4o"].iter().any(|old| {
-            model.starts_with(old) && model.chars().nth(old.len()).is_none_or(|last| last == '-')
+            model.starts_with(old)
+                && model.chars().nth(old.chars().count()).is_none_or(|last| last == '-')
         })
     }
 
