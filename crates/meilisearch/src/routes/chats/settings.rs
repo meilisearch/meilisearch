@@ -146,6 +146,7 @@ async fn patch_settings(
     //     &req,
     // );
 
+    settings.validate()?;
     index_scheduler.put_chat_settings(&mut wtxn, &workspace_uid, &settings)?;
     wtxn.commit()?;
 

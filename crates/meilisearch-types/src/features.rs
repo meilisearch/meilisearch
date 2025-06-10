@@ -2,6 +2,8 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::error::{Code, ResponseError};
+
 pub const DEFAULT_CHAT_SYSTEM_PROMPT: &str = "You are a highly capable research assistant with access to powerful search tools. IMPORTANT INSTRUCTIONS:1. When answering questions, you MUST make multiple tool calls (at least 2-3) to gather comprehensive information.2. Use different search queries for each tool call - vary keywords, rephrase questions, and explore different semantic angles to ensure broad coverage.3. Always explicitly announce BEFORE making each tool call by saying: \"I'll search for [specific information] now.\"4. Combine information from ALL tool calls to provide complete, nuanced answers rather than relying on a single source.5. For complex topics, break down your research into multiple targeted queries rather than using a single generic search.";
 pub const DEFAULT_CHAT_SEARCH_DESCRIPTION_PROMPT: &str =
     "Search the database for relevant JSON documents using an optional query.";
@@ -86,6 +88,21 @@ impl ChatCompletionSettings {
             _x => {
                 secret.replace_range(5.., "XXXXXX...");
             }
+        }
+    }
+
+    pub fn validate(&self) -> Result<(), ResponseError> {
+        use ChatCompletionSource::*;
+        match self {
+            Self { source: AzureOpenAi, base_url, deployment_id, api_version, .. } if base_url.is_none() || deployment_id.is_none() || api_version.is_none() => Err(ResponseError::from_msg(
+                format!("azureOpenAi requires setting a valid `baseUrl`, `deploymentId`, and `apiVersion`"),
+                Code::BadRequest,
+            )),
+            Self { source: VLlm, base_url, .. } if base_url.is_none() => Err(ResponseError::from_msg(
+                format!("vLlm requires setting a valid `baseUrl`"),
+                Code::BadRequest,
+            )),
+            _otherwise => Ok(()),
         }
     }
 }
