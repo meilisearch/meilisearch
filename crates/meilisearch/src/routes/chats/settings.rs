@@ -41,7 +41,6 @@ async fn get_settings(
 
     let ChatsParam { workspace_uid } = chats_param.into_inner();
 
-    // TODO do a spawn_blocking here ???
     let mut settings = match index_scheduler.chat_settings(&workspace_uid)? {
         Some(settings) => settings,
         None => {
@@ -66,7 +65,6 @@ async fn patch_settings(
     index_scheduler.features().check_chat_completions("using the /chats/settings route")?;
     let ChatsParam { workspace_uid } = chats_param.into_inner();
 
-    // TODO do a spawn_blocking here
     let old_settings = index_scheduler.chat_settings(&workspace_uid)?.unwrap_or_default();
 
     let prompts = match new.prompts {

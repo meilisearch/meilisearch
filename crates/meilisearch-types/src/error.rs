@@ -390,6 +390,7 @@ InvalidDocumentEditionFunctionFilter           , InvalidRequest       , BAD_REQU
 EditDocumentsByFunctionError                   , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsIndexChat                       , InvalidRequest       , BAD_REQUEST ;
 // Experimental features - Chat Completions
+UnimplementedExternalFunctionCalling           , InvalidRequest       , NOT_IMPLEMENTED ;
 UnimplementedNonStreamingChatCompletions       , InvalidRequest       , NOT_IMPLEMENTED ;
 UnimplementedMultiChoiceChatCompletions        , InvalidRequest       , NOT_IMPLEMENTED ;
 ChatNotFound                                   , InvalidRequest       , NOT_FOUND   ;

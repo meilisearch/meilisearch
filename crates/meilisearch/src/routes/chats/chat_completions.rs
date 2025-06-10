@@ -113,8 +113,24 @@ fn setup_search_tool(
     system_role: SystemRole,
 ) -> Result<FunctionSupport, ResponseError> {
     let tools = chat_completion.tools.get_or_insert_default();
-    if tools.iter().any(|t| t.function.name == MEILI_SEARCH_IN_INDEX_FUNCTION_NAME) {
-        panic!("{MEILI_SEARCH_IN_INDEX_FUNCTION_NAME} function already set");
+    for tool in &tools[..] {
+        match tool.function.name.as_str() {
+            MEILI_SEARCH_IN_INDEX_FUNCTION_NAME => {
+                return Err(ResponseError::from_msg(
+                    format!("{MEILI_SEARCH_IN_INDEX_FUNCTION_NAME} function is already defined."),
+                    Code::BadRequest,
+                ));
+            }
+            MEILI_SEARCH_PROGRESS_NAME
+            | MEILI_SEARCH_SOURCES_NAME
+            | MEILI_APPEND_CONVERSATION_MESSAGE_NAME => (),
+            external_function_name => {
+                return Err(ResponseError::from_msg(
+                    format!("{external_function_name}: External functions are not supported yet."),
+                    Code::UnimplementedExternalFunctionCalling,
+                ));
+            }
+        }
     }
 
     // Remove internal tools used for front-end notifications as they should be hidden from the LLM.
@@ -220,9 +236,6 @@ async fn process_search_request(
     index_uid: String,
     q: Option<String>,
 ) -> Result<(Index, Vec<Document>, String), ResponseError> {
-    // TBD
-    // let mut aggregate = SearchAggregator::<SearchPOST>::from_query(&query);
-
     let index = index_scheduler.index(&index_uid)?;
     let rtxn = index.static_read_txn()?;
     let ChatConfig { description: _, prompt: _, search_parameters } = index.chat_config(&rtxn)?;
@@ -281,7 +294,6 @@ async fn process_search_request(
             documents.push(document);
         }
     }
-    // analytics.publish(aggregate, &req);
 
     let (rtxn, search_result) = output?;
     let render_alloc = Bump::new();
@@ -495,7 +507,7 @@ async fn run_conversation<C: async_openai::config::Config>(
     function_support: FunctionSupport,
 ) -> Result<ControlFlow<Option<FinishReason>, ()>, SendError<Event>> {
     let mut finish_reason = None;
-    // safety: The unwrap can only happen if the stream is not correctly configured.
+    // safety: unwrap: can only happens if `stream` was set to `false`
     let mut response = client.chat().create_stream(chat_completion.clone()).await.unwrap();
     while let Some(result) = response.next().await {
         match result {
@@ -535,15 +547,11 @@ async fn run_conversation<C: async_openai::config::Config>(
                                         Call::External
                                     }
                                 });
-
-                            if global_tool_calls.get(index).is_some_and(Call::is_external) {
-                                todo!("Support forwarding external tool calls");
-                            }
                         }
                     }
                     None => {
                         if !global_tool_calls.is_empty() {
-                            let (meili_calls, other_calls): (Vec<_>, Vec<_>) =
+                            let (meili_calls, _other_calls): (Vec<_>, Vec<_>) =
                                 mem::take(global_tool_calls)
                                     .into_values()
                                     .flat_map(|call| match call {
@@ -566,11 +574,6 @@ async fn run_conversation<C: async_openai::config::Config>(
                                     .build()
                                     .unwrap()
                                     .into(),
-                            );
-
-                            assert!(
-                                other_calls.is_empty(),
-                                "We do not support external tool forwarding for now"
                             );
 
                             handle_meili_tools(
@@ -698,16 +701,13 @@ impl Call {
         matches!(self, Call::Internal { .. })
     }
 
-    fn is_external(&self) -> bool {
-        matches!(self, Call::External { .. })
-    }
-
+    /// # Panics
+    ///
+    /// - if called on external calls
     fn append(&mut self, more: &str) {
         match self {
             Call::Internal { arguments, .. } => arguments.push_str(more),
-            Call::External { .. } => {
-                panic!("Cannot append argument chunks to an external function")
-            }
+            Call::External => panic!("Cannot append argument chunks to an external function"),
         }
     }
 }
