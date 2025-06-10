@@ -569,10 +569,6 @@ pub async fn update_all(
     debug!(parameters = ?new_settings, "Update all settings");
     let new_settings = validate_settings(new_settings, &index_scheduler)?;
 
-    if !new_settings.chat.is_not_set() {
-        index_scheduler.features().check_chat_completions("setting `chat` in the index route")?;
-    }
-
     analytics.publish(
         SettingsAnalytics {
             ranking_rules: RankingRulesAnalytics::new(new_settings.ranking_rules.as_ref().set()),
