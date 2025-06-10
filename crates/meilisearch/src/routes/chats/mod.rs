@@ -26,12 +26,21 @@ pub mod settings;
 mod utils;
 
 /// The function name to report search progress.
+/// This function is used to report on what meilisearch is
+/// doing which must be used on the frontend to report progress.
 const MEILI_SEARCH_PROGRESS_NAME: &str = "_meiliSearchProgress";
 /// The function name to append a conversation message in the user conversation.
+/// This function is used to append a conversation message in the user conversation.
+/// This must be used on the frontend to keep context of what happened on the
+/// Meilisearch-side and keep good context for follow up questions.
 const MEILI_APPEND_CONVERSATION_MESSAGE_NAME: &str = "_meiliAppendConversationMessage";
 /// The function name to report sources to the frontend.
+/// This function is used to report sources to the frontend.
+/// The call id is associated to the one used by the search progress function.
 const MEILI_SEARCH_SOURCES_NAME: &str = "_meiliSearchSources";
 /// The *internal* function name to provide to the LLM to search in indexes.
+/// This function must not leak to the user as the LLM will call it and the
+/// main goal of Meilisearch is to provide an answer to these calls.
 const MEILI_SEARCH_IN_INDEX_FUNCTION_NAME: &str = "_meiliSearchInIndex";
 
 #[derive(Deserialize)]
