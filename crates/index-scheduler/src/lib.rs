@@ -77,6 +77,7 @@ use crate::utils::clamp_to_page_size;
 pub(crate) type BEI128 = I128<BE>;
 
 const TASK_SCHEDULER_SIZE_THRESHOLD_PERCENT_INT: u64 = 40;
+const CHAT_SETTINGS_DB_NAME: &str = "chat-settings";
 
 #[derive(Debug)]
 pub struct IndexSchedulerOptions {
@@ -279,7 +280,7 @@ impl IndexScheduler {
         let features = features::FeatureData::new(&env, &mut wtxn, options.instance_features)?;
         let queue = Queue::new(&env, &mut wtxn, &options)?;
         let index_mapper = IndexMapper::new(&env, &mut wtxn, &options, budget)?;
-        let chat_settings = env.create_database(&mut wtxn, Some("chat-settings"))?;
+        let chat_settings = env.create_database(&mut wtxn, Some(CHAT_SETTINGS_DB_NAME))?;
         wtxn.commit()?;
 
         // allow unreachable_code to get rids of the warning in the case of a test build.
