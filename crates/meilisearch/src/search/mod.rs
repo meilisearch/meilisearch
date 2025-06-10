@@ -57,7 +57,7 @@ pub const DEFAULT_HIGHLIGHT_PRE_TAG: fn() -> String = || "<em>".to_string();
 pub const DEFAULT_HIGHLIGHT_POST_TAG: fn() -> String = || "</em>".to_string();
 pub const DEFAULT_SEMANTIC_RATIO: fn() -> SemanticRatio = || SemanticRatio(0.5);
 
-#[derive(Clone, PartialEq, Deserr, ToSchema)]
+#[derive(Clone, Default, PartialEq, Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct SearchQuery {
     #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
@@ -145,19 +145,9 @@ impl From<SearchParameters> for SearchQuery {
             matching_strategy: matching_strategy.map(MatchingStrategy::from).unwrap_or_default(),
             attributes_to_search_on,
             ranking_score_threshold: ranking_score_threshold.map(RankingScoreThreshold::from),
-            ..Default::default()
-        }
-    }
-}
-
-impl Default for SearchQuery {
-    fn default() -> Self {
-        SearchQuery {
             q: None,
             vector: None,
-            hybrid: None,
             offset: DEFAULT_SEARCH_OFFSET(),
-            limit: DEFAULT_SEARCH_LIMIT(),
             page: None,
             hits_per_page: None,
             attributes_to_retrieve: None,
@@ -169,15 +159,10 @@ impl Default for SearchQuery {
             show_ranking_score: false,
             show_ranking_score_details: false,
             filter: None,
-            sort: None,
-            distinct: None,
             facets: None,
             highlight_pre_tag: DEFAULT_HIGHLIGHT_PRE_TAG(),
             highlight_post_tag: DEFAULT_HIGHLIGHT_POST_TAG(),
             crop_marker: DEFAULT_CROP_MARKER(),
-            matching_strategy: Default::default(),
-            attributes_to_search_on: None,
-            ranking_score_threshold: None,
             locales: None,
         }
     }
