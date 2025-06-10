@@ -124,15 +124,6 @@ impl<T> Setting<T> {
         *self = new;
         true
     }
-
-    #[track_caller]
-    pub fn unwrap(self) -> T {
-        match self {
-            Setting::Set(value) => value,
-            Setting::Reset => panic!("Setting::Reset unwrapped"),
-            Setting::NotSet => panic!("Setting::NotSet unwrapped"),
-        }
-    }
 }
 
 impl<T: Serialize> Serialize for Setting<T> {
