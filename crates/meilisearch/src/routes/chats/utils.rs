@@ -197,7 +197,10 @@ impl SseEventSender {
     }
 
     pub async fn stop(self) -> Result<(), SendError<Event>> {
-        self.0.send(Event::Data(sse::Data::new("[DONE]"))).await
+        // It is the way OpenAI sends a correct end of stream
+        // <https://platform.openai.com/docs/api-reference/assistants-streaming/events>
+        const DONE_DATA: &str = "[DONE]";
+        self.0.send(Event::Data(sse::Data::new(DONE_DATA))).await
     }
 
     async fn send_json<S: Serialize>(&self, data: &S) -> Result<(), SendError<Event>> {
