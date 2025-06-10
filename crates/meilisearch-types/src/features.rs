@@ -95,11 +95,11 @@ impl ChatCompletionSettings {
         use ChatCompletionSource::*;
         match self {
             Self { source: AzureOpenAi, base_url, deployment_id, api_version, .. } if base_url.is_none() || deployment_id.is_none() || api_version.is_none() => Err(ResponseError::from_msg(
-                format!("azureOpenAi requires setting a valid `baseUrl`, `deploymentId`, and `apiVersion`"),
+                "azureOpenAi requires setting a valid `baseUrl`, `deploymentId`, and `apiVersion`".to_string(),
                 Code::BadRequest,
             )),
             Self { source: VLlm, base_url, .. } if base_url.is_none() => Err(ResponseError::from_msg(
-                format!("vLlm requires setting a valid `baseUrl`"),
+                "vLlm requires setting a valid `baseUrl`".to_string(),
                 Code::BadRequest,
             )),
             _otherwise => Ok(()),
