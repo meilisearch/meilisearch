@@ -321,7 +321,7 @@ async fn non_streamed_chat(
         None => {
             return Err(ResponseError::from_msg(
                 format!("Chat `{workspace_uid}` not found"),
-                Code::ChatWorkspaceNotFound,
+                Code::ChatNotFound,
             ))
         }
     };
@@ -419,7 +419,7 @@ async fn streamed_chat(
         None => {
             return Err(ResponseError::from_msg(
                 format!("Chat `{workspace_uid}` not found"),
-                Code::ChatWorkspaceNotFound,
+                Code::ChatNotFound,
             ))
         }
     };

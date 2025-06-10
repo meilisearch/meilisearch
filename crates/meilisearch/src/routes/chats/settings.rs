@@ -48,7 +48,7 @@ async fn get_settings(
         None => {
             return Err(ResponseError::from_msg(
                 format!("Chat `{workspace_uid}` not found"),
-                Code::ChatWorkspaceNotFound,
+                Code::ChatNotFound,
             ))
         }
     };
@@ -173,7 +173,7 @@ async fn reset_settings(
     } else {
         Err(ResponseError::from_msg(
             format!("Chat `{workspace_uid}` not found"),
-            Code::ChatWorkspaceNotFound,
+            Code::ChatNotFound,
         ))
     }
 }

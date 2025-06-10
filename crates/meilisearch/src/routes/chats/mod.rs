@@ -64,7 +64,7 @@ pub async fn get_chat(
     } else {
         Err(ResponseError::from_msg(
             format!("chat {workspace_uid} not found"),
-            Code::ChatWorkspaceNotFound,
+            Code::ChatNotFound,
         ))
     }
 }
@@ -83,7 +83,7 @@ pub async fn delete_chat(
     } else {
         Err(ResponseError::from_msg(
             format!("chat {workspace_uid} not found"),
-            Code::ChatWorkspaceNotFound,
+            Code::ChatNotFound,
         ))
     }
 }
