@@ -323,9 +323,8 @@ pub enum Action {
     #[serde(rename = "network.update")]
     #[deserr(rename = "network.update")]
     NetworkUpdate,
-    // TODO should we rename it chatCompletions.get ?
-    #[serde(rename = "chatCompletion")]
-    #[deserr(rename = "chatCompletion")]
+    #[serde(rename = "chatCompletions")]
+    #[deserr(rename = "chatCompletions")]
     ChatCompletions,
     #[serde(rename = "chats.get")]
     #[deserr(rename = "chats.get")]
