@@ -41,7 +41,7 @@ impl SseEventSender {
         function_name: String,
         function_arguments: String,
     ) -> Result<(), SendError<Event>> {
-        #[allow(deprecated)]
+        #[allow(deprecated)] // function_call
         let message =
             ChatCompletionRequestMessage::Assistant(ChatCompletionRequestAssistantMessage {
                 content: None,
@@ -78,7 +78,7 @@ impl SseEventSender {
 
         resp.choices[0] = ChatChoiceStream {
             index: 0,
-            #[allow(deprecated)]
+            #[allow(deprecated)] // function_call
             delta: ChatCompletionStreamResponseDelta {
                 content: None,
                 function_call: None,
@@ -125,7 +125,7 @@ impl SseEventSender {
 
         resp.choices[0] = ChatChoiceStream {
             index: 0,
-            #[allow(deprecated)]
+            #[allow(deprecated)] // function_call
             delta: ChatCompletionStreamResponseDelta {
                 content: None,
                 function_call: None,
@@ -170,7 +170,7 @@ impl SseEventSender {
 
         resp.choices[0] = ChatChoiceStream {
             index: 0,
-            #[allow(deprecated)]
+            #[allow(deprecated)] // function_call
             delta: ChatCompletionStreamResponseDelta {
                 content: None,
                 function_call: None,
