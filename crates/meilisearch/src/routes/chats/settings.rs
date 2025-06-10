@@ -103,7 +103,7 @@ async fn patch_settings(
         Setting::NotSet => old_settings.prompts,
     };
 
-    let settings = ChatCompletionSettings {
+    let mut settings = ChatCompletionSettings {
         source: match new.source {
             Setting::Set(new_source) => new_source.into(),
             Setting::Reset => DbChatCompletionSource::default(),
@@ -153,6 +153,8 @@ async fn patch_settings(
 
     index_scheduler.put_chat_settings(&mut wtxn, &workspace_uid, &settings)?;
     wtxn.commit()?;
+
+    settings.hide_secrets();
 
     Ok(HttpResponse::Ok().json(settings))
 }
