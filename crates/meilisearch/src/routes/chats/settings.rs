@@ -7,9 +7,9 @@ use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::features::{
     ChatCompletionPrompts as DbChatCompletionPrompts, ChatCompletionSettings,
-    ChatCompletionSource as DbChatCompletionSource, DEFAULT_CHAT_PRE_QUERY_PROMPT,
-    DEFAULT_CHAT_SEARCH_DESCRIPTION_PROMPT, DEFAULT_CHAT_SEARCH_INDEX_UID_PARAM_PROMPT,
-    DEFAULT_CHAT_SEARCH_Q_PARAM_PROMPT, DEFAULT_CHAT_SYSTEM_PROMPT,
+    ChatCompletionSource as DbChatCompletionSource, DEFAULT_CHAT_SEARCH_DESCRIPTION_PROMPT,
+    DEFAULT_CHAT_SEARCH_INDEX_UID_PARAM_PROMPT, DEFAULT_CHAT_SEARCH_Q_PARAM_PROMPT,
+    DEFAULT_CHAT_SYSTEM_PROMPT,
 };
 use meilisearch_types::keys::actions;
 use meilisearch_types::milli::update::Setting;
@@ -92,11 +92,6 @@ async fn patch_settings(
                 Setting::Set(new_description) => new_description,
                 Setting::Reset => DEFAULT_CHAT_SEARCH_INDEX_UID_PARAM_PROMPT.to_string(),
                 Setting::NotSet => old_settings.prompts.search_index_uid_param,
-            },
-            pre_query: match new_prompts.pre_query {
-                Setting::Set(new_description) => new_description,
-                Setting::Reset => DEFAULT_CHAT_PRE_QUERY_PROMPT.to_string(),
-                Setting::NotSet => old_settings.prompts.pre_query,
             },
         },
         Setting::Reset => DbChatCompletionPrompts::default(),
@@ -268,8 +263,4 @@ pub struct ChatPrompts {
     #[deserr(default, error = DeserrJsonError<InvalidChatCompletionSearchIndexUidParamPrompt>)]
     #[schema(value_type = Option<String>, example = json!("This is index you want to search in..."))]
     pub search_index_uid_param: Setting<String>,
-    #[serde(default)]
-    #[deserr(default, error = DeserrJsonError<InvalidChatCompletionPreQueryPrompt>)]
-    #[schema(value_type = Option<String>)]
-    pub pre_query: Setting<String>,
 }

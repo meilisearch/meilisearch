@@ -23,10 +23,7 @@ use futures::StreamExt;
 use index_scheduler::IndexScheduler;
 use meilisearch_auth::AuthController;
 use meilisearch_types::error::{Code, ResponseError};
-use meilisearch_types::features::{
-    ChatCompletionPrompts as DbChatCompletionPrompts, ChatCompletionSettings as DbChatSettings,
-    SystemRole,
-};
+use meilisearch_types::features::{ChatCompletionPrompts as DbChatCompletionPrompts, SystemRole};
 use meilisearch_types::keys::actions;
 use meilisearch_types::milli::index::ChatConfig;
 use meilisearch_types::milli::{all_obkv_to_json, obkv_to_json, TimeBudget};
@@ -379,12 +376,11 @@ async fn non_streamed_chat(
                     };
 
                     // TODO report documents sources later
-                    let text = match result {
+                    let answer = match result {
                         Ok((_, _documents, text)) => text,
                         Err(err) => err,
                     };
 
-                    let answer = format!("{}\n\n{text}", chat_settings.prompts.pre_query);
                     chat_completion.messages.push(ChatCompletionRequestMessage::Tool(
                         ChatCompletionRequestToolMessage {
                             tool_call_id: call.id.clone(),
@@ -456,7 +452,6 @@ async fn streamed_chat(
                 &search_queue,
                 &auth_token,
                 &client,
-                &chat_settings,
                 &mut chat_completion,
                 &tx,
                 &mut global_tool_calls,
@@ -489,7 +484,6 @@ async fn run_conversation<C: async_openai::config::Config>(
     search_queue: &web::Data<SearchQueue>,
     auth_token: &str,
     client: &Client<C>,
-    chat_settings: &DbChatSettings,
     chat_completion: &mut CreateChatCompletionRequest,
     tx: &SseEventSender,
     global_tool_calls: &mut HashMap<u32, Call>,
@@ -579,7 +573,6 @@ async fn run_conversation<C: async_openai::config::Config>(
                                 auth_ctrl,
                                 search_queue,
                                 auth_token,
-                                chat_settings,
                                 tx,
                                 meili_calls,
                                 chat_completion,
@@ -617,7 +610,6 @@ async fn handle_meili_tools(
     auth_ctrl: &web::Data<AuthController>,
     search_queue: &web::Data<SearchQueue>,
     auth_token: &str,
-    chat_settings: &DbChatSettings,
     tx: &SseEventSender,
     meili_calls: Vec<ChatCompletionMessageToolCall>,
     chat_completion: &mut CreateChatCompletionRequest,
@@ -659,7 +651,7 @@ async fn handle_meili_tools(
             Err(err) => Err(err.to_string()),
         };
 
-        let text = match result {
+        let answer = match result {
             Ok((_index, documents, text)) => {
                 if report_sources {
                     tx.report_sources(resp.clone(), &call.id, &documents).await?;
@@ -670,7 +662,6 @@ async fn handle_meili_tools(
             Err(err) => err,
         };
 
-        let answer = format!("{}\n\n{text}", chat_settings.prompts.pre_query);
         let tool = ChatCompletionRequestMessage::Tool(ChatCompletionRequestToolMessage {
             tool_call_id: call.id.clone(),
             content: ChatCompletionRequestToolMessageContent::Text(answer),
