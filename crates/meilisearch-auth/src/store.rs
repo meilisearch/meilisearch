@@ -125,6 +125,12 @@ impl HeedAuthStore {
                 Action::MetricsAll => {
                     actions.insert(Action::MetricsGet);
                 }
+                Action::ChatsAll => {
+                    actions.extend([Action::ChatsGet, Action::ChatsDelete]);
+                }
+                Action::ChatsSettingsAll => {
+                    actions.extend([Action::ChatsSettingsGet, Action::ChatsSettingsUpdate]);
+                }
                 other => {
                     actions.insert(*other);
                 }

@@ -897,6 +897,7 @@ fn test_correct_settings_init() {
                 prefix_search,
                 facet_search,
                 disable_on_numbers,
+                chat,
             } = settings;
             assert!(matches!(searchable_fields, Setting::NotSet));
             assert!(matches!(displayed_fields, Setting::NotSet));
@@ -925,6 +926,7 @@ fn test_correct_settings_init() {
             assert!(matches!(prefix_search, Setting::NotSet));
             assert!(matches!(facet_search, Setting::NotSet));
             assert!(matches!(disable_on_numbers, Setting::NotSet));
+            assert!(matches!(chat, Setting::NotSet));
         })
         .unwrap();
 }

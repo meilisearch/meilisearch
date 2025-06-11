@@ -16,6 +16,7 @@ use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::locales::Locale;
+use meilisearch_types::milli::index::{self, SearchParameters};
 use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::vector::Embedder;
@@ -119,9 +120,58 @@ pub struct SearchQuery {
     pub locales: Option<Vec<Locale>>,
 }
 
+impl From<SearchParameters> for SearchQuery {
+    fn from(parameters: SearchParameters) -> Self {
+        let SearchParameters {
+            hybrid,
+            limit,
+            sort,
+            distinct,
+            matching_strategy,
+            attributes_to_search_on,
+            ranking_score_threshold,
+        } = parameters;
+
+        SearchQuery {
+            hybrid: hybrid.map(|index::HybridQuery { semantic_ratio, embedder }| HybridQuery {
+                semantic_ratio: SemanticRatio::try_from(semantic_ratio)
+                    .ok()
+                    .unwrap_or_else(DEFAULT_SEMANTIC_RATIO),
+                embedder,
+            }),
+            limit: limit.unwrap_or_else(DEFAULT_SEARCH_LIMIT),
+            sort,
+            distinct,
+            matching_strategy: matching_strategy.map(MatchingStrategy::from).unwrap_or_default(),
+            attributes_to_search_on,
+            ranking_score_threshold: ranking_score_threshold.map(RankingScoreThreshold::from),
+            q: None,
+            vector: None,
+            offset: DEFAULT_SEARCH_OFFSET(),
+            page: None,
+            hits_per_page: None,
+            attributes_to_retrieve: None,
+            retrieve_vectors: false,
+            attributes_to_crop: None,
+            crop_length: DEFAULT_CROP_LENGTH(),
+            attributes_to_highlight: None,
+            show_matches_position: false,
+            show_ranking_score: false,
+            show_ranking_score_details: false,
+            filter: None,
+            facets: None,
+            highlight_pre_tag: DEFAULT_HIGHLIGHT_PRE_TAG(),
+            highlight_post_tag: DEFAULT_HIGHLIGHT_POST_TAG(),
+            crop_marker: DEFAULT_CROP_MARKER(),
+            locales: None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Deserr, ToSchema, Serialize)]
 #[deserr(try_from(f64) = TryFrom::try_from -> InvalidSearchRankingScoreThreshold)]
 pub struct RankingScoreThreshold(f64);
+
 impl std::convert::TryFrom<f64> for RankingScoreThreshold {
     type Error = InvalidSearchRankingScoreThreshold;
 
@@ -133,6 +183,14 @@ impl std::convert::TryFrom<f64> for RankingScoreThreshold {
         } else {
             Ok(RankingScoreThreshold(f))
         }
+    }
+}
+
+impl From<index::RankingScoreThreshold> for RankingScoreThreshold {
+    fn from(threshold: index::RankingScoreThreshold) -> Self {
+        let threshold = threshold.as_f64();
+        assert!((0.0..=1.0).contains(&threshold));
+        RankingScoreThreshold(threshold)
     }
 }
 
@@ -279,8 +337,8 @@ impl fmt::Debug for SearchQuery {
 #[deserr(error = DeserrJsonError<InvalidSearchHybridQuery>, rename_all = camelCase, deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 pub struct HybridQuery {
-    #[deserr(default, error = DeserrJsonError<InvalidSearchSemanticRatio>, default)]
-    #[schema(value_type = f32, default)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchSemanticRatio>)]
+    #[schema(default, value_type = f32)]
     #[serde(default)]
     pub semantic_ratio: SemanticRatio,
     #[deserr(error = DeserrJsonError<InvalidSearchEmbedder>)]
@@ -717,6 +775,16 @@ impl From<MatchingStrategy> for TermsMatchingStrategy {
     }
 }
 
+impl From<index::MatchingStrategy> for MatchingStrategy {
+    fn from(other: index::MatchingStrategy) -> Self {
+        match other {
+            index::MatchingStrategy::Last => Self::Last,
+            index::MatchingStrategy::All => Self::All,
+            index::MatchingStrategy::Frequency => Self::Frequency,
+        }
+    }
+}
+
 #[derive(Debug, Default, Clone, PartialEq, Eq, Deserr)]
 #[deserr(rename_all = camelCase)]
 pub enum FacetValuesSort {
@@ -882,7 +950,7 @@ pub fn add_search_rules(filter: &mut Option<Value>, rules: IndexSearchRules) {
     }
 }
 
-fn prepare_search<'t>(
+pub fn prepare_search<'t>(
     index: &'t Index,
     rtxn: &'t RoTxn,
     query: &'t SearchQuery,
@@ -1260,7 +1328,7 @@ struct HitMaker<'a> {
     vectors_fid: Option<FieldId>,
     retrieve_vectors: RetrieveVectors,
     to_retrieve_ids: BTreeSet<FieldId>,
-    embedding_configs: Vec<milli::index::IndexEmbeddingConfig>,
+    embedding_configs: Vec<index::IndexEmbeddingConfig>,
     formatter_builder: MatcherBuilder<'a>,
     formatted_options: BTreeMap<FieldId, FormatOptions>,
     show_ranking_score: bool,
