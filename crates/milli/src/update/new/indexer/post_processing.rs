@@ -44,12 +44,7 @@ where
         indexing_context.progress,
     )?;
     let number_deltas = facet_field_ids_delta.consume_facet_number_delta().collect();
-    compute_facet_level_number(
-        index,
-        wtxn,
-        number_deltas,
-        indexing_context.progress,
-    )?;
+    compute_facet_level_number(index, wtxn, number_deltas, indexing_context.progress)?;
 
     compute_facet_search_database(index, wtxn, global_fields_ids_map, indexing_context.progress)?;
     indexing_context.progress.update_progress(IndexingStep::PostProcessingWords);
