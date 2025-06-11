@@ -394,6 +394,7 @@ UnimplementedExternalFunctionCalling           , InvalidRequest       , NOT_IMPL
 UnimplementedNonStreamingChatCompletions       , InvalidRequest       , NOT_IMPLEMENTED ;
 UnimplementedMultiChoiceChatCompletions        , InvalidRequest       , NOT_IMPLEMENTED ;
 ChatNotFound                                   , InvalidRequest       , NOT_FOUND   ;
+InvalidChatSettingDocumentTemplate             , InvalidRequest       , BAD_REQUEST ;
 InvalidChatCompletionOrgId                     , InvalidRequest       , BAD_REQUEST ;
 InvalidChatCompletionProjectId                 , InvalidRequest       , BAD_REQUEST ;
 InvalidChatCompletionApiVersion                , InvalidRequest       , BAD_REQUEST ;

@@ -646,7 +646,7 @@ async fn handle_meili_tools(
         }
 
         let result = match serde_json::from_str(&call.function.arguments) {
-            Ok(SearchInIndexParameters { index_uid, q }) => process_search_request(
+            Ok(SearchInIndexParameters { index_uid, q }) => match process_search_request(
                 index_scheduler,
                 auth_ctrl.clone(),
                 search_queue,
@@ -655,7 +655,14 @@ async fn handle_meili_tools(
                 q,
             )
             .await
-            .map_err(|e| e.to_string()),
+            {
+                Ok(output) => Ok(output),
+                Err(err) => {
+                    let error_text = err.to_string();
+                    tx.send_error(&StreamErrorEvent::from_response_error(err)).await?;
+                    Err(error_text)
+                }
+            },
             Err(err) => Err(err.to_string()),
         };
 
@@ -664,7 +671,6 @@ async fn handle_meili_tools(
                 if report_sources {
                     tx.report_sources(resp.clone(), &call.id, &documents).await?;
                 }
-
                 text
             }
             Err(err) => err,

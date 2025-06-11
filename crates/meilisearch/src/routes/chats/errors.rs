@@ -1,5 +1,6 @@
 use async_openai::error::{ApiError, OpenAIError};
 use async_openai::reqwest_eventsource::Error as EventSourceError;
+use meilisearch_types::error::ResponseError;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -53,12 +54,13 @@ pub struct StreamError {
 }
 
 impl StreamErrorEvent {
+    const ERROR_TYPE: &str = "error";
+
     pub async fn from_openai_error(error: OpenAIError) -> Result<Self, reqwest::Error> {
-        let error_type = "error".to_string();
         match error {
             OpenAIError::Reqwest(e) => Ok(StreamErrorEvent {
                 event_id: Uuid::new_v4().to_string(),
-                r#type: error_type,
+                r#type: Self::ERROR_TYPE.to_string(),
                 error: StreamError {
                     r#type: "internal_reqwest_error".to_string(),
                     code: Some("internal".to_string()),
@@ -69,7 +71,7 @@ impl StreamErrorEvent {
             }),
             OpenAIError::ApiError(ApiError { message, r#type, param, code }) => {
                 Ok(StreamErrorEvent {
-                    r#type: error_type,
+                    r#type: Self::ERROR_TYPE.to_string(),
                     event_id: Uuid::new_v4().to_string(),
                     error: StreamError {
                         r#type: r#type.unwrap_or_else(|| "unknown".to_string()),
@@ -82,7 +84,7 @@ impl StreamErrorEvent {
             }
             OpenAIError::JSONDeserialize(error) => Ok(StreamErrorEvent {
                 event_id: Uuid::new_v4().to_string(),
-                r#type: error_type,
+                r#type: Self::ERROR_TYPE.to_string(),
                 error: StreamError {
                     r#type: "json_deserialize_error".to_string(),
                     code: Some("internal".to_string()),
@@ -100,7 +102,7 @@ impl StreamErrorEvent {
 
                     Ok(StreamErrorEvent {
                         event_id: Uuid::new_v4().to_string(),
-                        r#type: error_type,
+                        r#type: Self::ERROR_TYPE.to_string(),
                         error: StreamError { r#type, code, message, param, event_id: None },
                     })
                 }
@@ -111,13 +113,13 @@ impl StreamErrorEvent {
 
                     Ok(StreamErrorEvent {
                         event_id: Uuid::new_v4().to_string(),
-                        r#type: error_type,
+                        r#type: Self::ERROR_TYPE.to_string(),
                         error: StreamError { r#type, code, message, param, event_id: None },
                     })
                 }
                 EventSourceError::Utf8(error) => Ok(StreamErrorEvent {
                     event_id: Uuid::new_v4().to_string(),
-                    r#type: error_type,
+                    r#type: Self::ERROR_TYPE.to_string(),
                     error: StreamError {
                         r#type: "invalid_utf8_error".to_string(),
                         code: None,
@@ -128,7 +130,7 @@ impl StreamErrorEvent {
                 }),
                 EventSourceError::Parser(error) => Ok(StreamErrorEvent {
                     event_id: Uuid::new_v4().to_string(),
-                    r#type: error_type,
+                    r#type: Self::ERROR_TYPE.to_string(),
                     error: StreamError {
                         r#type: "parser_error".to_string(),
                         code: None,
@@ -139,7 +141,7 @@ impl StreamErrorEvent {
                 }),
                 EventSourceError::Transport(error) => Ok(StreamErrorEvent {
                     event_id: Uuid::new_v4().to_string(),
-                    r#type: error_type,
+                    r#type: Self::ERROR_TYPE.to_string(),
                     error: StreamError {
                         r#type: "transport_error".to_string(),
                         code: None,
@@ -150,7 +152,7 @@ impl StreamErrorEvent {
                 }),
                 EventSourceError::InvalidLastEventId(message) => Ok(StreamErrorEvent {
                     event_id: Uuid::new_v4().to_string(),
-                    r#type: error_type,
+                    r#type: Self::ERROR_TYPE.to_string(),
                     error: StreamError {
                         r#type: "invalid_last_event_id".to_string(),
                         code: None,
@@ -161,7 +163,7 @@ impl StreamErrorEvent {
                 }),
                 EventSourceError::StreamEnded => Ok(StreamErrorEvent {
                     event_id: Uuid::new_v4().to_string(),
-                    r#type: error_type,
+                    r#type: Self::ERROR_TYPE.to_string(),
                     error: StreamError {
                         r#type: "stream_ended".to_string(),
                         code: None,
@@ -173,7 +175,7 @@ impl StreamErrorEvent {
             },
             OpenAIError::InvalidArgument(message) => Ok(StreamErrorEvent {
                 event_id: Uuid::new_v4().to_string(),
-                r#type: error_type,
+                r#type: Self::ERROR_TYPE.to_string(),
                 error: StreamError {
                     r#type: "invalid_argument".to_string(),
                     code: None,
@@ -182,6 +184,21 @@ impl StreamErrorEvent {
                     event_id: None,
                 },
             }),
+        }
+    }
+
+    pub fn from_response_error(error: ResponseError) -> Self {
+        let ResponseError { code, message, .. } = error;
+        StreamErrorEvent {
+            event_id: Uuid::new_v4().to_string(),
+            r#type: Self::ERROR_TYPE.to_string(),
+            error: StreamError {
+                r#type: "response_error".to_string(),
+                code: Some(code.as_str().to_string()),
+                message,
+                param: None,
+                event_id: None,
+            },
         }
     }
 }
