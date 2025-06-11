@@ -100,7 +100,7 @@ async fn simple_search_single_index() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response["results"], { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
+    snapshot!(json_string!(response["results"], { ".**.processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
     [
       {
         "indexUid": "SHARED_DOCUMENTS",
@@ -199,7 +199,7 @@ async fn federation_multiple_search_single_index() {
           "title": "Batman",
           "id": "D",
           "_federation": {
-            "indexUid": "test",
+            "indexUid": "SHARED_DOCUMENTS",
             "queriesPosition": 2,
             "weightedRankingScore": 1.0
           }
@@ -208,7 +208,7 @@ async fn federation_multiple_search_single_index() {
           "title": "Batman Returns",
           "id": "C",
           "_federation": {
-            "indexUid": "test",
+            "indexUid": "SHARED_DOCUMENTS",
             "queriesPosition": 3,
             "weightedRankingScore": 1.0
           }
@@ -217,7 +217,7 @@ async fn federation_multiple_search_single_index() {
           "title": "Batman the dark knight returns: Part 1",
           "id": "A",
           "_federation": {
-            "indexUid": "test",
+            "indexUid": "SHARED_DOCUMENTS",
             "queriesPosition": 2,
             "weightedRankingScore": 0.9848484848484848
           }
@@ -226,7 +226,7 @@ async fn federation_multiple_search_single_index() {
           "title": "Batman the dark knight returns: Part 2",
           "id": "B",
           "_federation": {
-            "indexUid": "test",
+            "indexUid": "SHARED_DOCUMENTS",
             "queriesPosition": 2,
             "weightedRankingScore": 0.9848484848484848
           }
@@ -235,7 +235,7 @@ async fn federation_multiple_search_single_index() {
           "title": "Badman",
           "id": "E",
           "_federation": {
-            "indexUid": "test",
+            "indexUid": "SHARED_DOCUMENTS",
             "queriesPosition": 1,
             "weightedRankingScore": 0.5
           }
@@ -393,7 +393,7 @@ async fn simple_search_two_indexes() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response["results"], { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
+    snapshot!(json_string!(response["results"], { ".**.processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
     [
       {
         "indexUid": "SHARED_DOCUMENTS",
@@ -1616,7 +1616,7 @@ async fn federation_sort_same_indexes_different_criterion_opposite_direction() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Inside `.queries[1]`: The results of queries #0 and #1 are incompatible: \n  1. `queries[0].sort[0]`, `nested-[uuid].rankingRules[0]`: ascending sort rule(s) on field `mother`\n  2. `queries[1].sort[0]`, `nested.rankingRules[0]`: descending sort rule(s) on field `father`\n  - cannot compare two sort rules in opposite directions\n",
+      "message": "Inside `.queries[1]`: The results of queries #0 and #1 are incompatible: \n  1. `queries[0].sort[0]`, `nested-[uuid].rankingRules[0]`: ascending sort rule(s) on field `mother`\n  2. `queries[1].sort[0]`, `nested-[uuid].rankingRules[0]`: descending sort rule(s) on field `father`\n  - cannot compare two sort rules in opposite directions\n",
       "code": "invalid_multi_search_query_ranking_rules",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_query_ranking_rules"
@@ -2089,7 +2089,7 @@ async fn federation_sort_different_ranking_rules() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Inside `.queries[1]`: The results of queries #2 and #1 are incompatible: \n  1. `queries[2]`, `batman-[uuid].rankingRules[0..=3]`: relevancy rule(s) words, typo, proximity, attribute\n  2. `queries[1].sort[0]`, `[uuid].rankingRules[0]`: descending sort rule(s) on field `title`\n  - cannot compare a relevancy rule with a sort rule\n",
+      "message": "Inside `.queries[1]`: The results of queries #2 and #1 are incompatible: \n  1. `queries[2]`, `batman-[uuid].rankingRules[0..=3]`: relevancy rule(s) words, typo, proximity, attribute\n  2. `queries[1].sort[0]`, `movies-[uuid].rankingRules[0]`: descending sort rule(s) on field `title`\n  - cannot compare a relevancy rule with a sort rule\n",
       "code": "invalid_multi_search_query_ranking_rules",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_query_ranking_rules"
@@ -2153,7 +2153,7 @@ async fn federation_sort_different_indexes_same_criterion_opposite_direction() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Inside `.queries[0]`: The results of queries #1 and #0 are incompatible: \n  1. `queries[1].sort[0]`, `batman-[uuid].rankingRules[0]`: descending sort rule(s) on field `title`\n  2. `queries[0].sort[0]`, `batman-[uuid].rankingRules[0]`: ascending sort rule(s) on field `title`\n  - cannot compare two sort rules in opposite directions\n  - note: The ranking rules of query #1 were modified during canonicalization:\n    1. Removed relevancy rule `words` at position #1 in ranking rules because the query is a placeholder search (`q`: \"\")\n    2. Removed relevancy rule `typo` at position #2 in ranking rules because the query is a placeholder search (`q`: \"\")\n    3. Removed relevancy rule `proximity` at position #3 in ranking rules because the query is a placeholder search (`q`: \"\")\n    4. Removed relevancy rule `attribute` at position #4 in ranking rules because the query is a placeholder search (`q`: \"\")\n    5. Removed relevancy rule `exactness` at position #5 in ranking rules because the query is a placeholder search (`q`: \"\")\n  - note: The ranking rules of query #0 were modified during canonicalization:\n    1. Removed relevancy rule `words` at position #1 in ranking rules because the query is a placeholder search (`q`: \"\")\n    2. Removed relevancy rule `typo` at position #2 in ranking rules because the query is a placeholder search (`q`: \"\")\n    3. Removed relevancy rule `proximity` at position #3 in ranking rules because the query is a placeholder search (`q`: \"\")\n    4. Removed relevancy rule `attribute` at position #4 in ranking rules because the query is a placeholder search (`q`: \"\")\n    5. Removed relevancy rule `exactness` at position #5 in ranking rules because the query is a placeholder search (`q`: \"\")\n",
+      "message": "Inside `.queries[0]`: The results of queries #1 and #0 are incompatible: \n  1. `queries[1].sort[0]`, `batman-[uuid].rankingRules[0]`: descending sort rule(s) on field `title`\n  2. `queries[0].sort[0]`, `movies-[uuid].rankingRules[0]`: ascending sort rule(s) on field `title`\n  - cannot compare two sort rules in opposite directions\n  - note: The ranking rules of query #1 were modified during canonicalization:\n    1. Removed relevancy rule `words` at position #1 in ranking rules because the query is a placeholder search (`q`: \"\")\n    2. Removed relevancy rule `typo` at position #2 in ranking rules because the query is a placeholder search (`q`: \"\")\n    3. Removed relevancy rule `proximity` at position #3 in ranking rules because the query is a placeholder search (`q`: \"\")\n    4. Removed relevancy rule `attribute` at position #4 in ranking rules because the query is a placeholder search (`q`: \"\")\n    5. Removed relevancy rule `exactness` at position #5 in ranking rules because the query is a placeholder search (`q`: \"\")\n  - note: The ranking rules of query #0 were modified during canonicalization:\n    1. Removed relevancy rule `words` at position #1 in ranking rules because the query is a placeholder search (`q`: \"\")\n    2. Removed relevancy rule `typo` at position #2 in ranking rules because the query is a placeholder search (`q`: \"\")\n    3. Removed relevancy rule `proximity` at position #3 in ranking rules because the query is a placeholder search (`q`: \"\")\n    4. Removed relevancy rule `attribute` at position #4 in ranking rules because the query is a placeholder search (`q`: \"\")\n    5. Removed relevancy rule `exactness` at position #5 in ranking rules because the query is a placeholder search (`q`: \"\")\n",
       "code": "invalid_multi_search_query_ranking_rules",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_query_ranking_rules"
@@ -2171,7 +2171,7 @@ async fn federation_sort_different_indexes_same_criterion_opposite_direction() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Inside `.queries[1]`: The results of queries #2 and #1 are incompatible: \n  1. `queries[2].sort[0]`, `[uuid].rankingRules[0]`: ascending sort rule(s) on field `title`\n  2. `queries[1].sort[0]`, `[uuid].rankingRules[0]`: descending sort rule(s) on field `title`\n  - cannot compare two sort rules in opposite directions\n",
+      "message": "Inside `.queries[1]`: The results of queries #2 and #1 are incompatible: \n  1. `queries[2].sort[0]`, `batman-[uuid].rankingRules[0]`: ascending sort rule(s) on field `title`\n  2. `queries[1].sort[0]`, `movies-[uuid].rankingRules[0]`: descending sort rule(s) on field `title`\n  - cannot compare two sort rules in opposite directions\n",
       "code": "invalid_multi_search_query_ranking_rules",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_query_ranking_rules"
@@ -2505,7 +2505,7 @@ async fn federation_sort_different_indexes_different_criterion_opposite_directio
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Inside `.queries[0]`: The results of queries #1 and #0 are incompatible: \n  1. `queries[1].sort[0]`, `batman-[uuid].rankingRules[0]`: descending sort rule(s) on field `id`\n  2. `queries[0].sort[0]`, `batman-[uuid].rankingRules[0]`: ascending sort rule(s) on field `title`\n  - cannot compare two sort rules in opposite directions\n  - note: The ranking rules of query #1 were modified during canonicalization:\n    1. Removed relevancy rule `words` at position #1 in ranking rules because the query is a placeholder search (`q`: \"\")\n    2. Removed relevancy rule `typo` at position #2 in ranking rules because the query is a placeholder search (`q`: \"\")\n    3. Removed relevancy rule `proximity` at position #3 in ranking rules because the query is a placeholder search (`q`: \"\")\n    4. Removed relevancy rule `attribute` at position #4 in ranking rules because the query is a placeholder search (`q`: \"\")\n    5. Removed relevancy rule `exactness` at position #5 in ranking rules because the query is a placeholder search (`q`: \"\")\n  - note: The ranking rules of query #0 were modified during canonicalization:\n    1. Removed relevancy rule `words` at position #1 in ranking rules because the query is a placeholder search (`q`: \"\")\n    2. Removed relevancy rule `typo` at position #2 in ranking rules because the query is a placeholder search (`q`: \"\")\n    3. Removed relevancy rule `proximity` at position #3 in ranking rules because the query is a placeholder search (`q`: \"\")\n    4. Removed relevancy rule `attribute` at position #4 in ranking rules because the query is a placeholder search (`q`: \"\")\n    5. Removed relevancy rule `exactness` at position #5 in ranking rules because the query is a placeholder search (`q`: \"\")\n",
+      "message": "Inside `.queries[0]`: The results of queries #1 and #0 are incompatible: \n  1. `queries[1].sort[0]`, `batman-[uuid].rankingRules[0]`: descending sort rule(s) on field `id`\n  2. `queries[0].sort[0]`, `movies-[uuid].rankingRules[0]`: ascending sort rule(s) on field `title`\n  - cannot compare two sort rules in opposite directions\n  - note: The ranking rules of query #1 were modified during canonicalization:\n    1. Removed relevancy rule `words` at position #1 in ranking rules because the query is a placeholder search (`q`: \"\")\n    2. Removed relevancy rule `typo` at position #2 in ranking rules because the query is a placeholder search (`q`: \"\")\n    3. Removed relevancy rule `proximity` at position #3 in ranking rules because the query is a placeholder search (`q`: \"\")\n    4. Removed relevancy rule `attribute` at position #4 in ranking rules because the query is a placeholder search (`q`: \"\")\n    5. Removed relevancy rule `exactness` at position #5 in ranking rules because the query is a placeholder search (`q`: \"\")\n  - note: The ranking rules of query #0 were modified during canonicalization:\n    1. Removed relevancy rule `words` at position #1 in ranking rules because the query is a placeholder search (`q`: \"\")\n    2. Removed relevancy rule `typo` at position #2 in ranking rules because the query is a placeholder search (`q`: \"\")\n    3. Removed relevancy rule `proximity` at position #3 in ranking rules because the query is a placeholder search (`q`: \"\")\n    4. Removed relevancy rule `attribute` at position #4 in ranking rules because the query is a placeholder search (`q`: \"\")\n    5. Removed relevancy rule `exactness` at position #5 in ranking rules because the query is a placeholder search (`q`: \"\")\n",
       "code": "invalid_multi_search_query_ranking_rules",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_query_ranking_rules"
@@ -2523,7 +2523,7 @@ async fn federation_sort_different_indexes_different_criterion_opposite_directio
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Inside `.queries[1]`: The results of queries #2 and #1 are incompatible: \n  1. `queries[2].sort[0]`, `[uuid].rankingRules[0]`: descending sort rule(s) on field `id`\n  2. `queries[1].sort[0]`, `[uuid].rankingRules[0]`: ascending sort rule(s) on field `title`\n  - cannot compare two sort rules in opposite directions\n",
+      "message": "Inside `.queries[1]`: The results of queries #2 and #1 are incompatible: \n  1. `queries[2].sort[0]`, `batman-[uuid].rankingRules[0]`: descending sort rule(s) on field `id`\n  2. `queries[1].sort[0]`, `movies-[uuid].rankingRules[0]`: ascending sort rule(s) on field `title`\n  - cannot compare two sort rules in opposite directions\n",
       "code": "invalid_multi_search_query_ranking_rules",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_query_ranking_rules"
@@ -2681,7 +2681,7 @@ async fn federation_limit_offset() {
             ]}))
             .await;
         snapshot!(code, @"200 OK");
-        snapshot!(json_string!(response, { ".**._rankingScore" => "[score]" }), @r###"
+        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
         {
           "hits": [
             {
@@ -2718,7 +2718,7 @@ async fn federation_limit_offset() {
             ]}))
             .await;
         snapshot!(code, @"200 OK");
-        snapshot!(json_string!(response, { ".**._rankingScore" => "[score]" }), @r###"
+        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
         {
           "hits": [
             {
@@ -2827,7 +2827,7 @@ async fn federation_limit_offset() {
             ]}))
             .await;
         snapshot!(code, @"200 OK");
-        snapshot!(json_string!(response, { ".**._rankingScore" => "[score]" }), @r###"
+        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
         {
           "hits": [],
           "processingTimeMs": "[duration]",
@@ -3052,7 +3052,7 @@ async fn federation_formatting() {
             ]}))
             .await;
         snapshot!(code, @"200 OK");
-        snapshot!(json_string!(response, { ".**._rankingScore" => "[score]" }), @r###"
+        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
         {
           "hits": [
             {
@@ -3161,7 +3161,7 @@ async fn federation_formatting() {
             ]}))
             .await;
         snapshot!(code, @"200 OK");
-        snapshot!(json_string!(response, { ".**._rankingScore" => "[score]" }), @r###"
+        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
         {
           "hits": [],
           "processingTimeMs": "[duration]",
@@ -3426,7 +3426,7 @@ async fn federation_federated_contains_facets() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Inside `.queries[1]`: Using facet options is not allowed in federated queries.\n - Hint: remove `facets` from query #1 or remove `federation` from the request\n - Hint: pass `federation.facetsByIndex.fruits: [\"BOOSTED\"]` for facets in federated search",
+      "message": "Inside `.queries[1]`: Using facet options is not allowed in federated queries.\n - Hint: remove `facets` from query #1 or remove `federation` from the request\n - Hint: pass `federation.facetsByIndex.fruits-[uuid]: [\"BOOSTED\"]` for facets in federated search",
       "code": "invalid_multi_search_query_facets",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_query_facets"
@@ -3735,7 +3735,7 @@ async fn federation_vector_single_index() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".**._rankingScore" => "[score]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
     {
       "hits": [
         {
@@ -4055,7 +4055,7 @@ async fn federation_vector_two_indexes() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".**._rankingScore" => "[score]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
     {
       "hits": [
         {
@@ -4078,7 +4078,7 @@ async fn federation_vector_two_indexes() {
             }
           },
           "_federation": {
-            "indexUid": "vectors-sentiment-[uuid]",
+            "indexUid": "vectors-animal-[uuid]",
             "queriesPosition": 0,
             "weightedRankingScore": 0.9728479385375975
           },
@@ -4104,7 +4104,7 @@ async fn federation_vector_two_indexes() {
             }
           },
           "_federation": {
-            "indexUid": "vectors-sentiment-[uuid]",
+            "indexUid": "vectors-animal-[uuid]",
             "queriesPosition": 0,
             "weightedRankingScore": 0.9701486229896544
           },
@@ -4182,7 +4182,7 @@ async fn federation_vector_two_indexes() {
             }
           },
           "_federation": {
-            "indexUid": "vectors-sentiment-[uuid]",
+            "indexUid": "vectors-animal-[uuid]",
             "queriesPosition": 0,
             "weightedRankingScore": 0.8601469993591309
           },
@@ -4208,7 +4208,7 @@ async fn federation_vector_two_indexes() {
             }
           },
           "_federation": {
-            "indexUid": "vectors-sentiment-[uuid]",
+            "indexUid": "vectors-animal-[uuid]",
             "queriesPosition": 0,
             "weightedRankingScore": 0.8432406187057495
           },
@@ -4490,7 +4490,7 @@ async fn federation_facets_different_indexes_same_facet() {
       "offset": 0,
       "estimatedTotalHits": 15,
       "facetsByIndex": {
-        "batman-[uuid]": {
+        "batman-2-[uuid]": {
           "distribution": {
             "title": {
               "Badman": 1,
@@ -4502,7 +4502,7 @@ async fn federation_facets_different_indexes_same_facet() {
           },
           "stats": {}
         },
-        "batman-2-[uuid]": {
+        "batman-[uuid]": {
           "distribution": {
             "title": {
               "Badman": 1,
@@ -4810,7 +4810,7 @@ async fn federation_facets_different_indexes_same_facet() {
       "offset": 0,
       "estimatedTotalHits": 11,
       "facetsByIndex": {
-        "batman-[uuid]": {
+        "batman-2-[uuid]": {
           "distribution": {
             "title": {
               "Badman": 1,
@@ -4822,7 +4822,7 @@ async fn federation_facets_different_indexes_same_facet() {
           },
           "stats": {}
         },
-        "batman-2-[uuid]": {
+        "batman-[uuid]": {
           "distribution": {
             "title": {
               "Badman": 1,
@@ -4974,7 +4974,7 @@ async fn federation_facets_same_indexes() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
     {
       "hits": [
         {
@@ -5015,6 +5015,27 @@ async fn federation_facets_same_indexes() {
       "offset": 0,
       "estimatedTotalHits": 4,
       "facetsByIndex": {
+        "doggos-2-[uuid]": {
+          "distribution": {
+            "doggos.age": {
+              "2": 1,
+              "4": 1
+            },
+            "father": {
+              "jean": 1,
+              "romain": 1
+            },
+            "mother": {
+              "michelle": 2
+            }
+          },
+          "stats": {
+            "doggos.age": {
+              "min": 2.0,
+              "max": 4.0
+            }
+          }
+        },
         "doggos-[uuid]": {
           "distribution": {
             "doggos.age": {
@@ -5038,27 +5059,6 @@ async fn federation_facets_same_indexes() {
               "max": 6.0
             }
           }
-        },
-        "doggos-2-[uuid]": {
-          "distribution": {
-            "doggos.age": {
-              "2": 1,
-              "4": 1
-            },
-            "father": {
-              "jean": 1,
-              "romain": 1
-            },
-            "mother": {
-              "michelle": 2
-            }
-          },
-          "stats": {
-            "doggos.age": {
-              "min": 2.0,
-              "max": 4.0
-            }
-          }
         }
       }
     }
@@ -5077,7 +5077,7 @@ async fn federation_facets_same_indexes() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
     {
       "hits": [
         {
@@ -5373,13 +5373,13 @@ async fn federation_inconsistent_merge_order() {
           },
           "stats": {}
         },
-        "movies-[uuid]": {
+        "movies-2-[uuid]": {
           "distribution": {
             "color": {
-              "blue": 3,
-              "green": 2,
               "red": 3,
-              "yellow": 2
+              "blue": 3,
+              "yellow": 2,
+              "green": 2
             },
             "title": {
               "Captain Marvel": 1,
@@ -5391,13 +5391,13 @@ async fn federation_inconsistent_merge_order() {
           },
           "stats": {}
         },
-        "movies-2-[uuid]": {
+        "movies-[uuid]": {
           "distribution": {
             "color": {
-              "red": 3,
               "blue": 3,
-              "yellow": 2,
-              "green": 2
+              "green": 2,
+              "red": 3,
+              "yellow": 2
             },
             "title": {
               "Captain Marvel": 1,
@@ -5431,7 +5431,7 @@ async fn federation_inconsistent_merge_order() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Inside `.federation.facetsByIndex.movies-2-[uuid]`: Inconsistent order for values in facet `color`: index `movies-[uuid]` orders alphabetically, but index `movies-2-[uuid]` orders by count.\n - Hint: Remove `federation.mergeFacets` or change `faceting.sortFacetValuesBy` to be consistent in settings.\n - Note: index `movies-2-[uuid]` used in `.queries[2]`",
+      "message": "Inside `.federation.facetsByIndex.movies-[uuid]`: Inconsistent order for values in facet `color`: index `movies-2-[uuid]` orders by count, but index `movies-[uuid]` orders alphabetically.\n - Hint: Remove `federation.mergeFacets` or change `faceting.sortFacetValuesBy` to be consistent in settings.\n - Note: index `movies-[uuid]` used in `.queries[0]`",
       "code": "invalid_multi_search_facet_order",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_facet_order"
