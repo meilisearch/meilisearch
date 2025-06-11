@@ -1,5 +1,5 @@
-use uuid::Uuid;
 use meili_snap::{json_string, snapshot};
+use uuid::Uuid;
 
 use super::{DOCUMENTS, FRUITS_DOCUMENTS, NESTED_DOCUMENTS};
 use crate::common::{
