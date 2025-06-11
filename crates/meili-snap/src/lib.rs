@@ -46,16 +46,16 @@ pub fn default_snapshot_settings_for_test<'a>(
     fn uuid_in_json_key_redaction(content: Content, _content_path: ContentPath) -> Content {
         match content {
             Content::Map(map) => {
-                let new_map = map.iter()
-                    .map(|(key, value)| {
-                        match key {
-                            Content::String(s) => {
-                                let uuid_replaced = UUID_IN_MESSAGE_RE.replace_all(s, "[uuid]");
-                                (Content::String(uuid_replaced.to_string()), value.clone())
-                            }
-                            _ => (key.clone(), value.clone()),
+                let new_map = map
+                    .iter()
+                    .map(|(key, value)| match key {
+                        Content::String(s) => {
+                            let uuid_replaced = UUID_IN_MESSAGE_RE.replace_all(s, "[uuid]");
+                            (Content::String(uuid_replaced.to_string()), value.clone())
                         }
-                    }).collect();
+                        _ => (key.clone(), value.clone()),
+                    })
+                    .collect();
                 Content::Map(new_map)
             }
             _ => content,
