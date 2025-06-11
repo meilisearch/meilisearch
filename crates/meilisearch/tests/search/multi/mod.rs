@@ -1,3 +1,4 @@
+use uuid::Uuid;
 use meili_snap::{json_string, snapshot};
 
 use super::{DOCUMENTS, FRUITS_DOCUMENTS, NESTED_DOCUMENTS};
@@ -784,16 +785,19 @@ async fn federation_one_index_doesnt_exist() {
 async fn search_multiple_indexes_dont_exist() {
     let server = Server::new_shared();
 
+    let index_1 = format!("index_1-{}", Uuid::new_v4());
+    let index_2 = format!("index_2-{}", Uuid::new_v4());
+
     let (response, code) = server
         .multi_search(json!({"queries": [
-        {"indexUid" : "test", "q": "glass"},
-        {"indexUid": "nested", "q": "pésti"},
+        {"indexUid" : index_1, "q": "glass"},
+        {"indexUid": index_2, "q": "pésti"},
         ]}))
         .await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Inside `.queries[0]`: Index `test` not found.",
+      "message": "Inside `.queries[0]`: Index `index_1-[uuid]` not found.",
       "code": "index_not_found",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#index_not_found"
@@ -805,10 +809,13 @@ async fn search_multiple_indexes_dont_exist() {
 async fn federation_multiple_indexes_dont_exist() {
     let server = Server::new_shared();
 
+    let index_1 = format!("index_1-{}", Uuid::new_v4());
+    let index_2 = format!("index_2-{}", Uuid::new_v4());
+
     let (response, code) = server
         .multi_search(json!({"federation": {}, "queries": [
-        {"indexUid" : "test", "q": "glass"},
-        {"indexUid": "nested", "q": "pésti"},
+        {"indexUid" : index_1, "q": "glass"},
+        {"indexUid": index_2, "q": "pésti"},
         ]}))
         .await;
     snapshot!(code, @"400 Bad Request");
@@ -816,7 +823,7 @@ async fn federation_multiple_indexes_dont_exist() {
     // the query index is the lowest index with that index
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Inside `.queries[1]`: Index `nested` not found.",
+      "message": "Inside `.queries[0]`: Index `index_1-[uuid]` not found.",
       "code": "index_not_found",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#index_not_found"
