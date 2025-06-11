@@ -645,6 +645,8 @@ async fn handle_meili_tools(
             .await?;
         }
 
+        let mut error = None;
+
         let result = match serde_json::from_str(&call.function.arguments) {
             Ok(SearchInIndexParameters { index_uid, q }) => match process_search_request(
                 index_scheduler,
@@ -658,8 +660,8 @@ async fn handle_meili_tools(
             {
                 Ok(output) => Ok(output),
                 Err(err) => {
-                    let error_text = err.to_string();
-                    tx.send_error(&StreamErrorEvent::from_response_error(err)).await?;
+                    let error_text = format!("the search tool call failed with {err}");
+                    error = Some(err);
                     Err(error_text)
                 }
             },
@@ -686,6 +688,10 @@ async fn handle_meili_tools(
         }
 
         chat_completion.messages.push(tool);
+
+        if let Some(error) = error {
+            tx.send_error(&StreamErrorEvent::from_response_error(error)).await?;
+        }
     }
 
     Ok(())
