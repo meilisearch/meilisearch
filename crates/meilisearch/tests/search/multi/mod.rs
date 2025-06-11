@@ -181,7 +181,7 @@ async fn federation_single_search_single_index() {
 #[actix_rt::test]
 async fn federation_multiple_search_single_index() {
     let server = Server::new_shared();
-    let index = shared_index_with_documents().await;
+    let index = shared_index_with_score_documents().await;
 
     let (response, code) = server
         .multi_search(json!({"federation": {}, "queries": [
@@ -199,7 +199,7 @@ async fn federation_multiple_search_single_index() {
           "title": "Batman",
           "id": "D",
           "_federation": {
-            "indexUid": "SHARED_DOCUMENTS",
+            "indexUid": "SHARED_SCORE_DOCUMENTS",
             "queriesPosition": 2,
             "weightedRankingScore": 1.0
           }
@@ -208,7 +208,7 @@ async fn federation_multiple_search_single_index() {
           "title": "Batman Returns",
           "id": "C",
           "_federation": {
-            "indexUid": "SHARED_DOCUMENTS",
+            "indexUid": "SHARED_SCORE_DOCUMENTS",
             "queriesPosition": 3,
             "weightedRankingScore": 1.0
           }
@@ -217,7 +217,7 @@ async fn federation_multiple_search_single_index() {
           "title": "Batman the dark knight returns: Part 1",
           "id": "A",
           "_federation": {
-            "indexUid": "SHARED_DOCUMENTS",
+            "indexUid": "SHARED_SCORE_DOCUMENTS",
             "queriesPosition": 2,
             "weightedRankingScore": 0.9848484848484848
           }
@@ -226,7 +226,7 @@ async fn federation_multiple_search_single_index() {
           "title": "Batman the dark knight returns: Part 2",
           "id": "B",
           "_federation": {
-            "indexUid": "SHARED_DOCUMENTS",
+            "indexUid": "SHARED_SCORE_DOCUMENTS",
             "queriesPosition": 2,
             "weightedRankingScore": 0.9848484848484848
           }
@@ -235,7 +235,7 @@ async fn federation_multiple_search_single_index() {
           "title": "Badman",
           "id": "E",
           "_federation": {
-            "indexUid": "SHARED_DOCUMENTS",
+            "indexUid": "SHARED_SCORE_DOCUMENTS",
             "queriesPosition": 1,
             "weightedRankingScore": 0.5
           }
@@ -880,14 +880,13 @@ async fn federation_one_query_sort_error() {
     let (response, code) = server
         .multi_search(json!({"federation": {}, "queries": [
         {"indexUid" : index.uid, "q": "glass"},
-        {"indexUid": nested_index.uid, "q": "pésti", "sort": ["doggos:desc"]},
+        {"indexUid": nested_index.uid, "q": "pésti", "sort": ["mother:desc"]},
         ]}))
         .await;
-    dbg!(&response);
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Inside `.queries[1]`: Index `nested`: Attribute `doggos` is not sortable. This index does not have configured sortable attributes.",
+      "message": "Inside `.queries[1]`: Index `SHARED_NESTED_DOCUMENTS`: Attribute `mother` is not sortable. Available sortable attributes are: `doggos`.",
       "code": "invalid_search_sort",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_sort"
@@ -2554,7 +2553,6 @@ async fn federation_limit_offset() {
             {"indexUid" : score_index.uid, "q": "batman returns", "attributesToRetrieve": ["title"]},
             ]}))
             .await;
-        dbg!(&response);
         snapshot!(code, @"200 OK");
         snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
         {
@@ -4324,7 +4322,7 @@ async fn federation_facets_different_indexes_same_facet() {
         .await;
     batman_index.wait_task(value.uid()).await.succeeded();
 
-    let batman_2_index = server.unique_index_with_prefix("batman-2");
+    let batman_2_index = server.unique_index_with_prefix("batman_2");
 
     let documents = SCORE_DOCUMENTS.clone();
     let (value, _) = batman_2_index.add_documents(documents, None).await;
@@ -4375,7 +4373,7 @@ async fn federation_facets_different_indexes_same_facet() {
         {
           "title": "Badman",
           "_federation": {
-            "indexUid": "batman-2-[uuid]",
+            "indexUid": "batman_2-[uuid]",
             "queriesPosition": 2,
             "weightedRankingScore": 1.0
           }
@@ -4391,7 +4389,7 @@ async fn federation_facets_different_indexes_same_facet() {
         {
           "title": "Batman",
           "_federation": {
-            "indexUid": "batman-2-[uuid]",
+            "indexUid": "batman_2-[uuid]",
             "queriesPosition": 2,
             "weightedRankingScore": 1.0
           }
@@ -4407,7 +4405,7 @@ async fn federation_facets_different_indexes_same_facet() {
         {
           "title": "Batman Returns",
           "_federation": {
-            "indexUid": "batman-2-[uuid]",
+            "indexUid": "batman_2-[uuid]",
             "queriesPosition": 2,
             "weightedRankingScore": 1.0
           }
@@ -4423,7 +4421,7 @@ async fn federation_facets_different_indexes_same_facet() {
         {
           "title": "Batman the dark knight returns: Part 1",
           "_federation": {
-            "indexUid": "batman-2-[uuid]",
+            "indexUid": "batman_2-[uuid]",
             "queriesPosition": 2,
             "weightedRankingScore": 1.0
           }
@@ -4439,7 +4437,7 @@ async fn federation_facets_different_indexes_same_facet() {
         {
           "title": "Batman the dark knight returns: Part 2",
           "_federation": {
-            "indexUid": "batman-2-[uuid]",
+            "indexUid": "batman_2-[uuid]",
             "queriesPosition": 2,
             "weightedRankingScore": 1.0
           }
@@ -4490,7 +4488,7 @@ async fn federation_facets_different_indexes_same_facet() {
       "offset": 0,
       "estimatedTotalHits": 15,
       "facetsByIndex": {
-        "batman-2-[uuid]": {
+        "batman-[uuid]": {
           "distribution": {
             "title": {
               "Badman": 1,
@@ -4502,7 +4500,7 @@ async fn federation_facets_different_indexes_same_facet() {
           },
           "stats": {}
         },
-        "batman-[uuid]": {
+        "batman_2-[uuid]": {
           "distribution": {
             "title": {
               "Badman": 1,
@@ -4565,7 +4563,7 @@ async fn federation_facets_different_indexes_same_facet() {
         {
           "title": "Badman",
           "_federation": {
-            "indexUid": "batman-2-[uuid]",
+            "indexUid": "batman_2-[uuid]",
             "queriesPosition": 2,
             "weightedRankingScore": 1.0
           }
@@ -4581,7 +4579,7 @@ async fn federation_facets_different_indexes_same_facet() {
         {
           "title": "Batman",
           "_federation": {
-            "indexUid": "batman-2-[uuid]",
+            "indexUid": "batman_2-[uuid]",
             "queriesPosition": 2,
             "weightedRankingScore": 1.0
           }
@@ -4597,7 +4595,7 @@ async fn federation_facets_different_indexes_same_facet() {
         {
           "title": "Batman Returns",
           "_federation": {
-            "indexUid": "batman-2-[uuid]",
+            "indexUid": "batman_2-[uuid]",
             "queriesPosition": 2,
             "weightedRankingScore": 1.0
           }
@@ -4613,7 +4611,7 @@ async fn federation_facets_different_indexes_same_facet() {
         {
           "title": "Batman the dark knight returns: Part 1",
           "_federation": {
-            "indexUid": "batman-2-[uuid]",
+            "indexUid": "batman_2-[uuid]",
             "queriesPosition": 2,
             "weightedRankingScore": 1.0
           }
@@ -4629,7 +4627,7 @@ async fn federation_facets_different_indexes_same_facet() {
         {
           "title": "Batman the dark knight returns: Part 2",
           "_federation": {
-            "indexUid": "batman-2-[uuid]",
+            "indexUid": "batman_2-[uuid]",
             "queriesPosition": 2,
             "weightedRankingScore": 1.0
           }
@@ -4735,7 +4733,7 @@ async fn federation_facets_different_indexes_same_facet() {
         {
           "title": "Batman the dark knight returns: Part 2",
           "_federation": {
-            "indexUid": "batman-2-[uuid]",
+            "indexUid": "batman_2-[uuid]",
             "queriesPosition": 1,
             "weightedRankingScore": 0.7028218694885362
           }
@@ -4751,7 +4749,7 @@ async fn federation_facets_different_indexes_same_facet() {
         {
           "title": "Batman the dark knight returns: Part 1",
           "_federation": {
-            "indexUid": "batman-2-[uuid]",
+            "indexUid": "batman_2-[uuid]",
             "queriesPosition": 1,
             "weightedRankingScore": 0.7028218694885362
           }
@@ -4767,7 +4765,7 @@ async fn federation_facets_different_indexes_same_facet() {
         {
           "title": "Batman Returns",
           "_federation": {
-            "indexUid": "batman-2-[uuid]",
+            "indexUid": "batman_2-[uuid]",
             "queriesPosition": 1,
             "weightedRankingScore": 0.8317901234567902
           }
@@ -4783,7 +4781,7 @@ async fn federation_facets_different_indexes_same_facet() {
         {
           "title": "Batman",
           "_federation": {
-            "indexUid": "batman-2-[uuid]",
+            "indexUid": "batman_2-[uuid]",
             "queriesPosition": 1,
             "weightedRankingScore": 0.23106060606060605
           }
@@ -4799,7 +4797,7 @@ async fn federation_facets_different_indexes_same_facet() {
         {
           "title": "Badman",
           "_federation": {
-            "indexUid": "batman-2-[uuid]",
+            "indexUid": "batman_2-[uuid]",
             "queriesPosition": 1,
             "weightedRankingScore": 0.5
           }
@@ -4810,7 +4808,7 @@ async fn federation_facets_different_indexes_same_facet() {
       "offset": 0,
       "estimatedTotalHits": 11,
       "facetsByIndex": {
-        "batman-2-[uuid]": {
+        "batman-[uuid]": {
           "distribution": {
             "title": {
               "Badman": 1,
@@ -4822,7 +4820,7 @@ async fn federation_facets_different_indexes_same_facet() {
           },
           "stats": {}
         },
-        "batman-[uuid]": {
+        "batman_2-[uuid]": {
           "distribution": {
             "title": {
               "Badman": 1,
@@ -4868,7 +4866,7 @@ async fn federation_facets_same_indexes() {
         .await;
     doggos_index.wait_task(value.uid()).await.succeeded();
 
-    let doggos2_index = server.unique_index_with_prefix("doggos-2");
+    let doggos2_index = server.unique_index_with_prefix("doggos_2");
 
     let documents = NESTED_DOCUMENTS.clone();
     let (value, _) = doggos2_index.add_documents(documents, None).await;
@@ -4996,7 +4994,7 @@ async fn federation_facets_same_indexes() {
         {
           "id": 852,
           "_federation": {
-            "indexUid": "doggos-2-[uuid]",
+            "indexUid": "doggos_2-[uuid]",
             "queriesPosition": 1,
             "weightedRankingScore": 0.9621212121212122
           }
@@ -5004,7 +5002,7 @@ async fn federation_facets_same_indexes() {
         {
           "id": 750,
           "_federation": {
-            "indexUid": "doggos-2-[uuid]",
+            "indexUid": "doggos_2-[uuid]",
             "queriesPosition": 1,
             "weightedRankingScore": 0.9621212121212122
           }
@@ -5015,27 +5013,6 @@ async fn federation_facets_same_indexes() {
       "offset": 0,
       "estimatedTotalHits": 4,
       "facetsByIndex": {
-        "doggos-2-[uuid]": {
-          "distribution": {
-            "doggos.age": {
-              "2": 1,
-              "4": 1
-            },
-            "father": {
-              "jean": 1,
-              "romain": 1
-            },
-            "mother": {
-              "michelle": 2
-            }
-          },
-          "stats": {
-            "doggos.age": {
-              "min": 2.0,
-              "max": 4.0
-            }
-          }
-        },
         "doggos-[uuid]": {
           "distribution": {
             "doggos.age": {
@@ -5057,6 +5034,27 @@ async fn federation_facets_same_indexes() {
             "doggos.age": {
               "min": 2.0,
               "max": 6.0
+            }
+          }
+        },
+        "doggos_2-[uuid]": {
+          "distribution": {
+            "doggos.age": {
+              "2": 1,
+              "4": 1
+            },
+            "father": {
+              "jean": 1,
+              "romain": 1
+            },
+            "mother": {
+              "michelle": 2
+            }
+          },
+          "stats": {
+            "doggos.age": {
+              "min": 2.0,
+              "max": 4.0
             }
           }
         }
@@ -5099,7 +5097,7 @@ async fn federation_facets_same_indexes() {
         {
           "id": 852,
           "_federation": {
-            "indexUid": "doggos-2-[uuid]",
+            "indexUid": "doggos_2-[uuid]",
             "queriesPosition": 1,
             "weightedRankingScore": 0.9621212121212122
           }
@@ -5107,7 +5105,7 @@ async fn federation_facets_same_indexes() {
         {
           "id": 750,
           "_federation": {
-            "indexUid": "doggos-2-[uuid]",
+            "indexUid": "doggos_2-[uuid]",
             "queriesPosition": 1,
             "weightedRankingScore": 0.9621212121212122
           }
@@ -5170,7 +5168,7 @@ async fn federation_inconsistent_merge_order() {
         .await;
     movies_index.wait_task(value.uid()).await.succeeded();
 
-    let movies2_index = server.unique_index_with_prefix("movies-2");
+    let movies2_index = server.unique_index_with_prefix("movies_2");
 
     let documents = DOCUMENTS.clone();
     let (value, _) = movies2_index.add_documents(documents, None).await;
@@ -5286,7 +5284,7 @@ async fn federation_inconsistent_merge_order() {
         {
           "title": "Captain Marvel",
           "_federation": {
-            "indexUid": "movies-2-[uuid]",
+            "indexUid": "movies_2-[uuid]",
             "queriesPosition": 2,
             "weightedRankingScore": 1.0
           }
@@ -5302,7 +5300,7 @@ async fn federation_inconsistent_merge_order() {
         {
           "title": "Escape Room",
           "_federation": {
-            "indexUid": "movies-2-[uuid]",
+            "indexUid": "movies_2-[uuid]",
             "queriesPosition": 2,
             "weightedRankingScore": 1.0
           }
@@ -5318,7 +5316,7 @@ async fn federation_inconsistent_merge_order() {
         {
           "title": "Gläss",
           "_federation": {
-            "indexUid": "movies-2-[uuid]",
+            "indexUid": "movies_2-[uuid]",
             "queriesPosition": 2,
             "weightedRankingScore": 1.0
           }
@@ -5334,7 +5332,7 @@ async fn federation_inconsistent_merge_order() {
         {
           "title": "How to Train Your Dragon: The Hidden World",
           "_federation": {
-            "indexUid": "movies-2-[uuid]",
+            "indexUid": "movies_2-[uuid]",
             "queriesPosition": 2,
             "weightedRankingScore": 1.0
           }
@@ -5350,7 +5348,7 @@ async fn federation_inconsistent_merge_order() {
         {
           "title": "Shazam!",
           "_federation": {
-            "indexUid": "movies-2-[uuid]",
+            "indexUid": "movies_2-[uuid]",
             "queriesPosition": 2,
             "weightedRankingScore": 1.0
           }
@@ -5373,13 +5371,13 @@ async fn federation_inconsistent_merge_order() {
           },
           "stats": {}
         },
-        "movies-2-[uuid]": {
+        "movies-[uuid]": {
           "distribution": {
             "color": {
-              "red": 3,
               "blue": 3,
-              "yellow": 2,
-              "green": 2
+              "green": 2,
+              "red": 3,
+              "yellow": 2
             },
             "title": {
               "Captain Marvel": 1,
@@ -5391,13 +5389,13 @@ async fn federation_inconsistent_merge_order() {
           },
           "stats": {}
         },
-        "movies-[uuid]": {
+        "movies_2-[uuid]": {
           "distribution": {
             "color": {
-              "blue": 3,
-              "green": 2,
               "red": 3,
-              "yellow": 2
+              "blue": 3,
+              "yellow": 2,
+              "green": 2
             },
             "title": {
               "Captain Marvel": 1,
@@ -5431,7 +5429,7 @@ async fn federation_inconsistent_merge_order() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Inside `.federation.facetsByIndex.movies-[uuid]`: Inconsistent order for values in facet `color`: index `movies-2-[uuid]` orders by count, but index `movies-[uuid]` orders alphabetically.\n - Hint: Remove `federation.mergeFacets` or change `faceting.sortFacetValuesBy` to be consistent in settings.\n - Note: index `movies-[uuid]` used in `.queries[0]`",
+      "message": "Inside `.federation.facetsByIndex.movies_2-[uuid]`: Inconsistent order for values in facet `color`: index `movies-[uuid]` orders alphabetically, but index `movies_2-[uuid]` orders by count.\n - Hint: Remove `federation.mergeFacets` or change `faceting.sortFacetValuesBy` to be consistent in settings.\n - Note: index `movies_2-[uuid]` used in `.queries[2]`",
       "code": "invalid_multi_search_facet_order",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_facet_order"
@@ -5456,7 +5454,7 @@ async fn federation_inconsistent_merge_order() {
  ]}))
  .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
     {
       "hits": [
         {
@@ -5510,7 +5508,7 @@ async fn federation_inconsistent_merge_order() {
         {
           "title": "Captain Marvel",
           "_federation": {
-            "indexUid": "movies-2-[uuid]",
+            "indexUid": "movies_2-[uuid]",
             "queriesPosition": 2,
             "weightedRankingScore": 1.0
           }
@@ -5526,7 +5524,7 @@ async fn federation_inconsistent_merge_order() {
         {
           "title": "Escape Room",
           "_federation": {
-            "indexUid": "movies-2-[uuid]",
+            "indexUid": "movies_2-[uuid]",
             "queriesPosition": 2,
             "weightedRankingScore": 1.0
           }
@@ -5542,7 +5540,7 @@ async fn federation_inconsistent_merge_order() {
         {
           "title": "Gläss",
           "_federation": {
-            "indexUid": "movies-2-[uuid]",
+            "indexUid": "movies_2-[uuid]",
             "queriesPosition": 2,
             "weightedRankingScore": 1.0
           }
@@ -5558,7 +5556,7 @@ async fn federation_inconsistent_merge_order() {
         {
           "title": "How to Train Your Dragon: The Hidden World",
           "_federation": {
-            "indexUid": "movies-2-[uuid]",
+            "indexUid": "movies_2-[uuid]",
             "queriesPosition": 2,
             "weightedRankingScore": 1.0
           }
@@ -5574,7 +5572,7 @@ async fn federation_inconsistent_merge_order() {
         {
           "title": "Shazam!",
           "_federation": {
-            "indexUid": "movies-2-[uuid]",
+            "indexUid": "movies_2-[uuid]",
             "queriesPosition": 2,
             "weightedRankingScore": 1.0
           }
