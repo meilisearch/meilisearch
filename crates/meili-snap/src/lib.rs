@@ -62,9 +62,7 @@ pub fn default_snapshot_settings_for_test<'a>(
         }
     }
 
-    settings.add_dynamic_redaction(".message", uuid_in_message_redaction);
     settings.add_dynamic_redaction(".**.message", uuid_in_message_redaction);
-    settings.add_dynamic_redaction(".indexUid", uuid_in_message_redaction);
     settings.add_dynamic_redaction(".**.indexUid", uuid_in_message_redaction);
     settings.add_dynamic_redaction(".facetsByIndex", uuid_in_json_key_redaction);
 
