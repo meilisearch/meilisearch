@@ -3722,6 +3722,8 @@ dependencies = [
  "insta",
  "md5",
  "once_cell",
+ "regex-lite",
+ "uuid",
 ]
 
 [[package]]

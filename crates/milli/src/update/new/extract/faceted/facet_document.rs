@@ -15,13 +15,11 @@ use crate::{
 #[allow(clippy::too_many_arguments)]
 pub fn extract_document_facets<'doc>(
     document: impl Document<'doc>,
-    external_document_id: &str,
     field_id_map: &mut GlobalFieldsIdsMap,
     filterable_attributes: &[FilterableAttributesRule],
     sortable_fields: &HashSet<String>,
     asc_desc_fields: &HashSet<String>,
     distinct_field: &Option<String>,
-    is_geo_enabled: bool,
     facet_fn: &mut impl FnMut(FieldId, Metadata, perm_json_p::Depth, &Value) -> Result<()>,
 ) -> Result<()> {
     // return the match result for the given field name.
@@ -101,17 +99,24 @@ pub fn extract_document_facets<'doc>(
         }
     }
 
-    if is_geo_enabled {
-        if let Some(geo_value) = document.geo_field()? {
-            if let Some([lat, lng]) = extract_geo_coordinates(external_document_id, geo_value)? {
-                let ((lat_fid, lat_meta), (lng_fid, lng_meta)) = field_id_map
-                    .id_with_metadata_or_insert("_geo.lat")
-                    .zip(field_id_map.id_with_metadata_or_insert("_geo.lng"))
-                    .ok_or(UserError::AttributeLimitReached)?;
+    Ok(())
+}
 
-                facet_fn(lat_fid, lat_meta, perm_json_p::Depth::OnBaseKey, &lat.into())?;
-                facet_fn(lng_fid, lng_meta, perm_json_p::Depth::OnBaseKey, &lng.into())?;
-            }
+pub fn extract_geo_document<'doc>(
+    document: impl Document<'doc>,
+    external_document_id: &str,
+    field_id_map: &mut GlobalFieldsIdsMap,
+    facet_fn: &mut impl FnMut(FieldId, Metadata, perm_json_p::Depth, &Value) -> Result<()>,
+) -> Result<()> {
+    if let Some(geo_value) = document.geo_field()? {
+        if let Some([lat, lng]) = extract_geo_coordinates(external_document_id, geo_value)? {
+            let ((lat_fid, lat_meta), (lng_fid, lng_meta)) = field_id_map
+                .id_with_metadata_or_insert("_geo.lat")
+                .zip(field_id_map.id_with_metadata_or_insert("_geo.lng"))
+                .ok_or(UserError::AttributeLimitReached)?;
+
+            facet_fn(lat_fid, lat_meta, perm_json_p::Depth::OnBaseKey, &lat.into())?;
+            facet_fn(lng_fid, lng_meta, perm_json_p::Depth::OnBaseKey, &lng.into())?;
         }
     }
 

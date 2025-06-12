@@ -120,7 +120,7 @@ actix-web-lab = { version = "0.24.1", default-features = false }
 actix-rt = "2.10.0"
 brotli = "6.0.0"
 # fixed version due to format breakages in v1.40
-insta = "=1.39.0"
+insta = { version = "=1.39.0", features = ["redactions"] }
 manifest-dir-macros = "0.1.18"
 maplit = "1.0.2"
 meili-snap = { path = "../meili-snap" }

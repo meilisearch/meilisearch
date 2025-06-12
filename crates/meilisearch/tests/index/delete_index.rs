@@ -28,6 +28,7 @@ async fn error_delete_unexisting_index() {
     let (task, code) = index.delete_index_fail().await;
 
     assert_eq!(code, 202);
+    index.wait_task(task.uid()).await.failed();
 
     let expected_response = json!({
         "message": "Index `DOES_NOT_EXISTS` not found.",
@@ -57,7 +58,7 @@ async fn loop_delete_add_documents() {
     }
 
     for task in tasks {
-        let response = index.wait_task(task).await;
+        let response = index.wait_task(task).await.succeeded();
         assert_eq!(response["status"], "succeeded", "{}", response);
     }
 }
