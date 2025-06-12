@@ -1,15 +1,79 @@
 use meili_snap::{json_string, snapshot};
+use tokio::sync::OnceCell;
 use uuid::Uuid;
 
 use super::{DOCUMENTS, FRUITS_DOCUMENTS, NESTED_DOCUMENTS};
+use crate::common::index::Index;
 use crate::common::{
     shared_index_with_documents, shared_index_with_nested_documents,
-    shared_index_with_score_documents, Server,
+    shared_index_with_score_documents, Server, Shared,
 };
 use crate::json;
 use crate::search::{SCORE_DOCUMENTS, VECTOR_DOCUMENTS};
 
 mod proxy;
+
+pub async fn shared_movies_index() -> &'static Index<'static, Shared> {
+    static INDEX: OnceCell<Index<'static, Shared>> = OnceCell::const_new();
+    INDEX
+        .get_or_init(|| async {
+            let server = Server::new_shared();
+            let movies_index = server.unique_index_with_prefix("movies");
+
+            let documents = DOCUMENTS.clone();
+            let (response, _code) = movies_index.add_documents(documents, None).await;
+            movies_index.wait_task(response.uid()).await.succeeded();
+
+            let (value, _) = movies_index
+                .update_settings(json!({
+                    "sortableAttributes": ["title"],
+                    "filterableAttributes": ["title", "color"],
+                    "rankingRules": [
+                        "sort",
+                        "words",
+                        "typo",
+                        "proximity",
+                        "attribute",
+                        "exactness"
+                    ]
+                }))
+                .await;
+            movies_index.wait_task(value.uid()).await.succeeded();
+            movies_index.to_shared()
+        })
+        .await
+}
+
+pub async fn shared_batman_index() -> &'static Index<'static, Shared> {
+    static INDEX: OnceCell<Index<'static, Shared>> = OnceCell::const_new();
+    INDEX
+        .get_or_init(|| async {
+            let server = Server::new_shared();
+            let batman_index = server.unique_index_with_prefix("batman");
+
+            let documents = SCORE_DOCUMENTS.clone();
+            let (response, _code) = batman_index.add_documents(documents, None).await;
+            batman_index.wait_task(response.uid()).await.succeeded();
+
+            let (value, _) = batman_index
+                .update_settings(json!({
+                    "sortableAttributes": ["id", "title"],
+                    "filterableAttributes": ["title"],
+                    "rankingRules": [
+                        "sort",
+                        "words",
+                        "typo",
+                        "proximity",
+                        "attribute",
+                        "exactness"
+                    ]
+                }))
+                .await;
+            batman_index.wait_task(value.uid()).await.succeeded();
+            batman_index.to_shared()
+        })
+        .await
+}
 
 #[actix_rt::test]
 async fn search_empty_list() {
@@ -1633,47 +1697,8 @@ async fn federation_sort_same_indexes_different_criterion_opposite_direction() {
 #[actix_rt::test]
 async fn federation_sort_different_indexes_same_criterion_same_direction() {
     let server = Server::new_shared();
-    let movies_index = server.unique_index_with_prefix("movies");
-
-    let documents = DOCUMENTS.clone();
-    let (value, _) = movies_index.add_documents(documents, None).await;
-    movies_index.wait_task(value.uid()).await.succeeded();
-
-    let (value, _) = movies_index
-        .update_settings(json!({
-          "sortableAttributes": ["title"],
-          "rankingRules": [
-            "sort",
-            "words",
-            "typo",
-            "proximity",
-            "attribute",
-            "exactness"
-          ]
-        }))
-        .await;
-    movies_index.wait_task(value.uid()).await.succeeded();
-
-    let batman_index = server.unique_index_with_prefix("batman");
-
-    let documents = SCORE_DOCUMENTS.clone();
-    let (value, _) = batman_index.add_documents(documents, None).await;
-    batman_index.wait_task(value.uid()).await.succeeded();
-
-    let (value, _) = batman_index
-        .update_settings(json!({
-          "sortableAttributes": ["title"],
-          "rankingRules": [
-            "sort",
-            "words",
-            "typo",
-            "proximity",
-            "attribute",
-            "exactness"
-          ]
-        }))
-        .await;
-    batman_index.wait_task(value.uid()).await.succeeded();
+    let movies_index = shared_movies_index().await;
+    let batman_index = shared_batman_index().await;
 
     // return titles ordered across indexes
     let (response, code) = server
@@ -1903,26 +1928,7 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
 async fn federation_sort_different_ranking_rules() {
     let server = Server::new_shared();
 
-    let movies_index = server.unique_index_with_prefix("movies");
-
-    let documents = DOCUMENTS.clone();
-    let (value, _) = movies_index.add_documents(documents, None).await;
-    movies_index.wait_task(value.uid()).await.succeeded();
-
-    let (value, _) = movies_index
-        .update_settings(json!({
-          "sortableAttributes": ["title"],
-          "rankingRules": [
-            "sort",
-            "words",
-            "typo",
-            "proximity",
-            "attribute",
-            "exactness"
-          ]
-        }))
-        .await;
-    movies_index.wait_task(value.uid()).await.succeeded();
+    let movies_index = shared_movies_index().await;
 
     let batman_index = shared_index_with_score_documents().await;
 
@@ -2087,48 +2093,8 @@ async fn federation_sort_different_ranking_rules() {
 #[actix_rt::test]
 async fn federation_sort_different_indexes_same_criterion_opposite_direction() {
     let server = Server::new_shared();
-
-    let movies_index = server.unique_index_with_prefix("movies");
-
-    let documents = DOCUMENTS.clone();
-    let (value, _) = movies_index.add_documents(documents, None).await;
-    movies_index.wait_task(value.uid()).await.succeeded();
-
-    let (value, _) = movies_index
-        .update_settings(json!({
-          "sortableAttributes": ["title"],
-          "rankingRules": [
-            "sort",
-            "words",
-            "typo",
-            "proximity",
-            "attribute",
-            "exactness"
-          ]
-        }))
-        .await;
-    movies_index.wait_task(value.uid()).await.succeeded();
-
-    let batman_index = server.unique_index_with_prefix("batman");
-
-    let documents = SCORE_DOCUMENTS.clone();
-    let (value, _) = batman_index.add_documents(documents, None).await;
-    batman_index.wait_task(value.uid()).await.succeeded();
-
-    let (value, _) = batman_index
-        .update_settings(json!({
-          "sortableAttributes": ["title"],
-          "rankingRules": [
-            "sort",
-            "words",
-            "typo",
-            "proximity",
-            "attribute",
-            "exactness"
-          ]
-        }))
-        .await;
-    batman_index.wait_task(value.uid()).await.succeeded();
+    let movies_index = shared_movies_index().await;
+    let batman_index = shared_batman_index().await;
 
     // all results from query 0
     let (response, code) = server
@@ -2169,48 +2135,8 @@ async fn federation_sort_different_indexes_same_criterion_opposite_direction() {
 #[actix_rt::test]
 async fn federation_sort_different_indexes_different_criterion_same_direction() {
     let server = Server::new_shared();
-
-    let movies_index = server.unique_index_with_prefix("movies");
-
-    let documents = DOCUMENTS.clone();
-    let (value, _) = movies_index.add_documents(documents, None).await;
-    movies_index.wait_task(value.uid()).await.succeeded();
-
-    let (value, _) = movies_index
-        .update_settings(json!({
-          "sortableAttributes": ["title"],
-          "rankingRules": [
-            "sort",
-            "words",
-            "typo",
-            "proximity",
-            "attribute",
-            "exactness"
-          ]
-        }))
-        .await;
-    movies_index.wait_task(value.uid()).await.succeeded();
-
-    let batman_index = server.unique_index_with_prefix("batman");
-
-    let documents = SCORE_DOCUMENTS.clone();
-    let (value, _) = batman_index.add_documents(documents, None).await;
-    batman_index.wait_task(value.uid()).await.succeeded();
-
-    let (value, _) = batman_index
-        .update_settings(json!({
-          "sortableAttributes": ["id"],
-          "rankingRules": [
-            "sort",
-            "words",
-            "typo",
-            "proximity",
-            "attribute",
-            "exactness"
-          ]
-        }))
-        .await;
-    batman_index.wait_task(value.uid()).await.succeeded();
+    let movies_index = shared_movies_index().await;
+    let batman_index = shared_batman_index().await;
 
     // return titles ordered across indexes
     let (response, code) = server
@@ -2439,48 +2365,8 @@ async fn federation_sort_different_indexes_different_criterion_same_direction() 
 #[actix_rt::test]
 async fn federation_sort_different_indexes_different_criterion_opposite_direction() {
     let server = Server::new_shared();
-
-    let movies_index = server.unique_index_with_prefix("movies");
-
-    let documents = DOCUMENTS.clone();
-    let (value, _) = movies_index.add_documents(documents, None).await;
-    movies_index.wait_task(value.uid()).await.succeeded();
-
-    let (value, _) = movies_index
-        .update_settings(json!({
-          "sortableAttributes": ["title"],
-          "rankingRules": [
-            "sort",
-            "words",
-            "typo",
-            "proximity",
-            "attribute",
-            "exactness"
-          ]
-        }))
-        .await;
-    movies_index.wait_task(value.uid()).await.succeeded();
-
-    let batman_index = server.unique_index_with_prefix("batman");
-
-    let documents = SCORE_DOCUMENTS.clone();
-    let (value, _) = batman_index.add_documents(documents, None).await;
-    batman_index.wait_task(value.uid()).await.succeeded();
-
-    let (value, _) = batman_index
-        .update_settings(json!({
-          "sortableAttributes": ["id"],
-          "rankingRules": [
-            "sort",
-            "words",
-            "typo",
-            "proximity",
-            "attribute",
-            "exactness"
-          ]
-        }))
-        .await;
-    batman_index.wait_task(value.uid()).await.succeeded();
+    let movies_index = shared_movies_index().await;
+    let batman_index = shared_batman_index().await;
 
     // all results from query 0 first
     let (response, code) = server
@@ -4265,50 +4151,8 @@ async fn federation_vector_two_indexes() {
 #[actix_rt::test]
 async fn federation_facets_different_indexes_same_facet() {
     let server = Server::new_shared();
-
-    let movies_index = server.unique_index_with_prefix("movies");
-
-    let documents = DOCUMENTS.clone();
-    let (value, _) = movies_index.add_documents(documents, None).await;
-    movies_index.wait_task(value.uid()).await.succeeded();
-
-    let (value, _) = movies_index
-        .update_settings(json!({
-          "sortableAttributes": ["title"],
-          "filterableAttributes": ["title", "color"],
-          "rankingRules": [
-            "sort",
-            "words",
-            "typo",
-            "proximity",
-            "attribute",
-            "exactness"
-          ]
-        }))
-        .await;
-    movies_index.wait_task(value.uid()).await.succeeded();
-
-    let batman_index = server.unique_index_with_prefix("batman");
-
-    let documents = SCORE_DOCUMENTS.clone();
-    let (value, _) = batman_index.add_documents(documents, None).await;
-    batman_index.wait_task(value.uid()).await.succeeded();
-
-    let (value, _) = batman_index
-        .update_settings(json!({
-          "sortableAttributes": ["title"],
-          "filterableAttributes": ["title"],
-          "rankingRules": [
-            "sort",
-            "words",
-            "typo",
-            "proximity",
-            "attribute",
-            "exactness"
-          ]
-        }))
-        .await;
-    batman_index.wait_task(value.uid()).await.succeeded();
+    let movies_index = shared_movies_index().await;
+    let batman_index = shared_batman_index().await;
 
     let batman_2_index = server.unique_index_with_prefix("batman_2");
 
@@ -5134,27 +4978,7 @@ async fn federation_facets_same_indexes() {
 async fn federation_inconsistent_merge_order() {
     let server = Server::new_shared();
 
-    let movies_index = server.unique_index_with_prefix("movies");
-
-    let documents = DOCUMENTS.clone();
-    let (value, _) = movies_index.add_documents(documents, None).await;
-    movies_index.wait_task(value.uid()).await.succeeded();
-
-    let (value, _) = movies_index
-        .update_settings(json!({
-          "sortableAttributes": ["title"],
-          "filterableAttributes": ["title", "color"],
-          "rankingRules": [
-            "sort",
-            "words",
-            "typo",
-            "proximity",
-            "attribute",
-            "exactness"
-          ]
-        }))
-        .await;
-    movies_index.wait_task(value.uid()).await.succeeded();
+    let movies_index = shared_movies_index().await;
 
     let movies2_index = server.unique_index_with_prefix("movies_2");
 
@@ -5181,27 +5005,7 @@ async fn federation_inconsistent_merge_order() {
         .await;
     movies2_index.wait_task(value.uid()).await.succeeded();
 
-    let batman_index = server.unique_index_with_prefix("batman");
-
-    let documents = SCORE_DOCUMENTS.clone();
-    let (value, _) = batman_index.add_documents(documents, None).await;
-    batman_index.wait_task(value.uid()).await.succeeded();
-
-    let (value, _) = batman_index
-        .update_settings(json!({
-          "sortableAttributes": ["title"],
-          "filterableAttributes": ["title"],
-          "rankingRules": [
-            "sort",
-            "words",
-            "typo",
-            "proximity",
-            "attribute",
-            "exactness"
-          ]
-        }))
-        .await;
-    batman_index.wait_task(value.uid()).await.succeeded();
+    let batman_index = shared_batman_index().await;
 
     // without merging, it works
     let (response, code) = server
