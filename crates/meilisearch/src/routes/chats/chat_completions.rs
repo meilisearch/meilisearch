@@ -23,7 +23,10 @@ use futures::StreamExt;
 use index_scheduler::IndexScheduler;
 use meilisearch_auth::AuthController;
 use meilisearch_types::error::{Code, ResponseError};
-use meilisearch_types::features::{ChatCompletionPrompts as DbChatCompletionPrompts, SystemRole};
+use meilisearch_types::features::{
+    ChatCompletionPrompts as DbChatCompletionPrompts,
+    ChatCompletionSource as DbChatCompletionSource, SystemRole,
+};
 use meilisearch_types::keys::actions;
 use meilisearch_types::milli::index::ChatConfig;
 use meilisearch_types::milli::{all_obkv_to_json, obkv_to_json, TimeBudget};
@@ -34,7 +37,7 @@ use tokio::runtime::Handle;
 use tokio::sync::mpsc::error::SendError;
 
 use super::config::Config;
-use super::errors::StreamErrorEvent;
+use super::errors::{MistralError, OpenAiOutsideError, StreamErrorEvent};
 use super::utils::format_documents;
 use super::{
     ChatsParam, MEILI_APPEND_CONVERSATION_MESSAGE_NAME, MEILI_SEARCH_IN_INDEX_FUNCTION_NAME,
@@ -469,6 +472,7 @@ async fn streamed_chat(
                 &search_queue,
                 &auth_token,
                 &client,
+                chat_settings.source,
                 &mut chat_completion,
                 &tx,
                 &mut global_tool_calls,
@@ -501,6 +505,7 @@ async fn run_conversation<C: async_openai::config::Config>(
     search_queue: &web::Data<SearchQueue>,
     auth_token: &str,
     client: &Client<C>,
+    source: DbChatCompletionSource,
     chat_completion: &mut CreateChatCompletionRequest,
     tx: &SseEventSender,
     global_tool_calls: &mut HashMap<u32, Call>,
@@ -595,7 +600,13 @@ async fn run_conversation<C: async_openai::config::Config>(
                 }
             }
             Err(error) => {
-                let error = StreamErrorEvent::from_openai_error(error).await.unwrap();
+                let result = match source {
+                    DbChatCompletionSource::Mistral => {
+                        StreamErrorEvent::from_openai_error::<MistralError>(error).await
+                    }
+                    _ => StreamErrorEvent::from_openai_error::<OpenAiOutsideError>(error).await,
+                };
+                let error = result.unwrap_or_else(StreamErrorEvent::from_reqwest_error);
                 tx.send_error(&error).await?;
                 return Ok(ControlFlow::Break(None));
             }
