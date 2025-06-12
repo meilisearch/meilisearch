@@ -20,7 +20,7 @@ async fn field_unavailable_for_source() {
       "message": "`.embedders.manual`: Field `documentTemplate` unavailable for source `userProvided`.\n  - note: `documentTemplate` is available for sources: `openAi`, `huggingFace`, `ollama`, `rest`\n  - note: available fields for source `userProvided`: `source`, `dimensions`, `distribution`, `binaryQuantized`",
       "code": "invalid_settings_embedders",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_embedders"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-settings-embedders"
     }
     "###);
 
@@ -35,7 +35,7 @@ async fn field_unavailable_for_source() {
       "message": "`.embedders.default`: Field `revision` unavailable for source `openAi`.\n  - note: `revision` is available for sources: `huggingFace`\n  - note: available fields for source `openAi`: `source`, `model`, `apiKey`, `dimensions`, `documentTemplate`, `documentTemplateMaxBytes`, `url`, `distribution`, `binaryQuantized`",
       "code": "invalid_settings_embedders",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_embedders"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-settings-embedders"
     }
     "###);
 }
@@ -251,7 +251,7 @@ async fn reset_embedder_documents() {
       "message": "Cannot find embedder with name `default`.",
       "code": "invalid_search_embedder",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_embedder"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-search-embedder"
     }
     "###);
 }
@@ -359,7 +359,7 @@ async fn ollama_url_checks() {
         "message": "Index `doggo`: Error while generating embeddings: user error: unsupported Ollama URL.\n  - For `ollama` sources, the URL must end with `/api/embed` or `/api/embeddings`\n  - Got `http://localhost:11434/api/embedd`",
         "code": "vector_embedding_error",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#vector-embedding-error"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -398,7 +398,7 @@ async fn ollama_url_checks() {
         "message": "Index `doggo`: Error while generating embeddings: user error: unsupported Ollama URL.\n  - For `ollama` sources, the URL must end with `/api/embed` or `/api/embeddings`\n  - Got `http://localhost:11434/v1/embeddings`",
         "code": "vector_embedding_error",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#vector-embedding-error"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -447,7 +447,7 @@ async fn composite_checks() {
       "message": "using `\"composite\"` as source requires enabling the `composite embedders` experimental feature. See https://github.com/orgs/meilisearch/discussions/816",
       "code": "feature_not_enabled",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#feature-not-enabled"
     }
     "###);
 
@@ -481,7 +481,7 @@ async fn composite_checks() {
       "message": "setting `searchEmbedder` requires enabling the `composite embedders` experimental feature. See https://github.com/orgs/meilisearch/discussions/816",
       "code": "feature_not_enabled",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#feature-not-enabled"
     }
     "###);
 
@@ -515,7 +515,7 @@ async fn composite_checks() {
       "message": "setting `indexingEmbedder` requires enabling the `composite embedders` experimental feature. See https://github.com/orgs/meilisearch/discussions/816",
       "code": "feature_not_enabled",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#feature-not-enabled"
     }
     "###);
 
@@ -562,7 +562,7 @@ async fn composite_checks() {
       "message": "`.embedders.test.searchEmbedder`: Field `distribution` unavailable for source `huggingFace` for the search embedder.\n  - note: available fields for source `huggingFace` for the search embedder: `source`, `model`, `revision`, `pooling`\n  - note: `distribution` is available when source `huggingFace` is not for the search embedder",
       "code": "invalid_settings_embedders",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_embedders"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-settings-embedders"
     }
     "###);
     // manual source
@@ -599,7 +599,7 @@ async fn composite_checks() {
       "message": "`.embedders.test.searchEmbedder.source`: Source `userProvided` is not available in a nested embedder",
       "code": "invalid_settings_embedders",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_embedders"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-settings-embedders"
     }
     "###);
     // composite source
@@ -645,7 +645,7 @@ async fn composite_checks() {
       "message": "`.embedders.test.searchEmbedder.source`: Source `composite` is not available in a nested embedder",
       "code": "invalid_settings_embedders",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_embedders"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-settings-embedders"
     }
     "###);
     // no source in indexing
@@ -679,7 +679,7 @@ async fn composite_checks() {
       "message": "`.embedders.test.indexingEmbedder`: Missing field `source`.\n  - note: this field is mandatory for nested embedders",
       "code": "invalid_settings_embedders",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_embedders"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-settings-embedders"
     }
     "###);
     // no source in search
@@ -713,7 +713,7 @@ async fn composite_checks() {
       "message": "`.embedders.test.searchEmbedder`: Missing field `source`.\n  - note: this field is mandatory for nested embedders",
       "code": "invalid_settings_embedders",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_embedders"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-settings-embedders"
     }
     "###);
     // no indexing
@@ -746,7 +746,7 @@ async fn composite_checks() {
       "message": "`.embedders.test`: Missing field `indexingEmbedder` (note: this field is mandatory for source `composite`)",
       "code": "invalid_settings_embedders",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_embedders"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-settings-embedders"
     }
     "###);
     // no search
@@ -779,7 +779,7 @@ async fn composite_checks() {
       "message": "`.embedders.test`: Missing field `searchEmbedder` (note: this field is mandatory for source `composite`)",
       "code": "invalid_settings_embedders",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_embedders"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-settings-embedders"
     }
     "###);
     // inner quantized
@@ -819,7 +819,7 @@ async fn composite_checks() {
       "message": "`.embedders.test.searchEmbedder`: Field `binaryQuantized` unavailable for source `huggingFace` for the search embedder.\n  - note: available fields for source `huggingFace` for the search embedder: `source`, `model`, `revision`, `pooling`\n  - note: `binaryQuantized` is available when source `huggingFace` is not for the search embedder",
       "code": "invalid_settings_embedders",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_embedders"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-settings-embedders"
     }
     "###);
     // prompt in search
@@ -858,7 +858,7 @@ async fn composite_checks() {
       "message": "`.embedders.test.searchEmbedder`: Field `documentTemplate` unavailable for source `huggingFace` for the search embedder.\n  - note: available fields for source `huggingFace` for the search embedder: `source`, `model`, `revision`, `pooling`\n  - note: `documentTemplate` is available when source `huggingFace` is not for the search embedder",
       "code": "invalid_settings_embedders",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_embedders"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-settings-embedders"
     }
     "###);
     // dimensions don't match
@@ -921,7 +921,7 @@ async fn composite_checks() {
         "message": "Index `test`: Error while generating embeddings: user error: error while generating test embeddings.\n  - the dimensions of embeddings produced at search time and at indexing time don't match.\n  - Search time dimensions: 66\n  - Indexing time dimensions: 42\n  - Note: Dimensions of embeddings produced by both embedders are required to match.",
         "code": "vector_embedding_error",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#vector-embedding-error"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",
@@ -993,7 +993,7 @@ async fn composite_checks() {
         "message": "Index `test`: Error while generating embeddings: user error: error while generating test embeddings.\n  - the embeddings produced at search time and indexing time are not similar enough.\n  - angular distance 0.25\n  - Meilisearch requires a maximum distance of 0.01.\n  - Note: check that both embedders produce similar embeddings.\n  - Make sure the `model`, `revision` and `pooling` of both embedders match.",
         "code": "vector_embedding_error",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#vector-embedding-error"
       },
       "duration": "[duration]",
       "enqueuedAt": "[date]",

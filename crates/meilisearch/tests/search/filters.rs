@@ -316,7 +316,7 @@ async fn search_with_pattern_filter_settings_scenario_1() {
                   "message": "Index `[uuid]`: Filter operator `>` is not allowed for the attribute `doggos.age`.\n  - Note: allowed operators: OR, AND, NOT, =, !=, IN, IS EMPTY, IS NULL, EXISTS.\n  - Note: field `doggos.age` matched rule #0 in `filterableAttributes`\n  - Hint: enable comparison in rule #0 by modifying the features.filter object\n  - Hint: prepend another rule matching `doggos.age` with appropriate filter features before rule #0",
                   "code": "invalid_search_filter",
                   "type": "invalid_request",
-                  "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+                  "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-search-filter"
                 }
                 "###);
             },
@@ -460,7 +460,7 @@ async fn search_with_pattern_filter_settings_scenario_1() {
                   "message": "Index `[uuid]`: Filter operator `=` is not allowed for the attribute `cattos`.\n  - Note: allowed operators: OR, AND, NOT, <, >, <=, >=, TO, IS EMPTY, IS NULL, EXISTS.\n  - Note: field `cattos` matched rule #0 in `filterableAttributes`\n  - Hint: enable equality in rule #0 by modifying the features.filter object\n  - Hint: prepend another rule matching `cattos` with appropriate filter features before rule #0",
                   "code": "invalid_search_filter",
                   "type": "invalid_request",
-                  "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+                  "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-search-filter"
                 }
                 "###);
             },
@@ -591,7 +591,7 @@ async fn search_with_pattern_filter_settings_scenario_1() {
                   "message": "Index `[uuid]`: Filter operator `>` is not allowed for the attribute `doggos.age`.\n  - Note: allowed operators: OR, AND, NOT, =, !=, IN, IS EMPTY, IS NULL, EXISTS.\n  - Note: field `doggos.age` matched rule #0 in `filterableAttributes`\n  - Hint: enable comparison in rule #0 by modifying the features.filter object\n  - Hint: prepend another rule matching `doggos.age` with appropriate filter features before rule #0",
                   "code": "invalid_search_filter",
                   "type": "invalid_request",
-                  "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+                  "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-search-filter"
                 }
                 "###);
             },
@@ -698,7 +698,7 @@ async fn test_filterable_attributes_priority() {
               "message": "Index `[uuid]`: Attribute `doggos.age` is not filterable. Available filterable attribute patterns are: `doggos.*`.\n1:11 doggos.age > 2",
               "code": "invalid_search_filter",
               "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+              "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-search-filter"
             }
             "###);
         },
@@ -724,7 +724,7 @@ async fn test_filterable_attributes_priority() {
               "message": "Index `[uuid]`: Attribute `doggos` is not filterable. Available filterable attribute patterns are: `doggos.*`.\n1:7 doggos EXISTS",
               "code": "invalid_search_filter",
               "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+              "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-search-filter"
             }
             "###);
         },

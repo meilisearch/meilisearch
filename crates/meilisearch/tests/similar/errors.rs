@@ -13,7 +13,7 @@ async fn similar_unexisting_index() {
         "message": format!("Index `{}` not found.", index.uid),
         "code": "index_not_found",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index_not_found"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#index-not-found"
     });
 
     index
@@ -62,7 +62,7 @@ async fn similar_bad_id() {
       "message": "Invalid value at `.id`: Document identifier `[\"doggo\"]` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_), and can not be more than 511 bytes.",
       "code": "invalid_similar_id",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_similar_id"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-similar-id"
     }
     "###);
 }
@@ -92,7 +92,7 @@ async fn similar_bad_ranking_score_threshold() {
       "message": "Invalid value type at `.rankingScoreThreshold`: expected a number, but found an array: `[\"doggo\"]`",
       "code": "invalid_similar_ranking_score_threshold",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_similar_ranking_score_threshold"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid_similar_ranking_score_threshold"
     }
     "###);
 }
@@ -122,7 +122,7 @@ async fn similar_invalid_ranking_score_threshold() {
       "message": "Invalid value at `.rankingScoreThreshold`: the value of `rankingScoreThreshold` is invalid, expected a float between `0.0` and `1.0`.",
       "code": "invalid_similar_ranking_score_threshold",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_similar_ranking_score_threshold"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid_similar_ranking_score_threshold"
     }
     "###);
 }
@@ -153,7 +153,7 @@ async fn similar_invalid_id() {
       "message": "Invalid value at `.id`: Document identifier `\"http://invalid-docid/\"` is invalid. A document identifier can be of type integer or string, only composed of alphanumeric characters (a-z A-Z 0-9), hyphens (-) and underscores (_), and can not be more than 511 bytes.",
       "code": "invalid_similar_id",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_similar_id"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-similar-id"
     }
     "###);
 }
@@ -184,7 +184,7 @@ async fn similar_not_found_id() {
       "message": "Document `definitely-doesnt-exist` not found.",
       "code": "not_found_similar_id",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#not_found_similar_id"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#not-found-similar-id"
     }
     "###);
 }
@@ -215,7 +215,7 @@ async fn similar_bad_offset() {
       "message": "Invalid value type at `.offset`: expected a positive integer, but found a string: `\"doggo\"`",
       "code": "invalid_similar_offset",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_similar_offset"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-similar-offset"
     }
     "###);
 
@@ -226,7 +226,7 @@ async fn similar_bad_offset() {
       "message": "Invalid value in parameter `offset`: could not parse `doggo` as a positive integer",
       "code": "invalid_similar_offset",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_similar_offset"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-similar-offset"
     }
     "###);
 }
@@ -257,7 +257,7 @@ async fn similar_bad_limit() {
       "message": "Invalid value type at `.limit`: expected a positive integer, but found a string: `\"doggo\"`",
       "code": "invalid_similar_limit",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_similar_limit"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-similar-limit"
     }
     "###);
 
@@ -268,7 +268,7 @@ async fn similar_bad_limit() {
       "message": "Invalid value in parameter `limit`: could not parse `doggo` as a positive integer",
       "code": "invalid_similar_limit",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_similar_limit"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-similar-limit"
     }
     "###);
 }
@@ -308,7 +308,7 @@ async fn similar_bad_filter() {
       "message": "Invalid syntax for the filter parameter: `expected String, Array, found: true`.",
       "code": "invalid_similar_filter",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-similar-filter"
     }
     "###);
     // Can't make the `filter` fail with a get search since it'll accept anything as a strings.
@@ -344,7 +344,7 @@ async fn filter_invalid_syntax_object() {
               "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `title & Glass`.\n1:14 title & Glass",
               "code": "invalid_similar_filter",
               "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
+              "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-similar-filter"
             }
             "###);
             snapshot!(code, @"400 Bad Request");
@@ -382,7 +382,7 @@ async fn filter_invalid_syntax_array() {
               "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `title & Glass`.\n1:14 title & Glass",
               "code": "invalid_similar_filter",
               "type": "invalid_request",
-              "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
+              "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-similar-filter"
             }
             "###);
             snapshot!(code, @"400 Bad Request");
@@ -417,7 +417,7 @@ async fn filter_invalid_syntax_string() {
         "message": "Found unexpected characters at the end of the filter: `XOR title = Glass`. You probably forgot an `OR` or an `AND` rule.\n15:32 title = Glass XOR title = Glass",
         "code": "invalid_similar_filter",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-similar-filter"
     });
     index
         .similar(
@@ -463,7 +463,7 @@ async fn filter_invalid_attribute_array() {
                   "message": "Attribute `many` is not filterable. Available filterable attribute patterns are: `title`.\n1:5 many = Glass",
                   "code": "invalid_similar_filter",
                   "type": "invalid_request",
-                  "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
+                  "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-similar-filter"
                 }
                 "###);
             },
@@ -504,7 +504,7 @@ async fn filter_invalid_attribute_string() {
                   "message": "Attribute `many` is not filterable. Available filterable attribute patterns are: `title`.\n1:5 many = Glass",
                   "code": "invalid_similar_filter",
                   "type": "invalid_request",
-                  "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
+                  "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-similar-filter"
                 }
                 "###);
             },
@@ -539,7 +539,7 @@ async fn filter_reserved_geo_attribute_array() {
         "message": "`_geo` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:13 _geo = Glass",
         "code": "invalid_similar_filter",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-similar-filter"
     });
     index
         .similar(
@@ -579,7 +579,7 @@ async fn filter_reserved_geo_attribute_string() {
         "message": "`_geo` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:13 _geo = Glass",
         "code": "invalid_similar_filter",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-similar-filter"
     });
     index
         .similar(
@@ -619,7 +619,7 @@ async fn filter_reserved_attribute_array() {
         "message": "`_geoDistance` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:21 _geoDistance = Glass",
         "code": "invalid_similar_filter",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-similar-filter"
     });
     index
         .similar(
@@ -659,7 +659,7 @@ async fn filter_reserved_attribute_string() {
        "message": "`_geoDistance` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:21 _geoDistance = Glass",
         "code": "invalid_similar_filter",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-similar-filter"
     });
     index
         .similar(
@@ -699,7 +699,7 @@ async fn filter_reserved_geo_point_array() {
         "message": "`_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:18 _geoPoint = Glass",
         "code": "invalid_similar_filter",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-similar-filter"
     });
     index
         .similar(
@@ -739,7 +739,7 @@ async fn filter_reserved_geo_point_string() {
        "message": "`_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:18 _geoPoint = Glass",
         "code": "invalid_similar_filter",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-similar-filter"
     });
     index
         .similar(
@@ -765,7 +765,7 @@ async fn similar_bad_retrieve_vectors() {
       "message": "Invalid value type at `.retrieveVectors`: expected a boolean, but found a string: `\"doggo\"`",
       "code": "invalid_similar_retrieve_vectors",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_similar_retrieve_vectors"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid_similar_retrieve_vectors"
     }
     "###);
 
@@ -777,7 +777,7 @@ async fn similar_bad_retrieve_vectors() {
       "message": "Invalid value type at `.retrieveVectors`: expected a boolean, but found an array: `[true]`",
       "code": "invalid_similar_retrieve_vectors",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_similar_retrieve_vectors"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid_similar_retrieve_vectors"
     }
     "###);
 
@@ -788,7 +788,7 @@ async fn similar_bad_retrieve_vectors() {
       "message": "Invalid value in parameter `retrieveVectors`: could not parse `` as a boolean, expected either `true` or `false`",
       "code": "invalid_similar_retrieve_vectors",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_similar_retrieve_vectors"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid_similar_retrieve_vectors"
     }
     "###);
 
@@ -799,7 +799,7 @@ async fn similar_bad_retrieve_vectors() {
       "message": "Invalid value in parameter `retrieveVectors`: could not parse `doggo` as a boolean, expected either `true` or `false`",
       "code": "invalid_similar_retrieve_vectors",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_similar_retrieve_vectors"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid_similar_retrieve_vectors"
     }
     "###);
 }
@@ -831,7 +831,7 @@ async fn similar_bad_embedder() {
     "message": "Cannot find embedder with name `auto`.",
     "code": "invalid_similar_embedder",
     "type": "invalid_request",
-    "link": "https://docs.meilisearch.com/errors#invalid_similar_embedder"
+    "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-similar-embedder"
     });
 
     index
@@ -845,7 +845,7 @@ async fn similar_bad_embedder() {
         "message": "Invalid value type at `.embedder`: expected a string, but found a positive integer: `42`",
         "code": "invalid_similar_embedder",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_similar_embedder"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-similar-embedder"
     });
 
     let (response, code) = index.similar_post(json!({"id": 287947, "embedder": 42})).await;
@@ -857,7 +857,7 @@ async fn similar_bad_embedder() {
         "message": "Invalid value type at `.embedder`: expected a string, but found null",
         "code": "invalid_similar_embedder",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_similar_embedder"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-similar-embedder"
     });
 
     let (response, code) = index.similar_post(json!({"id": 287947, "embedder": null})).await;
@@ -869,7 +869,7 @@ async fn similar_bad_embedder() {
        "message": "Missing field `embedder`",
         "code": "bad_request",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#bad_request"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#bad-request"
     });
 
     let (response, code) = index.similar_post(json!({"id": 287947})).await;
@@ -880,7 +880,7 @@ async fn similar_bad_embedder() {
        "message": "Missing parameter `embedder`",
         "code": "bad_request",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#bad_request"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#bad-request"
     });
     let (response, code) = index.similar_get("?id=287947").await;
     assert_eq!(response, expected_response);

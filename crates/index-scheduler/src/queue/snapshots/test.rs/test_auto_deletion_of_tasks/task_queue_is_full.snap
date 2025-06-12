@@ -1,6 +1,5 @@
 ---
 source: crates/index-scheduler/src/queue/test.rs
-snapshot_kind: text
 ---
 [
   {
@@ -34,7 +33,7 @@ snapshot_kind: text
       "message": "Index `doggo` already exists.",
       "code": "index_already_exists",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#index_already_exists"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#index_already_exists"
     },
     "canceledBy": null,
     "details": {

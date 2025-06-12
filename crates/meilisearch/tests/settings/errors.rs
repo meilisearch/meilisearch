@@ -15,7 +15,7 @@ async fn settings_bad_displayed_attributes() {
       "message": "Invalid value type at `.displayedAttributes`: expected an array, but found a string: `\"doggo\"`",
       "code": "invalid_settings_displayed_attributes",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_displayed_attributes"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-settings-displayed-attributes"
     }
     "###);
 
@@ -26,7 +26,7 @@ async fn settings_bad_displayed_attributes() {
       "message": "Invalid value type: expected an array, but found a string: `\"doggo\"`",
       "code": "invalid_settings_displayed_attributes",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_displayed_attributes"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-settings-displayed-attributes"
     }
     "###);
 }
@@ -43,7 +43,7 @@ async fn settings_bad_searchable_attributes() {
       "message": "Invalid value type at `.searchableAttributes`: expected an array, but found a string: `\"doggo\"`",
       "code": "invalid_settings_searchable_attributes",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_searchable_attributes"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-settings-searchable-attributes"
     }
     "###);
 
@@ -54,7 +54,7 @@ async fn settings_bad_searchable_attributes() {
       "message": "Invalid value type: expected an array, but found a string: `\"doggo\"`",
       "code": "invalid_settings_searchable_attributes",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_searchable_attributes"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-settings-searchable-attributes"
     }
     "###);
 }
@@ -71,7 +71,7 @@ async fn settings_bad_filterable_attributes() {
       "message": "Invalid value type at `.filterableAttributes`: expected an array, but found a string: `\"doggo\"`",
       "code": "invalid_settings_filterable_attributes",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_filterable_attributes"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-settings-filterable-attributes"
     }
     "###);
 
@@ -82,7 +82,7 @@ async fn settings_bad_filterable_attributes() {
       "message": "Invalid value type: expected an array, but found a string: `\"doggo\"`",
       "code": "invalid_settings_filterable_attributes",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_filterable_attributes"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-settings-filterable-attributes"
     }
     "###);
 }
@@ -99,7 +99,7 @@ async fn settings_bad_sortable_attributes() {
       "message": "Invalid value type at `.sortableAttributes`: expected an array, but found a string: `\"doggo\"`",
       "code": "invalid_settings_sortable_attributes",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_sortable_attributes"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-settings-sortable-attributes"
     }
     "###);
 
@@ -110,7 +110,7 @@ async fn settings_bad_sortable_attributes() {
       "message": "Invalid value type: expected an array, but found a string: `\"doggo\"`",
       "code": "invalid_settings_sortable_attributes",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_sortable_attributes"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-settings-sortable-attributes"
     }
     "###);
 }
@@ -127,7 +127,7 @@ async fn settings_bad_ranking_rules() {
       "message": "Invalid value type at `.rankingRules`: expected an array, but found a string: `\"doggo\"`",
       "code": "invalid_settings_ranking_rules",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_ranking_rules"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-settings-ranking-rules"
     }
     "###);
 
@@ -138,7 +138,7 @@ async fn settings_bad_ranking_rules() {
       "message": "Invalid value type: expected an array, but found a string: `\"doggo\"`",
       "code": "invalid_settings_ranking_rules",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_ranking_rules"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-settings-ranking-rules"
     }
     "###);
 }
@@ -155,7 +155,7 @@ async fn settings_bad_stop_words() {
       "message": "Invalid value type at `.stopWords`: expected an array, but found a string: `\"doggo\"`",
       "code": "invalid_settings_stop_words",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_stop_words"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-settings-stop-words"
     }
     "###);
 
@@ -166,7 +166,7 @@ async fn settings_bad_stop_words() {
       "message": "Invalid value type: expected an array, but found a string: `\"doggo\"`",
       "code": "invalid_settings_stop_words",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_stop_words"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-settings-stop-words"
     }
     "###);
 }
@@ -183,7 +183,7 @@ async fn settings_bad_synonyms() {
       "message": "Invalid value type at `.synonyms`: expected an object, but found a string: `\"doggo\"`",
       "code": "invalid_settings_synonyms",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_synonyms"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-settings-synonyms"
     }
     "###);
 
@@ -194,7 +194,7 @@ async fn settings_bad_synonyms() {
       "message": "Invalid value type: expected an object, but found a string: `\"doggo\"`",
       "code": "invalid_settings_synonyms",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_synonyms"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-settings-synonyms"
     }
     "###);
 }
@@ -211,7 +211,7 @@ async fn settings_bad_distinct_attribute() {
       "message": "Invalid value type at `.distinctAttribute`: expected a string, but found an array: `[\"doggo\"]`",
       "code": "invalid_settings_distinct_attribute",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_distinct_attribute"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-settings-distinct-attribute"
     }
     "###);
 
@@ -222,7 +222,7 @@ async fn settings_bad_distinct_attribute() {
       "message": "Invalid value type: expected a string, but found an array: `[\"doggo\"]`",
       "code": "invalid_settings_distinct_attribute",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_distinct_attribute"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-settings-distinct-attribute"
     }
     "###);
 }
@@ -239,7 +239,7 @@ async fn settings_bad_typo_tolerance() {
       "message": "Invalid value type at `.typoTolerance`: expected an object, but found a string: `\"doggo\"`",
       "code": "invalid_settings_typo_tolerance",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_typo_tolerance"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-settings-typo-tolerance"
     }
     "###);
 
@@ -251,7 +251,7 @@ async fn settings_bad_typo_tolerance() {
       "message": "Invalid value type at `.typoTolerance.minWordSizeForTypos`: expected an object, but found a string: `\"doggo\"`",
       "code": "invalid_settings_typo_tolerance",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_typo_tolerance"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-settings-typo-tolerance"
     }
     "###);
 
@@ -262,7 +262,7 @@ async fn settings_bad_typo_tolerance() {
       "message": "Invalid value type: expected an object, but found a string: `\"doggo\"`",
       "code": "invalid_settings_typo_tolerance",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_typo_tolerance"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-settings-typo-tolerance"
     }
     "###);
 
@@ -277,7 +277,7 @@ async fn settings_bad_typo_tolerance() {
       "message": "Unknown field `typoTolerance`: expected one of `enabled`, `minWordSizeForTypos`, `disableOnWords`, `disableOnAttributes`, `disableOnNumbers`",
       "code": "invalid_settings_typo_tolerance",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_typo_tolerance"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-settings-typo-tolerance"
     }
     "###);
 }
@@ -294,7 +294,7 @@ async fn settings_bad_faceting() {
       "message": "Invalid value type at `.faceting`: expected an object, but found a string: `\"doggo\"`",
       "code": "invalid_settings_faceting",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_faceting"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid_settings_faceting"
     }
     "###);
 
@@ -305,7 +305,7 @@ async fn settings_bad_faceting() {
       "message": "Invalid value type: expected an object, but found a string: `\"doggo\"`",
       "code": "invalid_settings_faceting",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_faceting"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid_settings_faceting"
     }
     "###);
 }
@@ -322,7 +322,7 @@ async fn settings_bad_pagination() {
       "message": "Invalid value type at `.pagination`: expected an object, but found a string: `\"doggo\"`",
       "code": "invalid_settings_pagination",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_pagination"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-settings-pagination"
     }
     "###);
 
@@ -333,7 +333,7 @@ async fn settings_bad_pagination() {
       "message": "Invalid value type: expected an object, but found a string: `\"doggo\"`",
       "code": "invalid_settings_pagination",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_pagination"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-settings-pagination"
     }
     "###);
 }
@@ -351,7 +351,7 @@ async fn settings_bad_max_total_hits() {
       "message": "Invalid value type at `.pagination.maxTotalHits`: expected a positive integer, but found a string: `\"doggo\"`",
       "code": "invalid_settings_pagination",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_pagination"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-settings-pagination"
     }
     "###);
 
@@ -363,7 +363,7 @@ async fn settings_bad_max_total_hits() {
       "message": "Invalid value type at `.maxTotalHits`: expected a positive integer, but found a string: `\"doggo\"`",
       "code": "invalid_settings_pagination",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_pagination"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-settings-pagination"
     }
     "#);
 
@@ -374,7 +374,7 @@ async fn settings_bad_max_total_hits() {
       "message": "Invalid value at `.maxTotalHits`: a non-zero integer value lower than `18446744073709551615` was expected, but found a zero",
       "code": "invalid_settings_pagination",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_pagination"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-settings-pagination"
     }
     "#);
 }
@@ -391,7 +391,7 @@ async fn settings_bad_search_cutoff_ms() {
       "message": "Invalid value type at `.searchCutoffMs`: expected a positive integer, but found a string: `\"doggo\"`",
       "code": "invalid_settings_search_cutoff_ms",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_search_cutoff_ms"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-settings-search-cutoff-ms"
     }
     "###);
 
@@ -402,7 +402,7 @@ async fn settings_bad_search_cutoff_ms() {
       "message": "Invalid value type: expected a positive integer, but found a string: `\"doggo\"`",
       "code": "invalid_settings_search_cutoff_ms",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_search_cutoff_ms"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-settings-search-cutoff-ms"
     }
     "###);
 }

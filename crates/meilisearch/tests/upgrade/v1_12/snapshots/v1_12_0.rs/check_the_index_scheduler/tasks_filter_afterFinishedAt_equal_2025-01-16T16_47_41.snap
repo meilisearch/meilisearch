@@ -68,7 +68,7 @@ source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
         "message": "Document doesn't have a `id` attribute: `{\"age\":1.4}`.",
         "code": "missing_document_id",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#missing_document_id"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#missing-document-id"
       },
       "duration": "PT0.005108474S",
       "enqueuedAt": "2025-01-23T11:36:04.115475071Z",
@@ -90,7 +90,7 @@ source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
         "message": "The primary key inference failed as the engine did not find any field ending with `id` in its name. Please specify the primary key manually using the `primaryKey` query parameter.",
         "code": "index_primary_key_no_candidate_found",
         "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#index_primary_key_no_candidate_found"
+        "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#index-primary-key-no-candidate-found"
       },
       "duration": "PT0.027954894S",
       "enqueuedAt": "2025-01-23T11:35:53.625718309Z",
