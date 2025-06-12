@@ -111,6 +111,8 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
                         let prompt = chunks.prompt();
 
                         let old_vectors = old_vectors.vectors_for_key(embedder_name)?.unwrap();
+
+                        // case where we have a `_vectors` field in the updated document
                         if let Some(new_vectors) = new_vectors.as_ref().and_then(|new_vectors| {
                             new_vectors.vectors_for_key(embedder_name).transpose()
                         }) {
@@ -130,6 +132,7 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
                                             error: error.to_string(),
                                         })?,
                                 )?;
+                            // regenerate if the new `_vectors` fields is set to.
                             } else if new_vectors.regenerate {
                                 let new_rendered = prompt.render_document(
                                     update.external_document_id(),
@@ -174,6 +177,7 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
                                     )?;
                                 }
                             }
+                        // no `_vectors` field, so only regenerate if the document is already set to in the DB.
                         } else if old_vectors.regenerate {
                             let new_rendered = prompt.render_document(
                                 update.external_document_id(),
