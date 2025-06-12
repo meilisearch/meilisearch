@@ -1065,13 +1065,14 @@ fn apply_default_for_source(
     }
 }
 
-pub(crate) enum FieldStatus {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FieldStatus {
     Mandatory,
     Allowed,
     Disallowed,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, enum_iterator::Sequence)]
 pub enum NestingContext {
     NotNested,
     Search,
@@ -1108,7 +1109,7 @@ impl NestingContext {
     }
 }
 
-#[derive(Debug, Clone, Copy, enum_iterator::Sequence)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, enum_iterator::Sequence)]
 pub enum MetaEmbeddingSetting {
     Source,
     Model,
@@ -1128,8 +1129,14 @@ pub enum MetaEmbeddingSetting {
     BinaryQuantized,
 }
 
+pub enum ReindexOutcome {
+    AlwaysReindex,
+    NeverReindex,
+    ReindexSometimes(&'static str),
+}
+
 impl MetaEmbeddingSetting {
-    pub(crate) fn name(&self) -> &'static str {
+    pub fn name(&self) -> &'static str {
         use MetaEmbeddingSetting::*;
         match self {
             Source => "source",
@@ -1148,6 +1155,159 @@ impl MetaEmbeddingSetting {
             IndexingEmbedder => "indexingEmbedder",
             Distribution => "distribution",
             BinaryQuantized => "binaryQuantized",
+        }
+    }
+
+    pub fn description(&self) -> &'static str {
+        use MetaEmbeddingSetting::*;
+        match self {
+            Source => {
+                r#"
+The source used to provide the embeddings.
+
+Which embedder parameters are available and mandatory is determined by the value of this setting.
+            "#
+            }
+            Model => "The name of the model to use.",
+            Revision => {
+                r#"
+The revision (commit SHA1) of the model to use.
+
+If unspecified, Meilisearch picks the latest revision of the model.
+            "#
+            }
+            Pooling => "The pooling method to use.",
+            ApiKey => "The API key to pass to the remote embedder while making requests.",
+            Dimensions => "The expected dimensions of the embeddings produced by this embedder.",
+            DocumentTemplate => {
+                r#"
+A liquid template used to render documents to a text that can be embedded.
+
+Meillisearch interpolates the template for each document and sends the resulting text to the embedder.
+The embedder then generates document vectors based on this text.
+            "#
+            }
+            DocumentTemplateMaxBytes => {
+                "Rendered texts are truncated to this size before embedding."
+            }
+            Url => "URL to reach the remote embedder.",
+            Request => "Template request to send to the remote embedder.",
+            Response => "Template response indicating how to find the embeddings in the response from the remote embedder.",
+            Headers => "Additional headers to send to the remote embedder.",
+            SearchEmbedder => "Embedder settings for the embedder used at search time.",
+            IndexingEmbedder => "Embedder settings for the embedder used at indexing time.",
+            Distribution => "Affine transformation applied to the semantic score to make it more comparable to the ranking score.",
+            BinaryQuantized => r#"
+Whether to binary quantize the embeddings of this embedder.
+
+Binary quantized embeddings are smaller than regular embeddings, which improves
+disk usage and retrieval speed, at the cost of relevancy.
+            "#,
+        }
+    }
+
+    pub fn kind(&self) -> &'static str {
+        use MetaEmbeddingSetting::*;
+        match self {
+            Source => {
+                r#""openAi" | "huggingFace" | "userProvided" | "ollama" | "rest" | "composite""#
+            }
+            Model => "string",
+            Revision => "string",
+            Pooling => r#""useModel" | "forceCls" | "forceMean""#,
+            ApiKey => "string",
+            Dimensions => "number",
+            DocumentTemplate => "string",
+            DocumentTemplateMaxBytes => "number",
+            Url => "string",
+            Request => "any",
+            Response => "any",
+            Headers => "object",
+            SearchEmbedder => "object",
+            IndexingEmbedder => "object",
+            Distribution => "object",
+            BinaryQuantized => "boolean",
+        }
+    }
+
+    pub fn default_value(&self) -> &'static str {
+        use MetaEmbeddingSetting::*;
+        match self {
+            Source => r#""openAi""#,
+            Model => {
+                r#"
+- For source `openAi`, defaults to "text-embedding-3-small"
+- For source `huggingFace`, defaults to "BAAI/bge-base-en-v1.5"
+            "#
+            }
+            Revision => {
+                r#"
+- When `model` is set to default, defaults to "617ca489d9e86b49b8167676d8220688b99db36e"
+- Otherwise, defaults to `null`
+            "#
+            }
+            Pooling => r#""useModel""#,
+            ApiKey => "`null`",
+            Dimensions => "`null`",
+            DocumentTemplate => crate::prompt::default_template_text(),
+            DocumentTemplateMaxBytes => "400",
+            Url => "`null`",
+            Request => "`null`",
+            Response => "`null`",
+            Headers => "`null`",
+            SearchEmbedder => "`null`",
+            IndexingEmbedder => "`null`",
+            Distribution => "`null`",
+            BinaryQuantized => "`false`",
+        }
+    }
+
+    pub fn reindex_outcome(&self) -> ReindexOutcome {
+        use MetaEmbeddingSetting::*;
+        match self {
+            Source => ReindexOutcome::AlwaysReindex,
+            Model => ReindexOutcome::AlwaysReindex,
+            Revision => ReindexOutcome::AlwaysReindex,
+            Pooling => ReindexOutcome::AlwaysReindex,
+            ApiKey => ReindexOutcome::NeverReindex,
+            Dimensions => ReindexOutcome::ReindexSometimes(
+                r#"
+- 🏗️ When the source is `openAi`, changing the value of this parameter always regenerates embeddings
+- 🌱 For other sources, changing the value of this parameter never regenerates embeddings
+            "#,
+            ),
+            DocumentTemplate => ReindexOutcome::ReindexSometimes(
+                r#"
+- 🏗️ When modified, embeddings are regenerated for documents whose rendering through the template produces a different text.
+            "#,
+            ),
+            DocumentTemplateMaxBytes => ReindexOutcome::ReindexSometimes(
+                r#"
+- 🏗️ When increased, embeddings are regenerated for documents whose rendering through the template produces a different text.
+- 🌱 When decreased, embeddings are never regenerated
+            "#,
+            ),
+            Url => ReindexOutcome::ReindexSometimes(
+                r#"
+- 🌱 When modified for source `openAi`, embeddings are never regenerated
+- 🏗️ When modified for sources `ollama` and `rest`, embeddings are always regenerated
+            "#,
+            ),
+            Request => ReindexOutcome::AlwaysReindex,
+            Response => ReindexOutcome::AlwaysReindex,
+            Headers => ReindexOutcome::NeverReindex,
+            SearchEmbedder => ReindexOutcome::NeverReindex,
+            IndexingEmbedder => ReindexOutcome::ReindexSometimes(
+                r#"
+- Embedding are regenerated when the setting modified in the indexing embedder require regeneration.
+            "#,
+            ),
+            Distribution => ReindexOutcome::NeverReindex,
+            BinaryQuantized => ReindexOutcome::ReindexSometimes(
+                r#"
+- Embeddings are not regenerated, but the binary quantization takes time during indexing.
+            "#,
+            ),
         }
     }
 }
@@ -1311,7 +1471,7 @@ impl EmbeddingSettings {
         }
     }
 
-    pub(crate) fn field_status(
+    pub fn field_status(
         source: EmbedderSource,
         field: MetaEmbeddingSetting,
         context: NestingContext,
