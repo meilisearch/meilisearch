@@ -175,8 +175,17 @@ make_enum_progress! {
     }
 }
 
+make_enum_progress! {
+    pub enum Export {
+        EnsuringCorrectnessOfTheTarget,
+        ExportTheSettings,
+        ExportTheDocuments,
+    }
+}
+
 make_atomic_progress!(Task alias AtomicTaskStep => "task" );
 make_atomic_progress!(Document alias AtomicDocumentStep => "document" );
+make_atomic_progress!(Index alias AtomicIndexStep => "index" );
 make_atomic_progress!(Batch alias AtomicBatchStep => "batch" );
 make_atomic_progress!(UpdateFile alias AtomicUpdateFileStep => "update file" );
 

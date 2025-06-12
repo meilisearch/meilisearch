@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use milli::Object;
 use serde::{Deserialize, Serialize};
 use time::{Duration, OffsetDateTime};
@@ -118,6 +120,15 @@ pub struct DetailsView {
     pub upgrade_from: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub upgrade_to: Option<String>,
+    // exporting
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exported_documents: Option<BTreeMap<String, u32>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub skip_embeddings: Option<bool>,
 }
 
 impl DetailsView {
@@ -238,6 +249,37 @@ impl DetailsView {
                     Some(left)
                 }
             },
+            url: match (self.url.clone(), other.url.clone()) {
+                (None, None) => None,
+                (None, Some(url)) | (Some(url), None) => Some(url),
+                // We should never be able to batch multiple exports at the same time.
+                // So we return the first one we encounter but that shouldn't be an issue anyway.
+                (Some(left), Some(_right)) => Some(left),
+            },
+            api_key: match (self.api_key.clone(), other.api_key.clone()) {
+                (None, None) => None,
+                (None, Some(key)) | (Some(key), None) => Some(key),
+                // We should never be able to batch multiple exports at the same time.
+                // So we return the first one we encounter but that shouldn't be an issue anyway.
+                (Some(left), Some(_right)) => Some(left),
+            },
+            exported_documents: match (
+                self.exported_documents.clone(),
+                other.exported_documents.clone(),
+            ) {
+                (None, None) => None,
+                (None, Some(exp)) | (Some(exp), None) => Some(exp),
+                // We should never be able to batch multiple exports at the same time.
+                // So we return the first one we encounter but that shouldn't be an issue anyway.
+                (Some(left), Some(_right)) => Some(left),
+            },
+            skip_embeddings: match (self.skip_embeddings, other.skip_embeddings) {
+                (None, None) => None,
+                (None, Some(skip)) | (Some(skip), None) => Some(skip),
+                // We should never be able to batch multiple exports at the same time.
+                // So we return the first one we encounter but that shouldn't be an issue anyway.
+                (Some(left), Some(_right)) => Some(left),
+            },
             // We want the earliest version
             upgrade_from: match (self.upgrade_from.clone(), other.upgrade_from.clone()) {
                 (None, None) => None,
@@ -326,6 +368,9 @@ impl From<Details> for DetailsView {
             }
             Details::IndexSwap { swaps } => {
                 DetailsView { swaps: Some(swaps), ..Default::default() }
+            }
+            Details::Export { url, api_key, exported_documents, skip_embeddings } => {
+                DetailsView { exported_documents: Some(exported_documents), ..Default::default() }
             }
             Details::UpgradeDatabase { from, to } => DetailsView {
                 upgrade_from: Some(format!("v{}.{}.{}", from.0, from.1, from.2)),

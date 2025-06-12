@@ -389,6 +389,11 @@ InvalidDocumentEditionContext                  , InvalidRequest       , BAD_REQU
 InvalidDocumentEditionFunctionFilter           , InvalidRequest       , BAD_REQUEST ;
 EditDocumentsByFunctionError                   , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsIndexChat                       , InvalidRequest       , BAD_REQUEST ;
+// Export
+InvalidExportUrl                               , InvalidRequest       , BAD_REQUEST ;
+InvalidExportApiKey                            , InvalidRequest       , BAD_REQUEST ;
+InvalidExportIndexesPatterns                   , InvalidRequest       , BAD_REQUEST ;
+InvalidExportSkipEmbeddings                    , InvalidRequest       , BAD_REQUEST ;
 // Experimental features - Chat Completions
 UnimplementedExternalFunctionCalling           , InvalidRequest       , NOT_IMPLEMENTED ;
 UnimplementedNonStreamingChatCompletions       , InvalidRequest       , NOT_IMPLEMENTED ;

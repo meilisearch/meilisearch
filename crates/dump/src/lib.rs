@@ -141,6 +141,12 @@ pub enum KindDump {
         instance_uid: Option<InstanceUid>,
     },
     SnapshotCreation,
+    Export {
+        url: String,
+        indexes: Vec<String>,
+        skip_embeddings: bool,
+        api_key: Option<String>,
+    },
     UpgradeDatabase {
         from: (u32, u32, u32),
     },
@@ -213,6 +219,14 @@ impl From<KindWithContent> for KindDump {
                 KindDump::DumpCreation { keys, instance_uid }
             }
             KindWithContent::SnapshotCreation => KindDump::SnapshotCreation,
+            KindWithContent::Export { url, indexes, skip_embeddings, api_key } => {
+                KindDump::Export {
+                    url,
+                    indexes: indexes.into_iter().map(|pattern| pattern.to_string()).collect(),
+                    skip_embeddings,
+                    api_key,
+                }
+            }
             KindWithContent::UpgradeDatabase { from: version } => {
                 KindDump::UpgradeDatabase { from: version }
             }

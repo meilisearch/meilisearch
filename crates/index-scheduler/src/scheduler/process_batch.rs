@@ -1,6 +1,7 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::Ordering;
+use std::time::Duration;
 
 use meilisearch_types::batches::{BatchEnqueuedAt, BatchId};
 use meilisearch_types::heed::{RoTxn, RwTxn};
@@ -13,9 +14,9 @@ use roaring::RoaringBitmap;
 
 use super::create_batch::Batch;
 use crate::processing::{
-    AtomicBatchStep, AtomicTaskStep, CreateIndexProgress, DeleteIndexProgress, FinalizingIndexStep,
-    InnerSwappingTwoIndexes, SwappingTheIndexes, TaskCancelationProgress, TaskDeletionProgress,
-    UpdateIndexProgress,
+    AtomicBatchStep, AtomicTaskStep, CreateIndexProgress, DeleteIndexProgress, Export,
+    FinalizingIndexStep, InnerSwappingTwoIndexes, SwappingTheIndexes, TaskCancelationProgress,
+    TaskDeletionProgress, UpdateIndexProgress,
 };
 use crate::utils::{
     self, remove_n_tasks_datetime_earlier_than, remove_task_datetime, swap_index_uid_in_task,
@@ -358,6 +359,23 @@ impl IndexScheduler {
                     )?;
                 }
                 wtxn.commit()?;
+                task.status = Status::Succeeded;
+                Ok((vec![task], ProcessBatchInfo::default()))
+            }
+            Batch::Export { mut task } => {
+                progress.update_progress(Export::EnsuringCorrectnessOfTheTarget);
+
+                // TODO send check requests with the API Key
+
+                let mut wtxn = self.env.write_txn()?;
+                let KindWithContent::Export { url, indexes, skip_embeddings, api_key } = &task.kind
+                else {
+                    unreachable!()
+                };
+
+                eprintln!("Exporting data to {}...", url);
+                std::thread::sleep(Duration::from_secs(30));
+
                 task.status = Status::Succeeded;
                 Ok((vec![task], ProcessBatchInfo::default()))
             }
