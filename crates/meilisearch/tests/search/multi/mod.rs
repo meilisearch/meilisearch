@@ -1924,26 +1924,7 @@ async fn federation_sort_different_ranking_rules() {
         .await;
     movies_index.wait_task(value.uid()).await.succeeded();
 
-    let batman_index = server.unique_index_with_prefix("batman");
-
-    let documents = SCORE_DOCUMENTS.clone();
-    let (value, _) = batman_index.add_documents(documents, None).await;
-    batman_index.wait_task(value.uid()).await.succeeded();
-
-    let (value, _) = batman_index
-        .update_settings(json!({
-          "sortableAttributes": ["title"],
-          "rankingRules": [
-            "words",
-            "typo",
-            "proximity",
-            "attribute",
-            "sort",
-            "exactness"
-          ]
-        }))
-        .await;
-    batman_index.wait_task(value.uid()).await.succeeded();
+    let batman_index = shared_index_with_score_documents().await;
 
     // return titles ordered across indexes
     let (response, code) = server
@@ -1960,7 +1941,7 @@ async fn federation_sort_different_ranking_rules() {
           "title": "Badman",
           "id": "E",
           "_federation": {
-            "indexUid": "batman-[uuid]",
+            "indexUid": "SHARED_SCORE_DOCUMENTS",
             "queriesPosition": 1,
             "weightedRankingScore": 1.0
           },
@@ -1970,7 +1951,7 @@ async fn federation_sort_different_ranking_rules() {
           "title": "Batman",
           "id": "D",
           "_federation": {
-            "indexUid": "batman-[uuid]",
+            "indexUid": "SHARED_SCORE_DOCUMENTS",
             "queriesPosition": 1,
             "weightedRankingScore": 1.0
           },
@@ -1980,7 +1961,7 @@ async fn federation_sort_different_ranking_rules() {
           "title": "Batman Returns",
           "id": "C",
           "_federation": {
-            "indexUid": "batman-[uuid]",
+            "indexUid": "SHARED_SCORE_DOCUMENTS",
             "queriesPosition": 1,
             "weightedRankingScore": 1.0
           },
@@ -1990,7 +1971,7 @@ async fn federation_sort_different_ranking_rules() {
           "title": "Batman the dark knight returns: Part 1",
           "id": "A",
           "_federation": {
-            "indexUid": "batman-[uuid]",
+            "indexUid": "SHARED_SCORE_DOCUMENTS",
             "queriesPosition": 1,
             "weightedRankingScore": 1.0
           },
@@ -2000,7 +1981,7 @@ async fn federation_sort_different_ranking_rules() {
           "title": "Batman the dark knight returns: Part 2",
           "id": "B",
           "_federation": {
-            "indexUid": "batman-[uuid]",
+            "indexUid": "SHARED_SCORE_DOCUMENTS",
             "queriesPosition": 1,
             "weightedRankingScore": 1.0
           },
@@ -2095,7 +2076,7 @@ async fn federation_sort_different_ranking_rules() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Inside `.queries[1]`: The results of queries #2 and #1 are incompatible: \n  1. `queries[2]`, `batman-[uuid].rankingRules[0..=3]`: relevancy rule(s) words, typo, proximity, attribute\n  2. `queries[1].sort[0]`, `movies-[uuid].rankingRules[0]`: descending sort rule(s) on field `title`\n  - cannot compare a relevancy rule with a sort rule\n",
+      "message": "Inside `.queries[1]`: The results of queries #2 and #1 are incompatible: \n  1. `queries[2]`, `SHARED_SCORE_DOCUMENTS.rankingRules[0..=3]`: relevancy rule(s) words, typo, proximity, attribute\n  2. `queries[1].sort[0]`, `movies-[uuid].rankingRules[0]`: descending sort rule(s) on field `title`\n  - cannot compare a relevancy rule with a sort rule\n",
       "code": "invalid_multi_search_query_ranking_rules",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_query_ranking_rules"
