@@ -133,7 +133,7 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
                             } else if new_vectors.regenerate {
                                 let new_rendered = prompt.render_document(
                                     update.external_document_id(),
-                                    update.current(
+                                    update.merged(
                                         &context.rtxn,
                                         context.index,
                                         context.db_fields_ids_map,
@@ -147,7 +147,7 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
                                 } else {
                                     let old_rendered = prompt.render_document(
                                         update.external_document_id(),
-                                        update.merged(
+                                        update.current(
                                             &context.rtxn,
                                             context.index,
                                             context.db_fields_ids_map,
