@@ -351,7 +351,7 @@ async fn settings_bad_max_total_hits() {
       "message": "Invalid value type at `.pagination.maxTotalHits`: expected a positive integer, but found a string: `\"doggo\"`",
       "code": "invalid_settings_pagination",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_pagination"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-settings-pagination"
     }
     "###);
 
@@ -363,7 +363,7 @@ async fn settings_bad_max_total_hits() {
       "message": "Invalid value type at `.maxTotalHits`: expected a positive integer, but found a string: `\"doggo\"`",
       "code": "invalid_settings_pagination",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_pagination"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-settings-pagination"
     }
     "#);
 
@@ -374,7 +374,7 @@ async fn settings_bad_max_total_hits() {
       "message": "Invalid value at `.maxTotalHits`: a non-zero integer value lower than `18446744073709551615` was expected, but found a zero",
       "code": "invalid_settings_pagination",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_settings_pagination"
+      "link": "https://www.meilisearch.com/docs/reference/errors/error_codes#invalid-settings-pagination"
     }
     "#);
 }
