@@ -29,7 +29,6 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
     let max_positions_per_attributes = max_positions_per_attributes
         .map_or(MAX_POSITION_PER_ATTRIBUTE, |max| max.min(MAX_POSITION_PER_ATTRIBUTE));
     let max_memory = indexer.max_memory_by_thread();
-    let force_reindexing = settings_diff.reindex_searchable();
 
     // initialize destination values.
     let mut documents_ids = RoaringBitmap::new();
@@ -42,6 +41,12 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
         max_memory,
         true,
     );
+
+    let force_reindexing = settings_diff.reindex_searchable();
+    let skip_indexing = !force_reindexing && settings_diff.settings_update_only();
+    if skip_indexing {
+        return sorter_into_reader(docid_word_positions_sorter, indexer);
+    }
 
     // initialize buffers.
     let mut del_buffers = Buffers::default();
