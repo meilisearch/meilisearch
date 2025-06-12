@@ -235,7 +235,7 @@ fn compute_facet_level_string(
     let (bulk, incremental): (Vec<_>, Vec<_>) = deltas
         .into_iter()
         .filter(|(fid, _)| retain_fid(*fid))
-        .partition(|(_, delta)| if let FacetFieldIdDelta::Bulk = delta { true } else { false });
+        .partition(|(_, delta)| matches!(delta, FacetFieldIdDelta::Bulk));
 
     progress.update_progress(PostProcessingFacets::StringsBulk);
     for (fid, _) in bulk {
@@ -276,13 +276,8 @@ fn compute_facet_level_number(
     progress: &Progress,
 ) -> Result<()> {
     // We partition deltas into bulk and incremental updates
-    let (bulk, incremental): (Vec<_>, Vec<_>) = deltas.into_iter().partition(|(_, delta)| {
-        if let FacetFieldIdDelta::Bulk = delta {
-            true
-        } else {
-            false
-        }
-    });
+    let (bulk, incremental): (Vec<_>, Vec<_>) =
+        deltas.into_iter().partition(|(_, delta)| matches!(delta, FacetFieldIdDelta::Bulk));
 
     progress.update_progress(PostProcessingFacets::NumbersBulk);
     for (fid, _) in bulk {
