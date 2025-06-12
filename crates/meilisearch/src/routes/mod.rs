@@ -54,6 +54,7 @@ mod api_key;
 pub mod batches;
 pub mod chats;
 mod dump;
+mod export;
 pub mod features;
 pub mod indexes;
 mod logs;
@@ -84,6 +85,7 @@ mod tasks_test;
         (path = "/multi-search", api = multi_search::MultiSearchApi),
         (path = "/swap-indexes", api = swap_indexes::SwapIndexesApi),
         (path = "/experimental-features", api = features::ExperimentalFeaturesApi),
+        (path = "/export", api = export::ExportApi),
         (path = "/network", api = network::NetworkApi),
     ),
     paths(get_health, get_version, get_stats),
@@ -115,6 +117,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(web::scope("/metrics").configure(metrics::configure))
         .service(web::scope("/experimental-features").configure(features::configure))
         .service(web::scope("/network").configure(network::configure))
+        .service(web::scope("/export").configure(export::configure))
         .service(web::scope("/chats").configure(chats::configure));
 
     #[cfg(feature = "swagger")]
