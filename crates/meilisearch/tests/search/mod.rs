@@ -2086,3 +2086,76 @@ async fn test_exact_typos_terms() {
     )
     .await;
 }
+
+#[actix_rt::test]
+async fn simple_search_changing_unrelated_settings() {
+    let server = Server::new_shared();
+    let index = server.unique_index();
+
+    let documents = DOCUMENTS.clone();
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    index.wait_task(task.uid()).await.succeeded();
+
+    index
+        .search(json!({"q": "Dragon"}), |response, code| {
+            snapshot!(code, @"200 OK");
+            snapshot!(json_string!(response["hits"]), @r###"
+            [
+              {
+                "title": "How to Train Your Dragon: The Hidden World",
+                "id": "166428",
+                "color": [
+                  "green",
+                  "red"
+                ]
+              }
+            ]
+            "###);
+        })
+        .await;
+
+    let (task, _status_code) =
+        index.update_settings(json!({ "filterableAttributes": ["title"] })).await;
+    let r = index.wait_task(task.uid()).await.succeeded();
+    snapshot!(r["status"], @r###""succeeded""###);
+
+    index
+        .search(json!({"q": "Dragon"}), |response, code| {
+            snapshot!(code, @"200 OK");
+            snapshot!(json_string!(response["hits"]), @r###"
+                [
+                  {
+                    "title": "How to Train Your Dragon: The Hidden World",
+                    "id": "166428",
+                    "color": [
+                      "green",
+                      "red"
+                    ]
+                  }
+                ]
+                "###);
+        })
+        .await;
+
+    let (task, _status_code) = index.update_settings(json!({ "filterableAttributes": [] })).await;
+    let r = index.wait_task(task.uid()).await.succeeded();
+    snapshot!(r["status"], @r###""succeeded""###);
+
+    index
+        .search(json!({"q": "Dragon"}), |response, code| {
+            snapshot!(code, @"200 OK");
+            snapshot!(json_string!(response["hits"]), @r###"
+                    [
+                      {
+                        "title": "How to Train Your Dragon: The Hidden World",
+                        "id": "166428",
+                        "color": [
+                          "green",
+                          "red"
+                        ]
+                      }
+                    ]
+                    "###);
+        })
+        .await;
+}
