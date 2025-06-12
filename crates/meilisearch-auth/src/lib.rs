@@ -165,6 +165,7 @@ impl AuthController {
     }
 }
 
+#[derive(Debug)]
 pub struct AuthFilter {
     search_rules: Option<SearchRules>,
     key_authorized_indexes: SearchRules,
@@ -349,6 +350,7 @@ pub struct IndexSearchRules {
 }
 
 fn generate_default_keys(store: &HeedAuthStore) -> Result<()> {
+    store.put_api_key(Key::default_chat())?;
     store.put_api_key(Key::default_admin())?;
     store.put_api_key(Key::default_search())?;
 

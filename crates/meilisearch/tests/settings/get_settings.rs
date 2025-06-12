@@ -184,6 +184,16 @@ test_setting_routes!(
         update_verb: patch,
         default_value: {"enabled": true, "minWordSizeForTypos": {"oneTypo": 5, "twoTypos": 9}, "disableOnWords": [], "disableOnAttributes": [], "disableOnNumbers": false}
     },
+    {
+        setting: chat,
+        update_verb: put,
+        default_value: {
+            "description": "",
+            "documentTemplate": "{% for field in fields %}{% if field.is_searchable and field.value != nil %}{{ field.name }}: {{ field.value }}\n{% endif %}{% endfor %}",
+            "documentTemplateMaxBytes": 400,
+            "searchParameters": {}
+        }
+    },
 );
 
 #[actix_rt::test]

@@ -50,8 +50,8 @@ doggos: { number_of_documents: 4, field_distribution: {"doggo": 4, "paw": 4} }
 [timestamp] [2,3,4,5,]
 ----------------------------------------------------------------------
 ### All Batches:
-0 {uid: 0, details: {"receivedDocuments":1,"indexedDocuments":0}, stats: {"totalNbTasks":1,"status":{"failed":1},"types":{"documentAdditionOrUpdate":1},"indexUids":{"doggos":1}}, stop reason: "task with id 1 is setting the `bork` primary key but cannot interfere with primary key guessing of the batch", }
-1 {uid: 1, details: {"receivedDocuments":1,"indexedDocuments":0}, stats: {"totalNbTasks":1,"status":{"failed":1},"types":{"documentAdditionOrUpdate":1},"indexUids":{"doggos":1}}, stop reason: "primary key `paw` in task with id 2 is different from the primary key of the batch `bork`", }
+0 {uid: 0, details: {"receivedDocuments":1,"indexedDocuments":0}, stats: {"totalNbTasks":1,"status":{"failed":1},"types":{"documentAdditionOrUpdate":1},"indexUids":{"doggos":1}}, stop reason: "stopped batching before task with id 1 because it is setting the `bork` primary key and it would interfere with primary key guessing of the batch", }
+1 {uid: 1, details: {"receivedDocuments":1,"indexedDocuments":0}, stats: {"totalNbTasks":1,"status":{"failed":1},"types":{"documentAdditionOrUpdate":1},"indexUids":{"doggos":1}}, stop reason: "stopped batching before task with id 2 because its primary key `paw` is different from the primary key of the batch `bork`", }
 2 {uid: 2, details: {"receivedDocuments":4,"indexedDocuments":4}, stats: {"totalNbTasks":4,"status":{"succeeded":4},"types":{"documentAdditionOrUpdate":4},"indexUids":{"doggos":4}}, stop reason: "batched all enqueued tasks", }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:

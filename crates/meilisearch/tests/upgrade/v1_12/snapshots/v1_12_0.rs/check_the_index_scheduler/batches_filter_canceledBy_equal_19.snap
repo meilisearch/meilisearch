@@ -30,7 +30,7 @@ source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "unspecified"
+      "batchStrategy": "unspecified"
     }
   ],
   "total": 1,

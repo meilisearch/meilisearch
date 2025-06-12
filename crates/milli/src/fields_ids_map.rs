@@ -7,6 +7,7 @@ use crate::FieldId;
 mod global;
 pub mod metadata;
 pub use global::GlobalFieldsIdsMap;
+pub use metadata::{FieldIdMapWithMetadata, MetadataBuilder};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FieldsIdsMap {

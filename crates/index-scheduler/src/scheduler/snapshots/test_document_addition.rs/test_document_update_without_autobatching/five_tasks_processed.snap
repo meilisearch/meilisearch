@@ -61,11 +61,11 @@ doggos: { number_of_documents: 5, field_distribution: {"doggo": 5, "id": 5} }
 [timestamp] [4,]
 ----------------------------------------------------------------------
 ### All Batches:
-0 {uid: 0, details: {"receivedDocuments":1,"indexedDocuments":1}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"documentAdditionOrUpdate":1},"indexUids":{"doggos":1}}, stop reason: "reached configured batch limit of 1 tasks", }
-1 {uid: 1, details: {"receivedDocuments":1,"indexedDocuments":1}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"documentAdditionOrUpdate":1},"indexUids":{"doggos":1}}, stop reason: "reached configured batch limit of 1 tasks", }
-2 {uid: 2, details: {"receivedDocuments":1,"indexedDocuments":1}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"documentAdditionOrUpdate":1},"indexUids":{"doggos":1}}, stop reason: "reached configured batch limit of 1 tasks", }
-3 {uid: 3, details: {"receivedDocuments":1,"indexedDocuments":1}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"documentAdditionOrUpdate":1},"indexUids":{"doggos":1}}, stop reason: "reached configured batch limit of 1 tasks", }
-4 {uid: 4, details: {"receivedDocuments":1,"indexedDocuments":1}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"documentAdditionOrUpdate":1},"indexUids":{"doggos":1}}, stop reason: "reached configured batch limit of 1 tasks", }
+0 {uid: 0, details: {"receivedDocuments":1,"indexedDocuments":1}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"documentAdditionOrUpdate":1},"indexUids":{"doggos":1}}, stop reason: "batched up to configured batch limit of 1 tasks", }
+1 {uid: 1, details: {"receivedDocuments":1,"indexedDocuments":1}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"documentAdditionOrUpdate":1},"indexUids":{"doggos":1}}, stop reason: "batched up to configured batch limit of 1 tasks", }
+2 {uid: 2, details: {"receivedDocuments":1,"indexedDocuments":1}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"documentAdditionOrUpdate":1},"indexUids":{"doggos":1}}, stop reason: "batched up to configured batch limit of 1 tasks", }
+3 {uid: 3, details: {"receivedDocuments":1,"indexedDocuments":1}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"documentAdditionOrUpdate":1},"indexUids":{"doggos":1}}, stop reason: "batched up to configured batch limit of 1 tasks", }
+4 {uid: 4, details: {"receivedDocuments":1,"indexedDocuments":1}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"documentAdditionOrUpdate":1},"indexUids":{"doggos":1}}, stop reason: "batched up to configured batch limit of 1 tasks", }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:
 0 [0,]

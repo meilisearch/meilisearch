@@ -2,7 +2,6 @@ mod context;
 mod document;
 pub(crate) mod error;
 mod fields;
-mod template_checker;
 
 use std::cell::RefCell;
 use std::convert::TryFrom;
@@ -65,7 +64,7 @@ fn default_template() -> liquid::Template {
     new_template(default_template_text()).unwrap()
 }
 
-fn default_template_text() -> &'static str {
+pub fn default_template_text() -> &'static str {
     "{% for field in fields %}\
     {% if field.is_searchable and field.value != nil %}\
     {{ field.name }}: {{ field.value }}\n\
@@ -104,11 +103,6 @@ impl Prompt {
             template_text: template,
             max_bytes,
         };
-
-        // render template with special object that's OK with `doc.*` and `fields.*`
-        this.template
-            .render(&template_checker::TemplateChecker)
-            .map_err(NewPromptError::invalid_fields_in_template)?;
 
         Ok(this)
     }
@@ -206,6 +200,7 @@ mod test {
     }
 
     #[test]
+    #[ignore] // See <https://github.com/meilisearch/meilisearch/pull/5593> for explanation
     fn template_missing_doc() {
         assert!(matches!(
             Prompt::new("{{title}}: {{overview}}".into(), None),
@@ -236,6 +231,7 @@ mod test {
     }
 
     #[test]
+    #[ignore] // See <https://github.com/meilisearch/meilisearch/pull/5593> for explanation
     fn template_fields_invalid() {
         assert!(matches!(
             // intentionally garbled field

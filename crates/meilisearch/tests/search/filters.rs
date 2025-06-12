@@ -3,13 +3,11 @@ use meilisearch::Opt;
 use tempfile::TempDir;
 
 use super::test_settings_documents_indexing_swapping_and_search;
-use crate::{
-    common::{
-        default_settings, shared_index_with_documents, shared_index_with_nested_documents, Server,
-        DOCUMENTS, NESTED_DOCUMENTS,
-    },
-    json,
+use crate::common::{
+    default_settings, shared_index_with_documents, shared_index_with_nested_documents, Server,
+    DOCUMENTS, NESTED_DOCUMENTS,
 };
+use crate::json;
 
 #[actix_rt::test]
 async fn search_with_filter_string_notation() {

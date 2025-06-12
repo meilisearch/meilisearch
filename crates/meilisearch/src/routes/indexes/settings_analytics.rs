@@ -10,8 +10,8 @@ use meilisearch_types::locales::{Locale, LocalizedAttributesRuleView};
 use meilisearch_types::milli::update::Setting;
 use meilisearch_types::milli::FilterableAttributesRule;
 use meilisearch_types::settings::{
-    FacetingSettings, PaginationSettings, PrefixSearchSettings, ProximityPrecisionView,
-    RankingRuleView, SettingEmbeddingSettings, TypoSettings,
+    ChatSettings, FacetingSettings, PaginationSettings, PrefixSearchSettings,
+    ProximityPrecisionView, RankingRuleView, SettingEmbeddingSettings, TypoSettings,
 };
 use serde::Serialize;
 
@@ -39,6 +39,7 @@ pub struct SettingsAnalytics {
     pub non_separator_tokens: NonSeparatorTokensAnalytics,
     pub facet_search: FacetSearchAnalytics,
     pub prefix_search: PrefixSearchAnalytics,
+    pub chat: ChatAnalytics,
 }
 
 impl Aggregate for SettingsAnalytics {
@@ -198,6 +199,7 @@ impl Aggregate for SettingsAnalytics {
                 set: new.prefix_search.set | self.prefix_search.set,
                 value: new.prefix_search.value.or(self.prefix_search.value),
             },
+            chat: ChatAnalytics { set: new.chat.set | self.chat.set },
         })
     }
 
@@ -454,7 +456,9 @@ pub struct PaginationAnalytics {
 
 impl PaginationAnalytics {
     pub fn new(setting: Option<&PaginationSettings>) -> Self {
-        Self { max_total_hits: setting.as_ref().and_then(|s| s.max_total_hits.set()) }
+        Self {
+            max_total_hits: setting.as_ref().and_then(|s| s.max_total_hits.set().map(|x| x.into())),
+        }
     }
 
     pub fn into_settings(self) -> SettingsAnalytics {
@@ -672,5 +676,20 @@ impl PrefixSearchAnalytics {
 
     pub fn into_settings(self) -> SettingsAnalytics {
         SettingsAnalytics { prefix_search: self, ..Default::default() }
+    }
+}
+
+#[derive(Serialize, Default)]
+pub struct ChatAnalytics {
+    pub set: bool,
+}
+
+impl ChatAnalytics {
+    pub fn new(settings: Option<&ChatSettings>) -> Self {
+        Self { set: settings.is_some() }
+    }
+
+    pub fn into_settings(self) -> SettingsAnalytics {
+        SettingsAnalytics { chat: self, ..Default::default() }
     }
 }

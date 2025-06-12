@@ -4,9 +4,12 @@ use std::marker::PhantomData;
 use std::ops::ControlFlow;
 
 use deserr::errors::{JsonError, QueryParamError};
-use deserr::{take_cf_content, DeserializeError, IntoValue, MergeWithError, ValuePointerRef};
+use deserr::{
+    take_cf_content, DeserializeError, Deserr, IntoValue, MergeWithError, ValuePointerRef,
+};
+use milli::update::ChatSettings;
 
-use crate::error::deserr_codes::*;
+use crate::error::deserr_codes::{self, *};
 use crate::error::{
     Code, DeserrParseBoolError, DeserrParseIntError, ErrorCode, InvalidTaskDateError,
     ParseOffsetDateTimeError,
@@ -33,6 +36,7 @@ pub struct DeserrError<Format, C: Default + ErrorCode> {
     pub code: Code,
     _phantom: PhantomData<(Format, C)>,
 }
+
 impl<Format, C: Default + ErrorCode> DeserrError<Format, C> {
     pub fn new(msg: String, code: Code) -> Self {
         Self { msg, code, _phantom: PhantomData }
@@ -114,6 +118,16 @@ impl<C: Default + ErrorCode> DeserializeError for DeserrQueryParamError<C> {
             take_cf_content(QueryParamError::error(None, error, location)).to_string(),
             C::default().error_code(),
         ))
+    }
+}
+
+impl Deserr<DeserrError<DeserrJson, deserr_codes::InvalidSettingsIndexChat>> for ChatSettings {
+    fn deserialize_from_value<V: IntoValue>(
+        value: deserr::Value<V>,
+        location: ValuePointerRef,
+    ) -> Result<Self, DeserrError<DeserrJson, deserr_codes::InvalidSettingsIndexChat>> {
+        Deserr::<JsonError>::deserialize_from_value(value, location)
+            .map_err(|e| DeserrError::new(e.to_string(), InvalidSettingsIndexChat.error_code()))
     }
 }
 

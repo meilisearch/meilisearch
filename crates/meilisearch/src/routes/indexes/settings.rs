@@ -5,8 +5,9 @@ use index_scheduler::IndexScheduler;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
+use meilisearch_types::milli::update::Setting;
 use meilisearch_types::settings::{
-    settings, SecretPolicy, SettingEmbeddingSettings, Settings, Unchecked,
+    settings, ChatSettings, SecretPolicy, SettingEmbeddingSettings, Settings, Unchecked,
 };
 use meilisearch_types::tasks::KindWithContent;
 use tracing::debug;
@@ -508,6 +509,17 @@ make_setting_routes!(
         camelcase_attr: "prefixSearch",
         analytics: PrefixSearchAnalytics
     },
+    {
+        route: "/chat",
+        update_verb: put,
+        value_type: ChatSettings,
+        err_type: meilisearch_types::deserr::DeserrJsonError<
+            meilisearch_types::error::deserr_codes::InvalidSettingsIndexChat,
+        >,
+        attr: chat,
+        camelcase_attr: "chat",
+        analytics: ChatAnalytics
+    },
 );
 
 #[utoipa::path(
@@ -597,6 +609,7 @@ pub async fn update_all(
             ),
             facet_search: FacetSearchAnalytics::new(new_settings.facet_search.as_ref().set()),
             prefix_search: PrefixSearchAnalytics::new(new_settings.prefix_search.as_ref().set()),
+            chat: ChatAnalytics::new(new_settings.chat.as_ref().set()),
         },
         &req,
     );
@@ -651,7 +664,11 @@ pub async fn get_all(
 
     let index = index_scheduler.index(&index_uid)?;
     let rtxn = index.read_txn()?;
-    let new_settings = settings(&index, &rtxn, SecretPolicy::HideSecrets)?;
+    let mut new_settings = settings(&index, &rtxn, SecretPolicy::HideSecrets)?;
+    if index_scheduler.features().check_chat_completions("showing index `chat` settings").is_err() {
+        new_settings.chat = Setting::NotSet;
+    }
+
     debug!(returns = ?new_settings, "Get all settings");
     Ok(HttpResponse::Ok().json(new_settings))
 }
@@ -739,6 +756,10 @@ fn validate_settings(
                 features.check_composite_embedders("setting `indexingEmbedder`")?;
             }
         }
+    }
+
+    if let Setting::Set(_chat) = &settings.chat {
+        features.check_chat_completions("setting `chat` in the index settings")?;
     }
 
     Ok(settings.validate()?)

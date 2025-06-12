@@ -894,7 +894,7 @@ fn create_and_list_index() {
 
     let err = index_scheduler.index("kefir").map(|_| ()).unwrap_err();
     snapshot!(err, @"Index `kefir` not found.");
-    let empty = index_scheduler.get_paginated_indexes_stats(&AuthFilter::default(), 0, 20).unwrap();
+    let empty = index_scheduler.paginated_indexes_stats(&AuthFilter::default(), 0, 20).unwrap();
     snapshot!(format!("{empty:?}"), @"(0, [])");
 
     // After advancing just once the index should've been created, the wtxn has been released and commited
@@ -902,7 +902,7 @@ fn create_and_list_index() {
     handle.advance_till([InsideProcessBatch]);
 
     index_scheduler.index("kefir").unwrap();
-    let list = index_scheduler.get_paginated_indexes_stats(&AuthFilter::default(), 0, 20).unwrap();
+    let list = index_scheduler.paginated_indexes_stats(&AuthFilter::default(), 0, 20).unwrap();
     snapshot!(json_string!(list, { "[1][0][1].created_at" => "[date]", "[1][0][1].updated_at" => "[date]", "[1][0][1].used_database_size" => "[bytes]", "[1][0][1].database_size" => "[bytes]" }), @r###"
     [
       1,
@@ -928,4 +928,31 @@ fn create_and_list_index() {
       ]
     ]
     "###);
+}
+
+#[test]
+fn test_scheduler_doesnt_run_with_zero_batched_tasks() {
+    let (index_scheduler, mut handle) = IndexScheduler::test_with_custom_config(vec![], |config| {
+        config.max_number_of_batched_tasks = 0;
+        None
+    });
+
+    handle.scheduler_is_down();
+
+    // Register a task
+    index_scheduler
+        .register(
+            KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None },
+            None,
+            false,
+        )
+        .unwrap();
+    snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_task");
+
+    handle.scheduler_is_down();
+
+    // If we restart the scheduler, it should run properly.
+    let (index_scheduler, mut handle) = handle.restart(index_scheduler, true, vec![], |_| None);
+    handle.advance_n_successful_batches(1);
+    snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_restart");
 }

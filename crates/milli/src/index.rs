@@ -1,14 +1,18 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::error::Error;
+use std::fmt;
 use std::fs::File;
 use std::path::Path;
 
+use deserr::Deserr;
 use heed::types::*;
 use heed::{CompactionOption, Database, DatabaseStat, RoTxn, RwTxn, Unspecified, WithoutTls};
 use indexmap::IndexMap;
 use roaring::RoaringBitmap;
 use rstar::RTree;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 use crate::constants::{self, RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME};
 use crate::database_stats::DatabaseStats;
@@ -23,7 +27,9 @@ use crate::heed_codec::facet::{
 use crate::heed_codec::version::VersionCodec;
 use crate::heed_codec::{BEU16StrCodec, FstSetCodec, StrBEU16Codec, StrRefCodec};
 use crate::order_by_map::OrderByMap;
+use crate::prompt::PromptData;
 use crate::proximity::ProximityPrecision;
+use crate::update::new::StdResult;
 use crate::vector::{ArroyStats, ArroyWrapper, Embedding, EmbeddingConfig};
 use crate::{
     default_criteria, CboRoaringBitmapCodec, Criterion, DocumentId, ExternalDocumentsIds,
@@ -79,6 +85,7 @@ pub mod main_key {
     pub const PREFIX_SEARCH: &str = "prefix_search";
     pub const DOCUMENTS_STATS: &str = "documents_stats";
     pub const DISABLED_TYPOS_TERMS: &str = "disabled_typos_terms";
+    pub const CHAT: &str = "chat";
 }
 
 pub mod db_name {
@@ -1691,6 +1698,25 @@ impl Index {
         self.main.remap_key_type::<Str>().delete(txn, main_key::FACET_SEARCH)
     }
 
+    pub fn chat_config(&self, txn: &RoTxn<'_>) -> heed::Result<ChatConfig> {
+        self.main
+            .remap_types::<Str, SerdeJson<_>>()
+            .get(txn, main_key::CHAT)
+            .map(|o| o.unwrap_or_default())
+    }
+
+    pub(crate) fn put_chat_config(
+        &self,
+        txn: &mut RwTxn<'_>,
+        val: &ChatConfig,
+    ) -> heed::Result<()> {
+        self.main.remap_types::<Str, SerdeJson<_>>().put(txn, main_key::CHAT, &val)
+    }
+
+    pub(crate) fn delete_chat_config(&self, txn: &mut RwTxn<'_>) -> heed::Result<bool> {
+        self.main.remap_key_type::<Str>().delete(txn, main_key::CHAT)
+    }
+
     pub fn localized_attributes_rules(
         &self,
         rtxn: &RoTxn<'_>,
@@ -1917,11 +1943,97 @@ pub struct IndexEmbeddingConfig {
     pub user_provided: RoaringBitmap,
 }
 
+#[derive(Debug, Default, Deserialize, Serialize)]
+pub struct ChatConfig {
+    pub description: String,
+    /// Contains the document template and max template length.
+    pub prompt: PromptData,
+    pub search_parameters: SearchParameters,
+}
+
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchParameters {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hybrid: Option<HybridQuery>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sort: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub distinct: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub matching_strategy: Option<MatchingStrategy>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attributes_to_search_on: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ranking_score_threshold: Option<RankingScoreThreshold>,
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Deserr, ToSchema)]
+#[deserr(try_from(f64) = TryFrom::try_from -> InvalidSettingsRankingScoreThreshold)]
+pub struct RankingScoreThreshold(f64);
+
+impl RankingScoreThreshold {
+    pub fn as_f64(&self) -> f64 {
+        self.0
+    }
+}
+
+impl TryFrom<f64> for RankingScoreThreshold {
+    type Error = InvalidSettingsRankingScoreThreshold;
+
+    fn try_from(value: f64) -> StdResult<Self, Self::Error> {
+        if !(0.0..=1.0).contains(&value) {
+            Err(InvalidSettingsRankingScoreThreshold)
+        } else {
+            Ok(RankingScoreThreshold(value))
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct InvalidSettingsRankingScoreThreshold;
+
+impl Error for InvalidSettingsRankingScoreThreshold {}
+
+impl fmt::Display for InvalidSettingsRankingScoreThreshold {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "the value of `rankingScoreThreshold` is invalid, expected a float between `0.0` and `1.0`."
+        )
+    }
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HybridQuery {
+    pub semantic_ratio: f32,
+    pub embedder: String,
+}
+
 #[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PrefixSettings {
     pub prefix_count_threshold: usize,
     pub max_prefix_length: usize,
     pub compute_prefixes: PrefixSearch,
+}
+
+/// This is unfortunately a duplication of the struct in <meilisearch/src/search/mod.rs>.
+/// The reason why it is duplicated is because milli cannot depend on meilisearch. It would be cyclic imports.
+#[derive(Default, Debug, Copy, Clone, PartialEq, Eq, Deserr, ToSchema, Serialize, Deserialize)]
+#[deserr(rename_all = camelCase)]
+#[serde(rename_all = "camelCase")]
+pub enum MatchingStrategy {
+    /// Remove query words from last to first
+    #[default]
+    Last,
+    /// All query words are mandatory
+    All,
+    /// Remove query words from the most frequent to the least
+    Frequency,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]

@@ -66,13 +66,13 @@ d: { number_of_documents: 0, field_distribution: {} }
 [timestamp] [6,]
 ----------------------------------------------------------------------
 ### All Batches:
-0 {uid: 0, details: {"primaryKey":"id"}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"a":1}}, stop reason: "task with id 0 of type `indexCreation` cannot be batched", }
-1 {uid: 1, details: {"primaryKey":"id"}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"b":1}}, stop reason: "task with id 1 of type `indexCreation` cannot be batched", }
-2 {uid: 2, details: {"primaryKey":"id"}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"c":1}}, stop reason: "task with id 2 of type `indexCreation` cannot be batched", }
-3 {uid: 3, details: {"primaryKey":"id"}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"d":1}}, stop reason: "task with id 3 of type `indexCreation` cannot be batched", }
-4 {uid: 4, details: {"swaps":[{"indexes":["a","b"]},{"indexes":["c","d"]}]}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexSwap":1},"indexUids":{}}, stop reason: "task with id 4 of type `indexSwap` cannot be batched", }
-5 {uid: 5, details: {"swaps":[{"indexes":["a","c"]}]}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexSwap":1},"indexUids":{}}, stop reason: "task with id 5 of type `indexSwap` cannot be batched", }
-6 {uid: 6, details: {"swaps":[]}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexSwap":1},"indexUids":{}}, stop reason: "task with id 6 of type `indexSwap` cannot be batched", }
+0 {uid: 0, details: {"primaryKey":"id"}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"a":1}}, stop reason: "created batch containing only task with id 0 of type `indexCreation` that cannot be batched with any other task.", }
+1 {uid: 1, details: {"primaryKey":"id"}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"b":1}}, stop reason: "created batch containing only task with id 1 of type `indexCreation` that cannot be batched with any other task.", }
+2 {uid: 2, details: {"primaryKey":"id"}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"c":1}}, stop reason: "created batch containing only task with id 2 of type `indexCreation` that cannot be batched with any other task.", }
+3 {uid: 3, details: {"primaryKey":"id"}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"d":1}}, stop reason: "created batch containing only task with id 3 of type `indexCreation` that cannot be batched with any other task.", }
+4 {uid: 4, details: {"swaps":[{"indexes":["a","b"]},{"indexes":["c","d"]}]}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexSwap":1},"indexUids":{}}, stop reason: "created batch containing only task with id 4 of type `indexSwap` that cannot be batched with any other task.", }
+5 {uid: 5, details: {"swaps":[{"indexes":["a","c"]}]}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexSwap":1},"indexUids":{}}, stop reason: "created batch containing only task with id 5 of type `indexSwap` that cannot be batched with any other task.", }
+6 {uid: 6, details: {"swaps":[]}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexSwap":1},"indexUids":{}}, stop reason: "created batch containing only task with id 6 of type `indexSwap` that cannot be batched with any other task.", }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:
 0 [0,]
