@@ -7,7 +7,7 @@ source: crates/index-scheduler/src/scheduler/test_document_addition.rs
 ----------------------------------------------------------------------
 ### All Tasks:
 0 {uid: 0, batch_uid: 0, status: succeeded, details: { received_documents: 1, indexed_documents: Some(1) }, kind: DocumentAdditionOrUpdate { index_uid: "doggos", primary_key: Some("id"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000000, documents_count: 1, allow_index_creation: true }}
-1 {uid: 1, batch_uid: 1, status: failed, error: ResponseError { code: 200, message: "Index already has a primary key: `id`.", error_code: "index_primary_key_already_exists", error_type: "invalid_request", error_link: "https://www.meilisearch.com/docs/reference/errors/error_codes#index-primary-key-already-exists" }, details: { received_documents: 1, indexed_documents: Some(0) }, kind: DocumentAdditionOrUpdate { index_uid: "doggos", primary_key: Some("bork"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000001, documents_count: 1, allow_index_creation: true }}
+1 {uid: 1, batch_uid: 1, status: failed, error: ResponseError { code: 200, message: "Index already has a primary key: `id`.", error_code: "index_primary_key_already_exists", error_type: "invalid_request", error_link: "https://www.meilisearch.com/docs/reference/errors/error_codes#index_primary_key_already_exists" }, details: { received_documents: 1, indexed_documents: Some(0) }, kind: DocumentAdditionOrUpdate { index_uid: "doggos", primary_key: Some("bork"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000001, documents_count: 1, allow_index_creation: true }}
 2 {uid: 2, status: enqueued, details: { received_documents: 1, indexed_documents: None }, kind: DocumentAdditionOrUpdate { index_uid: "doggos", primary_key: Some("bloup"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000002, documents_count: 1, allow_index_creation: true }}
 ----------------------------------------------------------------------
 ### Status:
@@ -42,8 +42,8 @@ doggos: { number_of_documents: 1, field_distribution: {"doggo": 1, "id": 1} }
 [timestamp] [1,]
 ----------------------------------------------------------------------
 ### All Batches:
-0 {uid: 0, details: {"receivedDocuments":1,"indexedDocuments":1}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"documentAdditionOrUpdate":1},"indexUids":{"doggos":1}}, stop reason: "stopped batching before task with id 1 because its primary key `bork` is different from the primary key of the batch `id`", }
-1 {uid: 1, details: {"receivedDocuments":1,"indexedDocuments":0}, stats: {"totalNbTasks":1,"status":{"failed":1},"types":{"documentAdditionOrUpdate":1},"indexUids":{"doggos":1}}, stop reason: "stopped batching before task with id 1 because its primary key `bork` is different from the primary key of the index `id`", }
+0 {uid: 0, details: {"receivedDocuments":1,"indexedDocuments":1}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"documentAdditionOrUpdate":1},"indexUids":{"doggos":1}}, stop reason: "primary key `bork` in task with id 1 is different from the primary key of the batch `id`", }
+1 {uid: 1, details: {"receivedDocuments":1,"indexedDocuments":0}, stats: {"totalNbTasks":1,"status":{"failed":1},"types":{"documentAdditionOrUpdate":1},"indexUids":{"doggos":1}}, stop reason: "primary key `bork` in task with id 1 is different from the primary key of the index `id`", }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:
 0 [0,]

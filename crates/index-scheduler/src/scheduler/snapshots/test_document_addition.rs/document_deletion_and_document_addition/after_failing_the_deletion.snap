@@ -6,7 +6,7 @@ source: crates/index-scheduler/src/scheduler/test_document_addition.rs
 []
 ----------------------------------------------------------------------
 ### All Tasks:
-0 {uid: 0, batch_uid: 0, status: failed, error: ResponseError { code: 200, message: "Index `doggos` not found.", error_code: "index_not_found", error_type: "invalid_request", error_link: "https://www.meilisearch.com/docs/reference/errors/error_codes#index-not-found" }, details: { received_document_ids: 2, deleted_documents: Some(0) }, kind: DocumentDeletion { index_uid: "doggos", documents_ids: ["1", "2"] }}
+0 {uid: 0, batch_uid: 0, status: failed, error: ResponseError { code: 200, message: "Index `doggos` not found.", error_code: "index_not_found", error_type: "invalid_request", error_link: "https://www.meilisearch.com/docs/reference/errors/error_codes#index_not_found" }, details: { received_document_ids: 2, deleted_documents: Some(0) }, kind: DocumentDeletion { index_uid: "doggos", documents_ids: ["1", "2"] }}
 1 {uid: 1, status: enqueued, details: { received_documents: 3, indexed_documents: None }, kind: DocumentAdditionOrUpdate { index_uid: "doggos", primary_key: Some("id"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000000, documents_count: 3, allow_index_creation: true }}
 ----------------------------------------------------------------------
 ### Status:
@@ -37,7 +37,7 @@ doggos [0,1,]
 [timestamp] [0,]
 ----------------------------------------------------------------------
 ### All Batches:
-0 {uid: 0, details: {"providedIds":2,"deletedDocuments":0}, stats: {"totalNbTasks":1,"status":{"failed":1},"types":{"documentDeletion":1},"indexUids":{"doggos":1}}, stop reason: "stopped batching before task with id 1 because its index creation rules differ from the ones from the batch", }
+0 {uid: 0, details: {"providedIds":2,"deletedDocuments":0}, stats: {"totalNbTasks":1,"status":{"failed":1},"types":{"documentDeletion":1},"indexUids":{"doggos":1}}, stop reason: "task with id 1 has different index creation rules as in the batch", }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:
 0 [0,]
