@@ -221,25 +221,24 @@ fn compute_facet_level_string(
     let rtxn = index.read_txn()?;
     let filterable_attributes_rules = index.filterable_attributes_rules(&rtxn)?;
 
-    // We partition bulk and incremental updates
-    let (bulk, incremental): (Vec<_>, Vec<_>) = deltas.into_iter().partition(|(_, delta)| {
-        if let FacetFieldIdDelta::Bulk = delta {
-            true
-        } else {
-            false
-        }
-    });
+    // A predicate to determine if a field id should be facet leveled
+    let mut retain_fid = |fid: u16| {
+        if let Some(metadata) = global_fields_ids_map.metadata(fid) {
+            if metadata.require_facet_level_database(&filterable_attributes_rules) {
+                return true;
+            }
+        };
+        false
+    };
+
+    // We partition deltas into bulk and incremental updates
+    let (bulk, incremental): (Vec<_>, Vec<_>) = deltas
+        .into_iter()
+        .filter(|(fid, _)| retain_fid(*fid))
+        .partition(|(_, delta)| if let FacetFieldIdDelta::Bulk = delta { true } else { false });
 
     progress.update_progress(PostProcessingFacets::StringsBulk);
     for (fid, _) in bulk {
-        // skip field ids that should not be facet leveled
-        let Some(metadata) = global_fields_ids_map.metadata(fid) else {
-            continue;
-        };
-        if !metadata.require_facet_level_database(&filterable_attributes_rules) {
-            continue;
-        }
-
         let span = tracing::trace_span!(target: "indexing::facet_field_ids", "string");
         let _entered = span.enter();
         tracing::debug!(%fid, "bulk string facet processing");
@@ -249,14 +248,6 @@ fn compute_facet_level_string(
 
     progress.update_progress(PostProcessingFacets::StringsIncremental);
     for (fid, delta) in incremental {
-        // skip field ids that should not be facet leveled
-        let Some(metadata) = global_fields_ids_map.metadata(fid) else {
-            continue;
-        };
-        if !metadata.require_facet_level_database(&filterable_attributes_rules) {
-            continue;
-        }
-
         let span = tracing::trace_span!(target: "indexing::facet_field_ids", "string");
         let _entered = span.enter();
         if let FacetFieldIdDelta::Incremental(delta_data) = delta {
@@ -284,7 +275,7 @@ fn compute_facet_level_number(
     deltas: Vec<(u16, FacetFieldIdDelta)>,
     progress: &Progress,
 ) -> Result<()> {
-    // We partition bulk and incremental updates
+    // We partition deltas into bulk and incremental updates
     let (bulk, incremental): (Vec<_>, Vec<_>) = deltas.into_iter().partition(|(_, delta)| {
         if let FacetFieldIdDelta::Bulk = delta {
             true
