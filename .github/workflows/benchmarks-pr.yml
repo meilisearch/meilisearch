@@ -61,7 +61,7 @@ jobs:
         with:
           repo_token: ${{ env.GH_TOKEN }}
 
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         if: success()
         with:
           fetch-depth: 0 # fetch full history to be able to get main commit sha
