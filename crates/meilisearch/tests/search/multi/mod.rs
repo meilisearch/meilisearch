@@ -1,6 +1,5 @@
 use meili_snap::{json_string, snapshot};
 use tokio::sync::OnceCell;
-use uuid::Uuid;
 
 use super::{DOCUMENTS, FRUITS_DOCUMENTS, NESTED_DOCUMENTS};
 use crate::common::index::Index;
@@ -849,13 +848,13 @@ async fn federation_one_index_doesnt_exist() {
 async fn search_multiple_indexes_dont_exist() {
     let server = Server::new_shared();
 
-    let index_1 = format!("index_1-{}", Uuid::new_v4());
-    let index_2 = format!("index_2-{}", Uuid::new_v4());
+    let index_1 = server.unique_index_with_prefix("index_1");
+    let index_2 = server.unique_index_with_prefix("index_2");
 
     let (response, code) = server
         .multi_search(json!({"queries": [
-        {"indexUid" : index_1, "q": "glass"},
-        {"indexUid": index_2, "q": "pésti"},
+        {"indexUid" : index_1.uid, "q": "glass"},
+        {"indexUid": index_2.uid, "q": "pésti"},
         ]}))
         .await;
     snapshot!(code, @"400 Bad Request");
@@ -873,13 +872,13 @@ async fn search_multiple_indexes_dont_exist() {
 async fn federation_multiple_indexes_dont_exist() {
     let server = Server::new_shared();
 
-    let index_1 = format!("index_1-{}", Uuid::new_v4());
-    let index_2 = format!("index_2-{}", Uuid::new_v4());
+    let index_1 = server.unique_index_with_prefix("index_1");
+    let index_2 = server.unique_index_with_prefix("index_2");
 
     let (response, code) = server
         .multi_search(json!({"federation": {}, "queries": [
-        {"indexUid" : index_1, "q": "glass"},
-        {"indexUid": index_2, "q": "pésti"},
+        {"indexUid" : index_1.uid, "q": "glass"},
+        {"indexUid": index_2.uid, "q": "pésti"},
         ]}))
         .await;
     snapshot!(code, @"400 Bad Request");
