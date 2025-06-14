@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use actix_web::web::{self, Data};
 use actix_web::{HttpRequest, HttpResponse};
 use deserr::actix_web::AwebJson;
@@ -8,7 +10,7 @@ use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid_pattern::IndexUidPattern;
 use meilisearch_types::keys::actions;
-use meilisearch_types::tasks::KindWithContent;
+use meilisearch_types::tasks::{ExportIndexSettings as DbExportIndexSettings, KindWithContent};
 use serde::Serialize;
 use tracing::debug;
 use utoipa::{OpenApi, ToSchema};
@@ -69,8 +71,17 @@ async fn export(
     let export = export.into_inner();
     debug!(returns = ?export, "Trigger export");
 
-    let Export { url, api_key, indexes, skip_embeddings } = export;
-    let task = KindWithContent::Export { url, api_key, indexes, skip_embeddings };
+    let Export { url, api_key, indexes } = export;
+    let task = KindWithContent::Export {
+        url,
+        api_key,
+        indexes: indexes
+            .into_iter()
+            .map(|(pattern, ExportIndexSettings { skip_embeddings, filter })| {
+                (pattern, DbExportIndexSettings { skip_embeddings, filter })
+            })
+            .collect(),
+    };
     let uid = get_task_id(&req, &opt)?;
     let dry_run = is_dry_run(&req, &opt)?;
     let task: SummarizedTaskView =
@@ -95,11 +106,22 @@ pub struct Export {
     #[deserr(default, error = DeserrJsonError<InvalidExportApiKey>)]
     pub api_key: Option<String>,
     #[schema(value_type = Option<BTreeSet<String>>, example = json!(["movies", "steam-*"]))]
-    #[deserr(default, error = DeserrJsonError<InvalidExportIndexesPatterns>)]
+    #[deserr(default)]
     #[serde(default)]
-    pub indexes: Vec<IndexUidPattern>,
+    pub indexes: BTreeMap<IndexUidPattern, ExportIndexSettings>,
+}
+
+#[derive(Debug, Deserr, ToSchema, Serialize)]
+#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
+pub struct ExportIndexSettings {
     #[schema(value_type = Option<bool>, example = json!("true"))]
     #[serde(default)]
-    #[deserr(default, error = DeserrJsonError<InvalidExportSkipEmbeddings>)]
+    #[deserr(default, error = DeserrJsonError<InvalidExportIndexSkipEmbeddings>)]
     pub skip_embeddings: bool,
+    #[schema(value_type = Option<String>, example = json!("genres = action"))]
+    #[serde(default)]
+    #[deserr(default, error = DeserrJsonError<InvalidExportIndexFilter>)]
+    pub filter: Option<String>,
 }

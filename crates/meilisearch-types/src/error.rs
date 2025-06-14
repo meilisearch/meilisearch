@@ -393,7 +393,8 @@ InvalidSettingsIndexChat                       , InvalidRequest       , BAD_REQU
 InvalidExportUrl                               , InvalidRequest       , BAD_REQUEST ;
 InvalidExportApiKey                            , InvalidRequest       , BAD_REQUEST ;
 InvalidExportIndexesPatterns                   , InvalidRequest       , BAD_REQUEST ;
-InvalidExportSkipEmbeddings                    , InvalidRequest       , BAD_REQUEST ;
+InvalidExportIndexSkipEmbeddings               , InvalidRequest       , BAD_REQUEST ;
+InvalidExportIndexFilter                       , InvalidRequest       , BAD_REQUEST ;
 // Experimental features - Chat Completions
 UnimplementedExternalFunctionCalling           , InvalidRequest       , NOT_IMPLEMENTED ;
 UnimplementedNonStreamingChatCompletions       , InvalidRequest       , NOT_IMPLEMENTED ;
