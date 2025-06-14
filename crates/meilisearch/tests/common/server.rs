@@ -347,6 +347,16 @@ impl<State> Server<State> {
         }
     }
 
+    pub fn unique_index_with_prefix(&self, prefix: &str) -> Index<'_> {
+        let uuid = Uuid::new_v4();
+        Index {
+            uid: format!("{prefix}-{}", uuid),
+            service: &self.service,
+            encoder: Encoder::Plain,
+            marker: PhantomData,
+        }
+    }
+
     pub fn unique_index_with_encoder(&self, encoder: Encoder) -> Index<'_> {
         let uuid = Uuid::new_v4();
         Index { uid: uuid.to_string(), service: &self.service, encoder, marker: PhantomData }

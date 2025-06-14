@@ -46,8 +46,10 @@ async fn create_index_with_gzip_encoded_request_and_receiving_brotli_encoded_res
     let server = Server::new_shared();
     let app = server.init_web_app().await;
 
+    let index = server.unique_index_with_prefix("test");
+
     let body = serde_json::to_string(&json!({
-        "uid": "test",
+        "uid": index.uid.clone(),
         "primaryKey": None::<&str>,
     }))
     .unwrap();
@@ -68,7 +70,7 @@ async fn create_index_with_gzip_encoded_request_and_receiving_brotli_encoded_res
     let parsed_response =
         serde_json::from_slice::<Value>(decoded.into().as_ref()).expect("Expecting valid json");
 
-    assert_eq!(parsed_response["indexUid"], "test");
+    assert_eq!(parsed_response["indexUid"], index.uid);
 }
 
 #[actix_rt::test]
