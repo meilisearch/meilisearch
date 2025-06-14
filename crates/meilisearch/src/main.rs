@@ -180,17 +180,30 @@ async fn run_http(
 
     if let Some(config) = opt_clone.get_ssl_config()? {
         http_server.bind_rustls_0_23(opt_clone.http_addr, config)?.run().await?;
+    } else if !cfg!(target_os = "windows")
+        && cfg!(feature = "uds")
+        && opt_clone.http_addr.starts_with("/")
+    {
+        http_server.bind_uds(&opt_clone.http_addr)?.run().await?;
     } else {
         http_server.bind(&opt_clone.http_addr)?.run().await?;
     }
     Ok(())
 }
 
-pub fn print_launch_resume(opt: &Opt, analytics: Analytics, config_read_from: Option<PathBuf>) {
+fn print_launch_resume(opt: &Opt, analytics: Analytics, config_read_from: Option<PathBuf>) {
     let build_info = build_info::BuildInfo::from_build();
 
-    let protocol =
-        if opt.ssl_cert_path.is_some() && opt.ssl_key_path.is_some() { "https" } else { "http" };
+    let protocol = if opt.ssl_cert_path.is_some() && opt.ssl_key_path.is_some() {
+        "https"
+    } else if !cfg!(target_os = "windows")
+        && cfg!(feature = "uds")
+        && opt.http_addr.starts_with("/")
+    {
+        "unix"
+    } else {
+        "http"
+    };
     let ascii_name = r#"
 888b     d888          d8b 888 d8b                                            888
 8888b   d8888          Y8P 888 Y8P                                            888
@@ -333,4 +346,110 @@ fn generated_master_key_message() -> String {
 >> --master-key {} <<",
         generate_master_key()
     )
+}
+
+#[cfg(all(not(target_os = "windows"), feature = "uds"))]
+#[cfg(test)]
+mod tests {
+    use http_client_unix_domain_socket::{ClientUnix, Method, StatusCode};
+    use once_cell::sync::Lazy;
+    use std::path::PathBuf;
+    use std::time::Duration;
+    use tempfile::TempDir;
+    use tokio::process::Command;
+    use tokio::sync::oneshot::Sender;
+    use tokio::time::timeout;
+
+    pub static TEST_TEMP_DIR: Lazy<TempDir> = Lazy::new(|| TempDir::new().unwrap());
+
+    #[actix_rt::test]
+    async fn test_unix_domain_socket() -> anyhow::Result<()> {
+        let dir = TempDir::new()?;
+
+        if cfg!(windows) {
+            std::env::set_var("TMP", TEST_TEMP_DIR.path());
+        } else {
+            std::env::set_var("TMPDIR", TEST_TEMP_DIR.path());
+        }
+        let unix_domain_socket =
+            dir.as_ref().join("meilisearch.sock").to_string_lossy().to_string();
+
+        let cargo_manifest_path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR")?);
+
+        let workspace_path = cargo_manifest_path.join("../../target");
+        let mut meilisearch_binary = workspace_path.join("debug").join("meilisearch");
+        if !meilisearch_binary.exists() {
+            meilisearch_binary = workspace_path.join("release").join("meilisearch");
+        }
+
+        assert!(
+            meilisearch_binary.exists(),
+            "Cannot find neither debug nor release binary of 'meilisearch'. This test needs it to run an UDS client against it!"
+        );
+
+        let mut meilisearch_process = Command::new(meilisearch_binary.into_os_string())
+            .env("MEILI_HTTP_ADDR", &unix_domain_socket)
+            .spawn()?;
+
+        let (tx, rx) = tokio::sync::oneshot::channel::<String>();
+
+        // Start the UDS client and wait for it at most 10 seconds
+        if let Err(err) = timeout(Duration::from_secs(10), uds_client(unix_domain_socket, tx)).await
+        {
+            meilisearch_process.kill().await?;
+            meilisearch_process.wait().await?;
+            panic!("Timeout while waiting for the UDS client: {err}");
+        }
+
+        match rx.await {
+            Ok(msg) => {
+                meilisearch_process.kill().await?;
+                meilisearch_process.wait().await?;
+                match msg.as_str() {
+                    "success" => {
+                        // The client finished successfully
+                    }
+                    _ => panic!("An error occurred in the UDS client: {msg}"),
+                }
+            }
+            Err(err) => {
+                meilisearch_process.kill().await?;
+                meilisearch_process.wait().await?;
+                panic!("An error occurred while waiting for the UDS client: {err}")
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn uds_client(http_addr: String, tx: Sender<String>) -> anyhow::Result<()> {
+        // Give meilisearch time to start
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+
+        let mut client = ClientUnix::try_new(&http_addr).await?;
+
+        match client
+            .send_request(
+                "/indexes",
+                Method::GET,
+                &vec![("Content-type", "application/json")],
+                None,
+            )
+            .await
+        {
+            Ok((status_code, response)) => {
+                assert_eq!(status_code, StatusCode::OK);
+                assert_eq!(
+                    response,
+                    r#"{"results":[],"offset":0,"limit":20,"total":0}"#.as_bytes()
+                );
+                tx.send("success".to_string()).unwrap();
+            }
+
+            Err(err) => {
+                tx.send(format!("Unexpected error: {err}")).unwrap();
+            }
+        }
+        Ok(())
+    }
 }
