@@ -9,7 +9,7 @@ use milli::Object;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize, Serializer};
 use time::{Duration, OffsetDateTime};
-use utoipa::ToSchema;
+use utoipa::{schema, ToSchema};
 use uuid::Uuid;
 
 use crate::batches::BatchId;
@@ -158,8 +158,7 @@ pub enum KindWithContent {
     Export {
         url: String,
         api_key: Option<String>,
-        indexes: Vec<IndexUidPattern>,
-        skip_embeddings: bool,
+        indexes: BTreeMap<IndexUidPattern, ExportIndexSettings>,
     },
     UpgradeDatabase {
         from: (u32, u32, u32),
@@ -170,6 +169,13 @@ pub enum KindWithContent {
 #[serde(rename_all = "camelCase")]
 pub struct IndexSwap {
     pub indexes: (String, String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportIndexSettings {
+    pub skip_embeddings: bool,
+    pub filter: Option<String>,
 }
 
 impl KindWithContent {
@@ -280,14 +286,11 @@ impl KindWithContent {
             }),
             KindWithContent::DumpCreation { .. } => Some(Details::Dump { dump_uid: None }),
             KindWithContent::SnapshotCreation => None,
-            KindWithContent::Export { url, api_key, indexes: _, skip_embeddings } => {
-                Some(Details::Export {
-                    url: url.clone(),
-                    api_key: api_key.clone(),
-                    exported_documents: Default::default(),
-                    skip_embeddings: *skip_embeddings,
-                })
-            }
+            KindWithContent::Export { url, api_key, indexes } => Some(Details::Export {
+                url: url.clone(),
+                api_key: api_key.clone(),
+                indexes: indexes.into_iter().map(|(p, s)| (p.clone(), s.clone().into())).collect(),
+            }),
             KindWithContent::UpgradeDatabase { from } => Some(Details::UpgradeDatabase {
                 from: (from.0, from.1, from.2),
                 to: (
@@ -354,14 +357,11 @@ impl KindWithContent {
             }),
             KindWithContent::DumpCreation { .. } => Some(Details::Dump { dump_uid: None }),
             KindWithContent::SnapshotCreation => None,
-            KindWithContent::Export { url, api_key, indexes: _, skip_embeddings } => {
-                Some(Details::Export {
-                    url: url.clone(),
-                    api_key: api_key.clone(),
-                    exported_documents: Default::default(),
-                    skip_embeddings: skip_embeddings.clone(),
-                })
-            }
+            KindWithContent::Export { url, api_key, indexes } => Some(Details::Export {
+                url: url.clone(),
+                api_key: api_key.clone(),
+                indexes: indexes.into_iter().map(|(p, s)| (p.clone(), s.clone().into())).collect(),
+            }),
             KindWithContent::UpgradeDatabase { from } => Some(Details::UpgradeDatabase {
                 from: *from,
                 to: (
@@ -410,14 +410,11 @@ impl From<&KindWithContent> for Option<Details> {
             }),
             KindWithContent::DumpCreation { .. } => Some(Details::Dump { dump_uid: None }),
             KindWithContent::SnapshotCreation => None,
-            KindWithContent::Export { url, api_key, indexes: _, skip_embeddings } => {
-                Some(Details::Export {
-                    url: url.clone(),
-                    api_key: api_key.clone(),
-                    exported_documents: BTreeMap::default(),
-                    skip_embeddings: skip_embeddings.clone(),
-                })
-            }
+            KindWithContent::Export { url, api_key, indexes } => Some(Details::Export {
+                url: url.clone(),
+                api_key: api_key.clone(),
+                indexes: indexes.into_iter().map(|(p, s)| (p.clone(), s.clone().into())).collect(),
+            }),
             KindWithContent::UpgradeDatabase { from } => Some(Details::UpgradeDatabase {
                 from: *from,
                 to: (
@@ -684,13 +681,29 @@ pub enum Details {
     Export {
         url: String,
         api_key: Option<String>,
-        exported_documents: BTreeMap<String, u32>,
-        skip_embeddings: bool,
+        indexes: BTreeMap<IndexUidPattern, DetailsExportIndexSettings>,
     },
     UpgradeDatabase {
         from: (u32, u32, u32),
         to: (u32, u32, u32),
     },
+}
+
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, ToSchema)]
+#[schema(rename_all = "camelCase")]
+pub struct DetailsExportIndexSettings {
+    #[serde(flatten)]
+    settings: ExportIndexSettings,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    matched_documents: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    exported_documents: Option<u64>,
+}
+
+impl From<ExportIndexSettings> for DetailsExportIndexSettings {
+    fn from(settings: ExportIndexSettings) -> Self {
+        DetailsExportIndexSettings { settings, matched_documents: None, exported_documents: None }
+    }
 }
 
 impl Details {

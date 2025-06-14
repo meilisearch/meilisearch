@@ -151,6 +151,8 @@ pub enum Error {
     CorruptedTaskQueue,
     #[error(transparent)]
     DatabaseUpgrade(Box<Self>),
+    #[error(transparent)]
+    Export(Box<Self>),
     #[error("Failed to rollback for index `{index}`: {rollback_outcome} ")]
     RollbackFailed { index: String, rollback_outcome: RollbackOutcome },
     #[error(transparent)]
@@ -221,6 +223,7 @@ impl Error {
             | Error::IoError(_)
             | Error::Persist(_)
             | Error::FeatureNotEnabled(_)
+            | Error::Export(_)
             | Error::Anyhow(_) => true,
             Error::CreateBatch(_)
             | Error::CorruptedTaskQueue
@@ -294,6 +297,7 @@ impl ErrorCode for Error {
             Error::CorruptedTaskQueue => Code::Internal,
             Error::CorruptedDump => Code::Internal,
             Error::DatabaseUpgrade(_) => Code::Internal,
+            Error::Export(_) => Code::Internal,
             Error::RollbackFailed { .. } => Code::Internal,
             Error::UnrecoverableError(_) => Code::Internal,
             Error::IndexSchedulerVersionMismatch { .. } => Code::Internal,

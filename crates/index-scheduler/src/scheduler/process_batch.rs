@@ -1,7 +1,6 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::Ordering;
-use std::time::Duration;
 
 use meilisearch_types::batches::{BatchEnqueuedAt, BatchId};
 use meilisearch_types::heed::{RoTxn, RwTxn};
@@ -14,9 +13,9 @@ use roaring::RoaringBitmap;
 
 use super::create_batch::Batch;
 use crate::processing::{
-    AtomicBatchStep, AtomicTaskStep, CreateIndexProgress, DeleteIndexProgress, Export,
-    FinalizingIndexStep, InnerSwappingTwoIndexes, SwappingTheIndexes, TaskCancelationProgress,
-    TaskDeletionProgress, UpdateIndexProgress,
+    AtomicBatchStep, AtomicTaskStep, CreateIndexProgress, DeleteIndexProgress, FinalizingIndexStep,
+    InnerSwappingTwoIndexes, SwappingTheIndexes, TaskCancelationProgress, TaskDeletionProgress,
+    UpdateIndexProgress,
 };
 use crate::utils::{
     self, remove_n_tasks_datetime_earlier_than, remove_task_datetime, swap_index_uid_in_task,
@@ -363,18 +362,32 @@ impl IndexScheduler {
                 Ok((vec![task], ProcessBatchInfo::default()))
             }
             Batch::Export { mut task } => {
-                progress.update_progress(Export::EnsuringCorrectnessOfTheTarget);
-
-                // TODO send check requests with the API Key
-
-                let mut wtxn = self.env.write_txn()?;
-                let KindWithContent::Export { url, indexes, skip_embeddings, api_key } = &task.kind
-                else {
+                let KindWithContent::Export { url, indexes, api_key } = &task.kind else {
                     unreachable!()
                 };
 
-                eprintln!("Exporting data to {}...", url);
-                std::thread::sleep(Duration::from_secs(30));
+                let ret = catch_unwind(AssertUnwindSafe(|| {
+                    self.process_export(url, indexes, api_key.as_deref(), progress)
+                }));
+
+                match ret {
+                    // TODO return the matched and exported documents
+                    Ok(Ok(())) => (),
+                    Ok(Err(Error::AbortedTask)) => return Err(Error::AbortedTask),
+                    Ok(Err(e)) => return Err(Error::Export(Box::new(e))),
+                    Err(e) => {
+                        let msg = match e.downcast_ref::<&'static str>() {
+                            Some(s) => *s,
+                            None => match e.downcast_ref::<String>() {
+                                Some(s) => &s[..],
+                                None => "Box<dyn Any>",
+                            },
+                        };
+                        return Err(Error::Export(Box::new(Error::ProcessBatchPanicked(
+                            msg.to_string(),
+                        ))));
+                    }
+                }
 
                 task.status = Status::Succeeded;
                 Ok((vec![task], ProcessBatchInfo::default()))
@@ -726,9 +739,11 @@ impl IndexScheduler {
                     from.1,
                     from.2
                 );
-                match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let ret = catch_unwind(std::panic::AssertUnwindSafe(|| {
                     self.process_rollback(from, progress)
-                })) {
+                }));
+
+                match ret {
                     Ok(Ok(())) => {}
                     Ok(Err(err)) => return Err(Error::DatabaseUpgrade(Box::new(err))),
                     Err(e) => {

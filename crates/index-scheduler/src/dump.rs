@@ -212,19 +212,20 @@ impl<'a> Dump<'a> {
                     KindWithContent::DumpCreation { keys, instance_uid }
                 }
                 KindDump::SnapshotCreation => KindWithContent::SnapshotCreation,
-                KindDump::Export { url, indexes, skip_embeddings, api_key } => {
-                    KindWithContent::Export {
-                        url,
-                        indexes: indexes
-                            .into_iter()
-                            .map(|index| {
-                                IndexUidPattern::try_from(index).map_err(|_| Error::CorruptedDump)
-                            })
-                            .collect::<Result<Vec<_>, Error>>()?,
-                        skip_embeddings,
-                        api_key,
-                    }
-                }
+                KindDump::Export { url, indexes, api_key } => KindWithContent::Export {
+                    url,
+                    api_key,
+                    indexes: indexes
+                        .into_iter()
+                        .map(|(pattern, settings)| {
+                            Ok((
+                                IndexUidPattern::try_from(pattern)
+                                    .map_err(|_| Error::CorruptedDump)?,
+                                settings,
+                            ))
+                        })
+                        .collect::<Result<_, Error>>()?,
+                },
                 KindDump::UpgradeDatabase { from } => KindWithContent::UpgradeDatabase { from },
             },
         };
