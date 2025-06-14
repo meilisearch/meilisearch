@@ -1,5 +1,5 @@
 use core::fmt;
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::fmt::{Display, Write};
 use std::str::FromStr;
 
@@ -9,11 +9,12 @@ use milli::Object;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize, Serializer};
 use time::{Duration, OffsetDateTime};
-use utoipa::ToSchema;
+use utoipa::{schema, ToSchema};
 use uuid::Uuid;
 
 use crate::batches::BatchId;
 use crate::error::ResponseError;
+use crate::index_uid_pattern::IndexUidPattern;
 use crate::keys::Key;
 use crate::settings::{Settings, Unchecked};
 use crate::{versioning, InstanceUid};
@@ -50,6 +51,7 @@ impl Task {
             | SnapshotCreation
             | TaskCancelation { .. }
             | TaskDeletion { .. }
+            | Export { .. }
             | UpgradeDatabase { .. }
             | IndexSwap { .. } => None,
             DocumentAdditionOrUpdate { index_uid, .. }
@@ -86,6 +88,7 @@ impl Task {
             | KindWithContent::TaskDeletion { .. }
             | KindWithContent::DumpCreation { .. }
             | KindWithContent::SnapshotCreation
+            | KindWithContent::Export { .. }
             | KindWithContent::UpgradeDatabase { .. } => None,
         }
     }
@@ -152,6 +155,11 @@ pub enum KindWithContent {
         instance_uid: Option<InstanceUid>,
     },
     SnapshotCreation,
+    Export {
+        url: String,
+        api_key: Option<String>,
+        indexes: BTreeMap<IndexUidPattern, ExportIndexSettings>,
+    },
     UpgradeDatabase {
         from: (u32, u32, u32),
     },
@@ -161,6 +169,13 @@ pub enum KindWithContent {
 #[serde(rename_all = "camelCase")]
 pub struct IndexSwap {
     pub indexes: (String, String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportIndexSettings {
+    pub skip_embeddings: bool,
+    pub filter: Option<String>,
 }
 
 impl KindWithContent {
@@ -180,6 +195,7 @@ impl KindWithContent {
             KindWithContent::TaskDeletion { .. } => Kind::TaskDeletion,
             KindWithContent::DumpCreation { .. } => Kind::DumpCreation,
             KindWithContent::SnapshotCreation => Kind::SnapshotCreation,
+            KindWithContent::Export { .. } => Kind::Export,
             KindWithContent::UpgradeDatabase { .. } => Kind::UpgradeDatabase,
         }
     }
@@ -192,6 +208,7 @@ impl KindWithContent {
             | SnapshotCreation
             | TaskCancelation { .. }
             | TaskDeletion { .. }
+            | Export { .. } // TODO Should I resolve the index names?
             | UpgradeDatabase { .. } => vec![],
             DocumentAdditionOrUpdate { index_uid, .. }
             | DocumentEdition { index_uid, .. }
@@ -269,6 +286,11 @@ impl KindWithContent {
             }),
             KindWithContent::DumpCreation { .. } => Some(Details::Dump { dump_uid: None }),
             KindWithContent::SnapshotCreation => None,
+            KindWithContent::Export { url, api_key, indexes } => Some(Details::Export {
+                url: url.clone(),
+                api_key: api_key.clone(),
+                indexes: indexes.into_iter().map(|(p, s)| (p.clone(), s.clone().into())).collect(),
+            }),
             KindWithContent::UpgradeDatabase { from } => Some(Details::UpgradeDatabase {
                 from: (from.0, from.1, from.2),
                 to: (
@@ -335,6 +357,11 @@ impl KindWithContent {
             }),
             KindWithContent::DumpCreation { .. } => Some(Details::Dump { dump_uid: None }),
             KindWithContent::SnapshotCreation => None,
+            KindWithContent::Export { url, api_key, indexes } => Some(Details::Export {
+                url: url.clone(),
+                api_key: api_key.clone(),
+                indexes: indexes.into_iter().map(|(p, s)| (p.clone(), s.clone().into())).collect(),
+            }),
             KindWithContent::UpgradeDatabase { from } => Some(Details::UpgradeDatabase {
                 from: *from,
                 to: (
@@ -383,6 +410,11 @@ impl From<&KindWithContent> for Option<Details> {
             }),
             KindWithContent::DumpCreation { .. } => Some(Details::Dump { dump_uid: None }),
             KindWithContent::SnapshotCreation => None,
+            KindWithContent::Export { url, api_key, indexes } => Some(Details::Export {
+                url: url.clone(),
+                api_key: api_key.clone(),
+                indexes: indexes.into_iter().map(|(p, s)| (p.clone(), s.clone().into())).collect(),
+            }),
             KindWithContent::UpgradeDatabase { from } => Some(Details::UpgradeDatabase {
                 from: *from,
                 to: (
@@ -499,6 +531,7 @@ pub enum Kind {
     TaskDeletion,
     DumpCreation,
     SnapshotCreation,
+    Export,
     UpgradeDatabase,
 }
 
@@ -516,6 +549,7 @@ impl Kind {
             | Kind::TaskCancelation
             | Kind::TaskDeletion
             | Kind::DumpCreation
+            | Kind::Export
             | Kind::UpgradeDatabase
             | Kind::SnapshotCreation => false,
         }
@@ -536,6 +570,7 @@ impl Display for Kind {
             Kind::TaskDeletion => write!(f, "taskDeletion"),
             Kind::DumpCreation => write!(f, "dumpCreation"),
             Kind::SnapshotCreation => write!(f, "snapshotCreation"),
+            Kind::Export => write!(f, "export"),
             Kind::UpgradeDatabase => write!(f, "upgradeDatabase"),
         }
     }
@@ -643,10 +678,32 @@ pub enum Details {
     IndexSwap {
         swaps: Vec<IndexSwap>,
     },
+    Export {
+        url: String,
+        api_key: Option<String>,
+        indexes: BTreeMap<IndexUidPattern, DetailsExportIndexSettings>,
+    },
     UpgradeDatabase {
         from: (u32, u32, u32),
         to: (u32, u32, u32),
     },
+}
+
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, ToSchema)]
+#[schema(rename_all = "camelCase")]
+pub struct DetailsExportIndexSettings {
+    #[serde(flatten)]
+    settings: ExportIndexSettings,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    matched_documents: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    exported_documents: Option<u64>,
+}
+
+impl From<ExportIndexSettings> for DetailsExportIndexSettings {
+    fn from(settings: ExportIndexSettings) -> Self {
+        DetailsExportIndexSettings { settings, matched_documents: None, exported_documents: None }
+    }
 }
 
 impl Details {
@@ -667,6 +724,7 @@ impl Details {
             Self::SettingsUpdate { .. }
             | Self::IndexInfo { .. }
             | Self::Dump { .. }
+            | Self::Export { .. }
             | Self::UpgradeDatabase { .. }
             | Self::IndexSwap { .. } => (),
         }
