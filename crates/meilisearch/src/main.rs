@@ -180,7 +180,10 @@ async fn run_http(
 
     if let Some(config) = opt_clone.get_ssl_config()? {
         http_server.bind_rustls_0_23(opt_clone.http_addr, config)?.run().await?;
-    } else if cfg!(feature = "uds") && opt_clone.http_addr.starts_with("/") {
+    } else if !cfg!(target_os = "windows")
+        && cfg!(feature = "uds")
+        && opt_clone.http_addr.starts_with("/")
+    {
         http_server.bind_uds(&opt_clone.http_addr)?.run().await?;
     } else {
         http_server.bind(&opt_clone.http_addr)?.run().await?;
@@ -193,7 +196,10 @@ fn print_launch_resume(opt: &Opt, analytics: Analytics, config_read_from: Option
 
     let protocol = if opt.ssl_cert_path.is_some() && opt.ssl_key_path.is_some() {
         "https"
-    } else if cfg!(feature = "uds") && opt.http_addr.starts_with("/") {
+    } else if !cfg!(target_os = "windows")
+        && cfg!(feature = "uds")
+        && opt.http_addr.starts_with("/")
+    {
         "unix"
     } else {
         "http"
@@ -342,7 +348,7 @@ fn generated_master_key_message() -> String {
     )
 }
 
-#[cfg(feature = "uds")]
+#[cfg(all(not(target_os = "windows"), feature = "uds"))]
 #[cfg(test)]
 mod tests {
     use http_client_unix_domain_socket::{ClientUnix, Method, StatusCode};
