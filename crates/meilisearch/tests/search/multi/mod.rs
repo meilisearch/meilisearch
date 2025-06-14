@@ -855,10 +855,6 @@ async fn search_multiple_indexes_dont_exist() {
         ]}))
         .await;
     snapshot!(code, @"400 Bad Request");
-
-    let (list_response, _code) = server.list_indexes(Some(0), Some(1_000_000)).await;
-    dbg!(list_response);
-
     snapshot!(json_string!(response), @r###"
     {
       "message": "Inside `.queries[0]`: Index `test` not found.",
