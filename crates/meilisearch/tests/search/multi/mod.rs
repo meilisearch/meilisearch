@@ -848,19 +848,20 @@ async fn federation_one_index_doesnt_exist() {
 async fn search_multiple_indexes_dont_exist() {
     let server = Server::new_shared();
 
-    let index_1 = server.unique_index_with_prefix("index_1");
-    let index_2 = server.unique_index_with_prefix("index_2");
-
     let (response, code) = server
         .multi_search(json!({"queries": [
-        {"indexUid" : index_1.uid, "q": "glass"},
-        {"indexUid": index_2.uid, "q": "pésti"},
+        {"indexUid" : "test", "q": "glass"},
+        {"indexUid": "nested", "q": "pésti"},
         ]}))
         .await;
     snapshot!(code, @"400 Bad Request");
+
+    let (list_response, _code) = server.list_indexes(Some(0), Some(1_000_000)).await;
+    dbg!(list_response);
+
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Inside `.queries[0]`: Index `index_1-[uuid]` not found.",
+      "message": "Inside `.queries[0]`: Index `test` not found.",
       "code": "index_not_found",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#index_not_found"
