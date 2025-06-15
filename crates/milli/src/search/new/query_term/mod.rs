@@ -489,8 +489,7 @@ impl QueryTerm {
         let mut words = BTreeSet::new();
         let mut phrases = BTreeSet::new();
 
-        let ZeroTypoTerm { phrase, exact: zero_typo, prefix_of, synonyms, use_prefix_db: _ } =
-            &self.zero_typo;
+        let ZeroTypoTerm { phrase, exact: zero_typo, prefix_of, synonyms, .. } = &self.zero_typo;
         words.extend(zero_typo.iter().copied());
         words.extend(prefix_of.iter().copied());
         phrases.extend(phrase.iter().copied());

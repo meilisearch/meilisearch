@@ -14,6 +14,7 @@ use utoipa::ToSchema;
 
 use super::FormatOptions;
 
+// TODO: Differentiate if full match do not return None, instead return match bounds with full length
 #[derive(Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MatchBounds {
@@ -158,20 +159,28 @@ impl MatchBoundsHelper<'_> {
     }
 
     /// For crop but no highlight.
-    fn get_crop_bounds_with_no_matches(&self, crop_size: usize) -> Option<MatchBounds> {
+    fn get_crop_bounds_with_no_matches(&self, crop_size: usize) -> MatchBounds {
         let final_token_index = get_adjusted_index_forward_for_crop_size(self.tokens, crop_size);
         let final_token = &self.tokens[final_token_index];
 
-        if final_token_index == self.tokens.len() - 1 {
-            return None;
-        }
-
         // TODO: Why is it that when we match all of the tokens we need to get byte_end instead of start?
 
-        Some(MatchBounds { highlight_toggle: false, indices: vec![0, final_token.byte_start] })
+        // TODO: Can here be an error, because it's byte_start but it could be byte_end?
+        MatchBounds { highlight_toggle: false, indices: vec![0, final_token.byte_start] }
     }
 
     fn get_matches_and_crop_indices(&self, crop_size: usize) -> MatchesAndCropIndices {
+        let asd = |i1, i2| {
+            println!(
+                "{}|{}|{}\n{} {}",
+                self.tokens[..i1].iter().map(|v| v.lemma()).collect::<Vec<_>>().join(""),
+                self.tokens[i1..i2].iter().map(|v| v.lemma()).collect::<Vec<_>>().join(""),
+                self.tokens[i2..].iter().map(|v| v.lemma()).collect::<Vec<_>>().join(""),
+                i1,
+                i2
+            );
+        };
+
         // TODO: This doesn't give back 2 phrases if one is out of crop window
         // Solution: also get next and previous matches, and if they're in the crop window, even if partially, highlight them
         let [matches_first_index, matches_last_index] =
@@ -196,28 +205,17 @@ impl MatchBoundsHelper<'_> {
             crop_size,
         );
 
-        let is_index_backward_at_limit = index_backward == 0;
-        let is_index_forward_at_limit = index_forward == self.tokens.len() - 1;
+        asd(first_match.get_first_token_pos(), last_match.get_last_token_pos());
+        asd(index_backward, index_forward);
 
         let backward_token = &self.tokens[index_backward];
-        let crop_byte_start = if is_index_backward_at_limit {
-            backward_token.byte_start
-        } else {
-            backward_token.byte_end
-        };
-
         let forward_token = &self.tokens[index_forward];
-        let crop_byte_end = if is_index_forward_at_limit {
-            forward_token.byte_end
-        } else {
-            forward_token.byte_start
-        };
 
         MatchesAndCropIndices {
             matches_first_index,
             matches_last_index,
-            crop_byte_start,
-            crop_byte_end,
+            crop_byte_start: backward_token.byte_start,
+            crop_byte_end: forward_token.byte_end,
         }
     }
 
@@ -248,7 +246,7 @@ impl MatchBounds {
 
         if let Some(crop_size) = format_options.crop.filter(|v| *v != 0) {
             if matches.is_empty() {
-                return mbh.get_crop_bounds_with_no_matches(crop_size);
+                return Some(mbh.get_crop_bounds_with_no_matches(crop_size));
             }
 
             if format_options.highlight {
@@ -258,15 +256,15 @@ impl MatchBounds {
             return Some(mbh.get_crop_bounds_with_matches(crop_size));
         }
 
-        if format_options.highlight && !matches.is_empty() {
-            Some(mbh.get_match_bounds(MatchesAndCropIndices {
-                matches_first_index: 0,
-                matches_last_index: matches.len() - 1,
-                crop_byte_start: 0,
-                crop_byte_end: tokens[tokens.len() - 1].byte_end,
-            }))
-        } else {
-            None
+        if !format_options.highlight || matches.is_empty() {
+            return None;
         }
+
+        Some(mbh.get_match_bounds(MatchesAndCropIndices {
+            matches_first_index: 0,
+            matches_last_index: matches.len() - 1,
+            crop_byte_start: 0,
+            crop_byte_end: tokens[tokens.len() - 1].byte_end,
+        }))
     }
 }
