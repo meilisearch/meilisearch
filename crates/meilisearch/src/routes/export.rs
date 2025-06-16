@@ -72,16 +72,19 @@ async fn export(
     debug!(returns = ?export, "Trigger export");
 
     let Export { url, api_key, indexes } = export;
-    let task = KindWithContent::Export {
-        url,
-        api_key,
-        indexes: indexes
+
+    let indexes = if indexes.is_empty() {
+        BTreeMap::from([(IndexUidPattern::new_unchecked("*"), DbExportIndexSettings::default())])
+    } else {
+        indexes
             .into_iter()
-            .map(|(pattern, ExportIndexSettings { skip_embeddings, filter })| {
-                (pattern, DbExportIndexSettings { skip_embeddings, filter })
+            .map(|(pattern, ExportIndexSettings { filter })| {
+                (pattern, DbExportIndexSettings { filter })
             })
-            .collect(),
+            .collect()
     };
+
+    let task = KindWithContent::Export { url, api_key, indexes };
     let uid = get_task_id(&req, &opt)?;
     let dry_run = is_dry_run(&req, &opt)?;
     let task: SummarizedTaskView =
@@ -116,10 +119,6 @@ pub struct Export {
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct ExportIndexSettings {
-    #[schema(value_type = Option<bool>, example = json!("true"))]
-    #[serde(default)]
-    #[deserr(default, error = DeserrJsonError<InvalidExportIndexSkipEmbeddings>)]
-    pub skip_embeddings: bool,
     #[schema(value_type = Option<String>, example = json!("genres = action"))]
     #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidExportIndexFilter>)]
