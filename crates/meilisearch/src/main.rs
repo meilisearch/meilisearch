@@ -21,6 +21,7 @@ use meilisearch::{
 };
 use meilisearch_auth::{generate_master_key, AuthController, MASTER_KEY_MIN_SIZE};
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+#[cfg(unix)]
 use tokio::signal::unix::{signal, SignalKind};
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt as _;
@@ -180,6 +181,7 @@ async fn run_http(
         http_server.bind(&opt_clone.http_addr)?.run()
     };
     let sigint_handle = server.handle();
+    #[cfg(unix)]
     let sigterm_handle = sigint_handle.clone();
 
     tokio::spawn(async move {
