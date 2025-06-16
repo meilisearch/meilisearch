@@ -21,6 +21,7 @@ use meilisearch::{
 };
 use meilisearch_auth::{generate_master_key, AuthController, MASTER_KEY_MIN_SIZE};
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use tokio::signal::unix::{signal, SignalKind};
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt as _;
 use tracing_subscriber::Layer;
@@ -189,7 +190,8 @@ async fn run_http(
 
     #[cfg(unix)]
     tokio::spawn(async move {
-        let mut stream = signal(SignalKind::terminate()).expect("SignalKind::terminate is not supported on this platform");
+        let mut stream = signal(SignalKind::terminate())
+            .expect("SignalKind::terminate is not supported on this platform");
         stream.recv().await.expect("Failed to receive terminate signal");
         eprintln!("Received TERM signal, shutting down gracefully...");
         sigterm_handle.stop(true).await;
