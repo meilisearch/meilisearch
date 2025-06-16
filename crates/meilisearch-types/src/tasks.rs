@@ -171,10 +171,9 @@ pub struct IndexSwap {
     pub indexes: (String, String),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ExportIndexSettings {
-    pub skip_embeddings: bool,
     pub filter: Option<String>,
 }
 
