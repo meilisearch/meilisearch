@@ -107,7 +107,7 @@ impl ChatCompletionSettings {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
 pub enum ChatCompletionSource {
     #[default]
