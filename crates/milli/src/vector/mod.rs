@@ -19,7 +19,7 @@ use crate::ThreadPoolNoAbort;
 
 pub mod composite;
 pub mod error;
-//pub mod extractor;
+pub mod extractor;
 pub mod hf;
 pub mod json_template;
 pub mod manual;

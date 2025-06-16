@@ -25,6 +25,7 @@ mod injectable_value;
 pub use injectable_value::InjectableValue;
 
 /// Represents a JSON [`Value`] where each string is rendered as a [`Template`].
+#[derive(Debug)]
 pub struct JsonTemplate {
     value: Value,
     templates: Vec<TemplateAtPath>,
@@ -33,6 +34,15 @@ pub struct JsonTemplate {
 struct TemplateAtPath {
     template: Template,
     path: ValuePath,
+}
+
+impl std::fmt::Debug for TemplateAtPath {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TemplateAtPath")
+            .field("template", &&"template")
+            .field("path", &self.path)
+            .finish()
+    }
 }
 
 /// Error that can occur either when parsing the templates in the value, or when trying to render them.
