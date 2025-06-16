@@ -90,10 +90,9 @@ impl IndexScheduler {
                 request.send_json(settings.clone()).map_err(into_backoff_error)
             })?;
 
-            // TODO support JSON Value objects
             let filter = filter
-                .as_deref()
-                .map(Filter::from_str)
+                .as_ref()
+                .map(Filter::from_json)
                 .transpose()
                 .map_err(|e| Error::from_milli(e, Some(uid.to_string())))?
                 .flatten();

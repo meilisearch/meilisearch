@@ -12,6 +12,7 @@ use meilisearch_types::index_uid_pattern::IndexUidPattern;
 use meilisearch_types::keys::actions;
 use meilisearch_types::tasks::{ExportIndexSettings as DbExportIndexSettings, KindWithContent};
 use serde::Serialize;
+use serde_json::Value;
 use tracing::debug;
 use utoipa::{OpenApi, ToSchema};
 
@@ -122,5 +123,5 @@ pub struct ExportIndexSettings {
     #[schema(value_type = Option<String>, example = json!("genres = action"))]
     #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidExportIndexFilter>)]
-    pub filter: Option<String>,
+    pub filter: Option<Value>,
 }
