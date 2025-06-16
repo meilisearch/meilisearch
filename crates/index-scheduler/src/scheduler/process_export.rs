@@ -59,7 +59,10 @@ impl IndexScheduler {
             let index_rtxn = index.read_txn()?;
 
             // Send the primary key
-            let primary_key = index.primary_key(&index_rtxn)?;
+            let primary_key = index
+                .primary_key(&index_rtxn)
+                .map_err(|e| Error::from_milli(e.into(), Some(uid.to_string())))?;
+
             let url = format!("{base_url}/indexes");
             retry(&must_stop_processing, || {
                 let mut request = agent.post(&url);
@@ -108,7 +111,7 @@ impl IndexScheduler {
             let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
             let embedding_configs = index
                 .embedding_configs(&index_rtxn)
-                .map_err(|e| Error::from_milli(e.into(), Some(uid.to_string())))?;
+                .map_err(|e| Error::from_milli(e, Some(uid.to_string())))?;
 
             let total_documents = universe.len() as u32;
             let (step, progress_step) = AtomicDocumentStep::new(total_documents);
@@ -227,7 +230,7 @@ where
         return Err(Error::AbortedTask);
     }
 
-    match backoff::retry(ExponentialBackoff::default(), || send_request()) {
+    match backoff::retry(ExponentialBackoff::default(), send_request) {
         Ok(response) => Ok(response),
         Err(backoff::Error::Permanent(e)) => Err(ureq_error_into_error(e)),
         Err(backoff::Error::Transient { err, retry_after: _ }) => Err(ureq_error_into_error(err)),
@@ -261,7 +264,7 @@ fn ureq_error_into_error(error: ureq::Error) -> Error {
             Ok(MeiliError { message, code, r#type, link }) => {
                 Error::FromRemoteWhenExporting { message, code, r#type, link }
             }
-            Err(e) => io::Error::from(e).into(),
+            Err(e) => e.into(),
         },
         ureq::Error::Transport(transport) => io::Error::new(io::ErrorKind::Other, transport).into(),
     }
