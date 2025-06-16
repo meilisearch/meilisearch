@@ -32,9 +32,9 @@ pub trait OnEmbed<'doc> {
     fn process_embeddings(&mut self, metadata: Metadata<'doc>, embeddings: Vec<Embedding>);
 }
 
-pub struct TextEmbedSession<'doc, C> {
+pub struct TextEmbedSession<'doc, C, I> {
     // requests
-    texts: BVec<'doc, &'doc str>,
+    texts: BVec<'doc, I>,
     metadata: BVec<'doc, Metadata<'doc>>,
 
     threads: &'doc ThreadPoolNoAbort,
@@ -45,7 +45,35 @@ pub struct TextEmbedSession<'doc, C> {
     on_embed: C,
 }
 
-impl<'doc, C: OnEmbed<'doc>> TextEmbedSession<'doc, C> {
+pub trait Input: Sized {
+    fn embed_ref(
+        inputs: &[Self],
+        embedder: &Embedder,
+        threads: &ThreadPoolNoAbort,
+    ) -> std::result::Result<Vec<Embedding>, EmbedError>;
+}
+
+impl Input for &'_ str {
+    fn embed_ref(
+        inputs: &[Self],
+        embedder: &Embedder,
+        threads: &ThreadPoolNoAbort,
+    ) -> std::result::Result<Vec<Embedding>, EmbedError> {
+        embedder.embed_index_ref(inputs, threads)
+    }
+}
+
+impl Input for Value {
+    fn embed_ref(
+        inputs: &[Value],
+        embedder: &Embedder,
+        threads: &ThreadPoolNoAbort,
+    ) -> std::result::Result<Vec<Embedding>, EmbedError> {
+        embedder.embed_index_ref_fragments(inputs, threads)
+    }
+}
+
+impl<'doc, C: OnEmbed<'doc>, I: Input> TextEmbedSession<'doc, C, I> {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         embedder: &'doc Embedder,
@@ -63,7 +91,7 @@ impl<'doc, C: OnEmbed<'doc>> TextEmbedSession<'doc, C> {
     pub fn request_embedding(
         &mut self,
         metadata: Metadata<'doc>,
-        rendered: &'doc str,
+        rendered: I,
         unused_vectors_distribution: &UnusedVectorsDistributionBump,
     ) -> Result<()> {
         if self.texts.len() < self.texts.capacity() {
@@ -87,7 +115,7 @@ impl<'doc, C: OnEmbed<'doc>> TextEmbedSession<'doc, C> {
         &mut self,
         unused_vectors_distribution: &UnusedVectorsDistributionBump,
     ) -> Result<()> {
-        let res = match self.embedder.embed_index_ref(self.texts.as_slice(), self.threads) {
+        let res = match I::embed_ref(self.texts.as_slice(), self.embedder, self.threads) {
             Ok(embeddings) => {
                 for (metadata, embedding) in self.metadata.iter().copied().zip(embeddings) {
                     self.on_embed
@@ -111,10 +139,6 @@ impl<'doc, C: OnEmbed<'doc>> TextEmbedSession<'doc, C> {
 
     pub(crate) fn embedder_name(&self) -> &'doc str {
         self.embedder_name
-    }
-
-    pub(crate) fn on_embed(&self) -> &C {
-        &self.on_embed
     }
 
     pub(crate) fn on_embed_mut(&mut self) -> &mut C {

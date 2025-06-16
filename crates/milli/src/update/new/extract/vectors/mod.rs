@@ -371,7 +371,7 @@ struct Chunks<'a, 'b, 'extractor> {
     dimensions: usize,
     prompt: &'a Prompt,
     user_provided: &'a RefCell<EmbeddingExtractorData<'extractor>>,
-    session: TextEmbedSession<'a, OnEmbeddingDocumentUpdates<'a, 'b>>,
+    session: TextEmbedSession<'a, OnEmbeddingDocumentUpdates<'a, 'b>, &'a str>,
 }
 
 impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {

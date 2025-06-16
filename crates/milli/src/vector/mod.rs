@@ -777,6 +777,18 @@ impl Embedder {
         }
     }
 
+    pub fn embed_index_ref_fragments(
+        &self,
+        fragments: &[serde_json::Value],
+        threads: &ThreadPoolNoAbort,
+    ) -> std::result::Result<Vec<Embedding>, EmbedError> {
+        if let Embedder::Rest(embedder) = self {
+            embedder.embed_index_ref(fragments, threads)
+        } else {
+            unimplemented!("embedding fragments is only available for rest embedders")
+        }
+    }
+
     /// Indicates the preferred number of chunks to pass to [`Self::embed_chunks`]
     pub fn chunk_count_hint(&self) -> usize {
         match self {
