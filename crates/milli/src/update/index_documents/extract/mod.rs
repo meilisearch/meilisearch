@@ -210,7 +210,7 @@ fn run_extraction_task<FE, FS, M>(
     })
 }
 
-fn request_threads() -> &'static ThreadPoolNoAbort {
+pub fn request_threads() -> &'static ThreadPoolNoAbort {
     static REQUEST_THREADS: OnceLock<ThreadPoolNoAbort> = OnceLock::new();
 
     REQUEST_THREADS.get_or_init(|| {
