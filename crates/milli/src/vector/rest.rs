@@ -6,9 +6,10 @@ use rand::Rng;
 use rayon::iter::{IntoParallelIterator as _, ParallelIterator as _};
 use rayon::slice::ParallelSlice as _;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use super::error::EmbedErrorKind;
-use super::json_template::InjectableValue;
+use super::json_template::{InjectableValue, JsonTemplate};
 use super::{
     DistributionShift, EmbedError, Embedding, EmbeddingCache, NewEmbedderError, REQUEST_PARALLELISM,
 };
@@ -87,9 +88,42 @@ struct EmbedderData {
     bearer: Option<String>,
     headers: BTreeMap<String, String>,
     url: String,
-    request: Request,
+    request: RequestData,
     response: Response,
     configuration_source: ConfigurationSource,
+}
+
+#[derive(Debug)]
+pub enum RequestData {
+    Single(Request),
+    FromFragments(RequestFromFragments),
+}
+
+impl RequestData {
+    pub fn new(
+        request: Value,
+        indexing_fragments: BTreeMap<String, Value>,
+        search_fragments: BTreeMap<String, Value>,
+    ) -> Result<Self, NewEmbedderError> {
+        Ok(if indexing_fragments.is_empty() && search_fragments.is_empty() {
+            RequestData::Single(Request::new(request)?)
+        } else {
+            RequestData::FromFragments(RequestFromFragments::new(
+                request,
+                indexing_fragments,
+                search_fragments,
+            )?)
+        })
+    }
+
+    fn input_type(&self) -> InputType {
+        match self {
+            RequestData::Single(request) => request.input_type(),
+            RequestData::FromFragments(request_from_fragments) => {
+                request_from_fragments.input_type()
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -98,8 +132,10 @@ pub struct EmbedderOptions {
     pub distribution: Option<DistributionShift>,
     pub dimensions: Option<usize>,
     pub url: String,
-    pub request: serde_json::Value,
-    pub response: serde_json::Value,
+    pub request: Value,
+    pub search_fragments: BTreeMap<String, Value>,
+    pub indexing_fragments: BTreeMap<String, Value>,
+    pub response: Value,
     pub headers: BTreeMap<String, String>,
 }
 
@@ -137,7 +173,12 @@ impl Embedder {
             .timeout(std::time::Duration::from_secs(30))
             .build();
 
-        let request = Request::new(options.request)?;
+        let request = RequestData::new(
+            options.request,
+            options.indexing_fragments,
+            options.search_fragments,
+        )?;
+
         let response = Response::new(options.response, &request)?;
 
         let data = EmbedderData {
@@ -178,7 +219,7 @@ impl Embedder {
         deadline: Option<Instant>,
     ) -> Result<Vec<Embedding>, EmbedError>
     where
-        S: AsRef<str> + Serialize,
+        S: Serialize,
     {
         embed(&self.data, texts, texts.len(), Some(self.dimensions), deadline)
     }
@@ -214,9 +255,9 @@ impl Embedder {
         }
     }
 
-    pub(crate) fn embed_index_ref(
+    pub(crate) fn embed_index_ref<S: Serialize + Sync>(
         &self,
-        texts: &[&str],
+        texts: &[S],
         threads: &ThreadPoolNoAbort,
     ) -> Result<Vec<Embedding>, EmbedError> {
         // This condition helps reduce the number of active rayon jobs
@@ -288,6 +329,13 @@ fn embed<S>(
 where
     S: Serialize,
 {
+    if inputs.is_empty() {
+        if expected_count != 0 {
+            return Err(EmbedError::rest_response_embedding_count(expected_count, 0));
+        }
+        return Ok(Vec::new());
+    }
+
     let request = data.client.post(&data.url);
     let request = if let Some(bearer) = &data.bearer {
         request.set("Authorization", bearer)
@@ -299,7 +347,12 @@ where
         request = request.set(header.as_str(), value.as_str());
     }
 
-    let body = data.request.inject_texts(inputs);
+    let body = match &data.request {
+        RequestData::Single(request) => request.inject_texts(inputs),
+        RequestData::FromFragments(request_from_fragments) => {
+            request_from_fragments.request_from_fragments(inputs).expect("inputs was empty")
+        }
+    };
 
     for attempt in 0..10 {
         let response = request.clone().send_json(&body);
@@ -383,7 +436,7 @@ fn response_to_embedding(
     expected_count: usize,
     expected_dimensions: Option<usize>,
 ) -> Result<Vec<Embedding>, Retry> {
-    let response: serde_json::Value = response
+    let response: Value = response
         .into_json()
         .map_err(EmbedError::rest_response_deserialization)
         .map_err(Retry::retry_later)?;
@@ -412,6 +465,7 @@ fn response_to_embedding(
 }
 
 pub(super) const REQUEST_PLACEHOLDER: &str = "{{text}}";
+pub(super) const REQUEST_FRAGMENT_PLACEHOLDER: &str = "{{fragment}}";
 pub(super) const RESPONSE_PLACEHOLDER: &str = "{{embedding}}";
 pub(super) const REPEAT_PLACEHOLDER: &str = "{{..}}";
 
@@ -421,7 +475,7 @@ pub struct Request {
 }
 
 impl Request {
-    pub fn new(template: serde_json::Value) -> Result<Self, NewEmbedderError> {
+    pub fn new(template: Value) -> Result<Self, NewEmbedderError> {
         let template = match InjectableValue::new(template, REQUEST_PLACEHOLDER, REPEAT_PLACEHOLDER)
         {
             Ok(template) => template,
@@ -443,11 +497,93 @@ impl Request {
         }
     }
 
-    pub fn inject_texts<S: Serialize>(
-        &self,
-        texts: impl IntoIterator<Item = S>,
-    ) -> serde_json::Value {
+    pub fn inject_texts<S: Serialize>(&self, texts: impl IntoIterator<Item = S>) -> Value {
         self.template.inject(texts.into_iter().map(|s| serde_json::json!(s))).unwrap()
+    }
+}
+
+#[derive(Debug)]
+pub struct RequestFromFragments {
+    indexing_fragments: BTreeMap<String, JsonTemplate>,
+    search_fragments: BTreeMap<String, JsonTemplate>,
+    request: InjectableValue,
+}
+
+impl RequestFromFragments {
+    pub fn new(
+        request: Value,
+        indexing_fragments: impl IntoIterator<Item = (String, Value)>,
+        search_fragments: impl IntoIterator<Item = (String, Value)>,
+    ) -> Result<Self, NewEmbedderError> {
+        let request =
+            match InjectableValue::new(request, REQUEST_FRAGMENT_PLACEHOLDER, REPEAT_PLACEHOLDER) {
+                Ok(template) => template,
+                Err(error) => {
+                    let message =
+                        error.error_message("request", REQUEST_PLACEHOLDER, REPEAT_PLACEHOLDER);
+                    return Err(NewEmbedderError::rest_could_not_parse_template(message));
+                }
+            };
+
+        let indexing_fragments: Result<_, NewEmbedderError> = indexing_fragments
+            .into_iter()
+            .map(|(name, value)| {
+                Ok((
+                    name,
+                    JsonTemplate::new(value).map_err(|error| {
+                        NewEmbedderError::rest_could_not_parse_template(
+                            error.parsing("indexingFragments"),
+                        )
+                    })?,
+                ))
+            })
+            .collect();
+        let search_fragments: Result<_, NewEmbedderError> = search_fragments
+            .into_iter()
+            .map(|(name, value)| {
+                Ok((
+                    name,
+                    JsonTemplate::new(value).map_err(|error| {
+                        NewEmbedderError::rest_could_not_parse_template(
+                            error.parsing("searchFragments"),
+                        )
+                    })?,
+                ))
+            })
+            .collect();
+
+        Ok(Self {
+            request,
+            indexing_fragments: indexing_fragments?,
+            search_fragments: search_fragments?,
+        })
+    }
+
+    fn input_type(&self) -> InputType {
+        if self.request.has_array_value() {
+            InputType::TextArray
+        } else {
+            InputType::Text
+        }
+    }
+
+    pub fn request_from_search(&self, q: Option<&str>, media: &Value) -> Option<Value> {
+        let fragments: Vec<_> = self
+            .search_fragments
+            .iter()
+            .filter_map(|(_name, template)| template.render_search(q, media).ok())
+            .collect();
+        if fragments.is_empty() {
+            return None;
+        }
+        Some(self.request.inject(std::iter::once(Value::Array(fragments))).unwrap())
+    }
+
+    pub fn request_from_fragments<'a, S: Serialize + 'a>(
+        &self,
+        fragments: impl IntoIterator<Item = &'a S>,
+    ) -> Option<Value> {
+        self.request.inject(fragments.into_iter().map(|fragment| serde_json::json!(fragment))).ok()
     }
 }
 
@@ -457,7 +593,7 @@ pub struct Response {
 }
 
 impl Response {
-    pub fn new(template: serde_json::Value, request: &Request) -> Result<Self, NewEmbedderError> {
+    pub fn new(template: Value, request: &RequestData) -> Result<Self, NewEmbedderError> {
         let template =
             match InjectableValue::new(template, RESPONSE_PLACEHOLDER, REPEAT_PLACEHOLDER) {
                 Ok(template) => template,
@@ -468,17 +604,14 @@ impl Response {
                 }
             };
 
-        match (template.has_array_value(), request.template.has_array_value()) {
+        match (template.has_array_value(), request.input_type() == InputType::TextArray) {
             (true, true) | (false, false) => Ok(Self {template}),
             (true, false) => Err(NewEmbedderError::rest_could_not_parse_template("in `response`: `response` has multiple embeddings, but `request` has only one text to embed".to_string())),
             (false, true) => Err(NewEmbedderError::rest_could_not_parse_template("in `response`: `response` has a single embedding, but `request` has multiple texts to embed".to_string())),
         }
     }
 
-    pub fn extract_embeddings(
-        &self,
-        response: serde_json::Value,
-    ) -> Result<Vec<Embedding>, EmbedError> {
+    pub fn extract_embeddings(&self, response: Value) -> Result<Vec<Embedding>, EmbedError> {
         let extracted_values: Vec<Embedding> = match self.template.extract(response) {
             Ok(extracted_values) => extracted_values,
             Err(error) => {
