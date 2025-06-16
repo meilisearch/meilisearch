@@ -732,6 +732,7 @@ fn basic_get_stats() {
         "documentDeletion": 0,
         "documentEdition": 0,
         "dumpCreation": 0,
+        "export": 0,
         "indexCreation": 3,
         "indexDeletion": 0,
         "indexSwap": 0,
