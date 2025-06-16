@@ -8,6 +8,7 @@ use milli::update::IndexDocumentsMethod;
 use milli::Object;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize, Serializer};
+use serde_json::Value;
 use time::{Duration, OffsetDateTime};
 use utoipa::{schema, ToSchema};
 use uuid::Uuid;
@@ -111,11 +112,11 @@ pub enum KindWithContent {
     },
     DocumentDeletionByFilter {
         index_uid: String,
-        filter_expr: serde_json::Value,
+        filter_expr: Value,
     },
     DocumentEdition {
         index_uid: String,
-        filter_expr: Option<serde_json::Value>,
+        filter_expr: Option<Value>,
         context: Option<milli::Object>,
         function: String,
     },
@@ -174,7 +175,7 @@ pub struct IndexSwap {
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ExportIndexSettings {
-    pub filter: Option<String>,
+    pub filter: Option<Value>,
 }
 
 impl KindWithContent {
