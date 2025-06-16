@@ -19,11 +19,13 @@ use crate::ThreadPoolNoAbort;
 
 pub mod composite;
 pub mod error;
+//pub mod extractor;
 pub mod hf;
 pub mod json_template;
 pub mod manual;
 pub mod openai;
 pub mod parsed_vectors;
+pub mod request;
 pub mod settings;
 
 pub mod ollama;
