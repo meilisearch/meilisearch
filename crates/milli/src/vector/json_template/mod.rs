@@ -28,7 +28,6 @@ pub use injectable_value::InjectableValue;
 pub struct JsonTemplate {
     value: Value,
     templates: Vec<TemplateAtPath>,
-    bump: Bump,
 }
 
 struct TemplateAtPath {
@@ -37,6 +36,7 @@ struct TemplateAtPath {
 }
 
 /// Error that can occur either when parsing the templates in the value, or when trying to render them.
+#[derive(Debug)]
 pub struct Error {
     template_error: liquid::Error,
     path: ValuePath,
@@ -70,8 +70,7 @@ impl JsonTemplate {
     ///  - If any of the strings contains a template that cannot be parsed.
     pub fn new(value: Value) -> Result<Self, Error> {
         let templates = build_templates(&value)?;
-        let bump = Bump::new();
-        Ok(Self { value, templates, bump })
+        Ok(Self { value, templates })
     }
 
     /// Renders this value by replacing all its strings with the rendered version of the template they represent from the given context.
@@ -94,11 +93,12 @@ impl JsonTemplate {
     /// # Error
     ///
     /// - If any of the strings contains a template that cannot be rendered with the given document.
-    pub fn render_document<'a, D: Document<'a> + std::fmt::Debug>(
+    pub fn render_document<'a, 'doc: 'a, D: Document<'a> + std::fmt::Debug>(
         &'a self,
         document: D,
+        doc_alloc: &'doc Bump,
     ) -> Result<Value, Error> {
-        let document = ParseableDocument::new(document, &self.bump);
+        let document = ParseableDocument::new(document, doc_alloc);
         self.render(&document)
     }
 

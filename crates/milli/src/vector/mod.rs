@@ -467,6 +467,7 @@ pub struct ArroyStats {
     pub documents: RoaringBitmap,
 }
 /// One or multiple embeddings stored consecutively in a flat vector.
+#[derive(Debug, PartialEq)]
 pub struct Embeddings<F> {
     data: Vec<F>,
     dimension: usize,
