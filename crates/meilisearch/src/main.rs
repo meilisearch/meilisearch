@@ -178,10 +178,21 @@ async fn run_http(
     } else {
         http_server.bind(&opt_clone.http_addr)?.run()
     };
-    let server_handle = server.handle();
+    let sigint_handle = server.handle();
+    let sigterm_handle = sigint_handle.clone();
+
     tokio::spawn(async move {
         tokio::signal::ctrl_c().await.expect("failed to listen for Ctrl_C event");
-        server_handle.stop(true).await;
+        eprintln!("Received Ctrl-C, shutting down...");
+        sigint_handle.stop(false).await;
+    });
+
+    #[cfg(unix)]
+    tokio::spawn(async move {
+        let mut stream = signal(SignalKind::terminate()).expect("SignalKind::terminate is not supported on this platform");
+        stream.recv().await.expect("Failed to receive terminate signal");
+        eprintln!("Received TERM signal, shutting down gracefully...");
+        sigterm_handle.stop(true).await;
     });
     server.await?;
     Ok(())
