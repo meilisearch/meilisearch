@@ -129,11 +129,6 @@ async fn try_main() -> anyhow::Result<()> {
 
     print_launch_resume(&opt, analytics.clone(), config_read_from);
 
-    tokio::spawn(async move {
-        tokio::signal::ctrl_c().await.unwrap();
-        std::process::exit(130);
-    });
-
     run_http(index_scheduler, auth_controller, opt, log_handle, Arc::new(analytics)).await?;
 
     Ok(())
@@ -178,11 +173,17 @@ async fn run_http(
     .disable_signals()
     .keep_alive(KeepAlive::Os);
 
-    if let Some(config) = opt_clone.get_ssl_config()? {
-        http_server.bind_rustls_0_23(opt_clone.http_addr, config)?.run().await?;
+    let server = if let Some(config) = opt_clone.get_ssl_config()? {
+        http_server.bind_rustls_0_23(opt_clone.http_addr, config)?.run()
     } else {
-        http_server.bind(&opt_clone.http_addr)?.run().await?;
-    }
+        http_server.bind(&opt_clone.http_addr)?.run()
+    };
+    let server_handle = server.handle();
+    tokio::spawn(async move {
+        tokio::signal::ctrl_c().await.expect("failed to listen for Ctrl_C event");
+        server_handle.stop(true).await;
+    });
+    server.await?;
     Ok(())
 }
 
