@@ -289,7 +289,7 @@ impl KindWithContent {
             KindWithContent::Export { url, api_key, indexes } => Some(Details::Export {
                 url: url.clone(),
                 api_key: api_key.clone(),
-                indexes: indexes.into_iter().map(|(p, s)| (p.clone(), s.clone().into())).collect(),
+                indexes: indexes.iter().map(|(p, s)| (p.clone(), s.clone().into())).collect(),
             }),
             KindWithContent::UpgradeDatabase { from } => Some(Details::UpgradeDatabase {
                 from: (from.0, from.1, from.2),
@@ -360,7 +360,7 @@ impl KindWithContent {
             KindWithContent::Export { url, api_key, indexes } => Some(Details::Export {
                 url: url.clone(),
                 api_key: api_key.clone(),
-                indexes: indexes.into_iter().map(|(p, s)| (p.clone(), s.clone().into())).collect(),
+                indexes: indexes.iter().map(|(p, s)| (p.clone(), s.clone().into())).collect(),
             }),
             KindWithContent::UpgradeDatabase { from } => Some(Details::UpgradeDatabase {
                 from: *from,
@@ -413,7 +413,7 @@ impl From<&KindWithContent> for Option<Details> {
             KindWithContent::Export { url, api_key, indexes } => Some(Details::Export {
                 url: url.clone(),
                 api_key: api_key.clone(),
-                indexes: indexes.into_iter().map(|(p, s)| (p.clone(), s.clone().into())).collect(),
+                indexes: indexes.iter().map(|(p, s)| (p.clone(), s.clone().into())).collect(),
             }),
             KindWithContent::UpgradeDatabase { from } => Some(Details::UpgradeDatabase {
                 from: *from,
