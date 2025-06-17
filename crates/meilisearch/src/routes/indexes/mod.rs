@@ -29,6 +29,7 @@ use crate::routes::is_dry_run;
 use crate::Opt;
 
 pub mod documents;
+pub mod duplicate;
 pub mod facet_search;
 pub mod search;
 mod search_analytics;
@@ -77,7 +78,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(web::scope("/search").configure(search::configure))
             .service(web::scope("/facet-search").configure(facet_search::configure))
             .service(web::scope("/similar").configure(similar::configure))
-            .service(web::scope("/settings").configure(settings::configure)),
+            .service(web::scope("/settings").configure(settings::configure))
+            .service(web::scope("/duplicate").configure(duplicate::configure)),
     );
 }
 
