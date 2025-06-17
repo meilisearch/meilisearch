@@ -1,4 +1,5 @@
 use std::fmt;
+use std::io::ErrorKind;
 
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::milli::update::IndexDocumentsMethod;
@@ -577,7 +578,11 @@ impl IndexScheduler {
                 .and_then(|task| task.ok_or(Error::CorruptedTaskQueue))?;
 
             if let Some(uuid) = task.content_uuid() {
-                let content_size = self.queue.file_store.compute_size(uuid)?;
+                let content_size = match self.queue.file_store.compute_size(uuid) {
+                    Ok(content_size) => content_size,
+                    Err(file_store::Error::IoError(err)) if err.kind() == ErrorKind::NotFound => 0,
+                    Err(otherwise) => return Err(otherwise.into()),
+                };
                 total_size = total_size.saturating_add(content_size);
             }
 
