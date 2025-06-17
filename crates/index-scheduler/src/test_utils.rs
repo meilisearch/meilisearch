@@ -37,6 +37,7 @@ pub(crate) enum FailureLocation {
     InsideCreateBatch,
     InsideProcessBatch,
     PanicInsideProcessBatch,
+    ProcessExport,
     ProcessUpgrade,
     AcquiringWtxn,
     UpdatingTaskAfterProcessBatchSuccess { task_uid: u32 },

@@ -12,6 +12,7 @@ use std::sync::Arc;
 
 use crossbeam_channel::{Receiver, Sender};
 use enrich::enrich_documents_batch;
+pub use extract::request_threads;
 use grenad::{Merger, MergerBuilder};
 use hashbrown::HashMap;
 use heed::types::Str;

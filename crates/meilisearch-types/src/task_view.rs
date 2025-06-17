@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use milli::Object;
 use serde::{Deserialize, Serialize};
 use time::{Duration, OffsetDateTime};
@@ -6,7 +8,9 @@ use utoipa::ToSchema;
 use crate::batches::BatchId;
 use crate::error::ResponseError;
 use crate::settings::{Settings, Unchecked};
-use crate::tasks::{serialize_duration, Details, IndexSwap, Kind, Status, Task, TaskId};
+use crate::tasks::{
+    serialize_duration, Details, DetailsExportIndexSettings, IndexSwap, Kind, Status, Task, TaskId,
+};
 
 #[derive(Debug, Clone, PartialEq, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -118,6 +122,13 @@ pub struct DetailsView {
     pub upgrade_from: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub upgrade_to: Option<String>,
+    // exporting
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub indexes: Option<BTreeMap<String, DetailsExportIndexSettings>>,
 }
 
 impl DetailsView {
@@ -238,6 +249,27 @@ impl DetailsView {
                     Some(left)
                 }
             },
+            url: match (self.url.clone(), other.url.clone()) {
+                (None, None) => None,
+                (None, Some(url)) | (Some(url), None) => Some(url),
+                // We should never be able to batch multiple exports at the same time.
+                // So we return the first one we encounter but that shouldn't be an issue anyway.
+                (Some(left), Some(_right)) => Some(left),
+            },
+            api_key: match (self.api_key.clone(), other.api_key.clone()) {
+                (None, None) => None,
+                (None, Some(key)) | (Some(key), None) => Some(key),
+                // We should never be able to batch multiple exports at the same time.
+                // So we return the first one we encounter but that shouldn't be an issue anyway.
+                (Some(left), Some(_right)) => Some(left),
+            },
+            indexes: match (self.indexes.clone(), other.indexes.clone()) {
+                (None, None) => None,
+                (None, Some(indexes)) | (Some(indexes), None) => Some(indexes),
+                // We should never be able to batch multiple exports at the same time.
+                // So we return the first one we encounter but that shouldn't be an issue anyway.
+                (Some(left), Some(_right)) => Some(left),
+            },
             // We want the earliest version
             upgrade_from: match (self.upgrade_from.clone(), other.upgrade_from.clone()) {
                 (None, None) => None,
@@ -327,6 +359,17 @@ impl From<Details> for DetailsView {
             Details::IndexSwap { swaps } => {
                 DetailsView { swaps: Some(swaps), ..Default::default() }
             }
+            Details::Export { url, api_key, indexes } => DetailsView {
+                url: Some(url),
+                api_key,
+                indexes: Some(
+                    indexes
+                        .into_iter()
+                        .map(|(pattern, settings)| (pattern.to_string(), settings))
+                        .collect(),
+                ),
+                ..Default::default()
+            },
             Details::UpgradeDatabase { from, to } => DetailsView {
                 upgrade_from: Some(format!("v{}.{}.{}", from.0, from.1, from.2)),
                 upgrade_to: Some(format!("v{}.{}.{}", to.0, to.1, to.2)),
