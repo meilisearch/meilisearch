@@ -49,3 +49,6 @@ opt-level = 3
 opt-level = 3
 [profile.dev.package.roaring]
 opt-level = 3
+
+[patch.crates-io]
+roaring = { git = "https://github.com/RoaringBitmap/roaring-rs.git" }

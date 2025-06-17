@@ -27,6 +27,8 @@ impl heed::BytesEncode<'_> for RoaringBitmapCodec {
     type EItem = RoaringBitmap;
 
     fn bytes_encode(item: &Self::EItem) -> Result<Cow<'_, [u8]>, BoxedError> {
+        let mut item = item.clone();
+        item.optimize();
         let mut bytes = Vec::with_capacity(item.serialized_size());
         item.serialize_into(&mut bytes)?;
         Ok(Cow::Owned(bytes))
