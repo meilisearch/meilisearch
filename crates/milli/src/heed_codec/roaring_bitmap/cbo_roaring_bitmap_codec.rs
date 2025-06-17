@@ -1,18 +1,11 @@
 use std::borrow::Cow;
 use std::io::{self, Cursor};
-use std::mem::size_of;
 
-use byteorder::{NativeEndian, ReadBytesExt, WriteBytesExt};
 use heed::BoxedError;
 use roaring::RoaringBitmap;
 
 use crate::heed_codec::BytesDecodeOwned;
 use crate::update::del_add::{DelAdd, KvReaderDelAdd};
-
-/// This is the limit where using a byteorder became less size efficient
-/// than using a direct roaring encoding, it is also the point where we are able
-/// to determine the encoding used only by using the array of bytes length.
-pub const THRESHOLD: usize = 0;
 
 /// A conditionnal codec that either use the RoaringBitmap
 /// or a lighter ByteOrder en/decoding method.
@@ -20,11 +13,7 @@ pub struct CboRoaringBitmapCodec;
 
 impl CboRoaringBitmapCodec {
     pub fn serialized_size(roaring: &RoaringBitmap) -> usize {
-        if roaring.len() <= THRESHOLD as u64 {
-            roaring.len() as usize * size_of::<u32>()
-        } else {
-            roaring.serialized_size()
-        }
+        roaring.serialized_size()
     }
 
     pub fn serialize_into_vec(roaring: &RoaringBitmap, vec: &mut Vec<u8>) {
@@ -33,55 +22,23 @@ impl CboRoaringBitmapCodec {
 
     pub fn serialize_into_writer<W: io::Write>(
         roaring: &RoaringBitmap,
-        mut writer: W,
+        writer: W,
     ) -> io::Result<()> {
-        if roaring.len() <= THRESHOLD as u64 {
-            // If the number of items (u32s) to encode is less than or equal to the threshold
-            // it means that it would weigh the same or less than the RoaringBitmap
-            // header, so we directly encode them using ByteOrder instead.
-            for integer in roaring {
-                writer.write_u32::<NativeEndian>(integer)?;
-            }
-        } else {
-            // Otherwise, we use the classic RoaringBitmapCodec that writes a header.
-            roaring.serialize_into(writer)?;
-        }
-
-        Ok(())
+        // Otherwise, we use the classic RoaringBitmapCodec that writes a header.
+        roaring.serialize_into(writer)
     }
 
-    pub fn deserialize_from(mut bytes: &[u8]) -> io::Result<RoaringBitmap> {
-        if bytes.len() <= THRESHOLD * size_of::<u32>() {
-            // If there is threshold or less than threshold integers that can fit into this array
-            // of bytes it means that we used the ByteOrder codec serializer.
-            let mut bitmap = RoaringBitmap::new();
-            while let Ok(integer) = bytes.read_u32::<NativeEndian>() {
-                bitmap.insert(integer);
-            }
-            Ok(bitmap)
-        } else {
-            // Otherwise, it means we used the classic RoaringBitmapCodec and
-            // that the header takes threshold integers.
-            RoaringBitmap::deserialize_unchecked_from(bytes)
-        }
+    pub fn deserialize_from(bytes: &[u8]) -> io::Result<RoaringBitmap> {
+        // Otherwise, it means we used the classic RoaringBitmapCodec and
+        // that the header takes threshold integers.
+        RoaringBitmap::deserialize_unchecked_from(bytes)
     }
 
     pub fn intersection_with_serialized(
-        mut bytes: &[u8],
+        bytes: &[u8],
         other: &RoaringBitmap,
     ) -> io::Result<RoaringBitmap> {
-        // See above `deserialize_from` method for implementation details.
-        if bytes.len() <= THRESHOLD * size_of::<u32>() {
-            let mut bitmap = RoaringBitmap::new();
-            while let Ok(integer) = bytes.read_u32::<NativeEndian>() {
-                if other.contains(integer) {
-                    bitmap.insert(integer);
-                }
-            }
-            Ok(bitmap)
-        } else {
-            other.intersection_with_serialized_unchecked(Cursor::new(bytes))
-        }
+        other.intersection_with_serialized_unchecked(Cursor::new(bytes))
     }
 
     /// Merge serialized CboRoaringBitmaps in a buffer.
@@ -98,29 +55,16 @@ impl CboRoaringBitmapCodec {
         let mut vec = Vec::new();
 
         for bytes in slices {
-            if bytes.as_ref().len() <= THRESHOLD * size_of::<u32>() {
-                let mut reader = bytes.as_ref();
-                while let Ok(integer) = reader.read_u32::<NativeEndian>() {
-                    vec.push(integer);
-                }
-            } else {
-                roaring |= RoaringBitmap::deserialize_unchecked_from(bytes.as_ref())?;
-            }
+            roaring |= RoaringBitmap::deserialize_unchecked_from(bytes.as_ref())?;
         }
 
         if roaring.is_empty() {
             vec.sort_unstable();
             vec.dedup();
 
-            if vec.len() <= THRESHOLD {
-                for integer in vec {
-                    buffer.extend_from_slice(&integer.to_ne_bytes());
-                }
-            } else {
-                // We can unwrap safely because the vector is sorted upper.
-                let roaring = RoaringBitmap::from_sorted_iter(vec).unwrap();
-                roaring.serialize_into(buffer)?;
-            }
+            // We can unwrap safely because the vector is sorted upper.
+            let roaring = RoaringBitmap::from_sorted_iter(vec).unwrap();
+            roaring.serialize_into(buffer)?;
         } else {
             roaring.extend(vec);
             roaring.serialize_into(buffer)?;
@@ -187,38 +131,9 @@ impl heed::BytesEncode<'_> for CboRoaringBitmapCodec {
 
 #[cfg(test)]
 mod tests {
-    use std::iter::FromIterator;
-
-    use heed::{BytesDecode, BytesEncode};
+    use heed::BytesEncode;
 
     use super::*;
-
-    #[test]
-    fn verify_encoding_decoding() {
-        let input = RoaringBitmap::from_iter(0..THRESHOLD as u32);
-        let bytes = CboRoaringBitmapCodec::bytes_encode(&input).unwrap();
-        let output = CboRoaringBitmapCodec::bytes_decode(&bytes).unwrap();
-        assert_eq!(input, output);
-    }
-
-    #[test]
-    fn verify_threshold() {
-        let input = RoaringBitmap::from_iter(0..THRESHOLD as u32);
-
-        // use roaring bitmap
-        let mut bytes = Vec::new();
-        input.serialize_into(&mut bytes).unwrap();
-        let roaring_size = bytes.len();
-
-        // use byteorder directly
-        let mut bytes = Vec::new();
-        for integer in input {
-            bytes.write_u32::<NativeEndian>(integer).unwrap();
-        }
-        let bo_size = bytes.len();
-
-        assert!(roaring_size > bo_size);
-    }
 
     #[test]
     fn merge_cbo_roaring_bitmaps() {
