@@ -15,7 +15,7 @@ actix-web = { version = "4.11.0", default-features = false }
 anyhow = "1.0.98"
 bumpalo = "3.18.1"
 bumparaw-collections = "0.1.4"
-convert_case = "0.6.0"
+convert_case = "0.8.0"
 csv = "1.3.1"
 deserr = { version = "0.6.3", features = ["actix-web"] }
 either = { version = "1.15.0", features = ["serde"] }

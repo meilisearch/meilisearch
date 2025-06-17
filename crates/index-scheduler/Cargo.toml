@@ -16,7 +16,7 @@ bincode = "1.3.3"
 byte-unit = "5.1.6"
 bumpalo = "3.18.1"
 bumparaw-collections = "0.1.4"
-convert_case = "0.6.0"
+convert_case = "0.8.0"
 csv = "1.3.1"
 derive_builder = "0.20.2"
 dump = { path = "../dump" }
