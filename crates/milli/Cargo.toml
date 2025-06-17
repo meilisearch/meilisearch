@@ -15,15 +15,15 @@ license.workspace = true
 big_s = "1.0.2"
 bimap = { version = "0.6.3", features = ["serde"] }
 bincode = "1.3.3"
-bstr = "1.11.3"
-bytemuck = { version = "1.21.0", features = ["extern_crate_alloc"] }
+bstr = "1.12.0"
+bytemuck = { version = "1.23.1", features = ["extern_crate_alloc"] }
 byteorder = "1.5.0"
 charabia = { version = "0.9.6", default-features = false }
 concat-arrays = "0.1.2"
 convert_case = "0.6.0"
 crossbeam-channel = "0.5.15"
 deserr = "0.6.3"
-either = { version = "1.13.0", features = ["serde"] }
+either = { version = "1.15.0", features = ["serde"] }
 flatten-serde-json = { path = "../flatten-serde-json" }
 fst = "0.4.7"
 fxhash = "0.2.1"
@@ -36,32 +36,32 @@ heed = { version = "0.22.0", default-features = false, features = [
     "serde-json",
     "serde-bincode",
 ] }
-indexmap = { version = "2.7.0", features = ["serde"] }
+indexmap = { version = "2.9.0", features = ["serde"] }
 json-depth-checker = { path = "../json-depth-checker" }
 levenshtein_automata = { version = "0.2.1", features = ["fst_automaton"] }
-memchr = "2.7.4"
+memchr = "2.7.5"
 memmap2 = "0.9.5"
 obkv = "0.3.0"
-once_cell = "1.20.2"
+once_cell = "1.21.3"
 ordered-float = "4.6.0"
 rayon = "1.10.0"
-roaring = { version = "0.10.10", features = ["serde"] }
+roaring = { version = "0.10.12", features = ["serde"] }
 rstar = { version = "0.12.2", features = ["serde"] }
-serde = { version = "1.0.217", features = ["derive"] }
-serde_json = { version = "1.0.135", features = ["preserve_order", "raw_value"] }
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = { version = "1.0.140", features = ["preserve_order", "raw_value"] }
 slice-group-by = "0.3.1"
 smallstr = { version = "0.3.0", features = ["serde"] }
-smallvec = "1.13.2"
+smallvec = "1.15.1"
 smartstring = "1.0.1"
-tempfile = "3.15.0"
-thiserror = "2.0.9"
-time = { version = "0.3.37", features = [
+tempfile = "3.20.0"
+thiserror = "2.0.12"
+time = { version = "0.3.41", features = [
     "serde-well-known",
     "formatting",
     "parsing",
     "macros",
 ] }
-uuid = { version = "1.11.0", features = ["v4"] }
+uuid = { version = "1.17.0", features = ["v4"] }
 
 filter-parser = { path = "../filter-parser" }
 
@@ -69,9 +69,9 @@ filter-parser = { path = "../filter-parser" }
 itertools = "0.14.0"
 
 csv = "1.3.1"
-candle-core = { version = "0.8.2" }
-candle-transformers = { version = "0.8.2" }
-candle-nn = { version = "0.8.2" }
+candle-core = { version = "0.8.4" }
+candle-transformers = { version = "0.8.4" }
+candle-nn = { version = "0.8.4" }
 tokenizers = { git = "https://github.com/huggingface/tokenizers.git", tag = "v0.15.2", version = "0.15.2", default-features = false, features = [
     "onig",
 ] }
@@ -79,8 +79,8 @@ hf-hub = { git = "https://github.com/dureuill/hf-hub.git", branch = "rust_tls", 
     "online",
 ] }
 tiktoken-rs = "0.6.0"
-liquid = "0.26.9"
-rhai = { git = "https://github.com/rhaiscript/rhai", rev = "ef3df63121d27aacd838f366f2b83fd65f20a1e4", features = [
+liquid = "0.26.11"
+rhai = { version = "1.22.2", features = [
     "serde",
     "no_module",
     "no_custom_syntax",
@@ -93,17 +93,17 @@ tracing = "0.1.41"
 ureq = { version = "2.12.1", features = ["json"] }
 url = "2.5.4"
 rayon-par-bridge = "0.1.0"
-hashbrown = "0.15.2"
-bumpalo = "3.16.0"
+hashbrown = "0.15.4"
+bumpalo = "3.18.1"
 bumparaw-collections = "0.1.4"
-thread_local = "1.1.8"
+thread_local = "1.1.9"
 allocator-api2 = "0.2.21"
-rustc-hash = "2.1.0"
+rustc-hash = "2.1.1"
 uell = "0.1.0"
 enum-iterator = "2.1.0"
 bbqueue = { git = "https://github.com/meilisearch/bbqueue" }
 flume = { version = "0.11.1", default-features = false }
-utoipa = { version = "5.3.1", features = [
+utoipa = { version = "5.4.0", features = [
     "non_strict_integers",
     "preserve_order",
     "uuid",
@@ -113,7 +113,7 @@ utoipa = { version = "5.3.1", features = [
 lru = "0.13.0"
 
 [dev-dependencies]
-mimalloc = { version = "0.1.43", default-features = false }
+mimalloc = { version = "0.1.47", default-features = false }
 # fixed version due to format breakages in v1.40
 insta = "=1.39.0"
 maplit = "1.0.2"
