@@ -6,19 +6,18 @@ use crate::json;
 
 #[actix_rt::test]
 async fn error_document_update_create_index_bad_uid() {
-    let server = Server::new().await;
-    let index = server.index("883  fj!");
+    let server = Server::new_shared();
+    let index = server.unique_index_with_prefix("883  fj!");
     let (response, code) = index.update_documents(json!([{"id": 1}]), None).await;
 
-    let expected_response = json!({
-        "message": "`883  fj!` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_), and can not be more than 512 bytes.",
-        "code": "invalid_index_uid",
-        "type": "invalid_request",
-        "link": "https://docs.meilisearch.com/errors#invalid_index_uid"
-    });
-
-    assert_eq!(code, 400);
-    assert_eq!(response, expected_response);
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "`883  fj!-[uuid]` is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_), and can not be more than 512 bytes.",
+      "code": "invalid_index_uid",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_index_uid"
+    }"###);
 }
 
 #[actix_rt::test]
