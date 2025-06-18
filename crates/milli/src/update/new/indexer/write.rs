@@ -10,9 +10,9 @@ use super::super::channel::*;
 use crate::database_stats::DatabaseStats;
 use crate::documents::PrimaryKey;
 use crate::fields_ids_map::metadata::FieldIdMapWithMetadata;
-use crate::index::IndexEmbeddingConfig;
 use crate::progress::Progress;
 use crate::update::settings::InnerIndexSettings;
+use crate::vector::db::IndexEmbeddingConfig;
 use crate::vector::{ArroyWrapper, Embedder, EmbeddingConfigs, Embeddings};
 use crate::{Error, Index, InternalError, Result, UserError};
 
@@ -130,7 +130,7 @@ where
         )?;
     }
 
-    index.put_embedding_configs(wtxn, index_embeddings)?;
+    index.embedding_configs().put_embedding_configs(wtxn, index_embeddings)?;
     Ok(())
 }
 

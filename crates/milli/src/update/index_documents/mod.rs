@@ -222,7 +222,8 @@ where
         settings_diff.new.recompute_searchables(self.wtxn, self.index)?;
 
         let settings_diff = Arc::new(settings_diff);
-        let embedders_configs = Arc::new(self.index.embedding_configs(self.wtxn)?);
+        let embedders_configs =
+            Arc::new(self.index.embedding_configs().embedding_configs(self.wtxn)?);
 
         let possible_embedding_mistakes =
             crate::vector::error::PossibleEmbeddingMistakes::new(&field_distribution);
@@ -474,7 +475,7 @@ where
         // we should insert it in `dimension`
         for (name, action) in settings_diff.embedding_config_updates.iter() {
             if action.is_being_quantized && !dimension.contains_key(name.as_str()) {
-                let index = self.index.embedder_category_id.get(self.wtxn, name)?.ok_or(
+                let index = self.index.embedding_configs().embedder_id(self.wtxn, name)?.ok_or(
                     InternalError::DatabaseMissingEntry {
                         db_name: "embedder_category_id",
                         key: None,
@@ -492,9 +493,13 @@ where
             let vector_arroy = self.index.vector_arroy;
             let cancel = &self.should_abort;
 
-            let embedder_index = self.index.embedder_category_id.get(wtxn, &embedder_name)?.ok_or(
-                InternalError::DatabaseMissingEntry { db_name: "embedder_category_id", key: None },
-            )?;
+            let embedder_index =
+                self.index.embedding_configs().embedder_id(wtxn, &embedder_name)?.ok_or(
+                    InternalError::DatabaseMissingEntry {
+                        db_name: "embedder_category_id",
+                        key: None,
+                    },
+                )?;
             let embedder_config = settings_diff.embedding_config_updates.get(&embedder_name);
             let was_quantized =
                 settings_diff.old.embedding_configs.get(&embedder_name).is_some_and(|conf| conf.2);
@@ -767,11 +772,11 @@ mod tests {
     use crate::constants::RESERVED_GEO_FIELD_NAME;
     use crate::documents::mmap_from_objects;
     use crate::index::tests::TempIndex;
-    use crate::index::IndexEmbeddingConfig;
     use crate::progress::Progress;
     use crate::search::TermsMatchingStrategy;
     use crate::update::new::indexer;
     use crate::update::Setting;
+    use crate::vector::db::IndexEmbeddingConfig;
     use crate::{all_obkv_to_json, db_snap, Filter, FilterableAttributesRule, Search, UserError};
 
     #[test]
@@ -2785,9 +2790,13 @@ mod tests {
                .unwrap();
 
         let rtxn = index.read_txn().unwrap();
-        let mut embedding_configs = index.embedding_configs(&rtxn).unwrap();
-        let IndexEmbeddingConfig { name: embedder_name, config: embedder, user_provided } =
-            embedding_configs.pop().unwrap();
+        let mut embedding_configs = index.embedding_configs().embedding_configs(&rtxn).unwrap();
+        let IndexEmbeddingConfig {
+            name: embedder_name,
+            config: embedder,
+            user_provided,
+            fragments,
+        } = embedding_configs.pop().unwrap();
         insta::assert_snapshot!(embedder_name, @"manual");
         insta::assert_debug_snapshot!(user_provided, @"RoaringBitmap<[0, 1, 2]>");
         let embedder = std::sync::Arc::new(

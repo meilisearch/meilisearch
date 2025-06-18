@@ -3,11 +3,11 @@ use std::collections::BTreeMap;
 use big_s::S;
 use meili_snap::{json_string, snapshot};
 use meilisearch_auth::AuthFilter;
-use meilisearch_types::milli::index::IndexEmbeddingConfig;
 use meilisearch_types::milli::update::IndexDocumentsMethod::*;
 use meilisearch_types::milli::{self};
 use meilisearch_types::settings::SettingEmbeddingSettings;
 use meilisearch_types::tasks::{IndexSwap, KindWithContent};
+use milli::vector::db::IndexEmbeddingConfig;
 use roaring::RoaringBitmap;
 
 use crate::insta_snapshot::snapshot_index_scheduler;
@@ -690,8 +690,8 @@ fn test_settings_update() {
     let index = index_scheduler.index("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
 
-    let configs = index.embedding_configs(&rtxn).unwrap();
-    let IndexEmbeddingConfig { name, config, user_provided } = configs.first().unwrap();
+    let configs = index.embedding_configs().embedding_configs(&rtxn).unwrap();
+    let IndexEmbeddingConfig { name, config, user_provided, fragments } = configs.first().unwrap();
     insta::assert_snapshot!(name, @"default");
     insta::assert_debug_snapshot!(user_provided, @"RoaringBitmap<[]>");
     insta::assert_json_snapshot!(config.embedder_options);

@@ -130,7 +130,7 @@ where
         grenad_parameters: &grenad_parameters,
     };
 
-    let index_embeddings = index.embedding_configs(wtxn)?;
+    let index_embeddings = index.embedding_configs().embedding_configs(wtxn)?;
     let mut field_distribution = index.field_distribution(wtxn)?;
     let mut document_ids = index.documents_ids(wtxn)?;
     let mut modified_docids = roaring::RoaringBitmap::new();
@@ -170,12 +170,13 @@ where
             .inner_as_ref()
             .iter()
             .map(|(embedder_name, (embedder, _, was_quantized))| {
-                let embedder_index = index.embedder_category_id.get(wtxn, embedder_name)?.ok_or(
-                    InternalError::DatabaseMissingEntry {
+                let embedder_index = index
+                    .embedding_configs()
+                    .embedder_id(wtxn, embedder_name)?
+                    .ok_or(InternalError::DatabaseMissingEntry {
                         db_name: "embedder_category_id",
                         key: None,
-                    },
-                )?;
+                    })?;
 
                 let dimensions = embedder.dimensions();
                 let writer = ArroyWrapper::new(vector_arroy, embedder_index, *was_quantized);

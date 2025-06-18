@@ -12,7 +12,7 @@ use super::document::{Document, DocumentFromDb, DocumentFromVersions, Versions};
 use super::indexer::de::DeserrRawValue;
 use crate::constants::RESERVED_VECTORS_FIELD_NAME;
 use crate::documents::FieldIdMapper;
-use crate::index::IndexEmbeddingConfig;
+use crate::vector::db::IndexEmbeddingConfig;
 use crate::vector::parsed_vectors::{RawVectors, RawVectorsError, VectorOrArrayOfVectors};
 use crate::vector::{ArroyWrapper, Embedding, EmbeddingConfigs};
 use crate::{DocumentId, Index, InternalError, Result, UserError};
@@ -109,7 +109,7 @@ impl<'t> VectorDocumentFromDb<'t> {
             None => None,
         };
 
-        let embedding_config = index.embedding_configs(rtxn)?;
+        let embedding_config = index.embedding_configs().embedding_configs(rtxn)?;
 
         Ok(Some(Self { docid, embedding_config, index, vectors_field, rtxn, doc_alloc }))
     }
@@ -138,7 +138,7 @@ impl<'t> VectorDocument<'t> for VectorDocumentFromDb<'t> {
             .iter()
             .map(|config| {
                 let embedder_id =
-                    self.index.embedder_category_id.get(self.rtxn, &config.name)?.unwrap();
+                    self.index.embedding_configs().embedder_id(self.rtxn, &config.name)?.unwrap();
                 let entry = self.entry_from_db(embedder_id, config)?;
                 let config_name = self.doc_alloc.alloc_str(config.name.as_str());
                 Ok((&*config_name, entry))
@@ -156,7 +156,7 @@ impl<'t> VectorDocument<'t> for VectorDocumentFromDb<'t> {
     }
 
     fn vectors_for_key(&self, key: &str) -> Result<Option<VectorEntry<'t>>> {
-        Ok(match self.index.embedder_category_id.get(self.rtxn, key)? {
+        Ok(match self.index.embedding_configs().embedder_id(self.rtxn, key)? {
             Some(embedder_id) => {
                 let config =
                     self.embedding_config.iter().find(|config| config.name == key).unwrap();

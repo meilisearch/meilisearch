@@ -3,13 +3,13 @@ use std::collections::BTreeMap;
 use big_s::S;
 use insta::assert_json_snapshot;
 use meili_snap::{json_string, snapshot};
-use meilisearch_types::milli::index::IndexEmbeddingConfig;
 use meilisearch_types::milli::update::Setting;
 use meilisearch_types::milli::vector::settings::EmbeddingSettings;
 use meilisearch_types::milli::{self, obkv_to_json};
 use meilisearch_types::settings::{SettingEmbeddingSettings, Settings, Unchecked};
 use meilisearch_types::tasks::KindWithContent;
 use milli::update::IndexDocumentsMethod::*;
+use milli::vector::db::IndexEmbeddingConfig;
 
 use crate::insta_snapshot::snapshot_index_scheduler;
 use crate::test_utils::read_json;
@@ -85,17 +85,17 @@ fn import_vectors() {
         let index = index_scheduler.index("doggos").unwrap();
         let rtxn = index.read_txn().unwrap();
 
-        let configs = index.embedding_configs(&rtxn).unwrap();
+        let configs = index.embedding_configs().embedding_configs(&rtxn).unwrap();
         // for consistency with the below
         #[allow(clippy::get_first)]
-        let IndexEmbeddingConfig { name, config: fakerest_config, user_provided } =
+        let IndexEmbeddingConfig { name, config: fakerest_config, user_provided, fragments } =
             configs.get(0).unwrap();
         insta::assert_snapshot!(name, @"A_fakerest");
         insta::assert_debug_snapshot!(user_provided, @"RoaringBitmap<[]>");
         insta::assert_json_snapshot!(fakerest_config.embedder_options);
         let fakerest_name = name.clone();
 
-        let IndexEmbeddingConfig { name, config: simple_hf_config, user_provided } =
+        let IndexEmbeddingConfig { name, config: simple_hf_config, user_provided, fragments } =
             configs.get(1).unwrap();
         insta::assert_snapshot!(name, @"B_small_hf");
         insta::assert_debug_snapshot!(user_provided, @"RoaringBitmap<[]>");
@@ -166,15 +166,16 @@ fn import_vectors() {
         let rtxn = index.read_txn().unwrap();
 
         // Ensure the document have been inserted into the relevant bitamp
-        let configs = index.embedding_configs(&rtxn).unwrap();
+        let configs = index.embedding_configs().embedding_configs(&rtxn).unwrap();
         // for consistency with the below
         #[allow(clippy::get_first)]
-        let IndexEmbeddingConfig { name, config: _, user_provided: user_defined } =
+        let IndexEmbeddingConfig { name, config: _, user_provided: user_defined, fragments } =
             configs.get(0).unwrap();
         insta::assert_snapshot!(name, @"A_fakerest");
         insta::assert_debug_snapshot!(user_defined, @"RoaringBitmap<[0]>");
 
-        let IndexEmbeddingConfig { name, config: _, user_provided } = configs.get(1).unwrap();
+        let IndexEmbeddingConfig { name, config: _, user_provided, fragments } =
+            configs.get(1).unwrap();
         insta::assert_snapshot!(name, @"B_small_hf");
         insta::assert_debug_snapshot!(user_provided, @"RoaringBitmap<[]>");
 
@@ -240,15 +241,16 @@ fn import_vectors() {
             let rtxn = index.read_txn().unwrap();
 
             // Ensure the document have been inserted into the relevant bitamp
-            let configs = index.embedding_configs(&rtxn).unwrap();
+            let configs = index.embedding_configs().embedding_configs(&rtxn).unwrap();
             // for consistency with the below
             #[allow(clippy::get_first)]
-            let IndexEmbeddingConfig { name, config: _, user_provided: user_defined } =
+            let IndexEmbeddingConfig { name, config: _, user_provided: user_defined, fragments } =
                 configs.get(0).unwrap();
             insta::assert_snapshot!(name, @"A_fakerest");
             insta::assert_debug_snapshot!(user_defined, @"RoaringBitmap<[0]>");
 
-            let IndexEmbeddingConfig { name, config: _, user_provided } = configs.get(1).unwrap();
+            let IndexEmbeddingConfig { name, config: _, user_provided, fragments } =
+                configs.get(1).unwrap();
             insta::assert_snapshot!(name, @"B_small_hf");
             insta::assert_debug_snapshot!(user_provided, @"RoaringBitmap<[]>");
 
@@ -400,7 +402,7 @@ fn import_vectors_first_and_embedder_later() {
     // the all the vectors linked to the new specified embedder have been removed
     // Only the unknown embedders stays in the document DB
     snapshot!(serde_json::to_string(&documents).unwrap(), @r###"[{"id":0,"doggo":"kefir"},{"id":1,"doggo":"intel","_vectors":{"unknown embedder":[1.0,2.0,3.0]}},{"id":2,"doggo":"max","_vectors":{"unknown embedder":[4.0,5.0]}},{"id":3,"doggo":"marcel"},{"id":4,"doggo":"sora"}]"###);
-    let conf = index.embedding_configs(&rtxn).unwrap();
+    let conf = index.embedding_configs().embedding_configs(&rtxn).unwrap();
     // even though we specified the vector for the ID 3, it shouldn't be marked
     // as user provided since we explicitely marked it as NOT user provided.
     snapshot!(format!("{conf:#?}"), @r###"
@@ -603,7 +605,7 @@ fn delete_document_containing_vector() {
         .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
         .collect::<Vec<_>>();
     snapshot!(serde_json::to_string(&documents).unwrap(), @r###"[{"id":0,"doggo":"kefir"}]"###);
-    let conf = index.embedding_configs(&rtxn).unwrap();
+    let conf = index.embedding_configs().embedding_configs(&rtxn).unwrap();
     snapshot!(format!("{conf:#?}"), @r###"
         [
             IndexEmbeddingConfig {
@@ -647,7 +649,7 @@ fn delete_document_containing_vector() {
         .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
         .collect::<Vec<_>>();
     snapshot!(serde_json::to_string(&documents).unwrap(), @"[]");
-    let conf = index.embedding_configs(&rtxn).unwrap();
+    let conf = index.embedding_configs().embedding_configs(&rtxn).unwrap();
     snapshot!(format!("{conf:#?}"), @r###"
         [
             IndexEmbeddingConfig {

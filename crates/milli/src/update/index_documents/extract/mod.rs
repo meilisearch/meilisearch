@@ -30,8 +30,8 @@ use self::extract_word_pair_proximity_docids::extract_word_pair_proximity_docids
 use self::extract_word_position_docids::extract_word_position_docids;
 use super::helpers::{as_cloneable_grenad, CursorClonableMmap, GrenadParameters};
 use super::{helpers, TypedChunk};
-use crate::index::IndexEmbeddingConfig;
 use crate::update::settings::InnerIndexSettingsDiff;
+use crate::vector::db::IndexEmbeddingConfig;
 use crate::vector::error::PossibleEmbeddingMistakes;
 use crate::{FieldId, Result, ThreadPoolNoAbort, ThreadPoolNoAbortBuilder};
 

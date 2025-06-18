@@ -166,8 +166,9 @@ impl IndexScheduler {
             let fields_ids_map = index.fields_ids_map(&rtxn)?;
             let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
             let embedding_configs = index
+                .embedding_configs()
                 .embedding_configs(&rtxn)
-                .map_err(|e| Error::from_milli(e, Some(uid.to_string())))?;
+                .map_err(|e| Error::from_milli(e.into(), Some(uid.to_string())))?;
 
             let nb_documents = index
                 .number_of_documents(&rtxn)

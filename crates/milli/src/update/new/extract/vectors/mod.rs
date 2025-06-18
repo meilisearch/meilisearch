@@ -62,13 +62,14 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
 
         let mut all_chunks = BVec::with_capacity_in(embedders.len(), &context.doc_alloc);
         for (embedder_name, (embedder, prompt, _is_quantized)) in embedders {
-            let embedder_id =
-                context.index.embedder_category_id.get(&context.rtxn, embedder_name)?.ok_or_else(
-                    || InternalError::DatabaseMissingEntry {
-                        db_name: "embedder_category_id",
-                        key: None,
-                    },
-                )?;
+            let embedder_id = context
+                .index
+                .embedding_configs()
+                .embedder_id(&context.rtxn, embedder_name)?
+                .ok_or_else(|| InternalError::DatabaseMissingEntry {
+                    db_name: "embedder_category_id",
+                    key: None,
+                })?;
             all_chunks.push(Chunks::new(
                 embedder,
                 embedder_id,

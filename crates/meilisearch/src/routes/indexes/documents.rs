@@ -1452,7 +1452,7 @@ fn some_documents<'a, 't: 'a>(
 ) -> Result<impl Iterator<Item = Result<Document, ResponseError>> + 'a, ResponseError> {
     let fields_ids_map = index.fields_ids_map(rtxn)?;
     let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
-    let embedding_configs = index.embedding_configs(rtxn)?;
+    let embedding_configs = index.embedding_configs().embedding_configs(rtxn)?;
 
     Ok(index.iter_documents(rtxn, doc_ids)?.map(move |ret| {
         ret.map_err(ResponseError::from).and_then(|(key, document)| -> Result<_, ResponseError> {

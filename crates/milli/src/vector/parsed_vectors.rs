@@ -6,8 +6,8 @@ use serde_json::value::RawValue;
 use serde_json::{from_slice, Value};
 
 use super::Embedding;
-use crate::index::IndexEmbeddingConfig;
 use crate::update::del_add::{DelAdd, KvReaderDelAdd};
+use crate::vector::db::IndexEmbeddingConfig;
 use crate::{DocumentId, FieldId, InternalError, UserError};
 
 #[derive(serde::Serialize, Debug)]

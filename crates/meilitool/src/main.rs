@@ -545,7 +545,7 @@ fn export_documents(
             let rtxn = index.read_txn()?;
             let fields_ids_map = index.fields_ids_map(&rtxn)?;
             let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
-            let embedding_configs = index.embedding_configs(&rtxn)?;
+            let embedding_configs = index.embedding_configs().embedding_configs(&rtxn)?;
 
             if let Some(offset) = offset {
                 eprintln!("Skipping {offset} documents");

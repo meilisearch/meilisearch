@@ -57,12 +57,12 @@ use meilisearch_types::features::{
 use meilisearch_types::heed::byteorder::BE;
 use meilisearch_types::heed::types::{DecodeIgnore, SerdeJson, Str, I128};
 use meilisearch_types::heed::{self, Database, Env, RoTxn, WithoutTls};
-use meilisearch_types::milli::index::IndexEmbeddingConfig;
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::vector::{Embedder, EmbedderOptions, EmbeddingConfigs};
 use meilisearch_types::milli::{self, Index};
 use meilisearch_types::task_view::TaskView;
 use meilisearch_types::tasks::{KindWithContent, Task};
+use milli::vector::db::IndexEmbeddingConfig;
 use processing::ProcessingTasks;
 pub use queue::Query;
 use queue::Queue;

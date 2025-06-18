@@ -399,7 +399,7 @@ impl SearchKind {
         route: Route,
     ) -> Result<(String, Arc<Embedder>, bool), ResponseError> {
         let rtxn = index.read_txn()?;
-        let embedder_configs = index.embedding_configs(&rtxn)?;
+        let embedder_configs = index.embedding_configs().embedding_configs(&rtxn)?;
         let embedders = index_scheduler.embedders(index_uid, embedder_configs)?;
 
         let (embedder, _, quantized) = embedders
@@ -1328,7 +1328,7 @@ struct HitMaker<'a> {
     vectors_fid: Option<FieldId>,
     retrieve_vectors: RetrieveVectors,
     to_retrieve_ids: BTreeSet<FieldId>,
-    embedding_configs: Vec<index::IndexEmbeddingConfig>,
+    embedding_configs: Vec<milli::vector::db::IndexEmbeddingConfig>,
     formatter_builder: MatcherBuilder<'a>,
     formatted_options: BTreeMap<FieldId, FormatOptions>,
     show_ranking_score: bool,
@@ -1443,7 +1443,7 @@ impl<'a> HitMaker<'a> {
             &displayed_ids,
         );
 
-        let embedding_configs = index.embedding_configs(rtxn)?;
+        let embedding_configs = index.embedding_configs().embedding_configs(rtxn)?;
 
         Ok(Self {
             index,

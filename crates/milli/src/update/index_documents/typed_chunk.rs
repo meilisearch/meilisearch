@@ -18,7 +18,6 @@ use super::helpers::{
 use crate::external_documents_ids::{DocumentOperation, DocumentOperationKind};
 use crate::facet::FacetType;
 use crate::index::db_name::DOCUMENTS;
-use crate::index::IndexEmbeddingConfig;
 use crate::proximity::MAX_DISTANCE;
 use crate::update::del_add::{deladd_serialize_add_side, DelAdd, KvReaderDelAdd};
 use crate::update::facet::FacetsUpdate;
@@ -26,6 +25,7 @@ use crate::update::index_documents::helpers::{
     as_cloneable_grenad, try_split_array_at, KeepLatestObkv,
 };
 use crate::update::settings::InnerIndexSettingsDiff;
+use crate::vector::db::IndexEmbeddingConfig;
 use crate::vector::ArroyWrapper;
 use crate::{
     lat_lng_to_xyz, CboRoaringBitmapCodec, DocumentId, FieldId, GeoPoint, Index, InternalError,
@@ -155,6 +155,7 @@ pub(crate) fn write_typed_chunk_into_index(
             let mut iter = merger.into_stream_merger_iter()?;
 
             let embedders: BTreeSet<_> = index
+                .embedding_configs()
                 .embedding_configs(wtxn)?
                 .into_iter()
                 .map(|IndexEmbeddingConfig { name, .. }| name)
@@ -648,7 +649,9 @@ pub(crate) fn write_typed_chunk_into_index(
             // typed chunks has always at least 1 chunk.
             let Some((expected_dimension, embedder_name)) = params else { unreachable!() };
 
-            let mut embedding_configs = index.embedding_configs(wtxn)?;
+            let embedders = index.embedding_configs();
+
+            let mut embedding_configs = embedders.embedding_configs(wtxn)?;
             let index_embedder_config = embedding_configs
                 .iter_mut()
                 .find(|IndexEmbeddingConfig { name, .. }| name == &embedder_name)
@@ -656,9 +659,9 @@ pub(crate) fn write_typed_chunk_into_index(
             index_embedder_config.user_provided -= remove_from_user_provided;
             index_embedder_config.user_provided |= add_to_user_provided;
 
-            index.put_embedding_configs(wtxn, embedding_configs)?;
+            embedders.put_embedding_configs(wtxn, embedding_configs)?;
 
-            let embedder_index = index.embedder_category_id.get(wtxn, &embedder_name)?.ok_or(
+            let embedder_index = embedders.embedder_id(wtxn, &embedder_name)?.ok_or(
                 InternalError::DatabaseMissingEntry { db_name: "embedder_category_id", key: None },
             )?;
             let binary_quantized =
