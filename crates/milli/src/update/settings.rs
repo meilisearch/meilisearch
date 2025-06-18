@@ -1043,7 +1043,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                 let old_configs = embedders.embedding_configs(self.wtxn)?;
                 let remove_all: Result<BTreeMap<String, EmbedderAction>> = old_configs
                     .into_iter()
-                    .map(|IndexEmbeddingConfig { name, config, user_provided, fragments }| -> Result<_> {
+                    .map(|IndexEmbeddingConfig { name, config, user_provided, fragments: _ }| -> Result<_> {
                         let embedder_id = embedders.embedder_id(self.wtxn, &name)?.ok_or(
                             crate::InternalError::DatabaseMissingEntry {
                                 db_name: crate::index::db_name::VECTOR_EMBEDDER_CATEGORY_ID,

@@ -92,6 +92,7 @@ fn import_vectors() {
             configs.get(0).unwrap();
         insta::assert_snapshot!(name, @"A_fakerest");
         insta::assert_debug_snapshot!(user_provided, @"RoaringBitmap<[]>");
+        insta::assert_debug_snapshot!(fragments, @"[]");
         insta::assert_json_snapshot!(fakerest_config.embedder_options);
         let fakerest_name = name.clone();
 
@@ -99,6 +100,7 @@ fn import_vectors() {
             configs.get(1).unwrap();
         insta::assert_snapshot!(name, @"B_small_hf");
         insta::assert_debug_snapshot!(user_provided, @"RoaringBitmap<[]>");
+        insta::assert_debug_snapshot!(fragments, @"[]");
         insta::assert_json_snapshot!(simple_hf_config.embedder_options);
         let simple_hf_name = name.clone();
 
@@ -173,11 +175,13 @@ fn import_vectors() {
             configs.get(0).unwrap();
         insta::assert_snapshot!(name, @"A_fakerest");
         insta::assert_debug_snapshot!(user_defined, @"RoaringBitmap<[0]>");
+        insta::assert_debug_snapshot!(fragments, @"[]");
 
         let IndexEmbeddingConfig { name, config: _, user_provided, fragments } =
             configs.get(1).unwrap();
         insta::assert_snapshot!(name, @"B_small_hf");
         insta::assert_debug_snapshot!(user_provided, @"RoaringBitmap<[]>");
+        insta::assert_debug_snapshot!(fragments, @"[]");
 
         let embeddings = index.embeddings(&rtxn, 0).unwrap();
 
@@ -248,11 +252,13 @@ fn import_vectors() {
                 configs.get(0).unwrap();
             insta::assert_snapshot!(name, @"A_fakerest");
             insta::assert_debug_snapshot!(user_defined, @"RoaringBitmap<[0]>");
+            insta::assert_debug_snapshot!(fragments, @"[]");
 
             let IndexEmbeddingConfig { name, config: _, user_provided, fragments } =
                 configs.get(1).unwrap();
             insta::assert_snapshot!(name, @"B_small_hf");
             insta::assert_debug_snapshot!(user_provided, @"RoaringBitmap<[]>");
+            insta::assert_debug_snapshot!(fragments, @"[]");
 
             let embeddings = index.embeddings(&rtxn, 0).unwrap();
 

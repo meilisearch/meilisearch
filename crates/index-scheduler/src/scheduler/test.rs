@@ -695,6 +695,7 @@ fn test_settings_update() {
     insta::assert_snapshot!(name, @"default");
     insta::assert_debug_snapshot!(user_provided, @"RoaringBitmap<[]>");
     insta::assert_json_snapshot!(config.embedder_options);
+    insta::assert_debug_snapshot!(fragments, @"[]");
 }
 
 #[test]
