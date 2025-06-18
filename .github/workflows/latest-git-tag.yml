@@ -10,7 +10,7 @@ jobs:
     name: Check the version validity
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Check release validity
         if: github.event_name == 'release'
         run: bash .github/scripts/check-release.sh
@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: check-version
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: rickstaa/action-create-tag@v1
         with:
           tag: "latest"
