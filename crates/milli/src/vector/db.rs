@@ -5,6 +5,7 @@ use heed::types::{SerdeJson, Str, U8};
 use heed::{Database, RoTxn, RwTxn, Unspecified};
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::vector::EmbeddingConfig;
 use crate::{CboRoaringBitmapCodec, DocumentId};
@@ -16,13 +17,43 @@ pub struct IndexEmbeddingConfig {
     /// TODO: remove user_provided
     pub user_provided: RoaringBitmap,
     #[serde(default)]
-    pub fragments: Vec<FragmentConfig>,
+    pub fragments: FragmentConfigs,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+pub struct FragmentConfigs(Vec<FragmentConfig>);
+
+impl FragmentConfigs {
+    pub fn new() -> Self {
+        Default::default()
+    }
+    pub fn as_slice(&self) -> &[FragmentConfig] {
+        self.0.as_slice()
+    }
+
+    pub fn add_new_fragments(&mut self, new_fragments: impl IntoIterator<Item = (String, Value)>) {
+        let mut free_indices: [bool; u8::MAX as usize] = [true; u8::MAX as usize];
+
+        for FragmentConfig { id, name: _, fragment: _ } in self.0.iter() {
+            free_indices[*id as usize] = false;
+        }
+        let mut free_indices = free_indices.iter_mut().enumerate();
+        let mut find_free_index =
+            move || free_indices.find(|(_, free)| **free).map(|(index, _)| index as u8);
+
+        for (name, fragment) in new_fragments {
+            /// FIXME: add error here if more than 256 fragments
+            let id = find_free_index().unwrap();
+            self.0.push(FragmentConfig { id, name, fragment })
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct FragmentConfig {
     pub id: u8,
     pub name: String,
+    pub fragment: Value,
 }
 
 pub struct IndexEmbeddingConfigs {
@@ -40,6 +71,7 @@ pub struct EmbedderInfo {
 /// Because most documents have the same value for `user_provided` and `must_regenerate`, we store only
 /// the `user_provided` and a list of the documents for which `must_regenerate` assumes the other value
 /// than `user_provided`.
+#[derive(Default)]
 pub struct EmbeddingStatus {
     user_provided: RoaringBitmap,
     skip_regenerate_different_from_user_provided: RoaringBitmap,
@@ -47,10 +79,7 @@ pub struct EmbeddingStatus {
 
 impl EmbeddingStatus {
     pub fn new() -> Self {
-        EmbeddingStatus {
-            user_provided: RoaringBitmap::new(),
-            skip_regenerate_different_from_user_provided: RoaringBitmap::new(),
-        }
+        Default::default()
     }
 
     /// Whether the document contains user-provided vectors for that embedder.
