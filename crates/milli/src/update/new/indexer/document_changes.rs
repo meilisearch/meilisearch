@@ -43,7 +43,7 @@ pub struct DocumentChangeContext<
     pub extractor_alloc: &'extractor Bump,
 
     /// Pool of doc allocators, used to retrieve the doc allocator we provided for the documents
-    doc_allocs: &'doc ThreadLocal<FullySend<Cell<Bump>>>,
+    pub doc_allocs: &'doc ThreadLocal<FullySend<Cell<Bump>>>,
 
     /// Extractor-specific data
     pub data: &'doc T,

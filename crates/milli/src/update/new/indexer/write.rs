@@ -21,7 +21,7 @@ pub fn write_to_db(
     finished_extraction: &AtomicBool,
     index: &Index,
     wtxn: &mut RwTxn<'_>,
-    arroy_writers: &HashMap<u8, (&str, &Embedder, ArroyWrapper, usize)>,
+    arroy_writers: &HashMap<u8, (&Embedder, ArroyWrapper, usize)>,
 ) -> Result<ChannelCongestion> {
     // Used by by the ArroySetVector to copy the embedding into an
     // aligned memory area, required by arroy to accept a new vector.
@@ -53,7 +53,7 @@ pub fn write_to_db(
             }
             ReceiverAction::LargeVectors(large_vectors) => {
                 let LargeVectors { docid, embedder_id, .. } = large_vectors;
-                let (_, _, writer, dimensions) =
+                let (_, writer, dimensions) =
                     arroy_writers.get(&embedder_id).expect("requested a missing embedder");
                 let mut embeddings = Embeddings::new(*dimensions);
                 for embedding in large_vectors.read_embeddings(*dimensions) {
@@ -105,7 +105,7 @@ pub fn build_vectors<MSP>(
     progress: &Progress,
     index_embeddings: Vec<IndexEmbeddingConfig>,
     arroy_memory: Option<usize>,
-    arroy_writers: &mut HashMap<u8, (&str, &Embedder, ArroyWrapper, usize)>,
+    arroy_writers: &mut HashMap<u8, (&Embedder, ArroyWrapper, usize)>,
     must_stop_processing: &MSP,
 ) -> Result<()>
 where
@@ -117,7 +117,7 @@ where
 
     let seed = rand::random();
     let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
-    for (_index, (_embedder_name, _embedder, writer, dimensions)) in arroy_writers {
+    for (_index, (_embedder, writer, dimensions)) in arroy_writers {
         let dimensions = *dimensions;
         writer.build_and_quantize(
             wtxn,
@@ -166,7 +166,7 @@ pub fn write_from_bbqueue(
     writer_receiver: &mut WriterBbqueueReceiver<'_>,
     index: &Index,
     wtxn: &mut RwTxn<'_>,
-    arroy_writers: &HashMap<u8, (&str, &crate::vector::Embedder, ArroyWrapper, usize)>,
+    arroy_writers: &HashMap<u8, (&crate::vector::Embedder, ArroyWrapper, usize)>,
     aligned_embedding: &mut Vec<f32>,
 ) -> crate::Result<()> {
     while let Some(frame_with_header) = writer_receiver.recv_frame() {
@@ -207,7 +207,7 @@ pub fn write_from_bbqueue(
                 }
             }
             EntryHeader::ArroyDeleteVector(ArroyDeleteVector { docid }) => {
-                for (_index, (_name, _embedder, writer, dimensions)) in arroy_writers {
+                for (_index, (_embedder, writer, dimensions)) in arroy_writers {
                     let dimensions = *dimensions;
                     writer.del_items(wtxn, dimensions, docid)?;
                 }
@@ -215,7 +215,7 @@ pub fn write_from_bbqueue(
             EntryHeader::ArroySetVectors(asvs) => {
                 let ArroySetVectors { docid, embedder_id, .. } = asvs;
                 let frame = frame_with_header.frame();
-                let (_, _, writer, dimensions) =
+                let (_, writer, dimensions) =
                     arroy_writers.get(&embedder_id).expect("requested a missing embedder");
                 let mut embeddings = Embeddings::new(*dimensions);
                 let all_embeddings = asvs.read_all_embeddings_into_vec(frame, aligned_embedding);

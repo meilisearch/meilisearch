@@ -12,7 +12,7 @@ pub use documents::*;
 pub use faceted::*;
 pub use geo::*;
 pub use searchable::*;
-pub use vectors::EmbeddingExtractor;
+pub use vectors::{EmbeddingExtractor, SettingsChangeEmbeddingExtractor};
 
 /// TODO move in permissive json pointer
 pub mod perm_json_p {

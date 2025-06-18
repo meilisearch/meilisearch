@@ -14,14 +14,9 @@ use crate::vector::EmbeddingConfigs;
 use crate::{DocumentId, Index, InternalError, Result};
 
 pub enum DocumentChange<'doc> {
-    Deletion(Deletion<'doc>),
+    Deletion(DatabaseDocument<'doc>),
     Update(Update<'doc>),
     Insertion(Insertion<'doc>),
-}
-
-pub struct Deletion<'doc> {
-    docid: DocumentId,
-    external_document_id: &'doc str,
 }
 
 pub struct Update<'doc> {
@@ -35,6 +30,11 @@ pub struct Insertion<'doc> {
     docid: DocumentId,
     external_document_id: &'doc str,
     new: Versions<'doc>,
+}
+
+pub struct DatabaseDocument<'doc> {
+    docid: DocumentId,
+    external_document_id: &'doc str,
 }
 
 impl<'doc> DocumentChange<'doc> {
@@ -52,31 +52,6 @@ impl<'doc> DocumentChange<'doc> {
             DocumentChange::Update(update) => update.external_document_id(),
             DocumentChange::Insertion(insertion) => insertion.external_document_id(),
         }
-    }
-}
-
-impl<'doc> Deletion<'doc> {
-    pub fn create(docid: DocumentId, external_document_id: &'doc str) -> Self {
-        Self { docid, external_document_id }
-    }
-
-    pub fn docid(&self) -> DocumentId {
-        self.docid
-    }
-
-    pub fn external_document_id(&self) -> &'doc str {
-        self.external_document_id
-    }
-
-    pub fn current<'a, Mapper: FieldIdMapper>(
-        &self,
-        rtxn: &'a RoTxn,
-        index: &'a Index,
-        mapper: &'a Mapper,
-    ) -> Result<DocumentFromDb<'a, Mapper>> {
-        Ok(DocumentFromDb::new(self.docid, rtxn, index, mapper)?.ok_or(
-            crate::error::UserError::UnknownInternalDocumentId { document_id: self.docid },
-        )?)
     }
 }
 
@@ -302,5 +277,42 @@ impl<'doc> Update<'doc> {
                 embedders,
             )
         }
+    }
+}
+
+impl<'doc> DatabaseDocument<'doc> {
+    pub fn create(docid: DocumentId, external_document_id: &'doc str) -> Self {
+        Self { docid, external_document_id }
+    }
+
+    pub fn docid(&self) -> DocumentId {
+        self.docid
+    }
+
+    pub fn external_document_id(&self) -> &'doc str {
+        self.external_document_id
+    }
+
+    pub fn current<'a, Mapper: FieldIdMapper>(
+        &self,
+        rtxn: &'a RoTxn,
+        index: &'a Index,
+        mapper: &'a Mapper,
+    ) -> Result<DocumentFromDb<'a, Mapper>> {
+        Ok(DocumentFromDb::new(self.docid, rtxn, index, mapper)?.ok_or(
+            crate::error::UserError::UnknownInternalDocumentId { document_id: self.docid },
+        )?)
+    }
+
+    pub fn current_vectors<'a, Mapper: FieldIdMapper>(
+        &self,
+        rtxn: &'a RoTxn,
+        index: &'a Index,
+        mapper: &'a Mapper,
+        doc_alloc: &'a Bump,
+    ) -> Result<VectorDocumentFromDb<'a>> {
+        Ok(VectorDocumentFromDb::new(self.docid, index, rtxn, mapper, doc_alloc)?.ok_or(
+            crate::error::UserError::UnknownInternalDocumentId { document_id: self.docid },
+        )?)
     }
 }

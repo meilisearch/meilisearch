@@ -19,7 +19,7 @@ use crate::progress::{AtomicPayloadStep, Progress};
 use crate::update::new::document::Versions;
 use crate::update::new::steps::IndexingStep;
 use crate::update::new::thread_local::MostlySend;
-use crate::update::new::{Deletion, Insertion, Update};
+use crate::update::new::{DatabaseDocument, Insertion, Update};
 use crate::update::{AvailableIds, IndexDocumentsMethod};
 use crate::{DocumentId, Error, FieldsIdsMap, Index, InternalError, Result, UserError};
 
@@ -577,7 +577,7 @@ impl<'pl> PayloadOperations<'pl> {
                 if self.is_new {
                     Ok(None)
                 } else {
-                    let deletion = Deletion::create(self.docid, external_doc);
+                    let deletion = DatabaseDocument::create(self.docid, external_doc);
                     Ok(Some(DocumentChange::Deletion(deletion)))
                 }
             }
