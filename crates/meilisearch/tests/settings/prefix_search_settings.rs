@@ -26,11 +26,11 @@ static DOCUMENTS: Lazy<crate::common::Value> = Lazy::new(|| {
 
 #[actix_rt::test]
 async fn add_docs_and_disable() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index_with_prefix("test");
 
     let (response, _code) = index.add_documents(DOCUMENTS.clone(), None).await;
-    index.wait_task(response.uid()).await;
+    server.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index
         .update_settings(json!({
@@ -38,8 +38,8 @@ async fn add_docs_and_disable() {
             "rankingRules": ["words", "typo", "proximity"],
         }))
         .await;
-    assert_eq!("202", code.as_str(), "{:?}", response);
-    index.wait_task(response.uid()).await;
+    assert_eq!("202", code.as_str(), "{response:?}");
+    server.wait_task(response.uid()).await.succeeded();
 
     // only 1 document should match
     index
@@ -86,8 +86,8 @@ async fn add_docs_and_disable() {
 
 #[actix_rt::test]
 async fn disable_and_add_docs() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index_with_prefix("test");
 
     let (response, code) = index
         .update_settings(json!({
@@ -95,11 +95,11 @@ async fn disable_and_add_docs() {
             "rankingRules": ["words", "typo", "proximity"],
         }))
         .await;
-    assert_eq!("202", code.as_str(), "{:?}", response);
-    index.wait_task(response.uid()).await;
+    assert_eq!("202", code.as_str(), "{response:?}");
+    server.wait_task(response.uid()).await.succeeded();
 
     let (response, _code) = index.add_documents(DOCUMENTS.clone(), None).await;
-    index.wait_task(response.uid()).await;
+    server.wait_task(response.uid()).await.succeeded();
 
     // only 1 document should match
     index
@@ -145,8 +145,8 @@ async fn disable_and_add_docs() {
 
 #[actix_rt::test]
 async fn disable_add_docs_and_enable() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index_with_prefix("test");
 
     let (response, code) = index
         .update_settings(json!({
@@ -154,11 +154,11 @@ async fn disable_add_docs_and_enable() {
             "rankingRules": ["words", "typo", "proximity"],
         }))
         .await;
-    assert_eq!("202", code.as_str(), "{:?}", response);
-    index.wait_task(response.uid()).await;
+    assert_eq!("202", code.as_str(), "{response:?}");
+    server.wait_task(response.uid()).await.succeeded();
 
     let (response, _code) = index.add_documents(DOCUMENTS.clone(), None).await;
-    index.wait_task(response.uid()).await;
+    server.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index
         .update_settings(json!({
@@ -166,8 +166,8 @@ async fn disable_add_docs_and_enable() {
             "rankingRules": ["words", "typo", "proximity"],
         }))
         .await;
-    assert_eq!("202", code.as_str(), "{:?}", response);
-    index.wait_task(2).await;
+    assert_eq!("202", code.as_str(), "{response:?}");
+    server.wait_task(response.uid()).await.succeeded();
 
     // all documents should match
     index
@@ -253,8 +253,8 @@ async fn disable_add_docs_and_enable() {
 
 #[actix_rt::test]
 async fn disable_add_docs_and_reset() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index_with_prefix("test");
 
     let (response, code) = index
         .update_settings(json!({
@@ -262,11 +262,11 @@ async fn disable_add_docs_and_reset() {
             "rankingRules": ["words", "typo", "proximity"],
         }))
         .await;
-    assert_eq!("202", code.as_str(), "{:?}", response);
-    index.wait_task(response.uid()).await;
+    assert_eq!("202", code.as_str(), "{response:?}");
+    server.wait_task(response.uid()).await.succeeded();
 
     let (response, _code) = index.add_documents(DOCUMENTS.clone(), None).await;
-    index.wait_task(response.uid()).await;
+    server.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index
         .update_settings(json!({
@@ -274,8 +274,8 @@ async fn disable_add_docs_and_reset() {
             "rankingRules": ["words", "typo", "proximity"],
         }))
         .await;
-    assert_eq!("202", code.as_str(), "{:?}", response);
-    index.wait_task(2).await;
+    assert_eq!("202", code.as_str(), "{response:?}");
+    server.wait_task(response.uid()).await.succeeded();
 
     // all documents should match
     index
@@ -361,19 +361,19 @@ async fn disable_add_docs_and_reset() {
 
 #[actix_rt::test]
 async fn default_behavior() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index_with_prefix("test");
 
     let (response, code) = index
         .update_settings(json!({
             "rankingRules": ["words", "typo", "proximity"],
         }))
         .await;
-    assert_eq!("202", code.as_str(), "{:?}", response);
-    index.wait_task(response.uid()).await;
+    assert_eq!("202", code.as_str(), "{response:?}");
+    server.wait_task(response.uid()).await.succeeded();
 
     let (response, _code) = index.add_documents(DOCUMENTS.clone(), None).await;
-    index.wait_task(response.uid()).await;
+    server.wait_task(response.uid()).await.succeeded();
 
     // all documents should match
     index
