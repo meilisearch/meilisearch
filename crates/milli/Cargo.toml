@@ -92,14 +92,12 @@ rand = "0.8.5"
 tracing = "0.1.41"
 ureq = { version = "2.12.1", features = ["json"] }
 url = "2.5.4"
-rayon-par-bridge = "0.1.0"
 hashbrown = "0.15.4"
 bumpalo = "3.18.1"
 bumparaw-collections = "0.1.4"
 thread_local = "1.1.9"
 allocator-api2 = "0.3.0"
 rustc-hash = "2.1.1"
-uell = "0.1.0"
 enum-iterator = "2.1.0"
 bbqueue = { git = "https://github.com/meilisearch/bbqueue" }
 flume = { version = "0.11.1", default-features = false }
