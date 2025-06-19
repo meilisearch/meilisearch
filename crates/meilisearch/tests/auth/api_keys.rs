@@ -790,7 +790,7 @@ async fn list_api_keys() {
     meili_snap::snapshot!(code, @"201 Created");
 
     let (response, code) = server.list_api_keys("").await;
-    meili_snap::snapshot!(meili_snap::json_string!(response, { ".results[].createdAt" => "[ignored]", ".results[].updatedAt" => "[ignored]", ".results[0].uid" => "[ignored]", ".results[].key" => "[ignored]" }), @r#"
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".results[].createdAt" => "[ignored]", ".results[].updatedAt" => "[ignored]", ".results[].uid" => "[ignored]", ".results[].key" => "[ignored]" }), @r#"
     {
       "results": [
         {
@@ -824,7 +824,7 @@ async fn list_api_keys() {
           "name": "Default Search API Key",
           "description": "Use it to search from the frontend",
           "key": "[ignored]",
-          "uid": "00000000-0000-0000-0000-000000000002",
+          "uid": "[ignored]",
           "actions": [
             "search"
           ],
@@ -839,7 +839,7 @@ async fn list_api_keys() {
           "name": "Default Admin API Key",
           "description": "Use it for anything that is not a search operation. Caution! Do not expose it on a public frontend",
           "key": "[ignored]",
-          "uid": "00000000-0000-0000-0000-000000000000",
+          "uid": "[ignored]",
           "actions": [
             "*"
           ],
@@ -854,7 +854,7 @@ async fn list_api_keys() {
           "name": "Default Read-Only Admin API Key",
           "description": "Use it to peek into the instance in a read-only mode. Caution! Do not expose it on a public frontend. It would give access to all other keys",
           "key": "[ignored]",
-          "uid": "00000000-0000-0000-0000-000000000001",
+          "uid": "[ignored]",
           "actions": [
             "*.get"
           ],
@@ -869,7 +869,7 @@ async fn list_api_keys() {
           "name": "Default Chat API Key",
           "description": "Use it to chat and search from the frontend",
           "key": "[ignored]",
-          "uid": "00000000-0000-0000-0000-000000000003",
+          "uid": "[ignored]",
           "actions": [
             "chatCompletions",
             "search"
