@@ -233,8 +233,8 @@ pub enum Action {
     #[serde(rename = "*")]
     #[deserr(rename = "*")]
     All = 0,
-    #[serde(rename = "*.read")]
-    #[deserr(rename = "*.read")]
+    #[serde(rename = "*.get")]
+    #[deserr(rename = "*.get")]
     AllRead,
     #[serde(rename = "search")]
     #[deserr(rename = "search")]
