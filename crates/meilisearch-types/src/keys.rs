@@ -151,7 +151,7 @@ impl Key {
             name: Some("Default Read-Only Admin API Key".to_string()),
             description: Some("Use it to peek into the instance in a read-only mode. Caution! Do not expose it on a public frontend. It would give access to all other keys".to_string()),
             uid,
-            actions: vec![Action::AllRead],
+            actions: vec![Action::AllGet],
             indexes: vec![IndexUidPattern::all()],
             expires_at: None,
             created_at: now,
@@ -235,7 +235,7 @@ pub enum Action {
     All = 0,
     #[serde(rename = "*.get")]
     #[deserr(rename = "*.get")]
-    AllRead,
+    AllGet,
     #[serde(rename = "search")]
     #[deserr(rename = "search")]
     Search,
@@ -421,7 +421,7 @@ impl Action {
         // It's using an exhaustive match to force the addition of new actions.
         match self {
             // Any action that expands to others must return false, as it wouldn't be able to expand recursively.
-            All | AllRead | DocumentsAll | IndexesAll | ChatsAll | TasksAll | SettingsAll
+            All | AllGet | DocumentsAll | IndexesAll | ChatsAll | TasksAll | SettingsAll
                 | StatsAll | MetricsAll | DumpsAll | SnapshotsAll | ChatsSettingsAll => false,
 
             Search => true,
@@ -468,7 +468,7 @@ pub mod actions {
     use super::Action::*;
 
     pub(crate) const ALL: u8 = All.repr();
-    pub const ALL_READ: u8 = AllRead.repr();
+    pub const ALL_READ: u8 = AllGet.repr();
     pub const SEARCH: u8 = Search.repr();
     pub const DOCUMENTS_ALL: u8 = DocumentsAll.repr();
     pub const DOCUMENTS_ADD: u8 = DocumentsAdd.repr();
