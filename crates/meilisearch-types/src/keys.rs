@@ -148,8 +148,8 @@ impl Key {
         let now = OffsetDateTime::now_utc();
         let uid = Uuid::from_u128(1);
         Self {
-            name: Some("Read-only Admin key".to_string()),
-            description: Some("Use it to peek into the instance in a read-only mode. Caution! Do not expose it on a public frontend".to_string()),
+            name: Some("Default Read-Only Admin API Key".to_string()),
+            description: Some("Use it to peek into the instance in a read-only mode. Caution! Do not expose it on a public frontend. It would give access to all other keys".to_string()),
             uid,
             actions: vec![Action::AllRead],
             indexes: vec![IndexUidPattern::all()],
@@ -444,7 +444,7 @@ impl Action {
             SnapshotsCreate => false,
             Version => true,
             KeysAdd => false,
-            KeysGet => false, // Prevent privilege escalation by not allowing reading other keys.
+            KeysGet => true,
             KeysUpdate => false,
             KeysDelete => false,
             ExperimentalFeaturesGet => true,
