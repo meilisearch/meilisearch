@@ -97,6 +97,7 @@ impl Server<Owned> {
         self.use_api_key(master_key);
         let (response, code) = self.list_api_keys("").await;
         assert_eq!(200, code, "{:?}", response);
+        // TODO: relying on the order of keys is not ideal, we should use the static uuid
         let admin_key = &response["results"][1]["key"];
         self.use_api_key(admin_key.as_str().unwrap());
     }

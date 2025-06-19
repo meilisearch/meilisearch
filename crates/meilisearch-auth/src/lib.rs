@@ -351,9 +351,9 @@ pub struct IndexSearchRules {
 
 fn generate_default_keys(store: &HeedAuthStore) -> Result<()> {
     store.put_api_key(Key::default_chat())?;
+    store.put_api_key(Key::default_management())?;
     store.put_api_key(Key::default_admin())?;
     store.put_api_key(Key::default_search())?;
-    store.put_api_key(Key::default_management())?;
 
     Ok(())
 }
