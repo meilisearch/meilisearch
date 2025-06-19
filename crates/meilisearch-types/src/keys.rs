@@ -218,6 +218,9 @@ pub enum Action {
     #[serde(rename = "*")]
     #[deserr(rename = "*")]
     All = 0,
+    #[serde(rename = "*.read")]
+    #[deserr(rename = "*.read")]
+    AllRead,
     #[serde(rename = "search")]
     #[deserr(rename = "search")]
     Search,
@@ -393,6 +396,51 @@ impl Action {
             NETWORK_GET => Some(Self::NetworkGet),
             NETWORK_UPDATE => Some(Self::NetworkUpdate),
             _otherwise => None,
+        }
+    }
+
+    /// Whether the action should be included in [Action::AllRead].
+    pub fn is_read(&self) -> bool {
+        use Action::*;
+
+        // It's using an exhaustive match to force the addition of new actions.
+        match self {
+            // Any action that expands to others must return false, as it wouldn't be able to expand recursively.
+            All | AllRead | DocumentsAll | IndexesAll | ChatsAll | TasksAll | SettingsAll
+                | StatsAll | MetricsAll | DumpsAll | SnapshotsAll | ChatsSettingsAll => false,
+
+            Search => true,
+            DocumentsAdd => false,
+            DocumentsGet => true,
+            DocumentsDelete => false,
+            IndexesAdd => false,
+            IndexesGet => true,
+            IndexesUpdate => false,
+            IndexesDelete => false,
+            IndexesSwap => false,
+            TasksCancel => false,
+            TasksDelete => false,
+            TasksGet => true,
+            SettingsGet => true,
+            SettingsUpdate => false,
+            StatsGet => true,
+            MetricsGet => true,
+            DumpsCreate => false,
+            SnapshotsCreate => false,
+            Version => true,
+            KeysAdd => false,
+            KeysGet => false, // Prevent privilege escalation by not allowing reading other keys.
+            KeysUpdate => false,
+            KeysDelete => false,
+            ExperimentalFeaturesGet => true,
+            ExperimentalFeaturesUpdate => false,
+            NetworkGet => true,
+            NetworkUpdate => false,
+            ChatCompletions => false, // Disabled because it might trigger generation of new chats.
+            ChatsGet => true,
+            ChatsDelete => false,
+            ChatsSettingsGet => true,
+            ChatsSettingsUpdate => false,
         }
     }
 
