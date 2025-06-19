@@ -131,7 +131,7 @@ pub struct Key {
 impl Key {
     pub fn default_admin() -> Self {
         let now = OffsetDateTime::now_utc();
-        let uid = Uuid::new_v4();
+        let uid = Uuid::from_u128(0);
         Self {
             name: Some("Default Admin API Key".to_string()),
             description: Some("Use it for anything that is not a search operation. Caution! Do not expose it on a public frontend".to_string()),
@@ -146,9 +146,9 @@ impl Key {
 
     pub fn default_management() -> Self {
         let now = OffsetDateTime::now_utc();
-        let uid = Uuid::new_v4();
+        let uid = Uuid::from_u128(1);
         Self {
-            name: Some("Default Management API Key".to_string()),
+            name: Some("Read-only Admin key".to_string()),
             description: Some("Use it to peek into the instance in a read-only mode. Caution! Do not expose it on a public frontend".to_string()),
             uid,
             actions: vec![Action::AllRead],
@@ -161,7 +161,7 @@ impl Key {
 
     pub fn default_search() -> Self {
         let now = OffsetDateTime::now_utc();
-        let uid = Uuid::new_v4();
+        let uid = Uuid::from_u128(2);
         Self {
             name: Some("Default Search API Key".to_string()),
             description: Some("Use it to search from the frontend".to_string()),
@@ -176,7 +176,7 @@ impl Key {
 
     pub fn default_chat() -> Self {
         let now = OffsetDateTime::now_utc();
-        let uid = Uuid::new_v4();
+        let uid = Uuid::from_u128(3);
         Self {
             name: Some("Default Chat API Key".to_string()),
             description: Some("Use it to chat and search from the frontend".to_string()),
