@@ -91,8 +91,10 @@ impl HeedAuthStore {
                 Action::All => {
                     actions.extend(enum_iterator::all::<Action>());
                     actions.remove(&Action::AllGet);
-                },
-                Action::AllGet => actions.extend(enum_iterator::all::<Action>().filter(|a| a.is_read())),
+                }
+                Action::AllGet => {
+                    actions.extend(enum_iterator::all::<Action>().filter(|a| a.is_read()))
+                }
                 Action::DocumentsAll => {
                     actions.extend(
                         [Action::DocumentsGet, Action::DocumentsDelete, Action::DocumentsAdd]

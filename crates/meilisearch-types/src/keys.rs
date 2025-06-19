@@ -422,7 +422,7 @@ impl Action {
         match self {
             // Any action that expands to others must return false, as it wouldn't be able to expand recursively.
             All | AllGet | DocumentsAll | IndexesAll | ChatsAll | TasksAll | SettingsAll
-                | StatsAll | MetricsAll | DumpsAll | SnapshotsAll | ChatsSettingsAll => false,
+            | StatsAll | MetricsAll | DumpsAll | SnapshotsAll | ChatsSettingsAll => false,
 
             Search => true,
             DocumentsAdd => false,
