@@ -144,6 +144,21 @@ impl Key {
         }
     }
 
+    pub fn default_management() -> Self {
+        let now = OffsetDateTime::now_utc();
+        let uid = Uuid::new_v4();
+        Self {
+            name: Some("Default Management API Key".to_string()),
+            description: Some("Use it to peek into the instance in a read-only mode. Caution! Do not expose it on a public frontend".to_string()),
+            uid,
+            actions: vec![Action::AllRead],
+            indexes: vec![IndexUidPattern::all()],
+            expires_at: None,
+            created_at: now,
+            updated_at: now,
+        }
+    }
+
     pub fn default_search() -> Self {
         let now = OffsetDateTime::now_utc();
         let uid = Uuid::new_v4();
@@ -453,6 +468,7 @@ pub mod actions {
     use super::Action::*;
 
     pub(crate) const ALL: u8 = All.repr();
+    pub const ALL_READ: u8 = AllRead.repr();
     pub const SEARCH: u8 = Search.repr();
     pub const DOCUMENTS_ALL: u8 = DocumentsAll.repr();
     pub const DOCUMENTS_ADD: u8 = DocumentsAdd.repr();
