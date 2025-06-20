@@ -12,6 +12,7 @@ pub use self::new::matches::{
 };
 use self::new::{execute_vector_search, PartialSearchResult, VectorStoreStats};
 use crate::filterable_attributes_rules::{filtered_matching_patterns, matching_features};
+use crate::index::MatchingStrategy;
 use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::vector::Embedder;
 use crate::{
@@ -363,6 +364,16 @@ pub enum TermsMatchingStrategy {
 impl Default for TermsMatchingStrategy {
     fn default() -> Self {
         Self::Last
+    }
+}
+
+impl From<MatchingStrategy> for TermsMatchingStrategy {
+    fn from(other: MatchingStrategy) -> Self {
+        match other {
+            MatchingStrategy::Last => Self::Last,
+            MatchingStrategy::All => Self::All,
+            MatchingStrategy::Frequency => Self::Frequency,
+        }
     }
 }
 

@@ -33,7 +33,6 @@ use crate::documents::{obkv_to_object, DocumentsBatchReader};
 use crate::error::{Error, InternalError};
 use crate::index::{PrefixSearch, PrefixSettings};
 use crate::progress::Progress;
-use crate::thread_pool_no_abort::ThreadPoolNoAbortBuilder;
 pub use crate::update::index_documents::helpers::CursorClonableMmap;
 use crate::update::{
     IndexerConfig, UpdateIndexingStep, WordPrefixDocids, WordPrefixIntegerDocids, WordsPrefixesFst,
@@ -228,24 +227,7 @@ where
         let possible_embedding_mistakes =
             crate::vector::error::PossibleEmbeddingMistakes::new(&field_distribution);
 
-        let backup_pool;
-        let pool = match self.indexer_config.thread_pool {
-            Some(ref pool) => pool,
-            None => {
-                // We initialize a backup pool with the default
-                // settings if none have already been set.
-                #[allow(unused_mut)]
-                let mut pool_builder = ThreadPoolNoAbortBuilder::new();
-
-                #[cfg(test)]
-                {
-                    pool_builder = pool_builder.num_threads(1);
-                }
-
-                backup_pool = pool_builder.build()?;
-                &backup_pool
-            }
-        };
+        let pool = &self.indexer_config.thread_pool;
 
         // create LMDB writer channel
         let (lmdb_writer_sx, lmdb_writer_rx): (
@@ -1580,12 +1562,12 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
 
         // Only the first document should match.
-        let count = index.word_docids.get(&rtxn, "huàzhuāngbāo").unwrap().unwrap().len();
+        let count = index.word_docids.get(&rtxn, "huàzhuāng").unwrap().unwrap().len();
         assert_eq!(count, 1);
 
         // Only the second document should match.
         let count = index.word_docids.get(&rtxn, "bāo").unwrap().unwrap().len();
-        assert_eq!(count, 1);
+        assert_eq!(count, 2);
 
         let mut search = crate::Search::new(&rtxn, &index);
         search.query("化妆包");

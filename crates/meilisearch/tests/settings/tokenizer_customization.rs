@@ -5,8 +5,8 @@ use crate::json;
 
 #[actix_rt::test]
 async fn set_and_reset() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (task, _code) = index
         .update_settings(json!({
@@ -70,8 +70,8 @@ async fn set_and_search() {
         },
     ]);
 
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (add_task, _status_code) = index.add_documents(documents, None).await;
     index.wait_task(add_task.uid()).await.succeeded();
@@ -224,8 +224,8 @@ async fn advanced_synergies() {
         },
     ]);
 
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (add_task, _status_code) = index.add_documents(documents, None).await;
     index.wait_task(add_task.uid()).await.succeeded();

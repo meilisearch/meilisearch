@@ -34,7 +34,7 @@ catto [0,]
 [timestamp] [0,]
 ----------------------------------------------------------------------
 ### All Batches:
-0 {uid: 0, details: {"primaryKey":"mouse"}, stats: {"totalNbTasks":1,"status":{"failed":1},"types":{"indexCreation":1},"indexUids":{"catto":1}}, stop reason: "task with id 0 of type `indexCreation` cannot be batched", }
+0 {uid: 0, details: {"primaryKey":"mouse"}, stats: {"totalNbTasks":1,"status":{"failed":1},"types":{"indexCreation":1},"indexUids":{"catto":1}}, stop reason: "created batch containing only task with id 0 of type `indexCreation` that cannot be batched with any other task.", }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:
 0 [0,]

@@ -347,6 +347,16 @@ impl<State> Server<State> {
         }
     }
 
+    pub fn unique_index_with_prefix(&self, prefix: &str) -> Index<'_> {
+        let uuid = Uuid::new_v4();
+        Index {
+            uid: format!("{prefix}-{}", uuid),
+            service: &self.service,
+            encoder: Encoder::Plain,
+            marker: PhantomData,
+        }
+    }
+
     pub fn unique_index_with_encoder(&self, encoder: Encoder) -> Index<'_> {
         let uuid = Uuid::new_v4();
         Index { uid: uuid.to_string(), service: &self.service, encoder, marker: PhantomData }
@@ -399,18 +409,9 @@ impl<State> Server<State> {
     pub async fn wait_task(&self, update_id: u64) -> Value {
         // try several times to get status, or panic to not wait forever
         let url = format!("/tasks/{}", update_id);
-        // Increase timeout for vector-related tests
-        let max_attempts = if url.contains("/tasks/") {
-            if update_id > 1000 {
-                400 // 200 seconds for vector tests
-            } else {
-                100 // 50 seconds for other tests
-            }
-        } else {
-            100 // 50 seconds for other tests
-        };
+        let max_attempts = 400; // 200 seconds total, 0.5s per attempt
 
-        for _ in 0..max_attempts {
+        for i in 0..max_attempts {
             let (response, status_code) = self.service.get(&url).await;
             assert_eq!(200, status_code, "response: {}", response);
 
@@ -420,6 +421,10 @@ impl<State> Server<State> {
 
             // wait 0.5 second.
             sleep(Duration::from_millis(500)).await;
+
+            if i == max_attempts - 1 {
+                dbg!(response);
+            }
         }
         panic!("Timeout waiting for update id");
     }

@@ -421,7 +421,7 @@ async fn error_add_api_key_invalid_parameters_actions() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
-      "message": "Unknown value `doc.add` at `.actions[0]`: expected one of `*`, `search`, `documents.*`, `documents.add`, `documents.get`, `documents.delete`, `indexes.*`, `indexes.create`, `indexes.get`, `indexes.update`, `indexes.delete`, `indexes.swap`, `tasks.*`, `tasks.cancel`, `tasks.delete`, `tasks.get`, `settings.*`, `settings.get`, `settings.update`, `stats.*`, `stats.get`, `metrics.*`, `metrics.get`, `dumps.*`, `dumps.create`, `snapshots.*`, `snapshots.create`, `version`, `keys.create`, `keys.get`, `keys.update`, `keys.delete`, `experimental.get`, `experimental.update`, `network.get`, `network.update`",
+      "message": "Unknown value `doc.add` at `.actions[0]`: expected one of `*`, `search`, `documents.*`, `documents.add`, `documents.get`, `documents.delete`, `indexes.*`, `indexes.create`, `indexes.get`, `indexes.update`, `indexes.delete`, `indexes.swap`, `tasks.*`, `tasks.cancel`, `tasks.delete`, `tasks.get`, `settings.*`, `settings.get`, `settings.update`, `stats.*`, `stats.get`, `metrics.*`, `metrics.get`, `dumps.*`, `dumps.create`, `snapshots.*`, `snapshots.create`, `version`, `keys.create`, `keys.get`, `keys.update`, `keys.delete`, `experimental.get`, `experimental.update`, `network.get`, `network.update`, `chatCompletions`, `chats.*`, `chats.get`, `chats.delete`, `chatsSettings.*`, `chatsSettings.get`, `chatsSettings.update`",
       "code": "invalid_api_key_actions",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_api_key_actions"
@@ -538,7 +538,7 @@ async fn error_add_api_key_parameters_uid_already_exist() {
     let (response, code) = server.add_api_key(content).await;
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
-      "message": "`uid` field value `4bc0887a-0e41-4f3b-935d-0c451dcee9c8` is already an existing API key.",
+      "message": "`uid` field value `[uuid]` is already an existing API key.",
       "code": "api_key_already_exists",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#api_key_already_exists"
@@ -849,11 +849,27 @@ async fn list_api_keys() {
           "expiresAt": null,
           "createdAt": "[ignored]",
           "updatedAt": "[ignored]"
+        },
+        {
+          "name": "Default Chat API Key",
+          "description": "Use it to chat and search from the frontend",
+          "key": "[ignored]",
+          "uid": "[ignored]",
+          "actions": [
+            "chatCompletions",
+            "search"
+          ],
+          "indexes": [
+            "*"
+          ],
+          "expiresAt": null,
+          "createdAt": "[ignored]",
+          "updatedAt": "[ignored]"
         }
       ],
       "offset": 0,
       "limit": 20,
-      "total": 3
+      "total": 4
     }
     "###);
     meili_snap::snapshot!(code, @"200 OK");

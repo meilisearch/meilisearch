@@ -6,11 +6,11 @@ use crate::json;
 
 #[actix_rt::test]
 async fn similar_unexisting_index() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let expected_response = json!({
-        "message": "Index `test` not found.",
+        "message": format!("Index `{}` not found.", index.uid),
         "code": "index_not_found",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#index_not_found"
@@ -26,12 +26,12 @@ async fn similar_unexisting_index() {
 
 #[actix_rt::test]
 async fn similar_unexisting_parameter() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     index
         .similar(json!({"id": 287947, "marin": "hello"}), |response, code| {
-            assert_eq!(code, 400, "{}", response);
+            assert_eq!(code, 400, "{response}");
             assert_eq!(response["code"], "bad_request");
         })
         .await;
@@ -39,8 +39,8 @@ async fn similar_unexisting_parameter() {
 
 #[actix_rt::test]
 async fn similar_bad_id() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) = index
         .update_settings(json!({
@@ -53,7 +53,7 @@ async fn similar_bad_id() {
         "filterableAttributes": ["title"]}))
         .await;
     snapshot!(code, @"202 Accepted");
-    server.wait_task(response.uid()).await;
+    server.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index.similar_post(json!({"id": ["doggo"], "embedder": "manual"})).await;
     snapshot!(code, @"400 Bad Request");
@@ -69,8 +69,8 @@ async fn similar_bad_id() {
 
 #[actix_rt::test]
 async fn similar_bad_ranking_score_threshold() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) = index
         .update_settings(json!({
@@ -83,7 +83,7 @@ async fn similar_bad_ranking_score_threshold() {
         "filterableAttributes": ["title"]}))
         .await;
     snapshot!(code, @"202 Accepted");
-    server.wait_task(response.uid()).await;
+    server.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index.similar_post(json!({"rankingScoreThreshold": ["doggo"]})).await;
     snapshot!(code, @"400 Bad Request");
@@ -99,8 +99,8 @@ async fn similar_bad_ranking_score_threshold() {
 
 #[actix_rt::test]
 async fn similar_invalid_ranking_score_threshold() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) = index
         .update_settings(json!({
@@ -113,7 +113,7 @@ async fn similar_invalid_ranking_score_threshold() {
         "filterableAttributes": ["title"]}))
         .await;
     snapshot!(code, @"202 Accepted");
-    server.wait_task(response.uid()).await;
+    server.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index.similar_post(json!({"rankingScoreThreshold": 42})).await;
     snapshot!(code, @"400 Bad Request");
@@ -129,8 +129,8 @@ async fn similar_invalid_ranking_score_threshold() {
 
 #[actix_rt::test]
 async fn similar_invalid_id() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) = index
         .update_settings(json!({
@@ -143,7 +143,7 @@ async fn similar_invalid_id() {
         "filterableAttributes": ["title"]}))
         .await;
     snapshot!(code, @"202 Accepted");
-    server.wait_task(response.uid()).await;
+    server.wait_task(response.uid()).await.succeeded();
 
     let (response, code) =
         index.similar_post(json!({"id": "http://invalid-docid/", "embedder": "manual"})).await;
@@ -160,8 +160,8 @@ async fn similar_invalid_id() {
 
 #[actix_rt::test]
 async fn similar_not_found_id() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) = index
         .update_settings(json!({
@@ -174,7 +174,7 @@ async fn similar_not_found_id() {
         "filterableAttributes": ["title"]}))
         .await;
     snapshot!(code, @"202 Accepted");
-    server.wait_task(response.uid()).await;
+    server.wait_task(response.uid()).await.succeeded();
 
     let (response, code) =
         index.similar_post(json!({"id": "definitely-doesnt-exist", "embedder": "manual"})).await;
@@ -191,8 +191,8 @@ async fn similar_not_found_id() {
 
 #[actix_rt::test]
 async fn similar_bad_offset() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) = index
         .update_settings(json!({
@@ -205,7 +205,7 @@ async fn similar_bad_offset() {
         "filterableAttributes": ["title"]}))
         .await;
     snapshot!(code, @"202 Accepted");
-    server.wait_task(response.uid()).await;
+    server.wait_task(response.uid()).await.succeeded();
 
     let (response, code) =
         index.similar_post(json!({"id": 287947, "offset": "doggo", "embedder": "manual"})).await;
@@ -233,8 +233,8 @@ async fn similar_bad_offset() {
 
 #[actix_rt::test]
 async fn similar_bad_limit() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) = index
         .update_settings(json!({
@@ -247,7 +247,7 @@ async fn similar_bad_limit() {
         "filterableAttributes": ["title"]}))
         .await;
     snapshot!(code, @"202 Accepted");
-    server.wait_task(response.uid()).await;
+    server.wait_task(response.uid()).await.succeeded();
 
     let (response, code) =
         index.similar_post(json!({"id": 287947, "limit": "doggo", "embedder": "manual"})).await;
@@ -277,8 +277,8 @@ async fn similar_bad_limit() {
 async fn similar_bad_filter() {
     // Since a filter is deserialized as a json Value it will never fail to deserialize.
     // Thus the error message is not generated by deserr but written by us.
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) = index
         .update_settings(json!({
@@ -291,7 +291,7 @@ async fn similar_bad_filter() {
         "filterableAttributes": ["title"]}))
         .await;
     snapshot!(code, @"202 Accepted");
-    server.wait_task(response.uid()).await;
+    server.wait_task(response.uid()).await.succeeded();
 
     snapshot!(code, @"202 Accepted");
 
@@ -316,8 +316,8 @@ async fn similar_bad_filter() {
 
 #[actix_rt::test]
 async fn filter_invalid_syntax_object() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) = index
         .update_settings(json!({
@@ -330,7 +330,7 @@ async fn filter_invalid_syntax_object() {
         "filterableAttributes": ["title"]}))
         .await;
     snapshot!(code, @"202 Accepted");
-    server.wait_task(response.uid()).await;
+    server.wait_task(response.uid()).await.succeeded();
 
     let documents = DOCUMENTS.clone();
     let (value, code) = index.add_documents(documents, None).await;
@@ -354,8 +354,8 @@ async fn filter_invalid_syntax_object() {
 
 #[actix_rt::test]
 async fn filter_invalid_syntax_array() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) = index
         .update_settings(json!({
@@ -368,7 +368,7 @@ async fn filter_invalid_syntax_array() {
         "filterableAttributes": ["title"]}))
         .await;
     snapshot!(code, @"202 Accepted");
-    server.wait_task(response.uid()).await;
+    server.wait_task(response.uid()).await.succeeded();
 
     let documents = DOCUMENTS.clone();
     let (value, code) = index.add_documents(documents, None).await;
@@ -392,8 +392,8 @@ async fn filter_invalid_syntax_array() {
 
 #[actix_rt::test]
 async fn filter_invalid_syntax_string() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) = index
         .update_settings(json!({
@@ -406,7 +406,7 @@ async fn filter_invalid_syntax_string() {
         "filterableAttributes": ["title"]}))
         .await;
     snapshot!(code, @"202 Accepted");
-    server.wait_task(response.uid()).await;
+    server.wait_task(response.uid()).await.succeeded();
 
     let documents = DOCUMENTS.clone();
     let (value, code) = index.add_documents(documents, None).await;
@@ -432,8 +432,8 @@ async fn filter_invalid_syntax_string() {
 
 #[actix_rt::test]
 async fn filter_invalid_attribute_array() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) = index
         .update_settings(json!({
@@ -446,7 +446,7 @@ async fn filter_invalid_attribute_array() {
         "filterableAttributes": ["title"]}))
         .await;
     snapshot!(code, @"202 Accepted");
-    server.wait_task(response.uid()).await;
+    server.wait_task(response.uid()).await.succeeded();
 
     let documents = DOCUMENTS.clone();
     let (value, code) = index.add_documents(documents, None).await;
@@ -473,8 +473,8 @@ async fn filter_invalid_attribute_array() {
 
 #[actix_rt::test]
 async fn filter_invalid_attribute_string() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) = index
         .update_settings(json!({
@@ -487,7 +487,7 @@ async fn filter_invalid_attribute_string() {
         "filterableAttributes": ["title"]}))
         .await;
     snapshot!(code, @"202 Accepted");
-    server.wait_task(response.uid()).await;
+    server.wait_task(response.uid()).await.succeeded();
 
     let documents = DOCUMENTS.clone();
     let (value, code) = index.add_documents(documents, None).await;
@@ -514,8 +514,8 @@ async fn filter_invalid_attribute_string() {
 
 #[actix_rt::test]
 async fn filter_reserved_geo_attribute_array() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) = index
         .update_settings(json!({
@@ -528,7 +528,7 @@ async fn filter_reserved_geo_attribute_array() {
         "filterableAttributes": ["title"]}))
         .await;
     snapshot!(code, @"202 Accepted");
-    server.wait_task(response.uid()).await;
+    server.wait_task(response.uid()).await.succeeded();
 
     let documents = DOCUMENTS.clone();
     let (value, code) = index.add_documents(documents, None).await;
@@ -554,8 +554,8 @@ async fn filter_reserved_geo_attribute_array() {
 
 #[actix_rt::test]
 async fn filter_reserved_geo_attribute_string() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) = index
         .update_settings(json!({
@@ -568,7 +568,7 @@ async fn filter_reserved_geo_attribute_string() {
         "filterableAttributes": ["title"]}))
         .await;
     snapshot!(code, @"202 Accepted");
-    server.wait_task(response.uid()).await;
+    server.wait_task(response.uid()).await.succeeded();
 
     let documents = DOCUMENTS.clone();
     let (value, code) = index.add_documents(documents, None).await;
@@ -594,8 +594,8 @@ async fn filter_reserved_geo_attribute_string() {
 
 #[actix_rt::test]
 async fn filter_reserved_attribute_array() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) = index
         .update_settings(json!({
@@ -608,7 +608,7 @@ async fn filter_reserved_attribute_array() {
         "filterableAttributes": ["title"]}))
         .await;
     snapshot!(code, @"202 Accepted");
-    server.wait_task(response.uid()).await;
+    server.wait_task(response.uid()).await.succeeded();
 
     let documents = DOCUMENTS.clone();
     let (value, code) = index.add_documents(documents, None).await;
@@ -634,8 +634,8 @@ async fn filter_reserved_attribute_array() {
 
 #[actix_rt::test]
 async fn filter_reserved_attribute_string() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) = index
         .update_settings(json!({
@@ -648,7 +648,7 @@ async fn filter_reserved_attribute_string() {
         "filterableAttributes": ["title"]}))
         .await;
     snapshot!(code, @"202 Accepted");
-    server.wait_task(response.uid()).await;
+    server.wait_task(response.uid()).await.succeeded();
 
     let documents = DOCUMENTS.clone();
     let (value, code) = index.add_documents(documents, None).await;
@@ -674,8 +674,8 @@ async fn filter_reserved_attribute_string() {
 
 #[actix_rt::test]
 async fn filter_reserved_geo_point_array() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) = index
         .update_settings(json!({
@@ -688,7 +688,7 @@ async fn filter_reserved_geo_point_array() {
         "filterableAttributes": ["title"]}))
         .await;
     snapshot!(code, @"202 Accepted");
-    server.wait_task(response.uid()).await;
+    server.wait_task(response.uid()).await.succeeded();
 
     let documents = DOCUMENTS.clone();
     let (value, code) = index.add_documents(documents, None).await;
@@ -714,8 +714,8 @@ async fn filter_reserved_geo_point_array() {
 
 #[actix_rt::test]
 async fn filter_reserved_geo_point_string() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) = index
         .update_settings(json!({
@@ -728,7 +728,7 @@ async fn filter_reserved_geo_point_string() {
         "filterableAttributes": ["title"]}))
         .await;
     snapshot!(code, @"202 Accepted");
-    server.wait_task(response.uid()).await;
+    server.wait_task(response.uid()).await.succeeded();
 
     let documents = DOCUMENTS.clone();
     let (value, code) = index.add_documents(documents, None).await;
@@ -754,8 +754,8 @@ async fn filter_reserved_geo_point_string() {
 
 #[actix_rt::test]
 async fn similar_bad_retrieve_vectors() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) =
         index.similar_post(json!({"retrieveVectors": "doggo", "embedder": "manual"})).await;
@@ -806,8 +806,8 @@ async fn similar_bad_retrieve_vectors() {
 
 #[actix_rt::test]
 async fn similar_bad_embedder() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) = index
         .update_settings(json!({
@@ -820,7 +820,7 @@ async fn similar_bad_embedder() {
         "filterableAttributes": ["title"]}))
         .await;
     snapshot!(code, @"202 Accepted");
-    server.wait_task(response.uid()).await;
+    server.wait_task(response.uid()).await.succeeded();
 
     let documents = DOCUMENTS.clone();
     let (value, code) = index.add_documents(documents, None).await;

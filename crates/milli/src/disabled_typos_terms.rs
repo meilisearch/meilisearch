@@ -1,10 +1,9 @@
-use heed::{
-    types::{SerdeJson, Str},
-    RoTxn, RwTxn,
-};
+use heed::types::{SerdeJson, Str};
+use heed::{RoTxn, RwTxn};
 use serde::{Deserialize, Serialize};
 
-use crate::{index::main_key, Index};
+use crate::index::main_key;
+use crate::Index;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
@@ -31,13 +30,6 @@ impl Index {
             disabled_typos_terms,
         )?;
 
-        Ok(())
-    }
-
-    pub(crate) fn delete_disabled_typos_terms(&self, txn: &mut RwTxn<'_>) -> heed::Result<()> {
-        self.main
-            .remap_types::<Str, SerdeJson<DisabledTyposTerms>>()
-            .delete(txn, main_key::DISABLED_TYPOS_TERMS)?;
         Ok(())
     }
 }

@@ -41,7 +41,12 @@ impl IndexScheduler {
         progress.update_progress(SnapshotCreationProgress::SnapshotTheIndexScheduler);
         let dst = temp_snapshot_dir.path().join("tasks");
         fs::create_dir_all(&dst)?;
-        self.env.copy_to_path(dst.join("data.mdb"), CompactionOption::Disabled)?;
+        let compaction_option = if self.scheduler.experimental_no_snapshot_compaction {
+            CompactionOption::Disabled
+        } else {
+            CompactionOption::Enabled
+        };
+        self.env.copy_to_path(dst.join("data.mdb"), compaction_option)?;
 
         // 2.2 Create a read transaction on the index-scheduler
         let rtxn = self.env.read_txn()?;
@@ -80,7 +85,7 @@ impl IndexScheduler {
             let dst = temp_snapshot_dir.path().join("indexes").join(uuid.to_string());
             fs::create_dir_all(&dst)?;
             index
-                .copy_to_path(dst.join("data.mdb"), CompactionOption::Disabled)
+                .copy_to_path(dst.join("data.mdb"), compaction_option)
                 .map_err(|e| Error::from_milli(e, Some(name.to_string())))?;
         }
 
@@ -90,7 +95,7 @@ impl IndexScheduler {
         progress.update_progress(SnapshotCreationProgress::SnapshotTheApiKeys);
         let dst = temp_snapshot_dir.path().join("auth");
         fs::create_dir_all(&dst)?;
-        self.scheduler.auth_env.copy_to_path(dst.join("data.mdb"), CompactionOption::Disabled)?;
+        self.scheduler.auth_env.copy_to_path(dst.join("data.mdb"), compaction_option)?;
 
         // 5. Copy and tarball the flat snapshot
         progress.update_progress(SnapshotCreationProgress::CreateTheTarball);

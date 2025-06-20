@@ -4,7 +4,9 @@ use super::logger::SearchLogger;
 use super::ranking_rules::{BoxRankingRule, RankingRuleQueryTrait};
 use super::SearchContext;
 use crate::score_details::{ScoreDetails, ScoringStrategy};
-use crate::search::new::distinct::{apply_distinct_rule, distinct_single_docid, DistinctOutput};
+use crate::search::new::distinct::{
+    apply_distinct_rule, distinct_fid, distinct_single_docid, DistinctOutput,
+};
 use crate::{Result, TimeBudget};
 
 pub struct BucketSortOutput {
@@ -35,16 +37,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
     logger.ranking_rules(&ranking_rules);
     logger.initial_universe(universe);
 
-    let distinct_field = match distinct {
-        Some(distinct) => Some(distinct),
-        None => ctx.index.distinct_field(ctx.txn)?,
-    };
-
-    let distinct_fid = if let Some(field) = distinct_field {
-        ctx.index.fields_ids_map(ctx.txn)?.id(field)
-    } else {
-        None
-    };
+    let distinct_fid = distinct_fid(distinct, ctx.index, ctx.txn)?;
 
     if universe.len() < from as u64 {
         return Ok(BucketSortOutput {

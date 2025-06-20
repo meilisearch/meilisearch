@@ -50,13 +50,11 @@ async fn test_settings_documents_indexing_swapping_and_facet_search(
 
     let (task, code) = index.add_documents(documents.clone(), None).await;
     assert_eq!(code, 202, "{}", task);
-    let response = index.wait_task(task.uid()).await;
-    assert!(response.is_success(), "{:?}", response);
+    index.wait_task(task.uid()).await.succeeded();
 
     let (task, code) = index.update_settings(settings.clone()).await;
     assert_eq!(code, 202, "{}", task);
-    let response = index.wait_task(task.uid()).await;
-    assert!(response.is_success(), "{:?}", response);
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = index.facet_search(query.clone()).await;
     insta::allow_duplicates! {
@@ -65,21 +63,18 @@ async fn test_settings_documents_indexing_swapping_and_facet_search(
 
     let (task, code) = server.delete_index("test").await;
     assert_eq!(code, 202, "{}", task);
-    let response = server.wait_task(task.uid()).await;
-    assert!(response.is_success(), "{:?}", response);
+    server.wait_task(task.uid()).await.succeeded();
 
     eprintln!("Settings -> Documents -> test");
     let index = server.index("test");
 
     let (task, code) = index.update_settings(settings.clone()).await;
     assert_eq!(code, 202, "{}", task);
-    let response = index.wait_task(task.uid()).await;
-    assert!(response.is_success(), "{:?}", response);
+    index.wait_task(task.uid()).await.succeeded();
 
     let (task, code) = index.add_documents(documents.clone(), None).await;
     assert_eq!(code, 202, "{}", task);
-    let response = index.wait_task(task.uid()).await;
-    assert!(response.is_success(), "{:?}", response);
+    index.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = index.facet_search(query.clone()).await;
     insta::allow_duplicates! {
@@ -88,14 +83,13 @@ async fn test_settings_documents_indexing_swapping_and_facet_search(
 
     let (task, code) = server.delete_index("test").await;
     assert_eq!(code, 202, "{}", task);
-    let response = server.wait_task(task.uid()).await;
-    assert!(response.is_success(), "{:?}", response);
+    server.wait_task(task.uid()).await.succeeded();
 }
 
 #[actix_rt::test]
 async fn simple_facet_search() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let documents = DOCUMENTS.clone();
     index.update_settings_filterable_attributes(json!(["genres"])).await;
@@ -105,20 +99,20 @@ async fn simple_facet_search() {
     let (response, code) =
         index.facet_search(json!({"facetName": "genres", "facetQuery": "a"})).await;
 
-    assert_eq!(code, 200, "{}", response);
-    assert_eq!(dbg!(response)["facetHits"].as_array().unwrap().len(), 2);
+    assert_eq!(code, 200, "{response}");
+    assert_eq!(response["facetHits"].as_array().unwrap().len(), 2);
 
     let (response, code) =
         index.facet_search(json!({"facetName": "genres", "facetQuery": "adventure"})).await;
 
-    assert_eq!(code, 200, "{}", response);
+    assert_eq!(code, 200, "{response}");
     assert_eq!(response["facetHits"].as_array().unwrap().len(), 1);
 }
 
 #[actix_rt::test]
 async fn simple_facet_search_on_movies() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let documents = json!([
       {
@@ -212,23 +206,23 @@ async fn simple_facet_search_on_movies() {
     ]);
     let (response, code) =
         index.update_settings_filterable_attributes(json!(["genres", "color"])).await;
-    assert_eq!(202, code, "{:?}", response);
-    index.wait_task(response.uid()).await;
+    assert_eq!(202, code, "{response:?}");
+    index.wait_task(response.uid()).await.succeeded();
 
     let (response, _code) = index.add_documents(documents, None).await;
-    index.wait_task(response.uid()).await;
+    index.wait_task(response.uid()).await.succeeded();
 
     let (response, code) =
         index.facet_search(json!({"facetQuery": "", "facetName": "genres", "q": "" })).await;
 
-    assert_eq!(code, 200, "{}", response);
+    assert_eq!(code, 200, "{response}");
     snapshot!(response["facetHits"], @r###"[{"value":"Action","count":2},{"value":"Adventure","count":3},{"value":"Drama","count":3},{"value":"Fantasy","count":1},{"value":"Romance","count":1},{"value":"Science Fiction","count":1}]"###);
 }
 
 #[actix_rt::test]
 async fn advanced_facet_search() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let documents = DOCUMENTS.clone();
     index.update_settings_filterable_attributes(json!(["genres"])).await;
@@ -251,8 +245,8 @@ async fn advanced_facet_search() {
 
 #[actix_rt::test]
 async fn more_advanced_facet_search() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let documents = DOCUMENTS.clone();
     index.update_settings_filterable_attributes(json!(["genres"])).await;
@@ -275,8 +269,8 @@ async fn more_advanced_facet_search() {
 
 #[actix_rt::test]
 async fn simple_facet_search_with_max_values() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let documents = DOCUMENTS.clone();
     index.update_settings_faceting(json!({ "maxValuesPerFacet": 1 })).await;
@@ -287,14 +281,14 @@ async fn simple_facet_search_with_max_values() {
     let (response, code) =
         index.facet_search(json!({"facetName": "genres", "facetQuery": "a"})).await;
 
-    assert_eq!(code, 200, "{}", response);
-    assert_eq!(dbg!(response)["facetHits"].as_array().unwrap().len(), 1);
+    assert_eq!(code, 200, "{response}");
+    assert_eq!(response["facetHits"].as_array().unwrap().len(), 1);
 }
 
 #[actix_rt::test]
 async fn simple_facet_search_by_count_with_max_values() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let documents = DOCUMENTS.clone();
     index
@@ -309,14 +303,14 @@ async fn simple_facet_search_by_count_with_max_values() {
     let (response, code) =
         index.facet_search(json!({"facetName": "genres", "facetQuery": "a"})).await;
 
-    assert_eq!(code, 200, "{}", response);
-    assert_eq!(dbg!(response)["facetHits"].as_array().unwrap().len(), 1);
+    assert_eq!(code, 200, "{response}");
+    assert_eq!(response["facetHits"].as_array().unwrap().len(), 1);
 }
 
 #[actix_rt::test]
 async fn non_filterable_facet_search_error() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let documents = DOCUMENTS.clone();
     let (task, _status_code) = index.add_documents(documents, None).await;
@@ -324,17 +318,17 @@ async fn non_filterable_facet_search_error() {
 
     let (response, code) =
         index.facet_search(json!({"facetName": "genres", "facetQuery": "a"})).await;
-    assert_eq!(code, 400, "{}", response);
+    assert_eq!(code, 400, "{response}");
 
     let (response, code) =
         index.facet_search(json!({"facetName": "genres", "facetQuery": "adv"})).await;
-    assert_eq!(code, 400, "{}", response);
+    assert_eq!(code, 400, "{response}");
 }
 
 #[actix_rt::test]
 async fn facet_search_dont_support_words() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let documents = DOCUMENTS.clone();
     index.update_settings_filterable_attributes(json!(["genres"])).await;
@@ -344,14 +338,14 @@ async fn facet_search_dont_support_words() {
     let (response, code) =
         index.facet_search(json!({"facetName": "genres", "facetQuery": "words"})).await;
 
-    assert_eq!(code, 200, "{}", response);
+    assert_eq!(code, 200, "{response}");
     assert_eq!(response["facetHits"].as_array().unwrap().len(), 0);
 }
 
 #[actix_rt::test]
 async fn simple_facet_search_with_sort_by_count() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let documents = DOCUMENTS.clone();
     index.update_settings_faceting(json!({ "sortFacetValuesBy": { "*": "count" } })).await;
@@ -362,7 +356,7 @@ async fn simple_facet_search_with_sort_by_count() {
     let (response, code) =
         index.facet_search(json!({"facetName": "genres", "facetQuery": "a"})).await;
 
-    assert_eq!(code, 200, "{}", response);
+    assert_eq!(code, 200, "{response}");
     let hits = response["facetHits"].as_array().unwrap();
     assert_eq!(hits.len(), 2);
     assert_eq!(hits[0], json!({ "value": "Action", "count": 3 }));
@@ -371,25 +365,25 @@ async fn simple_facet_search_with_sort_by_count() {
 
 #[actix_rt::test]
 async fn add_documents_and_deactivate_facet_search() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let documents = DOCUMENTS.clone();
     let (response, _code) = index.add_documents(documents, None).await;
-    index.wait_task(response.uid()).await;
+    index.wait_task(response.uid()).await.succeeded();
     let (response, code) = index
         .update_settings(json!({
             "facetSearch": false,
             "filterableAttributes": ["genres"],
         }))
         .await;
-    assert_eq!("202", code.as_str(), "{:?}", response);
-    index.wait_task(response.uid()).await;
+    assert_eq!("202", code.as_str(), "{response:?}");
+    index.wait_task(response.uid()).await.succeeded();
 
     let (response, code) =
         index.facet_search(json!({"facetName": "genres", "facetQuery": "a"})).await;
 
-    assert_eq!(code, 400, "{}", response);
+    assert_eq!(code, 400, "{response}");
     snapshot!(response, @r###"
     {
       "message": "The facet search is disabled for this index",
@@ -402,8 +396,8 @@ async fn add_documents_and_deactivate_facet_search() {
 
 #[actix_rt::test]
 async fn deactivate_facet_search_and_add_documents() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) = index
         .update_settings(json!({
@@ -411,16 +405,16 @@ async fn deactivate_facet_search_and_add_documents() {
             "filterableAttributes": ["genres"],
         }))
         .await;
-    assert_eq!("202", code.as_str(), "{:?}", response);
-    index.wait_task(response.uid()).await;
+    assert_eq!("202", code.as_str(), "{response:?}");
+    index.wait_task(response.uid()).await.succeeded();
     let documents = DOCUMENTS.clone();
     let (response, _code) = index.add_documents(documents, None).await;
-    index.wait_task(response.uid()).await;
+    index.wait_task(response.uid()).await.succeeded();
 
     let (response, code) =
         index.facet_search(json!({"facetName": "genres", "facetQuery": "a"})).await;
 
-    assert_eq!(code, 400, "{}", response);
+    assert_eq!(code, 400, "{response}");
     snapshot!(response, @r###"
     {
       "message": "The facet search is disabled for this index",
@@ -433,8 +427,8 @@ async fn deactivate_facet_search_and_add_documents() {
 
 #[actix_rt::test]
 async fn deactivate_facet_search_add_documents_and_activate_facet_search() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) = index
         .update_settings(json!({
@@ -442,31 +436,31 @@ async fn deactivate_facet_search_add_documents_and_activate_facet_search() {
             "filterableAttributes": ["genres"],
         }))
         .await;
-    assert_eq!("202", code.as_str(), "{:?}", response);
-    index.wait_task(response.uid()).await;
+    assert_eq!("202", code.as_str(), "{response:?}");
+    index.wait_task(response.uid()).await.succeeded();
     let documents = DOCUMENTS.clone();
     let (response, _code) = index.add_documents(documents, None).await;
-    index.wait_task(response.uid()).await;
+    index.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index
         .update_settings(json!({
             "facetSearch": true,
         }))
         .await;
-    assert_eq!("202", code.as_str(), "{:?}", response);
-    index.wait_task(response.uid()).await;
+    assert_eq!("202", code.as_str(), "{response:?}");
+    index.wait_task(response.uid()).await.succeeded();
 
     let (response, code) =
         index.facet_search(json!({"facetName": "genres", "facetQuery": "a"})).await;
 
-    assert_eq!(code, 200, "{}", response);
-    assert_eq!(dbg!(response)["facetHits"].as_array().unwrap().len(), 2);
+    assert_eq!(code, 200, "{response}");
+    assert_eq!(response["facetHits"].as_array().unwrap().len(), 2);
 }
 
 #[actix_rt::test]
 async fn deactivate_facet_search_add_documents_and_reset_facet_search() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let (response, code) = index
         .update_settings(json!({
@@ -474,25 +468,25 @@ async fn deactivate_facet_search_add_documents_and_reset_facet_search() {
             "filterableAttributes": ["genres"],
         }))
         .await;
-    assert_eq!("202", code.as_str(), "{:?}", response);
-    index.wait_task(response.uid()).await;
+    assert_eq!("202", code.as_str(), "{response:?}");
+    index.wait_task(response.uid()).await.succeeded();
     let documents = DOCUMENTS.clone();
     let (response, _code) = index.add_documents(documents, None).await;
-    index.wait_task(response.uid()).await;
+    index.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index
         .update_settings(json!({
             "facetSearch": serde_json::Value::Null,
         }))
         .await;
-    assert_eq!("202", code.as_str(), "{:?}", response);
-    index.wait_task(response.uid()).await;
+    assert_eq!("202", code.as_str(), "{response:?}");
+    index.wait_task(response.uid()).await.succeeded();
 
     let (response, code) =
         index.facet_search(json!({"facetName": "genres", "facetQuery": "a"})).await;
 
-    assert_eq!(code, 200, "{}", response);
-    assert_eq!(dbg!(response)["facetHits"].as_array().unwrap().len(), 2);
+    assert_eq!(code, 200, "{response}");
+    assert_eq!(response["facetHits"].as_array().unwrap().len(), 2);
 }
 
 #[actix_rt::test]
@@ -618,8 +612,8 @@ async fn facet_search_with_filterable_attributes_rules_errors() {
 
 #[actix_rt::test]
 async fn distinct_facet_search_on_movies() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let documents = json!([
       {
@@ -925,26 +919,26 @@ async fn distinct_facet_search_on_movies() {
     ]);
     let (response, code) =
         index.update_settings_filterable_attributes(json!(["genres", "color"])).await;
-    assert_eq!(202, code, "{:?}", response);
-    index.wait_task(response.uid()).await;
+    assert_eq!(202, code, "{response:?}");
+    index.wait_task(response.uid()).await.succeeded();
     let (response, code) = index.update_settings_distinct_attribute(json!("color")).await;
-    assert_eq!(202, code, "{:?}", response);
-    index.wait_task(response.uid()).await;
+    assert_eq!(202, code, "{response:?}");
+    index.wait_task(response.uid()).await.succeeded();
 
     let (response, _code) = index.add_documents(documents, None).await;
-    index.wait_task(response.uid()).await;
+    index.wait_task(response.uid()).await.succeeded();
 
     let (response, code) =
         index.facet_search(json!({"facetQuery": "blob", "facetName": "genres", "q": "" })).await;
 
     // non-exhaustive facet count is counting 27 documents with the facet query "blob" but there are only 23 documents with a distinct color.
-    assert_eq!(code, 200, "{}", response);
+    assert_eq!(code, 200, "{response}");
     snapshot!(response["facetHits"], @r###"[{"value":"Blob","count":27}]"###);
 
     let (response, code) =
         index.facet_search(json!({"facetQuery": "blob", "facetName": "genres", "q": "", "exhaustiveFacetCount": true })).await;
 
     // exhaustive facet count is counting 23 documents with the facet query "blob" which is the number of distinct colors.
-    assert_eq!(code, 200, "{}", response);
+    assert_eq!(code, 200, "{response}");
     snapshot!(response["facetHits"], @r###"[{"value":"Blob","count":23}]"###);
 }

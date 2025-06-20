@@ -18,7 +18,8 @@ pub use vectors::EmbeddingExtractor;
 pub mod perm_json_p {
     use serde_json::{Map, Value};
 
-    use crate::{attribute_patterns::PatternMatch, Result};
+    use crate::attribute_patterns::PatternMatch;
+    use crate::Result;
     const SPLIT_SYMBOL: char = '.';
 
     /// Returns `true` if the `selector` match the `key`.

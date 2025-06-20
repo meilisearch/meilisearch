@@ -37,7 +37,9 @@ use index_scheduler::{IndexScheduler, IndexSchedulerOptions};
 use meilisearch_auth::{open_auth_store_env, AuthController};
 use meilisearch_types::milli::constants::VERSION_MAJOR;
 use meilisearch_types::milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
-use meilisearch_types::milli::update::{IndexDocumentsConfig, IndexDocumentsMethod};
+use meilisearch_types::milli::update::{
+    default_thread_pool_and_threads, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig,
+};
 use meilisearch_types::settings::apply_settings_to_builder;
 use meilisearch_types::tasks::KindWithContent;
 use meilisearch_types::versioning::{
@@ -234,6 +236,7 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Arc<
         instance_features: opt.to_instance_features(),
         auto_upgrade: opt.experimental_dumpless_upgrade,
         embedding_cache_cap: opt.experimental_embedding_cache_entries,
+        experimental_no_snapshot_compaction: opt.experimental_no_snapshot_compaction,
     };
     let binary_version = (VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH);
 
@@ -500,7 +503,19 @@ fn import_dump(
     let network = dump_reader.network()?.cloned().unwrap_or_default();
     index_scheduler.put_network(network)?;
 
-    let indexer_config = index_scheduler.indexer_config();
+    // 3.1 Use all cpus to process dump if `max_indexing_threads` not configured
+    let backup_config;
+    let base_config = index_scheduler.indexer_config();
+
+    let indexer_config = if base_config.max_threads.is_none() {
+        let (thread_pool, _) = default_thread_pool_and_threads();
+
+        let _config = IndexerConfig { thread_pool, ..*base_config };
+        backup_config = _config;
+        &backup_config
+    } else {
+        base_config
+    };
 
     // /!\ The tasks must be imported AFTER importing the indexes or else the scheduler might
     // try to process tasks while we're trying to import the indexes.

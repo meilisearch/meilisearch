@@ -67,7 +67,7 @@ fn main() -> anyhow::Result<()> {
         writeln!(
             &mut manifest_paths_file,
             r#"pub const {}: &str = {:?};"#,
-            dataset.to_case(Case::ScreamingSnake),
+            dataset.to_case(Case::UpperSnake),
             out_file.display(),
         )?;
 

@@ -65,6 +65,7 @@ const MEILI_EXPERIMENTAL_LIMIT_BATCHED_TASKS_TOTAL_SIZE: &str =
     "MEILI_EXPERIMENTAL_LIMIT_BATCHED_TASKS_SIZE";
 const MEILI_EXPERIMENTAL_EMBEDDING_CACHE_ENTRIES: &str =
     "MEILI_EXPERIMENTAL_EMBEDDING_CACHE_ENTRIES";
+const MEILI_EXPERIMENTAL_NO_SNAPSHOT_COMPACTION: &str = "MEILI_EXPERIMENTAL_NO_SNAPSHOT_COMPACTION";
 const DEFAULT_CONFIG_FILE_PATH: &str = "./config.toml";
 const DEFAULT_DB_PATH: &str = "./data.ms";
 const DEFAULT_HTTP_ADDR: &str = "localhost:7700";
@@ -455,6 +456,15 @@ pub struct Opt {
     #[serde(default = "default_embedding_cache_entries")]
     pub experimental_embedding_cache_entries: usize,
 
+    /// Experimental no snapshot compaction feature.
+    ///
+    /// When enabled, Meilisearch will not compact snapshots during creation.
+    ///
+    /// For more information, see <https://github.com/orgs/meilisearch/discussions/833>.
+    #[clap(long, env = MEILI_EXPERIMENTAL_NO_SNAPSHOT_COMPACTION)]
+    #[serde(default)]
+    pub experimental_no_snapshot_compaction: bool,
+
     #[serde(flatten)]
     #[clap(flatten)]
     pub indexer_options: IndexerOpts,
@@ -559,6 +569,7 @@ impl Opt {
             experimental_max_number_of_batched_tasks,
             experimental_limit_batched_tasks_total_size,
             experimental_embedding_cache_entries,
+            experimental_no_snapshot_compaction,
         } = self;
         export_to_env_if_not_present(MEILI_DB_PATH, db_path);
         export_to_env_if_not_present(MEILI_HTTP_ADDR, http_addr);
@@ -655,6 +666,10 @@ impl Opt {
             MEILI_EXPERIMENTAL_EMBEDDING_CACHE_ENTRIES,
             experimental_embedding_cache_entries.to_string(),
         );
+        export_to_env_if_not_present(
+            MEILI_EXPERIMENTAL_NO_SNAPSHOT_COMPACTION,
+            experimental_no_snapshot_compaction.to_string(),
+        );
         indexer_options.export_to_env();
     }
 
@@ -746,10 +761,12 @@ impl IndexerOpts {
                 max_indexing_memory.to_string(),
             );
         }
-        export_to_env_if_not_present(
-            MEILI_MAX_INDEXING_THREADS,
-            max_indexing_threads.0.to_string(),
-        );
+        if let Some(max_indexing_threads) = max_indexing_threads.0 {
+            export_to_env_if_not_present(
+                MEILI_MAX_INDEXING_THREADS,
+                max_indexing_threads.to_string(),
+            );
+        }
     }
 }
 
@@ -757,15 +774,15 @@ impl TryFrom<&IndexerOpts> for IndexerConfig {
     type Error = anyhow::Error;
 
     fn try_from(other: &IndexerOpts) -> Result<Self, Self::Error> {
-        let thread_pool = ThreadPoolNoAbortBuilder::new()
-            .thread_name(|index| format!("indexing-thread:{index}"))
-            .num_threads(*other.max_indexing_threads)
+        let thread_pool = ThreadPoolNoAbortBuilder::new_for_indexing()
+            .num_threads(other.max_indexing_threads.unwrap_or_else(|| num_cpus::get() / 2))
             .build()?;
 
         Ok(Self {
+            thread_pool,
             log_every_n: Some(DEFAULT_LOG_EVERY_N),
             max_memory: other.max_indexing_memory.map(|b| b.as_u64() as usize),
-            thread_pool: Some(thread_pool),
+            max_threads: *other.max_indexing_threads,
             max_positions_per_attributes: None,
             skip_index_budget: other.skip_index_budget,
             ..Default::default()
@@ -828,31 +845,31 @@ fn total_memory_bytes() -> Option<u64> {
     }
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
-pub struct MaxThreads(usize);
+#[derive(Default, Debug, Clone, Copy, Deserialize, Serialize)]
+pub struct MaxThreads(Option<usize>);
 
 impl FromStr for MaxThreads {
     type Err = ParseIntError;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        usize::from_str(s).map(Self)
-    }
-}
-
-impl Default for MaxThreads {
-    fn default() -> Self {
-        MaxThreads(num_cpus::get() / 2)
+    fn from_str(s: &str) -> Result<MaxThreads, Self::Err> {
+        if s.is_empty() || s == "unlimited" {
+            return Ok(MaxThreads::default());
+        }
+        usize::from_str(s).map(Some).map(MaxThreads)
     }
 }
 
 impl fmt::Display for MaxThreads {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.0)
+        match self.0 {
+            Some(threads) => write!(f, "{}", threads),
+            None => write!(f, "unlimited"),
+        }
     }
 }
 
 impl Deref for MaxThreads {
-    type Target = usize;
+    type Target = Option<usize>;
 
     fn deref(&self) -> &Self::Target {
         &self.0

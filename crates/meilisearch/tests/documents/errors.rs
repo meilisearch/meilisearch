@@ -621,7 +621,7 @@ async fn delete_document_by_filter() {
     let (response, code) =
         index.delete_document_by_filter_fail(json!({ "filter": "catto = jorts"})).await;
     snapshot!(code, @"202 Accepted");
-    let response = server.wait_task(response.uid()).await;
+    let response = server.wait_task(response.uid()).await.failed();
     snapshot!(response, @r###"
     {
       "uid": "[uid]",
@@ -665,7 +665,7 @@ async fn fetch_document_by_filter() {
             Some("id"),
         )
         .await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = index.fetch_documents(json!(null)).await;
     snapshot!(code, @"400 Bad Request");

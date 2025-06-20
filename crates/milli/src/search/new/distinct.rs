@@ -9,7 +9,7 @@ use crate::heed_codec::facet::{
     FacetGroupKey, FacetGroupKeyCodec, FacetGroupValueCodec, FieldDocIdFacetCodec,
 };
 use crate::heed_codec::BytesRefCodec;
-use crate::{Index, Result, SearchContext};
+use crate::{FieldId, Index, Result, SearchContext};
 
 pub struct DistinctOutput {
     pub remaining: RoaringBitmap,
@@ -120,4 +120,19 @@ pub fn facet_string_values<'a>(
 #[allow(clippy::drop_non_drop)]
 fn facet_values_prefix_key(distinct: u16, id: u32) -> [u8; FID_SIZE + DOCID_SIZE] {
     concat_arrays::concat_arrays!(distinct.to_be_bytes(), id.to_be_bytes())
+}
+
+pub fn distinct_fid(
+    query_distinct_field: Option<&str>,
+    index: &Index,
+    rtxn: &RoTxn<'_>,
+) -> Result<Option<FieldId>> {
+    let distinct_field = match query_distinct_field {
+        Some(distinct) => Some(distinct),
+        None => index.distinct_field(rtxn)?,
+    };
+
+    let distinct_fid =
+        if let Some(field) = distinct_field { index.fields_ids_map(rtxn)?.id(field) } else { None };
+    Ok(distinct_fid)
 }

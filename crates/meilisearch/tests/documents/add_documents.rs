@@ -1,12 +1,12 @@
+use crate::common::encoder::Encoder;
+use crate::common::{default_settings, GetAllDocumentsOptions, Server, Value};
+use crate::json;
 use actix_web::test;
 use meili_snap::{json_string, snapshot};
 use meilisearch::Opt;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
-
-use crate::common::encoder::Encoder;
-use crate::common::{default_settings, GetAllDocumentsOptions, Server, Value};
-use crate::json;
+use uuid::Uuid;
 
 /// This is the basic usage of our API and every other tests uses the content-type application/json
 #[actix_rt::test]
@@ -18,13 +18,14 @@ async fn add_documents_test_json_content_types() {
         }
     ]);
 
-    // this is a what is expected and should work
-    let server = Server::new().await;
+    // this is what is expected and should work
+    let server = Server::new_shared();
     let app = server.init_web_app().await;
+    let index_name = Uuid::new_v4().to_string();
 
     // post
     let req = test::TestRequest::post()
-        .uri("/indexes/dog/documents")
+        .uri(format!("/indexes/{index_name}/documents").as_str())
         .set_payload(document.to_string())
         .insert_header(("content-type", "application/json"))
         .to_request();
@@ -33,20 +34,20 @@ async fn add_documents_test_json_content_types() {
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
     snapshot!(status_code, @"202 Accepted");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
-        @r###"
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r#"
     {
-      "taskUid": 0,
-      "indexUid": "dog",
+      "taskUid": "[task_uid]",
+      "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "documentAdditionOrUpdate",
       "enqueuedAt": "[date]"
     }
-    "###);
+    "#);
 
     // put
     let req = test::TestRequest::put()
-        .uri("/indexes/dog/documents")
+        .uri(format!("/indexes/{index_name}/documents").as_str())
         .set_payload(document.to_string())
         .insert_header(("content-type", "application/json"))
         .to_request();
@@ -55,11 +56,11 @@ async fn add_documents_test_json_content_types() {
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
     snapshot!(status_code, @"202 Accepted");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "taskUid": 1,
-      "indexUid": "dog",
+      "taskUid": "[task_uid]",
+      "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "documentAdditionOrUpdate",
       "enqueuedAt": "[date]"
@@ -75,13 +76,14 @@ async fn add_single_document_test_json_content_types() {
         "content": "Bouvier Bernois",
     });
 
-    // this is a what is expected and should work
-    let server = Server::new().await;
+    // this is what is expected and should work
+    let server = Server::new_shared();
     let app = server.init_web_app().await;
+    let index_name = Uuid::new_v4().to_string();
 
     // post
     let req = test::TestRequest::post()
-        .uri("/indexes/dog/documents")
+        .uri(format!("/indexes/{index_name}/documents").as_str())
         .set_payload(document.to_string())
         .insert_header(("content-type", "application/json"))
         .to_request();
@@ -90,20 +92,20 @@ async fn add_single_document_test_json_content_types() {
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
     snapshot!(status_code, @"202 Accepted");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
-        @r###"
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r#"
     {
-      "taskUid": 0,
-      "indexUid": "dog",
+      "taskUid": "[task_uid]",
+      "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "documentAdditionOrUpdate",
       "enqueuedAt": "[date]"
     }
-    "###);
+    "#);
 
     // put
     let req = test::TestRequest::put()
-        .uri("/indexes/dog/documents")
+        .uri(format!("/indexes/{index_name}/documents").as_str())
         .set_payload(document.to_string())
         .insert_header(("content-type", "application/json"))
         .to_request();
@@ -112,11 +114,11 @@ async fn add_single_document_test_json_content_types() {
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
     snapshot!(status_code, @"202 Accepted");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "taskUid": 1,
-      "indexUid": "dog",
+      "taskUid": "[task_uid]",
+      "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "documentAdditionOrUpdate",
       "enqueuedAt": "[date]"
@@ -132,14 +134,15 @@ async fn add_single_document_gzip_encoded() {
         "content": "Bouvier Bernois",
     });
 
-    // this is a what is expected and should work
-    let server = Server::new().await;
+    // this is what is expected and should work
+    let server = Server::new_shared();
     let app = server.init_web_app().await;
+    let index_name = Uuid::new_v4().to_string();
     // post
     let document = serde_json::to_string(&document).unwrap();
     let encoder = Encoder::Gzip;
     let req = test::TestRequest::post()
-        .uri("/indexes/dog/documents")
+        .uri(format!("/indexes/{index_name}/documents").as_str())
         .set_payload(encoder.encode(document.clone()))
         .insert_header(("content-type", "application/json"))
         .insert_header(encoder.header().unwrap())
@@ -149,20 +152,20 @@ async fn add_single_document_gzip_encoded() {
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
     snapshot!(status_code, @"202 Accepted");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
-        @r###"
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r#"
     {
-      "taskUid": 0,
-      "indexUid": "dog",
+      "taskUid": "[task_uid]",
+      "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "documentAdditionOrUpdate",
       "enqueuedAt": "[date]"
     }
-    "###);
+    "#);
 
     // put
     let req = test::TestRequest::put()
-        .uri("/indexes/dog/documents")
+        .uri(format!("/indexes/{index_name}/documents").as_str())
         .set_payload(encoder.encode(document))
         .insert_header(("content-type", "application/json"))
         .insert_header(encoder.header().unwrap())
@@ -172,11 +175,11 @@ async fn add_single_document_gzip_encoded() {
     let body = test::read_body(res).await;
     let response: Value = serde_json::from_slice(&body).unwrap_or_default();
     snapshot!(status_code, @"202 Accepted");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "taskUid": 1,
-      "indexUid": "dog",
+      "taskUid": "[task_uid]",
+      "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "documentAdditionOrUpdate",
       "enqueuedAt": "[date]"
@@ -187,13 +190,14 @@ async fn add_single_document_gzip_encoded() {
 async fn add_single_document_gzip_encoded_with_incomplete_error() {
     let document = json!("kefir");
 
-    // this is a what is expected and should work
-    let server = Server::new().await;
+    // this is what is expected and should work
+    let server = Server::new_shared();
     let app = server.init_web_app().await;
+    let index_name = Uuid::new_v4().to_string();
     // post
     let document = serde_json::to_string(&document).unwrap();
     let req = test::TestRequest::post()
-        .uri("/indexes/dog/documents")
+        .uri(format!("/indexes/{index_name}/documents").as_str())
         .set_payload(document.to_string())
         .insert_header(("content-type", "application/json"))
         .insert_header(("content-encoding", "gzip"))
@@ -215,7 +219,7 @@ async fn add_single_document_gzip_encoded_with_incomplete_error() {
 
     // put
     let req = test::TestRequest::put()
-        .uri("/indexes/dog/documents")
+        .uri(format!("/indexes/{index_name}/documents").as_str())
         .set_payload(document.to_string())
         .insert_header(("content-type", "application/json"))
         .insert_header(("content-encoding", "gzip"))
@@ -244,15 +248,16 @@ async fn add_single_document_with_every_encoding() {
         "content": "Bouvier Bernois",
     });
 
-    // this is a what is expected and should work
-    let server = Server::new().await;
+    // this is what is expected and should work
+    let server = Server::new_shared();
     let app = server.init_web_app().await;
+    let index_name = Uuid::new_v4().to_string();
     // post
     let document = serde_json::to_string(&document).unwrap();
 
-    for (task_uid, encoder) in Encoder::iterator().enumerate() {
+    for encoder in Encoder::iterator() {
         let mut req = test::TestRequest::post()
-            .uri("/indexes/dog/documents")
+            .uri(format!("/indexes/{index_name}/documents").as_str())
             .set_payload(encoder.encode(document.clone()))
             .insert_header(("content-type", "application/json"));
         req = match encoder.header() {
@@ -263,16 +268,15 @@ async fn add_single_document_with_every_encoding() {
         let res = test::call_service(&app, req).await;
         let status_code = res.status();
         let body = test::read_body(res).await;
-        let response: Value = serde_json::from_slice(&body).unwrap_or_default();
+        let _response: Value = serde_json::from_slice(&body).unwrap_or_default();
         assert_eq!(status_code, 202);
-        assert_eq!(response["taskUid"], task_uid);
     }
 }
 
 #[actix_rt::test]
 async fn add_csv_document() {
-    let server = Server::new().await;
-    let index = server.index("pets");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let document = "#id,name,race
 0,jean,bernese mountain
@@ -280,21 +284,21 @@ async fn add_csv_document() {
 
     let (response, code) = index.raw_update_documents(document, Some("text/csv"), "").await;
     snapshot!(code, @"202 Accepted");
-    snapshot!(json_string!(response, { ".enqueuedAt" => "[date]" }), @r###"
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".enqueuedAt" => "[date]" }), @r#"
     {
-      "taskUid": 0,
-      "indexUid": "pets",
+      "taskUid": "[task_uid]",
+      "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "documentAdditionOrUpdate",
       "enqueuedAt": "[date]"
     }
-    "###);
-    let response = index.wait_task(response["taskUid"].as_u64().unwrap()).await;
-    snapshot!(json_string!(response, { ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".duration" => "[duration]" }), @r###"
+    "#);
+    let response = index.wait_task(response.uid()).await.succeeded();
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".duration" => "[duration]" }), @r###"
     {
-      "uid": 0,
-      "batchUid": 0,
-      "indexUid": "pets",
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "[uuid]",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -335,8 +339,8 @@ async fn add_csv_document() {
 
 #[actix_rt::test]
 async fn add_csv_document_with_types() {
-    let server = Server::new().await;
-    let index = server.index("pets");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let document = "#id:number,name:string,race:string,age:number,cute:boolean
 0,jean,bernese mountain,2.5,true
@@ -345,21 +349,21 @@ async fn add_csv_document_with_types() {
 
     let (response, code) = index.raw_update_documents(document, Some("text/csv"), "").await;
     snapshot!(code, @"202 Accepted");
-    snapshot!(json_string!(response, { ".enqueuedAt" => "[date]" }), @r###"
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".enqueuedAt" => "[date]" }), @r#"
     {
-      "taskUid": 0,
-      "indexUid": "pets",
+      "taskUid": "[task_uid]",
+      "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "documentAdditionOrUpdate",
       "enqueuedAt": "[date]"
     }
-    "###);
-    let response = index.wait_task(response["taskUid"].as_u64().unwrap()).await;
-    snapshot!(json_string!(response, { ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".duration" => "[duration]" }), @r###"
+    "#);
+    let response = index.wait_task(response.uid()).await.succeeded();
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".duration" => "[duration]" }), @r###"
     {
-      "uid": 0,
-      "batchUid": 0,
-      "indexUid": "pets",
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "[uuid]",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -411,8 +415,8 @@ async fn add_csv_document_with_types() {
 
 #[actix_rt::test]
 async fn add_csv_document_with_custom_delimiter() {
-    let server = Server::new().await;
-    let index = server.index("pets");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let document = "#id|name|race
 0|jean|bernese mountain
@@ -421,21 +425,21 @@ async fn add_csv_document_with_custom_delimiter() {
     let (response, code) =
         index.raw_update_documents(document, Some("text/csv"), "?csvDelimiter=|").await;
     snapshot!(code, @"202 Accepted");
-    snapshot!(json_string!(response, { ".enqueuedAt" => "[date]" }), @r###"
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".enqueuedAt" => "[date]" }), @r#"
     {
-      "taskUid": 0,
-      "indexUid": "pets",
+      "taskUid": "[task_uid]",
+      "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "documentAdditionOrUpdate",
       "enqueuedAt": "[date]"
     }
-    "###);
-    let response = index.wait_task(response["taskUid"].as_u64().unwrap()).await;
-    snapshot!(json_string!(response, { ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".duration" => "[duration]" }), @r###"
+    "#);
+    let response = index.wait_task(response.uid()).await.succeeded();
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".duration" => "[duration]" }), @r###"
     {
-      "uid": 0,
-      "batchUid": 0,
-      "indexUid": "pets",
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "[uuid]",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -476,8 +480,8 @@ async fn add_csv_document_with_custom_delimiter() {
 
 #[actix_rt::test]
 async fn add_csv_document_with_types_error() {
-    let server = Server::new().await;
-    let index = server.index("pets");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let document = "#id:number,a:boolean,b:number
 0,doggo,1";
@@ -518,12 +522,13 @@ async fn error_add_documents_test_bad_content_types() {
         }
     ]);
 
-    let server = Server::new().await;
+    let server = Server::new_shared();
     let app = server.init_web_app().await;
+    let index_name = Uuid::new_v4().to_string();
 
     // post
     let req = test::TestRequest::post()
-        .uri("/indexes/dog/documents")
+        .uri(format!("/indexes/{index_name}/documents").as_str())
         .set_payload(document.to_string())
         .insert_header(("content-type", "text/plain"))
         .to_request();
@@ -544,7 +549,7 @@ async fn error_add_documents_test_bad_content_types() {
 
     // put
     let req = test::TestRequest::put()
-        .uri("/indexes/dog/documents")
+        .uri(format!("/indexes/{index_name}/documents").as_str())
         .set_payload(document.to_string())
         .insert_header(("content-type", "text/plain"))
         .to_request();
@@ -574,12 +579,13 @@ async fn error_add_documents_test_no_content_type() {
         }
     ]);
 
-    let server = Server::new().await;
+    let server = Server::new_shared();
     let app = server.init_web_app().await;
+    let index_name = Uuid::new_v4().to_string();
 
     // post
     let req = test::TestRequest::post()
-        .uri("/indexes/dog/documents")
+        .uri(format!("/indexes/{index_name}/documents").as_str())
         .set_payload(document.to_string())
         .to_request();
     let res = test::call_service(&app, req).await;
@@ -599,7 +605,7 @@ async fn error_add_documents_test_no_content_type() {
 
     // put
     let req = test::TestRequest::put()
-        .uri("/indexes/dog/documents")
+        .uri(format!("/indexes/{index_name}/documents").as_str())
         .set_payload(document.to_string())
         .to_request();
     let res = test::call_service(&app, req).await;
@@ -622,12 +628,13 @@ async fn error_add_documents_test_no_content_type() {
 async fn error_add_malformed_csv_documents() {
     let document = "id, content\n1234, hello, world\n12, hello world";
 
-    let server = Server::new().await;
+    let server = Server::new_shared();
     let app = server.init_web_app().await;
+    let index_name = Uuid::new_v4().to_string();
 
     // post
     let req = test::TestRequest::post()
-        .uri("/indexes/dog/documents")
+        .uri(format!("/indexes/{index_name}/documents").as_str())
         .set_payload(document.to_string())
         .insert_header(("content-type", "text/csv"))
         .to_request();
@@ -648,7 +655,7 @@ async fn error_add_malformed_csv_documents() {
 
     // put
     let req = test::TestRequest::put()
-        .uri("/indexes/dog/documents")
+        .uri(format!("/indexes/{index_name}/documents").as_str())
         .set_payload(document.to_string())
         .insert_header(("content-type", "text/csv"))
         .to_request();
@@ -672,12 +679,13 @@ async fn error_add_malformed_csv_documents() {
 async fn error_add_malformed_json_documents() {
     let document = r#"[{"id": 1}, {id: 2}]"#;
 
-    let server = Server::new().await;
+    let server = Server::new_shared();
     let app = server.init_web_app().await;
+    let index_name = Uuid::new_v4().to_string();
 
     // post
     let req = test::TestRequest::post()
-        .uri("/indexes/dog/documents")
+        .uri(format!("/indexes/{index_name}/documents").as_str())
         .set_payload(document.to_string())
         .insert_header(("content-type", "application/json"))
         .to_request();
@@ -698,7 +706,7 @@ async fn error_add_malformed_json_documents() {
 
     // put
     let req = test::TestRequest::put()
-        .uri("/indexes/dog/documents")
+        .uri(format!("/indexes/{index_name}/documents").as_str())
         .set_payload(document.to_string())
         .insert_header(("content-type", "application/json"))
         .to_request();
@@ -724,7 +732,7 @@ async fn error_add_malformed_json_documents() {
 
     let document = format!("\"{}\"", long);
     let req = test::TestRequest::put()
-        .uri("/indexes/dog/documents")
+        .uri(format!("/indexes/{index_name}/documents").as_str())
         .set_payload(document)
         .insert_header(("content-type", "application/json"))
         .to_request();
@@ -745,7 +753,7 @@ async fn error_add_malformed_json_documents() {
     // add one more char to the long string to test if the truncating works.
     let document = format!("\"{}m\"", long);
     let req = test::TestRequest::put()
-        .uri("/indexes/dog/documents")
+        .uri(format!("/indexes/{index_name}/documents").as_str())
         .set_payload(document)
         .insert_header(("content-type", "application/json"))
         .to_request();
@@ -768,12 +776,13 @@ async fn error_add_malformed_json_documents() {
 async fn error_add_malformed_ndjson_documents() {
     let document = "{\"id\": 1}\n{id: 2}";
 
-    let server = Server::new().await;
+    let server = Server::new_shared();
     let app = server.init_web_app().await;
+    let index_name = Uuid::new_v4().to_string();
 
     // post
     let req = test::TestRequest::post()
-        .uri("/indexes/dog/documents")
+        .uri(format!("/indexes/{index_name}/documents").as_str())
         .set_payload(document.to_string())
         .insert_header(("content-type", "application/x-ndjson"))
         .to_request();
@@ -794,7 +803,7 @@ async fn error_add_malformed_ndjson_documents() {
 
     // put
     let req = test::TestRequest::put()
-        .uri("/indexes/dog/documents")
+        .uri(format!("/indexes/{index_name}/documents").as_str())
         .set_payload(document.to_string())
         .insert_header(("content-type", "application/x-ndjson"))
         .to_request();
@@ -818,12 +827,13 @@ async fn error_add_malformed_ndjson_documents() {
 async fn error_add_missing_payload_csv_documents() {
     let document = "";
 
-    let server = Server::new().await;
+    let server = Server::new_shared();
     let app = server.init_web_app().await;
+    let index_name = Uuid::new_v4().to_string();
 
     // post
     let req = test::TestRequest::post()
-        .uri("/indexes/dog/documents")
+        .uri(format!("/indexes/{index_name}/documents").as_str())
         .set_payload(document.to_string())
         .insert_header(("content-type", "text/csv"))
         .to_request();
@@ -844,7 +854,7 @@ async fn error_add_missing_payload_csv_documents() {
 
     // put
     let req = test::TestRequest::put()
-        .uri("/indexes/dog/documents")
+        .uri(format!("/indexes/{index_name}/documents").as_str())
         .set_payload(document.to_string())
         .insert_header(("content-type", "text/csv"))
         .to_request();
@@ -868,12 +878,13 @@ async fn error_add_missing_payload_csv_documents() {
 async fn error_add_missing_payload_json_documents() {
     let document = "";
 
-    let server = Server::new().await;
+    let server = Server::new_shared();
     let app = server.init_web_app().await;
+    let index_name = Uuid::new_v4().to_string();
 
     // post
     let req = test::TestRequest::post()
-        .uri("/indexes/dog/documents")
+        .uri(format!("/indexes/{index_name}/documents").as_str())
         .set_payload(document.to_string())
         .insert_header(("content-type", "application/json"))
         .to_request();
@@ -894,7 +905,7 @@ async fn error_add_missing_payload_json_documents() {
 
     // put
     let req = test::TestRequest::put()
-        .uri("/indexes/dog/documents")
+        .uri(format!("/indexes/{index_name}/documents").as_str())
         .set_payload(document.to_string())
         .insert_header(("content-type", "application/json"))
         .to_request();
@@ -918,12 +929,13 @@ async fn error_add_missing_payload_json_documents() {
 async fn error_add_missing_payload_ndjson_documents() {
     let document = "";
 
-    let server = Server::new().await;
+    let server = Server::new_shared();
     let app = server.init_web_app().await;
+    let index_name = Uuid::new_v4().to_string();
 
     // post
     let req = test::TestRequest::post()
-        .uri("/indexes/dog/documents")
+        .uri(format!("/indexes/{index_name}/documents").as_str())
         .set_payload(document.to_string())
         .insert_header(("content-type", "application/x-ndjson"))
         .to_request();
@@ -944,7 +956,7 @@ async fn error_add_missing_payload_ndjson_documents() {
 
     // put
     let req = test::TestRequest::put()
-        .uri("/indexes/dog/documents")
+        .uri(format!("/indexes/{index_name}/documents").as_str())
         .set_payload(document.to_string())
         .insert_header(("content-type", "application/x-ndjson"))
         .to_request();
@@ -966,8 +978,8 @@ async fn error_add_missing_payload_ndjson_documents() {
 
 #[actix_rt::test]
 async fn add_documents_no_index_creation() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let documents = json!([
         {
@@ -978,18 +990,15 @@ async fn add_documents_no_index_creation() {
 
     let (response, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    assert_eq!(response["taskUid"], 0);
 
-    index.wait_task(response.uid()).await.succeeded();
-
-    let (response, code) = index.get_task(0).await;
-    snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    let response = index.wait_task(response.uid()).await.succeeded();
+    snapshot!(code, @"202 Accepted");
+    snapshot!(response,
         @r###"
     {
-      "uid": 0,
-      "batchUid": 0,
-      "indexUid": "test",
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "[uuid]",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -1037,8 +1046,8 @@ async fn error_document_add_create_index_bad_uid() {
 
 #[actix_rt::test]
 async fn document_addition_with_primary_key() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let documents = json!([
         {
@@ -1048,27 +1057,27 @@ async fn document_addition_with_primary_key() {
     ]);
     let (response, code) = index.add_documents(documents, Some("primary")).await;
     snapshot!(code, @"202 Accepted");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
-        @r###"
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r#"
     {
-      "taskUid": 0,
-      "indexUid": "test",
+      "taskUid": "[task_uid]",
+      "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "documentAdditionOrUpdate",
       "enqueuedAt": "[date]"
     }
-    "###);
+    "#);
 
     index.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index.get_task(response.uid()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "uid": 0,
-      "batchUid": 0,
-      "indexUid": "test",
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "[uuid]",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -1086,10 +1095,10 @@ async fn document_addition_with_primary_key() {
 
     let (response, code) = index.get().await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".createdAt" => "[date]", ".updatedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".createdAt" => "[date]", ".updatedAt" => "[date]", ".uid" => "[uuid]" }),
         @r###"
     {
-      "uid": "test",
+      "uid": "[uuid]",
       "createdAt": "[date]",
       "updatedAt": "[date]",
       "primaryKey": "primary"
@@ -1099,8 +1108,8 @@ async fn document_addition_with_primary_key() {
 
 #[actix_rt::test]
 async fn document_addition_with_huge_int_primary_key() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let documents = json!([
         {
@@ -1111,13 +1120,13 @@ async fn document_addition_with_huge_int_primary_key() {
     let (response, code) = index.add_documents(documents, Some("primary")).await;
     snapshot!(code, @"202 Accepted");
 
-    let response = index.wait_task(response.uid()).await;
+    let response = index.wait_task(response.uid()).await.succeeded();
     snapshot!(response,
         @r###"
     {
       "uid": "[uid]",
       "batchUid": "[batch_uid]",
-      "indexUid": "test",
+      "indexUid": "[uuid]",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -1146,8 +1155,8 @@ async fn document_addition_with_huge_int_primary_key() {
 
 #[actix_rt::test]
 async fn replace_document() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let documents = json!([
         {
@@ -1158,16 +1167,16 @@ async fn replace_document() {
 
     let (response, code) = index.add_documents(documents, None).await;
     snapshot!(code,@"202 Accepted");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
-        @r###"
+    snapshot!(json_string!(response, { ".taskUid" => "[task_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r#"
     {
-      "taskUid": 0,
-      "indexUid": "test",
+      "taskUid": "[task_uid]",
+      "indexUid": "[uuid]",
       "status": "enqueued",
       "type": "documentAdditionOrUpdate",
       "enqueuedAt": "[date]"
     }
-    "###);
+    "#);
 
     index.wait_task(response.uid()).await.succeeded();
 
@@ -1185,12 +1194,12 @@ async fn replace_document() {
 
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "uid": 1,
-      "batchUid": 1,
-      "indexUid": "test",
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "[uuid]",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -1219,17 +1228,17 @@ async fn replace_document() {
 
 #[actix_rt::test]
 async fn add_no_documents() {
-    let server = Server::new().await;
-    let index = server.index("kefir");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     let (task, code) = index.add_documents(json!([]), None).await;
     snapshot!(code, @"202 Accepted");
-    let task = server.wait_task(task.uid()).await;
+    let task = server.wait_task(task.uid()).await.succeeded();
     let task = task.succeeded();
     snapshot!(task, @r#"
     {
       "uid": "[uid]",
       "batchUid": "[batch_uid]",
-      "indexUid": "kefir",
+      "indexUid": "[uuid]",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -1246,13 +1255,13 @@ async fn add_no_documents() {
     "#);
 
     let (task, _code) = index.add_documents(json!([]), Some("kefkef")).await;
-    let task = server.wait_task(task.uid()).await;
+    let task = server.wait_task(task.uid()).await.succeeded();
     let task = task.succeeded();
     snapshot!(task, @r#"
     {
       "uid": "[uid]",
       "batchUid": "[batch_uid]",
-      "indexUid": "kefir",
+      "indexUid": "[uuid]",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -1269,13 +1278,13 @@ async fn add_no_documents() {
     "#);
 
     let (task, _code) = index.add_documents(json!([{ "kefkef": 1 }]), None).await;
-    let task = server.wait_task(task.uid()).await;
+    let task = server.wait_task(task.uid()).await.succeeded();
     let task = task.succeeded();
     snapshot!(task, @r#"
     {
       "uid": "[uid]",
       "batchUid": "[batch_uid]",
-      "indexUid": "kefir",
+      "indexUid": "[uuid]",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -1307,8 +1316,8 @@ async fn add_no_documents() {
 
 #[actix_rt::test]
 async fn add_larger_dataset() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     let update_id = index.load_test_set().await;
     let (response, code) = index.get_task(update_id).await;
     assert_eq!(code, 200);
@@ -1319,12 +1328,11 @@ async fn add_larger_dataset() {
     let (response, code) = index
         .get_all_documents(GetAllDocumentsOptions { limit: Some(1000), ..Default::default() })
         .await;
-    assert_eq!(code, 200, "failed with `{}`", response);
+    assert_eq!(code, 200, "failed with `{response}`");
     assert_eq!(response["results"].as_array().unwrap().len(), 77);
 
     // x-ndjson add large test
-    let server = Server::new().await;
-    let index = server.index("test");
+    let index = server.unique_index();
     let update_id = index.load_test_set_ndjson().await;
     let (response, code) = index.get_task(update_id).await;
     assert_eq!(code, 200);
@@ -1341,8 +1349,8 @@ async fn add_larger_dataset() {
 
 #[actix_rt::test]
 async fn error_add_documents_bad_document_id() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     index.create(Some("docid")).await;
 
     // unsupported characters
@@ -1357,12 +1365,12 @@ async fn error_add_documents_bad_document_id() {
     index.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
-        @r###"
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r#"
     {
-      "uid": 1,
-      "batchUid": 1,
-      "indexUid": "test",
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -1381,7 +1389,7 @@ async fn error_add_documents_bad_document_id() {
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "###);
+    "#);
 
     // More than 512 bytes
     let documents = json!([
@@ -1394,12 +1402,12 @@ async fn error_add_documents_bad_document_id() {
     index.wait_task(value.uid()).await.failed();
     let (response, code) = index.get_task(value.uid()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
       @r###"
     {
-      "uid": 2,
-      "batchUid": 2,
-      "indexUid": "test",
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -1431,12 +1439,12 @@ async fn error_add_documents_bad_document_id() {
     index.wait_task(value.uid()).await.failed();
     let (response, code) = index.get_task(value.uid()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
     @r###"
     {
-      "uid": 3,
-      "batchUid": 3,
-      "indexUid": "test",
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -1460,8 +1468,8 @@ async fn error_add_documents_bad_document_id() {
 
 #[actix_rt::test]
 async fn error_add_documents_missing_document_id() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     index.create(Some("docid")).await;
     let documents = json!([
         {
@@ -1473,12 +1481,12 @@ async fn error_add_documents_missing_document_id() {
     index.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
-        @r###"
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r#"
     {
-      "uid": 1,
-      "batchUid": 1,
-      "indexUid": "test",
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -1497,13 +1505,13 @@ async fn error_add_documents_missing_document_id() {
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "###);
+    "#);
 }
 
 #[actix_rt::test]
 async fn error_document_field_limit_reached_in_one_document() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     index.create(Some("id")).await;
 
@@ -1527,7 +1535,7 @@ async fn error_document_field_limit_reached_in_one_document() {
     {
       "uid": "[uid]",
       "batchUid": "[batch_uid]",
-      "indexUid": "test",
+      "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -1551,8 +1559,8 @@ async fn error_document_field_limit_reached_in_one_document() {
 
 #[actix_rt::test]
 async fn error_document_field_limit_reached_over_multiple_documents() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     index.create(Some("id")).await;
 
@@ -1568,14 +1576,14 @@ async fn error_document_field_limit_reached_over_multiple_documents() {
     let (response, code) = index.update_documents(documents, Some("id")).await;
     snapshot!(code, @"202 Accepted");
 
-    let response = index.wait_task(response.uid()).await;
+    let response = index.wait_task(response.uid()).await.succeeded();
     snapshot!(code, @"202 Accepted");
     snapshot!(response,
         @r###"
     {
       "uid": "[uid]",
       "batchUid": "[batch_uid]",
-      "indexUid": "test",
+      "indexUid": "[uuid]",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -1603,14 +1611,14 @@ async fn error_document_field_limit_reached_over_multiple_documents() {
     let (response, code) = index.update_documents(documents, Some("id")).await;
     snapshot!(code, @"202 Accepted");
 
-    let response = index.wait_task(response.uid()).await;
+    let response = index.wait_task(response.uid()).await.failed();
     snapshot!(code, @"202 Accepted");
     snapshot!(response,
         @r###"
     {
       "uid": "[uid]",
       "batchUid": "[batch_uid]",
-      "indexUid": "test",
+      "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -1634,8 +1642,8 @@ async fn error_document_field_limit_reached_over_multiple_documents() {
 
 #[actix_rt::test]
 async fn error_document_field_limit_reached_in_one_nested_document() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     index.create(Some("id")).await;
 
@@ -1652,7 +1660,7 @@ async fn error_document_field_limit_reached_in_one_nested_document() {
     let (response, code) = index.update_documents(documents, Some("id")).await;
     snapshot!(code, @"202 Accepted");
 
-    let response = index.wait_task(response.uid()).await;
+    let response = index.wait_task(response.uid()).await.succeeded();
     snapshot!(code, @"202 Accepted");
     // Documents without a primary key are not accepted.
     snapshot!(response,
@@ -1660,7 +1668,7 @@ async fn error_document_field_limit_reached_in_one_nested_document() {
     {
       "uid": "[uid]",
       "batchUid": "[batch_uid]",
-      "indexUid": "test",
+      "indexUid": "[uuid]",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -1679,8 +1687,8 @@ async fn error_document_field_limit_reached_in_one_nested_document() {
 
 #[actix_rt::test]
 async fn error_document_field_limit_reached_over_multiple_documents_with_nested_fields() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     index.create(Some("id")).await;
 
@@ -1697,14 +1705,14 @@ async fn error_document_field_limit_reached_over_multiple_documents_with_nested_
     let (response, code) = index.update_documents(documents, Some("id")).await;
     snapshot!(code, @"202 Accepted");
 
-    let response = index.wait_task(response.uid()).await;
+    let response = index.wait_task(response.uid()).await.succeeded();
     snapshot!(code, @"202 Accepted");
     snapshot!(response,
         @r###"
     {
       "uid": "[uid]",
       "batchUid": "[batch_uid]",
-      "indexUid": "test",
+      "indexUid": "[uuid]",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -1733,14 +1741,14 @@ async fn error_document_field_limit_reached_over_multiple_documents_with_nested_
     let (response, code) = index.update_documents(documents, Some("id")).await;
     snapshot!(code, @"202 Accepted");
 
-    let response = index.wait_task(response.uid()).await;
+    let response = index.wait_task(response.uid()).await.succeeded();
     snapshot!(code, @"202 Accepted");
     snapshot!(response,
         @r###"
     {
       "uid": "[uid]",
       "batchUid": "[batch_uid]",
-      "indexUid": "test",
+      "indexUid": "[uuid]",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -1759,8 +1767,8 @@ async fn error_document_field_limit_reached_over_multiple_documents_with_nested_
 
 #[actix_rt::test]
 async fn add_documents_with_geo_field() {
-    let server = Server::new().await;
-    let index = server.index("doggo");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     index.update_settings(json!({"sortableAttributes": ["_geo"]})).await;
 
     let documents = json!([
@@ -1782,13 +1790,13 @@ async fn add_documents_with_geo_field() {
     ]);
 
     let (task, _status_code) = index.add_documents(documents, None).await;
-    let response = index.wait_task(task.uid()).await;
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
-        @r###"
+    let response = index.wait_task(task.uid()).await.succeeded();
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r#"
     {
-      "uid": 1,
-      "batchUid": 1,
-      "indexUid": "doggo",
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "[uuid]",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -1802,7 +1810,7 @@ async fn add_documents_with_geo_field() {
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "###);
+    "#);
 
     let (response, code) = index.get_all_documents(GetAllDocumentsOptions::default()).await;
 
@@ -1883,8 +1891,8 @@ async fn add_documents_with_geo_field() {
 
 #[actix_rt::test]
 async fn update_documents_with_geo_field() {
-    let server = Server::new().await;
-    let index = server.index("doggo");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     index.update_settings(json!({"sortableAttributes": ["_geo"]})).await;
 
     let documents = json!([
@@ -1906,13 +1914,13 @@ async fn update_documents_with_geo_field() {
     ]);
 
     let (task, _status_code) = index.add_documents(documents, None).await;
-    let response = index.wait_task(task.uid()).await;
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
-        @r###"
+    let response = index.wait_task(task.uid()).await.succeeded();
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+        @r#"
     {
-      "uid": 1,
-      "batchUid": 1,
-      "indexUid": "doggo",
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "[uuid]",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -1926,7 +1934,7 @@ async fn update_documents_with_geo_field() {
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "###);
+    "#);
 
     let (response, code) = index.search_post(json!({"sort": ["_geoPoint(10,0):asc"]})).await;
     snapshot!(code, @"200 OK");
@@ -1975,13 +1983,13 @@ async fn update_documents_with_geo_field() {
         }
     ]);
     let (task, _status_code) = index.update_documents(updated_documents, None).await;
-    let response = index.wait_task(task.uid()).await;
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    let response = index.wait_task(task.uid()).await.succeeded();
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "uid": 2,
-      "batchUid": 2,
-      "indexUid": "doggo",
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "[uuid]",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -2075,8 +2083,8 @@ async fn update_documents_with_geo_field() {
 
 #[actix_rt::test]
 async fn add_documents_invalid_geo_field() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     index.create(Some("id")).await;
     index.update_settings(json!({"sortableAttributes": ["_geo"]})).await;
 
@@ -2092,12 +2100,12 @@ async fn add_documents_invalid_geo_field() {
     index.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
-        @r###"
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".indexUid" => "[uuid]" }),
+        @r#"
     {
-      "uid": 2,
-      "batchUid": 2,
-      "indexUid": "test",
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -2106,7 +2114,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Index `test`: The `_geo` field in the document with the id: `\"11\"` is not an object. Was expecting an object with the `_geo.lat` and `_geo.lng` fields but instead got `\"foobar\"`.",
+        "message": "Index `[uuid]`: The `_geo` field in the document with the id: `\"11\"` is not an object. Was expecting an object with the `_geo.lat` and `_geo.lng` fields but instead got `\"foobar\"`.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -2116,7 +2124,7 @@ async fn add_documents_invalid_geo_field() {
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "###);
+    "#);
 
     // _geo is an object but is missing both the lat and lng
     let documents = json!([
@@ -2130,12 +2138,12 @@ async fn add_documents_invalid_geo_field() {
     index.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "uid": 3,
-      "batchUid": 3,
-      "indexUid": "test",
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -2144,7 +2152,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Index `test`: Could not find latitude nor longitude in the document with the id: `\"11\"`. Was expecting `_geo.lat` and `_geo.lng` fields.",
+        "message": "Index `[uuid]`: Could not find latitude nor longitude in the document with the id: `\"11\"`. Was expecting `_geo.lat` and `_geo.lng` fields.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -2168,12 +2176,12 @@ async fn add_documents_invalid_geo_field() {
     index.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "uid": 4,
-      "batchUid": 4,
-      "indexUid": "test",
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -2182,7 +2190,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Index `test`: Could not find latitude nor longitude in the document with the id: `\"11\"`. Was expecting `_geo.lat` and `_geo.lng` fields.",
+        "message": "Index `[uuid]`: Could not find latitude nor longitude in the document with the id: `\"11\"`. Was expecting `_geo.lat` and `_geo.lng` fields.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -2206,12 +2214,12 @@ async fn add_documents_invalid_geo_field() {
     index.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "uid": 5,
-      "batchUid": 5,
-      "indexUid": "test",
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -2220,7 +2228,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Index `test`: Could not find longitude in the document with the id: `\"11\"`. Was expecting a `_geo.lng` field.",
+        "message": "Index `[uuid]`: Could not find longitude in the document with the id: `\"11\"`. Was expecting a `_geo.lng` field.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -2244,12 +2252,12 @@ async fn add_documents_invalid_geo_field() {
     index.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "uid": 6,
-      "batchUid": 6,
-      "indexUid": "test",
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -2258,7 +2266,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Index `test`: Could not find latitude in the document with the id: `\"11\"`. Was expecting a `_geo.lat` field.",
+        "message": "Index `[uuid]`: Could not find latitude in the document with the id: `\"11\"`. Was expecting a `_geo.lat` field.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -2282,12 +2290,12 @@ async fn add_documents_invalid_geo_field() {
     index.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "uid": 7,
-      "batchUid": 7,
-      "indexUid": "test",
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -2296,7 +2304,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Index `test`: Could not find longitude in the document with the id: `\"11\"`. Was expecting a `_geo.lng` field.",
+        "message": "Index `[uuid]`: Could not find longitude in the document with the id: `\"11\"`. Was expecting a `_geo.lng` field.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -2320,12 +2328,12 @@ async fn add_documents_invalid_geo_field() {
     index.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "uid": 8,
-      "batchUid": 8,
-      "indexUid": "test",
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -2334,7 +2342,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Index `test`: Could not find latitude in the document with the id: `\"11\"`. Was expecting a `_geo.lat` field.",
+        "message": "Index `[uuid]`: Could not find latitude in the document with the id: `\"11\"`. Was expecting a `_geo.lat` field.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -2358,12 +2366,12 @@ async fn add_documents_invalid_geo_field() {
     index.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "uid": 9,
-      "batchUid": 9,
-      "indexUid": "test",
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -2372,7 +2380,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Index `test`: Could not parse latitude nor longitude in the document with the id: `\"11\"`. Was expecting finite numbers but instead got `false` and `true`.",
+        "message": "Index `[uuid]`: Could not parse latitude nor longitude in the document with the id: `\"11\"`. Was expecting finite numbers but instead got `false` and `true`.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -2396,12 +2404,12 @@ async fn add_documents_invalid_geo_field() {
     index.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "uid": 10,
-      "batchUid": 10,
-      "indexUid": "test",
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -2410,7 +2418,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Index `test`: Could not find longitude in the document with the id: `\"11\"`. Was expecting a `_geo.lng` field.",
+        "message": "Index `[uuid]`: Could not find longitude in the document with the id: `\"11\"`. Was expecting a `_geo.lng` field.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -2434,12 +2442,12 @@ async fn add_documents_invalid_geo_field() {
     index.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "uid": 11,
-      "batchUid": 11,
-      "indexUid": "test",
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -2448,7 +2456,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Index `test`: Could not find latitude in the document with the id: `\"11\"`. Was expecting a `_geo.lat` field.",
+        "message": "Index `[uuid]`: Could not find latitude in the document with the id: `\"11\"`. Was expecting a `_geo.lat` field.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -2472,12 +2480,12 @@ async fn add_documents_invalid_geo_field() {
     index.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "uid": 12,
-      "batchUid": 12,
-      "indexUid": "test",
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -2486,7 +2494,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Index `test`: Could not parse latitude nor longitude in the document with the id: `\"11\"`. Was expecting finite numbers but instead got `\"doggo\"` and `\"doggo\"`.",
+        "message": "Index `[uuid]`: Could not parse latitude nor longitude in the document with the id: `\"11\"`. Was expecting finite numbers but instead got `\"doggo\"` and `\"doggo\"`.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -2510,12 +2518,12 @@ async fn add_documents_invalid_geo_field() {
     index.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "uid": 13,
-      "batchUid": 13,
-      "indexUid": "test",
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -2524,7 +2532,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Index `test`: The `_geo` field in the document with the id: `\"11\"` contains the following unexpected fields: `{\"doggo\":\"are the best\"}`.",
+        "message": "Index `[uuid]`: The `_geo` field in the document with the id: `\"11\"` contains the following unexpected fields: `{\"doggo\":\"are the best\"}`.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -2549,12 +2557,12 @@ async fn add_documents_invalid_geo_field() {
     let (response, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
     let response = index.wait_task(response.uid()).await.failed();
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "uid": 14,
-      "batchUid": 14,
-      "indexUid": "test",
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -2563,7 +2571,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Index `test`: Could not parse longitude in the document with the id: `\"12\"`. Was expecting a finite number but instead got `null`.",
+        "message": "Index `[uuid]`: Could not parse longitude in the document with the id: `\"12\"`. Was expecting a finite number but instead got `null`.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -2586,12 +2594,12 @@ async fn add_documents_invalid_geo_field() {
     let (response, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
     let response = index.wait_task(response.uid()).await.failed();
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "uid": 15,
-      "batchUid": 15,
-      "indexUid": "test",
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -2600,7 +2608,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Index `test`: Could not parse latitude in the document with the id: `\"12\"`. Was expecting a finite number but instead got `null`.",
+        "message": "Index `[uuid]`: Could not parse latitude in the document with the id: `\"12\"`. Was expecting a finite number but instead got `null`.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -2623,12 +2631,12 @@ async fn add_documents_invalid_geo_field() {
     let (response, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
     let response = index.wait_task(response.uid()).await.failed();
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
-      "uid": 16,
-      "batchUid": 16,
-      "indexUid": "test",
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -2637,7 +2645,7 @@ async fn add_documents_invalid_geo_field() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Index `test`: Could not parse latitude nor longitude in the document with the id: `\"13\"`. Was expecting finite numbers but instead got `null` and `null`.",
+        "message": "Index `[uuid]`: Could not parse latitude nor longitude in the document with the id: `\"13\"`. Was expecting finite numbers but instead got `null` and `null`.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -2653,8 +2661,8 @@ async fn add_documents_invalid_geo_field() {
 // Related to #4333
 #[actix_rt::test]
 async fn add_invalid_geo_and_then_settings() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     index.create(Some("id")).await;
 
     // _geo is not a correct object
@@ -2671,7 +2679,7 @@ async fn add_invalid_geo_and_then_settings() {
     {
       "uid": "[uid]",
       "batchUid": "[batch_uid]",
-      "indexUid": "test",
+      "indexUid": "[uuid]",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -2694,7 +2702,7 @@ async fn add_invalid_geo_and_then_settings() {
     {
       "uid": "[uid]",
       "batchUid": "[batch_uid]",
-      "indexUid": "test",
+      "indexUid": "[uuid]",
       "status": "failed",
       "type": "settingsUpdate",
       "canceledBy": null,
@@ -2704,7 +2712,7 @@ async fn add_invalid_geo_and_then_settings() {
         ]
       },
       "error": {
-        "message": "Index `test`: Could not parse latitude in the document with the id: `\"11\"`. Was expecting a finite number but instead got `null`.",
+        "message": "Index `[uuid]`: Could not parse latitude in the document with the id: `\"11\"`. Was expecting a finite number but instead got `null`.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
@@ -2719,8 +2727,8 @@ async fn add_invalid_geo_and_then_settings() {
 
 #[actix_rt::test]
 async fn error_add_documents_payload_size() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
     index.create(Some("id")).await;
     let document = json!(
         {
@@ -2746,8 +2754,8 @@ async fn error_add_documents_payload_size() {
 
 #[actix_rt::test]
 async fn error_primary_key_inference() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let documents = json!([
         {
@@ -2761,12 +2769,12 @@ async fn error_primary_key_inference() {
     let (response, code) = index.get_task(task.uid()).await;
     assert_eq!(code, 200);
 
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
-    @r###"
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    @r#"
     {
-      "uid": 0,
-      "batchUid": 0,
-      "indexUid": "test",
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -2785,7 +2793,7 @@ async fn error_primary_key_inference() {
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "###);
+    "#);
 
     let documents = json!([
         {
@@ -2802,12 +2810,12 @@ async fn error_primary_key_inference() {
     let (response, code) = index.get_task(task.uid()).await;
     assert_eq!(code, 200);
 
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
     @r###"
     {
-      "uid": 1,
-      "batchUid": 1,
-      "indexUid": "test",
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "[uuid]",
       "status": "failed",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -2841,12 +2849,12 @@ async fn error_primary_key_inference() {
     let (response, code) = index.get_task(task.uid()).await;
     assert_eq!(code, 200);
 
-    snapshot!(json_string!(response, { ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
+    snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
     @r###"
     {
-      "uid": 2,
-      "batchUid": 2,
-      "indexUid": "test",
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "[uuid]",
       "status": "succeeded",
       "type": "documentAdditionOrUpdate",
       "canceledBy": null,
@@ -2865,8 +2873,8 @@ async fn error_primary_key_inference() {
 
 #[actix_rt::test]
 async fn add_documents_with_primary_key_twice() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let documents = json!([
         {
@@ -2888,8 +2896,8 @@ async fn add_documents_with_primary_key_twice() {
 
 #[actix_rt::test]
 async fn batch_several_documents_addition() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index();
 
     let mut documents: Vec<_> = (0..150usize)
         .map(|id| {
@@ -2912,8 +2920,10 @@ async fn batch_several_documents_addition() {
     }
 
     // wait first batch of documents to finish
-    futures::future::join_all(waiter).await;
-    index.wait_task(4).await;
+    let finished_tasks = futures::future::join_all(waiter).await;
+    for (task, _code) in finished_tasks {
+        index.wait_task(task.uid()).await;
+    }
 
     // run a second completely failing batch
     documents[40] = json!({"title": "error", "desc": "error"});
@@ -2924,8 +2934,10 @@ async fn batch_several_documents_addition() {
         waiter.push(index.add_documents(json!(chunk), Some("id")));
     }
     // wait second batch of documents to finish
-    futures::future::join_all(waiter).await;
-    index.wait_task(9).await;
+    let finished_tasks = futures::future::join_all(waiter).await;
+    for (task, _code) in finished_tasks {
+        index.wait_task(task.uid()).await;
+    }
 
     let (response, _code) = index.filtered_tasks(&[], &["failed"], &[]).await;
 

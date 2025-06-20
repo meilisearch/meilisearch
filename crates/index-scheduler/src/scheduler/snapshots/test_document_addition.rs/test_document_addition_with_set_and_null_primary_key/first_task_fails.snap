@@ -45,7 +45,7 @@ doggos: { number_of_documents: 0, field_distribution: {} }
 [timestamp] [0,]
 ----------------------------------------------------------------------
 ### All Batches:
-0 {uid: 0, details: {"receivedDocuments":1,"indexedDocuments":0}, stats: {"totalNbTasks":1,"status":{"failed":1},"types":{"documentAdditionOrUpdate":1},"indexUids":{"doggos":1}}, stop reason: "task with id 1 is setting the `bork` primary key but cannot interfere with primary key guessing of the batch", }
+0 {uid: 0, details: {"receivedDocuments":1,"indexedDocuments":0}, stats: {"totalNbTasks":1,"status":{"failed":1},"types":{"documentAdditionOrUpdate":1},"indexUids":{"doggos":1}}, stop reason: "stopped batching before task with id 1 because it is setting the `bork` primary key and it would interfere with primary key guessing of the batch", }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:
 0 [0,]

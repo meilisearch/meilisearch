@@ -13,50 +13,50 @@ license.workspace = true
 default-run = "meilisearch"
 
 [dependencies]
-actix-cors = "0.7.0"
-actix-http = { version = "3.9.0", default-features = false, features = [
+actix-cors = "0.7.1"
+actix-http = { version = "3.11.0", default-features = false, features = [
     "compress-brotli",
     "compress-gzip",
     "rustls-0_23",
 ] }
 actix-utils = "3.0.1"
-actix-web = { version = "4.9.0", default-features = false, features = [
+actix-web = { version = "4.11.0", default-features = false, features = [
     "macros",
     "compress-brotli",
     "compress-gzip",
     "cookies",
     "rustls-0_23",
 ] }
-anyhow = { version = "1.0.95", features = ["backtrace"] }
-async-trait = "0.1.85"
-bstr = "1.11.3"
+anyhow = { version = "1.0.98", features = ["backtrace"] }
+bstr = "1.12.0"
 byte-unit = { version = "5.1.6", features = ["serde"] }
-bytes = "1.9.0"
-clap = { version = "4.5.24", features = ["derive", "env"] }
+bytes = "1.10.1"
+bumpalo = "3.18.1"
+clap = { version = "4.5.40", features = ["derive", "env"] }
 crossbeam-channel = "0.5.15"
 deserr = { version = "0.6.3", features = ["actix-web"] }
 dump = { path = "../dump" }
-either = "1.13.0"
+either = "1.15.0"
 file-store = { path = "../file-store" }
-flate2 = "1.0.35"
+flate2 = "1.1.2"
 fst = "0.4.7"
 futures = "0.3.31"
 futures-util = "0.3.31"
 index-scheduler = { path = "../index-scheduler" }
-indexmap = { version = "2.7.0", features = ["serde"] }
-is-terminal = "0.4.13"
+indexmap = { version = "2.9.0", features = ["serde"] }
+is-terminal = "0.4.16"
 itertools = "0.14.0"
-jsonwebtoken = "9.3.0"
+jsonwebtoken = "9.3.1"
 lazy_static = "1.5.0"
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
-mimalloc = { version = "0.1.43", default-features = false }
+mimalloc = { version = "0.1.47", default-features = false }
 mime = "0.3.17"
-num_cpus = "1.16.0"
+num_cpus = "1.17.0"
 obkv = "0.3.0"
-once_cell = "1.20.2"
-ordered-float = "4.6.0"
-parking_lot = "0.12.3"
+once_cell = "1.21.3"
+ordered-float = "5.0.0"
+parking_lot = "0.12.4"
 permissive-json-pointer = { path = "../permissive-json-pointer" }
 pin-project-lite = "0.2.16"
 platform-dirs = "0.3.0"
@@ -64,44 +64,44 @@ prometheus = { version = "0.14.0", features = ["process"] }
 rand = "0.8.5"
 rayon = "1.10.0"
 regex = "1.11.1"
-reqwest = { version = "0.12.12", features = [
+reqwest = { version = "0.12.20", features = [
     "rustls-tls",
     "json",
 ], default-features = false }
-rustls = { version = "0.23.20", features = ["ring"], default-features = false }
-rustls-pki-types = { version = "1.10.1", features = ["alloc"] }
+rustls = { version = "0.23.28", features = ["ring"], default-features = false }
+rustls-pki-types = { version = "1.12.0", features = ["alloc"] }
 rustls-pemfile = "2.2.0"
-segment = { version = "0.2.5" }
-serde = { version = "1.0.217", features = ["derive"] }
-serde_json = { version = "1.0.135", features = ["preserve_order"] }
-sha2 = "0.10.8"
+segment = { version = "0.2.6" }
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = { version = "1.0.140", features = ["preserve_order"] }
+sha2 = "0.10.9"
 siphasher = "1.0.1"
 slice-group-by = "0.3.1"
-static-files = { version = "0.2.4", optional = true }
-sysinfo = "0.33.1"
-tar = "0.4.43"
-tempfile = "3.15.0"
-thiserror = "2.0.9"
-time = { version = "0.3.37", features = [
+static-files = { version = "0.2.5", optional = true }
+sysinfo = "0.35.2"
+tar = "0.4.44"
+tempfile = "3.20.0"
+thiserror = "2.0.12"
+time = { version = "0.3.41", features = [
     "serde-well-known",
     "formatting",
     "parsing",
     "macros",
 ] }
-tokio = { version = "1.43.1", features = ["full"] }
-toml = "0.8.19"
-uuid = { version = "1.11.0", features = ["serde", "v4"] }
+tokio = { version = "1.45.1", features = ["full"] }
+toml = "0.8.23"
+uuid = { version = "1.17.0", features = ["serde", "v4"] }
 serde_urlencoded = "0.7.1"
 termcolor = "1.4.1"
 url = { version = "2.5.4", features = ["serde"] }
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["json"] }
 tracing-trace = { version = "0.1.0", path = "../tracing-trace" }
-tracing-actix-web = "0.7.15"
+tracing-actix-web = "0.7.18"
 build-info = { version = "1.7.0", path = "../build-info" }
-roaring = "0.10.10"
+roaring = "0.10.12"
 mopa-maintained = "0.2.3"
-utoipa = { version = "5.3.1", features = [
+utoipa = { version = "5.4.0", features = [
     "actix_extras",
     "macros",
     "non_strict_integers",
@@ -111,32 +111,35 @@ utoipa = { version = "5.3.1", features = [
     "openapi_extensions",
 ] }
 utoipa-scalar = { version = "0.3.0", optional = true, features = ["actix-web"] }
+async-openai = { git = "https://github.com/meilisearch/async-openai", branch = "better-error-handling" }
+secrecy = "0.10.3"
+actix-web-lab = { version = "0.24.1", default-features = false }
 
 [dev-dependencies]
 actix-rt = "2.10.0"
-brotli = "6.0.0"
+brotli = "8.0.1"
 # fixed version due to format breakages in v1.40
-insta = "=1.39.0"
+insta = { version = "=1.39.0", features = ["redactions"] }
 manifest-dir-macros = "0.1.18"
 maplit = "1.0.2"
 meili-snap = { path = "../meili-snap" }
 temp-env = "0.3.6"
 urlencoding = "2.1.3"
-wiremock = "0.6.2"
+wiremock = "0.6.3"
 yaup = "0.3.1"
 
 [build-dependencies]
-anyhow = { version = "1.0.95", optional = true }
-cargo_toml = { version = "0.21.0", optional = true }
+anyhow = { version = "1.0.98", optional = true }
+cargo_toml = { version = "0.22.1", optional = true }
 hex = { version = "0.4.3", optional = true }
-reqwest = { version = "0.12.12", features = [
+reqwest = { version = "0.12.20", features = [
     "blocking",
     "rustls-tls",
 ], default-features = false, optional = true }
 sha-1 = { version = "0.10.1", optional = true }
-static-files = { version = "0.2.4", optional = true }
-tempfile = { version = "3.15.0", optional = true }
-zip = { version = "2.3.0", optional = true }
+static-files = { version = "0.2.5", optional = true }
+tempfile = { version = "3.20.0", optional = true }
+zip = { version = "4.1.0", optional = true }
 
 [features]
 default = ["meilisearch-types/all-tokenizations", "mini-dashboard"]

@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
-use std::ops::ControlFlow;
 
 use fst::automaton::Str;
 use fst::{IntoStreamer, Streamer};
@@ -15,12 +14,6 @@ use crate::search::new::query_term::{Lazy, TwoTypoTerm};
 use crate::search::new::{limits, SearchContext};
 use crate::search::{build_dfa, get_first};
 use crate::{Result, MAX_WORD_LENGTH};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum NumberOfTypos {
-    One,
-    Two,
-}
 
 impl Interned<QueryTerm> {
     pub fn compute_fully_if_needed(self, ctx: &mut SearchContext<'_>) -> Result<()> {
@@ -45,7 +38,7 @@ impl Interned<QueryTerm> {
 fn find_zero_typo_prefix_derivations(
     ctx: &mut SearchContext<'_>,
     word_interned: Interned<String>,
-    mut visit: impl FnMut(Interned<String>) -> Result<ControlFlow<()>>,
+    prefix_of: &mut BTreeSet<Interned<String>>,
 ) -> Result<()> {
     let word = ctx.word_interner.get(word_interned).to_owned();
     let word = word.as_str();
@@ -65,8 +58,8 @@ fn find_zero_typo_prefix_derivations(
                 let derived_word = derived_word.to_string();
                 let derived_word_interned = ctx.word_interner.insert(derived_word);
                 if derived_word_interned != word_interned {
-                    let cf = visit(derived_word_interned)?;
-                    if cf.is_break() {
+                    prefix_of.insert(derived_word_interned);
+                    if prefix_of.len() >= limits::MAX_PREFIX_COUNT {
                         break;
                     }
                 }
@@ -81,7 +74,7 @@ fn find_one_typo_derivations(
     ctx: &mut SearchContext<'_>,
     word_interned: Interned<String>,
     is_prefix: bool,
-    mut visit: impl FnMut(Interned<String>) -> Result<ControlFlow<()>>,
+    one_typo_words: &mut BTreeSet<Interned<String>>,
 ) -> Result<()> {
     let fst = ctx.get_words_fst()?;
     let word = ctx.word_interner.get(word_interned).to_owned();
@@ -98,8 +91,8 @@ fn find_one_typo_derivations(
             1 => {
                 let derived_word = std::str::from_utf8(derived_word)?;
                 let derived_word = ctx.word_interner.insert(derived_word.to_owned());
-                let cf = visit(derived_word)?;
-                if cf.is_break() {
+                one_typo_words.insert(derived_word);
+                if one_typo_words.len() >= limits::MAX_ONE_TYPO_COUNT {
                     break;
                 }
             }
@@ -116,7 +109,8 @@ fn find_one_two_typo_derivations(
     is_prefix: bool,
     fst: fst::Set<Cow<'_, [u8]>>,
     word_interner: &mut DedupInterner<String>,
-    mut visit: impl FnMut(Interned<String>, NumberOfTypos) -> Result<ControlFlow<()>>,
+    one_typo_words: &mut BTreeSet<Interned<String>>,
+    two_typo_words: &mut BTreeSet<Interned<String>>,
 ) -> Result<()> {
     let word = word_interner.get(word_interned).to_owned();
     let word = word.as_str();
@@ -130,15 +124,20 @@ fn find_one_two_typo_derivations(
     let mut stream = fst.search_with_state(automaton).into_stream();
 
     while let Some((derived_word, state)) = stream.next() {
+        let finished_one_typo_words = one_typo_words.len() >= limits::MAX_ONE_TYPO_COUNT;
+        let finished_two_typo_words = two_typo_words.len() >= limits::MAX_TWO_TYPOS_COUNT;
+        if finished_one_typo_words && finished_two_typo_words {
+            // No chance we will add either one- or two-typo derivations anymore, stop iterating.
+            break;
+        }
         let derived_word = std::str::from_utf8(derived_word)?;
-        let derived_word_interned = word_interner.insert(derived_word.to_owned());
+        // No need to intern here
         // in the case the typo is on the first letter, we know the number of typo
         // is two
-        if get_first(derived_word) != get_first(word) {
-            let cf = visit(derived_word_interned, NumberOfTypos::Two)?;
-            if cf.is_break() {
-                break;
-            }
+        if get_first(derived_word) != get_first(word) && !finished_two_typo_words {
+            let derived_word_interned = word_interner.insert(derived_word.to_owned());
+            two_typo_words.insert(derived_word_interned);
+            continue;
         } else {
             // Else, we know that it is the second dfa that matched and compute the
             // correct distance
@@ -146,16 +145,18 @@ fn find_one_two_typo_derivations(
             match d.to_u8() {
                 0 => (),
                 1 => {
-                    let cf = visit(derived_word_interned, NumberOfTypos::One)?;
-                    if cf.is_break() {
-                        break;
+                    if finished_one_typo_words {
+                        continue;
                     }
+                    let derived_word_interned = word_interner.insert(derived_word.to_owned());
+                    one_typo_words.insert(derived_word_interned);
                 }
                 2 => {
-                    let cf = visit(derived_word_interned, NumberOfTypos::Two)?;
-                    if cf.is_break() {
-                        break;
+                    if finished_two_typo_words {
+                        continue;
                     }
+                    let derived_word_interned = word_interner.insert(derived_word.to_owned());
+                    two_typo_words.insert(derived_word_interned);
                 }
                 _ => unreachable!("2 typos DFA produced a distance greater than 2"),
             }
@@ -211,14 +212,7 @@ pub fn partially_initialized_term_from_word(
     }
 
     if is_prefix && use_prefix_db.is_none() {
-        find_zero_typo_prefix_derivations(ctx, word_interned, |derived_word| {
-            if prefix_of.len() < limits::MAX_PREFIX_COUNT {
-                prefix_of.insert(derived_word);
-                Ok(ControlFlow::Continue(()))
-            } else {
-                Ok(ControlFlow::Break(()))
-            }
-        })?;
+        find_zero_typo_prefix_derivations(ctx, word_interned, &mut prefix_of)?;
     }
     let synonyms = ctx.index.synonyms(ctx.txn)?;
     let mut synonym_word_count = 0;
@@ -281,14 +275,7 @@ impl Interned<QueryTerm> {
         let mut one_typo_words = BTreeSet::new();
 
         if *max_nbr_typos > 0 {
-            find_one_typo_derivations(ctx, original, is_prefix, |derived_word| {
-                if one_typo_words.len() < limits::MAX_ONE_TYPO_COUNT {
-                    one_typo_words.insert(derived_word);
-                    Ok(ControlFlow::Continue(()))
-                } else {
-                    Ok(ControlFlow::Break(()))
-                }
-            })?;
+            find_one_typo_derivations(ctx, original, is_prefix, &mut one_typo_words)?;
         }
 
         let split_words = if allows_split_words {
@@ -343,27 +330,8 @@ impl Interned<QueryTerm> {
                 *is_prefix,
                 ctx.index.words_fst(ctx.txn)?,
                 &mut ctx.word_interner,
-                |derived_word, nbr_typos| {
-                    if one_typo_words.len() >= limits::MAX_ONE_TYPO_COUNT
-                        && two_typo_words.len() >= limits::MAX_TWO_TYPOS_COUNT
-                    {
-                        // No chance we will add either one- or two-typo derivations anymore, stop iterating.
-                        return Ok(ControlFlow::Break(()));
-                    }
-                    match nbr_typos {
-                        NumberOfTypos::One => {
-                            if one_typo_words.len() < limits::MAX_ONE_TYPO_COUNT {
-                                one_typo_words.insert(derived_word);
-                            }
-                        }
-                        NumberOfTypos::Two => {
-                            if two_typo_words.len() < limits::MAX_TWO_TYPOS_COUNT {
-                                two_typo_words.insert(derived_word);
-                            }
-                        }
-                    }
-                    Ok(ControlFlow::Continue(()))
-                },
+                &mut one_typo_words,
+                &mut two_typo_words,
             )?;
         }
 

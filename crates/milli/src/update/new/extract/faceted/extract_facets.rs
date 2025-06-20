@@ -8,7 +8,7 @@ use hashbrown::HashMap;
 use serde_json::Value;
 
 use super::super::cache::BalancedCaches;
-use super::facet_document::extract_document_facets;
+use super::facet_document::{extract_document_facets, extract_geo_document};
 use super::FacetKind;
 use crate::fields_ids_map::metadata::Metadata;
 use crate::filterable_attributes_rules::match_faceted_field;
@@ -90,17 +90,12 @@ impl FacetedDocidsExtractor {
         let mut cached_sorter = context.data.borrow_mut_or_yield();
         let mut del_add_facet_value = DelAddFacetValue::new(&context.doc_alloc);
         let docid = document_change.docid();
-        let res = match document_change {
-            DocumentChange::Deletion(inner) => extract_document_facets(
-                inner.current(rtxn, index, context.db_fields_ids_map)?,
-                inner.external_document_id(),
-                new_fields_ids_map.deref_mut(),
-                filterable_attributes,
-                sortable_fields,
-                asc_desc_fields,
-                distinct_field,
-                is_geo_enabled,
-                &mut |fid, meta, depth, value| {
+
+        // Using a macro avoid borrowing the parameters as mutable in both closures at
+        // the same time by postponing their creation
+        macro_rules! facet_fn {
+            (del) => {
+                |fid: FieldId, meta: Metadata, depth: perm_json_p::Depth, value: &Value| {
                     Self::facet_fn_with_options(
                         &context.doc_alloc,
                         cached_sorter.deref_mut(),
@@ -114,91 +109,10 @@ impl FacetedDocidsExtractor {
                         depth,
                         value,
                     )
-                },
-            ),
-            DocumentChange::Update(inner) => {
-                let has_changed = inner.has_changed_for_fields(
-                    &mut |field_name| {
-                        match_faceted_field(
-                            field_name,
-                            filterable_attributes,
-                            sortable_fields,
-                            asc_desc_fields,
-                            distinct_field,
-                        )
-                    },
-                    rtxn,
-                    index,
-                    context.db_fields_ids_map,
-                )?;
-                let has_changed_for_geo_fields =
-                    inner.has_changed_for_geo_fields(rtxn, index, context.db_fields_ids_map)?;
-                if !has_changed && !has_changed_for_geo_fields {
-                    return Ok(());
                 }
-
-                extract_document_facets(
-                    inner.current(rtxn, index, context.db_fields_ids_map)?,
-                    inner.external_document_id(),
-                    new_fields_ids_map.deref_mut(),
-                    filterable_attributes,
-                    sortable_fields,
-                    asc_desc_fields,
-                    distinct_field,
-                    is_geo_enabled,
-                    &mut |fid, meta, depth, value| {
-                        Self::facet_fn_with_options(
-                            &context.doc_alloc,
-                            cached_sorter.deref_mut(),
-                            BalancedCaches::insert_del_u32,
-                            &mut del_add_facet_value,
-                            DelAddFacetValue::insert_del,
-                            docid,
-                            fid,
-                            meta,
-                            filterable_attributes,
-                            depth,
-                            value,
-                        )
-                    },
-                )?;
-
-                extract_document_facets(
-                    inner.merged(rtxn, index, context.db_fields_ids_map)?,
-                    inner.external_document_id(),
-                    new_fields_ids_map.deref_mut(),
-                    filterable_attributes,
-                    sortable_fields,
-                    asc_desc_fields,
-                    distinct_field,
-                    is_geo_enabled,
-                    &mut |fid, meta, depth, value| {
-                        Self::facet_fn_with_options(
-                            &context.doc_alloc,
-                            cached_sorter.deref_mut(),
-                            BalancedCaches::insert_add_u32,
-                            &mut del_add_facet_value,
-                            DelAddFacetValue::insert_add,
-                            docid,
-                            fid,
-                            meta,
-                            filterable_attributes,
-                            depth,
-                            value,
-                        )
-                    },
-                )
-            }
-            DocumentChange::Insertion(inner) => extract_document_facets(
-                inner.inserted(),
-                inner.external_document_id(),
-                new_fields_ids_map.deref_mut(),
-                filterable_attributes,
-                sortable_fields,
-                asc_desc_fields,
-                distinct_field,
-                is_geo_enabled,
-                &mut |fid, meta, depth, value| {
+            };
+            (add) => {
+                |fid: FieldId, meta: Metadata, depth: perm_json_p::Depth, value: &Value| {
                     Self::facet_fn_with_options(
                         &context.doc_alloc,
                         cached_sorter.deref_mut(),
@@ -212,12 +126,116 @@ impl FacetedDocidsExtractor {
                         depth,
                         value,
                     )
-                },
-            ),
+                }
+            };
+        }
+
+        match document_change {
+            DocumentChange::Deletion(inner) => {
+                let mut del = facet_fn!(del);
+
+                extract_document_facets(
+                    inner.current(rtxn, index, context.db_fields_ids_map)?,
+                    new_fields_ids_map.deref_mut(),
+                    filterable_attributes,
+                    sortable_fields,
+                    asc_desc_fields,
+                    distinct_field,
+                    &mut del,
+                )?;
+
+                if is_geo_enabled {
+                    extract_geo_document(
+                        inner.current(rtxn, index, context.db_fields_ids_map)?,
+                        inner.external_document_id(),
+                        new_fields_ids_map.deref_mut(),
+                        &mut del,
+                    )?;
+                }
+            }
+            DocumentChange::Update(inner) => {
+                let has_changed_for_facets = inner.has_changed_for_fields(
+                    &mut |field_name| {
+                        match_faceted_field(
+                            field_name,
+                            filterable_attributes,
+                            sortable_fields,
+                            asc_desc_fields,
+                            distinct_field,
+                        )
+                    },
+                    rtxn,
+                    index,
+                    context.db_fields_ids_map,
+                )?;
+
+                // 1. Maybe update doc
+                if has_changed_for_facets {
+                    extract_document_facets(
+                        inner.current(rtxn, index, context.db_fields_ids_map)?,
+                        new_fields_ids_map.deref_mut(),
+                        filterable_attributes,
+                        sortable_fields,
+                        asc_desc_fields,
+                        distinct_field,
+                        &mut facet_fn!(del),
+                    )?;
+
+                    extract_document_facets(
+                        inner.merged(rtxn, index, context.db_fields_ids_map)?,
+                        new_fields_ids_map.deref_mut(),
+                        filterable_attributes,
+                        sortable_fields,
+                        asc_desc_fields,
+                        distinct_field,
+                        &mut facet_fn!(add),
+                    )?;
+                }
+
+                // 2. Maybe update geo
+                if is_geo_enabled
+                    && inner.has_changed_for_geo_fields(rtxn, index, context.db_fields_ids_map)?
+                {
+                    extract_geo_document(
+                        inner.current(rtxn, index, context.db_fields_ids_map)?,
+                        inner.external_document_id(),
+                        new_fields_ids_map.deref_mut(),
+                        &mut facet_fn!(del),
+                    )?;
+                    extract_geo_document(
+                        inner.merged(rtxn, index, context.db_fields_ids_map)?,
+                        inner.external_document_id(),
+                        new_fields_ids_map.deref_mut(),
+                        &mut facet_fn!(add),
+                    )?;
+                }
+            }
+            DocumentChange::Insertion(inner) => {
+                let mut add = facet_fn!(add);
+
+                extract_document_facets(
+                    inner.inserted(),
+                    new_fields_ids_map.deref_mut(),
+                    filterable_attributes,
+                    sortable_fields,
+                    asc_desc_fields,
+                    distinct_field,
+                    &mut add,
+                )?;
+
+                if is_geo_enabled {
+                    extract_geo_document(
+                        inner.inserted(),
+                        inner.external_document_id(),
+                        new_fields_ids_map.deref_mut(),
+                        &mut add,
+                    )?;
+                }
+            }
         };
 
         del_add_facet_value.send_data(docid, sender, &context.doc_alloc).unwrap();
-        res
+        Ok(())
     }
 
     #[allow(clippy::too_many_arguments)]
