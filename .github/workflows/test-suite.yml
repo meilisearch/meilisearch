@@ -21,7 +21,7 @@ jobs:
       # Use ubuntu-22.04 to compile with glibc 2.35
       image: ubuntu:22.04
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Install needed dependencies
         run: |
           apt-get update && apt-get install -y curl
@@ -49,7 +49,7 @@ jobs:
       matrix:
         os: [macos-13, windows-2022]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2.7.8
       - uses: dtolnay/rust-toolchain@1.85
@@ -72,7 +72,7 @@ jobs:
       image: ubuntu:22.04
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Install needed dependencies
         run: |
           apt-get update
@@ -91,7 +91,7 @@ jobs:
     env:
       MEILI_TEST_OLLAMA_SERVER: "http://localhost:11434"
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Install Ollama
         run: |
           curl -fsSL https://ollama.com/install.sh | sudo -E sh
@@ -124,7 +124,7 @@ jobs:
       image: ubuntu:22.04
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Install needed dependencies
         run: |
           apt-get update
@@ -148,7 +148,7 @@ jobs:
       # Use ubuntu-22.04 to compile with glibc 2.35
       image: ubuntu:22.04
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Install needed dependencies
         run: |
           apt-get update && apt-get install -y curl
@@ -166,7 +166,7 @@ jobs:
     name: Run Clippy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.85
         with:
           profile: minimal
@@ -183,7 +183,7 @@ jobs:
     name: Run Rustfmt
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.85
         with:
           profile: minimal

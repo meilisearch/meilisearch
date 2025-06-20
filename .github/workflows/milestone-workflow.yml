@@ -32,7 +32,7 @@ jobs:
     outputs:
       is-patch: ${{ steps.check-patch.outputs.is-patch }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Check if this release is a patch release only
         id: check-patch
         run: |
@@ -57,7 +57,7 @@ jobs:
     env:
       ISSUE_TEMPLATE: issue-template.md
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Download the issue template
         run: curl -s https://raw.githubusercontent.com/meilisearch/engine-team/main/issue-templates/roadmap-issue.md > $ISSUE_TEMPLATE
       - name: Replace all empty occurrences in the templates
@@ -90,7 +90,7 @@ jobs:
     env:
       ISSUE_TEMPLATE: issue-template.md
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Download the issue template
         run: curl -s https://raw.githubusercontent.com/meilisearch/engine-team/main/issue-templates/changelog-issue.md > $ISSUE_TEMPLATE
       - name: Replace all empty occurrences in the templates
@@ -118,7 +118,7 @@ jobs:
     env:
       ISSUE_TEMPLATE: issue-template.md
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Download the issue template
         run: curl -s https://raw.githubusercontent.com/meilisearch/engine-team/main/issue-templates/update-version-issue.md > $ISSUE_TEMPLATE
       - name: Create the issue
@@ -137,7 +137,7 @@ jobs:
     env:
       ISSUE_TEMPLATE: issue-template.md
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Download the issue template
         run: curl -s https://raw.githubusercontent.com/meilisearch/engine-team/main/issue-templates/update-openapi-issue.md > $ISSUE_TEMPLATE
       - name: Create the issue
@@ -152,7 +152,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event.action == 'created'
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Install jq
         run: |
           sudo apt-get update
@@ -188,7 +188,7 @@ jobs:
     if: github.event.action == 'closed'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Create the ${{ env.MILESTONE_VERSION }} label
         run: |
           label_description="PRs/issues solved in $MILESTONE_VERSION"
@@ -209,7 +209,7 @@ jobs:
     needs: create-release-label
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Add label ${{ env.MILESTONE_VERSION }} to all PRs in the Milestone
         run: |
           prs=$(gh pr list --search milestone:"$MILESTONE_VERSION" --limit 1000 --state all --json number --template '{{range .}}{{tablerow (printf "%v" .number)}}{{end}}')
