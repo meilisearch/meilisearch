@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::time::Instant;
 
 use arroy::Distance;
@@ -7,6 +8,7 @@ use super::{
     hf, manual, ollama, openai, rest, DistributionShift, EmbedError, Embedding, EmbeddingCache,
     NewEmbedderError,
 };
+use crate::progress::EmbedderStats;
 use crate::ThreadPoolNoAbort;
 
 #[derive(Debug)]
@@ -81,6 +83,7 @@ impl Embedder {
                     "This is a sample text. It is meant to compare similarity.".into(),
                 ],
                 None,
+                None,
             )
             .map_err(|error| NewEmbedderError::composite_test_embedding_failed(error, "search"))?;
 
@@ -91,6 +94,7 @@ impl Embedder {
                     "a brave dog".into(),
                     "This is a sample text. It is meant to compare similarity.".into(),
                 ],
+                None,
                 None,
             )
             .map_err(|error| {
@@ -150,13 +154,14 @@ impl SubEmbedder {
         &self,
         texts: Vec<String>,
         deadline: Option<Instant>,
+        embedder_stats: Option<Arc<EmbedderStats>>,
     ) -> std::result::Result<Vec<Embedding>, EmbedError> {
         match self {
             SubEmbedder::HuggingFace(embedder) => embedder.embed(texts),
-            SubEmbedder::OpenAi(embedder) => embedder.embed(&texts, deadline),
-            SubEmbedder::Ollama(embedder) => embedder.embed(&texts, deadline),
+            SubEmbedder::OpenAi(embedder) => embedder.embed(&texts, deadline, embedder_stats),
+            SubEmbedder::Ollama(embedder) => embedder.embed(&texts, deadline, embedder_stats),
             SubEmbedder::UserProvided(embedder) => embedder.embed(&texts),
-            SubEmbedder::Rest(embedder) => embedder.embed(texts, deadline),
+            SubEmbedder::Rest(embedder) => embedder.embed(texts, deadline, embedder_stats),
         }
     }
 
@@ -164,18 +169,19 @@ impl SubEmbedder {
         &self,
         text: &str,
         deadline: Option<Instant>,
+        embedder_stats: Option<Arc<EmbedderStats>>,
     ) -> std::result::Result<Embedding, EmbedError> {
         match self {
             SubEmbedder::HuggingFace(embedder) => embedder.embed_one(text),
             SubEmbedder::OpenAi(embedder) => {
-                embedder.embed(&[text], deadline)?.pop().ok_or_else(EmbedError::missing_embedding)
+                embedder.embed(&[text], deadline, embedder_stats)?.pop().ok_or_else(EmbedError::missing_embedding)
             }
             SubEmbedder::Ollama(embedder) => {
-                embedder.embed(&[text], deadline)?.pop().ok_or_else(EmbedError::missing_embedding)
+                embedder.embed(&[text], deadline, embedder_stats)?.pop().ok_or_else(EmbedError::missing_embedding)
             }
             SubEmbedder::UserProvided(embedder) => embedder.embed_one(text),
             SubEmbedder::Rest(embedder) => embedder
-                .embed_ref(&[text], deadline)?
+                .embed_ref(&[text], deadline, embedder_stats)?
                 .pop()
                 .ok_or_else(EmbedError::missing_embedding),
         }
@@ -188,13 +194,14 @@ impl SubEmbedder {
         &self,
         text_chunks: Vec<Vec<String>>,
         threads: &ThreadPoolNoAbort,
+        embedder_stats: Option<Arc<EmbedderStats>>,
     ) -> std::result::Result<Vec<Vec<Embedding>>, EmbedError> {
         match self {
             SubEmbedder::HuggingFace(embedder) => embedder.embed_index(text_chunks),
-            SubEmbedder::OpenAi(embedder) => embedder.embed_index(text_chunks, threads),
-            SubEmbedder::Ollama(embedder) => embedder.embed_index(text_chunks, threads),
+            SubEmbedder::OpenAi(embedder) => embedder.embed_index(text_chunks, threads, embedder_stats),
+            SubEmbedder::Ollama(embedder) => embedder.embed_index(text_chunks, threads, embedder_stats),
             SubEmbedder::UserProvided(embedder) => embedder.embed_index(text_chunks),
-            SubEmbedder::Rest(embedder) => embedder.embed_index(text_chunks, threads),
+            SubEmbedder::Rest(embedder) => embedder.embed_index(text_chunks, threads, embedder_stats),
         }
     }
 
@@ -203,13 +210,14 @@ impl SubEmbedder {
         &self,
         texts: &[&str],
         threads: &ThreadPoolNoAbort,
+        embedder_stats: Option<Arc<EmbedderStats>>,
     ) -> std::result::Result<Vec<Embedding>, EmbedError> {
         match self {
             SubEmbedder::HuggingFace(embedder) => embedder.embed_index_ref(texts),
-            SubEmbedder::OpenAi(embedder) => embedder.embed_index_ref(texts, threads),
-            SubEmbedder::Ollama(embedder) => embedder.embed_index_ref(texts, threads),
+            SubEmbedder::OpenAi(embedder) => embedder.embed_index_ref(texts, threads, embedder_stats),
+            SubEmbedder::Ollama(embedder) => embedder.embed_index_ref(texts, threads, embedder_stats),
             SubEmbedder::UserProvided(embedder) => embedder.embed_index_ref(texts),
-            SubEmbedder::Rest(embedder) => embedder.embed_index_ref(texts, threads),
+            SubEmbedder::Rest(embedder) => embedder.embed_index_ref(texts, threads, embedder_stats),
         }
     }
 

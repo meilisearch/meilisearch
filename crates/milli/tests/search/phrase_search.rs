@@ -10,7 +10,7 @@ fn set_stop_words(index: &Index, stop_words: &[&str]) {
     let mut builder = Settings::new(&mut wtxn, index, &config);
     let stop_words = stop_words.iter().map(|s| s.to_string()).collect();
     builder.set_stop_words(stop_words);
-    builder.execute(|_| (), || false).unwrap();
+    builder.execute(|_| (), || false, None).unwrap();
     wtxn.commit().unwrap();
 }
 

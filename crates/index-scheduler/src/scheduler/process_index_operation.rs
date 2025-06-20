@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use bumpalo::collections::CollectIn;
 use bumpalo::Bump;
 use meilisearch_types::heed::RwTxn;
@@ -472,6 +474,7 @@ impl IndexScheduler {
                     .execute(
                         |indexing_step| tracing::debug!(update = ?indexing_step),
                         || must_stop_processing.get(),
+                        Some(Arc::clone(&progress.embedder_stats))
                     )
                     .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?;
 

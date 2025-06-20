@@ -134,7 +134,7 @@ impl TempIndex {
     ) -> Result<(), crate::error::Error> {
         let mut builder = update::Settings::new(wtxn, &self.inner, &self.indexer_config);
         update(&mut builder);
-        builder.execute(drop, || false)?;
+        builder.execute(drop, || false, None)?;
         Ok(())
     }
 

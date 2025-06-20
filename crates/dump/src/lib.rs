@@ -328,6 +328,7 @@ pub(crate) mod test {
                 progress_trace: Default::default(),
                 write_channel_congestion: None,
                 internal_database_sizes: Default::default(),
+                embeddings: Default::default(),
             },
             enqueued_at: Some(BatchEnqueuedAt {
                 earliest: datetime!(2022-11-11 0:00 UTC),

@@ -236,7 +236,7 @@ fn criteria_mixup() {
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, &config);
         builder.set_criteria(criteria.clone());
-        builder.execute(|_| (), || false).unwrap();
+        builder.execute(|_| (), || false, None).unwrap();
         wtxn.commit().unwrap();
 
         let rtxn = index.read_txn().unwrap();
@@ -276,7 +276,7 @@ fn criteria_ascdesc() {
         S("name"),
         S("age"),
     });
-    builder.execute(|_| (), || false).unwrap();
+    builder.execute(|_| (), || false, None).unwrap();
 
     wtxn.commit().unwrap();
     let mut wtxn = index.write_txn().unwrap();
@@ -358,7 +358,7 @@ fn criteria_ascdesc() {
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, &config);
         builder.set_criteria(vec![criterion.clone()]);
-        builder.execute(|_| (), || false).unwrap();
+        builder.execute(|_| (), || false, None).unwrap();
         wtxn.commit().unwrap();
 
         let rtxn = index.read_txn().unwrap();

@@ -1,7 +1,7 @@
 use std::any::TypeId;
 use std::borrow::Cow;
 use std::marker::PhantomData;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
@@ -20,6 +20,13 @@ pub trait Step: 'static + Send + Sync {
 #[derive(Clone, Default)]
 pub struct Progress {
     steps: Arc<RwLock<InnerProgress>>,
+    pub embedder_stats: Arc<EmbedderStats>,
+}
+
+#[derive(Default)]
+pub struct EmbedderStats {
+    pub errors: Arc<RwLock<(Option<String>, u32)>>,
+    pub total_requests: AtomicUsize
 }
 
 #[derive(Default)]
@@ -65,7 +72,19 @@ impl Progress {
             });
         }
 
-        ProgressView { steps: step_view, percentage: percentage * 100.0 }
+        let embedder_view = {
+            let (last_error, error_count) = match self.embedder_stats.errors.read() {
+                Ok(guard) => (guard.0.clone(), guard.1),
+                Err(_) => (None, 0),
+            };
+            EmbedderStatsView {
+                last_error,
+                request_count: self.embedder_stats.total_requests.load(Ordering::Relaxed) as u32,
+                error_count,
+            }
+        };
+
+        ProgressView { steps: step_view, percentage: percentage * 100.0, embedder: embedder_view }
     }
 
     pub fn accumulated_durations(&self) -> IndexMap<String, String> {
@@ -209,6 +228,7 @@ make_enum_progress! {
 pub struct ProgressView {
     pub steps: Vec<ProgressStepView>,
     pub percentage: f32,
+    pub embedder: EmbedderStatsView,
 }
 
 #[derive(Debug, Serialize, Clone, ToSchema)]
@@ -218,6 +238,16 @@ pub struct ProgressStepView {
     pub current_step: Cow<'static, str>,
     pub finished: u32,
     pub total: u32,
+}
+
+#[derive(Debug, Serialize, Clone, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
+pub struct EmbedderStatsView {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_error: Option<String>,
+    pub request_count: u32,
+    pub error_count: u32,
 }
 
 /// Used when the name can change but it's still the same step.

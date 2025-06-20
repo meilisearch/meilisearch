@@ -242,6 +242,7 @@ impl IndexScheduler {
                         .execute(
                             |indexing_step| tracing::debug!(update = ?indexing_step),
                             || must_stop_processing.get(),
+                            Some(progress.embedder_stats),
                         )
                         .map_err(|e| Error::from_milli(e, Some(index_uid.to_string())))?;
                     index_wtxn.commit()?;

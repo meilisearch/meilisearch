@@ -82,4 +82,14 @@ pub struct BatchStats {
     pub write_channel_congestion: Option<serde_json::Map<String, serde_json::Value>>,
     #[serde(default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub internal_database_sizes: serde_json::Map<String, serde_json::Value>,
+    pub embeddings: BatchEmbeddingStats
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
+pub struct BatchEmbeddingStats {
+    pub total_count: usize,
+    pub error_count: usize,
+    pub last_error: Option<String>,
 }

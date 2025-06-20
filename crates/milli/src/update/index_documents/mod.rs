@@ -32,7 +32,7 @@ use crate::database_stats::DatabaseStats;
 use crate::documents::{obkv_to_object, DocumentsBatchReader};
 use crate::error::{Error, InternalError};
 use crate::index::{PrefixSearch, PrefixSettings};
-use crate::progress::Progress;
+use crate::progress::{EmbedderStats, Progress};
 pub use crate::update::index_documents::helpers::CursorClonableMmap;
 use crate::update::{
     IndexerConfig, UpdateIndexingStep, WordPrefixDocids, WordPrefixIntegerDocids, WordsPrefixesFst,
@@ -81,6 +81,7 @@ pub struct IndexDocuments<'t, 'i, 'a, FP, FA> {
     added_documents: u64,
     deleted_documents: u64,
     embedders: EmbeddingConfigs,
+    embedder_stats: Option<Arc<EmbedderStats>>,
 }
 
 #[derive(Default, Debug, Clone)]
@@ -103,6 +104,7 @@ where
         config: IndexDocumentsConfig,
         progress: FP,
         should_abort: FA,
+        embedder_stats: Option<Arc<EmbedderStats>>,
     ) -> Result<IndexDocuments<'t, 'i, 'a, FP, FA>> {
         let transform = Some(Transform::new(
             wtxn,
@@ -123,6 +125,7 @@ where
             added_documents: 0,
             deleted_documents: 0,
             embedders: Default::default(),
+            embedder_stats,
         })
     }
 
@@ -292,6 +295,7 @@ where
 
         // Run extraction pipeline in parallel.
         let mut modified_docids = RoaringBitmap::new();
+        let embedder_stats = self.embedder_stats.clone();
         pool.install(|| {
                 let settings_diff_cloned = settings_diff.clone();
                 rayon::spawn(move || {
@@ -326,7 +330,8 @@ where
                             embedders_configs.clone(),
                             settings_diff_cloned,
                             max_positions_per_attributes,
-                            Arc::new(possible_embedding_mistakes)
+                            Arc::new(possible_embedding_mistakes),
+                            embedder_stats.clone()
                         )
                     });
 

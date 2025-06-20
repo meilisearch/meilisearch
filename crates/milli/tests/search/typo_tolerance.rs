@@ -46,7 +46,7 @@ fn test_typo_tolerance_one_typo() {
     let config = IndexerConfig::default();
     let mut builder = Settings::new(&mut txn, &index, &config);
     builder.set_min_word_len_one_typo(4);
-    builder.execute(|_| (), || false).unwrap();
+    builder.execute(|_| (), || false, None).unwrap();
 
     // typo is now supported for 4 letters words
     let mut search = Search::new(&txn, &index);
@@ -92,7 +92,7 @@ fn test_typo_tolerance_two_typo() {
     let config = IndexerConfig::default();
     let mut builder = Settings::new(&mut txn, &index, &config);
     builder.set_min_word_len_two_typos(7);
-    builder.execute(|_| (), || false).unwrap();
+    builder.execute(|_| (), || false, None).unwrap();
 
     // typo is now supported for 4 letters words
     let mut search = Search::new(&txn, &index);
@@ -180,7 +180,7 @@ fn test_typo_disabled_on_word() {
     // `zealand` doesn't allow typos anymore
     exact_words.insert("zealand".to_string());
     builder.set_exact_words(exact_words);
-    builder.execute(|_| (), || false).unwrap();
+    builder.execute(|_| (), || false, None).unwrap();
 
     let mut search = Search::new(&txn, &index);
     search.query("zealand");
@@ -218,7 +218,7 @@ fn test_disable_typo_on_attribute() {
     let mut builder = Settings::new(&mut txn, &index, &config);
     // disable typos on `description`
     builder.set_exact_attributes(vec!["description".to_string()].into_iter().collect());
-    builder.execute(|_| (), || false).unwrap();
+    builder.execute(|_| (), || false, None).unwrap();
 
     let mut search = Search::new(&txn, &index);
     search.query("antebelum");

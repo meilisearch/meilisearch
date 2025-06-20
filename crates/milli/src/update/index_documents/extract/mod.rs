@@ -31,6 +31,7 @@ use self::extract_word_position_docids::extract_word_position_docids;
 use super::helpers::{as_cloneable_grenad, CursorClonableMmap, GrenadParameters};
 use super::{helpers, TypedChunk};
 use crate::index::IndexEmbeddingConfig;
+use crate::progress::EmbedderStats;
 use crate::update::settings::InnerIndexSettingsDiff;
 use crate::vector::error::PossibleEmbeddingMistakes;
 use crate::{FieldId, Result, ThreadPoolNoAbort, ThreadPoolNoAbortBuilder};
@@ -49,6 +50,7 @@ pub(crate) fn data_from_obkv_documents(
     settings_diff: Arc<InnerIndexSettingsDiff>,
     max_positions_per_attributes: Option<u32>,
     possible_embedding_mistakes: Arc<PossibleEmbeddingMistakes>,
+    embedder_stats: Option<Arc<EmbedderStats>>,
 ) -> Result<()> {
     let (original_pipeline_result, flattened_pipeline_result): (Result<_>, Result<_>) = rayon::join(
         || {
@@ -62,6 +64,7 @@ pub(crate) fn data_from_obkv_documents(
                         embedders_configs.clone(),
                         settings_diff.clone(),
                         possible_embedding_mistakes.clone(),
+                        embedder_stats.clone(),
                     )
                 })
                 .collect::<Result<()>>()
@@ -231,6 +234,7 @@ fn send_original_documents_data(
     embedders_configs: Arc<Vec<IndexEmbeddingConfig>>,
     settings_diff: Arc<InnerIndexSettingsDiff>,
     possible_embedding_mistakes: Arc<PossibleEmbeddingMistakes>,
+    embedder_stats: Option<Arc<EmbedderStats>>,
 ) -> Result<()> {
     let original_documents_chunk =
         original_documents_chunk.and_then(|c| unsafe { as_cloneable_grenad(&c) })?;
@@ -270,6 +274,7 @@ fn send_original_documents_data(
                             embedder.clone(),
                             &embedder_name,
                             &possible_embedding_mistakes,
+                            embedder_stats.clone(),
                             &unused_vectors_distribution,
                             request_threads(),
                         ) {

@@ -450,7 +450,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
             return Err(crate::Error::UserError(crate::UserError::DocumentEmbeddingError(msg)));
         }
 
-        let res = match embedder.embed_index_ref(texts.as_slice(), threads) {
+        let res = match embedder.embed_index_ref(texts.as_slice(), threads, None) {
             Ok(embeddings) => {
                 for (docid, embedding) in ids.into_iter().zip(embeddings) {
                     sender.set_vector(*docid, embedder_id, embedding).unwrap();
