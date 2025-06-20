@@ -247,12 +247,22 @@ impl MatchingWords {
         // TODO: There is potentially an optimization to be made here
         // if we matched a term then we can skip checking it for further iterations?
 
+        println!(
+            "{:?}",
+            self.located_matching_words
+                .iter()
+                .flat_map(|lw| lw.value.iter().map(move |w| (
+                    lw.is_prefix,
+                    lw.original_char_count,
+                    self.word_interner.get(*w)
+                )))
+                .collect::<Vec<_>>()
+        );
+
         self.located_matching_words
             .iter()
-            .flat_map(|lw| lw.value.iter().map(move |w| (lw, w)))
+            .flat_map(|lw| lw.value.iter().map(move |w| (lw, self.word_interner.get(*w))))
             .find_map(|(located_words, word)| {
-                let word = self.word_interner.get(*word);
-
                 let [char_count, byte_len] =
                     match PrefixedOrEquality::new(tph.token.lemma(), word, located_words.is_prefix)
                     {
@@ -368,93 +378,105 @@ impl Debug for MatchingWords {
     }
 }
 
-// #[cfg(test)]
-// pub(crate) mod tests {
-//     use super::super::super::located_query_terms_from_tokens;
-//     use super::*;
-//     use crate::search::new::matches::tests::temp_index_with_documents;
-//     use crate::search::new::query_term::ExtractedTokens;
-//     use charabia::{TokenKind, TokenizerBuilder};
-//     use std::borrow::Cow;
+#[cfg(test)]
+mod tests {
+    use super::super::super::located_query_terms_from_tokens;
+    use super::*;
+    use crate::index::tests::TempIndex;
+    use crate::search::new::query_term::ExtractedTokens;
+    use charabia::{TokenKind, TokenizerBuilder};
+    use std::borrow::Cow;
 
-//     #[test]
-//     fn matching_words() {
-//         let temp_index = temp_index_with_documents(None);
-//         let rtxn = temp_index.read_txn().unwrap();
-//         let mut ctx = SearchContext::new(&temp_index, &rtxn).unwrap();
-//         let mut builder = TokenizerBuilder::default();
-//         let tokenizer = builder.build();
-//         let text = "split this world";
-//         let tokens = tokenizer.tokenize(text);
-//         let ExtractedTokens { query_terms, .. } =
-//             located_query_terms_from_tokens(&mut ctx, tokens, None).unwrap();
-//         let matching_words = MatchingWords::new(ctx, &query_terms);
+    fn temp_index_with_documents() -> TempIndex {
+        let temp_index = TempIndex::new();
+        temp_index
+            .add_documents(documents!([
+                { "id": 1, "name": "split this world westfali westfalia the Ŵôřlḑôle" },
+                { "id": 2, "name": "Westfália" },
+                { "id": 3, "name": "Ŵôřlḑôle" },
+            ]))
+            .unwrap();
+        temp_index
+    }
 
-//         assert_eq!(
-//             matching_words.get_matches_and_query_positions(
-//                 &[
-//                     Token {
-//                         kind: TokenKind::Word,
-//                         lemma: Cow::Borrowed("split"),
-//                         char_end: "split".chars().count(),
-//                         byte_end: "split".len(),
-//                         ..Default::default()
-//                     },
-//                     Token {
-//                         kind: TokenKind::Word,
-//                         lemma: Cow::Borrowed("nyc"),
-//                         char_end: "nyc".chars().count(),
-//                         byte_end: "nyc".len(),
-//                         ..Default::default()
-//                     },
-//                     Token {
-//                         kind: TokenKind::Word,
-//                         lemma: Cow::Borrowed("world"),
-//                         char_end: "world".chars().count(),
-//                         byte_end: "world".len(),
-//                         ..Default::default()
-//                     },
-//                     Token {
-//                         kind: TokenKind::Word,
-//                         lemma: Cow::Borrowed("worlded"),
-//                         char_end: "worlded".chars().count(),
-//                         byte_end: "worlded".len(),
-//                         ..Default::default()
-//                     },
-//                     Token {
-//                         kind: TokenKind::Word,
-//                         lemma: Cow::Borrowed("thisnew"),
-//                         char_end: "thisnew".chars().count(),
-//                         byte_end: "thisnew".len(),
-//                         ..Default::default()
-//                     }
-//                 ],
-//                 text
-//             ),
-//             (
-//                 vec![
-//                     Match {
-//                         char_count: 5,
-//                         byte_len: 5,
-//                         position: MatchPosition::Word { word_position: 0, token_position: 0 }
-//                     },
-//                     Match {
-//                         char_count: 5,
-//                         byte_len: 5,
-//                         position: MatchPosition::Word { word_position: 2, token_position: 2 }
-//                     },
-//                     Match {
-//                         char_count: 5,
-//                         byte_len: 5,
-//                         position: MatchPosition::Word { word_position: 3, token_position: 3 }
-//                     }
-//                 ],
-//                 vec![
-//                     QueryPosition { range: [0, 0], index: 0 },
-//                     QueryPosition { range: [2, 2], index: 1 },
-//                     QueryPosition { range: [2, 2], index: 2 }
-//                 ]
-//             )
-//         );
-//     }
-// }
+    #[test]
+    fn matching_words() {
+        let temp_index = temp_index_with_documents();
+        let rtxn = temp_index.read_txn().unwrap();
+        let mut ctx = SearchContext::new(&temp_index, &rtxn).unwrap();
+        let mut builder = TokenizerBuilder::default();
+        let tokenizer = builder.build();
+        let text = "split this world";
+        let tokens = tokenizer.tokenize(text);
+        let ExtractedTokens { query_terms, .. } =
+            located_query_terms_from_tokens(&mut ctx, tokens, None).unwrap();
+        let matching_words = MatchingWords::new(ctx, &query_terms);
+
+        assert_eq!(
+            matching_words.get_matches_and_query_positions(
+                &[
+                    Token {
+                        kind: TokenKind::Word,
+                        lemma: Cow::Borrowed("split"),
+                        char_end: "split".chars().count(),
+                        byte_end: "split".len(),
+                        ..Default::default()
+                    },
+                    Token {
+                        kind: TokenKind::Word,
+                        lemma: Cow::Borrowed("nyc"),
+                        char_end: "nyc".chars().count(),
+                        byte_end: "nyc".len(),
+                        ..Default::default()
+                    },
+                    Token {
+                        kind: TokenKind::Word,
+                        lemma: Cow::Borrowed("world"),
+                        char_end: "world".chars().count(),
+                        byte_end: "world".len(),
+                        ..Default::default()
+                    },
+                    Token {
+                        kind: TokenKind::Word,
+                        lemma: Cow::Borrowed("worlded"),
+                        char_end: "worlded".chars().count(),
+                        byte_end: "worlded".len(),
+                        ..Default::default()
+                    },
+                    Token {
+                        kind: TokenKind::Word,
+                        lemma: Cow::Borrowed("thisnew"),
+                        char_end: "thisnew".chars().count(),
+                        byte_end: "thisnew".len(),
+                        ..Default::default()
+                    }
+                ],
+                text
+            ),
+            (
+                vec![
+                    Match {
+                        char_count: 5,
+                        byte_len: 5,
+                        position: MatchPosition::Word { word_position: 0, token_position: 0 }
+                    },
+                    Match {
+                        char_count: 5,
+                        byte_len: 5,
+                        position: MatchPosition::Word { word_position: 2, token_position: 2 }
+                    },
+                    Match {
+                        char_count: 5,
+                        byte_len: 5,
+                        position: MatchPosition::Word { word_position: 3, token_position: 3 }
+                    }
+                ],
+                vec![
+                    QueryPosition { range: [0, 0], index: 0 },
+                    QueryPosition { range: [2, 2], index: 1 },
+                    QueryPosition { range: [2, 2], index: 2 }
+                ]
+            )
+        );
+    }
+}

@@ -200,7 +200,7 @@ mod tests {
         format_options: Option<FormatOptions>,
         text: &str,
         query: &str,
-        expected_text: &str,
+        expected_maybe_text: Option<&str>,
     ) {
         let temp_index = TempIndex::new();
 
@@ -216,7 +216,28 @@ mod tests {
         let builder = MatcherBuilder::new_test(&rtxn, &temp_index, query);
         let mut matcher = builder.build(text, None);
 
-        assert_eq!(matcher.get_formatted_text(format_options), Some(expected_text.to_string()));
+        assert_eq!(
+            matcher.get_formatted_text(format_options),
+            expected_maybe_text.map(|v| v.to_string())
+        );
+    }
+
+    struct FormatVariations<'a> {
+        highlight_with_crop: Option<&'a str>,
+        highlight: Option<&'a str>,
+        crop: Option<&'a str>,
+    }
+
+    impl<'a> FormatVariations<'a> {
+        fn get(&self) -> [(Option<FormatOptions>, Option<&'a str>); 5] {
+            [
+                (None, None),
+                (Some(FormatOptions { highlight: true, crop: Some(2) }), self.highlight_with_crop),
+                (Some(FormatOptions { highlight: true, crop: None }), self.highlight),
+                (Some(FormatOptions { highlight: false, crop: Some(2) }), self.crop),
+                (Some(FormatOptions { highlight: false, crop: None }), None),
+            ]
+        }
     }
 
     /// "Dei store fiskane eta dei små — dei liger under som minst förmå."
@@ -225,77 +246,66 @@ mod tests {
     fn rename_me_with_base_text(
         format_options: Option<FormatOptions>,
         query: &str,
-        expected_text: &str,
+        expected_maybe_text: Option<&str>,
     ) {
         rename_me(
             format_options,
             "Dei store fiskane eta dei små — dei liger under som minst förmå.",
             query,
-            expected_text,
+            expected_maybe_text,
         );
     }
 
     #[test]
-    fn phrase_highlight_bigger_than_crop() {
-        rename_me_with_base_text(
-            Some(FormatOptions { highlight: true, crop: Some(1) }),
-            "\"dei liger\"",
-            "…<em>dei</em>…",
-        );
+    fn empty_query() {
+        for (format_options, expected_maybe_text) in (FormatVariations {
+            highlight_with_crop: Some("Dei store…"),
+            highlight: None,
+            crop: Some("Dei store…"),
+        }
+        .get())
+        {
+            rename_me_with_base_text(format_options, "", expected_maybe_text);
+        }
     }
 
     #[test]
-    fn phrase_highlight_same_size_as_crop() {
-        rename_me_with_base_text(
-            Some(FormatOptions { highlight: true, crop: Some(2) }),
-            "\"dei liger\"",
-            "…<em>dei liger</em>…",
-        );
-    }
-
-    #[test]
-    fn phrase_highlight_crop_middle() {
-        rename_me_with_base_text(
-            Some(FormatOptions { highlight: true, crop: Some(4) }),
-            "\"dei liger\"",
-            "…små — <em>dei liger</em> under…",
-        );
-    }
-
-    #[test]
-    fn phrase_highlight_crop_end() {
-        rename_me_with_base_text(
-            Some(FormatOptions { highlight: true, crop: Some(4) }),
-            "\"minst förmå\"",
-            "…under som <em>minst förmå</em>.",
-        );
-    }
-
-    #[test]
-    fn phrase_highlight_crop_beginning() {
-        rename_me_with_base_text(
-            Some(FormatOptions { highlight: true, crop: Some(4) }),
-            "\"Dei store\"",
-            "<em>Dei store</em> fiskane eta…",
-        );
+    fn only_separators() {
+        for (format_options, expected_maybe_text) in (FormatVariations {
+            highlight_with_crop: Some(":-…"),
+            highlight: None,
+            crop: Some(":-…"),
+        }
+        .get())
+        {
+            rename_me(format_options, ":-)", ":-)", expected_maybe_text);
+        }
     }
 
     #[test]
     fn highlight_end() {
-        rename_me_with_base_text(
-            Some(FormatOptions { highlight: true, crop: None }),
-            "minst förmå",
-            "Dei store fiskane eta dei små — dei liger under som <em>minst</em> <em>förmå</em>.",
-        );
+        // TODO: Why is "förmå" marked as prefix in located matching words?
+        for (format_options, expected_maybe_text) in (FormatVariations {
+            highlight_with_crop: Some("…<em>minst</em> <em>förmå</em>."),
+            highlight: Some("Dei store fiskane eta dei små — dei liger under som <em>minst</em> <em>förmå</em>."),
+            crop: Some("…minst förmå."),
+        }
+        .get()) {
+            rename_me_with_base_text(format_options, "minst förmå", expected_maybe_text);
+        }
     }
 
     #[test]
     fn highlight_beginning_and_middle() {
-        rename_me_with_base_text(
-            Some(FormatOptions { highlight: true, crop: None }),
-            "Dei store",
-            "<em>Dei</em> <em>store</em> fiskane eta <em>dei</em> små — <em>dei</em> liger under som minst förmå.",
-        );
+        // TODO: Why is "store" marked as prefix in located matching words?
+        for (format_options, expected_maybe_text) in (FormatVariations {
+            highlight_with_crop: Some("<em>Dei</em> <em>store</em>…"),
+            highlight: Some("<em>Dei</em> <em>store</em> fiskane eta <em>dei</em> små — <em>dei</em> liger under som minst förmå."),
+            crop: Some("Dei store…"),
+        }
+        .get()) {
+            rename_me_with_base_text(format_options, "Dei store", expected_maybe_text);
+        }
     }
 
     #[test]
@@ -306,291 +316,185 @@ mod tests {
         // `milli::search::new::query_term::QueryTerm::all_computed_derivations` might be at fault here
 
         // interned words = ["forma"]
-        rename_me(
-            Some(FormatOptions { highlight: true, crop: None }),
-            "altså, förmå, på en måte",
-            "fo",
-            "altså, <em>förmå</em>, på en måte",
-        );
+        for (format_options, expected_maybe_text) in (FormatVariations {
+            highlight_with_crop: Some("…<em>förmå</em>, på…"),
+            highlight: Some("altså, <em>förmå</em>, på en måte"),
+            crop: Some("…förmå, på…"),
+        }
+        .get())
+        {
+            rename_me(format_options, "altså, förmå, på en måte", "fo", expected_maybe_text);
+        }
 
         // interned words = ["fo", "forma"]
-        rename_me(
-            Some(FormatOptions { highlight: true, crop: None }),
-            "altså, fo förmå, på en måte",
-            "fo",
-            "altså, <em>fo</em> <em>fö</em>rmå, på en måte",
-        );
+        for (format_options, expected_maybe_text) in (FormatVariations {
+            highlight_with_crop: Some("…<em>fo</em> <em>fö</em>rmå…"),
+            highlight: Some("altså, <em>fo</em> <em>fö</em>rmå, på en måte"),
+            crop: Some("…fo förmå…"),
+        }
+        .get())
+        {
+            rename_me(format_options, "altså, fo förmå, på en måte", "fo", expected_maybe_text);
+        }
     }
 
     #[test]
     fn partial_match_end() {
-        rename_me(
-            Some(FormatOptions { highlight: true, crop: None }),
-            "förmå, på en måte",
-            "fo",
-            "<em>förmå</em>, på en måte",
-        );
+        for (format_options, expected_maybe_text) in (FormatVariations {
+            highlight_with_crop: Some("<em>förmå</em>, på…"),
+            highlight: Some("<em>förmå</em>, på en måte"),
+            crop: Some("förmå, på…"),
+        }
+        .get())
+        {
+            rename_me(format_options, "förmå, på en måte", "fo", expected_maybe_text);
+        }
 
-        rename_me(
-            Some(FormatOptions { highlight: true, crop: None }),
-            "fo förmå, på en måte",
-            "fo",
-            "<em>fo</em> <em>fö</em>rmå, på en måte",
-        );
+        for (format_options, expected_maybe_text) in (FormatVariations {
+            highlight_with_crop: Some("<em>fo</em> <em>fö</em>rmå…"),
+            highlight: Some("<em>fo</em> <em>fö</em>rmå, på en måte"),
+            crop: Some("fo förmå…"),
+        }
+        .get())
+        {
+            rename_me(format_options, "fo förmå, på en måte", "fo", expected_maybe_text);
+        }
     }
 
     #[test]
     fn partial_match_beginning() {
-        rename_me(
-            Some(FormatOptions { highlight: true, crop: None }),
-            "altså, förmå",
-            "fo",
-            "altså, <em>förmå</em>",
-        );
+        for (format_options, expected_maybe_text) in (FormatVariations {
+            highlight_with_crop: Some("altså, <em>förmå</em>"),
+            highlight: Some("altså, <em>förmå</em>"),
+            crop: Some("altså, förmå"),
+        }
+        .get())
+        {
+            rename_me(format_options, "altså, förmå", "fo", expected_maybe_text);
+        }
 
-        rename_me(
-            Some(FormatOptions { highlight: true, crop: None }),
-            "altså, fo förmå",
-            "fo",
-            "altså, <em>fo</em> <em>fö</em>rmå",
+        for (format_options, expected_maybe_text) in (FormatVariations {
+            highlight_with_crop: Some("…<em>fo</em> <em>fö</em>rmå"),
+            highlight: Some("altså, <em>fo</em> <em>fö</em>rmå"),
+            crop: Some("…fo förmå"),
+        }
+        .get())
+        {
+            rename_me(format_options, "altså, fo förmå", "fo", expected_maybe_text);
+        }
+    }
+
+    #[test]
+    fn separator_at_end() {
+        for (format_options, expected_maybe_text) in (FormatVariations {
+            highlight_with_crop: Some("…<em>minst</em> förmå. , ;"),
+            highlight: Some("; , — dei liger under som <em>minst</em> förmå. , ;"),
+            crop: Some("…minst förmå. , ;"),
+        }
+        .get())
+        {
+            rename_me(
+                format_options,
+                "; , — dei liger under som minst förmå. , ;",
+                "minst",
+                expected_maybe_text,
+            );
+        }
+    }
+
+    #[test]
+    fn separator_at_beginning() {
+        for (format_options, expected_maybe_text) in (FormatVariations {
+            highlight_with_crop: Some("; , — <em>dei</em> liger…"),
+            highlight: Some("; , — <em>dei</em> liger under som minst förmå. , ;"),
+            crop: Some("; , — dei liger…"),
+        }
+        .get())
+        {
+            rename_me(
+                format_options,
+                "; , — dei liger under som minst förmå. , ;",
+                "dei",
+                expected_maybe_text,
+            );
+        }
+    }
+
+    #[test]
+    fn phrase() {
+        for (format_options, expected_maybe_text) in (FormatVariations {
+            highlight_with_crop: Some("…<em>dei liger</em>…"),
+            highlight: Some(
+                "Dei store fiskane eta dei små — <em>dei liger</em> under som minst förmå.",
+            ),
+            crop: Some("…dei liger…"),
+        }
+        .get())
+        {
+            rename_me_with_base_text(format_options, "\"dei liger\"", expected_maybe_text);
+        }
+    }
+
+    #[test]
+    fn phrase_highlight_bigger_than_crop() {
+        rename_me_with_base_text(
+            Some(FormatOptions { highlight: true, crop: Some(1) }),
+            "\"dei liger\"",
+            Some("…<em>dei</em>…"),
         );
     }
 
-    // #[test]
-    // fn format_identity() {
-    //     let temp_index = temp_index_with_documents(None);
-    //     let rtxn = temp_index.read_txn().unwrap();
-    //     let builder = MatcherBuilder::new_test(&rtxn, &temp_index, "split the world");
-    //     let format_options = Some(FormatOptions { highlight: false, crop: None });
+    #[test]
+    fn phrase_bigger_than_crop() {
+        rename_me_with_base_text(
+            Some(FormatOptions { highlight: false, crop: Some(1) }),
+            "\"dei liger\"",
+            Some("…dei…"),
+        );
+    }
 
-    //     let test_values = [
-    //         // Text without any match.
-    //         "A quick brown fox can not jump 32 feet, right? Brr, it is cold!",
-    //         // Text containing all matches.
-    //         "Natalie risk her future to build a world with the boy she loves. Emily Henry: The Love That Split The World.",
-    //         // Text containing some matches.
-    //         "Natalie risk her future to build a world with the boy she loves."
-    //     ];
+    #[test]
+    fn phrase_highlight_crop_middle() {
+        rename_me_with_base_text(
+            Some(FormatOptions { highlight: true, crop: Some(4) }),
+            "\"dei liger\"",
+            Some("…små — <em>dei liger</em> under…"),
+        );
+    }
 
-    //     for text in test_values {
-    //         let mut matcher = builder.build(text, None);
-    //         // no crop and no highlight should return complete text.
-    //         assert_eq!(matcher.get_formatted_text(format_options), None);
-    //     }
-    // }
+    #[test]
+    fn phrase_crop_middle() {
+        rename_me_with_base_text(
+            Some(FormatOptions { highlight: false, crop: Some(4) }),
+            "\"dei liger\"",
+            Some("…små — dei liger under…"),
+        );
+    }
 
-    // #[test]
-    // fn format_highlight() {
-    //     let temp_index = temp_index_with_documents(None);
-    //     let rtxn = temp_index.read_txn().unwrap();
-    //     let builder = MatcherBuilder::new_test(&rtxn, &temp_index, "split the world");
-    //     let format_options = Some(FormatOptions { highlight: true, crop: None });
+    #[test]
+    fn phrase_highlight_crop_end() {
+        rename_me_with_base_text(
+            Some(FormatOptions { highlight: true, crop: Some(4) }),
+            "\"minst förmå\"",
+            Some("…under som <em>minst förmå</em>."),
+        );
+    }
 
-    //     let test_values = [
-    //         // empty text.
-    //         ["", ""],
-    //         // text containing only separators.
-    //         [":-)", ":-)"],
-    //         // Text without any match.
-    //         ["A quick brown fox can not jump 32 feet, right? Brr, it is cold!",
-    //          "A quick brown fox can not jump 32 feet, right? Brr, it is cold!"],
-    //         // Text containing all matches.
-    //         ["Natalie risk her future to build a world with the boy she loves. Emily Henry: The Love That Split The World.",
-    //          "Natalie risk her future to build a <em>world</em> with <em>the</em> boy she loves. Emily Henry: <em>The</em> Love That <em>Split</em> <em>The</em> <em>World</em>."],
-    //         // Text containing some matches.
-    //         ["Natalie risk her future to build a world with the boy she loves.",
-    //          "Natalie risk her future to build a <em>world</em> with <em>the</em> boy she loves."],
-    //     ];
+    #[test]
+    fn phrase_crop_end() {
+        rename_me_with_base_text(
+            Some(FormatOptions { highlight: false, crop: Some(4) }),
+            "\"minst förmå\"",
+            Some("…under som minst förmå."),
+        );
+    }
 
-    //     for [text, expected_text] in test_values {
-    //         let mut matcher = builder.build(text, None);
-    //         // no crop should return complete text with highlighted matches.
-    //         assert_eq!(matcher.get_formatted_text(format_options), Some(expected_text.to_string()));
-    //     }
-    // }
-
-    // #[test]
-    // fn highlight_unicode() {
-    //     let temp_index = temp_index_with_documents(None);
-    //     let rtxn = temp_index.read_txn().unwrap();
-    //     let format_options = Some(FormatOptions { highlight: true, crop: None });
-
-    //     let test_values = [
-    //         // Text containing prefix match.
-    //         ["world", "Ŵôřlḑôle", "<em>Ŵôřlḑ</em>ôle"],
-    //         // Text containing unicode match.
-    //         ["world", "Ŵôřlḑ", "<em>Ŵôřlḑ</em>"],
-    //         // Text containing unicode match.
-    //         ["westfali", "Westfália", "<em>Westfáli</em>a"],
-    //     ];
-
-    //     for [query, text, expected_text] in test_values {
-    //         let builder = MatcherBuilder::new_test(&rtxn, &temp_index, query);
-    //         let mut matcher = builder.build(text, None);
-    //         // no crop should return complete text with highlighted matches.
-    //         assert_eq!(matcher.get_formatted_text(format_options), Some(expected_text.to_string()));
-    //     }
-    // }
-
-    // #[test]
-    // fn format_crop() {
-    //     let temp_index = temp_index_with_documents(None);
-    //     let rtxn = temp_index.read_txn().unwrap();
-    //     let builder = MatcherBuilder::new_test(&rtxn, &temp_index, "split the world");
-    //     let format_options = Some(FormatOptions { highlight: false, crop: Some(10) });
-
-    //     let test_values = [
-    //         // empty text.
-    //         // ["", ""],
-    //         // text containing only separators.
-    //         // [":-)", ":-)"],
-    //         // Text without any match.
-    //         ["A quick brown fox can not jump 32 feet, right? Brr, it is cold!",
-    //          "A quick brown fox can not jump 32 feet, right…"],
-    //         // Text without any match starting by a separator.
-    //         ["(A quick brown fox can not jump 32 feet, right? Brr, it is cold!)",
-    //          "(A quick brown fox can not jump 32 feet, right…" ],
-    //         // Test phrase propagation
-    //         ["Natalie risk her future. Split The World is a book written by Emily Henry. I never read it.",
-    //          "…Split The World is a book written by Emily Henry…"],
-    //         // Text containing some matches.
-    //         ["Natalie risk her future to build a world with the boy she loves.",
-    //          "…future to build a world with the boy she loves."],
-    //         // Text containing all matches.
-    //         ["Natalie risk her future to build a world with the boy she loves. Emily Henry: The Love That Split The World.",
-    //          "…she loves. Emily Henry: The Love That Split The World."],
-    //         // Text containing a match unordered and a match ordered.
-    //         ["The world split void void void void void void void void void split the world void void",
-    //          "…void void void void void split the world void void"],
-    //         // Text containing matches with different density.
-    //         ["split void the void void world void void void void void void void void void void split the world void void",
-    //          "…void void void void void split the world void void"],
-    //         ["split split split split split split void void void void void void void void void void split the world void void",
-    //          "…void void void void void split the world void void"]
-    //     ];
-
-    //     for [text, expected_text] in test_values {
-    //         let mut matcher = builder.build(text, None);
-    //         // no crop should return complete text with highlighted matches.
-    //         assert_eq!(matcher.get_formatted_text(format_options), Some(expected_text.to_string()));
-    //     }
-    // }
-
-    // #[test]
-    // fn format_highlight_crop() {
-    //     let temp_index = temp_index_with_documents(None);
-    //     let rtxn = temp_index.read_txn().unwrap();
-    //     let builder = MatcherBuilder::new_test(&rtxn, &temp_index, "split the world");
-    //     let format_options = Some(FormatOptions { highlight: true, crop: Some(10) });
-
-    //     let test_values = [
-    //         // empty text.
-    //         ["", ""],
-    //         // text containing only separators.
-    //         [":-)", ":-)"],
-    //         // Text without any match.
-    //         ["A quick brown fox can not jump 32 feet, right? Brr, it is cold!",
-    //          "A quick brown fox can not jump 32 feet, right…"],
-    //         // Text containing some matches.
-    //         ["Natalie risk her future to build a world with the boy she loves.",
-    //          "…future to build a <em>world</em> with <em>the</em> boy she loves."],
-    //         // Text containing all matches.
-    //         ["Natalie risk her future to build a world with the boy she loves. Emily Henry: The Love That Split The World.",
-    //          "…she loves. Emily Henry: <em>The</em> Love That <em>Split</em> <em>The</em> <em>World</em>."],
-    //         // Text containing a match unordered and a match ordered.
-    //         ["The world split void void void void void void void void void split the world void void",
-    //          "…void void void void void <em>split</em> <em>the</em> <em>world</em> void void"]
-    //     ];
-
-    //     for [text, expected_text] in test_values {
-    //         let mut matcher = builder.build(text, None);
-    //         // no crop should return complete text with highlighted matches.
-    //         assert_eq!(matcher.get_formatted_text(format_options), Some(expected_text.to_string()));
-    //     }
-    // }
-
-    // #[test]
-    // fn format_highlight_crop_phrase_query() {
-    //     //! testing: https://github.com/meilisearch/meilisearch/issues/3975
-    //     let text = "The groundbreaking invention had the power to split the world between those who embraced progress and those who resisted change!";
-    //     let temp_index = temp_index_with_documents(Some(documents!([
-    //         { "id": 1, "text": text }
-    //     ])));
-    //     let rtxn = temp_index.read_txn().unwrap();
-
-    //     let format_options = Some(FormatOptions { highlight: true, crop: Some(10) });
-
-    //     let test_values = [
-    //         // should return 10 words with a marker at the start as well the end, and the highlighted matches.
-    //         ["\"the world\"",
-    //          "…the power to split <em>the world</em> between those who embraced…"],
-    //         // should highlight "those" and the phrase "and those".
-    //         ["those \"and those\"",
-    //          "…world between <em>those</em> who embraced progress <em>and those</em> who resisted…"],
-    //         ["\"The groundbreaking invention had the power to split the world\"",
-    //          "<em>The groundbreaking invention had the power to split the world</em>…"],
-    //         ["\"The groundbreaking invention had the power to split the world between those\"",
-    //          "<em>The groundbreaking invention had the power to split the world</em>…"],
-    //         ["\"The groundbreaking invention\" \"embraced progress and those who resisted change!\"",
-    //          "…between those who <em>embraced progress and those who resisted change</em>!"],
-    //         ["\"groundbreaking invention\" \"split the world between\"",
-    //          "…<em>groundbreaking invention</em> had the power to <em>split the world between</em>…"],
-    //         ["\"groundbreaking invention\" \"had the power to split the world between those\"",
-    //          "…<em>invention</em> <em>had the power to split the world between those</em>…"],
-    //     ];
-
-    //     for [query, expected_text] in test_values {
-    //         let builder = MatcherBuilder::new_test(&rtxn, &temp_index, query);
-    //         let mut matcher = builder.build(text, None);
-
-    //         assert_eq!(matcher.get_formatted_text(format_options), Some(expected_text.to_string()));
-    //     }
-    // }
-
-    // #[test]
-    // fn smaller_crop_size() {
-    //     //! testing: https://github.com/meilisearch/specifications/pull/120#discussion_r836536295
-    //     let temp_index = temp_index_with_documents(None);
-    //     let rtxn = temp_index.read_txn().unwrap();
-    //     let builder = MatcherBuilder::new_test(&rtxn, &temp_index, "split the world");
-    //     let text = "void void split the world void void.";
-    //     let mut matcher = builder.build(text, None);
-
-    //     let test_values = [
-    //         // set a smaller crop size
-    //         // because crop size < query size, partially format matches.
-    //         (2, "…split the…"),
-    //         // set a smaller crop size
-    //         // because crop size < query size, partially format matches.
-    //         (1, "…split…"),
-    //         // set  crop size to 0
-    //         // because crop size is 0, crop is ignored.
-    //         (0, "void void split the world void void."),
-    //     ];
-
-    //     for (crop_size, expected_text) in test_values {
-    //         // set a smaller crop size
-    //         let format_options = Some(FormatOptions { highlight: false, crop: Some(crop_size) });
-    //         assert_eq!(matcher.get_formatted_text(format_options), Some(expected_text.to_string()));
-    //     }
-    // }
-
-    // #[test]
-    // fn partial_matches() {
-    //     let temp_index = temp_index_with_documents(None);
-    //     let rtxn = temp_index.read_txn().unwrap();
-    //     let builder = MatcherBuilder::new_test(&rtxn, &temp_index, "the \"t he\" door \"do or\"");
-
-    //     let format_options = Some(FormatOptions { highlight: true, crop: None });
-
-    //     let text = "the do or die can't be he do and or isn't he";
-    //     let mut matcher = builder.build(text, None);
-    //     assert_eq!(
-    //         matcher.get_formatted_text(format_options),
-    //         Some(
-    //             "<em>the</em> <em>do or</em> die can't be he do and or isn'<em>t he</em>"
-    //                 .to_string()
-    //         )
-    //     );
-    // }
+    #[test]
+    fn phrase_highlight_crop_beginning() {
+        rename_me_with_base_text(
+            Some(FormatOptions { highlight: true, crop: Some(4) }),
+            "\"Dei store\"",
+            Some("<em>Dei store</em> fiskane eta…"),
+        );
+    }
 }

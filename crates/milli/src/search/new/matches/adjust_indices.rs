@@ -33,8 +33,8 @@ fn get_adjusted_indices_for_too_few_words(
     let mut is_index_backwards_at_hard_separator = false;
     let mut is_index_forwards_at_hard_separator = false;
 
-    // false + ends reached because TODO
-    let mut is_crop_size_or_both_ends_reached = is_end_reached && is_beginning_reached;
+    let mut is_crop_size_or_both_ends_reached =
+        words_count == crop_size || (is_end_reached && is_beginning_reached);
 
     let mut dir = Direction::Forwards;
 
@@ -108,18 +108,38 @@ fn get_adjusted_indices_for_too_few_words(
         // 2. if forwards index reached a hard separator and backwards is currently hard, we can go backwards
     }
 
-    // keep advancing forward to check if there's only separator tokens left until the end
-    // if so, then include those too in the index range
-    let mut try_index_forward = valid_index_forward + 1;
-    while let Some(token) = tokens.get(try_index_forward) {
-        if !token.is_separator() {
-            return [valid_index_backward, valid_index_forward];
+    // keep advancing forward and backward to check if there's only separator tokens
+    // left until the end if so, then include those too in the index range
+
+    let saved_index = valid_index_forward;
+    loop {
+        if valid_index_forward == tokens.len() - 1 {
+            break;
         }
 
-        try_index_forward += 1;
+        valid_index_forward += 1;
+
+        if !tokens[valid_index_forward].is_separator() {
+            valid_index_forward = saved_index;
+            break;
+        }
     }
 
-    [valid_index_backward, try_index_forward - 1]
+    let saved_index = valid_index_backward;
+    loop {
+        if valid_index_backward == 0 {
+            break;
+        }
+
+        valid_index_backward -= 1;
+
+        if !tokens[valid_index_backward].is_separator() {
+            valid_index_backward = saved_index;
+            break;
+        }
+    }
+
+    [valid_index_backward, valid_index_forward]
 }
 
 fn get_adjusted_index_forward_for_too_many_words(
@@ -158,14 +178,13 @@ pub fn get_adjusted_indices_for_highlights_and_crop_size(
     crop_size: usize,
 ) -> [usize; 2] {
     match words_count.cmp(&crop_size) {
-        Ordering::Less => get_adjusted_indices_for_too_few_words(
+        Ordering::Equal | Ordering::Less => get_adjusted_indices_for_too_few_words(
             tokens,
             index_backward,
             index_forward,
             words_count,
             crop_size,
         ),
-        Ordering::Equal => [index_backward, index_forward],
         Ordering::Greater => [
             index_backward,
             get_adjusted_index_forward_for_too_many_words(
