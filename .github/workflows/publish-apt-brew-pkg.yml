@@ -9,7 +9,7 @@ jobs:
     name: Check the version validity
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Check release validity
         run: bash .github/scripts/check-release.sh
 
@@ -28,7 +28,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.85
       - name: Install cargo-deb
         run: cargo install cargo-deb
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Build deb package
         run: cargo deb -p meilisearch -o target/debian/meilisearch.deb
       - name: Upload debian pkg to release

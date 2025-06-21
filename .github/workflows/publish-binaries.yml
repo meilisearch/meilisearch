@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     # No need to check the version for dry run (cron)
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       # Check if the tag has the v<nmumber>.<number>.<number> format.
       # If yes, it means we are publishing an official release.
       # If no, we are releasing a RC, so no need to check the version.
@@ -40,7 +40,7 @@ jobs:
       # Use ubuntu-22.04 to compile with glibc 2.35
       image: ubuntu:22.04
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Install needed dependencies
         run: |
           apt-get update && apt-get install -y curl
@@ -74,7 +74,7 @@ jobs:
             artifact_name: meilisearch.exe
             asset_name: meilisearch-windows-amd64.exe
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.85
       - name: Build
         run: cargo build --release --locked
@@ -99,7 +99,7 @@ jobs:
             asset_name: meilisearch-macos-apple-silicon
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Installing Rust toolchain
         uses: dtolnay/rust-toolchain@1.85
         with:
@@ -136,7 +136,7 @@ jobs:
             asset_name: meilisearch-linux-aarch64
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Install needed dependencies
         run: |
           apt-get update -y && apt upgrade -y
