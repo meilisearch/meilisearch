@@ -19,11 +19,13 @@ use crate::ThreadPoolNoAbort;
 
 pub mod composite;
 pub mod error;
+pub mod extractor;
 pub mod hf;
 pub mod json_template;
 pub mod manual;
 pub mod openai;
 pub mod parsed_vectors;
+pub mod request;
 pub mod settings;
 
 pub mod ollama;
@@ -465,6 +467,7 @@ pub struct ArroyStats {
     pub documents: RoaringBitmap,
 }
 /// One or multiple embeddings stored consecutively in a flat vector.
+#[derive(Debug, PartialEq)]
 pub struct Embeddings<F> {
     data: Vec<F>,
     dimension: usize,
@@ -771,6 +774,18 @@ impl Embedder {
             Embedder::UserProvided(embedder) => embedder.embed_index_ref(texts),
             Embedder::Rest(embedder) => embedder.embed_index_ref(texts, threads),
             Embedder::Composite(embedder) => embedder.index.embed_index_ref(texts, threads),
+        }
+    }
+
+    pub fn embed_index_ref_fragments(
+        &self,
+        fragments: &[serde_json::Value],
+        threads: &ThreadPoolNoAbort,
+    ) -> std::result::Result<Vec<Embedding>, EmbedError> {
+        if let Embedder::Rest(embedder) = self {
+            embedder.embed_index_ref(fragments, threads)
+        } else {
+            unimplemented!("embedding fragments is only available for rest embedders")
         }
     }
 

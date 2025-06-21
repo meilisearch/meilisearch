@@ -15,6 +15,7 @@ use crate::update::new::DocumentChange;
 use crate::vector::error::{
     EmbedErrorKind, PossibleEmbeddingMistakes, UnusedVectorsDistributionBump,
 };
+use crate::vector::request::{Metadata, OnEmbed, TextEmbedSession};
 use crate::vector::{Embedder, Embedding, EmbeddingConfigs};
 use crate::{DocumentId, FieldDistribution, InternalError, Result, ThreadPoolNoAbort, UserError};
 
@@ -290,27 +291,87 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
     }
 }
 
-// **Warning**: the destructor of this struct is not normally run, make sure that all its fields:
-// 1. don't have side effects tied to they destructors
-// 2. if allocated, are allocated inside of the bumpalo
-//
-// Currently this is the case as:
-// 1. BVec are inside of the bumaplo
-// 2. All other fields are either trivial (u8) or references.
-struct Chunks<'a, 'b, 'extractor> {
-    texts: BVec<'a, &'a str>,
-    ids: BVec<'a, DocumentId>,
-
-    embedder: &'a Embedder,
+pub struct OnEmbeddingDocumentUpdates<'doc, 'b> {
     embedder_id: u8,
-    embedder_name: &'a str,
+    sender: EmbeddingSender<'doc, 'b>,
+    possible_embedding_mistakes: &'doc PossibleEmbeddingMistakes,
+}
+
+impl<'doc> OnEmbed<'doc> for OnEmbeddingDocumentUpdates<'doc, '_> {
+    fn process_embedding_response(
+        &mut self,
+        response: crate::vector::request::EmbeddingResponse<'doc>,
+    ) {
+        self.sender
+            .set_vector(response.metadata.docid, self.embedder_id, response.embedding)
+            .unwrap();
+    }
+
+    fn process_embeddings(&mut self, metadata: Metadata<'doc>, embeddings: Vec<Embedding>) {
+        self.sender.set_vectors(metadata.docid, self.embedder_id, embeddings).unwrap();
+    }
+
+    fn process_embedding_error(
+        &mut self,
+        error: crate::vector::hf::EmbedError,
+        embedder_name: &'doc str,
+        unused_vectors_distribution: &UnusedVectorsDistributionBump,
+        metadata: &[Metadata<'doc>],
+    ) -> crate::Error {
+        if let FaultSource::Bug = error.fault {
+            crate::Error::InternalError(crate::InternalError::VectorEmbeddingError(error.into()))
+        } else {
+            let mut msg = if let EmbedErrorKind::ManualEmbed(_) = &error.kind {
+                let Some(first) = metadata.first() else { todo!() };
+                format!(
+                    r"While embedding documents for embedder `{embedder_name}`: no vectors provided for document `{}`{}\n- Note: `{embedder_name}` has `source: userProvided`, so documents must provide embeddings as an array in `_vectors.{embedder_name}`.",
+                    first.external_docid,
+                    if metadata.len() > 1 {
+                        format!(" and at least {} other document(s)", metadata.len() - 1)
+                    } else {
+                        "".to_string()
+                    }
+                )
+            } else {
+                format!(r"While embedding documents for embedder `{embedder_name}`: {error}")
+            };
+
+            let mut hint_count = 0;
+
+            for (vector_misspelling, count) in
+                self.possible_embedding_mistakes.vector_mistakes().take(2)
+            {
+                msg += &format!("\n- Hint: try replacing `{vector_misspelling}` by `_vectors` in {count} document(s).");
+                hint_count += 1;
+            }
+
+            for (embedder_misspelling, count) in self
+                .possible_embedding_mistakes
+                .embedder_mistakes_bump(embedder_name, unused_vectors_distribution)
+                .take(2)
+            {
+                msg += &format!("\n- Hint: try replacing `_vectors.{embedder_misspelling}` by `_vectors.{embedder_name}` in {count} document(s).");
+                hint_count += 1;
+            }
+
+            if hint_count == 0 {
+                if let EmbedErrorKind::ManualEmbed(_) = &error.kind {
+                    msg += &format!(
+                        "\n- Hint: opt-out for a document with `_vectors.{embedder_name}: null`"
+                    );
+                }
+            }
+
+            crate::Error::UserError(crate::UserError::DocumentEmbeddingError(msg))
+        }
+    }
+}
+
+struct Chunks<'a, 'b, 'extractor> {
     dimensions: usize,
     prompt: &'a Prompt,
-    possible_embedding_mistakes: &'a PossibleEmbeddingMistakes,
     user_provided: &'a RefCell<EmbeddingExtractorData<'extractor>>,
-    threads: &'a ThreadPoolNoAbort,
-    sender: EmbeddingSender<'a, 'b>,
-    has_manual_generation: Option<&'a str>,
+    session: TextEmbedSession<'a, OnEmbeddingDocumentUpdates<'a, 'b>, &'a str>,
 }
 
 impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
@@ -326,23 +387,19 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
         sender: EmbeddingSender<'a, 'b>,
         doc_alloc: &'a Bump,
     ) -> Self {
-        let capacity = embedder.prompt_count_in_chunk_hint() * embedder.chunk_count_hint();
-        let texts = BVec::with_capacity_in(capacity, doc_alloc);
-        let ids = BVec::with_capacity_in(capacity, doc_alloc);
         let dimensions = embedder.dimensions();
+
         Self {
-            texts,
-            ids,
-            embedder,
-            prompt,
-            possible_embedding_mistakes,
-            threads,
-            sender,
-            embedder_id,
-            embedder_name,
-            user_provided,
-            has_manual_generation: None,
             dimensions,
+            prompt,
+            user_provided,
+            session: TextEmbedSession::new(
+                embedder,
+                embedder_name,
+                threads,
+                doc_alloc,
+                OnEmbeddingDocumentUpdates { embedder_id, sender, possible_embedding_mistakes },
+            ),
         }
     }
 
@@ -353,156 +410,15 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
         rendered: &'a str,
         unused_vectors_distribution: &UnusedVectorsDistributionBump,
     ) -> Result<()> {
-        let is_manual = matches!(&self.embedder, &Embedder::UserProvided(_));
-        if is_manual {
-            self.has_manual_generation.get_or_insert(external_docid);
-        }
-
-        if self.texts.len() < self.texts.capacity() {
-            self.texts.push(rendered);
-            self.ids.push(docid);
-            return Ok(());
-        }
-
-        Self::embed_chunks(
-            &mut self.texts,
-            &mut self.ids,
-            self.embedder,
-            self.embedder_id,
-            self.embedder_name,
-            self.possible_embedding_mistakes,
+        self.session.request_embedding(
+            Metadata { docid, external_docid, extractor_id: 1 },
+            rendered,
             unused_vectors_distribution,
-            self.threads,
-            self.sender,
-            self.has_manual_generation.take(),
         )
     }
 
-    pub fn drain(
-        mut self,
-        unused_vectors_distribution: &UnusedVectorsDistributionBump,
-    ) -> Result<()> {
-        let res = Self::embed_chunks(
-            &mut self.texts,
-            &mut self.ids,
-            self.embedder,
-            self.embedder_id,
-            self.embedder_name,
-            self.possible_embedding_mistakes,
-            unused_vectors_distribution,
-            self.threads,
-            self.sender,
-            self.has_manual_generation,
-        );
-        // optimization: don't run bvec dtors as they only contain bumpalo allocated stuff
-        std::mem::forget(self);
-        res
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub fn embed_chunks(
-        texts: &mut BVec<'a, &'a str>,
-        ids: &mut BVec<'a, DocumentId>,
-        embedder: &Embedder,
-        embedder_id: u8,
-        embedder_name: &str,
-        possible_embedding_mistakes: &PossibleEmbeddingMistakes,
-        unused_vectors_distribution: &UnusedVectorsDistributionBump,
-        threads: &ThreadPoolNoAbort,
-        sender: EmbeddingSender<'a, 'b>,
-        has_manual_generation: Option<&'a str>,
-    ) -> Result<()> {
-        if let Some(external_docid) = has_manual_generation {
-            let mut msg = format!(
-                r"While embedding documents for embedder `{embedder_name}`: no vectors provided for document `{}`{}",
-                external_docid,
-                if ids.len() > 1 {
-                    format!(" and at least {} other document(s)", ids.len() - 1)
-                } else {
-                    "".to_string()
-                }
-            );
-
-            msg += &format!("\n- Note: `{embedder_name}` has `source: userProvided`, so documents must provide embeddings as an array in `_vectors.{embedder_name}`.");
-
-            let mut hint_count = 0;
-
-            for (vector_misspelling, count) in possible_embedding_mistakes.vector_mistakes().take(2)
-            {
-                msg += &format!("\n- Hint: try replacing `{vector_misspelling}` by `_vectors` in {count} document(s).");
-                hint_count += 1;
-            }
-
-            for (embedder_misspelling, count) in possible_embedding_mistakes
-                .embedder_mistakes_bump(embedder_name, unused_vectors_distribution)
-                .take(2)
-            {
-                msg += &format!("\n- Hint: try replacing `_vectors.{embedder_misspelling}` by `_vectors.{embedder_name}` in {count} document(s).");
-                hint_count += 1;
-            }
-
-            if hint_count == 0 {
-                msg += &format!(
-                    "\n- Hint: opt-out for a document with `_vectors.{embedder_name}: null`"
-                );
-            }
-
-            return Err(crate::Error::UserError(crate::UserError::DocumentEmbeddingError(msg)));
-        }
-
-        let res = match embedder.embed_index_ref(texts.as_slice(), threads) {
-            Ok(embeddings) => {
-                for (docid, embedding) in ids.into_iter().zip(embeddings) {
-                    sender.set_vector(*docid, embedder_id, embedding).unwrap();
-                }
-                Ok(())
-            }
-            Err(error) => {
-                if let FaultSource::Bug = error.fault {
-                    Err(crate::Error::InternalError(crate::InternalError::VectorEmbeddingError(
-                        error.into(),
-                    )))
-                } else {
-                    let mut msg = format!(
-                        r"While embedding documents for embedder `{embedder_name}`: {error}"
-                    );
-
-                    if let EmbedErrorKind::ManualEmbed(_) = &error.kind {
-                        msg += &format!("\n- Note: `{embedder_name}` has `source: userProvided`, so documents must provide embeddings as an array in `_vectors.{embedder_name}`.");
-                    }
-
-                    let mut hint_count = 0;
-
-                    for (vector_misspelling, count) in
-                        possible_embedding_mistakes.vector_mistakes().take(2)
-                    {
-                        msg += &format!("\n- Hint: try replacing `{vector_misspelling}` by `_vectors` in {count} document(s).");
-                        hint_count += 1;
-                    }
-
-                    for (embedder_misspelling, count) in possible_embedding_mistakes
-                        .embedder_mistakes_bump(embedder_name, unused_vectors_distribution)
-                        .take(2)
-                    {
-                        msg += &format!("\n- Hint: try replacing `_vectors.{embedder_misspelling}` by `_vectors.{embedder_name}` in {count} document(s).");
-                        hint_count += 1;
-                    }
-
-                    if hint_count == 0 {
-                        if let EmbedErrorKind::ManualEmbed(_) = &error.kind {
-                            msg += &format!(
-                                "\n- Hint: opt-out for a document with `_vectors.{embedder_name}: null`"
-                            );
-                        }
-                    }
-
-                    Err(crate::Error::UserError(crate::UserError::DocumentEmbeddingError(msg)))
-                }
-            }
-        };
-        texts.clear();
-        ids.clear();
-        res
+    pub fn drain(self, unused_vectors_distribution: &UnusedVectorsDistributionBump) -> Result<()> {
+        self.session.drain(unused_vectors_distribution)
     }
 
     pub fn prompt(&self) -> &'a Prompt {
@@ -510,12 +426,12 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
     }
 
     pub fn embedder_name(&self) -> &'a str {
-        self.embedder_name
+        self.session.embedder_name()
     }
 
-    fn set_regenerate(&self, docid: DocumentId, regenerate: bool) {
+    pub fn set_regenerate(&self, docid: DocumentId, regenerate: bool) {
         let mut user_provided = self.user_provided.borrow_mut();
-        let user_provided = user_provided.0.entry_ref(self.embedder_name).or_default();
+        let user_provided = user_provided.0.entry_ref(self.embedder_name()).or_default();
         if regenerate {
             // regenerate == !user_provided
             user_provided.insert_del_u32(docid);
@@ -524,8 +440,8 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
         }
     }
 
-    fn set_vectors(
-        &self,
+    pub fn set_vectors(
+        &mut self,
         external_docid: &'a str,
         docid: DocumentId,
         embeddings: Vec<Embedding>,
@@ -535,14 +451,16 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                 return Err(UserError::InvalidIndexingVectorDimensions {
                     expected: self.dimensions,
                     found: embedding.len(),
-                    embedder_name: self.embedder_name.to_string(),
+                    embedder_name: self.embedder_name().to_string(),
                     document_id: external_docid.to_string(),
                     embedding_index,
                 }
                 .into());
             }
         }
-        self.sender.set_vectors(docid, self.embedder_id, embeddings).unwrap();
+        self.session
+            .on_embed_mut()
+            .process_embeddings(Metadata { docid, external_docid, extractor_id: 0 }, embeddings);
         Ok(())
     }
 }

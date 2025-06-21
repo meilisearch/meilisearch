@@ -9,7 +9,7 @@ use std::fmt::Debug;
 use std::num::NonZeroUsize;
 
 use bumpalo::Bump;
-use document::ParseableDocument;
+pub(crate) use document::ParseableDocument;
 use error::{NewPromptError, RenderPromptError};
 use fields::{BorrowedFields, OwnedFields};
 

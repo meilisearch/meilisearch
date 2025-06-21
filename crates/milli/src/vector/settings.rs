@@ -1638,6 +1638,8 @@ impl EmbeddingSettings {
             dimensions,
             url,
             request,
+            indexing_fragments,
+            search_fragments,
             response,
             distribution,
             headers,
@@ -2027,6 +2029,9 @@ impl SubEmbedderOptions {
             response,
             distribution: distribution.set(),
             headers: headers.set().unwrap_or_default(),
+            /// TODO: acutal values
+            search_fragments: Default::default(),
+            indexing_fragments: Default::default(),
         })
     }
     fn ollama(
