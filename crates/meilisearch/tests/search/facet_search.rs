@@ -50,11 +50,11 @@ async fn test_settings_documents_indexing_swapping_and_facet_search(
 
     let (task, code) = index.add_documents(documents.clone(), None).await;
     assert_eq!(code, 202, "{}", task);
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (task, code) = index.update_settings(settings.clone()).await;
     assert_eq!(code, 202, "{}", task);
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = index.facet_search(query.clone()).await;
     insta::allow_duplicates! {
@@ -70,11 +70,11 @@ async fn test_settings_documents_indexing_swapping_and_facet_search(
 
     let (task, code) = index.update_settings(settings.clone()).await;
     assert_eq!(code, 202, "{}", task);
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (task, code) = index.add_documents(documents.clone(), None).await;
     assert_eq!(code, 202, "{}", task);
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = index.facet_search(query.clone()).await;
     insta::allow_duplicates! {
@@ -94,7 +94,7 @@ async fn simple_facet_search() {
     let documents = DOCUMENTS.clone();
     index.update_settings_filterable_attributes(json!(["genres"])).await;
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (response, code) =
         index.facet_search(json!({"facetName": "genres", "facetQuery": "a"})).await;
@@ -207,10 +207,10 @@ async fn simple_facet_search_on_movies() {
     let (response, code) =
         index.update_settings_filterable_attributes(json!(["genres", "color"])).await;
     assert_eq!(202, code, "{response:?}");
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
 
     let (response, _code) = index.add_documents(documents, None).await;
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
 
     let (response, code) =
         index.facet_search(json!({"facetQuery": "", "facetName": "genres", "q": "" })).await;
@@ -228,7 +228,7 @@ async fn advanced_facet_search() {
     index.update_settings_filterable_attributes(json!(["genres"])).await;
     index.update_settings_typo_tolerance(json!({ "enabled": false })).await;
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (response, code) =
         index.facet_search(json!({"facetName": "genres", "facetQuery": "adventre"})).await;
@@ -252,7 +252,7 @@ async fn more_advanced_facet_search() {
     index.update_settings_filterable_attributes(json!(["genres"])).await;
     index.update_settings_typo_tolerance(json!({ "disableOnWords": ["adventre"] })).await;
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (response, code) =
         index.facet_search(json!({"facetName": "genres", "facetQuery": "adventre"})).await;
@@ -276,7 +276,7 @@ async fn simple_facet_search_with_max_values() {
     index.update_settings_faceting(json!({ "maxValuesPerFacet": 1 })).await;
     index.update_settings_filterable_attributes(json!(["genres"])).await;
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (response, code) =
         index.facet_search(json!({"facetName": "genres", "facetQuery": "a"})).await;
@@ -298,7 +298,7 @@ async fn simple_facet_search_by_count_with_max_values() {
         .await;
     index.update_settings_filterable_attributes(json!(["genres"])).await;
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (response, code) =
         index.facet_search(json!({"facetName": "genres", "facetQuery": "a"})).await;
@@ -314,7 +314,7 @@ async fn non_filterable_facet_search_error() {
 
     let documents = DOCUMENTS.clone();
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (response, code) =
         index.facet_search(json!({"facetName": "genres", "facetQuery": "a"})).await;
@@ -333,7 +333,7 @@ async fn facet_search_dont_support_words() {
     let documents = DOCUMENTS.clone();
     index.update_settings_filterable_attributes(json!(["genres"])).await;
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (response, code) =
         index.facet_search(json!({"facetName": "genres", "facetQuery": "words"})).await;
@@ -351,7 +351,7 @@ async fn simple_facet_search_with_sort_by_count() {
     index.update_settings_faceting(json!({ "sortFacetValuesBy": { "*": "count" } })).await;
     index.update_settings_filterable_attributes(json!(["genres"])).await;
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (response, code) =
         index.facet_search(json!({"facetName": "genres", "facetQuery": "a"})).await;
@@ -370,7 +370,7 @@ async fn add_documents_and_deactivate_facet_search() {
 
     let documents = DOCUMENTS.clone();
     let (response, _code) = index.add_documents(documents, None).await;
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
     let (response, code) = index
         .update_settings(json!({
             "facetSearch": false,
@@ -378,7 +378,7 @@ async fn add_documents_and_deactivate_facet_search() {
         }))
         .await;
     assert_eq!("202", code.as_str(), "{response:?}");
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
 
     let (response, code) =
         index.facet_search(json!({"facetName": "genres", "facetQuery": "a"})).await;
@@ -406,10 +406,10 @@ async fn deactivate_facet_search_and_add_documents() {
         }))
         .await;
     assert_eq!("202", code.as_str(), "{response:?}");
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
     let documents = DOCUMENTS.clone();
     let (response, _code) = index.add_documents(documents, None).await;
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
 
     let (response, code) =
         index.facet_search(json!({"facetName": "genres", "facetQuery": "a"})).await;
@@ -437,10 +437,10 @@ async fn deactivate_facet_search_add_documents_and_activate_facet_search() {
         }))
         .await;
     assert_eq!("202", code.as_str(), "{response:?}");
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
     let documents = DOCUMENTS.clone();
     let (response, _code) = index.add_documents(documents, None).await;
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index
         .update_settings(json!({
@@ -448,7 +448,7 @@ async fn deactivate_facet_search_add_documents_and_activate_facet_search() {
         }))
         .await;
     assert_eq!("202", code.as_str(), "{response:?}");
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
 
     let (response, code) =
         index.facet_search(json!({"facetName": "genres", "facetQuery": "a"})).await;
@@ -469,10 +469,10 @@ async fn deactivate_facet_search_add_documents_and_reset_facet_search() {
         }))
         .await;
     assert_eq!("202", code.as_str(), "{response:?}");
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
     let documents = DOCUMENTS.clone();
     let (response, _code) = index.add_documents(documents, None).await;
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index
         .update_settings(json!({
@@ -480,7 +480,7 @@ async fn deactivate_facet_search_add_documents_and_reset_facet_search() {
         }))
         .await;
     assert_eq!("202", code.as_str(), "{response:?}");
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
 
     let (response, code) =
         index.facet_search(json!({"facetName": "genres", "facetQuery": "a"})).await;
@@ -920,13 +920,13 @@ async fn distinct_facet_search_on_movies() {
     let (response, code) =
         index.update_settings_filterable_attributes(json!(["genres", "color"])).await;
     assert_eq!(202, code, "{response:?}");
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
     let (response, code) = index.update_settings_distinct_attribute(json!("color")).await;
     assert_eq!(202, code, "{response:?}");
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
 
     let (response, _code) = index.add_documents(documents, None).await;
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
 
     let (response, code) =
         index.facet_search(json!({"facetQuery": "blob", "facetName": "genres", "q": "" })).await;

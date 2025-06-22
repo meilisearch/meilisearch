@@ -425,7 +425,7 @@ async fn search_non_filterable_facets() {
     let index = server.unique_index();
     let (response, _code) = index.update_settings(json!({"filterableAttributes": ["title"]})).await;
     // Wait for the settings update to complete
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index.search_post(json!({"facets": ["doggo"]})).await;
     snapshot!(code, @"400 Bad Request");
@@ -456,7 +456,7 @@ async fn search_non_filterable_facets_multiple_filterable() {
     let index = server.unique_index();
     let (response, _code) =
         index.update_settings(json!({"filterableAttributes": ["title", "genres"]})).await;
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index.search_post(json!({"facets": ["doggo"]})).await;
     snapshot!(code, @"400 Bad Request");
@@ -486,7 +486,7 @@ async fn search_non_filterable_facets_no_filterable() {
     let server = Server::new_shared();
     let index = server.unique_index();
     let (response, _code) = index.update_settings(json!({"filterableAttributes": []})).await;
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index.search_post(json!({"facets": ["doggo"]})).await;
     snapshot!(code, @"400 Bad Request");
@@ -517,7 +517,7 @@ async fn search_non_filterable_facets_multiple_facets() {
     let index = server.unique_index();
     let (response, _uid) =
         index.update_settings(json!({"filterableAttributes": ["title", "genres"]})).await;
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index.search_post(json!({"facets": ["doggo", "neko"]})).await;
     snapshot!(code, @"400 Bad Request");
@@ -1001,7 +1001,7 @@ async fn sort_geo_reserved_attribute() {
     let index = server.unique_index();
 
     let (task, _code) = index.update_settings(json!({"sortableAttributes": ["id"]})).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let expected_response = json!({
         "message": "`_geo` is a reserved keyword and thus can't be used as a sort expression. Use the _geoPoint(latitude, longitude) built-in rule to sort on _geo field coordinates.",
@@ -1028,7 +1028,7 @@ async fn sort_reserved_attribute() {
     let index = server.unique_index();
 
     let (task, _code) = index.update_settings(json!({"sortableAttributes": ["id"]})).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let expected_response = json!({
         "message": "`_geoDistance` is a reserved keyword and thus can't be used as a sort expression.",
@@ -1054,7 +1054,7 @@ async fn sort_unsortable_attribute() {
     let server = Server::new_shared();
     let index = server.unique_index();
     let (response, _code) = index.update_settings(json!({"sortableAttributes": ["id"]})).await;
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
 
     let expected_response = json!({
         "message": format!("Index `{}`: Attribute `title` is not sortable. Available sortable attributes are: `id`.", index.uid),
@@ -1081,7 +1081,7 @@ async fn sort_invalid_syntax() {
     let index = server.unique_index();
 
     let (response, _code) = index.update_settings(json!({"sortableAttributes": ["id"]})).await;
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
 
     let expected_response = json!({
         "message": "Invalid syntax for the sort parameter: expected expression ending by `:asc` or `:desc`, found `title`.",
@@ -1112,7 +1112,7 @@ async fn sort_unset_ranking_rule() {
             json!({"sortableAttributes": ["title"], "rankingRules": ["proximity", "exactness"]}),
         )
         .await;
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
 
     let expected_response = json!({
         "message": format!("Index `{}`: You must specify where `sort` is listed in the rankingRules setting to use the sort parameter at search time.", index.uid),
@@ -1199,7 +1199,7 @@ async fn distinct_at_search_time() {
     let index = server.unique_index();
     let (response, _code) =
         index.add_documents(json!([{"id": 1, "color": "Doggo", "machin": "Action"}]), None).await;
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
 
     let (response, code) =
         index.search_post(json!({"page": 0, "hitsPerPage": 2, "distinct": "doggo.truc"})).await;
@@ -1214,7 +1214,7 @@ async fn distinct_at_search_time() {
     "###);
 
     let (task, _) = index.update_settings_filterable_attributes(json!(["color", "machin"])).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (response, code) =
         index.search_post(json!({"page": 0, "hitsPerPage": 2, "distinct": "doggo.truc"})).await;
@@ -1229,7 +1229,7 @@ async fn distinct_at_search_time() {
     "###);
 
     let (task, _) = index.update_settings_displayed_attributes(json!(["color"])).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (response, code) =
         index.search_post(json!({"page": 0, "hitsPerPage": 2, "distinct": "doggo.truc"})).await;
