@@ -58,7 +58,7 @@ macro_rules! test_setting_routes {
                     let index = server.unique_index();
                     let (response, code) = index.create(None).await;
                     assert_eq!(code, 202, "{response}");
-                    index.wait_task(response.uid()).await.succeeded();
+                    server.wait_task(response.uid()).await.succeeded();
                     let url = format!("/indexes/{}/settings/{}",
                         index.uid,
                         stringify!($setting)
@@ -209,7 +209,7 @@ async fn get_settings() {
     let server = Server::new_shared();
     let index = server.unique_index();
     let (response, _code) = index.create(None).await;
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
     let settings = response.as_object().unwrap();
@@ -254,7 +254,7 @@ async fn secrets_are_hidden_in_settings() {
     let server = Server::new_shared();
     let index = server.unique_index();
     let (response, _code) = index.create(None).await;
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index
         .update_settings(json!({
@@ -285,7 +285,7 @@ async fn secrets_are_hidden_in_settings() {
 
     let settings_update_uid = response.uid();
 
-    index.wait_task(settings_update_uid).await.succeeded();
+    server.wait_task(settings_update_uid).await.succeeded();
 
     let (response, code) = index.settings().await;
     meili_snap::snapshot!(code, @"200 OK");
@@ -384,14 +384,14 @@ async fn test_partial_update() {
     let server = Server::new_shared();
     let index = server.unique_index();
     let (task, _code) = index.update_settings(json!({"displayedAttributes": ["foo"]})).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
     assert_eq!(response["displayedAttributes"], json!(["foo"]));
     assert_eq!(response["searchableAttributes"], json!(["*"]));
 
     let (task, _) = index.update_settings(json!({"searchableAttributes": ["bar"]})).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
@@ -406,7 +406,7 @@ async fn error_delete_settings_unexisting_index() {
     let (task, code) = index.delete_settings().await;
     assert_eq!(code, 202);
 
-    index.wait_task(task.uid()).await.failed();
+    server.wait_task(task.uid()).await.failed();
 }
 
 #[actix_rt::test]
@@ -424,12 +424,12 @@ async fn reset_all_settings() {
 
     let (response, code) = index.add_documents(documents, None).await;
     assert_eq!(code, 202);
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
 
     let (update_task,_status_code) = index
         .update_settings(json!({"displayedAttributes": ["name", "age"], "searchableAttributes": ["name"], "stopWords": ["the"], "filterableAttributes": ["age"], "synonyms": {"puppy": ["dog", "doggo", "potat"] }}))
         .await;
-    index.wait_task(update_task.uid()).await.succeeded();
+    server.wait_task(update_task.uid()).await.succeeded();
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
     assert_eq!(response["displayedAttributes"], json!(["name", "age"]));
@@ -439,7 +439,7 @@ async fn reset_all_settings() {
     assert_eq!(response["filterableAttributes"], json!(["age"]));
 
     let (delete_task, _status_code) = index.delete_settings().await;
-    index.wait_task(delete_task.uid()).await.succeeded();
+    server.wait_task(delete_task.uid()).await.succeeded();
 
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
@@ -460,11 +460,11 @@ async fn update_setting_unexisting_index() {
     let index = server.unique_index();
     let (task, code) = index.update_settings(json!({})).await;
     assert_eq!(code, 202);
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
     let (_response, code) = index.get().await;
     assert_eq!(code, 200);
     let (task, _status_code) = index.delete_settings().await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 }
 
 #[actix_rt::test]
@@ -507,7 +507,7 @@ async fn set_and_reset_distinct_attribute_with_dedicated_route() {
     let index = server.unique_index();
 
     let (task, _code) = index.update_distinct_attribute(json!("test")).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (response, _) = index.get_distinct_attribute().await;
 
@@ -515,7 +515,7 @@ async fn set_and_reset_distinct_attribute_with_dedicated_route() {
 
     let (task, _status_code) = index.update_distinct_attribute(json!(null)).await;
 
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (response, _) = index.get_distinct_attribute().await;
 
@@ -540,7 +540,7 @@ async fn granular_filterable_attributes() {
             { "attributePatterns": ["default-facet-search"], "features": { "filter": {"equality": true, "comparison": true} } },
         ] })).await;
     assert_eq!(code, 202);
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index.settings().await;
     assert_eq!(code, 200, "{response}");
