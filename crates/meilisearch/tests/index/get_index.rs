@@ -12,7 +12,7 @@ async fn create_and_get_index() {
 
     assert_eq!(code, 202);
 
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index.get().await;
 
