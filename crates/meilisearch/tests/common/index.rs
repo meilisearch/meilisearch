@@ -1,10 +1,8 @@
 use std::fmt::Write;
 use std::marker::PhantomData;
 use std::panic::{catch_unwind, resume_unwind, UnwindSafe};
-use std::time::Duration;
 
 use actix_web::http::StatusCode;
-use tokio::time::sleep;
 use urlencoding::encode as urlencode;
 
 use super::encoder::Encoder;
@@ -362,23 +360,6 @@ impl<State> Index<'_, State> {
     pub(super) async fn _delete(&self) -> (Value, StatusCode) {
         let url = format!("/indexes/{}", urlencode(self.uid.as_ref()));
         self.service.delete(url).await
-    }
-
-    pub async fn wait_task(&self, update_id: u64) -> Value {
-        // try several times to get status, or panic to not wait forever
-        let url = format!("/tasks/{}", update_id);
-        for _ in 0..100 {
-            let (response, status_code) = self.service.get(&url).await;
-            assert_eq!(200, status_code, "response: {}", response);
-
-            if response["status"] == "succeeded" || response["status"] == "failed" {
-                return response;
-            }
-
-            // wait 0.5 second.
-            sleep(Duration::from_millis(500)).await;
-        }
-        panic!("Timeout waiting for update id");
     }
 
     pub async fn get_task(&self, update_id: u64) -> (Value, StatusCode) {
