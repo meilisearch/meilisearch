@@ -88,7 +88,7 @@ async fn binary_quantize_before_sending_documents() {
     ]);
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    index.wait_task(value.uid()).await.succeeded();
+    server.wait_task(value.uid()).await.succeeded();
 
     // Make sure the documents are binary quantized
     let (documents, _code) = index
@@ -161,7 +161,7 @@ async fn binary_quantize_after_sending_documents() {
     ]);
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    index.wait_task(value.uid()).await.succeeded();
+    server.wait_task(value.uid()).await.succeeded();
 
     let (response, code) = index
         .update_settings(json!({
@@ -305,7 +305,7 @@ async fn binary_quantize_clear_documents() {
     server.wait_task(response.uid()).await.succeeded();
 
     let (value, _code) = index.clear_all_documents().await;
-    index.wait_task(value.uid()).await.succeeded();
+    server.wait_task(value.uid()).await.succeeded();
 
     // Make sure the documents DB has been cleared
     let (documents, _code) = index

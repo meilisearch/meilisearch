@@ -1061,7 +1061,7 @@ async fn add_vector_and_user_provided() {
     ]);
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let task = index.wait_task(value.uid()).await;
+    let task = server.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
@@ -1578,7 +1578,7 @@ async fn server_returns_multiple() {
     ]);
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let task = index.wait_task(value.uid()).await;
+    let task = server.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
@@ -1684,7 +1684,7 @@ async fn server_single_input_returns_in_array() {
     ]);
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let task = index.wait_task(value.uid()).await;
+    let task = server.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
@@ -1790,7 +1790,7 @@ async fn server_raw() {
     ]);
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let task = index.wait_task(value.uid()).await;
+    let task = server.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
