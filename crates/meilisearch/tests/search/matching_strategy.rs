@@ -9,7 +9,7 @@ async fn index_with_documents<'a>(server: &'a Server<Shared>, documents: &Value)
     let index = server.unique_index();
 
     let (task, _status_code) = index.add_documents(documents.clone(), None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
     index
 }
 

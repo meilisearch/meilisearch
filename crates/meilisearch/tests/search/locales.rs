@@ -99,7 +99,7 @@ async fn simple_search() {
         )
         .await;
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     // english
     index
@@ -215,7 +215,7 @@ async fn force_locales() {
     }
     "###);
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     // chinese detection
     index
@@ -293,7 +293,7 @@ async fn force_locales_with_pattern() {
     }
     "###);
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     // chinese detection
     index
@@ -369,7 +369,7 @@ async fn force_locales_with_pattern_nested() {
     }
     "###);
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     // chinese
     index
@@ -444,7 +444,7 @@ async fn force_different_locales_with_pattern() {
     }
     "###);
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     // force chinese
     index
@@ -522,7 +522,7 @@ async fn auto_infer_locales_at_search_with_attributes_to_search_on() {
     }
     "###);
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     // auto infer any language
     index
@@ -596,7 +596,7 @@ async fn auto_infer_locales_at_search() {
     }
     "###);
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     index
         .search(
@@ -695,7 +695,7 @@ async fn force_different_locales_with_pattern_nested() {
     }
     "###);
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     // chinese
     index
@@ -773,7 +773,7 @@ async fn settings_change() {
 
     let documents = NESTED_DOCUMENTS.clone();
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
     let (response, _) = index
         .update_settings(json!({
             "searchableAttributes": ["document_en", "document_ja", "document_zh"],
@@ -792,7 +792,7 @@ async fn settings_change() {
       "enqueuedAt": "[date]"
     }
     "###);
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
 
     // chinese
     index
@@ -855,7 +855,7 @@ async fn settings_change() {
       "enqueuedAt": "[date]"
     }
     "###);
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
 
     // chinese
     index
@@ -910,7 +910,7 @@ async fn invalid_locales() {
         )
         .await;
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = index.search_post(json!({"q": "Atta", "locales": ["invalid"]})).await;
     snapshot!(code, @"400 Bad Request");
@@ -1028,7 +1028,7 @@ async fn simple_facet_search() {
     }
     "###);
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (response, _) = index
         .facet_search(json!({"facetName": "name_zh", "facetQuery": "進撃", "locales": ["cmn"]}))
@@ -1090,7 +1090,7 @@ async fn facet_search_with_localized_attributes() {
     }
     "###);
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (response, _) = index
         .facet_search(json!({"facetName": "name_zh", "facetQuery": "进击", "locales": ["cmn"]}))
@@ -1159,7 +1159,7 @@ async fn swedish_search() {
             ]
         }))
         .await;
-    index.wait_task(_response.uid()).await.succeeded();
+    server.wait_task(_response.uid()).await.succeeded();
 
     // infer swedish
     index
@@ -1280,7 +1280,7 @@ async fn german_search() {
             ]
         }))
         .await;
-    index.wait_task(_response.uid()).await.succeeded();
+    server.wait_task(_response.uid()).await.succeeded();
 
     // infer swedish
     index

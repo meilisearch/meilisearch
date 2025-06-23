@@ -114,14 +114,14 @@ async fn ensure_placeholder_search_hit_count_valid() {
         }
     ]);
     let (task, _code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (response, _code) = index
         .update_settings(
             json!({ "rankingRules": ["distinct:asc"], "distinctAttribute": "distinct"}),
         )
         .await;
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
 
     for page in 0..=4 {
         index
