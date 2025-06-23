@@ -12,10 +12,10 @@ async fn update_primary_key() {
     let (task, code) = index.create(None).await;
 
     assert_eq!(code, 202);
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (task, _status_code) = index.update(Some("primary")).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = index.get().await;
 
@@ -42,12 +42,12 @@ async fn create_and_update_with_different_encoding() {
     let (create_task, code) = index.create(None).await;
 
     assert_eq!(code, 202);
-    index.wait_task(create_task.uid()).await.succeeded();
+    server.wait_task(create_task.uid()).await.succeeded();
 
     let index = index.with_encoder(Encoder::Brotli);
     let (task, _status_code) = index.update(Some("primary")).await;
 
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 }
 
 #[actix_rt::test]
@@ -58,23 +58,24 @@ async fn update_nothing() {
 
     assert_eq!(code, 202);
 
-    index.wait_task(task1.uid()).await.succeeded();
+    server.wait_task(task1.uid()).await.succeeded();
 
     let (task2, code) = index.update(None).await;
 
     assert_eq!(code, 202);
 
-    index.wait_task(task2.uid()).await.succeeded();
+    server.wait_task(task2.uid()).await.succeeded();
 }
 
 #[actix_rt::test]
 async fn error_update_existing_primary_key() {
+    let server = Server::new_shared();
     let index = shared_index_with_documents().await;
 
     let (update_task, code) = index.update_index_fail(Some("primary")).await;
 
     assert_eq!(code, 202);
-    let response = index.wait_task(update_task.uid()).await.failed();
+    let response = server.wait_task(update_task.uid()).await.failed();
 
     let expected_response = json!({
         "message": format!("Index `{}`: Index already has a primary key: `id`.", index.uid),
@@ -88,12 +89,13 @@ async fn error_update_existing_primary_key() {
 
 #[actix_rt::test]
 async fn error_update_unexisting_index() {
+    let server = Server::new_shared();
     let index = shared_does_not_exists_index().await;
     let (task, code) = index.update_index_fail(Some("my-primary-key")).await;
 
     assert_eq!(code, 202);
 
-    let response = index.wait_task(task.uid()).await.failed();
+    let response = server.wait_task(task.uid()).await.failed();
 
     let expected_response = json!({
         "message": format!("Index `{}` not found.", index.uid),

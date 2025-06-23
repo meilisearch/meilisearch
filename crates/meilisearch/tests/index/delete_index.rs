@@ -9,7 +9,7 @@ async fn create_and_delete_index() {
 
     assert_eq!(code, 202);
 
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
 
     assert_eq!(index.get().await.1, 200);
 
@@ -17,18 +17,19 @@ async fn create_and_delete_index() {
 
     assert_eq!(code, 202);
 
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
 
     assert_eq!(index.get().await.1, 404);
 }
 
 #[actix_rt::test]
 async fn error_delete_unexisting_index() {
+    let server = Server::new_shared();
     let index = shared_does_not_exists_index().await;
     let (task, code) = index.delete_index_fail().await;
 
     assert_eq!(code, 202);
-    index.wait_task(task.uid()).await.failed();
+    server.wait_task(task.uid()).await.failed();
 
     let expected_response = json!({
         "message": "Index `DOES_NOT_EXISTS` not found.",
@@ -37,7 +38,7 @@ async fn error_delete_unexisting_index() {
         "link": "https://docs.meilisearch.com/errors#index_not_found"
     });
 
-    let response = index.wait_task(task.uid()).await;
+    let response = server.wait_task(task.uid()).await;
     assert_eq!(response["status"], "failed");
     assert_eq!(response["error"], expected_response);
 }
@@ -58,7 +59,7 @@ async fn loop_delete_add_documents() {
     }
 
     for task in tasks {
-        let response = index.wait_task(task).await.succeeded();
+        let response = server.wait_task(task).await.succeeded();
         assert_eq!(response["status"], "succeeded", "{}", response);
     }
 }
