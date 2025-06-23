@@ -411,18 +411,19 @@ impl From<arroy::Error> for Error {
             arroy::Error::Heed(heed) => heed.into(),
             arroy::Error::Io(io) => io.into(),
             arroy::Error::InvalidVecDimension { expected, received } => {
-                Error::UserError(UserError::InvalidVectorDimensions { expected, found: received })
-            }
+                        Error::UserError(UserError::InvalidVectorDimensions { expected, found: received })
+                    }
             arroy::Error::BuildCancelled => Error::InternalError(InternalError::AbortedIndexation),
             arroy::Error::DatabaseFull
-            | arroy::Error::InvalidItemAppend
-            | arroy::Error::UnmatchingDistance { .. }
-            | arroy::Error::NeedBuild(_)
-            | arroy::Error::MissingKey { .. }
-            | arroy::Error::MissingMetadata(_)
-            | arroy::Error::CannotDecodeKeyMode { .. } => {
-                Error::InternalError(InternalError::ArroyError(value))
-            }
+                    | arroy::Error::InvalidItemAppend
+                    | arroy::Error::UnmatchingDistance { .. }
+                    | arroy::Error::NeedBuild(_)
+                    | arroy::Error::MissingKey { .. }
+                    | arroy::Error::MissingMetadata(_)
+                    | arroy::Error::CannotDecodeKeyMode { .. }
+                    | arroy::Error::UnknownVersion { .. } => {
+                        Error::InternalError(InternalError::ArroyError(value))
+                    }
         }
     }
 }
