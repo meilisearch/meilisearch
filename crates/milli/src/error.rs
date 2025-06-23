@@ -418,7 +418,8 @@ impl From<arroy::Error> for Error {
             | arroy::Error::NeedBuild(_)
             | arroy::Error::MissingKey { .. }
             | arroy::Error::MissingMetadata(_)
-            | arroy::Error::CannotDecodeKeyMode { .. } => {
+            | arroy::Error::CannotDecodeKeyMode { .. }
+            | arroy::Error::UnknownVersion { .. } => {
                 Error::InternalError(InternalError::ArroyError(value))
             }
         }
