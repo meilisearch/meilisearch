@@ -310,6 +310,14 @@ impl Embedder {
     pub(super) fn cache(&self) -> &EmbeddingCache {
         &self.cache
     }
+
+    pub fn fragment(&self, name: &str) -> Option<&Value> {
+        let RequestData::FromFragments(from_fragments) = &self.data.request else {
+            return None;
+        };
+        let fragment = from_fragments.indexing_fragments.get(name)?;
+        Some(fragment.template())
+    }
 }
 
 fn infer_dimensions(data: &EmbedderData) -> Result<usize, NewEmbedderError> {

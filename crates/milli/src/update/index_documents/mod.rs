@@ -2768,6 +2768,8 @@ mod tests {
                         document_template: Setting::NotSet,
                         document_template_max_bytes: Setting::NotSet,
                         url: Setting::NotSet,
+                        indexing_fragments: Setting::NotSet,
+                        search_fragments: Setting::NotSet,
                         request: Setting::NotSet,
                         response: Setting::NotSet,
                         distribution: Setting::NotSet,

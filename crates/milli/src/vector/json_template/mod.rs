@@ -124,6 +124,10 @@ impl JsonTemplate {
         });
         self.render(&search_data)
     }
+
+    pub fn template(&self) -> &Value {
+        &self.value
+    }
 }
 
 fn build_templates(value: &Value) -> Result<Vec<TemplateAtPath>, Error> {

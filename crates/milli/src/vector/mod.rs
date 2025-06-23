@@ -786,7 +786,14 @@ impl Embedder {
         if let Embedder::Rest(embedder) = self {
             embedder.embed_index_ref(fragments, threads)
         } else {
-            unimplemented!("embedding fragments is only available for rest embedders")
+            let Embedder::Composite(embedder) = self else {
+                unimplemented!("embedding fragments is only available for rest embedders")
+            };
+            let crate::vector::composite::SubEmbedder::Rest(embedder) = &embedder.index else {
+                unimplemented!("embedding fragments is only available for rest embedders")
+            };
+
+            embedder.embed_index_ref(fragments, threads)
         }
     }
 
@@ -857,6 +864,17 @@ impl Embedder {
             Embedder::Ollama(embedder) => Some(embedder.cache()),
             Embedder::Rest(embedder) => Some(embedder.cache()),
             Embedder::Composite(embedder) => embedder.search.cache(),
+        }
+    }
+
+    pub fn fragment(&self, name: &str) -> Option<&serde_json::Value> {
+        match self {
+            Embedder::Rest(embedder) => embedder.fragment(name),
+            Embedder::Composite(embedder) => match &embedder.index {
+                composite::SubEmbedder::Rest(embedder) => embedder.fragment(name),
+                _ => None,
+            },
+            _ => None,
         }
     }
 }

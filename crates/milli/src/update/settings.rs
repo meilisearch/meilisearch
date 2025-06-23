@@ -1834,6 +1834,8 @@ pub fn validate_embedding_settings(
         document_template,
         document_template_max_bytes,
         url,
+        indexing_fragments,
+        search_fragments,
         request,
         response,
         search_embedder,
@@ -1863,9 +1865,26 @@ pub fn validate_embedding_settings(
     if let Some(request) = request.as_ref().set() {
         let request = crate::vector::rest::RequestData::new(
             request.to_owned(),
-            /// TODO: replace with actual values
-            Default::default(),
-            Default::default(),
+            indexing_fragments
+                .as_ref()
+                .set()
+                .iter()
+                .map(|map| map.iter())
+                .flatten()
+                .filter_map(|(name, fragment)| {
+                    Some((name.clone(), fragment.as_ref().map(|fragment| fragment.value.clone())?))
+                })
+                .collect(),
+            search_fragments
+                .as_ref()
+                .set()
+                .iter()
+                .map(|map| map.iter())
+                .flatten()
+                .filter_map(|(name, fragment)| {
+                    Some((name.clone(), fragment.as_ref().map(|fragment| fragment.value.clone())?))
+                })
+                .collect(),
         )
         .map_err(|error| crate::UserError::VectorEmbeddingError(error.into()))?;
         if let Some(response) = response.as_ref().set() {
@@ -1886,6 +1905,8 @@ pub fn validate_embedding_settings(
             document_template,
             document_template_max_bytes,
             url,
+            indexing_fragments,
+            search_fragments,
             request,
             response,
             search_embedder,
@@ -1905,6 +1926,8 @@ pub fn validate_embedding_settings(
         &dimensions,
         &api_key,
         &url,
+        &indexing_fragments,
+        &search_fragments,
         &request,
         &response,
         &document_template,
@@ -1983,6 +2006,8 @@ pub fn validate_embedding_settings(
                         &embedder.dimensions,
                         &embedder.api_key,
                         &embedder.url,
+                        &embedder.indexing_fragments,
+                        &embedder.search_fragments,
                         &embedder.request,
                         &embedder.response,
                         &embedder.document_template,
@@ -2038,6 +2063,8 @@ pub fn validate_embedding_settings(
                         &embedder.dimensions,
                         &embedder.api_key,
                         &embedder.url,
+                        &embedder.indexing_fragments,
+                        &embedder.search_fragments,
                         &embedder.request,
                         &embedder.response,
                         &embedder.document_template,
@@ -2070,6 +2097,8 @@ pub fn validate_embedding_settings(
         document_template,
         document_template_max_bytes,
         url,
+        indexing_fragments,
+        search_fragments,
         request,
         response,
         search_embedder,

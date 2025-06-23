@@ -86,7 +86,16 @@ struct EmbedderVectorExtractor<'a> {
 
 enum ExtractionAction {
     SettingsFullReindex,
-    SettingsRegeneratePrompts { old_prompt: Arc<Prompt> },
+    SettingsRegeneratePrompts {
+        old_prompt: Arc<Prompt>,
+    },
+    /// List of fragments to update/add
+    ///
+    /// The value is the old value, or None if the fragment is newly added.
+    /// Removed fragments are taken care of before this extractor.
+    SettingsRegenerateFragments {
+        fragments: Vec<(String, Option<Value>)>,
+    },
     DocumentOperation,
 }
 
@@ -234,6 +243,27 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
 
                 let action = match action {
                     ReindexAction::FullReindex => ExtractionAction::SettingsFullReindex,
+                    ReindexAction::RegenerateFragments(regenerate_fragments) => {
+                        let Some((embedder, _, _)) = old_configs.get(name) else {
+                            tracing::error!(embedder = name, "Old embedder config not found");
+                            continue;
+                        };
+
+                        let fragments = regenerate_fragments
+                            .iter()
+                            .filter_map(|(name, fragment)| match fragment {
+                                crate::vector::settings::RegenerateFragment::Update => {
+                                    let old_value = embedder.fragment(name);
+                                    Some((name.clone(), old_value.cloned()))
+                                }
+                                crate::vector::settings::RegenerateFragment::Remove => None,
+                                crate::vector::settings::RegenerateFragment::Add => {
+                                    Some((name.clone(), None))
+                                }
+                            })
+                            .collect();
+                        ExtractionAction::SettingsRegenerateFragments { fragments }
+                    }
                     ReindexAction::RegeneratePrompts => {
                         let Some((_, old_prompt, _quantized)) = old_configs.get(name) else {
                             tracing::error!(embedder = name, "Old embedder config not found");
@@ -384,6 +414,7 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                         regenerate_prompt(obkv, prompt, new_fields_ids_map)?
                     }
                 },
+                ExtractionAction::SettingsRegenerateFragments { fragments } => todo!(),
                 // prompt regeneration is only triggered for existing embedders
                 ExtractionAction::SettingsRegeneratePrompts { old_prompt } => {
                     if old.must_regenerate() {
