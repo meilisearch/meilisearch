@@ -4,7 +4,6 @@ use bumpalo::collections::Vec as BVec;
 use bumpalo::Bump;
 use hashbrown::{DefaultHashBuilder, HashMap};
 
-use super::cache::DelAddRoaringBitmap;
 use crate::error::FaultSource;
 use crate::prompt::Prompt;
 use crate::update::new::channel::EmbeddingSender;
@@ -12,6 +11,7 @@ use crate::update::new::indexer::document_changes::{DocumentChangeContext, Extra
 use crate::update::new::thread_local::MostlySend;
 use crate::update::new::vector_document::VectorDocument;
 use crate::update::new::DocumentChange;
+use crate::vector::db::{EmbedderInfo, EmbeddingStatus, EmbeddingStatusDelta};
 use crate::vector::error::{
     EmbedErrorKind, PossibleEmbeddingMistakes, UnusedVectorsDistributionBump,
 };
@@ -39,7 +39,7 @@ impl<'a, 'b> EmbeddingExtractor<'a, 'b> {
 }
 
 pub struct EmbeddingExtractorData<'extractor>(
-    pub HashMap<String, DelAddRoaringBitmap, DefaultHashBuilder, &'extractor Bump>,
+    pub HashMap<String, EmbeddingStatusDelta, DefaultHashBuilder, &'extractor Bump>,
 );
 
 unsafe impl MostlySend for EmbeddingExtractorData<'_> {}
@@ -62,17 +62,17 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
 
         let mut all_chunks = BVec::with_capacity_in(embedders.len(), &context.doc_alloc);
         for (embedder_name, (embedder, prompt, _is_quantized)) in embedders {
-            let embedder_id = context
+            let embedder_info = context
                 .index
                 .embedding_configs()
-                .embedder_id(&context.rtxn, embedder_name)?
+                .embedder_info(&context.rtxn, embedder_name)?
                 .ok_or_else(|| InternalError::DatabaseMissingEntry {
                     db_name: "embedder_category_id",
                     key: None,
                 })?;
             all_chunks.push(Chunks::new(
                 embedder,
-                embedder_id,
+                embedder_info,
                 embedder_name,
                 prompt,
                 context.data,
@@ -88,19 +88,14 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
             match change {
                 DocumentChange::Deletion(deletion) => {
                     // vector deletion is handled by document sender,
-                    // we still need to accomodate deletion from user_provided
+                    // we still need to accomodate deletion from embedding_status
                     for chunks in &mut all_chunks {
-                        // regenerate: true means we delete from user_provided
-                        chunks.set_regenerate(deletion.docid(), true);
+                        let (is_user_provided, must_regenerate) =
+                            chunks.is_user_provided_must_regenerate(deletion.docid());
+                        chunks.clear_status(deletion.docid(), is_user_provided, must_regenerate);
                     }
                 }
                 DocumentChange::Update(update) => {
-                    let old_vectors = update.current_vectors(
-                        &context.rtxn,
-                        context.index,
-                        context.db_fields_ids_map,
-                        &context.doc_alloc,
-                    )?;
                     let new_vectors =
                         update.only_changed_vectors(&context.doc_alloc, self.embedders)?;
 
@@ -109,19 +104,17 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
                     }
 
                     for chunks in &mut all_chunks {
+                        let (old_is_user_provided, old_must_regenerate) =
+                            chunks.is_user_provided_must_regenerate(update.docid());
+
                         let embedder_name = chunks.embedder_name();
                         let prompt = chunks.prompt();
-
-                        let old_vectors = old_vectors.vectors_for_key(embedder_name)?.unwrap();
 
                         // case where we have a `_vectors` field in the updated document
                         if let Some(new_vectors) = new_vectors.as_ref().and_then(|new_vectors| {
                             new_vectors.vectors_for_key(embedder_name).transpose()
                         }) {
                             let new_vectors = new_vectors?;
-                            if old_vectors.regenerate != new_vectors.regenerate {
-                                chunks.set_regenerate(update.docid(), new_vectors.regenerate);
-                            }
                             // do we have set embeddings?
                             if let Some(embeddings) = new_vectors.embeddings {
                                 chunks.set_vectors(
@@ -133,6 +126,9 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
                                             document_id: update.external_document_id().to_string(),
                                             error: error.to_string(),
                                         })?,
+                                    old_is_user_provided,
+                                    old_must_regenerate,
+                                    new_vectors.regenerate,
                                 )?;
                             // regenerate if the new `_vectors` fields is set to.
                             } else if new_vectors.regenerate {
@@ -146,7 +142,7 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
                                     context.new_fields_ids_map,
                                     &context.doc_alloc,
                                 )?;
-                                let must_regenerate = if !old_vectors.regenerate {
+                                let must_regenerate = if !old_must_regenerate {
                                     // we just enabled `regenerate`
                                     true
                                 } else {
@@ -176,11 +172,14 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
                                         update.external_document_id(),
                                         new_rendered,
                                         &unused_vectors_distribution,
+                                        old_is_user_provided,
+                                        old_must_regenerate,
+                                        true,
                                     )?;
                                 }
                             }
                         // no `_vectors` field, so only regenerate if the document is already set to in the DB.
-                        } else if old_vectors.regenerate {
+                        } else if old_must_regenerate {
                             let new_rendered = prompt.render_document(
                                 update.external_document_id(),
                                 update.merged(
@@ -218,12 +217,16 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
                                     update.external_document_id(),
                                     new_rendered,
                                     &unused_vectors_distribution,
+                                    old_is_user_provided,
+                                    old_must_regenerate,
+                                    true,
                                 )?;
                             }
                         }
                     }
                 }
                 DocumentChange::Insertion(insertion) => {
+                    let (default_is_user_provided, default_must_regenerate) = (false, true);
                     let new_vectors =
                         insertion.inserted_vectors(&context.doc_alloc, self.embedders)?;
                     if let Some(new_vectors) = &new_vectors {
@@ -238,7 +241,6 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
                             new_vectors.vectors_for_key(embedder_name).transpose()
                         }) {
                             let new_vectors = new_vectors?;
-                            chunks.set_regenerate(insertion.docid(), new_vectors.regenerate);
                             if let Some(embeddings) = new_vectors.embeddings {
                                 chunks.set_vectors(
                                     insertion.external_document_id(),
@@ -251,6 +253,9 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
                                                 .to_string(),
                                             error: error.to_string(),
                                         })?,
+                                    default_is_user_provided,
+                                    default_must_regenerate,
+                                    new_vectors.regenerate,
                                 )?;
                             } else if new_vectors.regenerate {
                                 let rendered = prompt.render_document(
@@ -264,6 +269,9 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
                                     insertion.external_document_id(),
                                     rendered,
                                     &unused_vectors_distribution,
+                                    default_is_user_provided,
+                                    default_must_regenerate,
+                                    true,
                                 )?;
                             }
                         } else {
@@ -278,6 +286,9 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
                                 insertion.external_document_id(),
                                 rendered,
                                 &unused_vectors_distribution,
+                                default_is_user_provided,
+                                default_must_regenerate,
+                                true,
                             )?;
                         }
                     }
@@ -371,7 +382,8 @@ impl<'doc> OnEmbed<'doc> for OnEmbeddingDocumentUpdates<'doc, '_> {
 struct Chunks<'a, 'b, 'extractor> {
     dimensions: usize,
     prompt: &'a Prompt,
-    user_provided: &'a RefCell<EmbeddingExtractorData<'extractor>>,
+    status_delta: &'a RefCell<EmbeddingExtractorData<'extractor>>,
+    status: EmbeddingStatus,
     session: TextEmbedSession<'a, OnEmbeddingDocumentUpdates<'a, 'b>, &'a str>,
 }
 
@@ -379,10 +391,10 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         embedder: &'a Embedder,
-        embedder_id: u8,
+        embedder_info: EmbedderInfo,
         embedder_name: &'a str,
         prompt: &'a Prompt,
-        user_provided: &'a RefCell<EmbeddingExtractorData<'extractor>>,
+        status_delta: &'a RefCell<EmbeddingExtractorData<'extractor>>,
         possible_embedding_mistakes: &'a PossibleEmbeddingMistakes,
         threads: &'a ThreadPoolNoAbort,
         sender: EmbeddingSender<'a, 'b>,
@@ -393,24 +405,45 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
         Self {
             dimensions,
             prompt,
-            user_provided,
+            status: embedder_info.embedding_status,
+            status_delta,
             session: TextEmbedSession::new(
                 embedder,
                 embedder_name,
                 threads,
                 doc_alloc,
-                OnEmbeddingDocumentUpdates { embedder_id, sender, possible_embedding_mistakes },
+                OnEmbeddingDocumentUpdates {
+                    embedder_id: embedder_info.embedder_id,
+                    sender,
+                    possible_embedding_mistakes,
+                },
             ),
         }
     }
 
+    pub fn is_user_provided_must_regenerate(&self, docid: DocumentId) -> (bool, bool) {
+        self.status.is_user_provided_must_regenerate(docid)
+    }
+
+    #[allow(clippy::too_many_arguments)]
     pub fn set_autogenerated(
         &mut self,
         docid: DocumentId,
         external_docid: &'a str,
         rendered: &'a str,
         unused_vectors_distribution: &UnusedVectorsDistributionBump,
+        old_is_user_provided: bool,
+        old_must_regenerate: bool,
+        new_must_regenerate: bool,
     ) -> Result<()> {
+        self.set_status(
+            docid,
+            old_is_user_provided,
+            old_must_regenerate,
+            false,
+            new_must_regenerate,
+        );
+
         self.session.request_embedding(
             Metadata { docid, external_docid, extractor_id: 1 },
             rendered,
@@ -430,14 +463,38 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
         self.session.embedder_name()
     }
 
-    pub fn set_regenerate(&self, docid: DocumentId, regenerate: bool) {
-        let mut user_provided = self.user_provided.borrow_mut();
-        let user_provided = user_provided.0.entry_ref(self.embedder_name()).or_default();
-        if regenerate {
-            // regenerate == !user_provided
-            user_provided.insert_del_u32(docid);
-        } else {
-            user_provided.insert_add_u32(docid);
+    fn set_status(
+        &self,
+        docid: DocumentId,
+        old_is_user_provided: bool,
+        old_must_regenerate: bool,
+        new_is_user_provided: bool,
+        new_must_regenerate: bool,
+    ) {
+        if EmbeddingStatusDelta::needs_change(
+            old_is_user_provided,
+            old_must_regenerate,
+            new_is_user_provided,
+            new_must_regenerate,
+        ) {
+            let mut status_delta = self.status_delta.borrow_mut();
+            let status_delta = status_delta.0.entry_ref(self.embedder_name()).or_default();
+            status_delta.push_delta(
+                docid,
+                old_is_user_provided,
+                old_must_regenerate,
+                new_is_user_provided,
+                new_must_regenerate,
+            );
+        }
+    }
+
+    pub fn clear_status(&self, docid: DocumentId, is_user_provided: bool, must_regenerate: bool) {
+        // these value ensure both roaring are at 0.
+        if EmbeddingStatusDelta::needs_clear(is_user_provided, must_regenerate) {
+            let mut status_delta = self.status_delta.borrow_mut();
+            let status_delta = status_delta.0.entry_ref(self.embedder_name()).or_default();
+            status_delta.clear_docid(docid, is_user_provided, must_regenerate);
         }
     }
 
@@ -446,7 +503,17 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
         external_docid: &'a str,
         docid: DocumentId,
         embeddings: Vec<Embedding>,
+        old_is_user_provided: bool,
+        old_must_regenerate: bool,
+        new_must_regenerate: bool,
     ) -> Result<()> {
+        self.set_status(
+            docid,
+            old_is_user_provided,
+            old_must_regenerate,
+            true,
+            new_must_regenerate,
+        );
         for (embedding_index, embedding) in embeddings.iter().enumerate() {
             if embedding.len() != self.dimensions {
                 return Err(UserError::InvalidIndexingVectorDimensions {

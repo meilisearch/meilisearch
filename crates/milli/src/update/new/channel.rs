@@ -398,6 +398,7 @@ pub enum Database {
     FacetIdStringDocids,
     FieldIdDocidFacetStrings,
     FieldIdDocidFacetF64s,
+    VectorEmbedderCategoryId,
 }
 
 impl Database {
@@ -419,6 +420,7 @@ impl Database {
             Database::FacetIdStringDocids => index.facet_id_string_docids.remap_types(),
             Database::FieldIdDocidFacetStrings => index.field_id_docid_facet_strings.remap_types(),
             Database::FieldIdDocidFacetF64s => index.field_id_docid_facet_f64s.remap_types(),
+            Database::VectorEmbedderCategoryId => index.embedder_category_id.remap_types(),
         }
     }
 
@@ -440,6 +442,7 @@ impl Database {
             Database::FacetIdStringDocids => db_name::FACET_ID_STRING_DOCIDS,
             Database::FieldIdDocidFacetStrings => db_name::FIELD_ID_DOCID_FACET_STRINGS,
             Database::FieldIdDocidFacetF64s => db_name::FIELD_ID_DOCID_FACET_F64S,
+            Database::VectorEmbedderCategoryId => db_name::VECTOR_EMBEDDER_CATEGORY_ID,
         }
     }
 }
@@ -566,6 +569,19 @@ impl<'b> ExtractorBbqueueSender<'b> {
         )?;
 
         Ok(())
+    }
+
+    fn embedding_status(
+        &self,
+        name: &str,
+        infos: crate::vector::db::EmbedderInfo,
+    ) -> crate::Result<()> {
+        let bytes = infos.to_bytes().map_err(|_| {
+            InternalError::Serialization(crate::SerializationError::Encoding {
+                db_name: Some(Database::VectorEmbedderCategoryId.database_name()),
+            })
+        })?;
+        self.write_key_value(Database::VectorEmbedderCategoryId, name.as_bytes(), &bytes)
     }
 
     fn write_key_value(&self, database: Database, key: &[u8], value: &[u8]) -> crate::Result<()> {
@@ -945,6 +961,14 @@ impl EmbeddingSender<'_, '_> {
         embedding: Embedding,
     ) -> crate::Result<()> {
         self.0.set_vectors(docid, embedder_id, &[embedding])
+    }
+
+    pub(crate) fn embedding_status(
+        &self,
+        name: &str,
+        infos: crate::vector::db::EmbedderInfo,
+    ) -> crate::Result<()> {
+        self.0.embedding_status(name, infos)
     }
 }
 

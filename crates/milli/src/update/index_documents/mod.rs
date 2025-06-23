@@ -37,6 +37,7 @@ pub use crate::update::index_documents::helpers::CursorClonableMmap;
 use crate::update::{
     IndexerConfig, UpdateIndexingStep, WordPrefixDocids, WordPrefixIntegerDocids, WordsPrefixesFst,
 };
+use crate::vector::db::EmbedderInfo;
 use crate::vector::{ArroyWrapper, EmbeddingConfigs};
 use crate::{CboRoaringBitmapCodec, Index, Result, UserError};
 
@@ -222,8 +223,13 @@ where
         settings_diff.new.recompute_searchables(self.wtxn, self.index)?;
 
         let settings_diff = Arc::new(settings_diff);
-        let embedders_configs =
-            Arc::new(self.index.embedding_configs().embedding_configs(self.wtxn)?);
+        let embedder_infos: heed::Result<Vec<(String, EmbedderInfo)>> = self
+            .index
+            .embedding_configs()
+            .iter_embedder_info(self.wtxn)?
+            .map(|res| res.map(|(name, info)| (name.to_owned(), info)))
+            .collect();
+        let embedder_infos = Arc::new(embedder_infos?);
 
         let possible_embedding_mistakes =
             crate::vector::error::PossibleEmbeddingMistakes::new(&field_distribution);
@@ -324,9 +330,9 @@ where
                             pool_params,
                             lmdb_writer_sx.clone(),
                             primary_key_id,
-                            embedders_configs.clone(),
                             settings_diff_cloned,
                             max_positions_per_attributes,
+                            embedder_infos,
                             Arc::new(possible_embedding_mistakes)
                         )
                     });
@@ -428,8 +434,7 @@ where
                                     embeddings,
                                     manual_vectors,
                                     embedder_name,
-                                    add_to_user_provided,
-                                    remove_from_user_provided,
+                                    embedding_status_delta,
                                 } => {
                                     dimension.insert(embedder_name.clone(), expected_dimension);
                                     TypedChunk::VectorPoints {
@@ -438,8 +443,7 @@ where
                                         expected_dimension,
                                         manual_vectors,
                                         embedder_name,
-                                        add_to_user_provided,
-                                        remove_from_user_provided,
+                                        embedding_status_delta,
                                     }
                                 }
                                 otherwise => otherwise,
@@ -2790,15 +2794,15 @@ mod tests {
                .unwrap();
 
         let rtxn = index.read_txn().unwrap();
-        let mut embedding_configs = index.embedding_configs().embedding_configs(&rtxn).unwrap();
-        let IndexEmbeddingConfig {
-            name: embedder_name,
-            config: embedder,
-            user_provided,
-            fragments,
-        } = embedding_configs.pop().unwrap();
+        let embedders = index.embedding_configs();
+        let mut embedding_configs = embedders.embedding_configs(&rtxn).unwrap();
+        let IndexEmbeddingConfig { name: embedder_name, config: embedder, fragments } =
+            embedding_configs.pop().unwrap();
+        let info = embedders.embedder_info(&rtxn, &embedder_name).unwrap().unwrap();
+        insta::assert_snapshot!(info.embedder_id, @"0");
+        insta::assert_debug_snapshot!(info.embedding_status.user_provided_docids(), @"RoaringBitmap<[0, 1, 2]>");
+        insta::assert_debug_snapshot!(info.embedding_status.skip_regenerate_docids(), @"RoaringBitmap<[0, 1, 2]>");
         insta::assert_snapshot!(embedder_name, @"manual");
-        insta::assert_debug_snapshot!(user_provided, @"RoaringBitmap<[0, 1, 2]>");
         insta::assert_debug_snapshot!(fragments, @"[]");
 
         let embedder = std::sync::Arc::new(

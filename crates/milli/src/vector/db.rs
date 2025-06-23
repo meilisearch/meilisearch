@@ -1,8 +1,10 @@
 //! Module containing types and methods to store meta-information about the embedders and fragments
 
+use std::borrow::Cow;
+
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use heed::types::{SerdeJson, Str, U8};
-use heed::{Database, RoTxn, RwTxn, Unspecified};
+use heed::{BytesEncode, Database, RoTxn, RwTxn, Unspecified};
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -14,8 +16,6 @@ use crate::{CboRoaringBitmapCodec, DocumentId};
 pub struct IndexEmbeddingConfig {
     pub name: String,
     pub config: EmbeddingConfig,
-    /// TODO: remove user_provided
-    pub user_provided: RoaringBitmap,
     #[serde(default)]
     pub fragments: FragmentConfigs,
 }
@@ -66,6 +66,12 @@ pub struct EmbedderInfo {
     pub embedding_status: EmbeddingStatus,
 }
 
+impl EmbedderInfo {
+    pub fn to_bytes(&self) -> Result<Cow<'_, [u8]>, heed::BoxedError> {
+        EmbedderInfoCodec::bytes_encode(self)
+    }
+}
+
 /// Optimized struct to hold the list of documents that are `user_provided` and `must_regenerate`.
 ///
 /// Because most documents have the same value for `user_provided` and `must_regenerate`, we store only
@@ -87,14 +93,127 @@ impl EmbeddingStatus {
         self.user_provided.contains(docid)
     }
     /// Whether vectors should be regenerated for that document and that embedder.
-    pub fn must_skip_regenerate(&self, docid: DocumentId) -> bool {
+    pub fn must_regenerate(&self, docid: DocumentId) -> bool {
         let invert = self.skip_regenerate_different_from_user_provided.contains(docid);
         let user_provided = self.user_provided.contains(docid);
-        if invert {
-            !user_provided
-        } else {
-            self.user_provided.contains(docid)
+        !(user_provided ^ invert)
+    }
+
+    pub fn is_user_provided_must_regenerate(&self, docid: DocumentId) -> (bool, bool) {
+        let invert = self.skip_regenerate_different_from_user_provided.contains(docid);
+        let user_provided = self.user_provided.contains(docid);
+        (user_provided, !(user_provided ^ invert))
+    }
+
+    pub fn user_provided_docids(&self) -> &RoaringBitmap {
+        &self.user_provided
+    }
+
+    pub fn skip_regenerate_docids(&self) -> RoaringBitmap {
+        &self.user_provided ^ &self.skip_regenerate_different_from_user_provided
+    }
+
+    pub(crate) fn into_user_provided(self) -> RoaringBitmap {
+        self.user_provided
+    }
+}
+
+#[derive(Default)]
+pub struct EmbeddingStatusDelta {
+    del_status: EmbeddingStatus,
+    add_status: EmbeddingStatus,
+}
+
+impl EmbeddingStatusDelta {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn needs_change(
+        old_is_user_provided: bool,
+        old_must_regenerate: bool,
+        new_is_user_provided: bool,
+        new_must_regenerate: bool,
+    ) -> bool {
+        let old_skip_regenerate_different_user_provided =
+            old_is_user_provided == old_must_regenerate;
+        let new_skip_regenerate_different_user_provided =
+            new_is_user_provided == new_must_regenerate;
+
+        old_is_user_provided != new_is_user_provided
+            || old_skip_regenerate_different_user_provided
+                != new_skip_regenerate_different_user_provided
+    }
+
+    pub fn needs_clear(is_user_provided: bool, must_regenerate: bool) -> bool {
+        Self::needs_change(is_user_provided, must_regenerate, false, true)
+    }
+
+    pub fn clear_docid(
+        &mut self,
+        docid: DocumentId,
+        is_user_provided: bool,
+        must_regenerate: bool,
+    ) {
+        self.push_delta(docid, is_user_provided, must_regenerate, false, true);
+    }
+
+    pub fn push_delta(
+        &mut self,
+        docid: DocumentId,
+        old_is_user_provided: bool,
+        old_must_regenerate: bool,
+        new_is_user_provided: bool,
+        new_must_regenerate: bool,
+    ) {
+        // must_regenerate == !skip_regenerate
+        let old_skip_regenerate_different_user_provided =
+            old_is_user_provided == old_must_regenerate;
+        let new_skip_regenerate_different_user_provided =
+            new_is_user_provided == new_must_regenerate;
+
+        match (old_is_user_provided, new_is_user_provided) {
+            (true, true) | (false, false) => { /* no change */ }
+            (true, false) => {
+                self.del_status.user_provided.insert(docid);
+            }
+            (false, true) => {
+                self.add_status.user_provided.insert(docid);
+            }
         }
+
+        match (
+            old_skip_regenerate_different_user_provided,
+            new_skip_regenerate_different_user_provided,
+        ) {
+            (true, true) | (false, false) => { /* no change */ }
+            (true, false) => {
+                self.del_status.skip_regenerate_different_from_user_provided.insert(docid);
+            }
+            (false, true) => {
+                self.add_status.skip_regenerate_different_from_user_provided.insert(docid);
+            }
+        }
+    }
+
+    pub fn push_new(&mut self, docid: DocumentId, is_user_provided: bool, must_regenerate: bool) {
+        self.push_delta(
+            docid,
+            !is_user_provided,
+            !must_regenerate,
+            is_user_provided,
+            must_regenerate,
+        );
+    }
+
+    pub fn apply_to(&self, status: &mut EmbeddingStatus) {
+        status.user_provided -= &self.del_status.user_provided;
+        status.user_provided |= &self.add_status.user_provided;
+
+        status.skip_regenerate_different_from_user_provided -=
+            &self.del_status.skip_regenerate_different_from_user_provided;
+        status.skip_regenerate_different_from_user_provided |=
+            &self.add_status.skip_regenerate_different_from_user_provided;
     }
 }
 
@@ -123,7 +242,7 @@ impl<'a> heed::BytesDecode<'a> for EmbedderInfoCodec {
 impl<'a> heed::BytesEncode<'a> for EmbedderInfoCodec {
     type EItem = EmbedderInfo;
 
-    fn bytes_encode(item: &'a Self::EItem) -> Result<std::borrow::Cow<'a, [u8]>, heed::BoxedError> {
+    fn bytes_encode(item: &'a Self::EItem) -> Result<Cow<'a, [u8]>, heed::BoxedError> {
         let first_bitmap_size =
             CboRoaringBitmapCodec::serialized_size(&item.embedding_status.user_provided);
         let second_bitmap_size = CboRoaringBitmapCodec::serialized_size(
@@ -131,8 +250,8 @@ impl<'a> heed::BytesEncode<'a> for EmbedderInfoCodec {
         );
 
         let mut bytes = Vec::with_capacity(1 + 4 + first_bitmap_size + second_bitmap_size);
-        bytes.write_u8(item.embedder_id);
-        bytes.write_u32::<BigEndian>(first_bitmap_size.try_into()?);
+        bytes.write_u8(item.embedder_id)?;
+        bytes.write_u32::<BigEndian>(first_bitmap_size.try_into()?)?;
         CboRoaringBitmapCodec::serialize_into_writer(
             &item.embedding_status.user_provided,
             &mut bytes,
@@ -213,7 +332,7 @@ impl IndexEmbeddingConfigs {
             move || free_indices.find(|(_, free)| **free).map(|(index, _)| index as u8);
 
         for embedder_name in embedder_names {
-            if self.embedder_id(&wtxn, embedder_name)?.is_some() {
+            if self.embedder_id(wtxn, embedder_name)?.is_some() {
                 continue;
             }
             let embedder_id = find_free_index()
@@ -256,12 +375,19 @@ impl IndexEmbeddingConfigs {
         Ok(())
     }
 
+    pub fn iter_embedder_info<'a>(
+        &self,
+        rtxn: &'a RoTxn<'_>,
+    ) -> heed::Result<impl Iterator<Item = heed::Result<(&'a str, EmbedderInfo)>>> {
+        self.embedder_info.iter(rtxn)
+    }
+
     pub fn remove_embedder(
         &self,
         wtxn: &mut RwTxn<'_>,
         name: &str,
     ) -> heed::Result<Option<EmbedderInfo>> {
-        let info = self.embedder_info.get(&wtxn, name)?;
+        let info = self.embedder_info.get(wtxn, name)?;
         self.embedder_info.delete(wtxn, name)?;
         Ok(info)
     }

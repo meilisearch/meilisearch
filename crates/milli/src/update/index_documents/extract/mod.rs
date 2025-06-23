@@ -31,7 +31,7 @@ use self::extract_word_position_docids::extract_word_position_docids;
 use super::helpers::{as_cloneable_grenad, CursorClonableMmap, GrenadParameters};
 use super::{helpers, TypedChunk};
 use crate::update::settings::InnerIndexSettingsDiff;
-use crate::vector::db::IndexEmbeddingConfig;
+use crate::vector::db::EmbedderInfo;
 use crate::vector::error::PossibleEmbeddingMistakes;
 use crate::{FieldId, Result, ThreadPoolNoAbort, ThreadPoolNoAbortBuilder};
 
@@ -45,9 +45,9 @@ pub(crate) fn data_from_obkv_documents(
     indexer: GrenadParameters,
     lmdb_writer_sx: Sender<Result<TypedChunk>>,
     primary_key_id: FieldId,
-    embedders_configs: Arc<Vec<IndexEmbeddingConfig>>,
     settings_diff: Arc<InnerIndexSettingsDiff>,
     max_positions_per_attributes: Option<u32>,
+    embedder_info: Arc<Vec<(String, EmbedderInfo)>>,
     possible_embedding_mistakes: Arc<PossibleEmbeddingMistakes>,
 ) -> Result<()> {
     let (original_pipeline_result, flattened_pipeline_result): (Result<_>, Result<_>) = rayon::join(
@@ -59,8 +59,8 @@ pub(crate) fn data_from_obkv_documents(
                         original_documents_chunk,
                         indexer,
                         lmdb_writer_sx.clone(),
-                        embedders_configs.clone(),
                         settings_diff.clone(),
+                        embedder_info.clone(),
                         possible_embedding_mistakes.clone(),
                     )
                 })
@@ -228,8 +228,8 @@ fn send_original_documents_data(
     original_documents_chunk: Result<grenad::Reader<BufReader<File>>>,
     indexer: GrenadParameters,
     lmdb_writer_sx: Sender<Result<TypedChunk>>,
-    embedders_configs: Arc<Vec<IndexEmbeddingConfig>>,
     settings_diff: Arc<InnerIndexSettingsDiff>,
+    embedder_info: Arc<Vec<(String, EmbedderInfo)>>,
     possible_embedding_mistakes: Arc<PossibleEmbeddingMistakes>,
 ) -> Result<()> {
     let original_documents_chunk =
@@ -241,7 +241,6 @@ fn send_original_documents_data(
 
     if index_vectors {
         let settings_diff = settings_diff.clone();
-        let embedders_configs = embedders_configs.clone();
 
         let original_documents_chunk = original_documents_chunk.clone();
         let lmdb_writer_sx = lmdb_writer_sx.clone();
@@ -249,8 +248,8 @@ fn send_original_documents_data(
             match extract_vector_points(
                 original_documents_chunk.clone(),
                 indexer,
-                &embedders_configs,
                 &settings_diff,
+                embedder_info.as_slice(),
                 &possible_embedding_mistakes,
             ) {
                 Ok((extracted_vectors, unused_vectors_distribution)) => {
@@ -260,8 +259,7 @@ fn send_original_documents_data(
                         prompts,
                         embedder_name,
                         embedder,
-                        add_to_user_provided,
-                        remove_from_user_provided,
+                        embedding_status_delta,
                     } in extracted_vectors
                     {
                         let embeddings = match extract_embeddings(
@@ -289,8 +287,7 @@ fn send_original_documents_data(
                                 expected_dimension: embedder.dimensions(),
                                 manual_vectors,
                                 embedder_name,
-                                add_to_user_provided,
-                                remove_from_user_provided,
+                                embedding_status_delta,
                             }));
                         }
                     }

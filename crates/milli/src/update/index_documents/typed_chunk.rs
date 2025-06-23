@@ -25,7 +25,7 @@ use crate::update::index_documents::helpers::{
     as_cloneable_grenad, try_split_array_at, KeepLatestObkv,
 };
 use crate::update::settings::InnerIndexSettingsDiff;
-use crate::vector::db::IndexEmbeddingConfig;
+use crate::vector::db::{EmbeddingStatusDelta, IndexEmbeddingConfig};
 use crate::vector::ArroyWrapper;
 use crate::{
     lat_lng_to_xyz, CboRoaringBitmapCodec, DocumentId, FieldId, GeoPoint, Index, InternalError,
@@ -90,8 +90,7 @@ pub(crate) enum TypedChunk {
         expected_dimension: usize,
         manual_vectors: grenad::Reader<BufReader<File>>,
         embedder_name: String,
-        add_to_user_provided: RoaringBitmap,
-        remove_from_user_provided: RoaringBitmap,
+        embedding_status_delta: EmbeddingStatusDelta,
     },
 }
 
@@ -615,12 +614,13 @@ pub(crate) fn write_typed_chunk_into_index(
             let span = tracing::trace_span!(target: "indexing::write_db", "vector_points");
             let _entered = span.enter();
 
+            let embedders = index.embedding_configs();
+
             let mut remove_vectors_builder = MergerBuilder::new(KeepFirst);
             let mut manual_vectors_builder = MergerBuilder::new(KeepFirst);
             let mut embeddings_builder = MergerBuilder::new(KeepFirst);
-            let mut add_to_user_provided = RoaringBitmap::new();
-            let mut remove_from_user_provided = RoaringBitmap::new();
             let mut params = None;
+            let mut infos = None;
             for typed_chunk in typed_chunks {
                 let TypedChunk::VectorPoints {
                     remove_vectors,
@@ -628,12 +628,20 @@ pub(crate) fn write_typed_chunk_into_index(
                     embeddings,
                     expected_dimension,
                     embedder_name,
-                    add_to_user_provided: aud,
-                    remove_from_user_provided: rud,
+                    embedding_status_delta,
                 } = typed_chunk
                 else {
                     unreachable!();
                 };
+
+                if infos.is_none() {
+                    infos = Some(embedders.embedder_info(wtxn, &embedder_name)?.ok_or(
+                        InternalError::DatabaseMissingEntry {
+                            db_name: "embedder_category_id",
+                            key: None,
+                        },
+                    )?);
+                }
 
                 params = Some((expected_dimension, embedder_name));
 
@@ -642,32 +650,22 @@ pub(crate) fn write_typed_chunk_into_index(
                 if let Some(embeddings) = embeddings {
                     embeddings_builder.push(embeddings.into_cursor()?);
                 }
-                add_to_user_provided |= aud;
-                remove_from_user_provided |= rud;
+
+                if let Some(infos) = &mut infos {
+                    embedding_status_delta.apply_to(&mut infos.embedding_status);
+                }
             }
 
             // typed chunks has always at least 1 chunk.
             let Some((expected_dimension, embedder_name)) = params else { unreachable!() };
+            let Some(infos) = infos else { unreachable!() };
 
-            let embedders = index.embedding_configs();
+            embedders.put_embedder_info(wtxn, &embedder_name, &infos)?;
 
-            let mut embedding_configs = embedders.embedding_configs(wtxn)?;
-            let index_embedder_config = embedding_configs
-                .iter_mut()
-                .find(|IndexEmbeddingConfig { name, .. }| name == &embedder_name)
-                .unwrap();
-            index_embedder_config.user_provided -= remove_from_user_provided;
-            index_embedder_config.user_provided |= add_to_user_provided;
-
-            embedders.put_embedding_configs(wtxn, embedding_configs)?;
-
-            let embedder_index = embedders.embedder_id(wtxn, &embedder_name)?.ok_or(
-                InternalError::DatabaseMissingEntry { db_name: "embedder_category_id", key: None },
-            )?;
             let binary_quantized =
                 settings_diff.old.embedding_configs.get(&embedder_name).is_some_and(|conf| conf.2);
             // FIXME: allow customizing distance
-            let writer = ArroyWrapper::new(index.vector_arroy, embedder_index, binary_quantized);
+            let writer = ArroyWrapper::new(index.vector_arroy, infos.embedder_id, binary_quantized);
 
             // remove vectors for docids we want them removed
             let merger = remove_vectors_builder.build();

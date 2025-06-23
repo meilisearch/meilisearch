@@ -12,7 +12,7 @@ use super::document::{Document, DocumentFromDb, DocumentFromVersions, Versions};
 use super::indexer::de::DeserrRawValue;
 use crate::constants::RESERVED_VECTORS_FIELD_NAME;
 use crate::documents::FieldIdMapper;
-use crate::vector::db::IndexEmbeddingConfig;
+use crate::vector::db::{EmbeddingStatus, IndexEmbeddingConfig};
 use crate::vector::parsed_vectors::{RawVectors, RawVectorsError, VectorOrArrayOfVectors};
 use crate::vector::{ArroyWrapper, Embedding, EmbeddingConfigs};
 use crate::{DocumentId, Index, InternalError, Result, UserError};
@@ -118,6 +118,7 @@ impl<'t> VectorDocumentFromDb<'t> {
         &self,
         embedder_id: u8,
         config: &IndexEmbeddingConfig,
+        status: &EmbeddingStatus,
     ) -> Result<VectorEntry<'t>> {
         let reader =
             ArroyWrapper::new(self.index.vector_arroy, embedder_id, config.config.quantized());
@@ -126,7 +127,7 @@ impl<'t> VectorDocumentFromDb<'t> {
         Ok(VectorEntry {
             has_configured_embedder: true,
             embeddings: Some(Embeddings::FromDb(vectors)),
-            regenerate: !config.user_provided.contains(self.docid),
+            regenerate: status.must_regenerate(self.docid),
             implicit: false,
         })
     }
@@ -137,9 +138,9 @@ impl<'t> VectorDocument<'t> for VectorDocumentFromDb<'t> {
         self.embedding_config
             .iter()
             .map(|config| {
-                let embedder_id =
-                    self.index.embedding_configs().embedder_id(self.rtxn, &config.name)?.unwrap();
-                let entry = self.entry_from_db(embedder_id, config)?;
+                let info =
+                    self.index.embedding_configs().embedder_info(self.rtxn, &config.name)?.unwrap();
+                let entry = self.entry_from_db(info.embedder_id, config, &info.embedding_status)?;
                 let config_name = self.doc_alloc.alloc_str(config.name.as_str());
                 Ok((&*config_name, entry))
             })
@@ -156,11 +157,11 @@ impl<'t> VectorDocument<'t> for VectorDocumentFromDb<'t> {
     }
 
     fn vectors_for_key(&self, key: &str) -> Result<Option<VectorEntry<'t>>> {
-        Ok(match self.index.embedding_configs().embedder_id(self.rtxn, key)? {
-            Some(embedder_id) => {
+        Ok(match self.index.embedding_configs().embedder_info(self.rtxn, key)? {
+            Some(info) => {
                 let config =
                     self.embedding_config.iter().find(|config| config.name == key).unwrap();
-                Some(self.entry_from_db(embedder_id, config)?)
+                Some(self.entry_from_db(info.embedder_id, config, &info.embedding_status)?)
             }
             None => match self.vectors_field.as_ref().and_then(|obkv| obkv.get(key)) {
                 Some(embedding_from_doc) => {

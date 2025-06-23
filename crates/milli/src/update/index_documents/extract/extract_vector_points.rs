@@ -9,7 +9,6 @@ use std::sync::Arc;
 use bytemuck::cast_slice;
 use grenad::Writer;
 use ordered_float::OrderedFloat;
-use roaring::RoaringBitmap;
 use serde_json::Value;
 
 use super::helpers::{create_writer, writer_into_reader, GrenadParameters};
@@ -19,7 +18,7 @@ use crate::fields_ids_map::metadata::FieldIdMapWithMetadata;
 use crate::prompt::Prompt;
 use crate::update::del_add::{DelAdd, KvReaderDelAdd, KvWriterDelAdd};
 use crate::update::settings::InnerIndexSettingsDiff;
-use crate::vector::db::IndexEmbeddingConfig;
+use crate::vector::db::{EmbedderInfo, EmbeddingStatus, EmbeddingStatusDelta};
 use crate::vector::error::{EmbedErrorKind, PossibleEmbeddingMistakes, UnusedVectorsDistribution};
 use crate::vector::parsed_vectors::{ParsedVectorsDiff, VectorState};
 use crate::vector::settings::ReindexAction;
@@ -40,8 +39,7 @@ pub struct ExtractedVectorPoints {
     // embedder
     pub embedder_name: String,
     pub embedder: Arc<Embedder>,
-    pub add_to_user_provided: RoaringBitmap,
-    pub remove_from_user_provided: RoaringBitmap,
+    pub embedding_status_delta: EmbeddingStatusDelta,
 }
 
 enum VectorStateDelta {
@@ -69,9 +67,10 @@ impl VectorStateDelta {
     }
 }
 
-struct EmbedderVectorExtractor {
+struct EmbedderVectorExtractor<'a> {
     embedder_name: String,
     embedder: Arc<Embedder>,
+    embedder_info: &'a EmbedderInfo,
     prompt: Arc<Prompt>,
 
     // (docid) -> (prompt)
@@ -80,21 +79,15 @@ struct EmbedderVectorExtractor {
     remove_vectors_writer: Writer<BufWriter<File>>,
     // (docid, _index) -> KvWriterDelAdd -> Vector
     manual_vectors_writer: Writer<BufWriter<File>>,
-    // The docids of the documents that contains a user defined embedding
-    add_to_user_provided: RoaringBitmap,
+    embedding_status_delta: EmbeddingStatusDelta,
 
     action: ExtractionAction,
-}
-
-struct DocumentOperation {
-    // The docids of the documents that contains an auto-generated embedding
-    remove_from_user_provided: RoaringBitmap,
 }
 
 enum ExtractionAction {
     SettingsFullReindex,
     SettingsRegeneratePrompts { old_prompt: Arc<Prompt> },
-    DocumentOperation(DocumentOperation),
+    DocumentOperation,
 }
 
 struct ManualEmbedderErrors {
@@ -182,8 +175,8 @@ impl ManualEmbedderErrors {
 pub fn extract_vector_points<R: io::Read + io::Seek>(
     obkv_documents: grenad::Reader<R>,
     indexer: GrenadParameters,
-    embedders_configs: &[IndexEmbeddingConfig],
     settings_diff: &InnerIndexSettingsDiff,
+    embedder_info: &[(String, EmbedderInfo)],
     possible_embedding_mistakes: &PossibleEmbeddingMistakes,
 ) -> Result<(Vec<ExtractedVectorPoints>, UnusedVectorsDistribution)> {
     let mut unused_vectors_distribution = UnusedVectorsDistribution::new();
@@ -206,6 +199,10 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
 
     if reindex_vectors {
         for (name, action) in settings_diff.embedding_config_updates.iter() {
+            /// FIXME: unwrap
+            let (_, embedder_info) =
+                embedder_info.iter().find(|(embedder_name, _)| embedder_name == name).unwrap();
+
             if let Some(action) = action.reindex() {
                 let Some((embedder_name, (embedder, prompt, _quantized))) =
                     configs.remove_entry(name)
@@ -250,11 +247,12 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                 extractors.push(EmbedderVectorExtractor {
                     embedder_name,
                     embedder,
+                    embedder_info,
                     prompt,
                     prompts_writer,
                     remove_vectors_writer,
                     manual_vectors_writer,
-                    add_to_user_provided: RoaringBitmap::new(),
+                    embedding_status_delta: Default::default(),
                     action,
                 });
             } else {
@@ -263,8 +261,13 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
         }
     } else {
         // document operation
-
         for (embedder_name, (embedder, prompt, _quantized)) in configs.into_iter() {
+            /// FIXME: unwrap
+            let (_, embedder_info) = embedder_info
+                .iter()
+                .find(|(name, _)| embedder_name.as_str() == name.as_str())
+                .unwrap();
+
             // (docid, _index) -> KvWriterDelAdd -> Vector
             let manual_vectors_writer = create_writer(
                 indexer.chunk_compression_type,
@@ -289,14 +292,13 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
             extractors.push(EmbedderVectorExtractor {
                 embedder_name,
                 embedder,
+                embedder_info,
                 prompt,
                 prompts_writer,
                 remove_vectors_writer,
                 manual_vectors_writer,
-                add_to_user_provided: RoaringBitmap::new(),
-                action: ExtractionAction::DocumentOperation(DocumentOperation {
-                    remove_from_user_provided: RoaringBitmap::new(),
-                }),
+                embedding_status_delta: Default::default(),
+                action: ExtractionAction::DocumentOperation,
             });
         }
     }
@@ -319,9 +321,12 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
         // lazily get it when needed
         let document_id = || -> Value { from_utf8(external_id_bytes).unwrap().into() };
 
+        let regenerate_for_embedders = embedder_info
+            .iter()
+            .filter(|&(_, infos)| infos.embedding_status.must_regenerate(docid))
+            .map(|(name, _)| name.clone());
         let mut parsed_vectors = ParsedVectorsDiff::new(
-            docid,
-            embedders_configs,
+            regenerate_for_embedders,
             obkv,
             old_vectors_fid,
             new_vectors_fid,
@@ -331,43 +336,39 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
         for EmbedderVectorExtractor {
             embedder_name,
             embedder,
+            embedder_info,
             prompt,
             prompts_writer,
             remove_vectors_writer,
             manual_vectors_writer,
-            add_to_user_provided,
+            embedding_status_delta,
             action,
         } in extractors.iter_mut()
         {
             let embedder_is_manual = matches!(**embedder, Embedder::UserProvided(_));
 
             let (old, new) = parsed_vectors.remove(embedder_name);
+            let new_must_regenerate = new.must_regenerate();
             let delta = match action {
                 ExtractionAction::SettingsFullReindex => match old {
                     // A full reindex can be triggered either by:
                     // 1. a new embedder
                     // 2. an existing embedder changed so that it must regenerate all generated embeddings.
                     // For a new embedder, there can be `_vectors.embedder` embeddings to add to the DB
-                    VectorState::Inline(vectors) => {
-                        if !vectors.must_regenerate() {
-                            add_to_user_provided.insert(docid);
-                        }
-
-                        match vectors.into_array_of_vectors() {
-                            Some(add_vectors) => {
-                                if add_vectors.len() > usize::from(u8::MAX) {
-                                    return Err(crate::Error::UserError(
-                                        crate::UserError::TooManyVectors(
-                                            document_id().to_string(),
-                                            add_vectors.len(),
-                                        ),
-                                    ));
-                                }
-                                VectorStateDelta::NowManual(add_vectors)
+                    VectorState::Inline(vectors) => match vectors.into_array_of_vectors() {
+                        Some(add_vectors) => {
+                            if add_vectors.len() > usize::from(u8::MAX) {
+                                return Err(crate::Error::UserError(
+                                    crate::UserError::TooManyVectors(
+                                        document_id().to_string(),
+                                        add_vectors.len(),
+                                    ),
+                                ));
                             }
-                            None => VectorStateDelta::NoChange,
+                            VectorStateDelta::NowManual(add_vectors)
                         }
-                    }
+                        None => VectorStateDelta::NoChange,
+                    },
                     // this happens only when an existing embedder changed. We cannot regenerate userProvided vectors
                     VectorState::Manual => VectorStateDelta::NoChange,
                     // generated vectors must be regenerated
@@ -405,13 +406,9 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                         VectorStateDelta::NoChange
                     }
                 }
-                ExtractionAction::DocumentOperation(DocumentOperation {
-                    remove_from_user_provided,
-                }) => extract_vector_document_diff(
-                    docid,
+                ExtractionAction::DocumentOperation => extract_vector_document_diff(
                     obkv,
                     prompt,
-                    (add_to_user_provided, remove_from_user_provided),
                     (old, new),
                     (old_fields_ids_map, new_fields_ids_map),
                     document_id,
@@ -420,6 +417,16 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                     &mut manual_errors,
                 )?,
             };
+
+            // update the embedding status
+            push_embedding_status_delta(
+                embedding_status_delta,
+                docid,
+                &delta,
+                new_must_regenerate,
+                &embedder_info.embedding_status,
+            );
+
             // and we finally push the unique vectors into the writer
             push_vectors_diff(
                 remove_vectors_writer,
@@ -444,44 +451,60 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
     for EmbedderVectorExtractor {
         embedder_name,
         embedder,
+        embedder_info: _,
         prompt: _,
         prompts_writer,
         remove_vectors_writer,
-        action,
+        action: _,
         manual_vectors_writer,
-        add_to_user_provided,
+        embedding_status_delta,
     } in extractors
     {
-        let remove_from_user_provided =
-            if let ExtractionAction::DocumentOperation(DocumentOperation {
-                remove_from_user_provided,
-            }) = action
-            {
-                remove_from_user_provided
-            } else {
-                Default::default()
-            };
-
         results.push(ExtractedVectorPoints {
             manual_vectors: writer_into_reader(manual_vectors_writer)?,
             remove_vectors: writer_into_reader(remove_vectors_writer)?,
             prompts: writer_into_reader(prompts_writer)?,
             embedder,
             embedder_name,
-            add_to_user_provided,
-            remove_from_user_provided,
+            embedding_status_delta,
         })
     }
 
     Ok((results, unused_vectors_distribution))
 }
 
+fn push_embedding_status_delta(
+    embedding_status_delta: &mut EmbeddingStatusDelta,
+    docid: DocumentId,
+    delta: &VectorStateDelta,
+    new_must_regenerate: bool,
+    embedding_status: &EmbeddingStatus,
+) {
+    let (old_is_user_provided, old_must_regenerate) =
+        embedding_status.is_user_provided_must_regenerate(docid);
+    let new_is_user_provided = match delta {
+        VectorStateDelta::NoChange => old_is_user_provided,
+        VectorStateDelta::NowRemoved => {
+            embedding_status_delta.clear_docid(docid, old_is_user_provided, old_must_regenerate);
+            return;
+        }
+        VectorStateDelta::NowManual(_) => true,
+        VectorStateDelta::NowGenerated(_) => false,
+    };
+
+    embedding_status_delta.push_delta(
+        docid,
+        old_is_user_provided,
+        old_must_regenerate,
+        new_is_user_provided,
+        new_must_regenerate,
+    );
+}
+
 #[allow(clippy::too_many_arguments)] // feel free to find efficient way to factor arguments
 fn extract_vector_document_diff(
-    docid: DocumentId,
     obkv: &obkv::KvReader<FieldId>,
     prompt: &Prompt,
-    (add_to_user_provided, remove_from_user_provided): (&mut RoaringBitmap, &mut RoaringBitmap),
     (old, new): (VectorState, VectorState),
     (old_fields_ids_map, new_fields_ids_map): (&FieldIdMapWithMetadata, &FieldIdMapWithMetadata),
     document_id: impl Fn() -> Value,
@@ -489,16 +512,6 @@ fn extract_vector_document_diff(
     embedder_is_manual: bool,
     manual_errors: &mut Option<ManualEmbedderErrors>,
 ) -> Result<VectorStateDelta> {
-    match (old.must_regenerate(), new.must_regenerate()) {
-        (true, true) | (false, false) => {}
-        (true, false) => {
-            add_to_user_provided.insert(docid);
-        }
-        (false, true) => {
-            remove_from_user_provided.insert(docid);
-        }
-    }
-
     let delta = match (old, new) {
         // regardless of the previous state, if a document now contains inline _vectors, they must
         // be extracted manually
@@ -573,8 +586,6 @@ fn extract_vector_document_diff(
                     new_fields_ids_map,
                 )?)
             } else {
-                // make sure the document is always removed from user provided on removal
-                remove_from_user_provided.insert(docid);
                 VectorStateDelta::NowRemoved
             }
         }
@@ -592,8 +603,6 @@ fn extract_vector_document_diff(
                 // then they are user-provided and nothing possibly changed
                 VectorStateDelta::NoChange
             } else {
-                // make sure the document is always removed from user provided on removal
-                remove_from_user_provided.insert(docid);
                 VectorStateDelta::NowRemoved
             }
         }

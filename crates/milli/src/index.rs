@@ -1766,15 +1766,21 @@ impl Index {
         &self,
         rtxn: &RoTxn<'_>,
         docid: DocumentId,
-    ) -> Result<BTreeMap<String, Vec<Embedding>>> {
+    ) -> Result<BTreeMap<String, (Vec<Embedding>, bool)>> {
         let mut res = BTreeMap::new();
-        let embedding_configs = self.embedding_configs();
-        for config in embedding_configs.embedding_configs(rtxn)? {
-            let embedder_id = embedding_configs.embedder_id(rtxn, &config.name)?.unwrap();
-            let reader =
-                ArroyWrapper::new(self.vector_arroy, embedder_id, config.config.quantized());
+        let embedders = self.embedding_configs();
+        for config in embedders.embedding_configs(rtxn)? {
+            let embedder_info = embedders.embedder_info(rtxn, &config.name)?.unwrap();
+            let reader = ArroyWrapper::new(
+                self.vector_arroy,
+                embedder_info.embedder_id,
+                config.config.quantized(),
+            );
             let embeddings = reader.item_vectors(rtxn, docid)?;
-            res.insert(config.name.to_owned(), embeddings);
+            res.insert(
+                config.name.to_owned(),
+                (embeddings, embedder_info.embedding_status.must_regenerate(docid)),
+            );
         }
         Ok(res)
     }

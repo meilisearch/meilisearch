@@ -265,14 +265,20 @@ where
             let span = tracing::debug_span!(target: "indexing::documents::merge", "vectors");
             let _entered = span.enter();
 
+            let embedder_configs = index.embedding_configs();
             for config in &mut index_embeddings {
+                /// FIXME: proper internal error
+                let mut infos = embedder_configs.embedder_info(&rtxn, &config.name)?.unwrap();
+
                 'data: for data in datastore.iter_mut() {
                     let data = &mut data.get_mut().0;
-                    let Some(deladd) = data.remove(&config.name) else {
+                    let Some(delta) = data.remove(&config.name) else {
                         continue 'data;
                     };
-                    deladd.apply_to(&mut config.user_provided, modified_docids);
+                    delta.apply_to(&mut infos.embedding_status);
                 }
+
+                extractor_sender.embeddings().embedding_status(&config.name, infos).unwrap();
             }
         }
     }

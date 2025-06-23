@@ -85,21 +85,28 @@ fn import_vectors() {
         let index = index_scheduler.index("doggos").unwrap();
         let rtxn = index.read_txn().unwrap();
 
-        let configs = index.embedding_configs().embedding_configs(&rtxn).unwrap();
+        let embedders = index.embedding_configs();
+        let configs = embedders.embedding_configs(&rtxn).unwrap();
         // for consistency with the below
         #[allow(clippy::get_first)]
-        let IndexEmbeddingConfig { name, config: fakerest_config, user_provided, fragments } =
+        let IndexEmbeddingConfig { name, config: fakerest_config, fragments } =
             configs.get(0).unwrap();
+        let info = embedders.embedder_info(&rtxn, name).unwrap().unwrap();
+        insta::assert_snapshot!(info.embedder_id, @"0");
+        insta::assert_debug_snapshot!(info.embedding_status.user_provided_docids(), @"RoaringBitmap<[]>");
+        insta::assert_debug_snapshot!(info.embedding_status.skip_regenerate_docids(), @"RoaringBitmap<[]>");
         insta::assert_snapshot!(name, @"A_fakerest");
-        insta::assert_debug_snapshot!(user_provided, @"RoaringBitmap<[]>");
         insta::assert_debug_snapshot!(fragments, @"[]");
         insta::assert_json_snapshot!(fakerest_config.embedder_options);
         let fakerest_name = name.clone();
 
-        let IndexEmbeddingConfig { name, config: simple_hf_config, user_provided, fragments } =
+        let IndexEmbeddingConfig { name, config: simple_hf_config, fragments } =
             configs.get(1).unwrap();
+        let info = embedders.embedder_info(&rtxn, name).unwrap().unwrap();
+        insta::assert_snapshot!(info.embedder_id, @"0");
+        insta::assert_debug_snapshot!(info.embedding_status.user_provided_docids(), @"RoaringBitmap<[]>");
+        insta::assert_debug_snapshot!(info.embedding_status.skip_regenerate_docids(), @"RoaringBitmap<[]>");
         insta::assert_snapshot!(name, @"B_small_hf");
-        insta::assert_debug_snapshot!(user_provided, @"RoaringBitmap<[]>");
         insta::assert_debug_snapshot!(fragments, @"[]");
         insta::assert_json_snapshot!(simple_hf_config.embedder_options);
         let simple_hf_name = name.clone();
@@ -168,25 +175,30 @@ fn import_vectors() {
         let rtxn = index.read_txn().unwrap();
 
         // Ensure the document have been inserted into the relevant bitamp
-        let configs = index.embedding_configs().embedding_configs(&rtxn).unwrap();
+        let embedders = index.embedding_configs();
+        let configs = embedders.embedding_configs(&rtxn).unwrap();
         // for consistency with the below
         #[allow(clippy::get_first)]
-        let IndexEmbeddingConfig { name, config: _, user_provided: user_defined, fragments } =
-            configs.get(0).unwrap();
+        let IndexEmbeddingConfig { name, config: _, fragments } = configs.get(0).unwrap();
+        let info = embedders.embedder_info(&rtxn, name).unwrap().unwrap();
+        insta::assert_snapshot!(info.embedder_id, @"0");
+        insta::assert_debug_snapshot!(info.embedding_status.user_provided_docids(), @"RoaringBitmap<[0]>");
+        insta::assert_debug_snapshot!(info.embedding_status.skip_regenerate_docids(), @"RoaringBitmap<[0]>");
         insta::assert_snapshot!(name, @"A_fakerest");
-        insta::assert_debug_snapshot!(user_defined, @"RoaringBitmap<[0]>");
         insta::assert_debug_snapshot!(fragments, @"[]");
 
-        let IndexEmbeddingConfig { name, config: _, user_provided, fragments } =
-            configs.get(1).unwrap();
+        let IndexEmbeddingConfig { name, config: _, fragments } = configs.get(1).unwrap();
+        let info = embedders.embedder_info(&rtxn, name).unwrap().unwrap();
+        insta::assert_snapshot!(info.embedder_id, @"0");
+        insta::assert_debug_snapshot!(info.embedding_status.user_provided_docids(), @"RoaringBitmap<[]>");
+        insta::assert_debug_snapshot!(info.embedding_status.skip_regenerate_docids(), @"RoaringBitmap<[]>");
         insta::assert_snapshot!(name, @"B_small_hf");
-        insta::assert_debug_snapshot!(user_provided, @"RoaringBitmap<[]>");
         insta::assert_debug_snapshot!(fragments, @"[]");
 
         let embeddings = index.embeddings(&rtxn, 0).unwrap();
 
-        assert_json_snapshot!(embeddings[&simple_hf_name][0] == lab_embed, @"true");
-        assert_json_snapshot!(embeddings[&fakerest_name][0] == beagle_embed, @"true");
+        assert_json_snapshot!(embeddings[&simple_hf_name].0[0] == lab_embed, @"true");
+        assert_json_snapshot!(embeddings[&fakerest_name].0[0] == beagle_embed, @"true");
 
         let doc = index.documents(&rtxn, std::iter::once(0)).unwrap()[0].1;
         let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
@@ -244,28 +256,33 @@ fn import_vectors() {
             let index = index_scheduler.index("doggos").unwrap();
             let rtxn = index.read_txn().unwrap();
 
+            let embedders = index.embedding_configs();
             // Ensure the document have been inserted into the relevant bitamp
-            let configs = index.embedding_configs().embedding_configs(&rtxn).unwrap();
+            let configs = embedders.embedding_configs(&rtxn).unwrap();
             // for consistency with the below
             #[allow(clippy::get_first)]
-            let IndexEmbeddingConfig { name, config: _, user_provided: user_defined, fragments } =
-                configs.get(0).unwrap();
+            let IndexEmbeddingConfig { name, config: _, fragments } = configs.get(0).unwrap();
+            let info = embedders.embedder_info(&rtxn, name).unwrap().unwrap();
+            insta::assert_snapshot!(info.embedder_id, @"0");
+            insta::assert_debug_snapshot!(info.embedding_status.user_provided_docids(), @"RoaringBitmap<[0]>");
+            insta::assert_debug_snapshot!(info.embedding_status.skip_regenerate_docids(), @"RoaringBitmap<[0]>");
             insta::assert_snapshot!(name, @"A_fakerest");
-            insta::assert_debug_snapshot!(user_defined, @"RoaringBitmap<[0]>");
             insta::assert_debug_snapshot!(fragments, @"[]");
 
-            let IndexEmbeddingConfig { name, config: _, user_provided, fragments } =
-                configs.get(1).unwrap();
+            let IndexEmbeddingConfig { name, config: _, fragments } = configs.get(1).unwrap();
+            let info = embedders.embedder_info(&rtxn, name).unwrap().unwrap();
+            insta::assert_snapshot!(info.embedder_id, @"0");
+            insta::assert_debug_snapshot!(info.embedding_status.user_provided_docids(), @"RoaringBitmap<[]>");
+            insta::assert_debug_snapshot!(info.embedding_status.skip_regenerate_docids(), @"RoaringBitmap<[]>");
             insta::assert_snapshot!(name, @"B_small_hf");
-            insta::assert_debug_snapshot!(user_provided, @"RoaringBitmap<[]>");
             insta::assert_debug_snapshot!(fragments, @"[]");
 
             let embeddings = index.embeddings(&rtxn, 0).unwrap();
 
             // automatically changed to patou because set to regenerate
-            assert_json_snapshot!(embeddings[&simple_hf_name][0] == patou_embed, @"true");
+            assert_json_snapshot!(embeddings[&simple_hf_name].0[0] == patou_embed, @"true");
             // remained beagle
-            assert_json_snapshot!(embeddings[&fakerest_name][0] == beagle_embed, @"true");
+            assert_json_snapshot!(embeddings[&fakerest_name].0[0] == beagle_embed, @"true");
 
             let doc = index.documents(&rtxn, std::iter::once(0)).unwrap()[0].1;
             let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
@@ -440,13 +457,13 @@ fn import_vectors_first_and_embedder_later() {
     "###);
     let docid = index.external_documents_ids.get(&rtxn, "0").unwrap().unwrap();
     let embeddings = index.embeddings(&rtxn, docid).unwrap();
-    let embedding = &embeddings["my_doggo_embedder"];
+    let (embedding, _) = &embeddings["my_doggo_embedder"];
     assert!(!embedding.is_empty(), "{embedding:?}");
 
     // the document with the id 3 should keep its original embedding
     let docid = index.external_documents_ids.get(&rtxn, "3").unwrap().unwrap();
     let embeddings = index.embeddings(&rtxn, docid).unwrap();
-    let embeddings = &embeddings["my_doggo_embedder"];
+    let (embeddings, _) = &embeddings["my_doggo_embedder"];
 
     snapshot!(embeddings.len(), @"1");
     assert!(embeddings[0].iter().all(|i| *i == 3.0), "{:?}", embeddings[0]);
@@ -501,7 +518,7 @@ fn import_vectors_first_and_embedder_later() {
         "###);
 
     let embeddings = index.embeddings(&rtxn, docid).unwrap();
-    let embedding = &embeddings["my_doggo_embedder"];
+    let (embedding, _) = &embeddings["my_doggo_embedder"];
 
     assert!(!embedding.is_empty());
     assert!(!embedding[0].iter().all(|i| *i == 3.0), "{:?}", embedding[0]);
@@ -509,7 +526,7 @@ fn import_vectors_first_and_embedder_later() {
     // the document with the id 4 should generate an embedding
     let docid = index.external_documents_ids.get(&rtxn, "4").unwrap().unwrap();
     let embeddings = index.embeddings(&rtxn, docid).unwrap();
-    let embedding = &embeddings["my_doggo_embedder"];
+    let (embedding, _) = &embeddings["my_doggo_embedder"];
 
     assert!(!embedding.is_empty());
 }
@@ -637,7 +654,7 @@ fn delete_document_containing_vector() {
         "###);
     let docid = index.external_documents_ids.get(&rtxn, "0").unwrap().unwrap();
     let embeddings = index.embeddings(&rtxn, docid).unwrap();
-    let embedding = &embeddings["manual"];
+    let (embedding, _) = &embeddings["manual"];
     assert!(!embedding.is_empty(), "{embedding:?}");
 
     index_scheduler

@@ -7,7 +7,6 @@ use std::sync::Arc;
 use charabia::{Normalize, Tokenizer, TokenizerBuilder};
 use deserr::{DeserializeError, Deserr};
 use itertools::{merge_join_by, EitherOrBoth, Itertools};
-use roaring::RoaringBitmap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use time::OffsetDateTime;
 
@@ -1043,8 +1042,8 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                 let old_configs = embedders.embedding_configs(self.wtxn)?;
                 let remove_all: Result<BTreeMap<String, EmbedderAction>> = old_configs
                     .into_iter()
-                    .map(|IndexEmbeddingConfig { name, config, user_provided, fragments: _ }| -> Result<_> {
-                        let embedder_id = embedders.embedder_id(self.wtxn, &name)?.ok_or(
+                    .map(|IndexEmbeddingConfig { name, config, fragments: _ }| -> Result<_> {
+                        let embedder_info = embedders.embedder_info(self.wtxn, &name)?.ok_or(
                             crate::InternalError::DatabaseMissingEntry {
                                 db_name: crate::index::db_name::VECTOR_EMBEDDER_CATEGORY_ID,
                                 key: None,
@@ -1053,7 +1052,12 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                         Ok((
                             name,
                             EmbedderAction::with_write_back(
-                                WriteBackToDocuments { embedder_id, user_provided },
+                                WriteBackToDocuments {
+                                    embedder_id: embedder_info.embedder_id,
+                                    user_provided: embedder_info
+                                        .embedding_status
+                                        .into_user_provided(),
+                                },
                                 config.quantized(),
                             ),
                         ))
@@ -1077,11 +1081,9 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         use crate::vector::settings::SettingsDiff;
         let embedders = self.index.embedding_configs();
         let old_configs = embedders.embedding_configs(self.wtxn)?;
-        let old_configs: BTreeMap<String, (EmbeddingSettings, RoaringBitmap)> = old_configs
+        let old_configs: BTreeMap<String, EmbeddingSettings> = old_configs
             .into_iter()
-            .map(|IndexEmbeddingConfig { name, config, user_provided, fragments }| {
-                (name, (config.into(), user_provided))
-            })
+            .map(|IndexEmbeddingConfig { name, config, fragments }| (name, (config.into())))
             .collect();
         let mut updated_configs = BTreeMap::new();
         let mut embedder_actions = BTreeMap::new();
@@ -1091,40 +1093,35 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         {
             match joined {
                 // updated config
-                EitherOrBoth::Both((name, (old, user_provided)), (_, new)) => {
+                EitherOrBoth::Both((name, old), (_, new)) => {
                     let was_quantized = old.binary_quantized.set().unwrap_or_default();
                     let settings_diff = SettingsDiff::from_settings(&name, old, new)?;
                     match settings_diff {
                         SettingsDiff::Remove => {
-                            tracing::debug!(
-                                embedder = name,
-                                user_provided = user_provided.len(),
-                                "removing embedder"
-                            );
                             let info = embedders.remove_embedder(self.wtxn, &name)?.ok_or(
                                 crate::InternalError::DatabaseMissingEntry {
                                     db_name: crate::index::db_name::VECTOR_EMBEDDER_CATEGORY_ID,
                                     key: None,
                                 },
                             )?;
+                            tracing::debug!(
+                                embedder = name,
+                                user_provided = info.embedding_status.user_provided_docids().len(),
+                                "removing embedder"
+                            );
                             embedder_actions.insert(
                                 name,
                                 EmbedderAction::with_write_back(
                                     WriteBackToDocuments {
                                         embedder_id: info.embedder_id,
-                                        user_provided,
+                                        user_provided: info.embedding_status.into_user_provided(),
                                     },
                                     was_quantized,
                                 ),
                             );
                         }
                         SettingsDiff::Reindex { action, updated_settings, quantize } => {
-                            tracing::debug!(
-                                embedder = name,
-                                user_provided = user_provided.len(),
-                                ?action,
-                                "reindex embedder"
-                            );
+                            tracing::debug!(embedder = name, ?action, "reindex embedder");
                             embedder_actions.insert(
                                 name.clone(),
                                 EmbedderAction::with_reindex(action, was_quantized)
@@ -1132,14 +1129,10 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                             );
                             let new =
                                 validate_embedding_settings(Setting::Set(updated_settings), &name)?;
-                            updated_configs.insert(name, (new, user_provided));
+                            updated_configs.insert(name, new);
                         }
                         SettingsDiff::UpdateWithoutReindex { updated_settings, quantize } => {
-                            tracing::debug!(
-                                embedder = name,
-                                user_provided = user_provided.len(),
-                                "update without reindex embedder"
-                            );
+                            tracing::debug!(embedder = name, "update without reindex embedder");
                             let new =
                                 validate_embedding_settings(Setting::Set(updated_settings), &name)?;
                             if quantize {
@@ -1148,14 +1141,14 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                                     EmbedderAction::default().with_is_being_quantized(true),
                                 );
                             }
-                            updated_configs.insert(name, (new, user_provided));
+                            updated_configs.insert(name, new);
                         }
                     }
                 }
                 // unchanged config
-                EitherOrBoth::Left((name, (setting, user_provided))) => {
+                EitherOrBoth::Left((name, setting)) => {
                     tracing::debug!(embedder = name, "unchanged embedder");
-                    updated_configs.insert(name, (Setting::Set(setting), user_provided));
+                    updated_configs.insert(name, Setting::Set(setting));
                 }
                 // new config
                 EitherOrBoth::Right((name, mut setting)) => {
@@ -1170,7 +1163,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                         name.clone(),
                         EmbedderAction::with_reindex(ReindexAction::FullReindex, false),
                     );
-                    updated_configs.insert(name, (setting, RoaringBitmap::new()));
+                    updated_configs.insert(name, setting);
                 }
             }
         }
@@ -1186,18 +1179,14 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
 
         let updated_configs: Vec<IndexEmbeddingConfig> = updated_configs
             .into_iter()
-            .filter_map(|(name, (config, user_provided))| match config {
-                Setting::Set(config) => Some(IndexEmbeddingConfig {
-                    name,
-                    config: config.into(),
-                    user_provided,
-                    fragments: todo!(),
-                }),
+            .filter_map(|(name, config)| match config {
+                Setting::Set(config) => {
+                    Some(IndexEmbeddingConfig { name, config: config.into(), fragments: todo!() })
+                }
                 Setting::Reset => None,
                 Setting::NotSet => Some(IndexEmbeddingConfig {
                     name,
                     config: EmbeddingSettings::default().into(),
-                    user_provided,
                     fragments: Default::default(),
                 }),
             })
