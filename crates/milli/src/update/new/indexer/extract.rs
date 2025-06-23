@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::sync::atomic::AtomicBool;
 use std::sync::OnceLock;
+use std::sync::Arc;
 
 use bumpalo::Bump;
 use roaring::RoaringBitmap;
@@ -13,6 +14,7 @@ use super::super::thread_local::{FullySend, ThreadLocal};
 use super::super::FacetFieldIdsDelta;
 use super::document_changes::{extract, DocumentChanges, IndexingContext};
 use crate::index::IndexEmbeddingConfig;
+use crate::progress::EmbedderStats;
 use crate::progress::MergingWordCache;
 use crate::proximity::ProximityPrecision;
 use crate::update::new::extract::EmbeddingExtractor;
@@ -34,6 +36,7 @@ pub(super) fn extract_all<'pl, 'extractor, DC, MSP>(
     mut index_embeddings: Vec<IndexEmbeddingConfig>,
     document_ids: &mut RoaringBitmap,
     modified_docids: &mut RoaringBitmap,
+    embedder_stats: Arc<EmbedderStats>,
 ) -> Result<(FacetFieldIdsDelta, Vec<IndexEmbeddingConfig>)>
 where
     DC: DocumentChanges<'pl>,
@@ -245,6 +248,7 @@ where
             embedders,
             embedding_sender,
             field_distribution,
+            Some(embedder_stats),
             request_threads(),
         );
         let mut datastore = ThreadLocal::with_capacity(rayon::current_num_threads());

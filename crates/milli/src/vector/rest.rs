@@ -295,6 +295,10 @@ fn embed<S>(
 where
     S: Serialize,
 {
+    use std::backtrace::Backtrace;
+
+    println!("Embedder stats? {}", embedder_stats.is_some());
+
     let request = data.client.post(&data.url);
     let request = if let Some(bearer) = &data.bearer {
         request.set("Authorization", bearer)

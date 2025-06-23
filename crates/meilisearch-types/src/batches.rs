@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
-use milli::progress::ProgressView;
+use milli::progress::{EmbedderStats, ProgressView};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use utoipa::ToSchema;
@@ -19,6 +20,7 @@ pub struct Batch {
     pub progress: Option<ProgressView>,
     pub details: DetailsView,
     pub stats: BatchStats,
+    pub embedder_stats: Option<BatchEmbeddingStats>,
 
     #[serde(with = "time::serde::rfc3339")]
     pub started_at: OffsetDateTime,
@@ -43,6 +45,7 @@ impl PartialEq for Batch {
             progress,
             details,
             stats,
+            embedder_stats,
             started_at,
             finished_at,
             enqueued_at,
@@ -53,6 +56,7 @@ impl PartialEq for Batch {
             && progress.is_none() == other.progress.is_none()
             && details == &other.details
             && stats == &other.stats
+            && embedder_stats == &other.embedder_stats
             && started_at == &other.started_at
             && finished_at == &other.finished_at
             && enqueued_at == &other.enqueued_at
@@ -82,7 +86,6 @@ pub struct BatchStats {
     pub write_channel_congestion: Option<serde_json::Map<String, serde_json::Value>>,
     #[serde(default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub internal_database_sizes: serde_json::Map<String, serde_json::Value>,
-    pub embeddings: BatchEmbeddingStats
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -91,5 +94,26 @@ pub struct BatchStats {
 pub struct BatchEmbeddingStats {
     pub total_count: usize,
     pub error_count: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub last_error: Option<String>,
+}
+
+impl From<&EmbedderStats> for BatchEmbeddingStats {
+    fn from(stats: &EmbedderStats) -> Self {
+        let errors = stats.errors.read().unwrap();
+        Self {
+            total_count: stats.total_requests.load(std::sync::atomic::Ordering::Relaxed),
+            error_count: errors.1 as usize,
+            last_error: errors.0.clone(),
+        }
+    }
+}
+
+impl BatchEmbeddingStats {
+    pub fn skip_serializing(this: &Option<BatchEmbeddingStats>) -> bool {
+        match this {
+            Some(stats) => stats.total_count == 0 && stats.error_count == 0 && stats.last_error.is_none(),
+            None => true,
+        }
+    }
 }

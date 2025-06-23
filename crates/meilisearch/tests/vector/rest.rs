@@ -4,6 +4,8 @@ use meili_snap::{json_string, snapshot};
 use reqwest::IntoUrl;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
+use std::thread::sleep;
+use std::time::Duration;
 
 use crate::common::Value;
 use crate::json;
@@ -305,6 +307,7 @@ async fn create_mock_raw() -> (MockServer, Value) {
     Mock::given(method("POST"))
         .and(path("/"))
         .respond_with(move |req: &Request| {
+            println!("Sent!");
             let req: String = match req.body_json() {
                 Ok(req) => req,
                 Err(error) => {
@@ -2110,4 +2113,41 @@ async fn searchable_reindex() {
       "finishedAt": "[date]"
     }
     "###);
+}
+
+
+#[actix_rt::test]
+async fn observability() {
+    let (_mock, setting) = create_mock_raw().await;
+    let server = get_server_vector().await;
+    let index = server.index("doggo");
+
+    let (response, code) = index
+        .update_settings(json!({
+          "embedders": {
+              "rest": setting,
+          },
+        }))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    let task = server.wait_task(response.uid()).await;
+    snapshot!(task["status"], @r###""succeeded""###);
+    let documents = json!([
+      {"id": 0, "name": "kefir"},
+      {"id": 1, "name": "echo", "_vectors": { "rest": [1, 1, 1] }},
+      {"id": 2, "name": "intel"},
+      {"id": 3, "name": "missing"}, // Stuff that doesn't exist
+      {"id": 4, "name": "invalid"},
+      {"id": 5, "name": "foobar"},
+    ]);
+    let (value, code) = index.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+
+    let batches = index.filtered_batches(&[], &[], &[]).await;
+    println!("Batches: {batches:?}");
+
+    let task = index.wait_task(value.uid()).await;
+    let batches = index.filtered_batches(&[], &[], &[]).await;
+    println!("Batches: {batches:?}");
+
 }

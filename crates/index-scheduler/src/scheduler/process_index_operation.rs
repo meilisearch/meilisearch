@@ -4,7 +4,7 @@ use bumpalo::collections::CollectIn;
 use bumpalo::Bump;
 use meilisearch_types::heed::RwTxn;
 use meilisearch_types::milli::documents::PrimaryKey;
-use meilisearch_types::milli::progress::Progress;
+use meilisearch_types::milli::progress::{EmbedderStats, Progress};
 use meilisearch_types::milli::update::new::indexer::{self, UpdateByFunction};
 use meilisearch_types::milli::update::DocumentAdditionResult;
 use meilisearch_types::milli::{self, ChannelCongestion, Filter};
@@ -26,7 +26,7 @@ impl IndexScheduler {
     /// The list of processed tasks.
     #[tracing::instrument(
         level = "trace",
-        skip(self, index_wtxn, index, progress),
+        skip(self, index_wtxn, index, progress, embedder_stats),
         target = "indexing::scheduler"
     )]
     pub(crate) fn apply_index_operation<'i>(
@@ -35,6 +35,7 @@ impl IndexScheduler {
         index: &'i Index,
         operation: IndexOperation,
         progress: &Progress,
+        embedder_stats: Arc<EmbedderStats>,
     ) -> Result<(Vec<Task>, Option<ChannelCongestion>)> {
         let indexer_alloc = Bump::new();
         let started_processing_at = std::time::Instant::now();
@@ -179,6 +180,7 @@ impl IndexScheduler {
                             embedders,
                             &|| must_stop_processing.get(),
                             progress,
+                            embedder_stats,
                         )
                         .map_err(|e| Error::from_milli(e, Some(index_uid.clone())))?,
                     );
@@ -290,6 +292,7 @@ impl IndexScheduler {
                             embedders,
                             &|| must_stop_processing.get(),
                             progress,
+                            embedder_stats,
                         )
                         .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?,
                     );
@@ -438,6 +441,7 @@ impl IndexScheduler {
                             embedders,
                             &|| must_stop_processing.get(),
                             progress,
+                            embedder_stats,
                         )
                         .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?,
                     );
@@ -474,7 +478,7 @@ impl IndexScheduler {
                     .execute(
                         |indexing_step| tracing::debug!(update = ?indexing_step),
                         || must_stop_processing.get(),
-                        Some(Arc::clone(&progress.embedder_stats))
+                        embedder_stats,
                     )
                     .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?;
 
@@ -494,6 +498,7 @@ impl IndexScheduler {
                         tasks: cleared_tasks,
                     },
                     progress,
+                    embedder_stats.clone(),
                 )?;
 
                 let (settings_tasks, _congestion) = self.apply_index_operation(
@@ -501,6 +506,7 @@ impl IndexScheduler {
                     index,
                     IndexOperation::Settings { index_uid, settings, tasks: settings_tasks },
                     progress,
+                    embedder_stats,
                 )?;
 
                 let mut tasks = settings_tasks;

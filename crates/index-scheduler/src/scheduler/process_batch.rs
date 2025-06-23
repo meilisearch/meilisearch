@@ -1,10 +1,11 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 
 use meilisearch_types::batches::{BatchEnqueuedAt, BatchId};
 use meilisearch_types::heed::{RoTxn, RwTxn};
-use meilisearch_types::milli::progress::{Progress, VariableNameStep};
+use meilisearch_types::milli::progress::{EmbedderStats, Progress, VariableNameStep};
 use meilisearch_types::milli::{self, ChannelCongestion};
 use meilisearch_types::tasks::{Details, IndexSwap, Kind, KindWithContent, Status, Task};
 use meilisearch_types::versioning::{VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH};
@@ -163,7 +164,7 @@ impl IndexScheduler {
 
                 let pre_commit_dabases_sizes = index.database_sizes(&index_wtxn)?;
                 let (tasks, congestion) =
-                    self.apply_index_operation(&mut index_wtxn, &index, op, &progress)?;
+                    self.apply_index_operation(&mut index_wtxn, &index, op, &progress, current_batch.clone_embedder_stats())?;
 
                 {
                     progress.update_progress(FinalizingIndexStep::Committing);
@@ -238,11 +239,21 @@ impl IndexScheduler {
                     );
                     builder.set_primary_key(primary_key);
                     let must_stop_processing = self.scheduler.must_stop_processing.clone();
+
+                    let embedder_stats = match current_batch.embedder_stats {
+                        Some(ref stats) => stats.clone(),
+                        None => {
+                            let embedder_stats: Arc<EmbedderStats> = Default::default();
+                            current_batch.embedder_stats = Some(embedder_stats.clone());
+                            embedder_stats
+                        },
+                    };
+
                     builder
                         .execute(
                             |indexing_step| tracing::debug!(update = ?indexing_step),
                             || must_stop_processing.get(),
-                            Some(progress.embedder_stats),
+                            embedder_stats,
                         )
                         .map_err(|e| Error::from_milli(e, Some(index_uid.to_string())))?;
                     index_wtxn.commit()?;

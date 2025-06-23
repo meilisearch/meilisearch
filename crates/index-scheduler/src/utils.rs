@@ -2,8 +2,10 @@
 
 use std::collections::{BTreeSet, HashSet};
 use std::ops::Bound;
+use std::sync::Arc;
+use crate::milli::progress::EmbedderStats;
 
-use meilisearch_types::batches::{Batch, BatchEnqueuedAt, BatchId, BatchStats};
+use meilisearch_types::batches::{Batch, BatchEmbeddingStats, BatchEnqueuedAt, BatchId, BatchStats};
 use meilisearch_types::heed::{Database, RoTxn, RwTxn};
 use meilisearch_types::milli::CboRoaringBitmapCodec;
 use meilisearch_types::task_view::DetailsView;
@@ -27,6 +29,7 @@ pub struct ProcessingBatch {
     pub uid: BatchId,
     pub details: DetailsView,
     pub stats: BatchStats,
+    pub embedder_stats: Option<Arc<EmbedderStats>>,
 
     pub statuses: HashSet<Status>,
     pub kinds: HashSet<Kind>,
@@ -48,6 +51,7 @@ impl ProcessingBatch {
             uid,
             details: DetailsView::default(),
             stats: BatchStats::default(),
+            embedder_stats: None,
 
             statuses,
             kinds: HashSet::default(),
@@ -57,6 +61,17 @@ impl ProcessingBatch {
             started_at: OffsetDateTime::now_utc(),
             finished_at: None,
             reason: Default::default(),
+        }
+    }
+
+    pub fn clone_embedder_stats(&mut self) -> Arc<EmbedderStats> {
+        match self.embedder_stats {
+            Some(ref stats) => stats.clone(),
+            None => {
+                let embedder_stats: Arc<EmbedderStats> = Default::default();
+                self.embedder_stats = Some(embedder_stats.clone());
+                embedder_stats
+            },
         }
     }
 
@@ -141,11 +156,13 @@ impl ProcessingBatch {
     }
 
     pub fn to_batch(&self) -> Batch {
+        println!("Converting to batch: {:?}", self.embedder_stats);
         Batch {
             uid: self.uid,
             progress: None,
             details: self.details.clone(),
             stats: self.stats.clone(),
+            embedder_stats: self.embedder_stats.as_ref().map(|s| BatchEmbeddingStats::from(s.as_ref())),
             started_at: self.started_at,
             finished_at: self.finished_at,
             enqueued_at: self.enqueued_at,

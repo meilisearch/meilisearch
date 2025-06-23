@@ -50,7 +50,7 @@ pub(crate) fn data_from_obkv_documents(
     settings_diff: Arc<InnerIndexSettingsDiff>,
     max_positions_per_attributes: Option<u32>,
     possible_embedding_mistakes: Arc<PossibleEmbeddingMistakes>,
-    embedder_stats: Option<Arc<EmbedderStats>>,
+    embedder_stats: Arc<EmbedderStats>,
 ) -> Result<()> {
     let (original_pipeline_result, flattened_pipeline_result): (Result<_>, Result<_>) = rayon::join(
         || {
@@ -234,7 +234,7 @@ fn send_original_documents_data(
     embedders_configs: Arc<Vec<IndexEmbeddingConfig>>,
     settings_diff: Arc<InnerIndexSettingsDiff>,
     possible_embedding_mistakes: Arc<PossibleEmbeddingMistakes>,
-    embedder_stats: Option<Arc<EmbedderStats>>,
+    embedder_stats: Arc<EmbedderStats>,
 ) -> Result<()> {
     let original_documents_chunk =
         original_documents_chunk.and_then(|c| unsafe { as_cloneable_grenad(&c) })?;
@@ -274,7 +274,7 @@ fn send_original_documents_data(
                             embedder.clone(),
                             &embedder_name,
                             &possible_embedding_mistakes,
-                            embedder_stats.clone(),
+                            Some(embedder_stats.clone()),
                             &unused_vectors_distribution,
                             request_threads(),
                         ) {
