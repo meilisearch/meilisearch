@@ -31,8 +31,8 @@ pub struct BatchView {
 pub struct BatchStatsView {
     #[serde(flatten)]
     pub stats: BatchStats,
-    #[serde(skip_serializing_if = "BatchEmbeddingStats::skip_serializing")]
-    pub embedder: Option<BatchEmbeddingStats>,
+    #[serde(skip_serializing_if = "BatchEmbeddingStats::skip_serializing", default)]
+    pub embedder: BatchEmbeddingStats,
 }
 
 impl BatchView {

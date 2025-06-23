@@ -437,8 +437,10 @@ impl IndexScheduler {
         #[cfg(test)]
         self.maybe_fail(crate::test_utils::FailureLocation::InsideCreateBatch)?;
 
+        println!("create next batch");
         let batch_id = self.queue.batches.next_batch_id(rtxn)?;
         let mut current_batch = ProcessingBatch::new(batch_id);
+        println!("over");
 
         let enqueued = &self.queue.tasks.get_status(rtxn, Status::Enqueued)?;
         let count_total_enqueued = enqueued.len();
@@ -454,6 +456,7 @@ impl IndexScheduler {
                 kind: Kind::TaskCancelation,
                 id: task_id,
             });
+            println!("task cancelled");
             return Ok(Some((Batch::TaskCancelation { task }, current_batch)));
         }
 
@@ -524,7 +527,7 @@ impl IndexScheduler {
         }
 
         // 5. We make a batch from the unprioritised tasks. Start by taking the next enqueued task.
-        let task_id = if let Some(task_id) = enqueued.min() { task_id } else { return Ok(None) };
+        let task_id = if let Some(task_id) = enqueued.min() { task_id } else { println!("return"); return Ok(None) };
         let mut task =
             self.queue.tasks.get_task(rtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
 
@@ -602,6 +605,7 @@ impl IndexScheduler {
             autobatcher::autobatch(enqueued, index_already_exists, primary_key.as_deref())
         {
             current_batch.reason(autobatch_stop_reason.unwrap_or(stop_reason));
+            println!("autobatch");
             return Ok(self
                 .create_next_batch_index(
                     rtxn,
@@ -615,6 +619,7 @@ impl IndexScheduler {
 
         // If we found no tasks then we were notified for something that got autobatched
         // somehow and there is nothing to do.
+        println!("nothing to do");
         Ok(None)
     }
 }

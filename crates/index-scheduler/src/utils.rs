@@ -29,7 +29,7 @@ pub struct ProcessingBatch {
     pub uid: BatchId,
     pub details: DetailsView,
     pub stats: BatchStats,
-    pub embedder_stats: Option<Arc<EmbedderStats>>,
+    pub embedder_stats: Arc<EmbedderStats>,
 
     pub statuses: HashSet<Status>,
     pub kinds: HashSet<Kind>,
@@ -47,11 +47,13 @@ impl ProcessingBatch {
         let mut statuses = HashSet::default();
         statuses.insert(Status::Processing);
 
+        println!("Processing batch created: {}", uid);
+
         Self {
             uid,
             details: DetailsView::default(),
             stats: BatchStats::default(),
-            embedder_stats: None,
+            embedder_stats: Default::default(),
 
             statuses,
             kinds: HashSet::default(),
@@ -61,17 +63,6 @@ impl ProcessingBatch {
             started_at: OffsetDateTime::now_utc(),
             finished_at: None,
             reason: Default::default(),
-        }
-    }
-
-    pub fn clone_embedder_stats(&mut self) -> Arc<EmbedderStats> {
-        match self.embedder_stats {
-            Some(ref stats) => stats.clone(),
-            None => {
-                let embedder_stats: Arc<EmbedderStats> = Default::default();
-                self.embedder_stats = Some(embedder_stats.clone());
-                embedder_stats
-            },
         }
     }
 
@@ -113,11 +104,14 @@ impl ProcessingBatch {
     }
 
     pub fn reason(&mut self, reason: BatchStopReason) {
+        println!("batch stopped: {:?}", reason);
         self.reason = reason;
     }
 
     /// Must be called once the batch has finished processing.
     pub fn finished(&mut self) {
+        println!("Batch finished: {}", self.uid);
+
         self.details = DetailsView::default();
         self.stats = BatchStats::default();
         self.finished_at = Some(OffsetDateTime::now_utc());
@@ -132,6 +126,8 @@ impl ProcessingBatch {
 
     /// Update the timestamp of the tasks and the inner structure of this structure.
     pub fn update(&mut self, task: &mut Task) {
+        println!("Updating task: {} in batch: {}", task.uid, self.uid);
+
         // We must re-set this value in case we're dealing with a task that has been added between
         // the `processing` and `finished` state
         // We must re-set this value in case we're dealing with a task that has been added between
@@ -156,13 +152,13 @@ impl ProcessingBatch {
     }
 
     pub fn to_batch(&self) -> Batch {
-        println!("Converting to batch: {:?}", self.embedder_stats);
+        println!("Converting to batch: {:?} {:?}", self.uid, self.embedder_stats);
         Batch {
             uid: self.uid,
             progress: None,
             details: self.details.clone(),
             stats: self.stats.clone(),
-            embedder_stats: self.embedder_stats.as_ref().map(|s| BatchEmbeddingStats::from(s.as_ref())),
+            embedder_stats: self.embedder_stats.as_ref().into(),
             started_at: self.started_at,
             finished_at: self.finished_at,
             enqueued_at: self.enqueued_at,

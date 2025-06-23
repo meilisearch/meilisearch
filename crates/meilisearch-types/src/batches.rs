@@ -20,7 +20,8 @@ pub struct Batch {
     pub progress: Option<ProgressView>,
     pub details: DetailsView,
     pub stats: BatchStats,
-    pub embedder_stats: Option<BatchEmbeddingStats>,
+    #[serde(skip_serializing_if = "BatchEmbeddingStats::skip_serializing", default)]
+    pub embedder_stats: BatchEmbeddingStats,
 
     #[serde(with = "time::serde::rfc3339")]
     pub started_at: OffsetDateTime,
@@ -110,10 +111,7 @@ impl From<&EmbedderStats> for BatchEmbeddingStats {
 }
 
 impl BatchEmbeddingStats {
-    pub fn skip_serializing(this: &Option<BatchEmbeddingStats>) -> bool {
-        match this {
-            Some(stats) => stats.total_count == 0 && stats.error_count == 0 && stats.last_error.is_none(),
-            None => true,
-        }
+    pub fn skip_serializing(&self) -> bool {
+        self.total_count == 0 && self.error_count == 0 && self.last_error.is_none()
     }
 }

@@ -1,10 +1,12 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use meili_snap::{json_string, snapshot};
 use reqwest::IntoUrl;
+use tokio::spawn;
+use tokio::sync::mpsc;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
-use std::thread::sleep;
+use tokio::time::sleep;
 use std::time::Duration;
 
 use crate::common::Value;
@@ -307,7 +309,6 @@ async fn create_mock_raw() -> (MockServer, Value) {
     Mock::given(method("POST"))
         .and(path("/"))
         .respond_with(move |req: &Request| {
-            println!("Sent!");
             let req: String = match req.body_json() {
                 Ok(req) => req,
                 Err(error) => {
@@ -320,6 +321,50 @@ async fn create_mock_raw() -> (MockServer, Value) {
             let output = text_to_embedding.get(req.as_str()).unwrap_or(&[99., 99., 99.]).to_vec();
 
             ResponseTemplate::new(200).set_body_json(output)
+        })
+        .mount(&mock_server)
+        .await;
+    let url = mock_server.uri();
+
+    let embedder_settings = json!({
+        "source": "rest",
+        "url": url,
+        "dimensions": 3,
+        "request": "{{text}}",
+        "response": "{{embedding}}",
+        "documentTemplate": "{{doc.name}}"
+    });
+
+    (mock_server, embedder_settings)
+}
+
+/// A mock server that returns 500 errors, and sends a message once 5 requests are received 
+async fn create_faulty_mock_raw(mut sender: mpsc::Sender<()>) -> (MockServer, Value) {
+    let mock_server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/"))
+        .respond_with(move |req: &Request| {
+            let req: String = match req.body_json() {
+                Ok(req) => req,
+                Err(error) => {
+                    return ResponseTemplate::new(400).set_body_json(json!({
+                      "error": format!("Invalid request: {error}")
+                    }));
+                }
+            };
+
+            let sender = sender.clone();
+            spawn(async move {
+                sender.send(()).await;
+            });
+
+            ResponseTemplate::new(500)
+                .set_delay(Duration::from_millis(500))
+                .set_body_json(json!({
+                    "error": "Service Unavailable",
+                    "text": req
+                }))
         })
         .mount(&mock_server)
         .await;
@@ -2118,7 +2163,8 @@ async fn searchable_reindex() {
 
 #[actix_rt::test]
 async fn observability() {
-    let (_mock, setting) = create_mock_raw().await;
+    let (sender, mut receiver) = mpsc::channel(10);
+    let (_mock, setting) = create_faulty_mock_raw(sender).await;
     let server = get_server_vector().await;
     let index = server.index("doggo");
 
@@ -2133,20 +2179,19 @@ async fn observability() {
     let task = server.wait_task(response.uid()).await;
     snapshot!(task["status"], @r###""succeeded""###);
     let documents = json!([
-      {"id": 0, "name": "kefir"},
-      {"id": 1, "name": "echo", "_vectors": { "rest": [1, 1, 1] }},
-      {"id": 2, "name": "intel"},
-      {"id": 3, "name": "missing"}, // Stuff that doesn't exist
-      {"id": 4, "name": "invalid"},
-      {"id": 5, "name": "foobar"},
+      {"id": 0, "name": "will_return_500"}, // Stuff that doesn't exist
+      {"id": 1, "name": "will_error"},
+      {"id": 2, "name": "must_error"},
     ]);
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
 
-    let batches = index.filtered_batches(&[], &[], &[]).await;
-    println!("Batches: {batches:?}");
+    // The task will eventually fail, so let's not wait for it.
+    // Let's just wait for 5 errors from the mock server.
+    for _errors in 0..5 {
+        receiver.recv().await;
+    }
 
-    let task = index.wait_task(value.uid()).await;
     let batches = index.filtered_batches(&[], &[], &[]).await;
     println!("Batches: {batches:?}");
 

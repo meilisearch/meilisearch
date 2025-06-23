@@ -316,6 +316,7 @@ where
         if let Some(embedder_stats) = &embedder_stats {
             embedder_stats.as_ref().total_requests.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
+        // TODO: also catch 403 errors
         let response = request.clone().send_json(&body);
         let result = check_response(response, data.configuration_source).and_then(|response| {
             response_to_embedding(response, data, expected_count, expected_dimension)

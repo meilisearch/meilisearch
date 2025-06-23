@@ -174,7 +174,7 @@ impl BatchQueue {
     pub(crate) fn write_batch(&self, wtxn: &mut RwTxn, batch: ProcessingBatch) -> Result<()> {
         let old_batch = self.all_batches.get(wtxn, &batch.uid)?;
 
-        println!("Saving batch: {}", batch.embedder_stats.is_some());
+        println!("Saving batch: {:?}", batch.embedder_stats);
 
         self.all_batches.put(
             wtxn,
@@ -184,7 +184,7 @@ impl BatchQueue {
                 progress: None,
                 details: batch.details,
                 stats: batch.stats,
-                embedder_stats: batch.embedder_stats.as_ref().map(|s| BatchEmbeddingStats::from(s.as_ref())),
+                embedder_stats: batch.embedder_stats.as_ref().into(),
                 started_at: batch.started_at,
                 finished_at: batch.finished_at,
                 enqueued_at: batch.enqueued_at,
