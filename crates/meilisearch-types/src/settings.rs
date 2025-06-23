@@ -751,6 +751,7 @@ pub fn apply_settings_to_builder(
             builder.reset_min_word_len_two_typos();
             builder.reset_exact_words();
             builder.reset_exact_attributes();
+            builder.reset_disable_on_numbers();
         }
         Setting::NotSet => (),
     }
