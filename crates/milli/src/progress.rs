@@ -282,8 +282,8 @@ impl Step for arroy::MainStep {
         match self {
             arroy::MainStep::PreProcessingTheItems => "pre processing the items",
             arroy::MainStep::WritingTheDescendantsAndMetadata => {
-                        "writing the descendants and metadata"
-                    }
+                "writing the descendants and metadata"
+            }
             arroy::MainStep::RetrieveTheUpdatedItems => "retrieve the updated items",
             arroy::MainStep::WriteTheMetadata => "write the metadata",
             arroy::MainStep::RetrievingTheItemsIds => "retrieving the items ids",
