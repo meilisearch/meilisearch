@@ -15,7 +15,7 @@ async fn set_and_reset() {
             "dictionary": ["J.R.R.", "J. R. R."],
         }))
         .await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (response, _) = index.settings().await;
     snapshot!(json_string!(response["nonSeparatorTokens"]), @r###"
@@ -45,7 +45,7 @@ async fn set_and_reset() {
         }))
         .await;
 
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (response, _) = index.settings().await;
     snapshot!(json_string!(response["nonSeparatorTokens"]), @"[]");
@@ -74,7 +74,7 @@ async fn set_and_search() {
     let index = server.unique_index();
 
     let (add_task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(add_task.uid()).await.succeeded();
+    server.wait_task(add_task.uid()).await.succeeded();
 
     let (update_task, _code) = index
         .update_settings(json!({
@@ -83,7 +83,7 @@ async fn set_and_search() {
             "dictionary": ["#", "A#", "B#", "C#", "D#", "E#", "F#", "G#"],
         }))
         .await;
-    index.wait_task(update_task.uid()).await.succeeded();
+    server.wait_task(update_task.uid()).await.succeeded();
 
     index
         .search(json!({"q": "&", "attributesToHighlight": ["content"]}), |response, code| {
@@ -228,7 +228,7 @@ async fn advanced_synergies() {
     let index = server.unique_index();
 
     let (add_task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(add_task.uid()).await.succeeded();
+    server.wait_task(add_task.uid()).await.succeeded();
 
     let (update_task, _code) = index
         .update_settings(json!({
@@ -243,7 +243,7 @@ async fn advanced_synergies() {
             }
         }))
         .await;
-    index.wait_task(update_task.uid()).await.succeeded();
+    server.wait_task(update_task.uid()).await.succeeded();
 
     index
         .search(json!({"q": "J.R.R.", "attributesToHighlight": ["content"]}), |response, code| {
@@ -353,7 +353,7 @@ async fn advanced_synergies() {
             "dictionary": ["J.R.R.", "J. R. R.", "J.K.", "J. K."],
         }))
         .await;
-    index.wait_task(_response.uid()).await.succeeded();
+    server.wait_task(_response.uid()).await.succeeded();
 
     index
         .search(json!({"q": "jk", "attributesToHighlight": ["content"]}), |response, code| {
