@@ -68,6 +68,7 @@ const MEILI_EXPERIMENTAL_LIMIT_BATCHED_TASKS_TOTAL_SIZE: &str =
 const MEILI_EXPERIMENTAL_EMBEDDING_CACHE_ENTRIES: &str =
     "MEILI_EXPERIMENTAL_EMBEDDING_CACHE_ENTRIES";
 const MEILI_EXPERIMENTAL_NO_SNAPSHOT_COMPACTION: &str = "MEILI_EXPERIMENTAL_NO_SNAPSHOT_COMPACTION";
+const MEILI_EXPERIMENTAL_CHAT_COMPLETIONS: &str = "MEILI_EXPERIMENTAL_CHAT_COMPLETIONS";
 const DEFAULT_CONFIG_FILE_PATH: &str = "./config.toml";
 const DEFAULT_DB_PATH: &str = "./data.ms";
 const DEFAULT_HTTP_ADDR: &str = "localhost:7700";
@@ -475,6 +476,11 @@ pub struct Opt {
     /// Format must be TOML.
     #[clap(long)]
     pub config_file_path: Option<PathBuf>,
+
+    /// Enables the chat completions functionality.
+    #[serde(default)]
+    #[clap(long, env = MEILI_EXPERIMENTAL_CHAT_COMPLETIONS, default_value_t = false)]
+    pub experimental_chat_completions: bool,
 }
 
 impl Opt {
@@ -500,25 +506,21 @@ impl Opt {
             Ok(config) => {
                 // If the file is successfully read, we deserialize it with `toml`.
                 let opt_from_config = toml::from_str::<Opt>(&config)?;
-                // Return an error if config file contains 'config_file_path'
+                // Return an error if the config file contains 'config_file_path'
                 // Using that key in the config file doesn't make sense bc it creates a logical loop (config file referencing itself)
                 if opt_from_config.config_file_path.is_some() {
                     anyhow::bail!("`config_file_path` is not supported in the configuration file")
                 }
                 // We inject the values from the toml in the corresponding env vars if needs be. Doing so, we respect the priority toml < env vars < cli args.
                 opt_from_config.export_to_env();
-                // Once injected we parse the cli args once again to take the new env vars into scope.
+                // Once injected, we parse the cli args once again to take the new env vars into scope.
                 opts = Opt::parse();
                 config_read_from = Some(config_file_path);
             }
             Err(e) => {
                 if let Some(path) = user_specified_config_file_path {
                     // If we have an error while reading the file defined by the user.
-                    anyhow::bail!(
-                        "unable to open or read the {:?} configuration file: {}.",
-                        path,
-                        e,
-                    )
+                    anyhow::bail!("unable to open or read the {path:?} configuration file: {e}.")
                 }
             }
         }
@@ -572,6 +574,7 @@ impl Opt {
             experimental_limit_batched_tasks_total_size,
             experimental_embedding_cache_entries,
             experimental_no_snapshot_compaction,
+            experimental_chat_completions,
         } = self;
         export_to_env_if_not_present(MEILI_DB_PATH, db_path);
         export_to_env_if_not_present(MEILI_HTTP_ADDR, http_addr);
@@ -671,6 +674,10 @@ impl Opt {
         export_to_env_if_not_present(
             MEILI_EXPERIMENTAL_NO_SNAPSHOT_COMPACTION,
             experimental_no_snapshot_compaction.to_string(),
+        );
+        export_to_env_if_not_present(
+            MEILI_EXPERIMENTAL_CHAT_COMPLETIONS,
+            experimental_chat_completions.to_string(),
         );
         indexer_options.export_to_env();
     }

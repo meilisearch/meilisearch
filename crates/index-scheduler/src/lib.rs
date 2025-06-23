@@ -45,6 +45,9 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
+use crate::features::FeatureData;
+use crate::index_mapper::IndexMapper;
+use crate::utils::clamp_to_page_size;
 use dump::Dump;
 pub use error::Error;
 pub use features::RoFeatures;
@@ -73,9 +76,6 @@ use roaring::RoaringBitmap;
 use scheduler::Scheduler;
 use time::OffsetDateTime;
 use versioning::Versioning;
-
-use crate::index_mapper::IndexMapper;
-use crate::utils::clamp_to_page_size;
 
 pub(crate) type BEI128 = I128<BE>;
 
@@ -139,6 +139,8 @@ pub struct IndexSchedulerOptions {
     pub embedding_cache_cap: usize,
     /// Snapshot compaction status.
     pub experimental_no_snapshot_compaction: bool,
+    /// Whether the chat completions are enabled or not.
+    pub experimental_chat_completions: bool,
 }
 
 /// Structure which holds meilisearch's indexes and schedules the tasks
@@ -276,7 +278,7 @@ impl IndexScheduler {
                 .open(&options.tasks_path)
         }?;
 
-        // We **must** starts by upgrading the version because it'll also upgrade the required database before we can open them
+        // We **must** start by upgrading the version because it'll also upgrade the required database before we can open them
         let version = versioning::Versioning::new(&env, from_db_version)?;
 
         let mut wtxn = env.write_txn()?;
@@ -284,7 +286,10 @@ impl IndexScheduler {
         let queue = Queue::new(&env, &mut wtxn, &options)?;
         let index_mapper = IndexMapper::new(&env, &mut wtxn, &options, budget)?;
         let chat_settings = env.create_database(&mut wtxn, Some(CHAT_SETTINGS_DB_NAME))?;
+
         wtxn.commit()?;
+
+        configure_experimental_features(&env, &features, &options)?;
 
         // allow unreachable_code to get rids of the warning in the case of a test build.
         let this = Self {
@@ -944,6 +949,22 @@ impl IndexScheduler {
         wtxn.commit()?;
         Ok(deleted)
     }
+}
+
+fn configure_experimental_features(
+    env: &Env<WithoutTls>,
+    features: &FeatureData,
+    options: &IndexSchedulerOptions,
+) -> Result<()> {
+    let current_features = features.features().runtime_features();
+
+    let new_features = RuntimeTogglableFeatures {
+        chat_completions: options.experimental_chat_completions,
+        ..current_features
+    };
+
+    let wtxn = env.write_txn().map_err(Error::HeedTransaction)?;
+    features.put_runtime_features(wtxn, new_features)
 }
 
 /// The outcome of calling the [`IndexScheduler::tick`] function.
