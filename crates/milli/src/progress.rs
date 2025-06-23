@@ -1,7 +1,7 @@
 use std::any::TypeId;
 use std::borrow::Cow;
 use std::marker::PhantomData;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
@@ -13,8 +13,8 @@ use utoipa::ToSchema;
 
 pub trait Step: 'static + Send + Sync {
     fn name(&self) -> Cow<'static, str>;
-    fn current(&self) -> u32;
-    fn total(&self) -> u32;
+    fn current(&self) -> u64;
+    fn total(&self) -> u64;
 }
 
 #[derive(Clone, Default)]
@@ -113,13 +113,13 @@ pub trait NamedStep: 'static + Send + Sync + Default {
 /// - The total number of steps doesn't change
 pub struct AtomicSubStep<Name: NamedStep> {
     unit_name: Name,
-    current: Arc<AtomicU32>,
-    total: u32,
+    current: Arc<AtomicU64>,
+    total: u64,
 }
 
 impl<Name: NamedStep> AtomicSubStep<Name> {
-    pub fn new(total: u32) -> (Arc<AtomicU32>, Self) {
-        let current = Arc::new(AtomicU32::new(0));
+    pub fn new(total: u64) -> (Arc<AtomicU64>, Self) {
+        let current = Arc::new(AtomicU64::new(0));
         (current.clone(), Self { current, total, unit_name: Name::default() })
     }
 }
@@ -129,11 +129,11 @@ impl<Name: NamedStep> Step for AtomicSubStep<Name> {
         self.unit_name.name().into()
     }
 
-    fn current(&self) -> u32 {
+    fn current(&self) -> u64 {
         self.current.load(Ordering::Relaxed)
     }
 
-    fn total(&self) -> u32 {
+    fn total(&self) -> u64 {
         self.total
     }
 }
@@ -164,13 +164,13 @@ macro_rules! make_enum_progress {
                 }
             }
 
-            fn current(&self) -> u32 {
-                *self as u32
+            fn current(&self) -> u64 {
+                *self as u64
             }
 
-            fn total(&self) -> u32 {
+            fn total(&self) -> u64 {
                 use $crate::progress::_private_enum_iterator::Sequence;
-                Self::CARDINALITY as u32
+                Self::CARDINALITY as u64
             }
         }
     };
@@ -216,8 +216,8 @@ pub struct ProgressView {
 #[schema(rename_all = "camelCase")]
 pub struct ProgressStepView {
     pub current_step: Cow<'static, str>,
-    pub finished: u32,
-    pub total: u32,
+    pub finished: u64,
+    pub total: u64,
 }
 
 /// Used when the name can change but it's still the same step.
@@ -233,13 +233,13 @@ pub struct ProgressStepView {
 /// ```
 pub struct VariableNameStep<U: Send + Sync + 'static> {
     name: String,
-    current: u32,
-    total: u32,
+    current: u64,
+    total: u64,
     phantom: PhantomData<U>,
 }
 
 impl<U: Send + Sync + 'static> VariableNameStep<U> {
-    pub fn new(name: impl Into<String>, current: u32, total: u32) -> Self {
+    pub fn new(name: impl Into<String>, current: u64, total: u64) -> Self {
         Self { name: name.into(), current, total, phantom: PhantomData }
     }
 }
@@ -249,11 +249,11 @@ impl<U: Send + Sync + 'static> Step for VariableNameStep<U> {
         self.name.clone().into()
     }
 
-    fn current(&self) -> u32 {
+    fn current(&self) -> u64 {
         self.current
     }
 
-    fn total(&self) -> u32 {
+    fn total(&self) -> u64 {
         self.total
     }
 }
@@ -263,8 +263,8 @@ impl Step for arroy::MainStep {
         match self {
             arroy::MainStep::PreProcessingTheItems => "pre processing the items",
             arroy::MainStep::WritingTheDescendantsAndMetadata => {
-                "writing the descendants and metadata"
-            }
+                        "writing the descendants and metadata"
+                    }
             arroy::MainStep::RetrieveTheUpdatedItems => "retrieve the updated items",
             arroy::MainStep::WriteTheMetadata => "write the metadata",
             arroy::MainStep::RetrievingTheItemsIds => "retrieving the items ids",
@@ -272,19 +272,20 @@ impl Step for arroy::MainStep {
             arroy::MainStep::DeletingExtraTrees => "deleting extra trees",
             arroy::MainStep::RemoveItemsFromExistingTrees => "remove items from existing trees",
             arroy::MainStep::InsertItemsInCurrentTrees => "insert items in current trees",
-            arroy::MainStep::IncrementalIndexLargeDescendants => {
-                "incremental index large descendants"
-            }
+            arroy::MainStep::RetrievingTheItems => "retrieving the items",
+            arroy::MainStep::RetrievingTheTreeNodes => "retrieving the tree nodes",
+            arroy::MainStep::RetrieveTheLargeDescendants => "retrieve the large descendants",
+            arroy::MainStep::CreateTreesForItems => "create trees for items",
         }
         .into()
     }
 
-    fn current(&self) -> u32 {
-        *self as u32
+    fn current(&self) -> u64 {
+        *self as u64
     }
 
-    fn total(&self) -> u32 {
-        Self::CARDINALITY as u32
+    fn total(&self) -> u64 {
+        Self::CARDINALITY as u64
     }
 }
 
@@ -293,11 +294,11 @@ impl Step for arroy::SubStep {
         self.unit.into()
     }
 
-    fn current(&self) -> u32 {
+    fn current(&self) -> u64 {
         self.current.load(Ordering::Relaxed)
     }
 
-    fn total(&self) -> u32 {
+    fn total(&self) -> u64 {
         self.max
     }
 }

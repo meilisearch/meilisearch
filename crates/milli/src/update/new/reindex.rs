@@ -11,7 +11,7 @@ pub fn field_distribution(index: &Index, wtxn: &mut RwTxn<'_>, progress: &Progre
     let field_id_map = index.fields_ids_map(wtxn)?;
 
     let (update_document_count, sub_step) =
-        AtomicSubStep::<progress::Document>::new(document_count as u32);
+        AtomicSubStep::<progress::Document>::new(document_count as u64);
     progress.update_progress(sub_step);
 
     let docids = index.documents_ids(wtxn)?;

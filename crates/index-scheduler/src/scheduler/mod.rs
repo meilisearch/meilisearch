@@ -237,7 +237,7 @@ impl IndexScheduler {
                 #[cfg(test)]
                 self.breakpoint(crate::test_utils::Breakpoint::ProcessBatchSucceeded);
 
-                let (task_progress, task_progress_obj) = AtomicTaskStep::new(tasks.len() as u32);
+                let (task_progress, task_progress_obj) = AtomicTaskStep::new(tasks.len() as u64);
                 progress.update_progress(task_progress_obj);
                 process_batch_info = info;
                 let mut success = 0;
@@ -316,7 +316,7 @@ impl IndexScheduler {
             Err(err) => {
                 #[cfg(test)]
                 self.breakpoint(crate::test_utils::Breakpoint::ProcessBatchFailed);
-                let (task_progress, task_progress_obj) = AtomicTaskStep::new(ids.len() as u32);
+                let (task_progress, task_progress_obj) = AtomicTaskStep::new(ids.len() as u64);
                 progress.update_progress(task_progress_obj);
 
                 if matches!(err, Error::DatabaseUpgrade(_)) {
