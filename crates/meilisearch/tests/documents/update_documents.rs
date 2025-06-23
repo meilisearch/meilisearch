@@ -34,7 +34,7 @@ async fn document_update_with_primary_key() {
     let (response, code) = index.update_documents(documents, Some("primary")).await;
     assert_eq!(code, 202);
 
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index.get_task(response.uid()).await;
     assert_eq!(code, 200);
@@ -63,7 +63,7 @@ async fn update_document() {
     let (response, code) = index.add_documents(documents, None).await;
     assert_eq!(code, 202);
 
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
 
     let documents = json!([
         {
@@ -75,7 +75,7 @@ async fn update_document() {
     let (response, code) = index.update_documents(documents, None).await;
     assert_eq!(code, 202, "response: {}", response);
 
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index.get_task(response.uid()).await;
     assert_eq!(code, 200);
@@ -107,7 +107,7 @@ async fn update_document_gzip_encoded() {
     let (response, code) = index.add_documents(documents, None).await;
     assert_eq!(code, 202);
 
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
 
     let documents = json!([
         {
@@ -119,7 +119,7 @@ async fn update_document_gzip_encoded() {
     let (response, code) = index.update_documents(documents, None).await;
     assert_eq!(code, 202, "response: {}", response);
 
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index.get_task(response.uid()).await;
     assert_eq!(code, 200);
@@ -142,7 +142,7 @@ async fn update_larger_dataset() {
     let index = server.unique_index();
     let documents = serde_json::from_str(include_str!("../assets/test_set.json")).unwrap();
     let (task, _code) = index.update_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
     let (response, code) = index.get_task(task.uid()).await;
     assert_eq!(code, 200);
     assert_eq!(response["type"], "documentAdditionOrUpdate");
@@ -166,7 +166,7 @@ async fn error_update_documents_bad_document_id() {
         }
     ]);
     let (task, _code) = index.update_documents(documents, None).await;
-    let response = index.wait_task(task.uid()).await;
+    let response = server.wait_task(task.uid()).await;
     assert_eq!(response["status"], json!("failed"));
     assert_eq!(
         response["error"]["message"],
@@ -194,7 +194,7 @@ async fn error_update_documents_missing_document_id() {
         }
     ]);
     let (task, _code) = index.update_documents(documents, None).await;
-    let response = index.wait_task(task.uid()).await;
+    let response = server.wait_task(task.uid()).await;
     assert_eq!(response["status"], "failed");
     assert_eq!(
         response["error"]["message"],
@@ -219,7 +219,7 @@ async fn update_faceted_document() {
         }))
         .await;
     assert_eq!("202", code.as_str(), "{:?}", response);
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
 
     let documents: Vec<_> = (0..1000)
         .map(|id| {
@@ -233,7 +233,7 @@ async fn update_faceted_document() {
     let (response, code) = index.add_documents(documents.into(), None).await;
     assert_eq!(code, 202);
 
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
 
     let documents = json!([
         {
@@ -245,7 +245,7 @@ async fn update_faceted_document() {
     let (response, code) = index.update_documents(documents, None).await;
     assert_eq!(code, 202, "response: {}", response);
 
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
 
     index
         .search(json!({"limit": 10}), |response, code| {

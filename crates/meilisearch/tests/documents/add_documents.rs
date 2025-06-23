@@ -293,7 +293,7 @@ async fn add_csv_document() {
       "enqueuedAt": "[date]"
     }
     "#);
-    let response = index.wait_task(response.uid()).await.succeeded();
+    let response = server.wait_task(response.uid()).await.succeeded();
     snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".duration" => "[duration]" }), @r###"
     {
       "uid": "[uid]",
@@ -358,7 +358,7 @@ async fn add_csv_document_with_types() {
       "enqueuedAt": "[date]"
     }
     "#);
-    let response = index.wait_task(response.uid()).await.succeeded();
+    let response = server.wait_task(response.uid()).await.succeeded();
     snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".duration" => "[duration]" }), @r###"
     {
       "uid": "[uid]",
@@ -434,7 +434,7 @@ async fn add_csv_document_with_custom_delimiter() {
       "enqueuedAt": "[date]"
     }
     "#);
-    let response = index.wait_task(response.uid()).await.succeeded();
+    let response = server.wait_task(response.uid()).await.succeeded();
     snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".duration" => "[duration]" }), @r###"
     {
       "uid": "[uid]",
@@ -991,7 +991,7 @@ async fn add_documents_no_index_creation() {
     let (response, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
 
-    let response = index.wait_task(response.uid()).await.succeeded();
+    let response = server.wait_task(response.uid()).await.succeeded();
     snapshot!(code, @"202 Accepted");
     snapshot!(response,
         @r###"
@@ -1068,7 +1068,7 @@ async fn document_addition_with_primary_key() {
     }
     "#);
 
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index.get_task(response.uid()).await;
     snapshot!(code, @"200 OK");
@@ -1120,7 +1120,7 @@ async fn document_addition_with_huge_int_primary_key() {
     let (response, code) = index.add_documents(documents, Some("primary")).await;
     snapshot!(code, @"202 Accepted");
 
-    let response = index.wait_task(response.uid()).await.succeeded();
+    let response = server.wait_task(response.uid()).await.succeeded();
     snapshot!(response,
         @r###"
     {
@@ -1178,7 +1178,7 @@ async fn replace_document() {
     }
     "#);
 
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
 
     let documents = json!([
         {
@@ -1190,7 +1190,7 @@ async fn replace_document() {
     let (task, code) = index.add_documents(documents, None).await;
     snapshot!(code,@"202 Accepted");
 
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
@@ -1362,7 +1362,7 @@ async fn error_add_documents_bad_document_id() {
         }
     ]);
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.failed();
+    server.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
@@ -1399,7 +1399,7 @@ async fn error_add_documents_bad_document_id() {
         }
     ]);
     let (value, _code) = index.add_documents(documents, None).await;
-    index.wait_task(value.uid()).await.failed();
+    server.wait_task(value.uid()).await.failed();
     let (response, code) = index.get_task(value.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
@@ -1436,7 +1436,7 @@ async fn error_add_documents_bad_document_id() {
         }
     ]);
     let (value, _code) = index.add_documents(documents, None).await;
-    index.wait_task(value.uid()).await.failed();
+    server.wait_task(value.uid()).await.failed();
     let (response, code) = index.get_task(value.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
@@ -1478,7 +1478,7 @@ async fn error_add_documents_missing_document_id() {
         }
     ]);
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.failed();
+    server.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
@@ -1527,7 +1527,7 @@ async fn error_document_field_limit_reached_in_one_document() {
     let (response, code) = index.update_documents(documents, Some("id")).await;
     snapshot!(code, @"202 Accepted");
 
-    let response = index.wait_task(response.uid()).await.failed();
+    let response = server.wait_task(response.uid()).await.failed();
     snapshot!(code, @"202 Accepted");
     // Documents without a primary key are not accepted.
     snapshot!(response,
@@ -1576,7 +1576,7 @@ async fn error_document_field_limit_reached_over_multiple_documents() {
     let (response, code) = index.update_documents(documents, Some("id")).await;
     snapshot!(code, @"202 Accepted");
 
-    let response = index.wait_task(response.uid()).await.succeeded();
+    let response = server.wait_task(response.uid()).await.succeeded();
     snapshot!(code, @"202 Accepted");
     snapshot!(response,
         @r###"
@@ -1611,7 +1611,7 @@ async fn error_document_field_limit_reached_over_multiple_documents() {
     let (response, code) = index.update_documents(documents, Some("id")).await;
     snapshot!(code, @"202 Accepted");
 
-    let response = index.wait_task(response.uid()).await.failed();
+    let response = server.wait_task(response.uid()).await.failed();
     snapshot!(code, @"202 Accepted");
     snapshot!(response,
         @r###"
@@ -1660,7 +1660,7 @@ async fn error_document_field_limit_reached_in_one_nested_document() {
     let (response, code) = index.update_documents(documents, Some("id")).await;
     snapshot!(code, @"202 Accepted");
 
-    let response = index.wait_task(response.uid()).await.succeeded();
+    let response = server.wait_task(response.uid()).await.succeeded();
     snapshot!(code, @"202 Accepted");
     // Documents without a primary key are not accepted.
     snapshot!(response,
@@ -1705,7 +1705,7 @@ async fn error_document_field_limit_reached_over_multiple_documents_with_nested_
     let (response, code) = index.update_documents(documents, Some("id")).await;
     snapshot!(code, @"202 Accepted");
 
-    let response = index.wait_task(response.uid()).await.succeeded();
+    let response = server.wait_task(response.uid()).await.succeeded();
     snapshot!(code, @"202 Accepted");
     snapshot!(response,
         @r###"
@@ -1741,7 +1741,7 @@ async fn error_document_field_limit_reached_over_multiple_documents_with_nested_
     let (response, code) = index.update_documents(documents, Some("id")).await;
     snapshot!(code, @"202 Accepted");
 
-    let response = index.wait_task(response.uid()).await.succeeded();
+    let response = server.wait_task(response.uid()).await.succeeded();
     snapshot!(code, @"202 Accepted");
     snapshot!(response,
         @r###"
@@ -1790,7 +1790,7 @@ async fn add_documents_with_geo_field() {
     ]);
 
     let (task, _status_code) = index.add_documents(documents, None).await;
-    let response = index.wait_task(task.uid()).await.succeeded();
+    let response = server.wait_task(task.uid()).await.succeeded();
     snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r#"
     {
@@ -1914,7 +1914,7 @@ async fn update_documents_with_geo_field() {
     ]);
 
     let (task, _status_code) = index.add_documents(documents, None).await;
-    let response = index.wait_task(task.uid()).await.succeeded();
+    let response = server.wait_task(task.uid()).await.succeeded();
     snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r#"
     {
@@ -1983,7 +1983,7 @@ async fn update_documents_with_geo_field() {
         }
     ]);
     let (task, _status_code) = index.update_documents(updated_documents, None).await;
-    let response = index.wait_task(task.uid()).await.succeeded();
+    let response = server.wait_task(task.uid()).await.succeeded();
     snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
@@ -2097,7 +2097,7 @@ async fn add_documents_invalid_geo_field() {
     ]);
 
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.failed();
+    server.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".indexUid" => "[uuid]" }),
@@ -2135,7 +2135,7 @@ async fn add_documents_invalid_geo_field() {
     ]);
 
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.failed();
+    server.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
@@ -2173,7 +2173,7 @@ async fn add_documents_invalid_geo_field() {
     ]);
 
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.failed();
+    server.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
@@ -2211,7 +2211,7 @@ async fn add_documents_invalid_geo_field() {
     ]);
 
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.failed();
+    server.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
@@ -2249,7 +2249,7 @@ async fn add_documents_invalid_geo_field() {
     ]);
 
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.failed();
+    server.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
@@ -2287,7 +2287,7 @@ async fn add_documents_invalid_geo_field() {
     ]);
 
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.failed();
+    server.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
@@ -2325,7 +2325,7 @@ async fn add_documents_invalid_geo_field() {
     ]);
 
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.failed();
+    server.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
@@ -2363,7 +2363,7 @@ async fn add_documents_invalid_geo_field() {
     ]);
 
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.failed();
+    server.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
@@ -2401,7 +2401,7 @@ async fn add_documents_invalid_geo_field() {
     ]);
 
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.failed();
+    server.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
@@ -2439,7 +2439,7 @@ async fn add_documents_invalid_geo_field() {
     ]);
 
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.failed();
+    server.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
@@ -2477,7 +2477,7 @@ async fn add_documents_invalid_geo_field() {
     ]);
 
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.failed();
+    server.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
@@ -2515,7 +2515,7 @@ async fn add_documents_invalid_geo_field() {
     ]);
 
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.failed();
+    server.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
@@ -2556,7 +2556,7 @@ async fn add_documents_invalid_geo_field() {
 
     let (response, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let response = index.wait_task(response.uid()).await.failed();
+    let response = server.wait_task(response.uid()).await.failed();
     snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
@@ -2593,7 +2593,7 @@ async fn add_documents_invalid_geo_field() {
 
     let (response, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let response = index.wait_task(response.uid()).await.failed();
+    let response = server.wait_task(response.uid()).await.failed();
     snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
@@ -2630,7 +2630,7 @@ async fn add_documents_invalid_geo_field() {
 
     let (response, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let response = index.wait_task(response.uid()).await.failed();
+    let response = server.wait_task(response.uid()).await.failed();
     snapshot!(json_string!(response, { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
         @r###"
     {
@@ -2674,7 +2674,7 @@ async fn add_invalid_geo_and_then_settings() {
     ]);
     let (ret, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let ret = index.wait_task(ret.uid()).await.succeeded();
+    let ret = server.wait_task(ret.uid()).await.succeeded();
     snapshot!(ret, @r###"
     {
       "uid": "[uid]",
@@ -2697,7 +2697,7 @@ async fn add_invalid_geo_and_then_settings() {
 
     let (ret, code) = index.update_settings(json!({ "sortableAttributes": ["_geo"] })).await;
     snapshot!(code, @"202 Accepted");
-    let ret = index.wait_task(ret.uid()).await.failed();
+    let ret = server.wait_task(ret.uid()).await.failed();
     snapshot!(ret, @r###"
     {
       "uid": "[uid]",
@@ -2765,7 +2765,7 @@ async fn error_primary_key_inference() {
     ]);
 
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.failed();
+    server.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     assert_eq!(code, 200);
 
@@ -2806,7 +2806,7 @@ async fn error_primary_key_inference() {
     ]);
 
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.failed();
+    server.wait_task(task.uid()).await.failed();
     let (response, code) = index.get_task(task.uid()).await;
     assert_eq!(code, 200);
 
@@ -2845,7 +2845,7 @@ async fn error_primary_key_inference() {
     ]);
 
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
     let (response, code) = index.get_task(task.uid()).await;
     assert_eq!(code, 200);
 
@@ -2884,12 +2884,12 @@ async fn add_documents_with_primary_key_twice() {
     ]);
 
     let (task, _status_code) = index.add_documents(documents.clone(), Some("title")).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
     let (response, _code) = index.get_task(task.uid()).await;
     assert_eq!(response["status"], "succeeded");
 
     let (task, _status_code) = index.add_documents(documents, Some("title")).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
     let (response, _code) = index.get_task(task.uid()).await;
     assert_eq!(response["status"], "succeeded");
 }
@@ -2922,7 +2922,7 @@ async fn batch_several_documents_addition() {
     // wait first batch of documents to finish
     let finished_tasks = futures::future::join_all(waiter).await;
     for (task, _code) in finished_tasks {
-        index.wait_task(task.uid()).await;
+        server.wait_task(task.uid()).await;
     }
 
     // run a second completely failing batch
@@ -2936,7 +2936,7 @@ async fn batch_several_documents_addition() {
     // wait second batch of documents to finish
     let finished_tasks = futures::future::join_all(waiter).await;
     for (task, _code) in finished_tasks {
-        index.wait_task(task.uid()).await;
+        server.wait_task(task.uid()).await;
     }
 
     let (response, _code) = index.filtered_tasks(&[], &["failed"], &[]).await;
