@@ -60,8 +60,8 @@ async fn list_multiple_indexes() {
     let index_with_key = server.unique_index();
     let (response_with_key, _status_code) = index_with_key.create(Some("key")).await;
 
-    index_without_key.wait_task(response_without_key.uid()).await.succeeded();
-    index_with_key.wait_task(response_with_key.uid()).await.succeeded();
+    server.wait_task(response_without_key.uid()).await.succeeded();
+    server.wait_task(response_with_key.uid()).await.succeeded();
 
     let (response, code) = server.list_indexes(None, Some(1000)).await;
     assert_eq!(code, 200);
@@ -81,8 +81,9 @@ async fn get_and_paginate_indexes() {
     let server = Server::new().await;
     const NB_INDEXES: usize = 50;
     for i in 0..NB_INDEXES {
-        server.index(format!("test_{i:02}")).create(None).await;
-        server.index(format!("test_{i:02}")).wait_task(i as u64).await;
+        let (task, code) = server.index(format!("test_{i:02}")).create(None).await;
+        assert_eq!(code, 202);
+        server.wait_task(task.uid()).await;
     }
 
     // basic
