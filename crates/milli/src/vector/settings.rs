@@ -645,6 +645,13 @@ pub struct EmbedderAction {
     pub is_being_quantized: bool,
     pub write_back: Option<WriteBackToDocuments>,
     pub reindex: Option<ReindexAction>,
+    pub remove_fragments: Option<RemoveFragments>,
+}
+
+#[derive(Debug)]
+pub struct RemoveFragments {
+    pub fragment_ids: Vec<u8>,
+    pub embedder_id: u8,
 }
 
 impl EmbedderAction {
@@ -660,6 +667,10 @@ impl EmbedderAction {
         self.reindex.as_ref()
     }
 
+    pub fn remove_fragments(&self) -> Option<&RemoveFragments> {
+        self.remove_fragments.as_ref()
+    }
+
     pub fn with_is_being_quantized(mut self, quantize: bool) -> Self {
         self.is_being_quantized = quantize;
         self
@@ -671,11 +682,23 @@ impl EmbedderAction {
             is_being_quantized: false,
             write_back: Some(write_back),
             reindex: None,
+            remove_fragments: None,
         }
     }
 
     pub fn with_reindex(reindex: ReindexAction, was_quantized: bool) -> Self {
-        Self { was_quantized, is_being_quantized: false, write_back: None, reindex: Some(reindex) }
+        Self {
+            was_quantized,
+            is_being_quantized: false,
+            write_back: None,
+            reindex: Some(reindex),
+            remove_fragments: None,
+        }
+    }
+
+    pub fn with_remove_fragments(mut self, remove_fragments: RemoveFragments) -> Self {
+        self.remove_fragments = Some(remove_fragments);
+        self
     }
 }
 
@@ -1120,7 +1143,7 @@ impl SettingsDiff {
             }
             // add all fragments
             (_, Setting::Set(new_fragments)) => {
-                for (name, _) in &new_fragments {
+                for name in new_fragments.keys() {
                     regenerate_fragments.push((name.clone(), RegenerateFragment::Add));
                 }
                 Setting::Set(new_fragments)
@@ -2301,6 +2324,8 @@ impl SubEmbedderOptions {
             distribution: distribution.set(),
         })
     }
+
+    #[allow(clippy::too_many_arguments)]
     fn rest(
         url: String,
         api_key: Setting<String>,

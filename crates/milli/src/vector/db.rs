@@ -9,6 +9,7 @@ use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::vector::settings::RemoveFragments;
 use crate::vector::EmbeddingConfig;
 use crate::{CboRoaringBitmapCodec, DocumentId};
 
@@ -31,20 +32,37 @@ impl FragmentConfigs {
         self.0.as_slice()
     }
 
-    pub fn add_new_fragments(&mut self, new_fragments: impl IntoIterator<Item = (String, Value)>) {
+    pub fn remove_fragments<'a>(
+        &mut self,
+        embedder_id: u8,
+        fragments: impl IntoIterator<Item = &'a str>,
+    ) -> Option<RemoveFragments> {
+        let mut remove_fragments = Vec::new();
+        for fragment in fragments {
+            let Ok(index_to_remove) = self.0.binary_search_by_key(&fragment, |f| &f.name) else {
+                continue;
+            };
+            let fragment = self.0.swap_remove(index_to_remove);
+            remove_fragments.push(fragment.id);
+        }
+        (!remove_fragments.is_empty())
+            .then_some(RemoveFragments { fragment_ids: remove_fragments, embedder_id })
+    }
+
+    pub fn add_new_fragments(&mut self, new_fragments: impl IntoIterator<Item = String>) {
         let mut free_indices: [bool; u8::MAX as usize] = [true; u8::MAX as usize];
 
-        for FragmentConfig { id, name: _, fragment: _ } in self.0.iter() {
+        for FragmentConfig { id, name: _ } in self.0.iter() {
             free_indices[*id as usize] = false;
         }
         let mut free_indices = free_indices.iter_mut().enumerate();
         let mut find_free_index =
             move || free_indices.find(|(_, free)| **free).map(|(index, _)| index as u8);
 
-        for (name, fragment) in new_fragments {
+        for name in new_fragments {
             /// FIXME: add error here if more than 256 fragments
             let id = find_free_index().unwrap();
-            self.0.push(FragmentConfig { id, name, fragment })
+            self.0.push(FragmentConfig { id, name })
         }
     }
 }
@@ -53,7 +71,6 @@ impl FragmentConfigs {
 pub struct FragmentConfig {
     pub id: u8,
     pub name: String,
-    pub fragment: Value,
 }
 
 pub struct IndexEmbeddingConfigs {

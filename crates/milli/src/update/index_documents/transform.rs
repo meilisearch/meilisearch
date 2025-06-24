@@ -31,7 +31,7 @@ use crate::update::index_documents::GrenadParameters;
 use crate::update::settings::{InnerIndexSettings, InnerIndexSettingsDiff};
 use crate::update::{AvailableIds, UpdateIndexingStep};
 use crate::vector::parsed_vectors::{ExplicitVectors, VectorOrArrayOfVectors};
-use crate::vector::settings::WriteBackToDocuments;
+use crate::vector::settings::{RemoveFragments, WriteBackToDocuments};
 use crate::vector::ArroyWrapper;
 use crate::{FieldDistribution, FieldId, FieldIdMapMissingEntry, Index, Result};
 
@@ -933,8 +933,22 @@ impl<'a, 'i> Transform<'a, 'i> {
 
         // delete all vectors from the embedders that need removal
         for (_, (reader, _)) in readers {
-            let dimensions = reader.dimensions(wtxn)?;
+            let Some(dimensions) = reader.dimensions(wtxn)? else {
+                continue;
+            };
             reader.clear(wtxn, dimensions)?;
+        }
+
+        // remove all vectors for the specified fragments
+        for (RemoveFragments { embedder_id, fragment_ids }, was_quantized) in
+            settings_diff.embedding_config_updates.iter().filter_map(|(_, action)| {
+                action.remove_fragments().map(|fragments| (fragments, action.was_quantized))
+            })
+        {
+            let arroy = ArroyWrapper::new(self.index.vector_arroy, *embedder_id, was_quantized);
+            for fragment_id in fragment_ids {
+                arroy.clear_store(wtxn, *fragment_id)?;
+            }
         }
 
         let grenad_params = GrenadParameters {

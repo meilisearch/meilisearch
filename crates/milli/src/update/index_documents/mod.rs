@@ -487,7 +487,9 @@ where
                 )?;
                 let reader =
                     ArroyWrapper::new(self.index.vector_arroy, index, action.was_quantized);
-                let dim = reader.dimensions(self.wtxn)?;
+                let Some(dim) = reader.dimensions(self.wtxn)? else {
+                    continue;
+                };
                 dimension.insert(name.to_string(), dim);
             }
         }

@@ -30,7 +30,7 @@ use crate::prompt::{default_max_bytes, default_template_text, PromptData};
 use crate::proximity::ProximityPrecision;
 use crate::update::index_documents::IndexDocumentsMethod;
 use crate::update::{IndexDocuments, UpdateIndexingStep};
-use crate::vector::db::IndexEmbeddingConfig;
+use crate::vector::db::{FragmentConfigs, IndexEmbeddingConfig};
 use crate::vector::settings::{
     EmbedderAction, EmbedderSource, EmbeddingSettings, NestingContext, ReindexAction,
     SubEmbeddingSettings, WriteBackToDocuments,
@@ -1081,9 +1081,11 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         use crate::vector::settings::SettingsDiff;
         let embedders = self.index.embedding_configs();
         let old_configs = embedders.embedding_configs(self.wtxn)?;
-        let old_configs: BTreeMap<String, EmbeddingSettings> = old_configs
+        let old_configs: BTreeMap<String, (EmbeddingSettings, FragmentConfigs)> = old_configs
             .into_iter()
-            .map(|IndexEmbeddingConfig { name, config, fragments }| (name, (config.into())))
+            .map(|IndexEmbeddingConfig { name, config, fragments }| {
+                (name, (config.into(), fragments))
+            })
             .collect();
         let mut updated_configs = BTreeMap::new();
         let mut embedder_actions = BTreeMap::new();
@@ -1093,7 +1095,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         {
             match joined {
                 // updated config
-                EitherOrBoth::Both((name, old), (_, new)) => {
+                EitherOrBoth::Both((name, (old, mut fragments)), (_, new)) => {
                     let was_quantized = old.binary_quantized.set().unwrap_or_default();
                     let settings_diff = SettingsDiff::from_settings(&name, old, new)?;
                     match settings_diff {
@@ -1121,15 +1123,51 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                             );
                         }
                         SettingsDiff::Reindex { action, updated_settings, quantize } => {
+                            let mut remove_fragments = None;
+                            if let ReindexAction::RegenerateFragments(regenerate_fragments) =
+                                &action
+                            {
+                                let embedder_id = embedders.embedder_id(self.wtxn, &name)?;
+                                let it = regenerate_fragments
+                                    .iter()
+                                    .filter(|(_, action)| {
+                                        matches!(
+                                            action,
+                                            crate::vector::settings::RegenerateFragment::Remove
+                                        )
+                                    })
+                                    .map(|(name, _)| name.as_str());
+                                if let Some(embedder_id) = embedder_id {
+                                    remove_fragments = fragments.remove_fragments(embedder_id, it);
+                                }
+
+                                let it = regenerate_fragments
+                                    .iter()
+                                    .filter(|(_, action)| {
+                                        matches!(
+                                            action,
+                                            crate::vector::settings::RegenerateFragment::Add
+                                        )
+                                    })
+                                    .map(|(name, _)| name.clone());
+                                fragments.add_new_fragments(it);
+                            }
                             tracing::debug!(embedder = name, ?action, "reindex embedder");
-                            embedder_actions.insert(
-                                name.clone(),
+
+                            let embedder_action =
                                 EmbedderAction::with_reindex(action, was_quantized)
-                                    .with_is_being_quantized(quantize),
-                            );
+                                    .with_is_being_quantized(quantize);
+
+                            let embedder_action = if let Some(remove_fragments) = remove_fragments {
+                                embedder_action.with_remove_fragments(remove_fragments)
+                            } else {
+                                embedder_action
+                            };
+
+                            embedder_actions.insert(name.clone(), embedder_action);
                             let new =
                                 validate_embedding_settings(Setting::Set(updated_settings), &name)?;
-                            updated_configs.insert(name, new);
+                            updated_configs.insert(name, (new, fragments));
                         }
                         SettingsDiff::UpdateWithoutReindex { updated_settings, quantize } => {
                             tracing::debug!(embedder = name, "update without reindex embedder");
@@ -1141,14 +1179,14 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                                     EmbedderAction::default().with_is_being_quantized(true),
                                 );
                             }
-                            updated_configs.insert(name, new);
+                            updated_configs.insert(name, (new, fragments));
                         }
                     }
                 }
                 // unchanged config
-                EitherOrBoth::Left((name, setting)) => {
+                EitherOrBoth::Left((name, (setting, fragments))) => {
                     tracing::debug!(embedder = name, "unchanged embedder");
-                    updated_configs.insert(name, Setting::Set(setting));
+                    updated_configs.insert(name, (Setting::Set(setting), fragments));
                 }
                 // new config
                 EitherOrBoth::Right((name, mut setting)) => {
@@ -1163,7 +1201,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                         name.clone(),
                         EmbedderAction::with_reindex(ReindexAction::FullReindex, false),
                     );
-                    updated_configs.insert(name, setting);
+                    updated_configs.insert(name, (setting, todo!()));
                 }
             }
         }
@@ -1179,9 +1217,9 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
 
         let updated_configs: Vec<IndexEmbeddingConfig> = updated_configs
             .into_iter()
-            .filter_map(|(name, config)| match config {
+            .filter_map(|(name, (config, fragments))| match config {
                 Setting::Set(config) => {
-                    Some(IndexEmbeddingConfig { name, config: config.into(), fragments: todo!() })
+                    Some(IndexEmbeddingConfig { name, config: config.into(), fragments })
                 }
                 Setting::Reset => None,
                 Setting::NotSet => Some(IndexEmbeddingConfig {
@@ -1501,13 +1539,31 @@ impl InnerIndexSettingsDiff {
                             was_quantized,
                         ));
                     }
-                    std::collections::btree_map::Entry::Occupied(entry) => {
+                    std::collections::btree_map::Entry::Occupied(mut entry) => {
+                        // future-proofing, make sure to destructure here so that any new field is taken into account in this case
+                        // case in point: adding `remove_fragments` was detected.
                         let EmbedderAction {
                             was_quantized: _,
                             is_being_quantized: _,
-                            write_back: _, // We are deleting this embedder, so no point in regeneration
-                            reindex: _,    // We are already fully reindexing
-                        } = entry.get();
+                            write_back, // We are deleting this embedder, so no point in regeneration
+                            reindex,
+                            remove_fragments: _,
+                        } = entry.get_mut();
+
+                        // fixup reindex to make sure we regenerate all fragments
+                        *reindex = match reindex.take() {
+                            Some(ReindexAction::RegenerateFragments(_)) => {
+                                Some(ReindexAction::RegeneratePrompts)
+                            }
+                            Some(reindex) => Some(reindex), // We are at least regenerating prompts
+                            None => {
+                                if write_back.is_none() {
+                                    Some(ReindexAction::RegeneratePrompts) // quantization case
+                                } else {
+                                    None
+                                }
+                            }
+                        };
                     }
                 };
             }
@@ -1869,8 +1925,7 @@ pub fn validate_embedding_settings(
                 .as_ref()
                 .set()
                 .iter()
-                .map(|map| map.iter())
-                .flatten()
+                .flat_map(|map| map.iter())
                 .filter_map(|(name, fragment)| {
                     Some((name.clone(), fragment.as_ref().map(|fragment| fragment.value.clone())?))
                 })
@@ -1879,8 +1934,7 @@ pub fn validate_embedding_settings(
                 .as_ref()
                 .set()
                 .iter()
-                .map(|map| map.iter())
-                .flatten()
+                .flat_map(|map| map.iter())
                 .filter_map(|(name, fragment)| {
                     Some((name.clone(), fragment.as_ref().map(|fragment| fragment.value.clone())?))
                 })
