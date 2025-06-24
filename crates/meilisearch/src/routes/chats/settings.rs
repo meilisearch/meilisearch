@@ -218,7 +218,6 @@ pub enum ChatCompletionSource {
     #[default]
     OpenAi,
     Mistral,
-    Gemini,
     AzureOpenAi,
     VLlm,
 }
@@ -229,7 +228,6 @@ impl From<ChatCompletionSource> for DbChatCompletionSource {
         match source {
             OpenAi => DbChatCompletionSource::OpenAi,
             Mistral => DbChatCompletionSource::Mistral,
-            Gemini => DbChatCompletionSource::Gemini,
             AzureOpenAi => DbChatCompletionSource::AzureOpenAi,
             VLlm => DbChatCompletionSource::VLlm,
         }
