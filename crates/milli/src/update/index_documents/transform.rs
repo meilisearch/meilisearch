@@ -940,14 +940,34 @@ impl<'a, 'i> Transform<'a, 'i> {
         }
 
         // remove all vectors for the specified fragments
-        for (RemoveFragments { embedder_id, fragment_ids }, was_quantized) in
-            settings_diff.embedding_config_updates.iter().filter_map(|(_, action)| {
-                action.remove_fragments().map(|fragments| (fragments, action.was_quantized))
+        for (embedder_name, RemoveFragments { fragment_ids }, was_quantized) in
+            settings_diff.embedding_config_updates.iter().filter_map(|(name, action)| {
+                action.remove_fragments().map(|fragments| (name, fragments, action.was_quantized))
             })
         {
-            let arroy = ArroyWrapper::new(self.index.vector_arroy, *embedder_id, was_quantized);
+            let Some(infos) = self.index.embedding_configs().embedder_info(wtxn, embedder_name)?
+            else {
+                continue;
+            };
+            let arroy =
+                ArroyWrapper::new(self.index.vector_arroy, infos.embedder_id, was_quantized);
             for fragment_id in fragment_ids {
-                arroy.clear_store(wtxn, *fragment_id)?;
+                // we must keep the user provided embeddings that ended up in this store
+
+                if infos.embedding_status.user_provided_docids().is_empty() {
+                    // no user provided: clear store
+                    arroy.clear_store(wtxn, *fragment_id)?;
+                    continue;
+                }
+
+                // some user provided, remove only the ids that are not user provided
+                let to_delete = arroy.items_in_store(wtxn, *fragment_id, |items| {
+                    items - infos.embedding_status.user_provided_docids()
+                })?;
+
+                for to_delete in to_delete {
+                    arroy.del_item_in_store(wtxn, to_delete, *fragment_id)?;
+                }
             }
         }
 
