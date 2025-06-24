@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::atomic::AtomicUsize;
 
 use meili_snap::{json_string, snapshot};
 use reqwest::IntoUrl;
@@ -338,36 +339,43 @@ async fn create_mock_raw() -> (MockServer, Value) {
     (mock_server, embedder_settings)
 }
 
-/// A mock server that returns 500 errors, and sends a message once 5 requests are received 
-async fn create_faulty_mock_raw(mut sender: mpsc::Sender<()>) -> (MockServer, Value) {
+async fn create_faulty_mock_raw(sender: mpsc::Sender<()>) -> (MockServer, Value) {
     let mock_server = MockServer::start().await;
-
+    let count = AtomicUsize::new(0);
+    
     Mock::given(method("POST"))
         .and(path("/"))
         .respond_with(move |req: &Request| {
-            let req: String = match req.body_json() {
-                Ok(req) => req,
+            let count = count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+
+            let req_body = match req.body_json::<Value>() {
+                Ok(body) => body,
                 Err(error) => {
                     return ResponseTemplate::new(400).set_body_json(json!({
-                      "error": format!("Invalid request: {error}")
+                        "error": format!("Invalid request: {error}")
                     }));
                 }
             };
 
-            let sender = sender.clone();
-            spawn(async move {
-                sender.send(()).await;
-            });
+            if count >= 5 {
+                let _ = sender.try_send(());
+                ResponseTemplate::new(500)
+                    .set_delay(Duration::from_secs(u64::MAX))
+                    .set_body_json(json!({
+                        "error": "Service Unavailable",
+                        "text": req_body
+                    }))
+            } else {
 
-            ResponseTemplate::new(500)
-                .set_delay(Duration::from_millis(500))
-                .set_body_json(json!({
+                ResponseTemplate::new(500).set_body_json(json!({
                     "error": "Service Unavailable",
-                    "text": req
+                    "text": req_body
                 }))
+            }
         })
         .mount(&mock_server)
         .await;
+
     let url = mock_server.uri();
 
     let embedder_settings = json!({
@@ -2187,12 +2195,9 @@ async fn observability() {
     snapshot!(code, @"202 Accepted");
 
     // The task will eventually fail, so let's not wait for it.
-    // Let's just wait for 5 errors from the mock server.
-    for _errors in 0..5 {
-        receiver.recv().await;
-    }
+    // Let's just wait for the server to block
+    receiver.recv().await;
 
     let batches = index.filtered_batches(&[], &[], &[]).await;
-    println!("Batches: {batches:?}");
-
+    snapshot!(task, @r###""###);
 }
