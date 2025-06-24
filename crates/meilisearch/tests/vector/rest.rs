@@ -2195,5 +2195,35 @@ async fn last_error_stats() {
     receiver.recv().await;
 
     let (response, _code) = index.filtered_batches(&[], &[], &[]).await;
-    snapshot!(response["results"][0], @r###""###);
+    snapshot!(json_string!(response["results"][0], { ".progress" => "[ignored]", ".stats.embedder.totalCount" => "[ignored]", ".startedAt" => "[ignored]" }), @r#"
+    {
+      "uid": 1,
+      "progress": "[ignored]",
+      "details": {
+        "receivedDocuments": 3,
+        "indexedDocuments": null
+      },
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "processing": 1
+        },
+        "types": {
+          "documentAdditionOrUpdate": 1
+        },
+        "indexUids": {
+          "doggo": 1
+        },
+        "embedder": {
+          "totalCount": "[ignored]",
+          "errorCount": 5,
+          "lastError": "runtime error: received internal error HTTP 500 from embedding server\n  - server replied with `{\"error\":\"Service Unavailable\",\"text\":\"will_error\"}`"
+        }
+      },
+      "duration": null,
+      "startedAt": "[ignored]",
+      "finishedAt": null,
+      "batchStrategy": "batched all enqueued tasks"
+    }
+    "#);
 }
