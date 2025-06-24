@@ -151,7 +151,7 @@ impl Key {
             name: Some("Default Read-Only Admin API Key".to_string()),
             description: Some("Use it to peek into the instance in a read-only mode. Caution! Do not expose it on a public frontend. It would give access to all other keys".to_string()),
             uid,
-            actions: vec![Action::AllGet],
+            actions: vec![Action::AllGet, Action::KeysGet],
             indexes: vec![IndexUidPattern::all()],
             expires_at: None,
             created_at: now,
@@ -444,14 +444,14 @@ impl Action {
             SnapshotsCreate => false,
             Version => true,
             KeysAdd => false,
-            KeysGet => true,
+            KeysGet => false, // Disabled in order to prevent privilege escalation
             KeysUpdate => false,
             KeysDelete => false,
             ExperimentalFeaturesGet => true,
             ExperimentalFeaturesUpdate => false,
             NetworkGet => true,
             NetworkUpdate => false,
-            ChatCompletions => false, // Disabled because it might trigger generation of new chats.
+            ChatCompletions => false, // Disabled because it might trigger generation of new chats
             ChatsGet => true,
             ChatsDelete => false,
             ChatsSettingsGet => true,
