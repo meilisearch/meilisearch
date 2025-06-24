@@ -8,6 +8,7 @@ pub const DEFAULT_CHAT_SYSTEM_PROMPT: &str = "You are a highly capable research 
 pub const DEFAULT_CHAT_SEARCH_DESCRIPTION_PROMPT: &str =
     "Search the database for relevant JSON documents using an optional query.";
 pub const DEFAULT_CHAT_SEARCH_Q_PARAM_PROMPT: &str = "The search query string used to find relevant documents in the index. This should contain keywords or phrases that best represent what the user is looking for. More specific queries will yield more precise results.";
+pub const DEFAULT_CHAT_SEARCH_FILTER_PARAM_PROMPT: &str = "The search filter string used to find relevant documents in the index. It supports parentheses, AND, OR, NOT, EXISTS, IS EMPTY, IS NOT EMPTY. Here is an example: \"price > 100 AND category = 'electronics'\"";
 pub const DEFAULT_CHAT_SEARCH_INDEX_UID_PARAM_PROMPT: &str = "The name of the index to search within. An index is a collection of documents organized for search. Selecting the right index ensures the most relevant results for the user query.";
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -164,6 +165,7 @@ pub struct ChatCompletionPrompts {
     pub system: String,
     pub search_description: String,
     pub search_q_param: String,
+    pub search_filter_param: String,
     pub search_index_uid_param: String,
 }
 
@@ -173,6 +175,7 @@ impl Default for ChatCompletionPrompts {
             system: DEFAULT_CHAT_SYSTEM_PROMPT.to_string(),
             search_description: DEFAULT_CHAT_SEARCH_DESCRIPTION_PROMPT.to_string(),
             search_q_param: DEFAULT_CHAT_SEARCH_Q_PARAM_PROMPT.to_string(),
+            search_filter_param: DEFAULT_CHAT_SEARCH_FILTER_PARAM_PROMPT.to_string(),
             search_index_uid_param: DEFAULT_CHAT_SEARCH_INDEX_UID_PARAM_PROMPT.to_string(),
         }
     }

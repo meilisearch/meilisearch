@@ -203,6 +203,10 @@ fn setup_search_tool(
                             // "type": ["string", "null"],
                             "type": "string",
                             "description": prompts.search_q_param,
+                        },
+                        "filter": {
+                            "type": "string",
+                            "description": prompts.search_filter_param,
                         }
                     },
                     "required": ["index_uid", "q"],
