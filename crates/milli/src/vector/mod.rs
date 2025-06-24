@@ -749,7 +749,7 @@ impl Embedder {
         &self,
         text_chunks: Vec<Vec<String>>,
         threads: &ThreadPoolNoAbort,
-        embedder_stats: Option<Arc<EmbedderStats>>,
+        embedder_stats: Arc<EmbedderStats>,
     ) -> std::result::Result<Vec<Vec<Embedding>>, EmbedError> {
         match self {
             Embedder::HuggingFace(embedder) => embedder.embed_index(text_chunks),
@@ -772,7 +772,7 @@ impl Embedder {
         &self,
         texts: &[&str],
         threads: &ThreadPoolNoAbort,
-        embedder_stats: Option<Arc<EmbedderStats>>,
+        embedder_stats: Arc<EmbedderStats>,
     ) -> std::result::Result<Vec<Embedding>, EmbedError> {
         match self {
             Embedder::HuggingFace(embedder) => embedder.embed_index_ref(texts),

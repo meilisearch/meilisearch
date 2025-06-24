@@ -274,7 +274,7 @@ fn send_original_documents_data(
                             embedder.clone(),
                             &embedder_name,
                             &possible_embedding_mistakes,
-                            Some(embedder_stats.clone()),
+                            embedder_stats.clone(),
                             &unused_vectors_distribution,
                             request_threads(),
                         ) {

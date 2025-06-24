@@ -248,7 +248,7 @@ where
             embedders,
             embedding_sender,
             field_distribution,
-            Some(embedder_stats),
+            embedder_stats,
             request_threads(),
         );
         let mut datastore = ThreadLocal::with_capacity(rayon::current_num_threads());

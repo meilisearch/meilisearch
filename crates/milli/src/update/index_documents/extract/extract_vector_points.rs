@@ -684,12 +684,10 @@ pub fn extract_embeddings<R: io::Read + io::Seek>(
     embedder: Arc<Embedder>,
     embedder_name: &str,
     possible_embedding_mistakes: &PossibleEmbeddingMistakes,
-    embedder_stats: Option<Arc<EmbedderStats>>,
+    embedder_stats: Arc<EmbedderStats>,
     unused_vectors_distribution: &UnusedVectorsDistribution,
     request_threads: &ThreadPoolNoAbort,
 ) -> Result<grenad::Reader<BufReader<File>>> {
-    println!("Extract embedder stats {}:", embedder_stats.is_some());
-
     let n_chunks = embedder.chunk_count_hint(); // chunk level parallelism
     let n_vectors_per_chunk = embedder.prompt_count_in_chunk_hint(); // number of vectors in a single chunk
 
@@ -791,7 +789,7 @@ fn embed_chunks(
     text_chunks: Vec<Vec<String>>,
     embedder_name: &str,
     possible_embedding_mistakes: &PossibleEmbeddingMistakes,
-    embedder_stats: Option<Arc<EmbedderStats>>,
+    embedder_stats: Arc<EmbedderStats>,
     unused_vectors_distribution: &UnusedVectorsDistribution,
     request_threads: &ThreadPoolNoAbort,
 ) -> Result<Vec<Vec<Embedding>>> {
