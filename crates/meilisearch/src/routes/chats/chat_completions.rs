@@ -209,7 +209,7 @@ fn setup_search_tool(
                             "description": prompts.search_filter_param,
                         }
                     },
-                    "required": ["index_uid", "q"],
+                    "required": ["index_uid", "q", "filter"],
                     "additionalProperties": false,
                 }))
                 .strict(true)
@@ -251,11 +251,16 @@ async fn process_search_request(
     auth_token: &str,
     index_uid: String,
     q: Option<String>,
+    filter: Option<String>,
 ) -> Result<(Index, Vec<Document>, String), ResponseError> {
     let index = index_scheduler.index(&index_uid)?;
     let rtxn = index.static_read_txn()?;
     let ChatConfig { description: _, prompt: _, search_parameters } = index.chat_config(&rtxn)?;
-    let mut query = SearchQuery { q, ..SearchQuery::from(search_parameters) };
+    let mut query = SearchQuery {
+        q,
+        filter: filter.map(serde_json::Value::from),
+        ..SearchQuery::from(search_parameters)
+    };
     let auth_filter = ActionPolicy::<{ actions::SEARCH }>::authenticate(
         auth_ctrl,
         auth_token,
@@ -399,16 +404,19 @@ async fn non_streamed_chat(
 
                 for call in meili_calls {
                     let result = match serde_json::from_str(&call.function.arguments) {
-                        Ok(SearchInIndexParameters { index_uid, q }) => process_search_request(
-                            &index_scheduler,
-                            auth_ctrl.clone(),
-                            &search_queue,
-                            auth_token,
-                            index_uid,
-                            q,
-                        )
-                        .await
-                        .map_err(|e| e.to_string()),
+                        Ok(SearchInIndexParameters { index_uid, q, filter }) => {
+                            process_search_request(
+                                &index_scheduler,
+                                auth_ctrl.clone(),
+                                &search_queue,
+                                auth_token,
+                                index_uid,
+                                q,
+                                filter,
+                            )
+                            .await
+                            .map_err(|e| e.to_string())
+                        }
                         Err(err) => Err(err.to_string()),
                     };
 
@@ -722,14 +730,15 @@ async fn handle_meili_tools(
 
         let mut error = None;
 
-        let result = match serde_json::from_str(&call.function.arguments) {
-            Ok(SearchInIndexParameters { index_uid, q }) => match process_search_request(
+        let answer = match serde_json::from_str(&call.function.arguments) {
+            Ok(SearchInIndexParameters { index_uid, q, filter }) => match process_search_request(
                 index_scheduler,
                 auth_ctrl.clone(),
                 search_queue,
                 auth_token,
                 index_uid,
                 q,
+                filter,
             )
             .await
             {
@@ -805,4 +814,6 @@ struct SearchInIndexParameters {
     index_uid: String,
     /// The query parameter to use.
     q: Option<String>,
+    /// The filter parameter to use.
+    filter: Option<String>,
 }
