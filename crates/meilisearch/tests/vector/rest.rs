@@ -2170,7 +2170,7 @@ async fn searchable_reindex() {
 
 
 #[actix_rt::test]
-async fn observability() {
+async fn last_error_stats() {
     let (sender, mut receiver) = mpsc::channel(10);
     let (_mock, setting) = create_faulty_mock_raw(sender).await;
     let server = get_server_vector().await;
@@ -2187,7 +2187,7 @@ async fn observability() {
     let task = server.wait_task(response.uid()).await;
     snapshot!(task["status"], @r###""succeeded""###);
     let documents = json!([
-      {"id": 0, "name": "will_return_500"}, // Stuff that doesn't exist
+      {"id": 0, "name": "will_return_500"},
       {"id": 1, "name": "will_error"},
       {"id": 2, "name": "must_error"},
     ]);
@@ -2195,9 +2195,9 @@ async fn observability() {
     snapshot!(code, @"202 Accepted");
 
     // The task will eventually fail, so let's not wait for it.
-    // Let's just wait for the server to block
+    // Let's just wait for the server's signal
     receiver.recv().await;
 
-    let batches = index.filtered_batches(&[], &[], &[]).await;
-    snapshot!(task, @r###""###);
+    let (response, _code) = index.filtered_batches(&[], &[], &[]).await;
+    snapshot!(response["results"][0], @r###""###);
 }

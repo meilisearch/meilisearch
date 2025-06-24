@@ -5,7 +5,7 @@ use std::ops::Bound;
 use std::sync::Arc;
 use crate::milli::progress::EmbedderStats;
 
-use meilisearch_types::batches::{Batch, BatchEmbeddingStats, BatchEnqueuedAt, BatchId, BatchStats};
+use meilisearch_types::batches::{Batch, EmbedderStatsView, BatchEnqueuedAt, BatchId, BatchStats};
 use meilisearch_types::heed::{Database, RoTxn, RwTxn};
 use meilisearch_types::milli::CboRoaringBitmapCodec;
 use meilisearch_types::task_view::DetailsView;
@@ -46,8 +46,6 @@ impl ProcessingBatch {
         // At the beginning, all the tasks are processing
         let mut statuses = HashSet::default();
         statuses.insert(Status::Processing);
-
-        println!("Processing batch created: {}", uid);
 
         Self {
             uid,
@@ -104,14 +102,11 @@ impl ProcessingBatch {
     }
 
     pub fn reason(&mut self, reason: BatchStopReason) {
-        println!("batch stopped: {:?}", reason);
         self.reason = reason;
     }
 
     /// Must be called once the batch has finished processing.
     pub fn finished(&mut self) {
-        println!("Batch finished: {}", self.uid);
-
         self.details = DetailsView::default();
         self.stats = BatchStats::default();
         self.finished_at = Some(OffsetDateTime::now_utc());
@@ -126,8 +121,6 @@ impl ProcessingBatch {
 
     /// Update the timestamp of the tasks and the inner structure of this structure.
     pub fn update(&mut self, task: &mut Task) {
-        println!("Updating task: {} in batch: {}", task.uid, self.uid);
-
         // We must re-set this value in case we're dealing with a task that has been added between
         // the `processing` and `finished` state
         // We must re-set this value in case we're dealing with a task that has been added between
@@ -152,7 +145,6 @@ impl ProcessingBatch {
     }
 
     pub fn to_batch(&self) -> Batch {
-        println!("Converting to batch: {:?} {:?}", self.uid, self.embedder_stats);
         Batch {
             uid: self.uid,
             progress: None,

@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::ops::{Bound, RangeBounds};
 
-use meilisearch_types::batches::{Batch, BatchEmbeddingStats, BatchId};
+use meilisearch_types::batches::{Batch, EmbedderStatsView, BatchId};
 use meilisearch_types::heed::types::{DecodeIgnore, SerdeBincode, SerdeJson, Str};
 use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn, WithoutTls};
 use meilisearch_types::milli::{CboRoaringBitmapCodec, RoaringBitmapCodec, BEU32};
@@ -92,10 +92,7 @@ impl BatchQueue {
     }
 
     pub(crate) fn get_batch(&self, rtxn: &RoTxn, batch_id: BatchId) -> Result<Option<Batch>> {
-        println!("Got batch from db {batch_id:?}");
-        let r = Ok(self.all_batches.get(rtxn, &batch_id)?);
-        println!("Got batch from db => {:?}", r);
-        r
+        Ok(self.all_batches.get(rtxn, &batch_id)?)
     }
 
     /// Returns the whole set of batches that belongs to this index.
@@ -173,8 +170,6 @@ impl BatchQueue {
 
     pub(crate) fn write_batch(&self, wtxn: &mut RwTxn, batch: ProcessingBatch) -> Result<()> {
         let old_batch = self.all_batches.get(wtxn, &batch.uid)?;
-
-        println!("Saving batch: {:?}", batch.embedder_stats);
 
         self.all_batches.put(
             wtxn,

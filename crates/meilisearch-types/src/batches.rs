@@ -20,8 +20,8 @@ pub struct Batch {
     pub progress: Option<ProgressView>,
     pub details: DetailsView,
     pub stats: BatchStats,
-    #[serde(skip_serializing_if = "BatchEmbeddingStats::skip_serializing", default)]
-    pub embedder_stats: BatchEmbeddingStats,
+    #[serde(skip_serializing_if = "EmbedderStatsView::skip_serializing", default)]
+    pub embedder_stats: EmbedderStatsView,
 
     #[serde(with = "time::serde::rfc3339")]
     pub started_at: OffsetDateTime,
@@ -92,25 +92,25 @@ pub struct BatchStats {
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
-pub struct BatchEmbeddingStats {
+pub struct EmbedderStatsView {
     pub total_count: usize,
     pub error_count: usize,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub last_error: Option<String>,
 }
 
-impl From<&EmbedderStats> for BatchEmbeddingStats {
+impl From<&EmbedderStats> for EmbedderStatsView {
     fn from(stats: &EmbedderStats) -> Self {
         let errors = stats.errors.read().unwrap();
         Self {
-            total_count: stats.total_requests.load(std::sync::atomic::Ordering::Relaxed),
+            total_count: stats.total_count.load(std::sync::atomic::Ordering::Relaxed),
             error_count: errors.1 as usize,
             last_error: errors.0.clone(),
         }
     }
 }
 
-impl BatchEmbeddingStats {
+impl EmbedderStatsView {
     pub fn skip_serializing(&self) -> bool {
         self.total_count == 0 && self.error_count == 0 && self.last_error.is_none()
     }

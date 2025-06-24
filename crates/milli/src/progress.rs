@@ -25,15 +25,15 @@ pub struct Progress {
 #[derive(Default)]
 pub struct EmbedderStats {
     pub errors: Arc<RwLock<(Option<String>, u32)>>,
-    pub total_requests: AtomicUsize
+    pub total_count: AtomicUsize
 }
 
 impl std::fmt::Debug for EmbedderStats {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let (error, count) = self.errors.read().unwrap().clone();
         f.debug_struct("EmbedderStats")
-            .field("errors", &error)
-            .field("total_requests", &self.total_requests.load(Ordering::Relaxed))
+            .field("last_error", &error)
+            .field("total_count", &self.total_count.load(Ordering::Relaxed))
             .field("error_count", &count)
             .finish()
     }

@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 use std::fmt::Write;
 
-use meilisearch_types::batches::{Batch, BatchEmbeddingStats, BatchEnqueuedAt, BatchStats};
+use meilisearch_types::batches::{Batch, EmbedderStatsView, BatchEnqueuedAt, BatchStats};
 use meilisearch_types::heed::types::{SerdeBincode, SerdeJson, Str};
 use meilisearch_types::heed::{Database, RoTxn};
 use meilisearch_types::milli::{CboRoaringBitmapCodec, RoaringBitmapCodec, BEU32};

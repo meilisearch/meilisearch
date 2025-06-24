@@ -3,7 +3,7 @@ use serde::Serialize;
 use time::{Duration, OffsetDateTime};
 use utoipa::ToSchema;
 
-use crate::batches::{Batch, BatchEmbeddingStats, BatchId, BatchStats};
+use crate::batches::{Batch, EmbedderStatsView, BatchId, BatchStats};
 use crate::task_view::DetailsView;
 use crate::tasks::serialize_duration;
 
@@ -31,8 +31,8 @@ pub struct BatchView {
 pub struct BatchStatsView {
     #[serde(flatten)]
     pub stats: BatchStats,
-    #[serde(skip_serializing_if = "BatchEmbeddingStats::skip_serializing", default)]
-    pub embedder: BatchEmbeddingStats,
+    #[serde(skip_serializing_if = "EmbedderStatsView::skip_serializing", default)]
+    pub embedder: EmbedderStatsView,
 }
 
 impl BatchView {

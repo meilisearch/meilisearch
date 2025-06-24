@@ -295,10 +295,6 @@ fn embed<S>(
 where
     S: Serialize,
 {
-    use std::backtrace::Backtrace;
-
-    println!("Embedder stats? {}", embedder_stats.is_some());
-
     let request = data.client.post(&data.url);
     let request = if let Some(bearer) = &data.bearer {
         request.set("Authorization", bearer)
@@ -314,9 +310,8 @@ where
 
     for attempt in 0..10 {
         if let Some(embedder_stats) = &embedder_stats {
-            embedder_stats.as_ref().total_requests.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            embedder_stats.as_ref().total_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
-        // TODO: also catch 403 errors
         let response = request.clone().send_json(&body);
         let result = check_response(response, data.configuration_source).and_then(|response| {
             response_to_embedding(response, data, expected_count, expected_dimension)
@@ -358,7 +353,7 @@ where
     }
 
     if let Some(embedder_stats) = &embedder_stats {
-        embedder_stats.as_ref().total_requests.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        embedder_stats.as_ref().total_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
     let response = request.send_json(&body);
     let result = check_response(response, data.configuration_source).and_then(|response| {
