@@ -1,4 +1,3 @@
-use std::f32::consts::E;
 use std::{cell::RefCell, sync::Arc};
 
 use bumpalo::collections::Vec as BVec;

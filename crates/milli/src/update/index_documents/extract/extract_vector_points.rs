@@ -675,6 +675,7 @@ fn compare_vectors(a: &[f32], b: &[f32]) -> Ordering {
     a.iter().copied().map(OrderedFloat).cmp(b.iter().copied().map(OrderedFloat))
 }
 
+#[allow(clippy::too_many_arguments)]
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::extract")]
 pub fn extract_embeddings<R: io::Read + io::Seek>(
     // docid, prompt
