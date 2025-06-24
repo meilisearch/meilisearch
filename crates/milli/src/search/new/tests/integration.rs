@@ -95,7 +95,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
         embedders,
         &|| false,
         &Progress::default(),
-            Default::default(),
+        Default::default(),
     )
     .unwrap();
 

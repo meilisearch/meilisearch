@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::sync::atomic::AtomicBool;
-use std::sync::OnceLock;
 use std::sync::Arc;
+use std::sync::OnceLock;
 
 use bumpalo::Bump;
 use roaring::RoaringBitmap;

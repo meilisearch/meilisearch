@@ -544,8 +544,11 @@ fn import_dump(
         let settings = index_reader.settings()?;
         apply_settings_to_builder(&settings, &mut builder);
         let embedder_stats: Arc<EmbedderStats> = Default::default(); // FIXME: this isn't linked to anything
-        builder
-            .execute(|indexing_step| tracing::debug!("update: {:?}", indexing_step), || false, embedder_stats.clone())?;
+        builder.execute(
+            |indexing_step| tracing::debug!("update: {:?}", indexing_step),
+            || false,
+            embedder_stats.clone(),
+        )?;
 
         // 4.3 Import the documents.
         // 4.3.1 We need to recreate the grenad+obkv format accepted by the index.

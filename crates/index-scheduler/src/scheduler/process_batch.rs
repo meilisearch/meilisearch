@@ -1,11 +1,10 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::Ordering;
-use std::sync::Arc;
 
 use meilisearch_types::batches::{BatchEnqueuedAt, BatchId};
 use meilisearch_types::heed::{RoTxn, RwTxn};
-use meilisearch_types::milli::progress::{EmbedderStats, Progress, VariableNameStep};
+use meilisearch_types::milli::progress::{Progress, VariableNameStep};
 use meilisearch_types::milli::{self, ChannelCongestion};
 use meilisearch_types::tasks::{Details, IndexSwap, Kind, KindWithContent, Status, Task};
 use meilisearch_types::versioning::{VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH};
@@ -163,8 +162,13 @@ impl IndexScheduler {
                     .set_currently_updating_index(Some((index_uid.clone(), index.clone())));
 
                 let pre_commit_dabases_sizes = index.database_sizes(&index_wtxn)?;
-                let (tasks, congestion) =
-                    self.apply_index_operation(&mut index_wtxn, &index, op, &progress, current_batch.embedder_stats.clone())?;
+                let (tasks, congestion) = self.apply_index_operation(
+                    &mut index_wtxn,
+                    &index,
+                    op,
+                    &progress,
+                    current_batch.embedder_stats.clone(),
+                )?;
 
                 {
                     progress.update_progress(FinalizingIndexStep::Committing);

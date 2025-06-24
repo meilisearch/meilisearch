@@ -719,12 +719,14 @@ impl Embedder {
         }
         let embedding = match self {
             Embedder::HuggingFace(embedder) => embedder.embed_one(text),
-            Embedder::OpenAi(embedder) => {
-                embedder.embed(&[text], deadline, None)?.pop().ok_or_else(EmbedError::missing_embedding)
-            }
-            Embedder::Ollama(embedder) => {
-                embedder.embed(&[text], deadline, None)?.pop().ok_or_else(EmbedError::missing_embedding)
-            }
+            Embedder::OpenAi(embedder) => embedder
+                .embed(&[text], deadline, None)?
+                .pop()
+                .ok_or_else(EmbedError::missing_embedding),
+            Embedder::Ollama(embedder) => embedder
+                .embed(&[text], deadline, None)?
+                .pop()
+                .ok_or_else(EmbedError::missing_embedding),
             Embedder::UserProvided(embedder) => embedder.embed_one(text),
             Embedder::Rest(embedder) => embedder
                 .embed_ref(&[text], deadline, None)?
@@ -751,11 +753,17 @@ impl Embedder {
     ) -> std::result::Result<Vec<Vec<Embedding>>, EmbedError> {
         match self {
             Embedder::HuggingFace(embedder) => embedder.embed_index(text_chunks),
-            Embedder::OpenAi(embedder) => embedder.embed_index(text_chunks, threads, embedder_stats),
-            Embedder::Ollama(embedder) => embedder.embed_index(text_chunks, threads, embedder_stats),
+            Embedder::OpenAi(embedder) => {
+                embedder.embed_index(text_chunks, threads, embedder_stats)
+            }
+            Embedder::Ollama(embedder) => {
+                embedder.embed_index(text_chunks, threads, embedder_stats)
+            }
             Embedder::UserProvided(embedder) => embedder.embed_index(text_chunks),
             Embedder::Rest(embedder) => embedder.embed_index(text_chunks, threads, embedder_stats),
-            Embedder::Composite(embedder) => embedder.index.embed_index(text_chunks, threads, embedder_stats),
+            Embedder::Composite(embedder) => {
+                embedder.index.embed_index(text_chunks, threads, embedder_stats)
+            }
         }
     }
 
@@ -772,7 +780,9 @@ impl Embedder {
             Embedder::Ollama(embedder) => embedder.embed_index_ref(texts, threads, embedder_stats),
             Embedder::UserProvided(embedder) => embedder.embed_index_ref(texts),
             Embedder::Rest(embedder) => embedder.embed_index_ref(texts, threads, embedder_stats),
-            Embedder::Composite(embedder) => embedder.index.embed_index_ref(texts, threads, embedder_stats),
+            Embedder::Composite(embedder) => {
+                embedder.index.embed_index_ref(texts, threads, embedder_stats)
+            }
         }
     }
 

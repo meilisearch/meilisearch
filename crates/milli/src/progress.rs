@@ -25,7 +25,7 @@ pub struct Progress {
 #[derive(Default)]
 pub struct EmbedderStats {
     pub errors: Arc<RwLock<(Option<String>, u32)>>,
-    pub total_count: AtomicUsize
+    pub total_count: AtomicUsize,
 }
 
 impl std::fmt::Debug for EmbedderStats {

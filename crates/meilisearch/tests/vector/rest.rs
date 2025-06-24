@@ -1,14 +1,12 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::sync::atomic::AtomicUsize;
 
 use meili_snap::{json_string, snapshot};
 use reqwest::IntoUrl;
-use tokio::spawn;
+use std::time::Duration;
 use tokio::sync::mpsc;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
-use tokio::time::sleep;
-use std::time::Duration;
 
 use crate::common::Value;
 use crate::json;
@@ -342,7 +340,7 @@ async fn create_mock_raw() -> (MockServer, Value) {
 async fn create_faulty_mock_raw(sender: mpsc::Sender<()>) -> (MockServer, Value) {
     let mock_server = MockServer::start().await;
     let count = AtomicUsize::new(0);
-    
+
     Mock::given(method("POST"))
         .and(path("/"))
         .respond_with(move |req: &Request| {
@@ -359,14 +357,13 @@ async fn create_faulty_mock_raw(sender: mpsc::Sender<()>) -> (MockServer, Value)
 
             if count >= 5 {
                 let _ = sender.try_send(());
-                ResponseTemplate::new(500)
-                    .set_delay(Duration::from_secs(u64::MAX))
-                    .set_body_json(json!({
+                ResponseTemplate::new(500).set_delay(Duration::from_secs(u64::MAX)).set_body_json(
+                    json!({
                         "error": "Service Unavailable",
                         "text": req_body
-                    }))
+                    }),
+                )
             } else {
-
                 ResponseTemplate::new(500).set_body_json(json!({
                     "error": "Service Unavailable",
                     "text": req_body
@@ -2168,7 +2165,6 @@ async fn searchable_reindex() {
     "###);
 }
 
-
 #[actix_rt::test]
 async fn last_error_stats() {
     let (sender, mut receiver) = mpsc::channel(10);
@@ -2191,7 +2187,7 @@ async fn last_error_stats() {
       {"id": 1, "name": "will_error"},
       {"id": 2, "name": "must_error"},
     ]);
-    let (value, code) = index.add_documents(documents, None).await;
+    let (_value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
 
     // The task will eventually fail, so let's not wait for it.

@@ -3,7 +3,7 @@ use serde::Serialize;
 use time::{Duration, OffsetDateTime};
 use utoipa::ToSchema;
 
-use crate::batches::{Batch, EmbedderStatsView, BatchId, BatchStats};
+use crate::batches::{Batch, BatchId, BatchStats, EmbedderStatsView};
 use crate::task_view::DetailsView;
 use crate::tasks::serialize_duration;
 

@@ -241,7 +241,11 @@ impl Embedder {
             let encoded = self.tokenizer.encode_ordinary(text);
             let len = encoded.len();
             if len < max_token_count {
-                all_embeddings.append(&mut self.rest_embedder.embed_ref(&[text], deadline, None)?);
+                all_embeddings.append(&mut self.rest_embedder.embed_ref(
+                    &[text],
+                    deadline,
+                    None,
+                )?);
                 continue;
             }
 
@@ -263,11 +267,17 @@ impl Embedder {
         // This condition helps reduce the number of active rayon jobs
         // so that we avoid consuming all the LMDB rtxns and avoid stack overflows.
         if threads.active_operations() >= REQUEST_PARALLELISM {
-            text_chunks.into_iter().map(move |chunk| self.embed(&chunk, None, embedder_stats.clone())).collect()
+            text_chunks
+                .into_iter()
+                .map(move |chunk| self.embed(&chunk, None, embedder_stats.clone()))
+                .collect()
         } else {
             threads
                 .install(move || {
-                    text_chunks.into_par_iter().map(move |chunk| self.embed(&chunk, None, embedder_stats.clone())).collect()
+                    text_chunks
+                        .into_par_iter()
+                        .map(move |chunk| self.embed(&chunk, None, embedder_stats.clone()))
+                        .collect()
                 })
                 .map_err(|error| EmbedError {
                     kind: EmbedErrorKind::PanicInThreadPool(error),

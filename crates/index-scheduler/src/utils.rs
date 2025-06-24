@@ -1,11 +1,11 @@
 //! Utility functions on the DBs. Mainly getter and setters.
 
+use crate::milli::progress::EmbedderStats;
 use std::collections::{BTreeSet, HashSet};
 use std::ops::Bound;
 use std::sync::Arc;
-use crate::milli::progress::EmbedderStats;
 
-use meilisearch_types::batches::{Batch, EmbedderStatsView, BatchEnqueuedAt, BatchId, BatchStats};
+use meilisearch_types::batches::{Batch, BatchEnqueuedAt, BatchId, BatchStats};
 use meilisearch_types::heed::{Database, RoTxn, RwTxn};
 use meilisearch_types::milli::CboRoaringBitmapCodec;
 use meilisearch_types::task_view::DetailsView;

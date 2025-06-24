@@ -1,7 +1,7 @@
 use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use std::sync::{Once, RwLock};
 use std::thread::{self, Builder};
-use std::sync::Arc;
 
 use big_s::S;
 use document_changes::{DocumentChanges, IndexingContext};

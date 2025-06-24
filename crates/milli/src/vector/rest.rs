@@ -14,8 +14,8 @@ use super::{
     DistributionShift, EmbedError, Embedding, EmbeddingCache, NewEmbedderError, REQUEST_PARALLELISM,
 };
 use crate::error::FaultSource;
-use crate::ThreadPoolNoAbort;
 use crate::progress::EmbedderStats;
+use crate::ThreadPoolNoAbort;
 
 // retrying in case of failure
 pub struct Retry {
@@ -172,7 +172,14 @@ impl Embedder {
         deadline: Option<Instant>,
         embedder_stats: Option<Arc<EmbedderStats>>,
     ) -> Result<Vec<Embedding>, EmbedError> {
-        embed(&self.data, texts.as_slice(), texts.len(), Some(self.dimensions), deadline, embedder_stats)
+        embed(
+            &self.data,
+            texts.as_slice(),
+            texts.len(),
+            Some(self.dimensions),
+            deadline,
+            embedder_stats,
+        )
     }
 
     pub fn embed_ref<S>(
@@ -206,11 +213,17 @@ impl Embedder {
         // This condition helps reduce the number of active rayon jobs
         // so that we avoid consuming all the LMDB rtxns and avoid stack overflows.
         if threads.active_operations() >= REQUEST_PARALLELISM {
-            text_chunks.into_iter().map(move |chunk| self.embed(chunk, None, embedder_stats.clone())).collect()
+            text_chunks
+                .into_iter()
+                .map(move |chunk| self.embed(chunk, None, embedder_stats.clone()))
+                .collect()
         } else {
             threads
                 .install(move || {
-                    text_chunks.into_par_iter().map(move |chunk| self.embed(chunk, None, embedder_stats.clone())).collect()
+                    text_chunks
+                        .into_par_iter()
+                        .map(move |chunk| self.embed(chunk, None, embedder_stats.clone()))
+                        .collect()
                 })
                 .map_err(|error| EmbedError {
                     kind: EmbedErrorKind::PanicInThreadPool(error),
@@ -223,7 +236,7 @@ impl Embedder {
         &self,
         texts: &[&str],
         threads: &ThreadPoolNoAbort,
-        embedder_stats: Option<Arc<EmbedderStats>>
+        embedder_stats: Option<Arc<EmbedderStats>>,
     ) -> Result<Vec<Embedding>, EmbedError> {
         // This condition helps reduce the number of active rayon jobs
         // so that we avoid consuming all the LMDB rtxns and avoid stack overflows.

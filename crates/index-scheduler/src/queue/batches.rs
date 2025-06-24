@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::ops::{Bound, RangeBounds};
 
-use meilisearch_types::batches::{Batch, EmbedderStatsView, BatchId};
+use meilisearch_types::batches::{Batch, BatchId};
 use meilisearch_types::heed::types::{DecodeIgnore, SerdeBincode, SerdeJson, Str};
 use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn, WithoutTls};
 use meilisearch_types::milli::{CboRoaringBitmapCodec, RoaringBitmapCodec, BEU32};

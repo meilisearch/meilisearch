@@ -1358,7 +1358,12 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         }
     }
 
-    pub fn execute<FP, FA>(mut self, progress_callback: FP, should_abort: FA, embedder_stats: Arc<EmbedderStats>) -> Result<()>
+    pub fn execute<FP, FA>(
+        mut self,
+        progress_callback: FP,
+        should_abort: FA,
+        embedder_stats: Arc<EmbedderStats>,
+    ) -> Result<()>
     where
         FP: Fn(UpdateIndexingStep) + Sync,
         FA: Fn() -> bool + Sync,

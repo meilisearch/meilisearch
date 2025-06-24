@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::sync::Arc;
 
 use milli::progress::{EmbedderStats, ProgressView};
 use serde::{Deserialize, Serialize};

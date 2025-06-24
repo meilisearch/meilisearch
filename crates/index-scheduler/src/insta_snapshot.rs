@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 use std::fmt::Write;
 
-use meilisearch_types::batches::{Batch, EmbedderStatsView, BatchEnqueuedAt, BatchStats};
+use meilisearch_types::batches::{Batch, BatchEnqueuedAt, BatchStats};
 use meilisearch_types::heed::types::{SerdeBincode, SerdeJson, Str};
 use meilisearch_types::heed::{Database, RoTxn};
 use meilisearch_types::milli::{CboRoaringBitmapCodec, RoaringBitmapCodec, BEU32};
@@ -367,7 +367,10 @@ pub fn snapshot_batch(batch: &Batch) -> String {
     snap.push_str(&format!("uid: {uid}, "));
     snap.push_str(&format!("details: {}, ", serde_json::to_string(details).unwrap()));
     snap.push_str(&format!("stats: {}, ", serde_json::to_string(&stats).unwrap()));
-    snap.push_str(&format!("embedder_stats: {}, ", serde_json::to_string(&embedder_stats).unwrap()));
+    snap.push_str(&format!(
+        "embedder_stats: {}, ",
+        serde_json::to_string(&embedder_stats).unwrap()
+    ));
     snap.push_str(&format!("stop reason: {}, ", serde_json::to_string(&stop_reason).unwrap()));
     snap.push('}');
     snap
