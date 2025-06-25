@@ -11,24 +11,24 @@ readme.workspace = true
 license.workspace = true
 
 [dependencies]
-anyhow = "1.0.98"
-flate2 = "1.1.2"
-http = "1.3.1"
+anyhow.workspace = true
+flate2.workspace = true
+http.workspace = true
 meilisearch-types = { path = "../meilisearch-types" }
-once_cell = "1.21.3"
-regex = "1.11.1"
-roaring = { version = "0.10.12", features = ["serde"] }
-serde = { version = "1.0.219", features = ["derive"] }
-serde_json = { version = "1.0.140", features = ["preserve_order"] }
-tar = "0.4.44"
-tempfile = "3.20.0"
-thiserror = "2.0.12"
-time = { version = "0.3.41", features = ["serde-well-known", "formatting", "parsing", "macros"] }
-tracing = "0.1.41"
-uuid = { version = "1.17.0", features = ["serde", "v4"] }
+once_cell.workspace = true
+regex.workspace = true
+roaring = { workspace = true, features = ["serde"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true, features = ["preserve_order"] }
+tar.workspace = true
+tempfile.workspace = true
+thiserror.workspace = true
+time = { workspace = true, features = ["serde-well-known", "formatting", "parsing", "macros"] }
+tracing.workspace = true
+uuid = { workspace = true, features = ["serde", "v4"] }
 
 [dev-dependencies]
-big_s = "1.0.2"
-maplit = "1.0.2"
+big_s.workspace = true
+maplit.workspace = true
 meili-snap = { path = "../meili-snap" }
 meilisearch-types = { path = "../meilisearch-types" }

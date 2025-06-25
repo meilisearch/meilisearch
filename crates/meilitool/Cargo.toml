@@ -9,15 +9,15 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-anyhow = "1.0.98"
-clap = { version = "4.5.40", features = ["derive"] }
+anyhow.workspace = true
+clap = { workspace = true, features = ["derive"] }
 dump = { path = "../dump" }
 file-store = { path = "../file-store" }
-indexmap = { version = "2.9.0", features = ["serde"] }
+indexmap = { workspace = true, features = ["serde"] }
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
-serde = { version = "1.0.219", features = ["derive"] }
-serde_json = { version = "1.0.140", features = ["preserve_order"] }
-tempfile = "3.20.0"
-time = { version = "0.3.41", features = ["formatting", "parsing", "alloc"] }
-uuid = { version = "1.17.0", features = ["v4"], default-features = false }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true, features = ["preserve_order"] }
+tempfile.workspace = true
+time = { workspace = true, features = ["formatting", "parsing", "alloc"] }
+uuid = { workspace = true, features = ["v4"], default-features = false }

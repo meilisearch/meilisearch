@@ -12,112 +12,111 @@ readme.workspace = true
 license.workspace = true
 
 [dependencies]
-big_s = "1.0.2"
-bimap = { version = "0.6.3", features = ["serde"] }
-bincode = "1.3.3"
-bstr = "1.12.0"
-bytemuck = { version = "1.23.1", features = ["extern_crate_alloc"] }
-byteorder = "1.5.0"
-charabia = { version = "0.9.6", default-features = false }
-concat-arrays = "0.1.2"
-convert_case = "0.8.0"
-crossbeam-channel = "0.5.15"
-deserr = "0.6.3"
-either = { version = "1.15.0", features = ["serde"] }
+big_s.workspace = true
+bimap = { workspace = true, features = ["serde"] }
+bincode.workspace = true
+bstr.workspace = true
+bytemuck = { workspace = true, features = ["extern_crate_alloc"] }
+byteorder.workspace = true
+charabia = { workspace = true, default-features = false }
+concat-arrays.workspace = true
+convert_case.workspace = true
+crossbeam-channel.workspace = true
+deserr.workspace = true
+either = { workspace = true, features = ["serde"] }
 flatten-serde-json = { path = "../flatten-serde-json" }
-fst = "0.4.7"
-fxhash = "0.2.1"
-geoutils = "0.5.1"
-grenad = { version = "0.5.0", default-features = false, features = [
+fst.workspace = true
+fxhash.workspace = true
+geoutils.workspace = true
+grenad = { workspace = true, default-features = false, features = [
     "rayon",
     "tempfile",
 ] }
-heed = { version = "0.22.0", default-features = false, features = [
+heed = { workspace = true, default-features = false, features = [
     "serde-json",
     "serde-bincode",
 ] }
-indexmap = { version = "2.9.0", features = ["serde"] }
+indexmap = { workspace = true, features = ["serde"] }
 json-depth-checker = { path = "../json-depth-checker" }
-levenshtein_automata = { version = "0.2.1", features = ["fst_automaton"] }
-memchr = "2.7.5"
-memmap2 = "0.9.5"
-obkv = "0.3.0"
-once_cell = "1.21.3"
-ordered-float = "5.0.0"
-rayon = "1.10.0"
-roaring = { version = "0.10.12", features = ["serde"] }
-rstar = { version = "0.12.2", features = ["serde"] }
-serde = { version = "1.0.219", features = ["derive"] }
-serde_json = { version = "1.0.140", features = ["preserve_order", "raw_value"] }
-slice-group-by = "0.3.1"
-smallstr = { version = "0.3.0", features = ["serde"] }
-smallvec = "1.15.1"
-smartstring = "1.0.1"
-tempfile = "3.20.0"
-thiserror = "2.0.12"
-time = { version = "0.3.41", features = [
+levenshtein_automata = { workspace = true, features = ["fst_automaton"] }
+memchr.workspace = true
+memmap2.workspace = true
+obkv.workspace = true
+once_cell.workspace = true
+ordered-float.workspace = true
+rayon.workspace = true
+roaring = { workspace = true, features = ["serde"] }
+rstar = { workspace = true, features = ["serde"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true, features = ["preserve_order", "raw_value"] }
+slice-group-by.workspace = true
+smallstr = { workspace = true, features = ["serde"] }
+smallvec.workspace = true
+smartstring.workspace = true
+tempfile.workspace = true
+thiserror.workspace = true
+time = { workspace = true, features = [
     "serde-well-known",
     "formatting",
     "parsing",
     "macros",
 ] }
-uuid = { version = "1.17.0", features = ["v4"] }
+uuid = { workspace = true, features = ["v4"] }
 
 filter-parser = { path = "../filter-parser" }
 
 # documents words self-join
-itertools = "0.14.0"
+itertools.workspace = true
 
-csv = "1.3.1"
-candle-core = { version = "0.9.1" }
-candle-transformers = { version = "0.9.1" }
-candle-nn = { version = "0.9.1" }
-tokenizers = { git = "https://github.com/huggingface/tokenizers.git", tag = "v0.15.2", version = "0.15.2", default-features = false, features = [
+csv.workspace = true
+candle-core = { workspace = true }
+candle-transformers = { workspace = true }
+candle-nn = { workspace = true }
+tokenizers = { workspace = true, default-features = false, features = [
     "onig",
 ] }
-hf-hub = { git = "https://github.com/dureuill/hf-hub.git", branch = "rust_tls", default-features = false, features = [
+hf-hub = { workspace = true, default-features = false, features = [
     "online",
 ] }
-tiktoken-rs = "0.7.0"
-liquid = "0.26.11"
-rhai = { version = "1.22.2", features = [
+tiktoken-rs.workspace = true
+liquid.workspace = true
+rhai = { workspace = true, features = [
     "serde",
     "no_module",
     "no_custom_syntax",
     "no_time",
     "sync",
 ] }
-arroy = "0.6.1"
-rand = "0.8.5"
-tracing = "0.1.41"
-ureq = { version = "2.12.1", features = ["json"] }
-url = "2.5.4"
-hashbrown = "0.15.4"
-bumpalo = "3.18.1"
-bumparaw-collections = "0.1.4"
-thread_local = "1.1.9"
-allocator-api2 = "0.3.0"
-rustc-hash = "2.1.1"
-enum-iterator = "2.1.0"
-bbqueue = { git = "https://github.com/meilisearch/bbqueue" }
-flume = { version = "0.11.1", default-features = false }
-utoipa = { version = "5.4.0", features = [
+arroy.workspace = true
+rand.workspace = true
+tracing.workspace = true
+ureq = { workspace = true, features = ["json"] }
+url.workspace = true
+hashbrown.workspace = true
+bumpalo.workspace = true
+bumparaw-collections.workspace = true
+thread_local.workspace = true
+allocator-api2.workspace = true
+rustc-hash.workspace = true
+enum-iterator.workspace = true
+bbqueue.workspace = true
+flume = { workspace = true, default-features = false }
+utoipa = { workspace = true, features = [
     "non_strict_integers",
     "preserve_order",
     "uuid",
     "time",
     "openapi_extensions",
 ] }
-lru = "0.14.0"
+lru.workspace = true
 
 [dev-dependencies]
-mimalloc = { version = "0.1.47", default-features = false }
-# fixed version due to format breakages in v1.40
-insta = "=1.39.0"
-maplit = "1.0.2"
-md5 = "0.7.0"
+mimalloc = { workspace = true, default-features = false }
+insta.workspace = true
+maplit.workspace = true
+md5.workspace = true
 meili-snap = { path = "../meili-snap" }
-rand = { version = "0.8.5", features = ["small_rng"] }
+rand = { workspace = true, features = ["small_rng"] }
 
 [features]
 all-tokenizations = ["charabia/default"]

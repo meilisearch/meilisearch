@@ -11,16 +11,16 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-base64 = "0.22.1"
-enum-iterator = "2.1.0"
-hmac = "0.12.1"
-maplit = "1.0.2"
+base64.workspace = true
+enum-iterator.workspace = true
+hmac.workspace = true
+maplit.workspace = true
 meilisearch-types = { path = "../meilisearch-types" }
-rand = "0.8.5"
-roaring = { version = "0.10.12", features = ["serde"] }
-serde = { version = "1.0.219", features = ["derive"] }
-serde_json = { version = "1.0.140", features = ["preserve_order"] }
-sha2 = "0.10.9"
-thiserror = "2.0.12"
-time = { version = "0.3.41", features = ["serde-well-known", "formatting", "parsing", "macros"] }
-uuid = { version = "1.17.0", features = ["serde", "v4"] }
+rand.workspace = true
+roaring = { workspace = true, features = ["serde"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true, features = ["preserve_order"] }
+sha2.workspace = true
+thiserror.workspace = true
+time = { workspace = true, features = ["serde-well-known", "formatting", "parsing", "macros"] }
+uuid = { workspace = true, features = ["serde", "v4"] }

@@ -11,44 +11,43 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-anyhow = "1.0.98"
-bincode = "1.3.3"
-byte-unit = "5.1.6"
-bumpalo = "3.18.1"
-bumparaw-collections = "0.1.4"
-convert_case = "0.8.0"
-csv = "1.3.1"
-derive_builder = "0.20.2"
+anyhow.workspace = true
+bincode.workspace = true
+byte-unit.workspace = true
+bumpalo.workspace = true
+bumparaw-collections.workspace = true
+convert_case.workspace = true
+csv.workspace = true
+derive_builder.workspace = true
 dump = { path = "../dump" }
-enum-iterator = "2.1.0"
+enum-iterator.workspace = true
 file-store = { path = "../file-store" }
-flate2 = "1.1.2"
-indexmap = "2.9.0"
+flate2.workspace = true
+indexmap.workspace = true
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
-memmap2 = "0.9.5"
-page_size = "0.6.0"
-rayon = "1.10.0"
-roaring = { version = "0.10.12", features = ["serde"] }
-serde = { version = "1.0.219", features = ["derive"] }
-serde_json = { version = "1.0.140", features = ["preserve_order"] }
-synchronoise = "1.0.1"
-tempfile = "3.20.0"
-thiserror = "2.0.12"
-time = { version = "0.3.41", features = [
+memmap2.workspace = true
+page_size.workspace = true
+rayon.workspace = true
+roaring = { workspace = true, features = ["serde"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true, features = ["preserve_order"] }
+synchronoise.workspace = true
+tempfile.workspace = true
+thiserror.workspace = true
+time = { workspace = true, features = [
     "serde-well-known",
     "formatting",
     "parsing",
     "macros",
 ] }
-tracing = "0.1.41"
-ureq = "2.12.1"
-uuid = { version = "1.17.0", features = ["serde", "v4"] }
+tracing.workspace = true
+ureq.workspace = true
+uuid = { workspace = true, features = ["serde", "v4"] }
 
 [dev-dependencies]
-big_s = "1.0.2"
-crossbeam-channel = "0.5.15"
-# fixed version due to format breakages in v1.40
-insta = { version = "=1.39.0", features = ["json", "redactions"] }
-maplit = "1.0.2"
+big_s.workspace = true
+crossbeam-channel.workspace = true
+insta = { workspace = true, features = ["json", "redactions"] }
+maplit.workspace = true
 meili-snap = { path = "../meili-snap" }
