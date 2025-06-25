@@ -2812,7 +2812,11 @@ mod tests {
         insta::assert_debug_snapshot!(info.embedding_status.user_provided_docids(), @"RoaringBitmap<[0, 1, 2]>");
         insta::assert_debug_snapshot!(info.embedding_status.skip_regenerate_docids(), @"RoaringBitmap<[0, 1, 2]>");
         insta::assert_snapshot!(embedder_name, @"manual");
-        insta::assert_debug_snapshot!(fragments, @"[]");
+        insta::assert_debug_snapshot!(fragments, @r###"
+        FragmentConfigs(
+            [],
+        )
+        "###);
 
         let embedder = std::sync::Arc::new(
             crate::vector::Embedder::new(embedder.embedder_options, 0).unwrap(),

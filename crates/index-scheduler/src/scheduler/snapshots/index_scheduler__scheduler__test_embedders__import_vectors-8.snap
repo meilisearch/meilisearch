@@ -1,12 +1,17 @@
 ---
 source: crates/index-scheduler/src/scheduler/test_embedders.rs
-expression: simple_hf_config.embedder_options
+expression: fakerest_config.embedder_options
 ---
 {
-  "HuggingFace": {
-    "model": "sentence-transformers/all-MiniLM-L6-v2",
-    "revision": "e4ce9877abf3edfe10b0d82785e83bdcb973e22e",
+  "Rest": {
+    "api_key": "My super secret",
     "distribution": null,
-    "pooling": "useModel"
+    "dimensions": 384,
+    "url": "http://localhost:7777",
+    "request": "{{text}}",
+    "search_fragments": {},
+    "indexing_fragments": {},
+    "response": "{{embedding}}",
+    "headers": {}
   }
 }

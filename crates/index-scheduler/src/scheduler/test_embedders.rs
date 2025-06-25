@@ -96,18 +96,26 @@ fn import_vectors() {
         insta::assert_debug_snapshot!(info.embedding_status.user_provided_docids(), @"RoaringBitmap<[]>");
         insta::assert_debug_snapshot!(info.embedding_status.skip_regenerate_docids(), @"RoaringBitmap<[]>");
         insta::assert_snapshot!(name, @"A_fakerest");
-        insta::assert_debug_snapshot!(fragments, @"[]");
+        insta::assert_debug_snapshot!(fragments, @r###"
+        FragmentConfigs(
+            [],
+        )
+        "###);
         insta::assert_json_snapshot!(fakerest_config.embedder_options);
         let fakerest_name = name.clone();
 
         let IndexEmbeddingConfig { name, config: simple_hf_config, fragments } =
             configs.get(1).unwrap();
         let info = embedders.embedder_info(&rtxn, name).unwrap().unwrap();
-        insta::assert_snapshot!(info.embedder_id, @"0");
+        insta::assert_snapshot!(info.embedder_id, @"1");
         insta::assert_debug_snapshot!(info.embedding_status.user_provided_docids(), @"RoaringBitmap<[]>");
         insta::assert_debug_snapshot!(info.embedding_status.skip_regenerate_docids(), @"RoaringBitmap<[]>");
         insta::assert_snapshot!(name, @"B_small_hf");
-        insta::assert_debug_snapshot!(fragments, @"[]");
+        insta::assert_debug_snapshot!(fragments, @r###"
+        FragmentConfigs(
+            [],
+        )
+        "###);
         insta::assert_json_snapshot!(simple_hf_config.embedder_options);
         let simple_hf_name = name.clone();
 
@@ -186,15 +194,23 @@ fn import_vectors() {
         insta::assert_debug_snapshot!(info.embedding_status.user_provided_docids(), @"RoaringBitmap<[0]>");
         insta::assert_debug_snapshot!(info.embedding_status.skip_regenerate_docids(), @"RoaringBitmap<[0]>");
         insta::assert_snapshot!(name, @"A_fakerest");
-        insta::assert_debug_snapshot!(fragments, @"[]");
+        insta::assert_debug_snapshot!(fragments, @r###"
+        FragmentConfigs(
+            [],
+        )
+        "###);
 
         let IndexEmbeddingConfig { name, config: _, fragments } = configs.get(1).unwrap();
         let info = embedders.embedder_info(&rtxn, name).unwrap().unwrap();
-        insta::assert_snapshot!(info.embedder_id, @"0");
-        insta::assert_debug_snapshot!(info.embedding_status.user_provided_docids(), @"RoaringBitmap<[]>");
+        insta::assert_snapshot!(info.embedder_id, @"1");
+        insta::assert_debug_snapshot!(info.embedding_status.user_provided_docids(), @"RoaringBitmap<[0]>");
         insta::assert_debug_snapshot!(info.embedding_status.skip_regenerate_docids(), @"RoaringBitmap<[]>");
         insta::assert_snapshot!(name, @"B_small_hf");
-        insta::assert_debug_snapshot!(fragments, @"[]");
+        insta::assert_debug_snapshot!(fragments, @r###"
+        FragmentConfigs(
+            [],
+        )
+        "###);
 
         let embeddings = index.embeddings(&rtxn, 0).unwrap();
 
@@ -452,10 +468,19 @@ fn import_vectors_first_and_embedder_later() {
                 },
                 quantized: None,
             },
-            user_provided: RoaringBitmap<[1, 2]>,
+            fragments: FragmentConfigs(
+                [],
+            ),
         },
     ]
     "###);
+    let info =
+        index.embedding_configs().embedder_info(&rtxn, "my_doggo_embedder").unwrap().unwrap();
+    insta::assert_snapshot!(info.embedder_id, @"0");
+
+    insta::assert_debug_snapshot!(info.embedding_status.user_provided_docids(), @"RoaringBitmap<[1, 2, 3]>");
+    insta::assert_debug_snapshot!(info.embedding_status.skip_regenerate_docids(), @"RoaringBitmap<[1, 2]>");
+
     let docid = index.external_documents_ids.get(&rtxn, "0").unwrap().unwrap();
     let embeddings = index.embeddings(&rtxn, docid).unwrap();
     let (embedding, _) = &embeddings["my_doggo_embedder"];
@@ -631,28 +656,30 @@ fn delete_document_containing_vector() {
     snapshot!(serde_json::to_string(&documents).unwrap(), @r###"[{"id":0,"doggo":"kefir"}]"###);
     let conf = index.embedding_configs().embedding_configs(&rtxn).unwrap();
     snapshot!(format!("{conf:#?}"), @r###"
-        [
-            IndexEmbeddingConfig {
-                name: "manual",
-                config: EmbeddingConfig {
-                    embedder_options: UserProvided(
-                        EmbedderOptions {
-                            dimensions: 3,
-                            distribution: None,
-                        },
-                    ),
-                    prompt: PromptData {
-                        template: "{% for field in fields %}{% if field.is_searchable and field.value != nil %}{{ field.name }}: {{ field.value }}\n{% endif %}{% endfor %}",
-                        max_bytes: Some(
-                            400,
-                        ),
+    [
+        IndexEmbeddingConfig {
+            name: "manual",
+            config: EmbeddingConfig {
+                embedder_options: UserProvided(
+                    EmbedderOptions {
+                        dimensions: 3,
+                        distribution: None,
                     },
-                    quantized: None,
+                ),
+                prompt: PromptData {
+                    template: "{% for field in fields %}{% if field.is_searchable and field.value != nil %}{{ field.name }}: {{ field.value }}\n{% endif %}{% endfor %}",
+                    max_bytes: Some(
+                        400,
+                    ),
                 },
-                user_provided: RoaringBitmap<[0]>,
+                quantized: None,
             },
-        ]
-        "###);
+            fragments: FragmentConfigs(
+                [],
+            ),
+        },
+    ]
+    "###);
     let docid = index.external_documents_ids.get(&rtxn, "0").unwrap().unwrap();
     let embeddings = index.embeddings(&rtxn, docid).unwrap();
     let (embedding, _) = &embeddings["manual"];
@@ -675,28 +702,30 @@ fn delete_document_containing_vector() {
     snapshot!(serde_json::to_string(&documents).unwrap(), @"[]");
     let conf = index.embedding_configs().embedding_configs(&rtxn).unwrap();
     snapshot!(format!("{conf:#?}"), @r###"
-        [
-            IndexEmbeddingConfig {
-                name: "manual",
-                config: EmbeddingConfig {
-                    embedder_options: UserProvided(
-                        EmbedderOptions {
-                            dimensions: 3,
-                            distribution: None,
-                        },
-                    ),
-                    prompt: PromptData {
-                        template: "{% for field in fields %}{% if field.is_searchable and field.value != nil %}{{ field.name }}: {{ field.value }}\n{% endif %}{% endfor %}",
-                        max_bytes: Some(
-                            400,
-                        ),
+    [
+        IndexEmbeddingConfig {
+            name: "manual",
+            config: EmbeddingConfig {
+                embedder_options: UserProvided(
+                    EmbedderOptions {
+                        dimensions: 3,
+                        distribution: None,
                     },
-                    quantized: None,
+                ),
+                prompt: PromptData {
+                    template: "{% for field in fields %}{% if field.is_searchable and field.value != nil %}{{ field.name }}: {{ field.value }}\n{% endif %}{% endfor %}",
+                    max_bytes: Some(
+                        400,
+                    ),
                 },
-                user_provided: RoaringBitmap<[]>,
+                quantized: None,
             },
-        ]
-        "###);
+            fragments: FragmentConfigs(
+                [],
+            ),
+        },
+    ]
+    "###);
 }
 
 #[test]

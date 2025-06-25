@@ -699,7 +699,11 @@ fn test_settings_update() {
     insta::assert_debug_snapshot!(info.embedding_status.skip_regenerate_docids(), @"RoaringBitmap<[]>");
     insta::assert_snapshot!(name, @"default");
     insta::assert_json_snapshot!(config.embedder_options);
-    insta::assert_debug_snapshot!(fragments, @"[]");
+    insta::assert_debug_snapshot!(fragments, @r###"
+    FragmentConfigs(
+        [],
+    )
+    "###);
 }
 
 #[test]
