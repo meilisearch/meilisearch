@@ -29,6 +29,7 @@ pub struct InstanceTogglableFeatures {
     pub metrics: bool,
     pub logs_route: bool,
     pub contains_filter: bool,
+    pub chat_completions: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]

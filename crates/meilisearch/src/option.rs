@@ -731,6 +731,7 @@ impl Opt {
             metrics: self.experimental_enable_metrics,
             logs_route: self.experimental_enable_logs_route,
             contains_filter: self.experimental_contains_filter,
+            chat_completions: self.experimental_chat_completions,
         }
     }
 }
