@@ -20,7 +20,7 @@ use crate::vector::error::{
 use crate::vector::extractor::{
     DocumentTemplateExtractor, Extractor as VectorExtractor, RequestFragmentExtractor,
 };
-use crate::vector::request::{EmbedSession, Input, Metadata, OnEmbed};
+use crate::vector::session::{EmbedSession, Input, Metadata, OnEmbed};
 use crate::vector::{Embedding, RuntimeEmbedder, RuntimeEmbedders, RuntimeFragment};
 use crate::{DocumentId, FieldDistribution, InternalError, Result, ThreadPoolNoAbort, UserError};
 
@@ -269,7 +269,7 @@ impl<'doc> OnEmbed<'doc> for OnEmbeddingDocumentUpdates<'doc, '_> {
     type ErrorMetadata = UnusedVectorsDistributionBump<'doc>;
     fn process_embedding_response(
         &mut self,
-        response: crate::vector::request::EmbeddingResponse<'doc>,
+        response: crate::vector::session::EmbeddingResponse<'doc>,
     ) {
         self.sender
             .set_vector(
@@ -702,7 +702,7 @@ where
                 // remove any existing embedding
                 OnEmbed::process_embedding_response(
                     session.on_embed_mut(),
-                    crate::vector::request::EmbeddingResponse { metadata, embedding: None },
+                    crate::vector::session::EmbeddingResponse { metadata, embedding: None },
                 );
             }
         }

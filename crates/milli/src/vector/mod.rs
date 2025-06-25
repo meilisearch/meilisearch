@@ -28,7 +28,7 @@ pub mod json_template;
 pub mod manual;
 pub mod openai;
 pub mod parsed_vectors;
-pub mod request;
+pub mod session;
 pub mod settings;
 
 pub mod ollama;

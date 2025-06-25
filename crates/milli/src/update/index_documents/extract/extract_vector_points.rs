@@ -26,7 +26,7 @@ use crate::vector::db::{EmbedderInfo, EmbeddingStatus, EmbeddingStatusDelta};
 use crate::vector::error::{EmbedErrorKind, PossibleEmbeddingMistakes, UnusedVectorsDistribution};
 use crate::vector::extractor::{Extractor, ExtractorDiff, RequestFragmentExtractor};
 use crate::vector::parsed_vectors::{ParsedVectorsDiff, VectorState};
-use crate::vector::request::{EmbedSession, Metadata, OnEmbed};
+use crate::vector::session::{EmbedSession, Metadata, OnEmbed};
 use crate::vector::settings::ReindexAction;
 use crate::vector::{Embedder, Embedding, RuntimeEmbedder, RuntimeFragment};
 use crate::{try_split_array_at, DocumentId, FieldId, Result, ThreadPoolNoAbort};
@@ -1165,7 +1165,7 @@ impl<'doc> OnEmbed<'doc> for WriteGrenadOnEmbed<'_> {
     type ErrorMetadata = UnusedVectorsDistribution;
     fn process_embedding_response(
         &mut self,
-        response: crate::vector::request::EmbeddingResponse<'doc>,
+        response: crate::vector::session::EmbeddingResponse<'doc>,
     ) {
         let (docid, extractor_id) = (response.metadata.docid, response.metadata.extractor_id);
         while let Some(waiting_response) = self.waiting_responses.pop_front() {
@@ -1193,7 +1193,7 @@ impl<'doc> OnEmbed<'doc> for WriteGrenadOnEmbed<'_> {
         error: crate::vector::error::EmbedError,
         embedder_name: &'doc str,
         unused_vectors_distribution: &crate::vector::error::UnusedVectorsDistribution,
-        _metadata: &[crate::vector::request::Metadata<'doc>],
+        _metadata: &[crate::vector::session::Metadata<'doc>],
     ) -> crate::Error {
         if let FaultSource::Bug = error.fault {
             crate::Error::InternalError(crate::InternalError::VectorEmbeddingError(error.into()))
@@ -1237,7 +1237,7 @@ impl<'doc> OnEmbed<'doc> for WriteGrenadOnEmbed<'_> {
 
     fn process_embeddings(
         &mut self,
-        _metadata: crate::vector::request::Metadata<'doc>,
+        _metadata: crate::vector::session::Metadata<'doc>,
         _embeddings: Vec<Embedding>,
     ) {
         unimplemented!("unused")
