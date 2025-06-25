@@ -722,7 +722,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 let docid = key.read_u32::<BigEndian>().unwrap();
                 let extractor_id = key.read_u8().unwrap();
                 if value.is_empty() {
-                    writer.del_item_in_store(wtxn, docid, extractor_id)?;
+                    writer.del_item_in_store(wtxn, docid, extractor_id, expected_dimension)?;
                 } else {
                     let data = pod_collect_to_vec(value);
                     // it is a code error to have embeddings and not expected_dimension

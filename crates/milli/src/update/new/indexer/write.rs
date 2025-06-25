@@ -245,7 +245,7 @@ pub fn write_from_bbqueue(
                 let (_, _, writer, dimensions) =
                     arroy_writers.get(&embedder_id).expect("requested a missing embedder");
                 let embedding = asv.read_all_embeddings_into_vec(frame, aligned_embedding);
-                writer.del_item_in_store(wtxn, docid, extractor_id)?;
+                writer.del_item_in_store(wtxn, docid, extractor_id, *dimensions)?;
 
                 if !embedding.is_empty() {
                     if embedding.len() != *dimensions {

@@ -951,12 +951,15 @@ impl<'a, 'i> Transform<'a, 'i> {
             };
             let arroy =
                 ArroyWrapper::new(self.index.vector_arroy, infos.embedder_id, was_quantized);
+            let Some(dimensions) = arroy.dimensions(wtxn)? else {
+                continue;
+            };
             for fragment_id in fragment_ids {
                 // we must keep the user provided embeddings that ended up in this store
 
                 if infos.embedding_status.user_provided_docids().is_empty() {
                     // no user provided: clear store
-                    arroy.clear_store(wtxn, *fragment_id)?;
+                    arroy.clear_store(wtxn, *fragment_id, dimensions)?;
                     continue;
                 }
 
@@ -966,7 +969,7 @@ impl<'a, 'i> Transform<'a, 'i> {
                 })?;
 
                 for to_delete in to_delete {
-                    arroy.del_item_in_store(wtxn, to_delete, *fragment_id)?;
+                    arroy.del_item_in_store(wtxn, to_delete, *fragment_id, dimensions)?;
                 }
             }
         }

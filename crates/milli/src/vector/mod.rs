@@ -303,11 +303,12 @@ impl ArroyWrapper {
         wtxn: &mut RwTxn,
         item_id: arroy::ItemId,
         store_id: u8,
+        dimensions: usize,
     ) -> Result<bool, arroy::Error> {
         if self.quantized {
-            self._del_item_in_store(wtxn, self.quantized_db(), item_id, store_id)
+            self._del_item_in_store(wtxn, self.quantized_db(), item_id, store_id, dimensions)
         } else {
-            self._del_item_in_store(wtxn, self.angular_db(), item_id, store_id)
+            self._del_item_in_store(wtxn, self.angular_db(), item_id, store_id, dimensions)
         }
     }
 
@@ -317,8 +318,8 @@ impl ArroyWrapper {
         db: arroy::Database<D>,
         item_id: arroy::ItemId,
         store_id: u8,
+        dimensions: usize,
     ) -> Result<bool, arroy::Error> {
-        let Some(dimensions) = self.dimensions(wtxn)? else { return Ok(false) };
         let index = arroy_store_for_embedder(self.embedder_index, store_id);
         let writer = arroy::Writer::new(db, index, dimensions);
         writer.del_item(wtxn, item_id)
@@ -329,11 +330,16 @@ impl ArroyWrapper {
     /// # Warning
     ///
     /// - This function will silently fail to remove the items if used against an arroy database that was never built.
-    pub fn clear_store(&self, wtxn: &mut RwTxn, store_id: u8) -> Result<(), arroy::Error> {
+    pub fn clear_store(
+        &self,
+        wtxn: &mut RwTxn,
+        store_id: u8,
+        dimensions: usize,
+    ) -> Result<(), arroy::Error> {
         if self.quantized {
-            self._clear_store(wtxn, self.quantized_db(), store_id)
+            self._clear_store(wtxn, self.quantized_db(), store_id, dimensions)
         } else {
-            self._clear_store(wtxn, self.angular_db(), store_id)
+            self._clear_store(wtxn, self.angular_db(), store_id, dimensions)
         }
     }
 
@@ -342,10 +348,8 @@ impl ArroyWrapper {
         wtxn: &mut RwTxn,
         db: arroy::Database<D>,
         store_id: u8,
+        dimensions: usize,
     ) -> Result<(), arroy::Error> {
-        let Some(dimensions) = self.dimensions(wtxn)? else {
-            return Ok(());
-        };
         let index = arroy_store_for_embedder(self.embedder_index, store_id);
         let writer = arroy::Writer::new(db, index, dimensions);
         writer.clear(wtxn)
