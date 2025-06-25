@@ -149,7 +149,7 @@ impl Key {
         let uid = Uuid::new_v4();
         Self {
             name: Some("Default Read-Only Admin API Key".to_string()),
-            description: Some("Use it to peek into the instance in a read-only mode. Caution! Do not expose it on a public frontend. It would give access to all other keys".to_string()),
+            description: Some("Use it to peek into the instance in a read-only mode.".to_string()),
             uid,
             actions: vec![Action::AllGet, Action::KeysGet],
             indexes: vec![IndexUidPattern::all()],
@@ -468,7 +468,7 @@ pub mod actions {
     use super::Action::*;
 
     pub(crate) const ALL: u8 = All.repr();
-    pub const ALL_READ: u8 = AllGet.repr();
+    pub const ALL_GET: u8 = AllGet.repr();
     pub const SEARCH: u8 = Search.repr();
     pub const DOCUMENTS_ALL: u8 = DocumentsAll.repr();
     pub const DOCUMENTS_ADD: u8 = DocumentsAdd.repr();
