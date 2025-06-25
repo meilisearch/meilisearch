@@ -12,6 +12,7 @@ use super::super::steps::IndexingStep;
 use super::super::thread_local::{FullySend, ThreadLocal};
 use super::super::FacetFieldIdsDelta;
 use super::document_changes::{extract, DocumentChanges, IndexingContext};
+use super::settings_changes::settings_change_extract;
 use crate::documents::FieldIdMapper;
 use crate::documents::PrimaryKey;
 use crate::index::IndexEmbeddingConfig;
@@ -355,6 +356,53 @@ where
         settings_delta,
         extractor_allocs,
     )?;
+
+    'vectors: {
+        if settings_delta.embedder_actions().is_empty() {
+            break 'vectors;
+        }
+
+        let embedding_sender = extractor_sender.embeddings();
+
+        // extract the remaining embedders
+        let extractor = SettingsChangeEmbeddingExtractor::new(
+            settings_delta.new_embedders(),
+            settings_delta.old_embedders(),
+            settings_delta.embedder_actions(),
+            settings_delta.new_embedder_category_id(),
+            embedding_sender,
+            field_distribution,
+            request_threads(),
+        );
+        let mut datastore = ThreadLocal::with_capacity(rayon::current_num_threads());
+        {
+            let span = tracing::debug_span!(target: "indexing::documents::extract", "vectors");
+            let _entered = span.enter();
+
+            settings_change_extract(
+                &documents,
+                &extractor,
+                indexing_context,
+                extractor_allocs,
+                &datastore,
+                IndexingStep::ExtractingEmbeddings,
+            )?;
+        }
+        {
+            let span = tracing::debug_span!(target: "indexing::documents::merge", "vectors");
+            let _entered = span.enter();
+
+            for config in &mut index_embeddings {
+                'data: for data in datastore.iter_mut() {
+                    let data = &mut data.get_mut().0;
+                    let Some(deladd) = data.remove(&config.name) else {
+                        continue 'data;
+                    };
+                    deladd.apply_to(&mut config.user_provided, modified_docids);
+                }
+            }
+        }
+    }
 
     indexing_context.progress.update_progress(IndexingStep::WaitingForDatabaseWrites);
     finished_extraction.store(true, std::sync::atomic::Ordering::Relaxed);

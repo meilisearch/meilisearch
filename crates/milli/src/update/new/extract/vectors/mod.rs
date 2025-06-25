@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::collections::BTreeMap;
 
 use bumpalo::collections::Vec as BVec;
 use bumpalo::Bump;
@@ -9,13 +10,16 @@ use crate::error::FaultSource;
 use crate::progress::EmbedderStats;
 use crate::prompt::Prompt;
 use crate::update::new::channel::EmbeddingSender;
+use crate::update::new::document_change::DatabaseDocument;
 use crate::update::new::indexer::document_changes::{DocumentChangeContext, Extractor};
+use crate::update::new::indexer::settings_changes::SettingsChangeExtractor;
 use crate::update::new::thread_local::MostlySend;
 use crate::update::new::vector_document::VectorDocument;
 use crate::update::new::DocumentChange;
 use crate::vector::error::{
     EmbedErrorKind, PossibleEmbeddingMistakes, UnusedVectorsDistributionBump,
 };
+use crate::vector::settings::{EmbedderAction, ReindexAction};
 use crate::vector::{Embedder, Embedding, EmbeddingConfigs};
 use crate::{DocumentId, FieldDistribution, InternalError, Result, ThreadPoolNoAbort, UserError};
 
@@ -290,6 +294,200 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
         for chunk in all_chunks {
             chunk.drain(&unused_vectors_distribution)?;
         }
+        Ok(())
+    }
+}
+
+pub struct SettingsChangeEmbeddingExtractor<'a, 'b> {
+    embedders: &'a EmbeddingConfigs,
+    old_embedders: &'a EmbeddingConfigs,
+    embedder_actions: &'a BTreeMap<String, EmbedderAction>,
+    embedder_category_id: &'a std::collections::HashMap<String, u8>,
+    sender: EmbeddingSender<'a, 'b>,
+    possible_embedding_mistakes: PossibleEmbeddingMistakes,
+    threads: &'a ThreadPoolNoAbort,
+}
+
+impl<'a, 'b> SettingsChangeEmbeddingExtractor<'a, 'b> {
+    pub fn new(
+        embedders: &'a EmbeddingConfigs,
+        old_embedders: &'a EmbeddingConfigs,
+        embedder_actions: &'a BTreeMap<String, EmbedderAction>,
+        embedder_category_id: &'a std::collections::HashMap<String, u8>,
+        sender: EmbeddingSender<'a, 'b>,
+        field_distribution: &'a FieldDistribution,
+        threads: &'a ThreadPoolNoAbort,
+    ) -> Self {
+        let possible_embedding_mistakes = PossibleEmbeddingMistakes::new(field_distribution);
+        Self {
+            embedders,
+            old_embedders,
+            embedder_actions,
+            embedder_category_id,
+            sender,
+            threads,
+            possible_embedding_mistakes,
+        }
+    }
+}
+
+impl<'extractor> SettingsChangeExtractor<'extractor> for SettingsChangeEmbeddingExtractor<'_, '_> {
+    type Data = RefCell<EmbeddingExtractorData<'extractor>>;
+
+    fn init_data<'doc>(&'doc self, extractor_alloc: &'extractor Bump) -> crate::Result<Self::Data> {
+        Ok(RefCell::new(EmbeddingExtractorData(HashMap::new_in(extractor_alloc))))
+    }
+
+    fn process<'doc>(
+        &'doc self,
+        documents: impl Iterator<Item = crate::Result<DatabaseDocument<'doc>>>,
+        context: &'doc DocumentChangeContext<Self::Data>,
+    ) -> crate::Result<()> {
+        let embedders = self.embedders.inner_as_ref();
+        let old_embedders = self.old_embedders.inner_as_ref();
+        let unused_vectors_distribution = UnusedVectorsDistributionBump::new_in(&context.doc_alloc);
+
+        let mut all_chunks = BVec::with_capacity_in(embedders.len(), &context.doc_alloc);
+        for (embedder_name, (embedder, prompt, _is_quantized)) in embedders {
+            // if the embedder is not in the embedder_actions, we don't need to reindex.
+            if let Some((embedder_id, reindex_action)) =
+                self.embedder_actions.get(embedder_name).and_then(|action| {
+                    let embedder_id = self
+                        .embedder_category_id
+                        .get(embedder_name)
+                        .expect("embedder_category_id should be present");
+                    action.reindex().map(|reindex| (*embedder_id, reindex))
+                })
+            {
+                all_chunks.push((
+                    Chunks::new(
+                        embedder,
+                        embedder_id,
+                        embedder_name,
+                        prompt,
+                        context.data,
+                        &self.possible_embedding_mistakes,
+                        self.threads,
+                        self.sender,
+                        &context.doc_alloc,
+                    ),
+                    reindex_action,
+                ))
+            }
+        }
+
+        for document in documents {
+            let document = document?;
+
+            let current_vectors = document.current_vectors(
+                &context.rtxn,
+                context.index,
+                context.db_fields_ids_map,
+                &context.doc_alloc,
+            )?;
+
+            for (chunks, reindex_action) in &mut all_chunks {
+                let embedder_name = chunks.embedder_name();
+                let current_vectors = current_vectors.vectors_for_key(embedder_name)?;
+
+                // if the vectors for this document have been already provided, we don't need to reindex.
+                let (is_new_embedder, must_regenerate) =
+                    current_vectors.as_ref().map_or((true, true), |vectors| {
+                        (!vectors.has_configured_embedder, vectors.regenerate)
+                    });
+
+                match reindex_action {
+                    ReindexAction::RegeneratePrompts => {
+                        if !must_regenerate {
+                            continue;
+                        }
+                        // we need to regenerate the prompts for the document
+
+                        // Get the old prompt and render the document with it
+                        let Some((_, old_prompt, _)) = old_embedders.get(embedder_name) else {
+                            unreachable!("ReindexAction::RegeneratePrompts implies that the embedder {embedder_name} is in the old_embedders")
+                        };
+                        let old_rendered = old_prompt.render_document(
+                            document.external_document_id(),
+                            document.current(
+                                &context.rtxn,
+                                context.index,
+                                context.db_fields_ids_map,
+                            )?,
+                            context.new_fields_ids_map,
+                            &context.doc_alloc,
+                        )?;
+
+                        // Get the new prompt and render the document with it
+                        let new_prompt = chunks.prompt();
+                        let new_rendered = new_prompt.render_document(
+                            document.external_document_id(),
+                            document.current(
+                                &context.rtxn,
+                                context.index,
+                                context.db_fields_ids_map,
+                            )?,
+                            context.new_fields_ids_map,
+                            &context.doc_alloc,
+                        )?;
+
+                        // Compare the rendered documents
+                        // if they are different, regenerate the vectors
+                        if new_rendered != old_rendered {
+                            chunks.set_autogenerated(
+                                document.docid(),
+                                document.external_document_id(),
+                                new_rendered,
+                                &unused_vectors_distribution,
+                            )?;
+                        }
+                    }
+                    ReindexAction::FullReindex => {
+                        let prompt = chunks.prompt();
+                        // if no inserted vectors, then regenerate: true + no embeddings => autogenerate
+                        if let Some(embeddings) = current_vectors
+                            .and_then(|vectors| vectors.embeddings)
+                            // insert the embeddings only for new embedders
+                            .filter(|_| is_new_embedder)
+                        {
+                            chunks.set_regenerate(document.docid(), must_regenerate);
+                            chunks.set_vectors(
+                                document.external_document_id(),
+                                document.docid(),
+                                embeddings.into_vec(&context.doc_alloc, embedder_name).map_err(
+                                    |error| UserError::InvalidVectorsEmbedderConf {
+                                        document_id: document.external_document_id().to_string(),
+                                        error: error.to_string(),
+                                    },
+                                )?,
+                            )?;
+                        } else if must_regenerate {
+                            let rendered = prompt.render_document(
+                                document.external_document_id(),
+                                document.current(
+                                    &context.rtxn,
+                                    context.index,
+                                    context.db_fields_ids_map,
+                                )?,
+                                context.new_fields_ids_map,
+                                &context.doc_alloc,
+                            )?;
+                            chunks.set_autogenerated(
+                                document.docid(),
+                                document.external_document_id(),
+                                rendered,
+                                &unused_vectors_distribution,
+                            )?;
+                        }
+                    }
+                }
+            }
+        }
+
+        for (chunk, _) in all_chunks {
+            chunk.drain(&unused_vectors_distribution)?;
+        }
+
         Ok(())
     }
 }
