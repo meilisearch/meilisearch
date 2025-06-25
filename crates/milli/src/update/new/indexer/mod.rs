@@ -168,6 +168,7 @@ where
                 index_embeddings,
                 arroy_memory,
                 &mut arroy_writers,
+                None,
                 &indexing_context.must_stop_processing,
             )
         })
