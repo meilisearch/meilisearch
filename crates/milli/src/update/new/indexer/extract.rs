@@ -12,6 +12,8 @@ use super::super::steps::IndexingStep;
 use super::super::thread_local::{FullySend, ThreadLocal};
 use super::super::FacetFieldIdsDelta;
 use super::document_changes::{extract, DocumentChanges, IndexingContext};
+use crate::documents::FieldIdMapper;
+use crate::documents::PrimaryKey;
 use crate::index::IndexEmbeddingConfig;
 use crate::progress::EmbedderStats;
 use crate::progress::MergingWordCache;
@@ -19,7 +21,10 @@ use crate::proximity::ProximityPrecision;
 use crate::update::new::extract::EmbeddingExtractor;
 use crate::update::new::merger::merge_and_send_rtree;
 use crate::update::new::{merge_and_send_docids, merge_and_send_facet_docids, FacetDatabases};
+use crate::update::settings::SettingsDelta;
 use crate::vector::EmbeddingConfigs;
+use crate::Index;
+use crate::InternalError;
 use crate::{Result, ThreadPoolNoAbort, ThreadPoolNoAbortBuilder};
 
 #[allow(clippy::too_many_arguments)]
@@ -313,6 +318,28 @@ where
     finished_extraction.store(true, std::sync::atomic::Ordering::Relaxed);
 
     Result::Ok((facet_field_ids_delta, index_embeddings))
+}
+
+pub(super) fn extract_all_settings_changes<'extractor, MSP, SD>(
+    indexing_context: IndexingContext<MSP>,
+    indexer_span: Span,
+    extractor_sender: ExtractorBbqueueSender,
+    settings_delta: &SD,
+    extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
+    finished_extraction: &AtomicBool,
+    field_distribution: &mut BTreeMap<String, u64>,
+    mut index_embeddings: Vec<IndexEmbeddingConfig>,
+    modified_docids: &mut RoaringBitmap,
+) -> Result<Vec<IndexEmbeddingConfig>>
+where
+    MSP: Fn() -> bool + Sync,
+    SD: SettingsDelta,
+{
+
+    indexing_context.progress.update_progress(IndexingStep::WaitingForDatabaseWrites);
+    finished_extraction.store(true, std::sync::atomic::Ordering::Relaxed);
+
+    Result::Ok(index_embeddings)
 }
 
 fn request_threads() -> &'static ThreadPoolNoAbort {

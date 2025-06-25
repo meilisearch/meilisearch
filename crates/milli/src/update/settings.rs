@@ -2221,6 +2221,38 @@ fn deserialize_sub_embedder(
     }
 }
 
+/// Implement this trait for the settings delta type.
+/// This is used in the new settings update flow and will allow to easily replace the old settings delta type: `InnerIndexSettingsDiff`.
+pub trait SettingsDelta {
+    fn new_embedders(&self) -> &EmbeddingConfigs;
+    fn old_embedders(&self) -> &EmbeddingConfigs;
+    fn new_embedder_category_id(&self) -> &HashMap<String, u8>;
+    fn embedder_actions(&self) -> &BTreeMap<String, EmbedderAction>;
+    fn new_fields_ids_map(&self) -> &FieldIdMapWithMetadata;
+}
+
+impl SettingsDelta for InnerIndexSettingsDiff {
+    fn new_embedders(&self) -> &EmbeddingConfigs {
+        &self.new.embedding_configs
+    }
+
+    fn old_embedders(&self) -> &EmbeddingConfigs {
+        &self.old.embedding_configs
+    }
+
+    fn new_embedder_category_id(&self) -> &HashMap<String, u8> {
+        &self.new.embedder_category_id
+    }
+
+    fn embedder_actions(&self) -> &BTreeMap<String, EmbedderAction> {
+        &self.embedding_config_updates
+    }
+
+    fn new_fields_ids_map(&self) -> &FieldIdMapWithMetadata {
+        &self.new.fields_ids_map
+    }
+}
+
 #[cfg(test)]
 #[path = "test_settings.rs"]
 mod tests;
