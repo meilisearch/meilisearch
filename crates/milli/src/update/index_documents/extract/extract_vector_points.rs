@@ -239,10 +239,10 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
     let old_configs = &settings_diff.old.embedding_configs;
     if reindex_vectors {
         for (name, action) in settings_diff.embedding_config_updates.iter() {
-            let (_, embedder_info) =
-                embedder_info.iter().find(|(embedder_name, _)| embedder_name == name).unwrap();
-
             if let Some(action) = action.reindex() {
+                let (_, embedder_info) =
+                    embedder_info.iter().find(|(embedder_name, _)| embedder_name == name).unwrap();
+
                 let Some((embedder_name, runtime)) = configs.remove_entry(name) else {
                     tracing::error!(embedder = name, "Requested embedder config not found");
                     continue;
