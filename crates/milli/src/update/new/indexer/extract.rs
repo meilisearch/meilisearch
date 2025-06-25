@@ -344,6 +344,18 @@ where
         primary_key_from_db(&indexing_context.index, &rtxn, &indexing_context.db_fields_ids_map)?;
     let documents = DatabaseDocuments::new(&all_document_ids, primary_key);
 
+    let span =
+        tracing::trace_span!(target: "indexing::documents", parent: &indexer_span, "extract");
+    let _entered = span.enter();
+
+    update_database_documents(
+        &documents,
+        indexing_context,
+        &extractor_sender,
+        settings_delta,
+        extractor_allocs,
+    )?;
+
     indexing_context.progress.update_progress(IndexingStep::WaitingForDatabaseWrites);
     finished_extraction.store(true, std::sync::atomic::Ordering::Relaxed);
 
