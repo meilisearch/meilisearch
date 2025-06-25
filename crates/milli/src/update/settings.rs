@@ -1128,7 +1128,6 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                         SettingsDiff::Reindex { action, updated_settings, quantize } => {
                             let mut remove_fragments = None;
                             let updated_settings = Setting::Set(updated_settings);
-                            /// FIXME: `fragments` might need rebuilding even if ReindexAction == FullReindex or RegeneratePrompts
                             if let ReindexAction::RegenerateFragments(regenerate_fragments) =
                                 &action
                             {
@@ -1153,7 +1152,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                                         )
                                     })
                                     .map(|(name, _)| name.clone());
-                                fragments.add_new_fragments(it);
+                                fragments.add_new_fragments(it)?;
                             } else {
                                 // needs full reindex of fragments
                                 fragments = FragmentConfigs::new();
@@ -1161,7 +1160,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                                     crate::vector::settings::fragments_from_settings(
                                         &updated_settings,
                                     ),
-                                );
+                                )?;
                             }
                             tracing::debug!(embedder = name, ?action, "reindex embedder");
 
@@ -1212,9 +1211,9 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                         EmbedderAction::with_reindex(ReindexAction::FullReindex, false),
                     );
                     let mut fragments = FragmentConfigs::new();
-                    fragments.add_new_fragments(crate::vector::settings::fragments_from_settings(
-                        &setting,
-                    ));
+                    fragments.add_new_fragments(
+                        crate::vector::settings::fragments_from_settings(&setting),
+                    )?;
                     updated_configs.insert(name, (setting, fragments));
                 }
             }
@@ -1855,7 +1854,6 @@ fn embedders(embedding_configs: Vec<IndexEmbeddingConfig>) -> Result<RuntimeEmbe
                     .into_inner()
                     .into_iter()
                     .map(|fragment| {
-                        /// FIXME: unwrap
                         let template = JsonTemplate::new(
                             embedder_options.fragment(&fragment.name).unwrap().clone(),
                         )

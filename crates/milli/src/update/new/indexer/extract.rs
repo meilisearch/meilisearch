@@ -267,7 +267,6 @@ where
 
             let embedder_configs = index.embedding_configs();
             for config in &mut index_embeddings {
-                /// FIXME: proper internal error
                 let mut infos = embedder_configs.embedder_info(&rtxn, &config.name)?.unwrap();
 
                 'data: for data in datastore.iter_mut() {

@@ -105,7 +105,7 @@ impl<'doc, C: OnEmbed<'doc>, I: Input> EmbedSession<'doc, C, I> {
     }
 
     pub fn drain(mut self, unused_vectors_distribution: &C::ErrorMetadata) -> Result<C> {
-        self.embed_chunks(unused_vectors_distribution);
+        self.embed_chunks(unused_vectors_distribution)?;
         Ok(self.on_embed)
     }
 

@@ -239,7 +239,6 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
     let old_configs = &settings_diff.old.embedding_configs;
     if reindex_vectors {
         for (name, action) in settings_diff.embedding_config_updates.iter() {
-            /// FIXME: unwrap
             let (_, embedder_info) =
                 embedder_info.iter().find(|(embedder_name, _)| embedder_name == name).unwrap();
 
@@ -347,7 +346,6 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
     } else {
         // document operation
         for (embedder_name, runtime) in configs.into_iter() {
-            /// FIXME: unwrap
             let (_, embedder_info) = embedder_info
                 .iter()
                 .find(|(name, _)| embedder_name.as_str() == name.as_str())

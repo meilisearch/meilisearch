@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::vector::settings::RemoveFragments;
 use crate::vector::EmbeddingConfig;
-use crate::{CboRoaringBitmapCodec, DocumentId};
+use crate::{CboRoaringBitmapCodec, DocumentId, UserError};
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct IndexEmbeddingConfig {
@@ -50,7 +50,10 @@ impl FragmentConfigs {
         (!remove_fragments.is_empty()).then_some(RemoveFragments { fragment_ids: remove_fragments })
     }
 
-    pub fn add_new_fragments(&mut self, new_fragments: impl IntoIterator<Item = String>) {
+    pub fn add_new_fragments(
+        &mut self,
+        new_fragments: impl IntoIterator<Item = String>,
+    ) -> crate::Result<()> {
         let mut free_indices: [bool; u8::MAX as usize] = [true; u8::MAX as usize];
 
         for FragmentConfig { id, name: _ } in self.0.iter() {
@@ -60,11 +63,19 @@ impl FragmentConfigs {
         let mut find_free_index =
             move || free_indices.find(|(_, free)| **free).map(|(index, _)| index as u8);
 
-        for name in new_fragments {
-            /// FIXME: add error here if more than 256 fragments
-            let id = find_free_index().unwrap();
-            self.0.push(FragmentConfig { id, name })
+        let mut new_fragments = new_fragments.into_iter();
+
+        for name in &mut new_fragments {
+            let id = match find_free_index() {
+                Some(id) => id,
+                None => {
+                    let more = (&mut new_fragments).count();
+                    return Err(UserError::TooManyFragments(u8::MAX as usize + more + 1).into());
+                }
+            };
+            self.0.push(FragmentConfig { id, name });
         }
+        Ok(())
     }
 }
 
