@@ -409,8 +409,8 @@ pub struct BrowseQueryGet {
     #[param(default, value_type = Option<String>, example = "popularity > 1000")]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentFilter>)]
     filter: Option<String>,
-    #[deserr(default, error = DeserrQueryParamError<InvalidSearchSort>)]
-    sort: Option<String>, // TODO: change deser error
+    #[deserr(default, error = DeserrQueryParamError<InvalidDocumentSort>)]
+    sort: Option<String>,
 }
 
 #[derive(Debug, Deserr, ToSchema)]
@@ -436,8 +436,8 @@ pub struct BrowseQuery {
     #[deserr(default, error = DeserrJsonError<InvalidDocumentFilter>)]
     filter: Option<Value>,
     #[schema(default, value_type = Option<Vec<String>>, example = json!(["title:asc", "rating:desc"]))]
-    #[deserr(default, error = DeserrJsonError<InvalidSearchSort>)] // TODO: Change error
-    pub sort: Option<Vec<String>>,
+    #[deserr(default, error = DeserrJsonError<InvalidDocumentSort>)]
+    sort: Option<Vec<String>>,
 }
 
 /// Get documents with POST

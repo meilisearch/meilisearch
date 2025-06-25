@@ -237,6 +237,7 @@ InvalidDocumentRetrieveVectors                 , InvalidRequest       , BAD_REQU
 MissingDocumentFilter                          , InvalidRequest       , BAD_REQUEST ;
 MissingDocumentEditionFunction                 , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentFilter                          , InvalidRequest       , BAD_REQUEST ;
+InvalidDocumentSort                            , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentGeoField                        , InvalidRequest       , BAD_REQUEST ;
 InvalidVectorDimensions                        , InvalidRequest       , BAD_REQUEST ;
 InvalidVectorsType                             , InvalidRequest       , BAD_REQUEST ;
