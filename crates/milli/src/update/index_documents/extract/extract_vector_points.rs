@@ -11,6 +11,7 @@ use bumpalo::Bump;
 use bytemuck::cast_slice;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use grenad::Writer;
+use obkv::KvReaderU16;
 use ordered_float::OrderedFloat;
 use serde_json::Value;
 
@@ -236,8 +237,6 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
 
     let mut configs = settings_diff.new.embedding_configs.clone().into_inner();
     let old_configs = &settings_diff.old.embedding_configs;
-
-    /// TODO: handle fragments even when not doing a regenerate fragment
     if reindex_vectors {
         for (name, action) in settings_diff.embedding_config_updates.iter() {
             /// FIXME: unwrap
@@ -475,7 +474,18 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                             );
                             continue;
                         }
-                        regenerate_prompt(obkv, &runtime.document_template, new_fields_ids_map)?
+                        let has_fragments = !runtime.fragments.is_empty();
+
+                        if has_fragments {
+                            regenerate_all_fragments(
+                                &runtime.fragments,
+                                &doc_alloc,
+                                new_fields_ids_map,
+                                obkv,
+                            )
+                        } else {
+                            regenerate_prompt(obkv, &runtime.document_template, new_fields_ids_map)?
+                        }
                     }
                 },
                 ExtractionAction::SettingsRegenerateFragments {
@@ -483,37 +493,54 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                     old_runtime,
                 } => {
                     if old.must_regenerate() {
-                        let mut fragment_diff = Vec::new();
-                        for (name, (old_index, new_index)) in must_regenerate_fragments {
-                            let Some(new) = runtime.fragments.get(*new_index) else { continue };
+                        let has_fragments = !runtime.fragments.is_empty();
+                        let old_has_fragments = !old_runtime.fragments.is_empty();
 
-                            let new =
-                                RequestFragmentExtractor::new(new, &doc_alloc).ignore_errors();
+                        let is_adding_fragments = has_fragments && !old_has_fragments;
 
-                            let diff = {
-                                let old = old_index.as_ref().and_then(|old| {
-                                    let old = old_runtime.fragments.get(*old)?;
-                                    Some(
-                                        RequestFragmentExtractor::new(old, &doc_alloc)
-                                            .ignore_errors(),
-                                    )
-                                });
-                                let old = old.as_ref();
+                        if is_adding_fragments {
+                            regenerate_all_fragments(
+                                &runtime.fragments,
+                                &doc_alloc,
+                                new_fields_ids_map,
+                                obkv,
+                            )
+                        } else if !has_fragments {
+                            // removing fragments
+                            regenerate_prompt(obkv, &runtime.document_template, new_fields_ids_map)?
+                        } else {
+                            let mut fragment_diff = Vec::new();
+                            for (name, (old_index, new_index)) in must_regenerate_fragments {
+                                let Some(new) = runtime.fragments.get(*new_index) else { continue };
 
-                                let new_fields_ids_map = new_fields_ids_map.as_fields_ids_map();
+                                let new =
+                                    RequestFragmentExtractor::new(new, &doc_alloc).ignore_errors();
 
-                                let obkv_document =
-                                    crate::update::new::document::KvDelAddDocument::new(
-                                        obkv,
-                                        DelAdd::Addition,
-                                        new_fields_ids_map,
-                                    );
-                                Extractor::diff_settings(&new, obkv_document, &(), old)
+                                let diff = {
+                                    let old = old_index.as_ref().and_then(|old| {
+                                        let old = old_runtime.fragments.get(*old)?;
+                                        Some(
+                                            RequestFragmentExtractor::new(old, &doc_alloc)
+                                                .ignore_errors(),
+                                        )
+                                    });
+                                    let old = old.as_ref();
+
+                                    let new_fields_ids_map = new_fields_ids_map.as_fields_ids_map();
+
+                                    let obkv_document =
+                                        crate::update::new::document::KvDelAddDocument::new(
+                                            obkv,
+                                            DelAdd::Addition,
+                                            new_fields_ids_map,
+                                        );
+                                    Extractor::diff_settings(&new, obkv_document, &(), old)
+                                }
+                                .expect("ignoring errors so this cannot fail");
+                                fragment_diff.push((name.clone(), diff));
                             }
-                            .expect("ignoring errors so this cannot fail");
-                            fragment_diff.push((name.clone(), diff));
+                            VectorStateDelta::UpdateGeneratedFromFragments(fragment_diff)
                         }
-                        VectorStateDelta::UpdateGeneratedFromFragments(fragment_diff)
                     } else {
                         // we can simply ignore user provided vectors as they are not regenerated and are
                         // already in the DB since this is an existing embedder
@@ -531,11 +558,22 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                             );
                             continue;
                         }
-                        regenerate_if_prompt_changed(
-                            obkv,
-                            (&old_runtime.document_template, &runtime.document_template),
-                            (old_fields_ids_map, new_fields_ids_map),
-                        )?
+                        let has_fragments = !runtime.fragments.is_empty();
+
+                        if has_fragments {
+                            regenerate_all_fragments(
+                                &runtime.fragments,
+                                &doc_alloc,
+                                new_fields_ids_map,
+                                obkv,
+                            )
+                        } else {
+                            regenerate_if_prompt_changed(
+                                obkv,
+                                (&old_runtime.document_template, &runtime.document_template),
+                                (old_fields_ids_map, new_fields_ids_map),
+                            )?
+                        }
                     } else {
                         // we can simply ignore user provided vectors as they are not regenerated and are
                         // already in the DB since this is an existing embedder
@@ -776,6 +814,35 @@ fn regenerate_prompt(
     let prompt = prompt.render_kvdeladd(obkv, DelAdd::Addition, new_fields_ids_map)?;
 
     Ok(VectorStateDelta::NowGenerated(prompt))
+}
+
+fn regenerate_all_fragments<'a>(
+    fragments: impl IntoIterator<Item = &'a RuntimeFragment>,
+    doc_alloc: &Bump,
+    new_fields_ids_map: &FieldIdMapWithMetadata,
+    obkv: &KvReaderU16,
+) -> VectorStateDelta {
+    let mut fragment_diff = Vec::new();
+    for new in fragments {
+        let name = &new.name;
+        let new = RequestFragmentExtractor::new(new, doc_alloc).ignore_errors();
+
+        let diff = {
+            let new_fields_ids_map = new_fields_ids_map.as_fields_ids_map();
+
+            let obkv_document = crate::update::new::document::KvDelAddDocument::new(
+                obkv,
+                DelAdd::Addition,
+                new_fields_ids_map,
+            );
+            new.extract(obkv_document, &())
+        }
+        .expect("ignoring errors so this cannot fail");
+        if let Some(value) = diff {
+            fragment_diff.push((name.clone(), value));
+        }
+    }
+    VectorStateDelta::NowGeneratedFromFragments(fragment_diff)
 }
 
 /// We cannot compute the diff between both Del and Add vectors.
