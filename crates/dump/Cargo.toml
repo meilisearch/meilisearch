@@ -14,7 +14,7 @@ license.workspace = true
 anyhow.workspace = true
 flate2.workspace = true
 http.workspace = true
-meilisearch-types = { path = "../meilisearch-types" }
+meilisearch-types.path = "../meilisearch-types"
 once_cell.workspace = true
 regex.workspace = true
 roaring = { workspace = true, features = ["serde"] }
@@ -30,5 +30,5 @@ uuid = { workspace = true, features = ["serde", "v4"] }
 [dev-dependencies]
 big_s.workspace = true
 maplit.workspace = true
-meili-snap = { path = "../meili-snap" }
-meilisearch-types = { path = "../meilisearch-types" }
+meili-snap.path = "../meili-snap"
+meilisearch-types.path = "../meilisearch-types"

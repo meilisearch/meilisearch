@@ -35,29 +35,29 @@ bumpalo.workspace = true
 clap = { workspace = true, features = ["derive", "env"] }
 crossbeam-channel.workspace = true
 deserr = { workspace = true, features = ["actix-web"] }
-dump = { path = "../dump" }
+dump.path = "../dump"
 either.workspace = true
-file-store = { path = "../file-store" }
+file-store.path = "../file-store"
 flate2.workspace = true
 fst.workspace = true
 futures.workspace = true
 futures-util.workspace = true
-index-scheduler = { path = "../index-scheduler" }
+index-scheduler.path = "../index-scheduler"
 indexmap = { workspace = true, features = ["serde"] }
 is-terminal.workspace = true
 itertools.workspace = true
 jsonwebtoken.workspace = true
 lazy_static.workspace = true
-meilisearch-auth = { path = "../meilisearch-auth" }
-meilisearch-types = { path = "../meilisearch-types" }
-mimalloc = { workspace = true, default-features = false }
+meilisearch-auth.path = "../meilisearch-auth"
+meilisearch-types.path = "../meilisearch-types"
+mimalloc.workspace = true
 mime.workspace = true
 num_cpus.workspace = true
 obkv.workspace = true
 once_cell.workspace = true
 ordered-float.workspace = true
 parking_lot.workspace = true
-permissive-json-pointer = { path = "../permissive-json-pointer" }
+permissive-json-pointer.path = "../permissive-json-pointer"
 pin-project-lite.workspace = true
 platform-dirs.workspace = true
 prometheus = { workspace = true, features = ["process"] }
@@ -96,7 +96,9 @@ termcolor.workspace = true
 url = { workspace = true, features = ["serde"] }
 tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["json"] }
+tracing-trace.path = "../tracing-trace"
 tracing-actix-web.workspace = true
+build-info.path = "../build-info"
 roaring.workspace = true
 mopa-maintained.workspace = true
 utoipa = { workspace = true, features = [
@@ -119,7 +121,7 @@ brotli.workspace = true
 insta = { workspace = true, features = ["redactions"] }
 manifest-dir-macros.workspace = true
 maplit.workspace = true
-meili-snap = { path = "../meili-snap" }
+meili-snap.path = "../meili-snap"
 temp-env.workspace = true
 urlencoding.workspace = true
 wiremock.workspace = true

@@ -24,7 +24,7 @@ convert_case.workspace = true
 crossbeam-channel.workspace = true
 deserr.workspace = true
 either = { workspace = true, features = ["serde"] }
-flatten-serde-json = { path = "../flatten-serde-json" }
+flatten-serde-json.path = "../flatten-serde-json"
 fst.workspace = true
 fxhash.workspace = true
 geoutils.workspace = true
@@ -37,7 +37,7 @@ heed = { workspace = true, default-features = false, features = [
     "serde-bincode",
 ] }
 indexmap = { workspace = true, features = ["serde"] }
-json-depth-checker = { path = "../json-depth-checker" }
+json-depth-checker.path = "../json-depth-checker"
 levenshtein_automata = { workspace = true, features = ["fst_automaton"] }
 memchr.workspace = true
 memmap2.workspace = true
@@ -63,7 +63,7 @@ time = { workspace = true, features = [
 ] }
 uuid = { workspace = true, features = ["v4"] }
 
-filter-parser = { path = "../filter-parser" }
+filter-parser.path = "../filter-parser"
 
 # documents words self-join
 itertools.workspace = true
@@ -100,7 +100,7 @@ allocator-api2.workspace = true
 rustc-hash.workspace = true
 enum-iterator.workspace = true
 bbqueue.workspace = true
-flume = { workspace = true, default-features = false }
+flume.workspace = true
 utoipa = { workspace = true, features = [
     "non_strict_integers",
     "preserve_order",
@@ -111,11 +111,11 @@ utoipa = { workspace = true, features = [
 lru.workspace = true
 
 [dev-dependencies]
-mimalloc = { workspace = true, default-features = false }
+mimalloc.workspace = true
 insta.workspace = true
 maplit.workspace = true
 md5.workspace = true
-meili-snap = { path = "../meili-snap" }
+meili-snap.path = "../meili-snap"
 rand = { workspace = true, features = ["small_rng"] }
 
 [features]

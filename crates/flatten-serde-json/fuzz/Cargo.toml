@@ -11,7 +11,7 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4"
 arbitrary-json = "0.1.1"
-json-depth-checker = { path = "../../json-depth-checker" }
+json-depth-checker.path = "../../json-depth-checker"
 
 [dependencies.flatten-serde-json]
 path = ".."

@@ -11,13 +11,13 @@ license.workspace = true
 [dependencies]
 anyhow.workspace = true
 clap = { workspace = true, features = ["derive"] }
-dump = { path = "../dump" }
-file-store = { path = "../file-store" }
+dump.path = "../dump"
+file-store.path = "../file-store"
 indexmap = { workspace = true, features = ["serde"] }
-meilisearch-auth = { path = "../meilisearch-auth" }
-meilisearch-types = { path = "../meilisearch-types" }
+meilisearch-auth.path = "../meilisearch-auth"
+meilisearch-types.path = "../meilisearch-types"
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true, features = ["preserve_order"] }
 tempfile.workspace = true
 time = { workspace = true, features = ["formatting", "parsing", "alloc"] }
-uuid = { workspace = true, features = ["v4"], default-features = false }
+uuid = { workspace = true, features = ["v4"] }

@@ -11,34 +11,34 @@ license.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.98"
-build-info = { version = "1.7.0", path = "../build-info" }
-cargo_metadata = "0.20.0"
-clap = { version = "4.5.40", features = ["derive"] }
-futures-core = "0.3.31"
-futures-util = "0.3.31"
-reqwest = { version = "0.12.20", features = [
+anyhow.workspace = true
+build-info.path = "../build-info"
+cargo_metadata.workspace = true
+clap = { workspace = true, features = ["derive"] }
+futures-core.workspace = true
+futures-util.workspace = true
+reqwest = { workspace = true, features = [
     "stream",
     "json",
     "rustls-tls",
 ], default-features = false }
-serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.140"
-sha2 = "0.10.9"
-sysinfo = "0.35.2"
-time = { version = "0.3.41", features = [
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+sha2.workspace = true
+sysinfo.workspace = true
+time = { workspace = true, features = [
     "serde",
     "serde-human-readable",
     "macros",
 ] }
-tokio = { version = "1.45.1", features = [
+tokio = { workspace = true, features = [
     "rt",
     "net",
     "time",
     "process",
     "signal",
 ] }
-tracing = "0.1.41"
-tracing-subscriber = "0.3.19"
-tracing-trace = { version = "0.1.0", path = "../tracing-trace" }
-uuid = { version = "1.17.0", features = ["v7", "serde"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tracing-trace.path = "../tracing-trace"
+uuid = { workspace = true, features = ["v7", "serde"] }

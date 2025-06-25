@@ -20,11 +20,11 @@ csv.workspace = true
 deserr = { workspace = true, features = ["actix-web"] }
 either = { workspace = true, features = ["serde"] }
 enum-iterator.workspace = true
-file-store = { path = "../file-store" }
+file-store.path = "../file-store"
 flate2.workspace = true
 fst.workspace = true
 memmap2.workspace = true
-milli = { path = "../milli" }
+milli.path = "../milli"
 roaring = { workspace = true, features = ["serde"] }
 rustc-hash.workspace = true
 serde = { workspace = true, features = ["derive"] }
@@ -45,7 +45,7 @@ uuid = { workspace = true, features = ["serde", "v4"] }
 
 [dev-dependencies]
 insta.workspace = true
-meili-snap = { path = "../meili-snap" }
+meili-snap.path = "../meili-snap"
 
 [features]
 # all specialized tokenizations

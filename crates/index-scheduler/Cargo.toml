@@ -19,13 +19,13 @@ bumparaw-collections.workspace = true
 convert_case.workspace = true
 csv.workspace = true
 derive_builder.workspace = true
-dump = { path = "../dump" }
+dump.path = "../dump"
 enum-iterator.workspace = true
-file-store = { path = "../file-store" }
+file-store.path = "../file-store"
 flate2.workspace = true
 indexmap.workspace = true
-meilisearch-auth = { path = "../meilisearch-auth" }
-meilisearch-types = { path = "../meilisearch-types" }
+meilisearch-auth.path = "../meilisearch-auth"
+meilisearch-types.path = "../meilisearch-types"
 memmap2.workspace = true
 page_size.workspace = true
 rayon.workspace = true
@@ -50,4 +50,4 @@ big_s.workspace = true
 crossbeam-channel.workspace = true
 insta = { workspace = true, features = ["json", "redactions"] }
 maplit.workspace = true
-meili-snap = { path = "../meili-snap" }
+meili-snap.path = "../meili-snap"

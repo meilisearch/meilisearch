@@ -13,11 +13,7 @@ serde_json.workspace = true
 tracing.workspace = true
 tracing-error.workspace = true
 tracing-subscriber.workspace = true
-byte-unit = { workspace = true, default-features = false, features = [
-    "std",
-    "byte",
-    "serde",
-] }
+byte-unit = { workspace = true, features = ["serde"] }
 tokio = { workspace = true, features = ["sync"] }
 
 [target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]

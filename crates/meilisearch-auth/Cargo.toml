@@ -15,7 +15,7 @@ base64.workspace = true
 enum-iterator.workspace = true
 hmac.workspace = true
 maplit.workspace = true
-meilisearch-types = { path = "../meilisearch-types" }
+meilisearch-types.path = "../meilisearch-types"
 rand.workspace = true
 roaring = { workspace = true, features = ["serde"] }
 serde = { workspace = true, features = ["derive"] }
