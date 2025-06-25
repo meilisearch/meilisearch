@@ -362,12 +362,19 @@ impl IndexScheduler {
                 Ok((vec![task], ProcessBatchInfo::default()))
             }
             Batch::Export { mut task } => {
-                let KindWithContent::Export { url, indexes, api_key } = &task.kind else {
+                let KindWithContent::Export { url, api_key, payload_size, indexes } = &task.kind
+                else {
                     unreachable!()
                 };
 
                 let ret = catch_unwind(AssertUnwindSafe(|| {
-                    self.process_export(url, indexes, api_key.as_deref(), progress)
+                    self.process_export(
+                        url,
+                        api_key.as_deref(),
+                        payload_size.as_ref(),
+                        indexes,
+                        progress,
+                    )
                 }));
 
                 match ret {

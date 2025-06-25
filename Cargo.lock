@@ -3855,6 +3855,7 @@ dependencies = [
  "anyhow",
  "bumpalo",
  "bumparaw-collections",
+ "byte-unit",
  "convert_case 0.8.0",
  "csv",
  "deserr",

@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, HashSet};
 use std::fmt::{Display, Write};
 use std::str::FromStr;
 
+use byte_unit::Byte;
 use enum_iterator::Sequence;
 use milli::update::IndexDocumentsMethod;
 use milli::Object;
@@ -159,6 +160,7 @@ pub enum KindWithContent {
     Export {
         url: String,
         api_key: Option<String>,
+        payload_size: Option<Byte>,
         indexes: BTreeMap<IndexUidPattern, ExportIndexSettings>,
     },
     UpgradeDatabase {
@@ -286,11 +288,14 @@ impl KindWithContent {
             }),
             KindWithContent::DumpCreation { .. } => Some(Details::Dump { dump_uid: None }),
             KindWithContent::SnapshotCreation => None,
-            KindWithContent::Export { url, api_key, indexes } => Some(Details::Export {
-                url: url.clone(),
-                api_key: api_key.clone(),
-                indexes: indexes.iter().map(|(p, s)| (p.clone(), s.clone().into())).collect(),
-            }),
+            KindWithContent::Export { url, api_key, payload_size, indexes } => {
+                Some(Details::Export {
+                    url: url.clone(),
+                    api_key: api_key.clone(),
+                    payload_size: payload_size.clone(),
+                    indexes: indexes.iter().map(|(p, s)| (p.clone(), s.clone().into())).collect(),
+                })
+            }
             KindWithContent::UpgradeDatabase { from } => Some(Details::UpgradeDatabase {
                 from: (from.0, from.1, from.2),
                 to: (
@@ -357,11 +362,14 @@ impl KindWithContent {
             }),
             KindWithContent::DumpCreation { .. } => Some(Details::Dump { dump_uid: None }),
             KindWithContent::SnapshotCreation => None,
-            KindWithContent::Export { url, api_key, indexes } => Some(Details::Export {
-                url: url.clone(),
-                api_key: api_key.clone(),
-                indexes: indexes.iter().map(|(p, s)| (p.clone(), s.clone().into())).collect(),
-            }),
+            KindWithContent::Export { url, api_key, payload_size, indexes } => {
+                Some(Details::Export {
+                    url: url.clone(),
+                    api_key: api_key.clone(),
+                    payload_size: payload_size.clone(),
+                    indexes: indexes.iter().map(|(p, s)| (p.clone(), s.clone().into())).collect(),
+                })
+            }
             KindWithContent::UpgradeDatabase { from } => Some(Details::UpgradeDatabase {
                 from: *from,
                 to: (
@@ -410,11 +418,14 @@ impl From<&KindWithContent> for Option<Details> {
             }),
             KindWithContent::DumpCreation { .. } => Some(Details::Dump { dump_uid: None }),
             KindWithContent::SnapshotCreation => None,
-            KindWithContent::Export { url, api_key, indexes } => Some(Details::Export {
-                url: url.clone(),
-                api_key: api_key.clone(),
-                indexes: indexes.iter().map(|(p, s)| (p.clone(), s.clone().into())).collect(),
-            }),
+            KindWithContent::Export { url, api_key, payload_size, indexes } => {
+                Some(Details::Export {
+                    url: url.clone(),
+                    api_key: api_key.clone(),
+                    payload_size: payload_size.clone(),
+                    indexes: indexes.iter().map(|(p, s)| (p.clone(), s.clone().into())).collect(),
+                })
+            }
             KindWithContent::UpgradeDatabase { from } => Some(Details::UpgradeDatabase {
                 from: *from,
                 to: (
@@ -681,6 +692,7 @@ pub enum Details {
     Export {
         url: String,
         api_key: Option<String>,
+        payload_size: Option<Byte>,
         indexes: BTreeMap<IndexUidPattern, DetailsExportIndexSettings>,
     },
     UpgradeDatabase {

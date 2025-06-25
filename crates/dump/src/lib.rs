@@ -4,6 +4,7 @@
 use std::collections::BTreeMap;
 
 use meilisearch_types::batches::BatchId;
+use meilisearch_types::byte_unit::Byte;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::keys::Key;
 use meilisearch_types::milli::update::IndexDocumentsMethod;
@@ -148,6 +149,7 @@ pub enum KindDump {
     Export {
         url: String,
         api_key: Option<String>,
+        payload_size: Option<Byte>,
         indexes: BTreeMap<String, ExportIndexSettings>,
     },
     UpgradeDatabase {
@@ -222,9 +224,10 @@ impl From<KindWithContent> for KindDump {
                 KindDump::DumpCreation { keys, instance_uid }
             }
             KindWithContent::SnapshotCreation => KindDump::SnapshotCreation,
-            KindWithContent::Export { url, api_key, indexes } => KindDump::Export {
+            KindWithContent::Export { url, api_key, payload_size, indexes } => KindDump::Export {
                 url,
                 api_key,
+                payload_size,
                 indexes: indexes
                     .into_iter()
                     .map(|(pattern, settings)| (pattern.to_string(), settings))

@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use byte_unit::UnitType;
 use milli::Object;
 use serde::{Deserialize, Serialize};
 use time::{Duration, OffsetDateTime};
@@ -127,6 +128,8 @@ pub struct DetailsView {
     pub url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub api_key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub payload_size: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub indexes: Option<BTreeMap<String, DetailsExportIndexSettings>>,
 }
@@ -263,6 +266,13 @@ impl DetailsView {
                 // So we return the first one we encounter but that shouldn't be an issue anyway.
                 (Some(left), Some(_right)) => Some(left),
             },
+            payload_size: match (self.payload_size.clone(), other.payload_size.clone()) {
+                (None, None) => None,
+                (None, Some(size)) | (Some(size), None) => Some(size),
+                // We should never be able to batch multiple exports at the same time.
+                // So we return the first one we encounter but that shouldn't be an issue anyway.
+                (Some(left), Some(_right)) => Some(left),
+            },
             indexes: match (self.indexes.clone(), other.indexes.clone()) {
                 (None, None) => None,
                 (None, Some(indexes)) | (Some(indexes), None) => Some(indexes),
@@ -359,9 +369,11 @@ impl From<Details> for DetailsView {
             Details::IndexSwap { swaps } => {
                 DetailsView { swaps: Some(swaps), ..Default::default() }
             }
-            Details::Export { url, api_key, indexes } => DetailsView {
+            Details::Export { url, api_key, payload_size, indexes } => DetailsView {
                 url: Some(url),
                 api_key,
+                payload_size: payload_size
+                    .map(|ps| ps.get_appropriate_unit(UnitType::Both).to_string()),
                 indexes: Some(
                     indexes
                         .into_iter()

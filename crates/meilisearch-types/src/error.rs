@@ -392,6 +392,7 @@ InvalidSettingsIndexChat                       , InvalidRequest       , BAD_REQU
 // Export
 InvalidExportUrl                               , InvalidRequest       , BAD_REQUEST ;
 InvalidExportApiKey                            , InvalidRequest       , BAD_REQUEST ;
+InvalidExportPayloadSize                       , InvalidRequest       , BAD_REQUEST ;
 InvalidExportIndexesPatterns                   , InvalidRequest       , BAD_REQUEST ;
 InvalidExportIndexSkipEmbeddings               , InvalidRequest       , BAD_REQUEST ;
 InvalidExportIndexFilter                       , InvalidRequest       , BAD_REQUEST ;

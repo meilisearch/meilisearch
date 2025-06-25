@@ -601,7 +601,7 @@ impl crate::IndexScheduler {
                     Details::Dump { dump_uid: _ } => {
                         assert_eq!(kind.as_kind(), Kind::DumpCreation);
                     }
-                    Details::Export { url: _, api_key: _, indexes: _ } => {
+                    Details::Export { url: _, api_key: _, payload_size: _, indexes: _ } => {
                         assert_eq!(kind.as_kind(), Kind::Export);
                     }
                     Details::UpgradeDatabase { from: _, to: _ } => {

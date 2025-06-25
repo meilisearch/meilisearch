@@ -1,7 +1,10 @@
 use std::collections::BTreeMap;
+use std::convert::Infallible;
+use std::str::FromStr as _;
 
 use actix_web::web::{self, Data};
 use actix_web::{HttpRequest, HttpResponse};
+use byte_unit::Byte;
 use deserr::actix_web::AwebJson;
 use deserr::Deserr;
 use index_scheduler::IndexScheduler;
@@ -72,7 +75,7 @@ async fn export(
     let export = export.into_inner();
     debug!(returns = ?export, "Trigger export");
 
-    let Export { url, api_key, indexes } = export;
+    let Export { url, api_key, payload_size, indexes } = export;
 
     let indexes = if indexes.is_empty() {
         BTreeMap::from([(IndexUidPattern::new_unchecked("*"), DbExportIndexSettings::default())])
@@ -85,7 +88,12 @@ async fn export(
             .collect()
     };
 
-    let task = KindWithContent::Export { url, api_key, indexes };
+    let task = KindWithContent::Export {
+        url,
+        api_key,
+        payload_size: payload_size.map(|ByteWithDeserr(bytes)| bytes),
+        indexes,
+    };
     let uid = get_task_id(&req, &opt)?;
     let dry_run = is_dry_run(&req, &opt)?;
     let task: SummarizedTaskView =
@@ -109,10 +117,49 @@ pub struct Export {
     #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidExportApiKey>)]
     pub api_key: Option<String>,
+    #[schema(value_type = Option<String>, example = json!("24MiB"))]
+    #[serde(default)]
+    #[deserr(default, error = DeserrJsonError<InvalidExportPayloadSize>)]
+    pub payload_size: Option<ByteWithDeserr>,
     #[schema(value_type = Option<BTreeSet<String>>, example = json!(["movies", "steam-*"]))]
     #[deserr(default)]
     #[serde(default)]
     pub indexes: BTreeMap<IndexUidPattern, ExportIndexSettings>,
+}
+
+/// A wrapper around the `Byte` type that implements `Deserr`.
+#[derive(Debug, Serialize)]
+#[serde(transparent)]
+pub struct ByteWithDeserr(pub Byte);
+
+impl<E> deserr::Deserr<E> for ByteWithDeserr
+where
+    E: deserr::DeserializeError,
+{
+    fn deserialize_from_value<V: deserr::IntoValue>(
+        value: deserr::Value<V>,
+        location: deserr::ValuePointerRef,
+    ) -> Result<Self, E> {
+        use deserr::{ErrorKind, Value, ValueKind};
+        match value {
+            Value::Integer(integer) => Ok(ByteWithDeserr(Byte::from_u64(integer))),
+            Value::String(string) => Byte::from_str(&string).map(ByteWithDeserr).map_err(|e| {
+                deserr::take_cf_content(E::error::<Infallible>(
+                    None,
+                    ErrorKind::Unexpected { msg: e.to_string() },
+                    location,
+                ))
+            }),
+            actual => Err(deserr::take_cf_content(E::error(
+                None,
+                ErrorKind::IncorrectValueKind {
+                    actual,
+                    accepted: &[ValueKind::Integer, ValueKind::String],
+                },
+                location,
+            ))),
+        }
+    }
 }
 
 #[derive(Debug, Deserr, ToSchema, Serialize)]

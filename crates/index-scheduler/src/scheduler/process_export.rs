@@ -4,6 +4,7 @@ use std::sync::atomic;
 use std::time::Duration;
 
 use backoff::ExponentialBackoff;
+use byte_unit::Byte;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use meilisearch_types::index_uid_pattern::IndexUidPattern;
@@ -25,8 +26,9 @@ impl IndexScheduler {
     pub(super) fn process_export(
         &self,
         base_url: &str,
-        indexes: &BTreeMap<IndexUidPattern, ExportIndexSettings>,
         api_key: Option<&str>,
+        payload_size: Option<&Byte>,
+        indexes: &BTreeMap<IndexUidPattern, ExportIndexSettings>,
         progress: Progress,
     ) -> Result<()> {
         #[cfg(test)]
@@ -122,7 +124,7 @@ impl IndexScheduler {
             let (step, progress_step) = AtomicDocumentStep::new(total_documents);
             progress.update_progress(progress_step);
 
-            let limit = 50 * 1024 * 1024; // 50 MiB
+            let limit = payload_size.map(|ps| ps.as_u64() as usize).unwrap_or(50 * 1024 * 1024); // defaults to 50 MiB
             let documents_url = format!("{base_url}/indexes/{uid}/documents");
 
             request_threads()
