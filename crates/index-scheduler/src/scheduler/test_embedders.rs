@@ -284,15 +284,23 @@ fn import_vectors() {
             insta::assert_debug_snapshot!(info.embedding_status.user_provided_docids(), @"RoaringBitmap<[0]>");
             insta::assert_debug_snapshot!(info.embedding_status.skip_regenerate_docids(), @"RoaringBitmap<[0]>");
             insta::assert_snapshot!(name, @"A_fakerest");
-            insta::assert_debug_snapshot!(fragments, @"[]");
+            insta::assert_debug_snapshot!(fragments, @r###"
+            FragmentConfigs(
+                [],
+            )
+            "###);
 
             let IndexEmbeddingConfig { name, config: _, fragments } = configs.get(1).unwrap();
             let info = embedders.embedder_info(&rtxn, name).unwrap().unwrap();
-            insta::assert_snapshot!(info.embedder_id, @"0");
+            insta::assert_snapshot!(info.embedder_id, @"1");
             insta::assert_debug_snapshot!(info.embedding_status.user_provided_docids(), @"RoaringBitmap<[]>");
             insta::assert_debug_snapshot!(info.embedding_status.skip_regenerate_docids(), @"RoaringBitmap<[]>");
             insta::assert_snapshot!(name, @"B_small_hf");
-            insta::assert_debug_snapshot!(fragments, @"[]");
+            insta::assert_debug_snapshot!(fragments, @r###"
+            FragmentConfigs(
+                [],
+            )
+            "###);
 
             let embeddings = index.embeddings(&rtxn, 0).unwrap();
 
