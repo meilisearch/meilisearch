@@ -343,31 +343,16 @@ async fn create_faulty_mock_raw(sender: mpsc::Sender<()>) -> (MockServer, Value)
 
     Mock::given(method("POST"))
         .and(path("/"))
-        .respond_with(move |req: &Request| {
+        .respond_with(move |_req: &Request| {
             let count = count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-
-            let req_body = match req.body_json::<Value>() {
-                Ok(body) => body,
-                Err(error) => {
-                    return ResponseTemplate::new(400).set_body_json(json!({
-                        "error": format!("Invalid request: {error}")
-                    }));
-                }
-            };
 
             if count >= 5 {
                 let _ = sender.try_send(());
-                ResponseTemplate::new(500).set_delay(Duration::from_secs(u64::MAX)).set_body_json(
-                    json!({
-                        "error": "Service Unavailable",
-                        "text": req_body
-                    }),
-                )
+                ResponseTemplate::new(500)
+                    .set_delay(Duration::from_secs(u64::MAX))
+                    .set_body_string("Service Unavailable")
             } else {
-                ResponseTemplate::new(500).set_body_json(json!({
-                    "error": "Service Unavailable",
-                    "text": req_body
-                }))
+                ResponseTemplate::new(500).set_body_string("Service Unavailable")
             }
         })
         .mount(&mock_server)
@@ -2195,7 +2180,11 @@ async fn last_error_stats() {
     receiver.recv().await;
 
     let (response, _code) = index.filtered_batches(&[], &[], &[]).await;
-    snapshot!(json_string!(response["results"][0], { ".progress" => "[ignored]", ".stats.embedder.totalCount" => "[ignored]", ".startedAt" => "[ignored]" }), @r#"
+    snapshot!(json_string!(response["results"][0], {
+        ".progress" => "[ignored]",
+        ".stats.embedder.totalCount" => "[ignored]",
+        ".startedAt" => "[ignored]"
+    }), @r#"
     {
       "uid": 1,
       "progress": "[ignored]",
@@ -2217,7 +2206,7 @@ async fn last_error_stats() {
         "embedder": {
           "totalCount": "[ignored]",
           "errorCount": 5,
-          "lastError": "runtime error: received internal error HTTP 500 from embedding server\n  - server replied with `{\"error\":\"Service Unavailable\",\"text\":\"will_error\"}`"
+          "lastError": "runtime error: received internal error HTTP 500 from embedding server\n  - server replied with `Service Unavailable`"
         }
       },
       "duration": null,
