@@ -17,6 +17,10 @@ use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
+use meilisearch_types::milli::facet::facet_sort_recursive::recursive_facet_sort;
+use meilisearch_types::milli::facet::{ascending_facet_sort, descending_facet_sort};
+use meilisearch_types::milli::heed_codec::facet::FacetGroupKeyCodec;
+use meilisearch_types::milli::heed_codec::BytesRefCodec;
 use meilisearch_types::milli::update::IndexDocumentsMethod;
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::DocumentId;
@@ -1532,6 +1536,15 @@ fn retrieve_documents<S: AsRef<str>>(
             e => e.into(),
         })?
     }
+
+    let fields = vec![(0, true)];
+    let number_db = index
+        .facet_id_f64_docids
+        .remap_key_type::<FacetGroupKeyCodec<BytesRefCodec>>();
+    let string_db = index
+        .facet_id_string_docids
+        .remap_key_type::<FacetGroupKeyCodec<BytesRefCodec>>();
+    candidates = recursive_facet_sort(&rtxn, number_db, string_db, &fields, candidates)?;
 
     let (it, number_of_documents) = {
         let number_of_documents = candidates.len();
