@@ -13,7 +13,7 @@ impl Config {
     pub fn new(chat_settings: &DbChatSettings) -> Self {
         use meilisearch_types::features::ChatCompletionSource::*;
         match chat_settings.source {
-            OpenAi | Mistral | Gemini | VLlm => {
+            OpenAi | Mistral | VLlm => {
                 let mut config = OpenAIConfig::default();
                 if let Some(org_id) = chat_settings.org_id.as_ref() {
                     config = config.with_org_id(org_id);
