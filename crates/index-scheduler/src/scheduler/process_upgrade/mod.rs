@@ -25,6 +25,13 @@ impl IndexScheduler {
                 i as u32,
                 indexes.len() as u32,
             ));
+            if uid.starts_with("long-") {
+                tracing::warn!("taking a long time to upgrade for test purposes");
+                std::thread::sleep(std::time::Duration::from_secs(1200));
+            }
+            if uid.starts_with("fail-") {
+                panic!("failing for test purposes");
+            }
             let index = self.index(uid)?;
             let mut index_wtxn = index.write_txn()?;
             let regen_stats = milli::update::upgrade::upgrade(
