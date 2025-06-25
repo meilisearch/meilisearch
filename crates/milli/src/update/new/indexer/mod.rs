@@ -218,6 +218,8 @@ where
     MSP: Fn() -> bool + Sync,
     SD: SettingsDelta + Sync,
 {
+    delete_old_embedders(wtxn, index, settings_delta)?;
+
     let mut bbbuffers = Vec::new();
     let finished_extraction = AtomicBool::new(false);
 
@@ -367,6 +369,25 @@ fn arroy_writers_from_embedder_actions<'indexer, 'index>(
             }
         })
         .collect()
+}
+
+fn delete_old_embedders<'indexer, 'index, SD>(
+    wtxn: &mut RwTxn<'_>,
+    index: &'index Index,
+    settings_delta: &'indexer SD,
+) -> Result<()>
+where
+    SD: SettingsDelta,
+{
+    for (_name, action) in settings_delta.embedder_actions() {
+        if let Some(WriteBackToDocuments { embedder_id, .. }) = action.write_back() {
+            let reader = ArroyWrapper::new(index.vector_arroy, *embedder_id, action.was_quantized);
+            let dimensions = reader.dimensions(wtxn)?;
+            reader.clear(wtxn, dimensions)?;
+        }
+    }
+
+    Ok(())
 }
 
 fn indexer_memory_settings(
