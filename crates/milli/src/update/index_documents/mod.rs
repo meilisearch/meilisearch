@@ -431,7 +431,8 @@ where
                                 TypedChunk::VectorPoints {
                                     expected_dimension,
                                     remove_vectors,
-                                    embeddings,
+                                    embeddings_from_prompts,
+                                    embeddings_from_fragments,
                                     manual_vectors,
                                     embedder_name,
                                     embedding_status_delta,
@@ -439,7 +440,8 @@ where
                                     dimension.insert(embedder_name.clone(), expected_dimension);
                                     TypedChunk::VectorPoints {
                                         remove_vectors,
-                                        embeddings,
+                                        embeddings_from_prompts,
+                                        embeddings_from_fragments,
                                         expected_dimension,
                                         manual_vectors,
                                         embedder_name,

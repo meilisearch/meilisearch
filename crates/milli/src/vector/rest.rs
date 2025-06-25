@@ -108,11 +108,7 @@ impl RequestData {
         Ok(if indexing_fragments.is_empty() && search_fragments.is_empty() {
             RequestData::Single(Request::new(request)?)
         } else {
-            RequestData::FromFragments(RequestFromFragments::new(
-                request,
-                indexing_fragments,
-                search_fragments,
-            )?)
+            RequestData::FromFragments(RequestFromFragments::new(request, search_fragments)?)
         })
     }
 
@@ -310,14 +306,6 @@ impl Embedder {
     pub(super) fn cache(&self) -> &EmbeddingCache {
         &self.cache
     }
-
-    pub fn fragment(&self, name: &str) -> Option<&JsonTemplate> {
-        let RequestData::FromFragments(from_fragments) = &self.data.request else {
-            return None;
-        };
-        let fragment = from_fragments.indexing_fragments.get(name)?;
-        Some(fragment)
-    }
 }
 
 fn infer_dimensions(data: &EmbedderData) -> Result<usize, NewEmbedderError> {
@@ -512,7 +500,6 @@ impl Request {
 
 #[derive(Debug)]
 pub struct RequestFromFragments {
-    indexing_fragments: BTreeMap<String, JsonTemplate>,
     search_fragments: BTreeMap<String, JsonTemplate>,
     request: InjectableValue,
 }
@@ -520,7 +507,6 @@ pub struct RequestFromFragments {
 impl RequestFromFragments {
     pub fn new(
         request: Value,
-        indexing_fragments: impl IntoIterator<Item = (String, Value)>,
         search_fragments: impl IntoIterator<Item = (String, Value)>,
     ) -> Result<Self, NewEmbedderError> {
         let request =
@@ -533,19 +519,6 @@ impl RequestFromFragments {
                 }
             };
 
-        let indexing_fragments: Result<_, NewEmbedderError> = indexing_fragments
-            .into_iter()
-            .map(|(name, value)| {
-                Ok((
-                    name,
-                    JsonTemplate::new(value).map_err(|error| {
-                        NewEmbedderError::rest_could_not_parse_template(
-                            error.parsing("indexingFragments"),
-                        )
-                    })?,
-                ))
-            })
-            .collect();
         let search_fragments: Result<_, NewEmbedderError> = search_fragments
             .into_iter()
             .map(|(name, value)| {
@@ -560,11 +533,7 @@ impl RequestFromFragments {
             })
             .collect();
 
-        Ok(Self {
-            request,
-            indexing_fragments: indexing_fragments?,
-            search_fragments: search_fragments?,
-        })
+        Ok(Self { request, search_fragments: search_fragments? })
     }
 
     fn input_type(&self) -> InputType {

@@ -132,7 +132,7 @@ impl<'a, 'b> DocumentTemplateExtractor<'a, 'b> {
     }
 }
 
-impl<'doc, 'b> Extractor<'doc> for DocumentTemplateExtractor<'doc, 'b> {
+impl<'doc> Extractor<'doc> for DocumentTemplateExtractor<'doc, '_> {
     type DocumentMetadata = &'doc str;
     type Input = &'doc str;
     type Error = RenderPromptError;

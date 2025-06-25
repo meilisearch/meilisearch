@@ -1009,17 +1009,6 @@ impl Embedder {
             Embedder::Composite(embedder) => embedder.search.cache(),
         }
     }
-
-    pub fn fragment(&self, name: &str) -> Option<&JsonTemplate> {
-        match self {
-            Embedder::Rest(embedder) => embedder.fragment(name),
-            Embedder::Composite(embedder) => match &embedder.index {
-                composite::SubEmbedder::Rest(embedder) => embedder.fragment(name),
-                _ => None,
-            },
-            _ => None,
-        }
-    }
 }
 
 /// Describes the mean and sigma of distribution of embedding similarity in the embedding space.

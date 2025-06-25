@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::convert::{TryFrom, TryInto};
 use std::fs::File;
 use std::io::{self, BufReader, BufWriter};
@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 use bumpalo::Bump;
 use bytemuck::cast_slice;
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use grenad::Writer;
 use ordered_float::OrderedFloat;
 use serde_json::Value;
@@ -24,6 +25,7 @@ use crate::vector::db::{EmbedderInfo, EmbeddingStatus, EmbeddingStatusDelta};
 use crate::vector::error::{EmbedErrorKind, PossibleEmbeddingMistakes, UnusedVectorsDistribution};
 use crate::vector::extractor::{Extractor, ExtractorDiff, RequestFragmentExtractor};
 use crate::vector::parsed_vectors::{ParsedVectorsDiff, VectorState};
+use crate::vector::request::{EmbedSession, Metadata, OnEmbed};
 use crate::vector::settings::ReindexAction;
 use crate::vector::{Embedder, Embedding, RuntimeEmbedder, RuntimeFragment};
 use crate::{try_split_array_at, DocumentId, FieldId, Result, ThreadPoolNoAbort};
@@ -802,9 +804,7 @@ fn push_vectors_diff(
         let mut fragment_delta: Vec<_> = fragments
             .iter()
             .filter_map(|fragment| {
-                let Some(delta) = fragment_delta.remove(&fragment.name) else {
-                    return None;
-                };
+                let delta = fragment_delta.remove(&fragment.name)?;
                 Some((fragment.id, delta))
             })
             .collect();
@@ -853,7 +853,7 @@ fn compare_vectors(a: &[f32], b: &[f32]) -> Ordering {
 }
 
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::extract")]
-pub fn extract_embeddings<R: io::Read + io::Seek>(
+pub fn extract_embeddings_from_prompts<R: io::Read + io::Seek>(
     // docid, prompt
     prompt_reader: grenad::Reader<R>,
     indexer: GrenadParameters,
@@ -899,7 +899,7 @@ pub fn extract_embeddings<R: io::Read + io::Seek>(
 
         if chunks.len() == chunks.capacity() {
             let chunked_embeds = embed_chunks(
-                &embedder,
+                embedder,
                 std::mem::replace(&mut chunks, Vec::with_capacity(n_chunks)),
                 embedder_name,
                 possible_embedding_mistakes,
@@ -921,7 +921,7 @@ pub fn extract_embeddings<R: io::Read + io::Seek>(
     // send last chunk
     if !chunks.is_empty() {
         let chunked_embeds = embed_chunks(
-            &embedder,
+            embedder,
             std::mem::take(&mut chunks),
             embedder_name,
             possible_embedding_mistakes,
@@ -939,7 +939,7 @@ pub fn extract_embeddings<R: io::Read + io::Seek>(
 
     if !current_chunk.is_empty() {
         let embeds = embed_chunks(
-            &embedder,
+            embedder,
             vec![std::mem::take(&mut current_chunk)],
             embedder_name,
             possible_embedding_mistakes,
@@ -1008,5 +1008,173 @@ fn embed_chunks(
                 Err(crate::Error::UserError(crate::UserError::DocumentEmbeddingError(msg)))
             }
         }
+    }
+}
+
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::extract")]
+pub fn extract_embeddings_from_fragments<R: io::Read + io::Seek>(
+    // (docid, extractor_id) -> (Option<Value>)
+    inputs_reader: grenad::Reader<R>,
+    indexer: GrenadParameters,
+    runtime: Arc<RuntimeEmbedder>,
+    embedder_name: &str,
+    possible_embedding_mistakes: &PossibleEmbeddingMistakes,
+    unused_vectors_distribution: &UnusedVectorsDistribution,
+    request_threads: &ThreadPoolNoAbort,
+) -> Result<grenad::Reader<BufReader<File>>> {
+    let doc_alloc = Bump::new();
+
+    // (docid, extractor_id) -> (Option<Value>)
+    let vector_writer = create_writer(
+        indexer.chunk_compression_type,
+        indexer.chunk_compression_level,
+        tempfile::tempfile()?,
+    );
+
+    let on_embed = WriteGrenadOnEmbed {
+        waiting_responses: Default::default(),
+        vector_writer,
+        scratch: Default::default(),
+        possible_embedding_mistakes,
+    };
+
+    let mut session =
+        EmbedSession::new(&runtime.embedder, embedder_name, request_threads, &doc_alloc, on_embed);
+
+    let mut cursor = inputs_reader.into_cursor()?;
+
+    while let Some((mut key, value)) = cursor.move_on_next()? {
+        let docid = key.read_u32::<BigEndian>().unwrap();
+        let extractor_id = key.read_u8().unwrap();
+
+        if value.is_empty() {
+            // no value => removed fragment
+            session.on_embed_mut().push_response(docid, extractor_id);
+        } else {
+            // unwrap: the grenad value was saved as a serde_json::Value
+            let value: Value = serde_json::from_slice(value).unwrap();
+            session.request_embedding(
+                Metadata { docid, external_docid: "", extractor_id },
+                value,
+                unused_vectors_distribution,
+            )?;
+        }
+    }
+
+    // send last chunk
+    let on_embed = session.drain(unused_vectors_distribution)?;
+    on_embed.finish()
+}
+
+struct WriteGrenadOnEmbed<'a> {
+    // list of (document_id, extractor_id) for which vectors should be removed.
+    // these are written whenever a response arrives that has a larger (docid, extractor_id).
+    waiting_responses: VecDeque<(DocumentId, u8)>,
+
+    // grenad of (docid, extractor_id) -> (Option<Vector>)
+    vector_writer: Writer<BufWriter<File>>,
+
+    possible_embedding_mistakes: &'a PossibleEmbeddingMistakes,
+
+    // scratch buffer used to write keys
+    scratch: Vec<u8>,
+}
+
+impl WriteGrenadOnEmbed<'_> {
+    pub fn push_response(&mut self, docid: DocumentId, extractor_id: u8) {
+        self.waiting_responses.push_back((docid, extractor_id));
+    }
+
+    pub fn finish(mut self) -> Result<grenad::Reader<BufReader<File>>> {
+        for (docid, extractor_id) in self.waiting_responses {
+            self.scratch.clear();
+            self.scratch.write_u32::<BigEndian>(docid).unwrap();
+            self.scratch.write_u8(extractor_id).unwrap();
+            self.vector_writer.insert(&self.scratch, []).unwrap();
+        }
+        writer_into_reader(self.vector_writer)
+    }
+}
+
+impl<'doc> OnEmbed<'doc> for WriteGrenadOnEmbed<'_> {
+    type ErrorMetadata = UnusedVectorsDistribution;
+    fn process_embedding_response(
+        &mut self,
+        response: crate::vector::request::EmbeddingResponse<'doc>,
+    ) {
+        let (docid, extractor_id) = (response.metadata.docid, response.metadata.extractor_id);
+        while let Some(waiting_response) = self.waiting_responses.pop_front() {
+            if (docid, extractor_id) > waiting_response {
+                self.scratch.clear();
+                self.scratch.write_u32::<BigEndian>(docid).unwrap();
+                self.scratch.write_u8(extractor_id).unwrap();
+                self.vector_writer.insert(&self.scratch, []).unwrap();
+            } else {
+                self.waiting_responses.push_front(waiting_response);
+                break;
+            }
+        }
+
+        if let Some(embedding) = response.embedding {
+            self.scratch.clear();
+            self.scratch.write_u32::<BigEndian>(docid).unwrap();
+            self.scratch.write_u8(extractor_id).unwrap();
+            self.vector_writer.insert(&self.scratch, cast_slice(embedding.as_slice())).unwrap();
+        }
+    }
+
+    fn process_embedding_error(
+        &mut self,
+        error: crate::vector::error::EmbedError,
+        embedder_name: &'doc str,
+        unused_vectors_distribution: &crate::vector::error::UnusedVectorsDistribution,
+        _metadata: &[crate::vector::request::Metadata<'doc>],
+    ) -> crate::Error {
+        if let FaultSource::Bug = error.fault {
+            crate::Error::InternalError(crate::InternalError::VectorEmbeddingError(error.into()))
+        } else {
+            let mut msg =
+                format!(r"While embedding documents for embedder `{embedder_name}`: {error}");
+
+            if let EmbedErrorKind::ManualEmbed(_) = &error.kind {
+                msg += &format!("\n- Note: `{embedder_name}` has `source: userProvided`, so documents must provide embeddings as an array in `_vectors.{embedder_name}`.");
+            }
+
+            let mut hint_count = 0;
+
+            for (vector_misspelling, count) in
+                self.possible_embedding_mistakes.vector_mistakes().take(2)
+            {
+                msg += &format!("\n- Hint: try replacing `{vector_misspelling}` by `_vectors` in {count} document(s).");
+                hint_count += 1;
+            }
+
+            for (embedder_misspelling, count) in self
+                .possible_embedding_mistakes
+                .embedder_mistakes(embedder_name, unused_vectors_distribution)
+                .take(2)
+            {
+                msg += &format!("\n- Hint: try replacing `_vectors.{embedder_misspelling}` by `_vectors.{embedder_name}` in {count} document(s).");
+                hint_count += 1;
+            }
+
+            if hint_count == 0 {
+                if let EmbedErrorKind::ManualEmbed(_) = &error.kind {
+                    msg += &format!(
+                        "\n- Hint: opt-out for a document with `_vectors.{embedder_name}: null`"
+                    );
+                }
+            }
+
+            crate::Error::UserError(crate::UserError::DocumentEmbeddingError(msg))
+        }
+    }
+
+    fn process_embeddings(
+        &mut self,
+        _metadata: crate::vector::request::Metadata<'doc>,
+        _embeddings: Vec<Embedding>,
+    ) {
+        unimplemented!("unused")
     }
 }

@@ -4,6 +4,7 @@ use std::fs::File;
 use std::io::{self, BufReader};
 
 use bytemuck::allocation::pod_collect_to_vec;
+use byteorder::{BigEndian, ReadBytesExt as _};
 use grenad::{MergeFunction, Merger, MergerBuilder};
 use heed::types::Bytes;
 use heed::{BytesDecode, RwTxn};
@@ -86,7 +87,10 @@ pub(crate) enum TypedChunk {
     GeoPoints(grenad::Reader<BufReader<File>>),
     VectorPoints {
         remove_vectors: grenad::Reader<BufReader<File>>,
-        embeddings: Option<grenad::Reader<BufReader<File>>>,
+        // docid -> vector
+        embeddings_from_prompts: Option<grenad::Reader<BufReader<File>>>,
+        // docid, extractor_id -> Option<vector>,
+        embeddings_from_fragments: Option<grenad::Reader<BufReader<File>>>,
         expected_dimension: usize,
         manual_vectors: grenad::Reader<BufReader<File>>,
         embedder_name: String,
@@ -618,14 +622,16 @@ pub(crate) fn write_typed_chunk_into_index(
 
             let mut remove_vectors_builder = MergerBuilder::new(KeepFirst);
             let mut manual_vectors_builder = MergerBuilder::new(KeepFirst);
-            let mut embeddings_builder = MergerBuilder::new(KeepFirst);
+            let mut embeddings_from_prompts_builder = MergerBuilder::new(KeepFirst);
+            let mut embeddings_from_fragments_builder = MergerBuilder::new(KeepFirst);
             let mut params = None;
             let mut infos = None;
             for typed_chunk in typed_chunks {
                 let TypedChunk::VectorPoints {
                     remove_vectors,
                     manual_vectors,
-                    embeddings,
+                    embeddings_from_prompts,
+                    embeddings_from_fragments,
                     expected_dimension,
                     embedder_name,
                     embedding_status_delta,
@@ -647,8 +653,11 @@ pub(crate) fn write_typed_chunk_into_index(
 
                 remove_vectors_builder.push(remove_vectors.into_cursor()?);
                 manual_vectors_builder.push(manual_vectors.into_cursor()?);
-                if let Some(embeddings) = embeddings {
-                    embeddings_builder.push(embeddings.into_cursor()?);
+                if let Some(embeddings) = embeddings_from_prompts {
+                    embeddings_from_prompts_builder.push(embeddings.into_cursor()?);
+                }
+                if let Some(embeddings) = embeddings_from_fragments {
+                    embeddings_from_fragments_builder.push(embeddings.into_cursor()?);
                 }
 
                 if let Some(infos) = &mut infos {
@@ -678,8 +687,8 @@ pub(crate) fn write_typed_chunk_into_index(
                 writer.del_items(wtxn, expected_dimension, docid)?;
             }
 
-            // add generated embeddings
-            let merger = embeddings_builder.build();
+            // add generated embeddings -- from prompts
+            let merger = embeddings_from_prompts_builder.build();
             let mut iter = merger.into_stream_merger_iter()?;
             while let Some((key, value)) = iter.next()? {
                 let docid = key.try_into().map(DocumentId::from_be_bytes).unwrap();
@@ -704,6 +713,24 @@ pub(crate) fn write_typed_chunk_into_index(
                     )));
                 }
                 writer.add_items(wtxn, docid, &embeddings)?;
+            }
+
+            // add generated embeddings -- from fragments
+            let merger = embeddings_from_fragments_builder.build();
+            let mut iter = merger.into_stream_merger_iter()?;
+            while let Some((mut key, value)) = iter.next()? {
+                let docid = key.read_u32::<BigEndian>().unwrap();
+                let extractor_id = key.read_u8().unwrap();
+                if value.is_empty() {
+                    writer.del_item_in_store(wtxn, docid, extractor_id)?;
+                } else {
+                    let data = pod_collect_to_vec(value);
+                    // it is a code error to have embeddings and not expected_dimension
+                    if data.len() != expected_dimension {
+                        panic!("wrong dimensions")
+                    }
+                    writer.add_item_in_store(wtxn, docid, extractor_id, &data)?;
+                }
             }
 
             // perform the manual diff

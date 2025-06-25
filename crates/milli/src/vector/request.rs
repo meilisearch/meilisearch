@@ -3,7 +3,6 @@ use bumpalo::Bump;
 use serde_json::Value;
 
 use super::{EmbedError, Embedder, Embedding};
-use crate::vector::error::UnusedVectorsDistributionBump;
 use crate::{DocumentId, Result, ThreadPoolNoAbort};
 type ExtractorId = u8;
 
@@ -20,12 +19,14 @@ pub struct EmbeddingResponse<'doc> {
 }
 
 pub trait OnEmbed<'doc> {
+    type ErrorMetadata;
+
     fn process_embedding_response(&mut self, response: EmbeddingResponse<'doc>);
     fn process_embedding_error(
         &mut self,
         error: EmbedError,
         embedder_name: &'doc str,
-        unused_vectors_distribution: &UnusedVectorsDistributionBump,
+        unused_vectors_distribution: &Self::ErrorMetadata,
         metadata: &[Metadata<'doc>],
     ) -> crate::Error;
 
@@ -92,7 +93,7 @@ impl<'doc, C: OnEmbed<'doc>, I: Input> EmbedSession<'doc, C, I> {
         &mut self,
         metadata: Metadata<'doc>,
         rendered: I,
-        unused_vectors_distribution: &UnusedVectorsDistributionBump,
+        unused_vectors_distribution: &C::ErrorMetadata,
     ) -> Result<()> {
         if self.inputs.len() < self.inputs.capacity() {
             self.inputs.push(rendered);
@@ -103,18 +104,13 @@ impl<'doc, C: OnEmbed<'doc>, I: Input> EmbedSession<'doc, C, I> {
         self.embed_chunks(unused_vectors_distribution)
     }
 
-    pub fn drain(
-        mut self,
-        unused_vectors_distribution: &UnusedVectorsDistributionBump,
-    ) -> Result<()> {
-        self.embed_chunks(unused_vectors_distribution)
+    pub fn drain(mut self, unused_vectors_distribution: &C::ErrorMetadata) -> Result<C> {
+        self.embed_chunks(unused_vectors_distribution);
+        Ok(self.on_embed)
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn embed_chunks(
-        &mut self,
-        unused_vectors_distribution: &UnusedVectorsDistributionBump,
-    ) -> Result<()> {
+    fn embed_chunks(&mut self, unused_vectors_distribution: &C::ErrorMetadata) -> Result<()> {
         let res = match I::embed_ref(self.inputs.as_slice(), self.embedder, self.threads) {
             Ok(embeddings) => {
                 for (metadata, embedding) in self.metadata.iter().copied().zip(embeddings) {

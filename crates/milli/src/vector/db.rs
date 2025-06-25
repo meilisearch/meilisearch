@@ -242,6 +242,10 @@ impl<'a> heed::BytesDecode<'a> for EmbedderInfoCodec {
 
     fn bytes_decode(mut bytes: &'a [u8]) -> Result<Self::DItem, heed::BoxedError> {
         let embedder_id = bytes.read_u8()?;
+        // Support all version that didn't store the embedding status
+        if bytes.is_empty() {
+            return Ok(EmbedderInfo { embedder_id, embedding_status: EmbeddingStatus::new() });
+        }
         let first_bitmap_size = bytes.read_u32::<BigEndian>()?;
         let first_bitmap_bytes = &bytes[..first_bitmap_size as usize];
         let user_provided = CboRoaringBitmapCodec::bytes_decode(first_bitmap_bytes)?;

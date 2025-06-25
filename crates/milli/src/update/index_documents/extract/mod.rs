@@ -23,13 +23,14 @@ use self::extract_fid_docid_facet_values::{extract_fid_docid_facet_values, Extra
 use self::extract_fid_word_count_docids::extract_fid_word_count_docids;
 use self::extract_geo_points::extract_geo_points;
 use self::extract_vector_points::{
-    extract_embeddings, extract_vector_points, ExtractedVectorPoints,
+    extract_embeddings_from_prompts, extract_vector_points, ExtractedVectorPoints,
 };
 use self::extract_word_docids::extract_word_docids;
 use self::extract_word_pair_proximity_docids::extract_word_pair_proximity_docids;
 use self::extract_word_position_docids::extract_word_position_docids;
 use super::helpers::{as_cloneable_grenad, CursorClonableMmap, GrenadParameters};
 use super::{helpers, TypedChunk};
+use crate::update::index_documents::extract::extract_vector_points::extract_embeddings_from_fragments;
 use crate::update::settings::InnerIndexSettingsDiff;
 use crate::vector::db::EmbedderInfo;
 use crate::vector::error::PossibleEmbeddingMistakes;
@@ -263,7 +264,7 @@ fn send_original_documents_data(
                         embedding_status_delta,
                     } in extracted_vectors
                     {
-                        let embeddings = match extract_embeddings(
+                        let embeddings_from_prompts = match extract_embeddings_from_prompts(
                             prompts,
                             indexer,
                             runtime.clone(),
@@ -278,13 +279,32 @@ fn send_original_documents_data(
                                 None
                             }
                         };
+
+                        let embeddings_from_fragments = match extract_embeddings_from_fragments(
+                            inputs,
+                            indexer,
+                            runtime.clone(),
+                            &embedder_name,
+                            &possible_embedding_mistakes,
+                            &unused_vectors_distribution,
+                            request_threads(),
+                        ) {
+                            Ok(results) => Some(results),
+                            Err(error) => {
+                                let _ = lmdb_writer_sx.send(Err(error));
+                                None
+                            }
+                        };
+
                         if !(remove_vectors.is_empty()
                             && manual_vectors.is_empty()
-                            && embeddings.as_ref().is_none_or(|e| e.is_empty()))
+                            && embeddings_from_prompts.as_ref().is_none_or(|e| e.is_empty())
+                            && embeddings_from_fragments.as_ref().is_none_or(|e| e.is_empty()))
                         {
                             let _ = lmdb_writer_sx.send(Ok(TypedChunk::VectorPoints {
                                 remove_vectors,
-                                embeddings,
+                                embeddings_from_prompts,
+                                embeddings_from_fragments,
                                 expected_dimension: runtime.embedder.dimensions(),
                                 manual_vectors,
                                 embedder_name,
