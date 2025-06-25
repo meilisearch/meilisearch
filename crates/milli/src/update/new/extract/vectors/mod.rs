@@ -298,7 +298,8 @@ impl<'doc> OnEmbed<'doc> for OnEmbeddingDocumentUpdates<'doc, '_> {
             let mut msg = if let EmbedErrorKind::ManualEmbed(_) = &error.kind {
                 let Some(first) = metadata.first() else { todo!() };
                 format!(
-                    r"While embedding documents for embedder `{embedder_name}`: no vectors provided for document `{}`{}\n- Note: `{embedder_name}` has `source: userProvided`, so documents must provide embeddings as an array in `_vectors.{embedder_name}`.",
+                    r"While embedding documents for embedder `{embedder_name}`: no vectors provided for document `{}`{}
+- Note: `{embedder_name}` has `source: userProvided`, so documents must provide embeddings as an array in `_vectors.{embedder_name}`.",
                     first.external_docid,
                     if metadata.len() > 1 {
                         format!(" and at least {} other document(s)", metadata.len() - 1)

@@ -1096,6 +1096,10 @@ pub fn extract_embeddings_from_fragments<R: io::Read + io::Seek>(
         tempfile::tempfile()?,
     );
 
+    if inputs_reader.is_empty() {
+        return writer_into_reader(vector_writer);
+    }
+
     let on_embed = WriteGrenadOnEmbed {
         waiting_responses: Default::default(),
         vector_writer,

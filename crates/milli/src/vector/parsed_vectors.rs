@@ -395,7 +395,7 @@ impl ParsedVectorsDiff {
         }
         .flatten().map_or(BTreeMap::default(), |del| del.into_iter().map(|(name, vec)| (name, VectorState::Inline(vec))).collect());
         for name in regenerate_for_embedders {
-            old.entry(name).or_insert(VectorState::Manual);
+            old.entry(name).or_insert(VectorState::Generated);
         }
 
         let new = 'new: {

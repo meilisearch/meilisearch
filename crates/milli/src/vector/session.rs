@@ -111,6 +111,9 @@ impl<'doc, C: OnEmbed<'doc>, I: Input> EmbedSession<'doc, C, I> {
 
     #[allow(clippy::too_many_arguments)]
     fn embed_chunks(&mut self, unused_vectors_distribution: &C::ErrorMetadata) -> Result<()> {
+        if self.inputs.is_empty() {
+            return Ok(());
+        }
         let res = match I::embed_ref(self.inputs.as_slice(), self.embedder, self.threads) {
             Ok(embeddings) => {
                 for (metadata, embedding) in self.metadata.iter().copied().zip(embeddings) {
