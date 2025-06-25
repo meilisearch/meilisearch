@@ -852,11 +852,12 @@ async fn list_api_keys() {
         },
         {
           "name": "Default Read-Only Admin API Key",
-          "description": "Use it to peek into the instance in a read-only mode. Caution! Do not expose it on a public frontend. It would give access to all other keys",
+          "description": "Use it to peek into the instance in a read-only mode.",
           "key": "[ignored]",
           "uid": "[ignored]",
           "actions": [
-            "*.get"
+            "*.get",
+            "keys.get"
           ],
           "indexes": [
             "*"
