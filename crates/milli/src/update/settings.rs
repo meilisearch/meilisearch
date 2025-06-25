@@ -27,17 +27,21 @@ use crate::index::{
     DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS,
 };
 use crate::order_by_map::OrderByMap;
+use crate::progress::Progress;
 use crate::progress::EmbedderStats;
 use crate::prompt::{default_max_bytes, default_template_text, PromptData};
 use crate::proximity::ProximityPrecision;
 use crate::update::index_documents::IndexDocumentsMethod;
+use crate::update::new::indexer::reindex;
 use crate::update::{IndexDocuments, UpdateIndexingStep};
 use crate::vector::settings::{
     EmbedderAction, EmbedderSource, EmbeddingSettings, NestingContext, ReindexAction,
     SubEmbeddingSettings, WriteBackToDocuments,
 };
 use crate::vector::{Embedder, EmbeddingConfig, EmbeddingConfigs};
-use crate::{FieldId, FilterableAttributesRule, Index, LocalizedAttributesRule, Result};
+use crate::{
+    ChannelCongestion, FieldId, FilterableAttributesRule, Index, LocalizedAttributesRule, Result,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum Setting<T> {
@@ -1358,12 +1362,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         }
     }
 
-    pub fn execute<FP, FA>(
-        mut self,
-        progress_callback: FP,
-        should_abort: FA,
-        embedder_stats: Arc<EmbedderStats>,
-    ) -> Result<()>
+    pub fn legacy_execute<FP, FA>(mut self, progress_callback: FP, should_abort: FA) -> Result<()>
     where
         FP: Fn(UpdateIndexingStep) + Sync,
         FA: Fn() -> bool + Sync,
@@ -1425,6 +1424,106 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         }
 
         Ok(())
+    }
+
+    pub fn execute<'indexer, MSP>(
+        mut self,
+        must_stop_processing: &'indexer MSP,
+        progress: &'indexer Progress,
+    ) -> Result<Option<ChannelCongestion>>
+    where
+        MSP: Fn() -> bool + Sync,
+    {
+        // force the old indexer if the environment says so
+        if std::env::var_os("MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_SETTINGS").is_some() {
+            return self
+                .legacy_execute(
+                    |indexing_step| tracing::debug!(update = ?indexing_step),
+                    must_stop_processing,
+                )
+                .map(|_| None);
+        }
+
+        // only use the new indexer when only the embedder possibly changed
+        if let Self {
+            searchable_fields: Setting::NotSet,
+            displayed_fields: Setting::NotSet,
+            filterable_fields: Setting::NotSet,
+            sortable_fields: Setting::NotSet,
+            criteria: Setting::NotSet,
+            stop_words: Setting::NotSet,
+            non_separator_tokens: Setting::NotSet,
+            separator_tokens: Setting::NotSet,
+            dictionary: Setting::NotSet,
+            distinct_field: Setting::NotSet,
+            synonyms: Setting::NotSet,
+            primary_key: Setting::NotSet,
+            authorize_typos: Setting::NotSet,
+            min_word_len_two_typos: Setting::NotSet,
+            min_word_len_one_typo: Setting::NotSet,
+            exact_words: Setting::NotSet,
+            exact_attributes: Setting::NotSet,
+            max_values_per_facet: Setting::NotSet,
+            sort_facet_values_by: Setting::NotSet,
+            pagination_max_total_hits: Setting::NotSet,
+            proximity_precision: Setting::NotSet,
+            embedder_settings: _,
+            search_cutoff: Setting::NotSet,
+            localized_attributes_rules: Setting::NotSet,
+            prefix_search: Setting::NotSet,
+            facet_search: Setting::NotSet,
+            disable_on_numbers: Setting::NotSet,
+            chat: Setting::NotSet,
+            wtxn: _,
+            index: _,
+            indexer_config: _, // TODO: this is not used
+        } = &self
+        {
+            self.index.set_updated_at(self.wtxn, &OffsetDateTime::now_utc())?;
+
+            let old_inner_settings = InnerIndexSettings::from_index(self.index, self.wtxn, None)?;
+
+            // Update index settings
+            let embedding_config_updates = self.update_embedding_configs()?;
+
+            let mut new_inner_settings =
+                InnerIndexSettings::from_index(self.index, self.wtxn, None)?;
+            new_inner_settings.recompute_searchables(self.wtxn, self.index)?;
+
+            let primary_key_id = self
+                .index
+                .primary_key(self.wtxn)?
+                .and_then(|name| new_inner_settings.fields_ids_map.id(name));
+            let settings_update_only = true;
+            let inner_settings_diff = InnerIndexSettingsDiff::new(
+                old_inner_settings,
+                new_inner_settings,
+                primary_key_id,
+                embedding_config_updates,
+                settings_update_only,
+            );
+
+            if self.index.number_of_documents(self.wtxn)? > 0 {
+                reindex(
+                    self.wtxn,
+                    self.index,
+                    &self.indexer_config.thread_pool,
+                    self.indexer_config.grenad_parameters(),
+                    &inner_settings_diff,
+                    must_stop_processing,
+                    progress,
+                )
+                .map(Some)
+            } else {
+                Ok(None)
+            }
+        } else {
+            self.legacy_execute(
+                |indexing_step| tracing::debug!(update = ?indexing_step),
+                must_stop_processing,
+            )
+            .map(|_| None)
+        }
     }
 }
 
@@ -1685,6 +1784,7 @@ pub(crate) struct InnerIndexSettings {
     pub disabled_typos_terms: DisabledTyposTerms,
     pub proximity_precision: ProximityPrecision,
     pub embedding_configs: EmbeddingConfigs,
+    pub embedder_category_id: HashMap<String, u8>,
     pub geo_fields_ids: Option<(FieldId, FieldId)>,
     pub prefix_search: PrefixSearch,
     pub facet_search: bool,
@@ -1707,6 +1807,11 @@ impl InnerIndexSettings {
             Some(embedding_configs) => embedding_configs,
             None => embedders(index.embedding_configs(rtxn)?)?,
         };
+        let embedder_category_id = index
+            .embedder_category_id
+            .iter(rtxn)?
+            .map(|r| r.map(|(k, v)| (k.to_string(), v)))
+            .collect::<heed::Result<_>>()?;
         let prefix_search = index.prefix_search(rtxn)?.unwrap_or_default();
         let facet_search = index.facet_search(rtxn)?;
         let geo_fields_ids = match fields_ids_map.id(RESERVED_GEO_FIELD_NAME) {
@@ -1746,6 +1851,7 @@ impl InnerIndexSettings {
             exact_attributes,
             proximity_precision,
             embedding_configs,
+            embedder_category_id,
             geo_fields_ids,
             prefix_search,
             facet_search,

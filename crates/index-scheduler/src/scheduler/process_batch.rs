@@ -245,11 +245,7 @@ impl IndexScheduler {
                     let must_stop_processing = self.scheduler.must_stop_processing.clone();
 
                     builder
-                        .execute(
-                            |indexing_step| tracing::debug!(update = ?indexing_step),
-                            || must_stop_processing.get(),
-                            current_batch.embedder_stats.clone(),
-                        )
+                        .execute(&|| must_stop_processing.get(), &progress)
                         .map_err(|e| Error::from_milli(e, Some(index_uid.to_string())))?;
                     index_wtxn.commit()?;
                 }
