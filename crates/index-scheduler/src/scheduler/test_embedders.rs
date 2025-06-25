@@ -399,7 +399,7 @@ fn import_vectors_first_and_embedder_later() {
         .collect::<Vec<_>>();
     // the all the vectors linked to the new specified embedder have been removed
     // Only the unknown embedders stays in the document DB
-    snapshot!(serde_json::to_string(&documents).unwrap(), @r###"[{"id":0,"doggo":"kefir"},{"id":1,"doggo":"intel","_vectors":{"unknown embedder":[1.0,2.0,3.0]}},{"id":2,"doggo":"max","_vectors":{"unknown embedder":[4.0,5.0]}},{"id":3,"doggo":"marcel"},{"id":4,"doggo":"sora"}]"###);
+    snapshot!(serde_json::to_string(&documents).unwrap(), @r###"[{"id":0,"doggo":"kefir"},{"id":1,"doggo":"intel","_vectors":{"unknown embedder":[1,2,3]}},{"id":2,"doggo":"max","_vectors":{"unknown embedder":[4,5]}},{"id":3,"doggo":"marcel"},{"id":4,"doggo":"sora"}]"###);
     let conf = index.embedding_configs(&rtxn).unwrap();
     // even though we specified the vector for the ID 3, it shouldn't be marked
     // as user provided since we explicitely marked it as NOT user provided.
