@@ -36,7 +36,7 @@ use serde_json::json;
 use tokio::runtime::Handle;
 use tokio::sync::mpsc::error::SendError;
 
-use super::chat_completion_analytics::{ChatCompletionAggregator, ChatCompletionPOST};
+use super::chat_completion_analytics::ChatCompletionAggregator;
 use super::config::Config;
 use super::errors::{MistralError, OpenAiOutsideError, StreamErrorEvent};
 use super::utils::format_documents;
@@ -325,7 +325,7 @@ async fn non_streamed_chat(
     index_scheduler.features().check_chat_completions("using the /chats chat completions route")?;
 
     // Create analytics aggregator
-    let aggregate = ChatCompletionAggregator::<ChatCompletionPOST>::from_request(
+    let aggregate = ChatCompletionAggregator::from_request(
         &chat_completion.model,
         chat_completion.messages.len(),
         false, // non_streamed_chat is not streaming
@@ -466,7 +466,7 @@ async fn streamed_chat(
     };
 
     // Create analytics aggregator
-    let mut aggregate = ChatCompletionAggregator::<ChatCompletionPOST>::from_request(
+    let mut aggregate = ChatCompletionAggregator::from_request(
         &chat_completion.model,
         chat_completion.messages.len(),
         true, // streamed_chat is always streaming

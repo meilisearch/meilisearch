@@ -2,15 +2,10 @@ use std::collections::BinaryHeap;
 
 use serde_json::{json, Value};
 
-use crate::aggregate_methods;
-use crate::analytics::{Aggregate, AggregateMethod};
-
-aggregate_methods!(
-    ChatCompletionPOST => "Chat Completion POST",
-);
+use crate::analytics::Aggregate;
 
 #[derive(Default)]
-pub struct ChatCompletionAggregator<Method: AggregateMethod> {
+pub struct ChatCompletionAggregator {
     // requests
     total_received: usize,
     total_succeeded: usize,
@@ -23,22 +18,23 @@ pub struct ChatCompletionAggregator<Method: AggregateMethod> {
 
     // model usage tracking
     models_used: std::collections::HashMap<String, usize>,
-
-    _method: std::marker::PhantomData<Method>,
 }
 
-impl<Method: AggregateMethod> ChatCompletionAggregator<Method> {
+impl ChatCompletionAggregator {
     pub fn from_request(model: &str, message_count: usize, is_stream: bool) -> Self {
         let mut models_used = std::collections::HashMap::new();
         models_used.insert(model.to_string(), 1);
 
         Self {
             total_received: 1,
+            total_succeeded: 0,
+            time_spent: BinaryHeap::new(),
+
             total_messages: message_count,
             total_streamed_requests: if is_stream { 1 } else { 0 },
             total_non_streamed_requests: if is_stream { 0 } else { 1 },
+
             models_used,
-            ..Default::default()
         }
     }
 
@@ -48,9 +44,9 @@ impl<Method: AggregateMethod> ChatCompletionAggregator<Method> {
     }
 }
 
-impl<Method: AggregateMethod> Aggregate for ChatCompletionAggregator<Method> {
+impl Aggregate for ChatCompletionAggregator {
     fn event_name(&self) -> &'static str {
-        Method::event_name()
+        "Chat Completion POST"
     }
 
     fn aggregate(mut self: Box<Self>, new: Box<Self>) -> Box<Self> {
