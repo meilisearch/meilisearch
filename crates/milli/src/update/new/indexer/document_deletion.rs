@@ -7,7 +7,7 @@ use roaring::RoaringBitmap;
 use super::document_changes::{DocumentChangeContext, DocumentChanges};
 use crate::documents::PrimaryKey;
 use crate::update::new::thread_local::MostlySend;
-use crate::update::new::{Deletion, DocumentChange};
+use crate::update::new::{DatabaseDocument, DocumentChange};
 use crate::{DocumentId, Result};
 
 #[derive(Default)]
@@ -74,7 +74,7 @@ impl<'pl> DocumentChanges<'pl> for DocumentDeletionChanges<'pl> {
 
         let external_document_id = external_document_id.to_bump(&context.doc_alloc);
 
-        Ok(Some(DocumentChange::Deletion(Deletion::create(*docid, external_document_id))))
+        Ok(Some(DocumentChange::Deletion(DatabaseDocument::create(*docid, external_document_id))))
     }
 
     fn len(&self) -> usize {

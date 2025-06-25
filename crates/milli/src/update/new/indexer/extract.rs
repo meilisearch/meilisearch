@@ -19,6 +19,7 @@ use crate::progress::EmbedderStats;
 use crate::progress::MergingWordCache;
 use crate::proximity::ProximityPrecision;
 use crate::update::new::extract::EmbeddingExtractor;
+use crate::update::new::indexer::settings_changes::DatabaseDocuments;
 use crate::update::new::merger::merge_and_send_rtree;
 use crate::update::new::{merge_and_send_docids, merge_and_send_facet_docids, FacetDatabases};
 use crate::update::settings::SettingsDelta;
@@ -335,11 +336,36 @@ where
     MSP: Fn() -> bool + Sync,
     SD: SettingsDelta,
 {
+    // Create the list of document ids to extract
+    let rtxn = indexing_context.index.read_txn()?;
+    let all_document_ids =
+        indexing_context.index.documents_ids(&rtxn)?.into_iter().collect::<Vec<_>>();
+    let primary_key =
+        primary_key_from_db(&indexing_context.index, &rtxn, &indexing_context.db_fields_ids_map)?;
+    let documents = DatabaseDocuments::new(&all_document_ids, primary_key);
 
     indexing_context.progress.update_progress(IndexingStep::WaitingForDatabaseWrites);
     finished_extraction.store(true, std::sync::atomic::Ordering::Relaxed);
 
     Result::Ok(index_embeddings)
+}
+
+fn primary_key_from_db<'indexer, 'index>(
+    index: &'indexer Index,
+    rtxn: &'indexer heed::RoTxn<'index>,
+    fields: &'indexer impl FieldIdMapper,
+) -> Result<PrimaryKey<'indexer>> {
+    let Some(primary_key) = index.primary_key(rtxn)? else {
+        return Err(InternalError::DatabaseMissingEntry {
+            db_name: crate::index::db_name::MAIN,
+            key: Some(crate::index::main_key::PRIMARY_KEY_KEY),
+        }
+        .into());
+    };
+    let Some(primary_key) = PrimaryKey::new(primary_key, fields) else {
+        unreachable!("Primary key must exist at this point");
+    };
+    Ok(primary_key)
 }
 
 fn request_threads() -> &'static ThreadPoolNoAbort {
