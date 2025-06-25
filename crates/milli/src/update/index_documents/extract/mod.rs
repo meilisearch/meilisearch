@@ -257,15 +257,16 @@ fn send_original_documents_data(
                         manual_vectors,
                         remove_vectors,
                         prompts,
+                        inputs,
                         embedder_name,
-                        embedder,
+                        runtime,
                         embedding_status_delta,
                     } in extracted_vectors
                     {
                         let embeddings = match extract_embeddings(
                             prompts,
                             indexer,
-                            embedder.clone(),
+                            runtime.clone(),
                             &embedder_name,
                             &possible_embedding_mistakes,
                             &unused_vectors_distribution,
@@ -284,7 +285,7 @@ fn send_original_documents_data(
                             let _ = lmdb_writer_sx.send(Ok(TypedChunk::VectorPoints {
                                 remove_vectors,
                                 embeddings,
-                                expected_dimension: embedder.dimensions(),
+                                expected_dimension: runtime.embedder.dimensions(),
                                 manual_vectors,
                                 embedder_name,
                                 embedding_status_delta,

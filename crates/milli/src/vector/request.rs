@@ -5,7 +5,7 @@ use serde_json::Value;
 use super::{EmbedError, Embedder, Embedding};
 use crate::vector::error::UnusedVectorsDistributionBump;
 use crate::{DocumentId, Result, ThreadPoolNoAbort};
-type ExtractorId = u16;
+type ExtractorId = u8;
 
 #[derive(Clone, Copy)]
 pub struct Metadata<'doc> {
@@ -16,7 +16,7 @@ pub struct Metadata<'doc> {
 
 pub struct EmbeddingResponse<'doc> {
     pub metadata: Metadata<'doc>,
-    pub embedding: Embedding,
+    pub embedding: Option<Embedding>,
 }
 
 pub trait OnEmbed<'doc> {
@@ -32,9 +32,9 @@ pub trait OnEmbed<'doc> {
     fn process_embeddings(&mut self, metadata: Metadata<'doc>, embeddings: Vec<Embedding>);
 }
 
-pub struct TextEmbedSession<'doc, C, I> {
+pub struct EmbedSession<'doc, C, I> {
     // requests
-    texts: BVec<'doc, I>,
+    inputs: BVec<'doc, I>,
     metadata: BVec<'doc, Metadata<'doc>>,
 
     threads: &'doc ThreadPoolNoAbort,
@@ -73,7 +73,7 @@ impl Input for Value {
     }
 }
 
-impl<'doc, C: OnEmbed<'doc>, I: Input> TextEmbedSession<'doc, C, I> {
+impl<'doc, C: OnEmbed<'doc>, I: Input> EmbedSession<'doc, C, I> {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         embedder: &'doc Embedder,
@@ -85,7 +85,7 @@ impl<'doc, C: OnEmbed<'doc>, I: Input> TextEmbedSession<'doc, C, I> {
         let capacity = embedder.prompt_count_in_chunk_hint() * embedder.chunk_count_hint();
         let texts = BVec::with_capacity_in(capacity, doc_alloc);
         let ids = BVec::with_capacity_in(capacity, doc_alloc);
-        Self { texts, metadata: ids, embedder, threads, embedder_name, on_embed }
+        Self { inputs: texts, metadata: ids, embedder, threads, embedder_name, on_embed }
     }
 
     pub fn request_embedding(
@@ -94,8 +94,8 @@ impl<'doc, C: OnEmbed<'doc>, I: Input> TextEmbedSession<'doc, C, I> {
         rendered: I,
         unused_vectors_distribution: &UnusedVectorsDistributionBump,
     ) -> Result<()> {
-        if self.texts.len() < self.texts.capacity() {
-            self.texts.push(rendered);
+        if self.inputs.len() < self.inputs.capacity() {
+            self.inputs.push(rendered);
             self.metadata.push(metadata);
             return Ok(());
         }
@@ -115,11 +115,13 @@ impl<'doc, C: OnEmbed<'doc>, I: Input> TextEmbedSession<'doc, C, I> {
         &mut self,
         unused_vectors_distribution: &UnusedVectorsDistributionBump,
     ) -> Result<()> {
-        let res = match I::embed_ref(self.texts.as_slice(), self.embedder, self.threads) {
+        let res = match I::embed_ref(self.inputs.as_slice(), self.embedder, self.threads) {
             Ok(embeddings) => {
                 for (metadata, embedding) in self.metadata.iter().copied().zip(embeddings) {
-                    self.on_embed
-                        .process_embedding_response(EmbeddingResponse { metadata, embedding });
+                    self.on_embed.process_embedding_response(EmbeddingResponse {
+                        metadata,
+                        embedding: Some(embedding),
+                    });
                 }
                 Ok(())
             }
@@ -132,13 +134,17 @@ impl<'doc, C: OnEmbed<'doc>, I: Input> TextEmbedSession<'doc, C, I> {
                 ))
             }
         };
-        self.texts.clear();
+        self.inputs.clear();
         self.metadata.clear();
         res
     }
 
     pub(crate) fn embedder_name(&self) -> &'doc str {
         self.embedder_name
+    }
+
+    pub(crate) fn doc_alloc(&self) -> &'doc Bump {
+        self.inputs.bump()
     }
 
     pub(crate) fn on_embed_mut(&mut self) -> &mut C {

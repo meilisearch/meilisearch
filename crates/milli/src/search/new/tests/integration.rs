@@ -8,7 +8,7 @@ use maplit::{btreemap, hashset};
 use crate::progress::Progress;
 use crate::update::new::indexer;
 use crate::update::{IndexerConfig, Settings};
-use crate::vector::EmbeddingConfigs;
+use crate::vector::RuntimeEmbedders;
 use crate::{db_snap, Criterion, FilterableAttributesRule, Index};
 pub const CONTENT: &str = include_str!("../../../../tests/assets/test_set.ndjson");
 use crate::constants::RESERVED_GEO_FIELD_NAME;
@@ -55,7 +55,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-    let embedders = EmbeddingConfigs::default();
+    let embedders = RuntimeEmbedders::default();
     let mut indexer = indexer::DocumentOperation::new();
 
     let mut file = tempfile::tempfile().unwrap();

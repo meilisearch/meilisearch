@@ -311,12 +311,12 @@ impl Embedder {
         &self.cache
     }
 
-    pub fn fragment(&self, name: &str) -> Option<&Value> {
+    pub fn fragment(&self, name: &str) -> Option<&JsonTemplate> {
         let RequestData::FromFragments(from_fragments) = &self.data.request else {
             return None;
         };
         let fragment = from_fragments.indexing_fragments.get(name)?;
-        Some(fragment.template())
+        Some(fragment)
     }
 }
 

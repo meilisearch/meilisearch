@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::num::NonZeroUsize;
 
 use deserr::Deserr;
+use either::Either;
 use itertools::Itertools;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
@@ -651,7 +652,6 @@ pub struct EmbedderAction {
 #[derive(Debug)]
 pub struct RemoveFragments {
     pub fragment_ids: Vec<u8>,
-    pub embedder_id: u8,
 }
 
 impl EmbedderAction {
@@ -2398,5 +2398,22 @@ impl From<SubEmbedderOptions> for EmbedderOptions {
             }
             SubEmbedderOptions::Rest(embedder_options) => Self::Rest(embedder_options),
         }
+    }
+}
+
+pub(crate) fn fragments_from_settings(
+    setting: &Setting<EmbeddingSettings>,
+) -> impl Iterator<Item = String> + '_ {
+    let Some(setting) = setting.as_ref().set() else { return Either::Left(None.into_iter()) };
+    if let Some(setting) = setting.indexing_fragments.as_ref().set() {
+        Either::Right(setting.keys().cloned())
+    } else {
+        let Some(setting) = setting.indexing_embedder.as_ref().set() else {
+            return Either::Left(None.into_iter());
+        };
+        let Some(setting) = setting.indexing_fragments.as_ref().set() else {
+            return Either::Left(None.into_iter());
+        };
+        Either::Right(setting.keys().cloned())
     }
 }

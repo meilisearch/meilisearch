@@ -31,11 +31,14 @@ use crate::proximity::ProximityPrecision;
 use crate::update::index_documents::IndexDocumentsMethod;
 use crate::update::{IndexDocuments, UpdateIndexingStep};
 use crate::vector::db::{FragmentConfigs, IndexEmbeddingConfig};
+use crate::vector::json_template::JsonTemplate;
 use crate::vector::settings::{
     EmbedderAction, EmbedderSource, EmbeddingSettings, NestingContext, ReindexAction,
     SubEmbeddingSettings, WriteBackToDocuments,
 };
-use crate::vector::{Embedder, EmbeddingConfig, EmbeddingConfigs};
+use crate::vector::{
+    Embedder, EmbeddingConfig, RuntimeEmbedder, RuntimeEmbedders, RuntimeFragment,
+};
 use crate::{FieldId, FilterableAttributesRule, Index, LocalizedAttributesRule, Result};
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
@@ -1124,10 +1127,11 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                         }
                         SettingsDiff::Reindex { action, updated_settings, quantize } => {
                             let mut remove_fragments = None;
+                            let updated_settings = Setting::Set(updated_settings);
+                            /// FIXME: `fragments` might need rebuilding even if ReindexAction == FullReindex or RegeneratePrompts
                             if let ReindexAction::RegenerateFragments(regenerate_fragments) =
                                 &action
                             {
-                                let embedder_id = embedders.embedder_id(self.wtxn, &name)?;
                                 let it = regenerate_fragments
                                     .iter()
                                     .filter(|(_, action)| {
@@ -1137,9 +1141,8 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                                         )
                                     })
                                     .map(|(name, _)| name.as_str());
-                                if let Some(embedder_id) = embedder_id {
-                                    remove_fragments = fragments.remove_fragments(embedder_id, it);
-                                }
+
+                                remove_fragments = fragments.remove_fragments(it);
 
                                 let it = regenerate_fragments
                                     .iter()
@@ -1151,6 +1154,14 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                                     })
                                     .map(|(name, _)| name.clone());
                                 fragments.add_new_fragments(it);
+                            } else {
+                                // needs full reindex of fragments
+                                fragments = FragmentConfigs::new();
+                                fragments.add_new_fragments(
+                                    crate::vector::settings::fragments_from_settings(
+                                        &updated_settings,
+                                    ),
+                                );
                             }
                             tracing::debug!(embedder = name, ?action, "reindex embedder");
 
@@ -1165,8 +1176,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                             };
 
                             embedder_actions.insert(name.clone(), embedder_action);
-                            let new =
-                                validate_embedding_settings(Setting::Set(updated_settings), &name)?;
+                            let new = validate_embedding_settings(updated_settings, &name)?;
                             updated_configs.insert(name, (new, fragments));
                         }
                         SettingsDiff::UpdateWithoutReindex { updated_settings, quantize } => {
@@ -1201,7 +1211,11 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                         name.clone(),
                         EmbedderAction::with_reindex(ReindexAction::FullReindex, false),
                     );
-                    updated_configs.insert(name, (setting, todo!()));
+                    let mut fragments = FragmentConfigs::new();
+                    fragments.add_new_fragments(crate::vector::settings::fragments_from_settings(
+                        &setting,
+                    ));
+                    updated_configs.insert(name, (setting, fragments));
                 }
             }
         }
@@ -1520,13 +1534,13 @@ impl InnerIndexSettingsDiff {
 
         // if the user-defined searchables changed, then we need to reindex prompts.
         if cache_user_defined_searchables {
-            for (embedder_name, (config, _, _quantized)) in
-                new_settings.embedding_configs.inner_as_ref()
-            {
-                let was_quantized =
-                    old_settings.embedding_configs.get(embedder_name).is_some_and(|conf| conf.2);
+            for (embedder_name, runtime) in new_settings.embedding_configs.inner_as_ref() {
+                let was_quantized = old_settings
+                    .embedding_configs
+                    .get(embedder_name)
+                    .is_some_and(|conf| conf.is_quantized);
                 // skip embedders that don't use document templates
-                if !config.uses_document_template() {
+                if !runtime.embedder.uses_document_template() {
                     continue;
                 }
 
@@ -1717,7 +1731,7 @@ pub(crate) struct InnerIndexSettings {
     pub exact_attributes: HashSet<FieldId>,
     pub disabled_typos_terms: DisabledTyposTerms,
     pub proximity_precision: ProximityPrecision,
-    pub embedding_configs: EmbeddingConfigs,
+    pub embedding_configs: RuntimeEmbedders,
     pub geo_fields_ids: Option<(FieldId, FieldId)>,
     pub prefix_search: PrefixSearch,
     pub facet_search: bool,
@@ -1727,7 +1741,7 @@ impl InnerIndexSettings {
     pub fn from_index(
         index: &Index,
         rtxn: &heed::RoTxn<'_>,
-        embedding_configs: Option<EmbeddingConfigs>,
+        embedding_configs: Option<RuntimeEmbedders>,
     ) -> Result<Self> {
         let stop_words = index.stop_words(rtxn)?;
         let stop_words = stop_words.map(|sw| sw.map_data(Vec::from).unwrap());
@@ -1820,28 +1834,50 @@ impl InnerIndexSettings {
     }
 }
 
-fn embedders(embedding_configs: Vec<IndexEmbeddingConfig>) -> Result<EmbeddingConfigs> {
+fn embedders(embedding_configs: Vec<IndexEmbeddingConfig>) -> Result<RuntimeEmbedders> {
     let res: Result<_> = embedding_configs
         .into_iter()
         .map(
             |IndexEmbeddingConfig {
                  name,
                  config: EmbeddingConfig { embedder_options, prompt, quantized },
-                 ..
+                 fragments,
              }| {
-                let prompt = Arc::new(prompt.try_into().map_err(crate::Error::from)?);
+                let document_template = prompt.try_into().map_err(crate::Error::from)?;
 
-                let embedder = Arc::new(
+                let embedder =
                     // cache_cap: no cache needed for indexing purposes
-                    Embedder::new(embedder_options.clone(), 0)
+                    Arc::new(Embedder::new(embedder_options.clone(), 0)
                         .map_err(crate::vector::Error::from)
-                        .map_err(crate::Error::from)?,
-                );
-                Ok((name, (embedder, prompt, quantized.unwrap_or_default())))
+                        .map_err(crate::Error::from)?);
+
+                let fragments = fragments
+                    .into_inner()
+                    .into_iter()
+                    .map(|fragment| {
+                        /// FIXME: unwrap
+                        let template = JsonTemplate::new(
+                            embedder_options.fragment(&fragment.name).unwrap().clone(),
+                        )
+                        .unwrap();
+
+                        RuntimeFragment { name: fragment.name, id: fragment.id, template }
+                    })
+                    .collect();
+
+                Ok((
+                    name,
+                    Arc::new(RuntimeEmbedder {
+                        embedder,
+                        document_template,
+                        fragments,
+                        is_quantized: quantized.unwrap_or_default(),
+                    }),
+                ))
             },
         )
         .collect();
-    res.map(EmbeddingConfigs::new)
+    res.map(RuntimeEmbedders::new)
 }
 
 fn validate_prompt(

@@ -31,6 +31,12 @@ pub struct JsonTemplate {
     templates: Vec<TemplateAtPath>,
 }
 
+impl Clone for JsonTemplate {
+    fn clone(&self) -> Self {
+        Self::new(self.value.clone()).unwrap()
+    }
+}
+
 struct TemplateAtPath {
     template: Template,
     path: ValuePath,
@@ -112,6 +118,19 @@ impl JsonTemplate {
         self.render(&document)
     }
 
+    pub fn render_kvdeladd(
+        &self,
+        document: &obkv::KvReaderU16,
+        side: crate::update::del_add::DelAdd,
+        field_id_map: &crate::FieldIdMapWithMetadata,
+    ) -> Result<Value, Error> {
+        let document =
+            crate::prompt::Document::new(document, side, field_id_map.as_fields_ids_map());
+        let fields = crate::prompt::OwnedFields::new(&document, field_id_map);
+        let context = crate::prompt::Context::new(&document, &fields);
+        self.render(&context)
+    }
+
     /// Renders this value by replacing all its strings with the rendered version of the template they represent from the contents of the search query.
     ///
     /// # Error
@@ -125,6 +144,7 @@ impl JsonTemplate {
         self.render(&search_data)
     }
 
+    /// The JSON value representing the underlying template
     pub fn template(&self) -> &Value {
         &self.value
     }

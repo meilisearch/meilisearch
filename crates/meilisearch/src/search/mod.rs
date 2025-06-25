@@ -402,7 +402,7 @@ impl SearchKind {
         let embedder_configs = index.embedding_configs().embedding_configs(&rtxn)?;
         let embedders = index_scheduler.embedders(index_uid, embedder_configs)?;
 
-        let (embedder, _, quantized) = embedders
+        let (embedder, quantized) = embedders
             .get(embedder_name)
             .ok_or(match route {
                 Route::Search | Route::MultiSearch => {
@@ -412,6 +412,7 @@ impl SearchKind {
                     milli::UserError::InvalidSimilarEmbedder(embedder_name.to_owned())
                 }
             })
+            .map(|runtime| (runtime.embedder.clone(), runtime.is_quantized))
             .map_err(milli::Error::from)?;
 
         if let Some(vector_len) = vector_len {

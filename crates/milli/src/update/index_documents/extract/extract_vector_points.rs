@@ -1,4 +1,5 @@
 use std::cmp::Ordering;
+use std::collections::BTreeMap;
 use std::convert::{TryFrom, TryInto};
 use std::fs::File;
 use std::io::{self, BufReader, BufWriter};
@@ -6,6 +7,7 @@ use std::mem::size_of;
 use std::str::from_utf8;
 use std::sync::Arc;
 
+use bumpalo::Bump;
 use bytemuck::cast_slice;
 use grenad::Writer;
 use ordered_float::OrderedFloat;
@@ -20,9 +22,10 @@ use crate::update::del_add::{DelAdd, KvReaderDelAdd, KvWriterDelAdd};
 use crate::update::settings::InnerIndexSettingsDiff;
 use crate::vector::db::{EmbedderInfo, EmbeddingStatus, EmbeddingStatusDelta};
 use crate::vector::error::{EmbedErrorKind, PossibleEmbeddingMistakes, UnusedVectorsDistribution};
+use crate::vector::extractor::{Extractor, ExtractorDiff, RequestFragmentExtractor};
 use crate::vector::parsed_vectors::{ParsedVectorsDiff, VectorState};
 use crate::vector::settings::ReindexAction;
-use crate::vector::{Embedder, Embedding};
+use crate::vector::{Embedder, Embedding, RuntimeEmbedder, RuntimeFragment};
 use crate::{try_split_array_at, DocumentId, FieldId, Result, ThreadPoolNoAbort};
 
 /// The length of the elements that are always in the buffer when inserting new values.
@@ -35,10 +38,12 @@ pub struct ExtractedVectorPoints {
     pub remove_vectors: grenad::Reader<BufReader<File>>,
     // docid -> prompt
     pub prompts: grenad::Reader<BufReader<File>>,
+    // docid, extractor_id -> Option<json>
+    pub inputs: grenad::Reader<BufReader<File>>,
 
     // embedder
     pub embedder_name: String,
-    pub embedder: Arc<Embedder>,
+    pub runtime: Arc<RuntimeEmbedder>,
     pub embedding_status_delta: EmbeddingStatusDelta,
 }
 
@@ -53,28 +58,53 @@ enum VectorStateDelta {
     // Remove any previous vector
     // Note: changing the value of the prompt **does require** recording this delta
     NowGenerated(String),
+
+    // Add and remove the vectors computed from the fragments.
+    UpdateGeneratedFromFragments(Vec<(String, ExtractorDiff<Value>)>),
+
+    /// Wasn't generated from fragments, but now is.
+    /// Delete any previous vectors and add the new vectors
+    NowGeneratedFromFragments(Vec<(String, Value)>),
 }
 
 impl VectorStateDelta {
-    fn into_values(self) -> (bool, String, Vec<Vec<f32>>) {
+    fn into_values(self) -> (bool, String, BTreeMap<String, Option<Value>>, Vec<Vec<f32>>) {
         match self {
             VectorStateDelta::NoChange => Default::default(),
-            VectorStateDelta::NowRemoved => (true, Default::default(), Default::default()),
-            // We always delete the previous vectors
-            VectorStateDelta::NowManual(add) => (true, Default::default(), add),
-            VectorStateDelta::NowGenerated(prompt) => (true, prompt, Default::default()),
+            VectorStateDelta::NowRemoved => {
+                (true, Default::default(), Default::default(), Default::default())
+            }
+            VectorStateDelta::NowManual(add) => (true, Default::default(), Default::default(), add),
+            VectorStateDelta::NowGenerated(prompt) => {
+                (true, prompt, Default::default(), Default::default())
+            }
+            VectorStateDelta::UpdateGeneratedFromFragments(fragments) => (
+                false,
+                Default::default(),
+                ExtractorDiff::into_list_of_changes(fragments),
+                Default::default(),
+            ),
+            VectorStateDelta::NowGeneratedFromFragments(items) => (
+                true,
+                Default::default(),
+                ExtractorDiff::into_list_of_changes(
+                    items.into_iter().map(|(name, value)| (name, ExtractorDiff::Added(value))),
+                ),
+                Default::default(),
+            ),
         }
     }
 }
 
 struct EmbedderVectorExtractor<'a> {
     embedder_name: String,
-    embedder: Arc<Embedder>,
     embedder_info: &'a EmbedderInfo,
-    prompt: Arc<Prompt>,
+    runtime: Arc<RuntimeEmbedder>,
 
     // (docid) -> (prompt)
     prompts_writer: Writer<BufWriter<File>>,
+    // (docid, extractor_id) -> (Option<Value>)
+    inputs_writer: Writer<BufWriter<File>>,
     // (docid) -> ()
     remove_vectors_writer: Writer<BufWriter<File>>,
     // (docid, _index) -> KvWriterDelAdd -> Vector
@@ -87,14 +117,13 @@ struct EmbedderVectorExtractor<'a> {
 enum ExtractionAction {
     SettingsFullReindex,
     SettingsRegeneratePrompts {
-        old_prompt: Arc<Prompt>,
+        old_runtime: Arc<RuntimeEmbedder>,
     },
     /// List of fragments to update/add
-    ///
-    /// The value is the old value, or None if the fragment is newly added.
-    /// Removed fragments are taken care of before this extractor.
     SettingsRegenerateFragments {
-        fragments: Vec<(String, Option<Value>)>,
+        // name and indices, respectively in old and new runtime, of the fragments to examine.
+        must_regenerate_fragments: BTreeMap<String, (Option<usize>, usize)>,
+        old_runtime: Arc<RuntimeEmbedder>,
     },
     DocumentOperation,
 }
@@ -206,6 +235,7 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
     let mut configs = settings_diff.new.embedding_configs.clone().into_inner();
     let old_configs = &settings_diff.old.embedding_configs;
 
+    /// TODO: handle fragments even when not doing a regenerate fragment
     if reindex_vectors {
         for (name, action) in settings_diff.embedding_config_updates.iter() {
             /// FIXME: unwrap
@@ -213,9 +243,7 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                 embedder_info.iter().find(|(embedder_name, _)| embedder_name == name).unwrap();
 
             if let Some(action) = action.reindex() {
-                let Some((embedder_name, (embedder, prompt, _quantized))) =
-                    configs.remove_entry(name)
-                else {
+                let Some((embedder_name, runtime)) = configs.remove_entry(name) else {
                     tracing::error!(embedder = name, "Requested embedder config not found");
                     continue;
                 };
@@ -234,6 +262,12 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                     tempfile::tempfile()?,
                 );
 
+                let inputs_writer = create_writer(
+                    indexer.chunk_compression_type,
+                    indexer.chunk_compression_level,
+                    tempfile::tempfile()?,
+                );
+
                 // (docid) -> ()
                 let remove_vectors_writer = create_writer(
                     indexer.chunk_compression_type,
@@ -244,7 +278,7 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                 let action = match action {
                     ReindexAction::FullReindex => ExtractionAction::SettingsFullReindex,
                     ReindexAction::RegenerateFragments(regenerate_fragments) => {
-                        let Some((embedder, _, _)) = old_configs.get(name) else {
+                        let Some(old_runtime) = old_configs.get(name) else {
                             tracing::error!(embedder = name, "Old embedder config not found");
                             continue;
                         };
@@ -253,33 +287,53 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                             .iter()
                             .filter_map(|(name, fragment)| match fragment {
                                 crate::vector::settings::RegenerateFragment::Update => {
-                                    let old_value = embedder.fragment(name);
-                                    Some((name.clone(), old_value.cloned()))
+                                    let old_value = old_runtime
+                                        .fragments
+                                        .binary_search_by_key(&name, |fragment| &fragment.name)
+                                        .ok();
+                                    let Ok(new_value) = runtime
+                                        .fragments
+                                        .binary_search_by_key(&name, |fragment| &fragment.name)
+                                    else {
+                                        return None;
+                                    };
+                                    Some((name.clone(), (old_value, new_value)))
                                 }
+                                // was already handled in transform
                                 crate::vector::settings::RegenerateFragment::Remove => None,
                                 crate::vector::settings::RegenerateFragment::Add => {
-                                    Some((name.clone(), None))
+                                    let Ok(new_value) = runtime
+                                        .fragments
+                                        .binary_search_by_key(&name, |fragment| &fragment.name)
+                                    else {
+                                        return None;
+                                    };
+                                    Some((name.clone(), (None, new_value)))
                                 }
                             })
                             .collect();
-                        ExtractionAction::SettingsRegenerateFragments { fragments }
+                        ExtractionAction::SettingsRegenerateFragments {
+                            old_runtime,
+                            must_regenerate_fragments: fragments,
+                        }
                     }
+
                     ReindexAction::RegeneratePrompts => {
-                        let Some((_, old_prompt, _quantized)) = old_configs.get(name) else {
+                        let Some(old_runtime) = old_configs.get(name) else {
                             tracing::error!(embedder = name, "Old embedder config not found");
                             continue;
                         };
 
-                        ExtractionAction::SettingsRegeneratePrompts { old_prompt }
+                        ExtractionAction::SettingsRegeneratePrompts { old_runtime }
                     }
                 };
 
                 extractors.push(EmbedderVectorExtractor {
                     embedder_name,
-                    embedder,
+                    runtime,
                     embedder_info,
-                    prompt,
                     prompts_writer,
+                    inputs_writer,
                     remove_vectors_writer,
                     manual_vectors_writer,
                     embedding_status_delta: Default::default(),
@@ -291,7 +345,7 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
         }
     } else {
         // document operation
-        for (embedder_name, (embedder, prompt, _quantized)) in configs.into_iter() {
+        for (embedder_name, runtime) in configs.into_iter() {
             /// FIXME: unwrap
             let (_, embedder_info) = embedder_info
                 .iter()
@@ -312,6 +366,12 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                 tempfile::tempfile()?,
             );
 
+            let inputs_writer = create_writer(
+                indexer.chunk_compression_type,
+                indexer.chunk_compression_level,
+                tempfile::tempfile()?,
+            );
+
             // (docid) -> ()
             let remove_vectors_writer = create_writer(
                 indexer.chunk_compression_type,
@@ -321,10 +381,10 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
 
             extractors.push(EmbedderVectorExtractor {
                 embedder_name,
-                embedder,
+                runtime,
                 embedder_info,
-                prompt,
                 prompts_writer,
+                inputs_writer,
                 remove_vectors_writer,
                 manual_vectors_writer,
                 embedding_status_delta: Default::default(),
@@ -335,7 +395,9 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
 
     let mut key_buffer = Vec::new();
     let mut cursor = obkv_documents.into_cursor()?;
+    let mut doc_alloc = Bump::new();
     while let Some((key, value)) = cursor.move_on_next()? {
+        doc_alloc.reset();
         // this must always be serialized as (docid, external_docid);
         const SIZE_OF_DOCUMENTID: usize = std::mem::size_of::<DocumentId>();
         let (docid_bytes, external_id_bytes) =
@@ -365,17 +427,17 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
 
         for EmbedderVectorExtractor {
             embedder_name,
-            embedder,
+            runtime,
             embedder_info,
-            prompt,
             prompts_writer,
+            inputs_writer,
             remove_vectors_writer,
             manual_vectors_writer,
             embedding_status_delta,
             action,
         } in extractors.iter_mut()
         {
-            let embedder_is_manual = matches!(**embedder, Embedder::UserProvided(_));
+            let embedder_is_manual = matches!(*runtime.embedder, Embedder::UserProvided(_));
 
             let (old, new) = parsed_vectors.remove(embedder_name);
             let new_must_regenerate = new.must_regenerate();
@@ -411,12 +473,53 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                             );
                             continue;
                         }
-                        regenerate_prompt(obkv, prompt, new_fields_ids_map)?
+                        regenerate_prompt(obkv, &runtime.document_template, new_fields_ids_map)?
                     }
                 },
-                ExtractionAction::SettingsRegenerateFragments { fragments } => todo!(),
+                ExtractionAction::SettingsRegenerateFragments {
+                    must_regenerate_fragments,
+                    old_runtime,
+                } => {
+                    if old.must_regenerate() {
+                        let mut fragment_diff = Vec::new();
+                        for (name, (old_index, new_index)) in must_regenerate_fragments {
+                            let Some(new) = runtime.fragments.get(*new_index) else { continue };
+
+                            let new =
+                                RequestFragmentExtractor::new(new, &doc_alloc).ignore_errors();
+
+                            let diff = {
+                                let old = old_index.as_ref().and_then(|old| {
+                                    let old = old_runtime.fragments.get(*old)?;
+                                    Some(
+                                        RequestFragmentExtractor::new(old, &doc_alloc)
+                                            .ignore_errors(),
+                                    )
+                                });
+                                let old = old.as_ref();
+
+                                let new_fields_ids_map = new_fields_ids_map.as_fields_ids_map();
+
+                                let obkv_document =
+                                    crate::update::new::document::KvDelAddDocument::new(
+                                        obkv,
+                                        DelAdd::Addition,
+                                        new_fields_ids_map,
+                                    );
+                                Extractor::diff_settings(&new, obkv_document, &(), old)
+                            }
+                            .expect("ignoring errors so this cannot fail");
+                            fragment_diff.push((name.clone(), diff));
+                        }
+                        VectorStateDelta::UpdateGeneratedFromFragments(fragment_diff)
+                    } else {
+                        // we can simply ignore user provided vectors as they are not regenerated and are
+                        // already in the DB since this is an existing embedder
+                        VectorStateDelta::NoChange
+                    }
+                }
                 // prompt regeneration is only triggered for existing embedders
-                ExtractionAction::SettingsRegeneratePrompts { old_prompt } => {
+                ExtractionAction::SettingsRegeneratePrompts { old_runtime } => {
                     if old.must_regenerate() {
                         if embedder_is_manual {
                             ManualEmbedderErrors::push_error(
@@ -428,7 +531,7 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                         }
                         regenerate_if_prompt_changed(
                             obkv,
-                            (old_prompt, prompt),
+                            (&old_runtime.document_template, &runtime.document_template),
                             (old_fields_ids_map, new_fields_ids_map),
                         )?
                     } else {
@@ -439,7 +542,7 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                 }
                 ExtractionAction::DocumentOperation => extract_vector_document_diff(
                     obkv,
-                    prompt,
+                    &runtime.document_template,
                     (old, new),
                     (old_fields_ids_map, new_fields_ids_map),
                     document_id,
@@ -462,9 +565,11 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
             push_vectors_diff(
                 remove_vectors_writer,
                 prompts_writer,
+                inputs_writer,
                 manual_vectors_writer,
                 &mut key_buffer,
                 delta,
+                &runtime.fragments,
             )?;
         }
 
@@ -481,10 +586,10 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
 
     for EmbedderVectorExtractor {
         embedder_name,
-        embedder,
+        runtime,
         embedder_info: _,
-        prompt: _,
         prompts_writer,
+        inputs_writer,
         remove_vectors_writer,
         action: _,
         manual_vectors_writer,
@@ -495,7 +600,8 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
             manual_vectors: writer_into_reader(manual_vectors_writer)?,
             remove_vectors: writer_into_reader(remove_vectors_writer)?,
             prompts: writer_into_reader(prompts_writer)?,
-            embedder,
+            inputs: writer_into_reader(inputs_writer)?,
+            runtime,
             embedder_name,
             embedding_status_delta,
         })
@@ -520,7 +626,9 @@ fn push_embedding_status_delta(
             return;
         }
         VectorStateDelta::NowManual(_) => true,
-        VectorStateDelta::NowGenerated(_) => false,
+        VectorStateDelta::NowGenerated(_)
+        | VectorStateDelta::UpdateGeneratedFromFragments(_)
+        | VectorStateDelta::NowGeneratedFromFragments(_) => false,
     };
 
     embedding_status_delta.push_delta(
@@ -673,11 +781,13 @@ fn regenerate_prompt(
 fn push_vectors_diff(
     remove_vectors_writer: &mut Writer<BufWriter<File>>,
     prompts_writer: &mut Writer<BufWriter<File>>,
+    inputs_writer: &mut Writer<BufWriter<File>>,
     manual_vectors_writer: &mut Writer<BufWriter<File>>,
     key_buffer: &mut Vec<u8>,
     delta: VectorStateDelta,
+    fragments: &[RuntimeFragment],
 ) -> Result<()> {
-    let (must_remove, prompt, mut add_vectors) = delta.into_values();
+    let (must_remove, prompt, mut fragment_delta, mut add_vectors) = delta.into_values();
     if must_remove {
         key_buffer.truncate(TRUNCATE_SIZE);
         remove_vectors_writer.insert(&key_buffer, [])?;
@@ -687,23 +797,51 @@ fn push_vectors_diff(
         prompts_writer.insert(&key_buffer, prompt.as_bytes())?;
     }
 
-    // We sort and dedup the vectors
-    add_vectors.sort_unstable_by(|a, b| compare_vectors(a, b));
-    add_vectors.dedup_by(|a, b| compare_vectors(a, b).is_eq());
+    if !fragment_delta.is_empty() {
+        let mut scratch = Vec::new();
+        let mut fragment_delta: Vec<_> = fragments
+            .iter()
+            .filter_map(|fragment| {
+                let Some(delta) = fragment_delta.remove(&fragment.name) else {
+                    return None;
+                };
+                Some((fragment.id, delta))
+            })
+            .collect();
 
-    // insert vectors into the writer
-    for (i, vector) in add_vectors.into_iter().enumerate().take(u16::MAX as usize) {
-        // Generate the key by extending the unique index to it.
-        key_buffer.truncate(TRUNCATE_SIZE);
-        let index = u16::try_from(i).unwrap();
-        key_buffer.extend_from_slice(&index.to_be_bytes());
+        fragment_delta.sort_unstable_by_key(|(id, _)| *id);
+        for (id, value) in fragment_delta {
+            key_buffer.truncate(TRUNCATE_SIZE);
+            key_buffer.push(id);
+            if let Some(value) = value {
+                scratch.clear();
+                serde_json::to_writer(&mut scratch, &value).unwrap();
+                inputs_writer.insert(&key_buffer, &scratch)?;
+            } else {
+                inputs_writer.insert(&key_buffer, [])?;
+            }
+        }
+    }
 
-        // We insert only the Add part of the Obkv to inform
-        // that we only want to remove all those vectors.
-        let mut obkv = KvWriterDelAdd::memory();
-        obkv.insert(DelAdd::Addition, cast_slice(&vector))?;
-        let bytes = obkv.into_inner()?;
-        manual_vectors_writer.insert(&key_buffer, bytes)?;
+    if !add_vectors.is_empty() {
+        // We sort and dedup the vectors
+        add_vectors.sort_unstable_by(|a, b| compare_vectors(a, b));
+        add_vectors.dedup_by(|a, b| compare_vectors(a, b).is_eq());
+
+        // insert vectors into the writer
+        for (i, vector) in add_vectors.into_iter().enumerate().take(u16::MAX as usize) {
+            // Generate the key by extending the unique index to it.
+            key_buffer.truncate(TRUNCATE_SIZE);
+            let index = u16::try_from(i).unwrap();
+            key_buffer.extend_from_slice(&index.to_be_bytes());
+
+            // We insert only the Add part of the Obkv to inform
+            // that we only want to remove all those vectors.
+            let mut obkv = KvWriterDelAdd::memory();
+            obkv.insert(DelAdd::Addition, cast_slice(&vector))?;
+            let bytes = obkv.into_inner()?;
+            manual_vectors_writer.insert(&key_buffer, bytes)?;
+        }
     }
 
     Ok(())
@@ -719,12 +857,13 @@ pub fn extract_embeddings<R: io::Read + io::Seek>(
     // docid, prompt
     prompt_reader: grenad::Reader<R>,
     indexer: GrenadParameters,
-    embedder: Arc<Embedder>,
+    runtime: Arc<RuntimeEmbedder>,
     embedder_name: &str,
     possible_embedding_mistakes: &PossibleEmbeddingMistakes,
     unused_vectors_distribution: &UnusedVectorsDistribution,
     request_threads: &ThreadPoolNoAbort,
 ) -> Result<grenad::Reader<BufReader<File>>> {
+    let embedder = &runtime.embedder;
     let n_chunks = embedder.chunk_count_hint(); // chunk level parallelism
     let n_vectors_per_chunk = embedder.prompt_count_in_chunk_hint(); // number of vectors in a single chunk
 

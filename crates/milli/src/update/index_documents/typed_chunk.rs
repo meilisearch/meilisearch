@@ -662,8 +662,11 @@ pub(crate) fn write_typed_chunk_into_index(
 
             embedders.put_embedder_info(wtxn, &embedder_name, &infos)?;
 
-            let binary_quantized =
-                settings_diff.old.embedding_configs.get(&embedder_name).is_some_and(|conf| conf.2);
+            let binary_quantized = settings_diff
+                .old
+                .embedding_configs
+                .get(&embedder_name)
+                .is_some_and(|conf| conf.is_quantized);
             // FIXME: allow customizing distance
             let writer = ArroyWrapper::new(index.vector_arroy, infos.embedder_id, binary_quantized);
 

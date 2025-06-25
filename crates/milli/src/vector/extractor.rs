@@ -1,50 +1,66 @@
 use std::cell::RefCell;
+use std::collections::BTreeMap;
 use std::fmt::Debug;
 
 use bumpalo::Bump;
 use serde_json::Value;
 
 use super::json_template::{self, JsonTemplate};
-use super::Embedding;
 use crate::prompt::error::RenderPromptError;
 use crate::prompt::Prompt;
 use crate::update::new::document::Document;
-use crate::update::new::vector_document::VectorDocument;
-use crate::{GlobalFieldsIdsMap, UserError};
+use crate::vector::RuntimeFragment;
+use crate::GlobalFieldsIdsMap;
 
-pub trait Extractor<'a> {
+pub trait Extractor<'doc> {
+    type DocumentMetadata;
     type Input: PartialEq;
     type Error;
 
-    fn extract(
+    fn extract<'a, D: Document<'a> + Debug>(
         &self,
-        external_docid: &'a str,
-        doc: &'a (impl Document<'a> + Debug),
-        vector: Option<&'a impl VectorDocument<'a>>,
-    ) -> Result<Option<Self::Input>, Self::Error>;
+        doc: D,
+        meta: &Self::DocumentMetadata,
+    ) -> Result<Option<Self::Input>, Self::Error>
+    where
+        'doc: 'a;
 
-    fn diff_documents(
+    fn extractor_id(&self) -> u8;
+
+    fn diff_documents<'a, OD: Document<'a> + Debug, ND: Document<'a> + Debug>(
         &self,
-        external_docid: &'a str,
-        old: (&'a (impl Document<'a> + Debug), Option<&'a impl VectorDocument<'a>>),
-        new: (&'a (impl Document<'a> + Debug), Option<&'a impl VectorDocument<'a>>),
-    ) -> Result<ExtractorDiff<Self::Input>, Self::Error> {
-        let old_input = self.extract(external_docid, old.0, old.1);
-        let new_input = self.extract(external_docid, new.0, new.1);
+        old: OD,
+        new: ND,
+        meta: &Self::DocumentMetadata,
+    ) -> Result<ExtractorDiff<Self::Input>, Self::Error>
+    where
+        'doc: 'a,
+    {
+        let old_input = self.extract(old, meta);
+        let new_input = self.extract(new, meta);
         to_diff(old_input, new_input)
     }
 
-    fn diff_settings(
+    fn diff_settings<'a, D: Document<'a> + Debug>(
         &self,
-        external_docid: &'a str,
-        doc: &'a (impl Document<'a> + Debug),
-        vector: Option<&'a impl VectorDocument<'a>>,
-        old: &Self,
-    ) -> Result<ExtractorDiff<Self::Input>, Self::Error> {
-        let old_input = old.extract(external_docid, doc, vector);
-        let new_input = self.extract(external_docid, doc, vector);
+        doc: D,
+        meta: &Self::DocumentMetadata,
+        old: Option<&Self>,
+    ) -> Result<ExtractorDiff<Self::Input>, Self::Error>
+    where
+        'doc: 'a,
+    {
+        let old_input = if let Some(old) = old { old.extract(&doc, meta) } else { Ok(None) };
+        let new_input = self.extract(&doc, meta);
 
         to_diff(old_input, new_input)
+    }
+
+    fn ignore_errors(self) -> IgnoreErrorExtractor<Self>
+    where
+        Self: Sized,
+    {
+        IgnoreErrorExtractor(self)
     }
 }
 
@@ -70,51 +86,69 @@ pub enum ExtractorDiff<Input> {
     Unchanged,
 }
 
-pub struct ManualExtractor<'a> {
-    key: &'a str,
-    doc_alloc: &'a Bump,
-}
+impl<Input> ExtractorDiff<Input> {
+    pub fn into_input(self) -> Option<Input> {
+        match self {
+            ExtractorDiff::Removed => None,
+            ExtractorDiff::Added(input) => Some(input),
+            ExtractorDiff::Updated(input) => Some(input),
+            ExtractorDiff::Unchanged => None,
+        }
+    }
 
-impl<'a> Extractor<'a> for ManualExtractor<'a> {
-    type Input = Vec<Embedding>;
-    type Error = crate::Error;
+    pub fn needs_change(&self) -> bool {
+        match self {
+            ExtractorDiff::Removed => true,
+            ExtractorDiff::Added(_) => true,
+            ExtractorDiff::Updated(_) => true,
+            ExtractorDiff::Unchanged => false,
+        }
+    }
 
-    fn extract(
-        &self,
-        external_docid: &'a str,
-        _doc: &'a (impl Document<'a> + Debug),
-        vector: Option<&'a impl VectorDocument<'a>>,
-    ) -> Result<Option<Self::Input>, Self::Error> {
-        let Some(vector) = vector else { return Ok(None) };
-
-        let Some(entry) = vector.vectors_for_key(self.key)? else { return Ok(None) };
-        let Some(embeddings) = entry.embeddings else { return Ok(None) };
-
-        Ok(Some(embeddings.into_vec(self.doc_alloc, self.key).map_err(|error| {
-            UserError::InvalidVectorsEmbedderConf {
-                document_id: external_docid.to_string(),
-                error: error.to_string(),
-            }
-        })?))
+    pub fn into_list_of_changes(
+        named_diffs: impl IntoIterator<Item = (String, Self)>,
+    ) -> BTreeMap<String, Option<Input>> {
+        named_diffs
+            .into_iter()
+            .filter(|(_, diff)| diff.needs_change())
+            .map(|(name, diff)| (name, diff.into_input()))
+            .collect()
     }
 }
 
-pub struct DocumentTemplateExtractor<'a> {
+pub struct DocumentTemplateExtractor<'a, 'b> {
     template: &'a Prompt,
     doc_alloc: &'a Bump,
-    field_id_map: &'a RefCell<GlobalFieldsIdsMap<'a>>,
+    field_id_map: &'a RefCell<GlobalFieldsIdsMap<'b>>,
 }
 
-impl<'a> Extractor<'a> for DocumentTemplateExtractor<'a> {
-    type Input = &'a str;
+impl<'a, 'b> DocumentTemplateExtractor<'a, 'b> {
+    pub fn new(
+        template: &'a Prompt,
+        doc_alloc: &'a Bump,
+        field_id_map: &'a RefCell<GlobalFieldsIdsMap<'b>>,
+    ) -> Self {
+        Self { template, doc_alloc, field_id_map }
+    }
+}
+
+impl<'doc, 'b> Extractor<'doc> for DocumentTemplateExtractor<'doc, 'b> {
+    type DocumentMetadata = &'doc str;
+    type Input = &'doc str;
     type Error = RenderPromptError;
 
-    fn extract(
+    fn extractor_id(&self) -> u8 {
+        0
+    }
+
+    fn extract<'a, D: Document<'a> + Debug>(
         &self,
-        external_docid: &'a str,
-        doc: &'a (impl Document<'a> + Debug),
-        _vector: Option<&'a impl VectorDocument<'a>>,
-    ) -> Result<Option<&'a str>, RenderPromptError> {
+        doc: D,
+        external_docid: &Self::DocumentMetadata,
+    ) -> Result<Option<Self::Input>, Self::Error>
+    where
+        'doc: 'a,
+    {
         Ok(Some(self.template.render_document(
             external_docid,
             doc,
@@ -126,44 +160,60 @@ impl<'a> Extractor<'a> for DocumentTemplateExtractor<'a> {
 
 pub struct RequestFragmentExtractor<'a> {
     fragment: &'a JsonTemplate,
+    extractor_id: u8,
     doc_alloc: &'a Bump,
 }
 
-impl<'a> Extractor<'a> for RequestFragmentExtractor<'a> {
+impl<'a> RequestFragmentExtractor<'a> {
+    pub fn new(fragment: &'a RuntimeFragment, doc_alloc: &'a Bump) -> Self {
+        Self { fragment: &fragment.template, extractor_id: fragment.id, doc_alloc }
+    }
+}
+
+impl<'doc> Extractor<'doc> for RequestFragmentExtractor<'doc> {
+    type DocumentMetadata = ();
     type Input = Value;
     type Error = json_template::Error;
 
-    fn extract(
+    fn extractor_id(&self) -> u8 {
+        self.extractor_id
+    }
+
+    fn extract<'a, D: Document<'a> + Debug>(
         &self,
-        _external_docid: &'a str,
-        doc: &'a (impl Document<'a> + Debug),
-        _vector: Option<&'a impl VectorDocument<'a>>,
-    ) -> Result<Option<Self::Input>, Self::Error> {
+        doc: D,
+        _meta: &Self::DocumentMetadata,
+    ) -> Result<Option<Self::Input>, Self::Error>
+    where
+        'doc: 'a,
+    {
         Ok(Some(self.fragment.render_document(doc, self.doc_alloc)?))
     }
 }
 
-// 1. Document ---Extractor--> Input
-// 2. Input ---Embedding Request--> EmbeddingResponse
-// 3. EmbeddingResponse ---Store in vector store---> EmbeddingLocation
-// 4. EmbeddingLocation ---Memorize in embedding map---> EmbeddingMap
+pub struct IgnoreErrorExtractor<E>(E);
 
-// EmbeddingMap (extractor_id, vector_id) -> doc_id
-// EmbeddingMap::push_docid(extractor_id, vector_id, doc_id)
-// EmbeddingMap::remove_docid(extractor_id, doc_id)
-// needed: extractor_id, vector_id, doc_id
+impl<'doc, E> Extractor<'doc> for IgnoreErrorExtractor<E>
+where
+    E: Extractor<'doc>,
+{
+    type DocumentMetadata = E::DocumentMetadata;
+    type Input = E::Input;
 
-// EmbeddingLocation (extractor_id, vector_id, doc_id)
-// EmbeddingLocation::push_embedding(doc_id, embedding) -> vector_id
-// EmbeddingLocation::remove_embedding(doc_id, vector_id)
-// needed: extractor_id, doc_id, vector_id
+    type Error = ();
 
-// EmbeddingResponse (extractor_id, doc_id, embedding)
+    fn extractor_id(&self) -> u8 {
+        self.0.extractor_id()
+    }
 
-// EmbeddingRequest (extractor_id, doc_id, input)
-// EmbeddingRequest::embed(extractor_id, doc_id, input) -> EmbeddingResponse
-
-// Embedder::embed_index -> EmbeddingRequests
-
-// EmbeddingRequests::embed_text(extractor_id, doc_id, text)
-// EmbeddingRequests::embed_fragment(extractor_id, doc_id, fragment)
+    fn extract<'a, D: Document<'a> + Debug>(
+        &self,
+        doc: D,
+        meta: &Self::DocumentMetadata,
+    ) -> Result<Option<Self::Input>, Self::Error>
+    where
+        'doc: 'a,
+    {
+        Ok(self.0.extract(doc, meta).ok().flatten())
+    }
+}

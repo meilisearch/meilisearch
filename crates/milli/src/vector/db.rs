@@ -7,7 +7,6 @@ use heed::types::{SerdeJson, Str, U8};
 use heed::{BytesEncode, Database, RoTxn, RwTxn, Unspecified};
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 use crate::vector::settings::RemoveFragments;
 use crate::vector::EmbeddingConfig;
@@ -32,9 +31,12 @@ impl FragmentConfigs {
         self.0.as_slice()
     }
 
+    pub fn into_inner(self) -> Vec<FragmentConfig> {
+        self.0
+    }
+
     pub fn remove_fragments<'a>(
         &mut self,
-        embedder_id: u8,
         fragments: impl IntoIterator<Item = &'a str>,
     ) -> Option<RemoveFragments> {
         let mut remove_fragments = Vec::new();
@@ -45,8 +47,7 @@ impl FragmentConfigs {
             let fragment = self.0.swap_remove(index_to_remove);
             remove_fragments.push(fragment.id);
         }
-        (!remove_fragments.is_empty())
-            .then_some(RemoveFragments { fragment_ids: remove_fragments, embedder_id })
+        (!remove_fragments.is_empty()).then_some(RemoveFragments { fragment_ids: remove_fragments })
     }
 
     pub fn add_new_fragments(&mut self, new_fragments: impl IntoIterator<Item = String>) {

@@ -14,7 +14,7 @@ use crate::constants::RESERVED_VECTORS_FIELD_NAME;
 use crate::documents::FieldIdMapper;
 use crate::vector::db::{EmbeddingStatus, IndexEmbeddingConfig};
 use crate::vector::parsed_vectors::{RawVectors, RawVectorsError, VectorOrArrayOfVectors};
-use crate::vector::{ArroyWrapper, Embedding, EmbeddingConfigs};
+use crate::vector::{ArroyWrapper, Embedding, RuntimeEmbedders};
 use crate::{DocumentId, Index, InternalError, Result, UserError};
 
 #[derive(Serialize)]
@@ -223,7 +223,7 @@ fn entry_from_raw_value(
 pub struct VectorDocumentFromVersions<'doc> {
     external_document_id: &'doc str,
     vectors: RawMap<'doc, FxBuildHasher>,
-    embedders: &'doc EmbeddingConfigs,
+    embedders: &'doc RuntimeEmbedders,
 }
 
 impl<'doc> VectorDocumentFromVersions<'doc> {
@@ -231,7 +231,7 @@ impl<'doc> VectorDocumentFromVersions<'doc> {
         external_document_id: &'doc str,
         versions: &Versions<'doc>,
         bump: &'doc Bump,
-        embedders: &'doc EmbeddingConfigs,
+        embedders: &'doc RuntimeEmbedders,
     ) -> Result<Option<Self>> {
         let document = DocumentFromVersions::new(versions);
         if let Some(vectors_field) = document.vectors_field()? {
@@ -284,7 +284,7 @@ impl<'doc> MergedVectorDocument<'doc> {
         db_fields_ids_map: &'doc Mapper,
         versions: &Versions<'doc>,
         doc_alloc: &'doc Bump,
-        embedders: &'doc EmbeddingConfigs,
+        embedders: &'doc RuntimeEmbedders,
     ) -> Result<Option<Self>> {
         let db = VectorDocumentFromDb::new(docid, index, rtxn, db_fields_ids_map, doc_alloc)?;
         let new_doc =
@@ -296,7 +296,7 @@ impl<'doc> MergedVectorDocument<'doc> {
         external_document_id: &'doc str,
         versions: &Versions<'doc>,
         doc_alloc: &'doc Bump,
-        embedders: &'doc EmbeddingConfigs,
+        embedders: &'doc RuntimeEmbedders,
     ) -> Result<Option<Self>> {
         let Some(new_doc) =
             VectorDocumentFromVersions::new(external_document_id, versions, doc_alloc, embedders)?

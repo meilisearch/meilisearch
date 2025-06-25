@@ -15,6 +15,8 @@ use utoipa::ToSchema;
 use self::error::{EmbedError, NewEmbedderError};
 use crate::progress::Progress;
 use crate::prompt::{Prompt, PromptData};
+use crate::vector::composite::SubEmbedderOptions;
+use crate::vector::json_template::JsonTemplate;
 use crate::ThreadPoolNoAbort;
 
 pub mod composite;
@@ -86,7 +88,7 @@ impl ArroyWrapper {
         with_items: F,
     ) -> Result<O, arroy::Error>
     where
-        F: FnOnce(Option<&RoaringBitmap>) -> O,
+        F: FnOnce(&RoaringBitmap) -> O,
     {
         if self.quantized {
             self._items_in_store(rtxn, self.quantized_db(), store_id, with_items)
@@ -103,13 +105,13 @@ impl ArroyWrapper {
         with_items: F,
     ) -> Result<O, arroy::Error>
     where
-        F: FnOnce(Option<&RoaringBitmap>) -> O,
+        F: FnOnce(&RoaringBitmap) -> O,
     {
         let index = arroy_store_for_embedder(self.embedder_index, store_id);
         let reader = arroy::Reader::open(rtxn, index, db);
         match reader {
-            Ok(reader) => Ok(with_items(Some(reader.item_ids()))),
-            Err(arroy::Error::MissingMetadata(_)) => Ok(with_items(None)),
+            Ok(reader) => Ok(with_items(reader.item_ids())),
+            Err(arroy::Error::MissingMetadata(_)) => Ok(with_items(&RoaringBitmap::new())),
             Err(err) => Err(err),
         }
     }
@@ -316,7 +318,7 @@ impl ArroyWrapper {
         item_id: arroy::ItemId,
         store_id: u8,
     ) -> Result<bool, arroy::Error> {
-        let Some(dimensions) = self.dimensions(&wtxn)? else { return Ok(false) };
+        let Some(dimensions) = self.dimensions(wtxn)? else { return Ok(false) };
         let index = arroy_store_for_embedder(self.embedder_index, store_id);
         let writer = arroy::Writer::new(db, index, dimensions);
         writer.del_item(wtxn, item_id)
@@ -341,7 +343,7 @@ impl ArroyWrapper {
         db: arroy::Database<D>,
         store_id: u8,
     ) -> Result<(), arroy::Error> {
-        let Some(dimensions) = self.dimensions(&wtxn)? else {
+        let Some(dimensions) = self.dimensions(wtxn)? else {
             return Ok(());
         };
         let index = arroy_store_for_embedder(self.embedder_index, store_id);
@@ -729,15 +731,26 @@ impl EmbeddingConfig {
     }
 }
 
-/// Map of embedder configurations.
-///
-/// Each configuration is mapped to a name.
+/// Map of runtime embedder data.
 #[derive(Clone, Default)]
-pub struct EmbeddingConfigs(HashMap<String, (Arc<Embedder>, Arc<Prompt>, bool)>);
+pub struct RuntimeEmbedders(HashMap<String, Arc<RuntimeEmbedder>>);
 
-impl EmbeddingConfigs {
+pub struct RuntimeEmbedder {
+    pub embedder: Arc<Embedder>,
+    pub document_template: Prompt,
+    pub fragments: Vec<RuntimeFragment>,
+    pub is_quantized: bool,
+}
+
+pub struct RuntimeFragment {
+    pub name: String,
+    pub id: u8,
+    pub template: JsonTemplate,
+}
+
+impl RuntimeEmbedders {
     /// Create the map from its internal component.s
-    pub fn new(data: HashMap<String, (Arc<Embedder>, Arc<Prompt>, bool)>) -> Self {
+    pub fn new(data: HashMap<String, Arc<RuntimeEmbedder>>) -> Self {
         Self(data)
     }
 
@@ -746,24 +759,23 @@ impl EmbeddingConfigs {
     }
 
     /// Get an embedder configuration and template from its name.
-    pub fn get(&self, name: &str) -> Option<(Arc<Embedder>, Arc<Prompt>, bool)> {
+    pub fn get(&self, name: &str) -> Option<Arc<RuntimeEmbedder>> {
         self.0.get(name).cloned()
     }
 
-    pub fn inner_as_ref(&self) -> &HashMap<String, (Arc<Embedder>, Arc<Prompt>, bool)> {
+    pub fn inner_as_ref(&self) -> &HashMap<String, Arc<RuntimeEmbedder>> {
         &self.0
     }
 
-    pub fn into_inner(self) -> HashMap<String, (Arc<Embedder>, Arc<Prompt>, bool)> {
+    pub fn into_inner(self) -> HashMap<String, Arc<RuntimeEmbedder>> {
         self.0
     }
 }
 
-impl IntoIterator for EmbeddingConfigs {
-    type Item = (String, (Arc<Embedder>, Arc<Prompt>, bool));
+impl IntoIterator for RuntimeEmbedders {
+    type Item = (String, Arc<RuntimeEmbedder>);
 
-    type IntoIter =
-        std::collections::hash_map::IntoIter<String, (Arc<Embedder>, Arc<Prompt>, bool)>;
+    type IntoIter = std::collections::hash_map::IntoIter<String, Arc<RuntimeEmbedder>>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
@@ -779,6 +791,27 @@ pub enum EmbedderOptions {
     UserProvided(manual::EmbedderOptions),
     Rest(rest::EmbedderOptions),
     Composite(composite::EmbedderOptions),
+}
+
+impl EmbedderOptions {
+    pub fn fragment(&self, name: &str) -> Option<&serde_json::Value> {
+        match &self {
+            EmbedderOptions::HuggingFace(_)
+            | EmbedderOptions::OpenAi(_)
+            | EmbedderOptions::Ollama(_)
+            | EmbedderOptions::UserProvided(_) => None,
+            EmbedderOptions::Rest(embedder_options) => {
+                embedder_options.indexing_fragments.get(name)
+            }
+            EmbedderOptions::Composite(embedder_options) => {
+                if let SubEmbedderOptions::Rest(embedder_options) = &embedder_options.index {
+                    embedder_options.indexing_fragments.get(name)
+                } else {
+                    None
+                }
+            }
+        }
+    }
 }
 
 impl Default for EmbedderOptions {
@@ -977,7 +1010,7 @@ impl Embedder {
         }
     }
 
-    pub fn fragment(&self, name: &str) -> Option<&serde_json::Value> {
+    pub fn fragment(&self, name: &str) -> Option<&JsonTemplate> {
         match self {
             Embedder::Rest(embedder) => embedder.fragment(name),
             Embedder::Composite(embedder) => match &embedder.index {

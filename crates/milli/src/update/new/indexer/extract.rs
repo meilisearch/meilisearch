@@ -18,7 +18,7 @@ use crate::update::new::extract::EmbeddingExtractor;
 use crate::update::new::merger::merge_and_send_rtree;
 use crate::update::new::{merge_and_send_docids, merge_and_send_facet_docids, FacetDatabases};
 use crate::vector::db::IndexEmbeddingConfig;
-use crate::vector::EmbeddingConfigs;
+use crate::vector::RuntimeEmbedders;
 use crate::{Result, ThreadPoolNoAbort, ThreadPoolNoAbortBuilder};
 
 #[allow(clippy::too_many_arguments)]
@@ -27,7 +27,7 @@ pub(super) fn extract_all<'pl, 'extractor, DC, MSP>(
     indexing_context: IndexingContext<MSP>,
     indexer_span: Span,
     extractor_sender: ExtractorBbqueueSender,
-    embedders: &EmbeddingConfigs,
+    embedders: &RuntimeEmbedders,
     extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
     finished_extraction: &AtomicBool,
     field_distribution: &mut BTreeMap<String, u64>,

@@ -38,7 +38,7 @@ use crate::update::{
     IndexerConfig, UpdateIndexingStep, WordPrefixDocids, WordPrefixIntegerDocids, WordsPrefixesFst,
 };
 use crate::vector::db::EmbedderInfo;
-use crate::vector::{ArroyWrapper, EmbeddingConfigs};
+use crate::vector::{ArroyWrapper, RuntimeEmbedders};
 use crate::{CboRoaringBitmapCodec, Index, Result, UserError};
 
 static MERGED_DATABASE_COUNT: usize = 7;
@@ -81,7 +81,7 @@ pub struct IndexDocuments<'t, 'i, 'a, FP, FA> {
     should_abort: FA,
     added_documents: u64,
     deleted_documents: u64,
-    embedders: EmbeddingConfigs,
+    embedders: RuntimeEmbedders,
 }
 
 #[derive(Default, Debug, Clone)]
@@ -169,7 +169,7 @@ where
         Ok((self, Ok(indexed_documents)))
     }
 
-    pub fn with_embedders(mut self, embedders: EmbeddingConfigs) -> Self {
+    pub fn with_embedders(mut self, embedders: RuntimeEmbedders) -> Self {
         self.embedders = embedders;
         self
     }
@@ -507,8 +507,11 @@ where
                     },
                 )?;
             let embedder_config = settings_diff.embedding_config_updates.get(&embedder_name);
-            let was_quantized =
-                settings_diff.old.embedding_configs.get(&embedder_name).is_some_and(|conf| conf.2);
+            let was_quantized = settings_diff
+                .old
+                .embedding_configs
+                .get(&embedder_name)
+                .is_some_and(|conf| conf.is_quantized);
             let is_quantizing = embedder_config.is_some_and(|action| action.is_being_quantized);
 
             pool.install(|| {
@@ -2033,7 +2036,7 @@ mod tests {
             new_fields_ids_map,
             primary_key,
             &document_changes,
-            EmbeddingConfigs::default(),
+            RuntimeEmbedders::default(),
             &|| false,
             &Progress::default(),
         )
@@ -2120,7 +2123,7 @@ mod tests {
             new_fields_ids_map,
             primary_key,
             &document_changes,
-            EmbeddingConfigs::default(),
+            RuntimeEmbedders::default(),
             &|| false,
             &Progress::default(),
         )
@@ -2280,7 +2283,7 @@ mod tests {
         ]);
 
         let indexer_alloc = Bump::new();
-        let embedders = EmbeddingConfigs::default();
+        let embedders = RuntimeEmbedders::default();
         let mut indexer = indexer::DocumentOperation::new();
         indexer.replace_documents(&documents).unwrap();
         indexer.delete_documents(&["2"]);
@@ -2345,7 +2348,7 @@ mod tests {
         indexer.delete_documents(&["1", "2"]);
 
         let indexer_alloc = Bump::new();
-        let embedders = EmbeddingConfigs::default();
+        let embedders = RuntimeEmbedders::default();
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(
                 &indexer_alloc,
@@ -2395,7 +2398,7 @@ mod tests {
             { "id": 3, "name": "jean", "age": 25 },
         ]);
         let indexer_alloc = Bump::new();
-        let embedders = EmbeddingConfigs::default();
+        let embedders = RuntimeEmbedders::default();
         let mut indexer = indexer::DocumentOperation::new();
         indexer.update_documents(&documents).unwrap();
 
@@ -2446,7 +2449,7 @@ mod tests {
             { "id": 3, "legs": 4 },
         ]);
         let indexer_alloc = Bump::new();
-        let embedders = EmbeddingConfigs::default();
+        let embedders = RuntimeEmbedders::default();
         let mut indexer = indexer::DocumentOperation::new();
         indexer.update_documents(&documents).unwrap();
         indexer.delete_documents(&["1", "2"]);
@@ -2495,7 +2498,7 @@ mod tests {
         let mut new_fields_ids_map = db_fields_ids_map.clone();
 
         let indexer_alloc = Bump::new();
-        let embedders = EmbeddingConfigs::default();
+        let embedders = RuntimeEmbedders::default();
         let mut indexer = indexer::DocumentOperation::new();
         indexer.delete_documents(&["1", "2"]);
 
@@ -2550,7 +2553,7 @@ mod tests {
         let mut new_fields_ids_map = db_fields_ids_map.clone();
 
         let indexer_alloc = Bump::new();
-        let embedders = EmbeddingConfigs::default();
+        let embedders = RuntimeEmbedders::default();
         let mut indexer = indexer::DocumentOperation::new();
 
         indexer.delete_documents(&["1", "2", "1", "2"]);
@@ -2608,7 +2611,7 @@ mod tests {
         let mut new_fields_ids_map = db_fields_ids_map.clone();
 
         let indexer_alloc = Bump::new();
-        let embedders = EmbeddingConfigs::default();
+        let embedders = RuntimeEmbedders::default();
         let mut indexer = indexer::DocumentOperation::new();
 
         let documents = documents!([
@@ -2657,7 +2660,7 @@ mod tests {
         let mut new_fields_ids_map = db_fields_ids_map.clone();
 
         let indexer_alloc = Bump::new();
-        let embedders = EmbeddingConfigs::default();
+        let embedders = RuntimeEmbedders::default();
         let mut indexer = indexer::DocumentOperation::new();
 
         indexer.delete_documents(&["1"]);
@@ -2863,7 +2866,7 @@ mod tests {
         let mut new_fields_ids_map = db_fields_ids_map.clone();
 
         let indexer_alloc = Bump::new();
-        let embedders = EmbeddingConfigs::default();
+        let embedders = RuntimeEmbedders::default();
         let mut indexer = indexer::DocumentOperation::new();
 
         // OP
@@ -2923,7 +2926,7 @@ mod tests {
         let mut new_fields_ids_map = db_fields_ids_map.clone();
 
         let indexer_alloc = Bump::new();
-        let embedders = EmbeddingConfigs::default();
+        let embedders = RuntimeEmbedders::default();
         let mut indexer = indexer::DocumentOperation::new();
 
         indexer.delete_documents(&["1"]);
@@ -2981,7 +2984,7 @@ mod tests {
         let mut new_fields_ids_map = db_fields_ids_map.clone();
 
         let indexer_alloc = Bump::new();
-        let embedders = EmbeddingConfigs::default();
+        let embedders = RuntimeEmbedders::default();
         let mut indexer = indexer::DocumentOperation::new();
 
         let documents = documents!([

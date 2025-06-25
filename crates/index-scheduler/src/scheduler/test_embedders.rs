@@ -112,7 +112,8 @@ fn import_vectors() {
         let simple_hf_name = name.clone();
 
         let configs = index_scheduler.embedders("doggos".to_string(), configs).unwrap();
-        let (hf_embedder, _, _) = configs.get(&simple_hf_name).unwrap();
+        let hf_runtime = configs.get(&simple_hf_name).unwrap();
+        let hf_embedder = &hf_runtime.embedder;
         let beagle_embed = hf_embedder.embed_search("Intel the beagle best doggo", None).unwrap();
         let lab_embed = hf_embedder.embed_search("Max the lab best doggo", None).unwrap();
         let patou_embed = hf_embedder.embed_search("kefir the patou best doggo", None).unwrap();
