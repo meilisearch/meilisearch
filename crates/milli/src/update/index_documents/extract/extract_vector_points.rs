@@ -508,6 +508,13 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                             regenerate_prompt(obkv, &runtime.document_template, new_fields_ids_map)?
                         } else {
                             let mut fragment_diff = Vec::new();
+                            let new_fields_ids_map = new_fields_ids_map.as_fields_ids_map();
+
+                            let obkv_document = crate::update::new::document::KvDelAddDocument::new(
+                                obkv,
+                                DelAdd::Addition,
+                                new_fields_ids_map,
+                            );
                             for (name, (old_index, new_index)) in must_regenerate_fragments {
                                 let Some(new) = runtime.fragments.get(*new_index) else { continue };
 
@@ -523,16 +530,7 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                                         )
                                     });
                                     let old = old.as_ref();
-
-                                    let new_fields_ids_map = new_fields_ids_map.as_fields_ids_map();
-
-                                    let obkv_document =
-                                        crate::update::new::document::KvDelAddDocument::new(
-                                            obkv,
-                                            DelAdd::Addition,
-                                            new_fields_ids_map,
-                                        );
-                                    Extractor::diff_settings(&new, obkv_document, &(), old)
+                                    Extractor::diff_settings(&new, &obkv_document, &(), old)
                                 }
                                 .expect("ignoring errors so this cannot fail");
                                 fragment_diff.push((name.clone(), diff));
@@ -580,7 +578,8 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                 }
                 ExtractionAction::DocumentOperation => extract_vector_document_diff(
                     obkv,
-                    &runtime.document_template,
+                    runtime,
+                    &doc_alloc,
                     (old, new),
                     (old_fields_ids_map, new_fields_ids_map),
                     document_id,
@@ -681,7 +680,8 @@ fn push_embedding_status_delta(
 #[allow(clippy::too_many_arguments)] // feel free to find efficient way to factor arguments
 fn extract_vector_document_diff(
     obkv: &obkv::KvReader<FieldId>,
-    prompt: &Prompt,
+    runtime: &RuntimeEmbedder,
+    doc_alloc: &Bump,
     (old, new): (VectorState, VectorState),
     (old_fields_ids_map, new_fields_ids_map): (&FieldIdMapWithMetadata, &FieldIdMapWithMetadata),
     document_id: impl Fn() -> Value,
@@ -719,19 +719,52 @@ fn extract_vector_document_diff(
                     ManualEmbedderErrors::push_error(manual_errors, embedder_name, document_id);
                     return Ok(VectorStateDelta::NoChange);
                 }
-                // Don't give up if the old prompt was failing
-                let old_prompt = Some(&prompt).map(|p| {
-                    p.render_kvdeladd(obkv, DelAdd::Deletion, old_fields_ids_map)
-                        .unwrap_or_default()
-                });
-                let new_prompt =
-                    prompt.render_kvdeladd(obkv, DelAdd::Addition, new_fields_ids_map)?;
-                if old_prompt.as_ref() != Some(&new_prompt) {
-                    let old_prompt = old_prompt.unwrap_or_default();
-                    tracing::trace!(
-                        "🚀 Changing prompt from\n{old_prompt}\n===to===\n{new_prompt}"
-                    );
-                    VectorStateDelta::NowGenerated(new_prompt)
+                let has_fragments = !runtime.fragments.is_empty();
+                if has_fragments {
+                    let prompt = &runtime.document_template;
+                    // Don't give up if the old prompt was failing
+                    let old_prompt = Some(&prompt).map(|p| {
+                        p.render_kvdeladd(obkv, DelAdd::Deletion, old_fields_ids_map)
+                            .unwrap_or_default()
+                    });
+                    let new_prompt =
+                        prompt.render_kvdeladd(obkv, DelAdd::Addition, new_fields_ids_map)?;
+                    if old_prompt.as_ref() != Some(&new_prompt) {
+                        let old_prompt = old_prompt.unwrap_or_default();
+                        tracing::trace!(
+                            "🚀 Changing prompt from\n{old_prompt}\n===to===\n{new_prompt}"
+                        );
+                        VectorStateDelta::NowGenerated(new_prompt)
+                    } else {
+                        let mut fragment_diff = Vec::new();
+                        let old_fields_ids_map = old_fields_ids_map.as_fields_ids_map();
+                        let new_fields_ids_map = new_fields_ids_map.as_fields_ids_map();
+
+                        let old_document = crate::update::new::document::KvDelAddDocument::new(
+                            obkv,
+                            DelAdd::Deletion,
+                            old_fields_ids_map,
+                        );
+
+                        let new_document = crate::update::new::document::KvDelAddDocument::new(
+                            obkv,
+                            DelAdd::Addition,
+                            new_fields_ids_map,
+                        );
+
+                        for new in &runtime.fragments {
+                            let name = &new.name;
+                            let fragment =
+                                RequestFragmentExtractor::new(new, doc_alloc).ignore_errors();
+
+                            let diff = fragment
+                                .diff_documents(&old_document, &new_document, &())
+                                .expect("ignoring errors so this cannot fail");
+
+                            fragment_diff.push((name.clone(), diff));
+                        }
+                        VectorStateDelta::UpdateGeneratedFromFragments(fragment_diff)
+                    }
                 } else {
                     tracing::trace!("⏭️ Prompt unmodified, skipping");
                     VectorStateDelta::NoChange
@@ -756,12 +789,24 @@ fn extract_vector_document_diff(
                     ManualEmbedderErrors::push_error(manual_errors, embedder_name, document_id);
                     return Ok(VectorStateDelta::NoChange);
                 }
-                // becomes autogenerated
-                VectorStateDelta::NowGenerated(prompt.render_kvdeladd(
-                    obkv,
-                    DelAdd::Addition,
-                    new_fields_ids_map,
-                )?)
+
+                let has_fragments = !runtime.fragments.is_empty();
+
+                if has_fragments {
+                    regenerate_all_fragments(
+                        &runtime.fragments,
+                        doc_alloc,
+                        new_fields_ids_map,
+                        obkv,
+                    )
+                } else {
+                    // becomes autogenerated
+                    VectorStateDelta::NowGenerated(runtime.document_template.render_kvdeladd(
+                        obkv,
+                        DelAdd::Addition,
+                        new_fields_ids_map,
+                    )?)
+                }
             } else {
                 VectorStateDelta::NowRemoved
             }
@@ -821,21 +866,19 @@ fn regenerate_all_fragments<'a>(
     obkv: &KvReaderU16,
 ) -> VectorStateDelta {
     let mut fragment_diff = Vec::new();
+    let new_fields_ids_map = new_fields_ids_map.as_fields_ids_map();
+
+    let obkv_document = crate::update::new::document::KvDelAddDocument::new(
+        obkv,
+        DelAdd::Addition,
+        new_fields_ids_map,
+    );
     for new in fragments {
         let name = &new.name;
         let new = RequestFragmentExtractor::new(new, doc_alloc).ignore_errors();
 
-        let diff = {
-            let new_fields_ids_map = new_fields_ids_map.as_fields_ids_map();
-
-            let obkv_document = crate::update::new::document::KvDelAddDocument::new(
-                obkv,
-                DelAdd::Addition,
-                new_fields_ids_map,
-            );
-            new.extract(obkv_document, &())
-        }
-        .expect("ignoring errors so this cannot fail");
+        let diff =
+            { new.extract(&obkv_document, &()) }.expect("ignoring errors so this cannot fail");
         if let Some(value) = diff {
             fragment_diff.push((name.clone(), value));
         }
