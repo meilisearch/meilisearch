@@ -30,7 +30,9 @@ pub struct EmbedderStats {
 
 impl std::fmt::Debug for EmbedderStats {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let (error, count) = self.errors.read().unwrap().clone();
+        let guard = self.errors.read().unwrap_or_else(|p| p.into_inner());
+        let (error, count) = (guard.0.clone(), guard.1);
+        std::mem::drop(guard);
         f.debug_struct("EmbedderStats")
             .field("last_error", &error)
             .field("total_count", &self.total_count.load(Ordering::Relaxed))

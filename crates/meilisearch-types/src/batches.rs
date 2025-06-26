@@ -100,7 +100,7 @@ pub struct EmbedderStatsView {
 
 impl From<&EmbedderStats> for EmbedderStatsView {
     fn from(stats: &EmbedderStats) -> Self {
-        let errors = stats.errors.read().unwrap();
+        let errors = stats.errors.read().unwrap_or_else(|p| p.into_inner());
         Self {
             total_count: stats.total_count.load(std::sync::atomic::Ordering::Relaxed),
             error_count: errors.1 as usize,
