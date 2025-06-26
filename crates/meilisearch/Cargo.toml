@@ -19,7 +19,6 @@ actix-http = { workspace = true, default-features = false, features = [
     "compress-gzip",
     "rustls-0_23",
 ] }
-actix-utils.workspace = true
 actix-web = { workspace = true, default-features = false, features = [
     "macros",
     "compress-brotli",
@@ -39,7 +38,6 @@ dump.path = "../dump"
 either.workspace = true
 file-store.path = "../file-store"
 flate2.workspace = true
-fst.workspace = true
 futures.workspace = true
 futures-util.workspace = true
 index-scheduler.path = "../index-scheduler"
@@ -55,31 +53,23 @@ mime.workspace = true
 num_cpus.workspace = true
 obkv.workspace = true
 once_cell.workspace = true
-ordered-float.workspace = true
-parking_lot.workspace = true
 permissive-json-pointer.path = "../permissive-json-pointer"
 pin-project-lite.workspace = true
 platform-dirs.workspace = true
 prometheus = { workspace = true, features = ["process"] }
 rand.workspace = true
-rayon.workspace = true
 regex.workspace = true
 reqwest = { workspace = true, features = [
     "rustls-tls",
     "json",
 ], default-features = false }
 rustls = { workspace = true, features = ["ring"], default-features = false }
-rustls-pki-types = { workspace = true, features = ["alloc"] }
 rustls-pemfile.workspace = true
 segment.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true, features = ["preserve_order"] }
-sha2.workspace = true
-siphasher.workspace = true
-slice-group-by.workspace = true
 static-files = { workspace = true, optional = true }
 sysinfo.workspace = true
-tar.workspace = true
 tempfile.workspace = true
 thiserror.workspace = true
 time = { workspace = true, features = [
@@ -100,7 +90,6 @@ tracing-trace.path = "../tracing-trace"
 tracing-actix-web.workspace = true
 build-info.path = "../build-info"
 roaring.workspace = true
-mopa-maintained.workspace = true
 utoipa = { workspace = true, features = [
     "actix_extras",
     "macros",

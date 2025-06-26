@@ -96,7 +96,6 @@ hashbrown.workspace = true
 bumpalo.workspace = true
 bumparaw-collections.workspace = true
 thread_local.workspace = true
-allocator-api2.workspace = true
 rustc-hash.workspace = true
 enum-iterator.workspace = true
 bbqueue.workspace = true

@@ -17,6 +17,5 @@ clap = { workspace = true, features = ["derive"] }
 either.workspace = true
 fastrand.workspace = true
 milli.path = "../milli"
-serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true, features = ["preserve_order"] }
 tempfile.workspace = true

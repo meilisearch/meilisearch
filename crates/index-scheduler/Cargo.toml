@@ -12,13 +12,9 @@ license.workspace = true
 
 [dependencies]
 anyhow.workspace = true
-bincode.workspace = true
 byte-unit.workspace = true
 bumpalo.workspace = true
-bumparaw-collections.workspace = true
 convert_case.workspace = true
-csv.workspace = true
-derive_builder.workspace = true
 dump.path = "../dump"
 enum-iterator.workspace = true
 file-store.path = "../file-store"

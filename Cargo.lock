@@ -345,12 +345,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 
 [[package]]
-name = "allocator-api2"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "78200ac3468a57d333cd0ea5dd398e25111194dcacd49208afca95c629a6311d"
-
-[[package]]
 name = "anes"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -783,7 +777,7 @@ version = "3.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "793db76d6187cd04dff33004d8e6c9cc4e05cd330500379d2394209271b4aeee"
 dependencies = [
- "allocator-api2 0.2.21",
+ "allocator-api2",
  "serde",
 ]
 
@@ -793,7 +787,7 @@ version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4ce682bdc86c2e25ef5cd95881d9d6a1902214eddf74cf9ffea88fe1464377e8"
 dependencies = [
- "allocator-api2 0.2.21",
+ "allocator-api2",
  "bitpacking",
  "bumpalo",
  "hashbrown 0.15.4",
@@ -1776,7 +1770,6 @@ dependencies = [
 name = "dump"
 version = "1.15.2"
 dependencies = [
- "anyhow",
  "big_s",
  "flate2",
  "http 1.3.1",
@@ -2202,7 +2195,6 @@ dependencies = [
  "either",
  "fastrand",
  "milli",
- "serde",
  "serde_json",
  "tempfile",
 ]
@@ -2625,7 +2617,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e5274423e17b7c9fc20b6e7e208532f9b19825d82dfd615708b70edd83df41f1"
 dependencies = [
  "ahash 0.8.12",
- "allocator-api2 0.2.21",
+ "allocator-api2",
 ]
 
 [[package]]
@@ -2634,7 +2626,7 @@ version = "0.15.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5971ac85611da7067dbfcabef3c70ebb5606018acd9e2a3903a0da507521e0d5"
 dependencies = [
- "allocator-api2 0.2.21",
+ "allocator-api2",
  "equivalent",
  "foldhash",
  "serde",
@@ -2998,14 +2990,10 @@ version = "1.15.2"
 dependencies = [
  "anyhow",
  "big_s",
- "bincode",
  "bumpalo",
- "bumparaw-collections",
  "byte-unit",
  "convert_case 0.8.0",
  "crossbeam-channel",
- "csv",
- "derive_builder 0.20.2",
  "dump",
  "enum-iterator",
  "file-store",
@@ -3322,9 +3310,9 @@ dependencies = [
 
 [[package]]
 name = "libgit2-sys"
-version = "0.18.1+1.9.0"
+version = "0.18.2+1.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e1dcb20f84ffcdd825c7a311ae347cce604a6f084a767dec4a4929829645290e"
+checksum = "1c42fe03df2bd3c53a3a9c7317ad91d80c81cd1fb0caec8d7cc4cd2bfa10c222"
 dependencies = [
  "cc",
  "libc",
@@ -3739,7 +3727,6 @@ dependencies = [
  "actix-cors",
  "actix-http",
  "actix-rt",
- "actix-utils",
  "actix-web",
  "actix-web-lab",
  "anyhow",
@@ -3758,7 +3745,6 @@ dependencies = [
  "either",
  "file-store",
  "flate2",
- "fst",
  "futures",
  "futures-util",
  "hex",
@@ -3776,36 +3762,27 @@ dependencies = [
  "meilisearch-types",
  "mimalloc",
  "mime",
- "mopa-maintained",
  "num_cpus",
  "obkv",
  "once_cell",
- "ordered-float 5.0.0",
- "parking_lot",
  "permissive-json-pointer",
  "pin-project-lite",
  "platform-dirs",
  "prometheus",
  "rand 0.8.5",
- "rayon",
  "regex",
  "reqwest",
  "roaring",
  "rustls",
  "rustls-pemfile",
- "rustls-pki-types",
  "secrecy",
  "segment",
  "serde",
  "serde_json",
  "serde_urlencoded",
  "sha-1",
- "sha2",
- "siphasher",
- "slice-group-by",
  "static-files",
  "sysinfo",
- "tar",
  "temp-env",
  "tempfile",
  "termcolor",
@@ -3837,7 +3814,6 @@ dependencies = [
  "maplit",
  "meilisearch-types",
  "rand 0.8.5",
- "roaring",
  "serde",
  "serde_json",
  "sha2",
@@ -3857,7 +3833,6 @@ dependencies = [
  "convert_case 0.8.0",
  "csv",
  "deserr",
- "either",
  "enum-iterator",
  "file-store",
  "flate2",
@@ -3875,7 +3850,6 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.12",
  "time",
- "tokio",
  "utoipa",
  "uuid",
 ]
@@ -3918,7 +3892,6 @@ dependencies = [
 name = "milli"
 version = "1.15.2"
 dependencies = [
- "allocator-api2 0.3.0",
  "arroy",
  "bbqueue",
  "big_s",
@@ -4063,12 +4036,6 @@ dependencies = [
  "quote",
  "syn 2.0.101",
 ]
-
-[[package]]
-name = "mopa-maintained"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "79b7f3e22167862cc7c95b21a6f326c22e4bf40da59cbf000b368a310173ba11"
 
 [[package]]
 name = "mutually_exclusive_features"
@@ -7262,7 +7229,6 @@ dependencies = [
  "build-info",
  "cargo_metadata",
  "clap",
- "futures-core",
  "futures-util",
  "reqwest",
  "serde",

@@ -17,7 +17,6 @@ hmac.workspace = true
 maplit.workspace = true
 meilisearch-types.path = "../meilisearch-types"
 rand.workspace = true
-roaring = { workspace = true, features = ["serde"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true, features = ["preserve_order"] }
 sha2.workspace = true

@@ -15,7 +15,6 @@ anyhow.workspace = true
 build-info.path = "../build-info"
 cargo_metadata.workspace = true
 clap = { workspace = true, features = ["derive"] }
-futures-core.workspace = true
 futures-util.workspace = true
 reqwest = { workspace = true, features = [
     "stream",

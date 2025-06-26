@@ -18,7 +18,6 @@ bumparaw-collections.workspace = true
 convert_case.workspace = true
 csv.workspace = true
 deserr = { workspace = true, features = ["actix-web"] }
-either = { workspace = true, features = ["serde"] }
 enum-iterator.workspace = true
 file-store.path = "../file-store"
 flate2.workspace = true
@@ -39,7 +38,6 @@ time = { workspace = true, features = [
     "parsing",
     "macros",
 ] }
-tokio = "1.45"
 utoipa = { workspace = true, features = ["macros"] }
 uuid = { workspace = true, features = ["serde", "v4"] }
 
