@@ -457,6 +457,7 @@ impl ErrorCode for milli::Error {
                     | UserError::MissingSourceForNested { .. }
                     | UserError::InvalidSettingsEmbedder { .. } => Code::InvalidSettingsEmbedders,
                     UserError::TooManyEmbedders(_) => Code::InvalidSettingsEmbedders,
+                    UserError::TooManyFragments(_) => Code::InvalidSettingsEmbedders,
                     UserError::InvalidPromptForEmbeddings(..) => Code::InvalidSettingsEmbedders,
                     UserError::NoPrimaryKeyCandidateFound => Code::IndexPrimaryKeyNoCandidateFound,
                     UserError::MultiplePrimaryKeyCandidatesFound { .. } => {

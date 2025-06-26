@@ -1,0 +1,15 @@
+---
+source: crates/index-scheduler/src/scheduler/test_embedders.rs
+expression: doc
+---
+{
+  "doggo": "Intel",
+  "breed": "beagle",
+  "_vectors": {
+    "noise": [
+      0.1,
+      0.2,
+      0.3
+    ]
+  }
+}

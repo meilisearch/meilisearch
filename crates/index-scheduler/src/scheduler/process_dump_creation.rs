@@ -165,9 +165,6 @@ impl IndexScheduler {
 
             let fields_ids_map = index.fields_ids_map(&rtxn)?;
             let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
-            let embedding_configs = index
-                .embedding_configs(&rtxn)
-                .map_err(|e| Error::from_milli(e, Some(uid.to_string())))?;
 
             let nb_documents = index
                 .number_of_documents(&rtxn)
@@ -221,16 +218,12 @@ impl IndexScheduler {
                         return Err(Error::from_milli(user_err, Some(uid.to_string())));
                     };
 
-                    for (embedder_name, embeddings) in embeddings {
-                        let user_provided = embedding_configs
-                            .iter()
-                            .find(|conf| conf.name == embedder_name)
-                            .is_some_and(|conf| conf.user_provided.contains(id));
+                    for (embedder_name, (embeddings, regenerate)) in embeddings {
                         let embeddings = ExplicitVectors {
                             embeddings: Some(VectorOrArrayOfVectors::from_array_of_vectors(
                                 embeddings,
                             )),
-                            regenerate: !user_provided,
+                            regenerate,
                         };
                         vectors.insert(embedder_name, serde_json::to_value(embeddings).unwrap());
                     }

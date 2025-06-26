@@ -30,7 +30,8 @@ use crate::order_by_map::OrderByMap;
 use crate::prompt::PromptData;
 use crate::proximity::ProximityPrecision;
 use crate::update::new::StdResult;
-use crate::vector::{ArroyStats, ArroyWrapper, Embedding, EmbeddingConfig};
+use crate::vector::db::IndexEmbeddingConfigs;
+use crate::vector::{ArroyStats, ArroyWrapper, Embedding};
 use crate::{
     default_criteria, CboRoaringBitmapCodec, Criterion, DocumentId, ExternalDocumentsIds,
     FacetDistribution, FieldDistribution, FieldId, FieldIdMapMissingEntry, FieldIdWordCountCodec,
@@ -177,7 +178,7 @@ pub struct Index {
     pub field_id_docid_facet_strings: Database<FieldDocIdFacetStringCodec, Str>,
 
     /// Maps an embedder name to its id in the arroy store.
-    pub embedder_category_id: Database<Str, U8>,
+    pub(crate) embedder_category_id: Database<Unspecified, Unspecified>,
     /// Vector store based on arroy™.
     pub vector_arroy: arroy::Database<Unspecified>,
 
@@ -1745,34 +1746,6 @@ impl Index {
         self.main.remap_key_type::<Str>().delete(txn, main_key::LOCALIZED_ATTRIBUTES_RULES)
     }
 
-    /// Put the embedding configs:
-    /// 1. The name of the embedder
-    /// 2. The configuration option for this embedder
-    /// 3. The list of documents with a user provided embedding
-    pub(crate) fn put_embedding_configs(
-        &self,
-        wtxn: &mut RwTxn<'_>,
-        configs: Vec<IndexEmbeddingConfig>,
-    ) -> heed::Result<()> {
-        self.main.remap_types::<Str, SerdeJson<Vec<IndexEmbeddingConfig>>>().put(
-            wtxn,
-            main_key::EMBEDDING_CONFIGS,
-            &configs,
-        )
-    }
-
-    pub(crate) fn delete_embedding_configs(&self, wtxn: &mut RwTxn<'_>) -> heed::Result<bool> {
-        self.main.remap_key_type::<Str>().delete(wtxn, main_key::EMBEDDING_CONFIGS)
-    }
-
-    pub fn embedding_configs(&self, rtxn: &RoTxn<'_>) -> Result<Vec<IndexEmbeddingConfig>> {
-        Ok(self
-            .main
-            .remap_types::<Str, SerdeJson<Vec<IndexEmbeddingConfig>>>()
-            .get(rtxn, main_key::EMBEDDING_CONFIGS)?
-            .unwrap_or_default())
-    }
-
     pub(crate) fn put_search_cutoff(&self, wtxn: &mut RwTxn<'_>, cutoff: u64) -> heed::Result<()> {
         self.main.remap_types::<Str, BEU64>().put(wtxn, main_key::SEARCH_CUTOFF, &cutoff)
     }
@@ -1785,19 +1758,29 @@ impl Index {
         self.main.remap_key_type::<Str>().delete(wtxn, main_key::SEARCH_CUTOFF)
     }
 
+    pub fn embedding_configs(&self) -> IndexEmbeddingConfigs {
+        IndexEmbeddingConfigs::new(self.main, self.embedder_category_id)
+    }
+
     pub fn embeddings(
         &self,
         rtxn: &RoTxn<'_>,
         docid: DocumentId,
-    ) -> Result<BTreeMap<String, Vec<Embedding>>> {
+    ) -> Result<BTreeMap<String, (Vec<Embedding>, bool)>> {
         let mut res = BTreeMap::new();
-        let embedding_configs = self.embedding_configs(rtxn)?;
-        for config in embedding_configs {
-            let embedder_id = self.embedder_category_id.get(rtxn, &config.name)?.unwrap();
-            let reader =
-                ArroyWrapper::new(self.vector_arroy, embedder_id, config.config.quantized());
+        let embedders = self.embedding_configs();
+        for config in embedders.embedding_configs(rtxn)? {
+            let embedder_info = embedders.embedder_info(rtxn, &config.name)?.unwrap();
+            let reader = ArroyWrapper::new(
+                self.vector_arroy,
+                embedder_info.embedder_id,
+                config.config.quantized(),
+            );
             let embeddings = reader.item_vectors(rtxn, docid)?;
-            res.insert(config.name.to_owned(), embeddings);
+            res.insert(
+                config.name.to_owned(),
+                (embeddings, embedder_info.embedding_status.must_regenerate(docid)),
+            );
         }
         Ok(res)
     }
@@ -1809,9 +1792,9 @@ impl Index {
 
     pub fn arroy_stats(&self, rtxn: &RoTxn<'_>) -> Result<ArroyStats> {
         let mut stats = ArroyStats::default();
-        let embedding_configs = self.embedding_configs(rtxn)?;
-        for config in embedding_configs {
-            let embedder_id = self.embedder_category_id.get(rtxn, &config.name)?.unwrap();
+        let embedding_configs = self.embedding_configs();
+        for config in embedding_configs.embedding_configs(rtxn)? {
+            let embedder_id = embedding_configs.embedder_id(rtxn, &config.name)?.unwrap();
             let reader =
                 ArroyWrapper::new(self.vector_arroy, embedder_id, config.config.quantized());
             reader.aggregate_stats(rtxn, &mut stats)?;
@@ -1934,13 +1917,6 @@ impl Index {
 
         Ok(sizes)
     }
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct IndexEmbeddingConfig {
-    pub name: String,
-    pub config: EmbeddingConfig,
-    pub user_provided: RoaringBitmap,
 }
 
 #[derive(Debug, Default, Deserialize, Serialize)]

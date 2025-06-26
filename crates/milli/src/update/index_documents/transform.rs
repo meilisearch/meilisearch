@@ -31,7 +31,7 @@ use crate::update::index_documents::GrenadParameters;
 use crate::update::settings::{InnerIndexSettings, InnerIndexSettingsDiff};
 use crate::update::{AvailableIds, UpdateIndexingStep};
 use crate::vector::parsed_vectors::{ExplicitVectors, VectorOrArrayOfVectors};
-use crate::vector::settings::WriteBackToDocuments;
+use crate::vector::settings::{RemoveFragments, WriteBackToDocuments};
 use crate::vector::ArroyWrapper;
 use crate::{FieldDistribution, FieldId, FieldIdMapMissingEntry, Index, Result};
 
@@ -933,8 +933,45 @@ impl<'a, 'i> Transform<'a, 'i> {
 
         // delete all vectors from the embedders that need removal
         for (_, (reader, _)) in readers {
-            let dimensions = reader.dimensions(wtxn)?;
+            let Some(dimensions) = reader.dimensions(wtxn)? else {
+                continue;
+            };
             reader.clear(wtxn, dimensions)?;
+        }
+
+        // remove all vectors for the specified fragments
+        for (embedder_name, RemoveFragments { fragment_ids }, was_quantized) in
+            settings_diff.embedding_config_updates.iter().filter_map(|(name, action)| {
+                action.remove_fragments().map(|fragments| (name, fragments, action.was_quantized))
+            })
+        {
+            let Some(infos) = self.index.embedding_configs().embedder_info(wtxn, embedder_name)?
+            else {
+                continue;
+            };
+            let arroy =
+                ArroyWrapper::new(self.index.vector_arroy, infos.embedder_id, was_quantized);
+            let Some(dimensions) = arroy.dimensions(wtxn)? else {
+                continue;
+            };
+            for fragment_id in fragment_ids {
+                // we must keep the user provided embeddings that ended up in this store
+
+                if infos.embedding_status.user_provided_docids().is_empty() {
+                    // no user provided: clear store
+                    arroy.clear_store(wtxn, *fragment_id, dimensions)?;
+                    continue;
+                }
+
+                // some user provided, remove only the ids that are not user provided
+                let to_delete = arroy.items_in_store(wtxn, *fragment_id, |items| {
+                    items - infos.embedding_status.user_provided_docids()
+                })?;
+
+                for to_delete in to_delete {
+                    arroy.del_item_in_store(wtxn, to_delete, *fragment_id, dimensions)?;
+                }
+            }
         }
 
         let grenad_params = GrenadParameters {

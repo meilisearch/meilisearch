@@ -64,11 +64,7 @@ impl<'t, 'i> ClearDocuments<'t, 'i> {
         self.index.delete_geo_faceted_documents_ids(self.wtxn)?;
 
         // Remove all user-provided bits from the configs
-        let mut configs = self.index.embedding_configs(self.wtxn)?;
-        for config in configs.iter_mut() {
-            config.user_provided.clear();
-        }
-        self.index.put_embedding_configs(self.wtxn, configs)?;
+        self.index.embedding_configs().clear_embedder_info_docids(self.wtxn)?;
 
         // Clear the other databases.
         external_documents_ids.clear(self.wtxn)?;
