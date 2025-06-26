@@ -23,7 +23,7 @@ pub trait SettingsChangeExtractor<'extractor>: Sync {
 
     fn process<'doc>(
         &'doc self,
-        changes: impl Iterator<Item = Result<DatabaseDocument<'doc>>>,
+        documents: impl Iterator<Item = Result<DatabaseDocument<'doc>>>,
         context: &'doc DocumentContext<Self::Data>,
     ) -> Result<()>;
 }
@@ -128,12 +128,11 @@ pub fn settings_change_extract<
             // Clean up and reuse the document-specific allocator
             context.doc_alloc.reset();
 
-            let items = items.as_ref();
-            let changes = items
+            let documents = items
                 .iter()
                 .filter_map(|item| documents.item_to_database_document(context, item).transpose());
 
-            let res = extractor.process(changes, context).map_err(Arc::new);
+            let res = extractor.process(documents, context).map_err(Arc::new);
             step.fetch_add(items.as_ref().len() as u32, Ordering::Relaxed);
 
             // send back the doc_alloc in the pool

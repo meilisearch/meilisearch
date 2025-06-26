@@ -205,8 +205,7 @@ where
     Ok(congestion)
 }
 
-#[allow(clippy::too_many_arguments)] // clippy: 😝
-pub fn reindex<'pl, 'indexer, 'index, MSP, SD>(
+pub fn reindex<'indexer, 'index, MSP, SD>(
     wtxn: &mut RwTxn<'index>,
     index: &'index Index,
     pool: &ThreadPoolNoAbort,
@@ -307,7 +306,7 @@ where
                 index_embeddings,
                 arroy_memory,
                 &mut arroy_writers,
-                Some(&embedder_actions),
+                Some(embedder_actions),
                 &indexing_context.must_stop_processing,
             )
         })
@@ -336,8 +335,8 @@ where
     Ok(congestion)
 }
 
-fn arroy_writers_from_embedder_actions<'indexer, 'index>(
-    index: &'index Index,
+fn arroy_writers_from_embedder_actions<'indexer>(
+    index: &Index,
     embedder_actions: &'indexer BTreeMap<String, EmbedderAction>,
     embedders: &'indexer EmbeddingConfigs,
     index_embedder_category_ids: &'indexer std::collections::HashMap<String, u8>,
@@ -372,15 +371,11 @@ fn arroy_writers_from_embedder_actions<'indexer, 'index>(
         .collect()
 }
 
-fn delete_old_embedders<'indexer, 'index, SD>(
-    wtxn: &mut RwTxn<'_>,
-    index: &'index Index,
-    settings_delta: &'indexer SD,
-) -> Result<()>
+fn delete_old_embedders<SD>(wtxn: &mut RwTxn<'_>, index: &Index, settings_delta: &SD) -> Result<()>
 where
     SD: SettingsDelta,
 {
-    for (_name, action) in settings_delta.embedder_actions() {
+    for action in settings_delta.embedder_actions().values() {
         if let Some(WriteBackToDocuments { embedder_id, .. }) = action.write_back() {
             let reader = ArroyWrapper::new(index.vector_arroy, *embedder_id, action.was_quantized);
             let dimensions = reader.dimensions(wtxn)?;

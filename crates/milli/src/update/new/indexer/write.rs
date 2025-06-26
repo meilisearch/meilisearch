@@ -101,6 +101,7 @@ impl ChannelCongestion {
 }
 
 #[tracing::instrument(level = "debug", skip_all, target = "indexing::vectors")]
+#[allow(clippy::too_many_arguments)]
 pub fn build_vectors<MSP>(
     index: &Index,
     wtxn: &mut RwTxn<'_>,

@@ -186,10 +186,10 @@ impl<'a, 'b> SettingsChangeDocumentExtractor<'a, 'b> {
 }
 
 impl<'extractor> SettingsChangeExtractor<'extractor> for SettingsChangeDocumentExtractor<'_, '_> {
-    type Data = FullySend<RefCell<DocumentExtractorData>>;
+    type Data = FullySend<()>;
 
     fn init_data(&self, _extractor_alloc: &'extractor Bump) -> Result<Self::Data> {
-        Ok(FullySend(Default::default()))
+        Ok(FullySend(()))
     }
 
     fn process<'doc>(

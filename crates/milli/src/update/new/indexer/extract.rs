@@ -322,12 +322,13 @@ where
     Result::Ok((facet_field_ids_delta, index_embeddings))
 }
 
-pub(super) fn extract_all_settings_changes<'extractor, MSP, SD>(
+#[allow(clippy::too_many_arguments)]
+pub(super) fn extract_all_settings_changes<MSP, SD>(
     indexing_context: IndexingContext<MSP>,
     indexer_span: Span,
     extractor_sender: ExtractorBbqueueSender,
     settings_delta: &SD,
-    extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
+    extractor_allocs: &mut ThreadLocal<FullySend<Bump>>,
     finished_extraction: &AtomicBool,
     field_distribution: &mut BTreeMap<String, u64>,
     mut index_embeddings: Vec<IndexEmbeddingConfig>,
@@ -342,7 +343,7 @@ where
     let all_document_ids =
         indexing_context.index.documents_ids(&rtxn)?.into_iter().collect::<Vec<_>>();
     let primary_key =
-        primary_key_from_db(&indexing_context.index, &rtxn, &indexing_context.db_fields_ids_map)?;
+        primary_key_from_db(indexing_context.index, &rtxn, &indexing_context.db_fields_ids_map)?;
     let documents = DatabaseDocuments::new(&all_document_ids, primary_key);
 
     let span =
@@ -364,7 +365,7 @@ where
 
         let embedding_sender = extractor_sender.embeddings();
 
-        // extract the remaining embedders
+        // extract the remaining embeddings
         let extractor = SettingsChangeEmbeddingExtractor::new(
             settings_delta.new_embedders(),
             settings_delta.old_embedders(),
@@ -410,9 +411,9 @@ where
     Result::Ok(index_embeddings)
 }
 
-fn primary_key_from_db<'indexer, 'index>(
+fn primary_key_from_db<'indexer>(
     index: &'indexer Index,
-    rtxn: &'indexer heed::RoTxn<'index>,
+    rtxn: &'indexer heed::RoTxn<'_>,
     fields: &'indexer impl FieldIdMapper,
 ) -> Result<PrimaryKey<'indexer>> {
     let Some(primary_key) = index.primary_key(rtxn)? else {

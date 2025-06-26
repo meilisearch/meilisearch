@@ -1476,7 +1476,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             chat: Setting::NotSet,
             wtxn: _,
             index: _,
-            indexer_config: _, // TODO: this is not used
+            indexer_config: _,
         } = &self
         {
             self.index.set_updated_at(self.wtxn, &OffsetDateTime::now_utc())?;
@@ -1486,9 +1486,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             // Update index settings
             let embedding_config_updates = self.update_embedding_configs()?;
 
-            let mut new_inner_settings =
-                InnerIndexSettings::from_index(self.index, self.wtxn, None)?;
-            new_inner_settings.recompute_searchables(self.wtxn, self.index)?;
+            let new_inner_settings = InnerIndexSettings::from_index(self.index, self.wtxn, None)?;
 
             let primary_key_id = self
                 .index
