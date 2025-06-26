@@ -67,7 +67,7 @@ impl SseEventSender {
     ) -> Result<(), SendError<Event>> {
         let call_text = serde_json::to_string(message).unwrap();
         let tool_call = ChatCompletionMessageToolCallChunk {
-            index: 0,
+            index: Some(0),
             id: Some(uuid::Uuid::new_v4().to_string()),
             r#type: Some(ChatCompletionToolType::Function),
             function: Some(FunctionCallStream {
@@ -114,7 +114,7 @@ impl SseEventSender {
         let progress = MeiliSearchProgress { call_id, function_name, function_arguments };
         let call_text = serde_json::to_string(&progress).unwrap();
         let tool_call = ChatCompletionMessageToolCallChunk {
-            index: 0,
+            index: Some(0),
             id: Some(uuid::Uuid::new_v4().to_string()),
             r#type: Some(ChatCompletionToolType::Function),
             function: Some(FunctionCallStream {
@@ -159,7 +159,7 @@ impl SseEventSender {
         let sources = MeiliSearchSources { call_id, sources: documents };
         let call_text = serde_json::to_string(&sources).unwrap();
         let tool_call = ChatCompletionMessageToolCallChunk {
-            index: 0,
+            index: Some(0),
             id: Some(uuid::Uuid::new_v4().to_string()),
             r#type: Some(ChatCompletionToolType::Function),
             function: Some(FunctionCallStream {
