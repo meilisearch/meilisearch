@@ -81,7 +81,7 @@ pub struct IndexDocuments<'t, 'i, 'a, FP, FA> {
     added_documents: u64,
     deleted_documents: u64,
     embedders: EmbeddingConfigs,
-    embedder_stats: Arc<EmbedderStats>, // Cant change
+    embedder_stats: &'t Arc<EmbedderStats>,
 }
 
 #[derive(Default, Debug, Clone)]
@@ -104,7 +104,7 @@ where
         config: IndexDocumentsConfig,
         progress: FP,
         should_abort: FA,
-        embedder_stats: Arc<EmbedderStats>, // Cant change
+        embedder_stats: &'t Arc<EmbedderStats>,
     ) -> Result<IndexDocuments<'t, 'i, 'a, FP, FA>> {
         let transform = Some(Transform::new(
             wtxn,
@@ -331,7 +331,7 @@ where
                             settings_diff_cloned,
                             max_positions_per_attributes,
                             Arc::new(possible_embedding_mistakes),
-                            embedder_stats.clone()
+                            &embedder_stats
                         )
                     });
 

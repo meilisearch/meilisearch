@@ -579,7 +579,7 @@ fn import_dump(
             },
             |indexing_step| tracing::trace!("update: {:?}", indexing_step),
             || false,
-            embedder_stats,
+            &embedder_stats,
         )?;
 
         let builder = builder.with_embedders(embedders);

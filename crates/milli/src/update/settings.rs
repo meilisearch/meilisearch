@@ -475,7 +475,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         progress_callback: &FP,
         should_abort: &FA,
         settings_diff: InnerIndexSettingsDiff,
-        embedder_stats: Arc<EmbedderStats>, // Cant change
+        embedder_stats: &Arc<EmbedderStats>, // Cant change
     ) -> Result<()>
     where
         FP: Fn(UpdateIndexingStep) + Sync,
@@ -507,7 +507,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             IndexDocumentsConfig::default(),
             &progress_callback,
             &should_abort,
-            embedder_stats,
+            &embedder_stats,
         )?;
 
         indexing_builder.execute_raw(output)?;
@@ -1421,7 +1421,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         );
 
         if inner_settings_diff.any_reindexing_needed() {
-            self.reindex(&progress_callback, &should_abort, inner_settings_diff, embedder_stats)?;
+            self.reindex(&progress_callback, &should_abort, inner_settings_diff, &embedder_stats)?;
         }
 
         Ok(())
