@@ -35,7 +35,7 @@ impl IndexScheduler {
         index: &'i Index,
         operation: IndexOperation,
         progress: &Progress,
-        embedder_stats: Arc<EmbedderStats>, // Cant change
+        embedder_stats: Arc<EmbedderStats>,
     ) -> Result<(Vec<Task>, Option<ChannelCongestion>)> {
         let indexer_alloc = Bump::new();
         let started_processing_at = std::time::Instant::now();
