@@ -15,7 +15,7 @@ use crate::update::new::thread_local::{FullySend, MostlySend, ThreadLocal};
 use crate::update::GrenadParameters;
 use crate::{FieldsIdsMap, GlobalFieldsIdsMap, Index, InternalError, Result};
 
-pub struct DocumentChangeContext<
+pub struct DocumentContext<
     'doc,             // covariant lifetime of a single `process` call
     'extractor: 'doc, // invariant lifetime of the extractor_allocs
     'fid: 'doc,       // invariant lifetime of the new_fields_ids_map
@@ -56,7 +56,7 @@ impl<
         'fid: 'doc,       // invariant lifetime of fields ids map
         'indexer: 'doc,   // covariant lifetime of objects that survive a `process` call
         T: MostlySend,
-    > DocumentChangeContext<'doc, 'extractor, 'fid, 'indexer, T>
+    > DocumentContext<'doc, 'extractor, 'fid, 'indexer, T>
 {
     #[allow(clippy::too_many_arguments)]
     pub fn new<F>(
@@ -84,7 +84,7 @@ impl<
         let data = datastore.get_or_try(move || init_data(&extractor_alloc.0))?;
 
         let txn = index.read_txn()?;
-        Ok(DocumentChangeContext {
+        Ok(DocumentContext {
             index,
             rtxn: txn,
             db_fields_ids_map,
@@ -106,7 +106,7 @@ pub trait Extractor<'extractor>: Sync {
     fn process<'doc>(
         &'doc self,
         changes: impl Iterator<Item = Result<DocumentChange<'doc>>>,
-        context: &'doc DocumentChangeContext<Self::Data>,
+        context: &'doc DocumentContext<Self::Data>,
     ) -> Result<()>;
 }
 
@@ -125,7 +125,7 @@ pub trait DocumentChanges<'pl // lifetime of the underlying payload
     fn item_to_document_change<'doc, // lifetime of a single `process` call
      T: MostlySend>(
         &'doc self,
-        context: &'doc DocumentChangeContext<T>,
+        context: &'doc DocumentContext<T>,
         item: &'doc Self::Item,
     ) -> Result<Option<DocumentChange<'doc>>> where 'pl: 'doc // the payload must survive the process calls
     ;
@@ -224,7 +224,7 @@ where
     let pi = document_changes.iter(CHUNK_SIZE);
     pi.try_arc_for_each_try_init(
         || {
-            DocumentChangeContext::new(
+            DocumentContext::new(
                 index,
                 db_fields_ids_map,
                 new_fields_ids_map,

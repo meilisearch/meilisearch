@@ -12,7 +12,7 @@ use serde_json::value::RawValue;
 use serde_json::Deserializer;
 
 use super::super::document_change::DocumentChange;
-use super::document_changes::{DocumentChangeContext, DocumentChanges};
+use super::document_changes::{DocumentContext, DocumentChanges};
 use super::guess_primary_key::retrieve_or_guess_primary_key;
 use crate::documents::PrimaryKey;
 use crate::progress::{AtomicPayloadStep, Progress};
@@ -411,7 +411,7 @@ impl<'pl> DocumentChanges<'pl> for DocumentOperationChanges<'pl> {
 
     fn item_to_document_change<'doc, T: MostlySend + 'doc>(
         &'doc self,
-        context: &'doc DocumentChangeContext<T>,
+        context: &'doc DocumentContext<T>,
         item: &'doc Self::Item,
     ) -> Result<Option<DocumentChange<'doc>>>
     where

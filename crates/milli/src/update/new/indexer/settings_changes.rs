@@ -9,7 +9,7 @@ use super::document_changes::IndexingContext;
 use crate::documents::PrimaryKey;
 use crate::progress::AtomicDocumentStep;
 use crate::update::new::document_change::DatabaseDocument;
-use crate::update::new::indexer::document_changes::DocumentChangeContext;
+use crate::update::new::indexer::document_changes::DocumentContext;
 use crate::update::new::parallel_iterator_ext::ParallelIteratorExt as _;
 use crate::update::new::steps::IndexingStep;
 use crate::update::new::thread_local::{FullySend, MostlySend, ThreadLocal};
@@ -24,7 +24,7 @@ pub trait SettingsChangeExtractor<'extractor>: Sync {
     fn process<'doc>(
         &'doc self,
         changes: impl Iterator<Item = Result<DatabaseDocument<'doc>>>,
-        context: &'doc DocumentChangeContext<Self::Data>,
+        context: &'doc DocumentContext<Self::Data>,
     ) -> Result<()>;
 }
 pub struct DatabaseDocuments<'indexer> {
@@ -46,7 +46,7 @@ impl<'indexer> DatabaseDocuments<'indexer> {
         T: MostlySend,
     >(
         &'doc self,
-        context: &'doc DocumentChangeContext<T>,
+        context: &'doc DocumentContext<T>,
         docid: &'doc DocumentId,
     ) -> Result<Option<DatabaseDocument<'doc>>> {
         let current = context.index.document(&context.rtxn, *docid)?;
@@ -109,7 +109,7 @@ pub fn settings_change_extract<
     let pi = documents.iter(CHUNK_SIZE);
     pi.try_arc_for_each_try_init(
         || {
-            DocumentChangeContext::new(
+            DocumentContext::new(
                 index,
                 db_fields_ids_map,
                 new_fields_ids_map,

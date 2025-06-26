@@ -5,7 +5,7 @@ use rhai::{Dynamic, Engine, OptimizationLevel, Scope, AST};
 use roaring::RoaringBitmap;
 use rustc_hash::FxBuildHasher;
 
-use super::document_changes::DocumentChangeContext;
+use super::document_changes::DocumentContext;
 use super::DocumentChanges;
 use crate::documents::Error::InvalidDocumentFormat;
 use crate::documents::PrimaryKey;
@@ -86,13 +86,13 @@ impl<'index> DocumentChanges<'index> for UpdateByFunctionChanges<'index> {
 
     fn item_to_document_change<'doc, T: MostlySend + 'doc>(
         &self,
-        context: &'doc DocumentChangeContext<T>,
+        context: &'doc DocumentContext<T>,
         docid: &'doc Self::Item,
     ) -> Result<Option<DocumentChange<'doc>>>
     where
         'index: 'doc,
     {
-        let DocumentChangeContext {
+        let DocumentContext {
             index,
             db_fields_ids_map,
             rtxn: txn,

@@ -5,7 +5,7 @@ use rayon::iter::IndexedParallelIterator;
 use rustc_hash::FxBuildHasher;
 use serde_json::value::RawValue;
 
-use super::document_changes::{DocumentChangeContext, DocumentChanges};
+use super::document_changes::{DocumentContext, DocumentChanges};
 use crate::documents::PrimaryKey;
 use crate::update::concurrent_available_ids::ConcurrentAvailableIds;
 use crate::update::new::document::Versions;
@@ -55,7 +55,7 @@ where
 
     fn item_to_document_change<'doc, T: MostlySend + 'doc>(
         &'doc self,
-        context: &'doc DocumentChangeContext<T>,
+        context: &'doc DocumentContext<T>,
         document: &'doc Self::Item,
     ) -> Result<Option<DocumentChange<'doc>>>
     where

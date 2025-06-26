@@ -10,7 +10,7 @@ use crate::error::FaultSource;
 use crate::prompt::Prompt;
 use crate::update::new::channel::EmbeddingSender;
 use crate::update::new::document_change::DatabaseDocument;
-use crate::update::new::indexer::document_changes::{DocumentChangeContext, Extractor};
+use crate::update::new::indexer::document_changes::{DocumentContext, Extractor};
 use crate::update::new::indexer::settings_changes::SettingsChangeExtractor;
 use crate::update::new::thread_local::MostlySend;
 use crate::update::new::vector_document::VectorDocument;
@@ -57,7 +57,7 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
     fn process<'doc>(
         &'doc self,
         changes: impl Iterator<Item = crate::Result<DocumentChange<'doc>>>,
-        context: &'doc DocumentChangeContext<Self::Data>,
+        context: &'doc DocumentContext<Self::Data>,
     ) -> crate::Result<()> {
         let embedders = self.embedders.inner_as_ref();
         let mut unused_vectors_distribution =
@@ -337,7 +337,7 @@ impl<'extractor> SettingsChangeExtractor<'extractor> for SettingsChangeEmbedding
     fn process<'doc>(
         &'doc self,
         documents: impl Iterator<Item = crate::Result<DatabaseDocument<'doc>>>,
-        context: &'doc DocumentChangeContext<Self::Data>,
+        context: &'doc DocumentContext<Self::Data>,
     ) -> crate::Result<()> {
         let embedders = self.embedders.inner_as_ref();
         let old_embedders = self.old_embedders.inner_as_ref();
