@@ -44,7 +44,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
         S("america") => vec![S("the united states")],
     });
     builder.set_searchable_fields(vec![S("title"), S("description")]);
-    builder.execute(|_| (), || false).unwrap();
+    builder.execute(|_| (), || false, Default::default()).unwrap();
     wtxn.commit().unwrap();
 
     // index documents
@@ -95,6 +95,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
         embedders,
         &|| false,
         &Progress::default(),
+        &Default::default(),
     )
     .unwrap();
 

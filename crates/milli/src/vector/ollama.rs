@@ -7,6 +7,7 @@ use super::error::{EmbedError, EmbedErrorKind, NewEmbedderError, NewEmbedderErro
 use super::rest::{Embedder as RestEmbedder, EmbedderOptions as RestEmbedderOptions};
 use super::{DistributionShift, EmbeddingCache, REQUEST_PARALLELISM};
 use crate::error::FaultSource;
+use crate::progress::EmbedderStats;
 use crate::vector::Embedding;
 use crate::ThreadPoolNoAbort;
 
@@ -104,8 +105,9 @@ impl Embedder {
         &self,
         texts: &[S],
         deadline: Option<Instant>,
+        embedder_stats: Option<&EmbedderStats>,
     ) -> Result<Vec<Embedding>, EmbedError> {
-        match self.rest_embedder.embed_ref(texts, deadline) {
+        match self.rest_embedder.embed_ref(texts, deadline, embedder_stats) {
             Ok(embeddings) => Ok(embeddings),
             Err(EmbedError { kind: EmbedErrorKind::RestOtherStatusCode(404, error), fault: _ }) => {
                 Err(EmbedError::ollama_model_not_found(error))
@@ -118,15 +120,22 @@ impl Embedder {
         &self,
         text_chunks: Vec<Vec<String>>,
         threads: &ThreadPoolNoAbort,
+        embedder_stats: &EmbedderStats,
     ) -> Result<Vec<Vec<Embedding>>, EmbedError> {
         // This condition helps reduce the number of active rayon jobs
         // so that we avoid consuming all the LMDB rtxns and avoid stack overflows.
         if threads.active_operations() >= REQUEST_PARALLELISM {
-            text_chunks.into_iter().map(move |chunk| self.embed(&chunk, None)).collect()
+            text_chunks
+                .into_iter()
+                .map(move |chunk| self.embed(&chunk, None, Some(embedder_stats)))
+                .collect()
         } else {
             threads
                 .install(move || {
-                    text_chunks.into_par_iter().map(move |chunk| self.embed(&chunk, None)).collect()
+                    text_chunks
+                        .into_par_iter()
+                        .map(move |chunk| self.embed(&chunk, None, Some(embedder_stats)))
+                        .collect()
                 })
                 .map_err(|error| EmbedError {
                     kind: EmbedErrorKind::PanicInThreadPool(error),
@@ -139,13 +148,14 @@ impl Embedder {
         &self,
         texts: &[&str],
         threads: &ThreadPoolNoAbort,
+        embedder_stats: &EmbedderStats,
     ) -> Result<Vec<Vec<f32>>, EmbedError> {
         // This condition helps reduce the number of active rayon jobs
         // so that we avoid consuming all the LMDB rtxns and avoid stack overflows.
         if threads.active_operations() >= REQUEST_PARALLELISM {
             let embeddings: Result<Vec<Vec<Embedding>>, _> = texts
                 .chunks(self.prompt_count_in_chunk_hint())
-                .map(move |chunk| self.embed(chunk, None))
+                .map(move |chunk| self.embed(chunk, None, Some(embedder_stats)))
                 .collect();
 
             let embeddings = embeddings?;
@@ -155,7 +165,7 @@ impl Embedder {
                 .install(move || {
                     let embeddings: Result<Vec<Vec<Embedding>>, _> = texts
                         .par_chunks(self.prompt_count_in_chunk_hint())
-                        .map(move |chunk| self.embed(chunk, None))
+                        .map(move |chunk| self.embed(chunk, None, Some(embedder_stats)))
                         .collect();
 
                     let embeddings = embeddings?;

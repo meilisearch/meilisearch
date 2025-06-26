@@ -17,6 +17,7 @@ use crate::constants::RESERVED_VECTORS_FIELD_NAME;
 use crate::error::FaultSource;
 use crate::fields_ids_map::metadata::FieldIdMapWithMetadata;
 use crate::index::IndexEmbeddingConfig;
+use crate::progress::EmbedderStats;
 use crate::prompt::Prompt;
 use crate::update::del_add::{DelAdd, KvReaderDelAdd, KvWriterDelAdd};
 use crate::update::settings::InnerIndexSettingsDiff;
@@ -674,6 +675,7 @@ fn compare_vectors(a: &[f32], b: &[f32]) -> Ordering {
     a.iter().copied().map(OrderedFloat).cmp(b.iter().copied().map(OrderedFloat))
 }
 
+#[allow(clippy::too_many_arguments)]
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::extract")]
 pub fn extract_embeddings<R: io::Read + io::Seek>(
     // docid, prompt
@@ -682,6 +684,7 @@ pub fn extract_embeddings<R: io::Read + io::Seek>(
     embedder: Arc<Embedder>,
     embedder_name: &str,
     possible_embedding_mistakes: &PossibleEmbeddingMistakes,
+    embedder_stats: &EmbedderStats,
     unused_vectors_distribution: &UnusedVectorsDistribution,
     request_threads: &ThreadPoolNoAbort,
 ) -> Result<grenad::Reader<BufReader<File>>> {
@@ -724,6 +727,7 @@ pub fn extract_embeddings<R: io::Read + io::Seek>(
                 std::mem::replace(&mut chunks, Vec::with_capacity(n_chunks)),
                 embedder_name,
                 possible_embedding_mistakes,
+                embedder_stats,
                 unused_vectors_distribution,
                 request_threads,
             )?;
@@ -746,6 +750,7 @@ pub fn extract_embeddings<R: io::Read + io::Seek>(
             std::mem::take(&mut chunks),
             embedder_name,
             possible_embedding_mistakes,
+            embedder_stats,
             unused_vectors_distribution,
             request_threads,
         )?;
@@ -764,6 +769,7 @@ pub fn extract_embeddings<R: io::Read + io::Seek>(
             vec![std::mem::take(&mut current_chunk)],
             embedder_name,
             possible_embedding_mistakes,
+            embedder_stats,
             unused_vectors_distribution,
             request_threads,
         )?;
@@ -783,10 +789,11 @@ fn embed_chunks(
     text_chunks: Vec<Vec<String>>,
     embedder_name: &str,
     possible_embedding_mistakes: &PossibleEmbeddingMistakes,
+    embedder_stats: &EmbedderStats,
     unused_vectors_distribution: &UnusedVectorsDistribution,
     request_threads: &ThreadPoolNoAbort,
 ) -> Result<Vec<Vec<Embedding>>> {
-    match embedder.embed_index(text_chunks, request_threads) {
+    match embedder.embed_index(text_chunks, request_threads, embedder_stats) {
         Ok(chunks) => Ok(chunks),
         Err(error) => {
             if let FaultSource::Bug = error.fault {

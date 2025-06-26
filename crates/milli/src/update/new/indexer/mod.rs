@@ -19,7 +19,7 @@ use super::steps::IndexingStep;
 use super::thread_local::ThreadLocal;
 use crate::documents::PrimaryKey;
 use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
-use crate::progress::Progress;
+use crate::progress::{EmbedderStats, Progress};
 use crate::update::GrenadParameters;
 use crate::vector::{ArroyWrapper, EmbeddingConfigs};
 use crate::{FieldsIdsMap, GlobalFieldsIdsMap, Index, InternalError, Result, ThreadPoolNoAbort};
@@ -55,6 +55,7 @@ pub fn index<'pl, 'indexer, 'index, DC, MSP>(
     embedders: EmbeddingConfigs,
     must_stop_processing: &'indexer MSP,
     progress: &'indexer Progress,
+    embedder_stats: &'indexer EmbedderStats,
 ) -> Result<ChannelCongestion>
 where
     DC: DocumentChanges<'pl>,
@@ -158,6 +159,7 @@ where
                         index_embeddings,
                         document_ids,
                         modified_docids,
+                        embedder_stats,
                     )
                 })
                 .unwrap()

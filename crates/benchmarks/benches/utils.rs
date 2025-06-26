@@ -90,7 +90,7 @@ pub fn base_setup(conf: &Conf) -> Index {
 
     (conf.configure)(&mut builder);
 
-    builder.execute(|_| (), || false).unwrap();
+    builder.execute(|_| (), || false, Default::default()).unwrap();
     wtxn.commit().unwrap();
 
     let config = IndexerConfig::default();
@@ -128,6 +128,7 @@ pub fn base_setup(conf: &Conf) -> Index {
         EmbeddingConfigs::default(),
         &|| false,
         &Progress::default(),
+        &Default::default(),
     )
     .unwrap();
 

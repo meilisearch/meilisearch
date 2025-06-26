@@ -13,6 +13,7 @@ use super::{
     DistributionShift, EmbedError, Embedding, EmbeddingCache, NewEmbedderError, REQUEST_PARALLELISM,
 };
 use crate::error::FaultSource;
+use crate::progress::EmbedderStats;
 use crate::ThreadPoolNoAbort;
 
 // retrying in case of failure
@@ -168,19 +169,28 @@ impl Embedder {
         &self,
         texts: Vec<String>,
         deadline: Option<Instant>,
+        embedder_stats: Option<&EmbedderStats>,
     ) -> Result<Vec<Embedding>, EmbedError> {
-        embed(&self.data, texts.as_slice(), texts.len(), Some(self.dimensions), deadline)
+        embed(
+            &self.data,
+            texts.as_slice(),
+            texts.len(),
+            Some(self.dimensions),
+            deadline,
+            embedder_stats,
+        )
     }
 
     pub fn embed_ref<S>(
         &self,
         texts: &[S],
         deadline: Option<Instant>,
+        embedder_stats: Option<&EmbedderStats>,
     ) -> Result<Vec<Embedding>, EmbedError>
     where
         S: AsRef<str> + Serialize,
     {
-        embed(&self.data, texts, texts.len(), Some(self.dimensions), deadline)
+        embed(&self.data, texts, texts.len(), Some(self.dimensions), deadline, embedder_stats)
     }
 
     pub fn embed_tokens(
@@ -188,7 +198,7 @@ impl Embedder {
         tokens: &[u32],
         deadline: Option<Instant>,
     ) -> Result<Embedding, EmbedError> {
-        let mut embeddings = embed(&self.data, tokens, 1, Some(self.dimensions), deadline)?;
+        let mut embeddings = embed(&self.data, tokens, 1, Some(self.dimensions), deadline, None)?;
         // unwrap: guaranteed that embeddings.len() == 1, otherwise the previous line terminated in error
         Ok(embeddings.pop().unwrap())
     }
@@ -197,15 +207,22 @@ impl Embedder {
         &self,
         text_chunks: Vec<Vec<String>>,
         threads: &ThreadPoolNoAbort,
+        embedder_stats: &EmbedderStats,
     ) -> Result<Vec<Vec<Embedding>>, EmbedError> {
         // This condition helps reduce the number of active rayon jobs
         // so that we avoid consuming all the LMDB rtxns and avoid stack overflows.
         if threads.active_operations() >= REQUEST_PARALLELISM {
-            text_chunks.into_iter().map(move |chunk| self.embed(chunk, None)).collect()
+            text_chunks
+                .into_iter()
+                .map(move |chunk| self.embed(chunk, None, Some(embedder_stats)))
+                .collect()
         } else {
             threads
                 .install(move || {
-                    text_chunks.into_par_iter().map(move |chunk| self.embed(chunk, None)).collect()
+                    text_chunks
+                        .into_par_iter()
+                        .map(move |chunk| self.embed(chunk, None, Some(embedder_stats)))
+                        .collect()
                 })
                 .map_err(|error| EmbedError {
                     kind: EmbedErrorKind::PanicInThreadPool(error),
@@ -218,13 +235,14 @@ impl Embedder {
         &self,
         texts: &[&str],
         threads: &ThreadPoolNoAbort,
+        embedder_stats: &EmbedderStats,
     ) -> Result<Vec<Embedding>, EmbedError> {
         // This condition helps reduce the number of active rayon jobs
         // so that we avoid consuming all the LMDB rtxns and avoid stack overflows.
         if threads.active_operations() >= REQUEST_PARALLELISM {
             let embeddings: Result<Vec<Vec<Embedding>>, _> = texts
                 .chunks(self.prompt_count_in_chunk_hint())
-                .map(move |chunk| self.embed_ref(chunk, None))
+                .map(move |chunk| self.embed_ref(chunk, None, Some(embedder_stats)))
                 .collect();
 
             let embeddings = embeddings?;
@@ -234,7 +252,7 @@ impl Embedder {
                 .install(move || {
                     let embeddings: Result<Vec<Vec<Embedding>>, _> = texts
                         .par_chunks(self.prompt_count_in_chunk_hint())
-                        .map(move |chunk| self.embed_ref(chunk, None))
+                        .map(move |chunk| self.embed_ref(chunk, None, Some(embedder_stats)))
                         .collect();
 
                     let embeddings = embeddings?;
@@ -272,7 +290,7 @@ impl Embedder {
 }
 
 fn infer_dimensions(data: &EmbedderData) -> Result<usize, NewEmbedderError> {
-    let v = embed(data, ["test"].as_slice(), 1, None, None)
+    let v = embed(data, ["test"].as_slice(), 1, None, None, None)
         .map_err(NewEmbedderError::could_not_determine_dimension)?;
     // unwrap: guaranteed that v.len() == 1, otherwise the previous line terminated in error
     Ok(v.first().unwrap().len())
@@ -284,6 +302,7 @@ fn embed<S>(
     expected_count: usize,
     expected_dimension: Option<usize>,
     deadline: Option<Instant>,
+    embedder_stats: Option<&EmbedderStats>,
 ) -> Result<Vec<Embedding>, EmbedError>
 where
     S: Serialize,
@@ -302,6 +321,9 @@ where
     let body = data.request.inject_texts(inputs);
 
     for attempt in 0..10 {
+        if let Some(embedder_stats) = &embedder_stats {
+            embedder_stats.total_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
         let response = request.clone().send_json(&body);
         let result = check_response(response, data.configuration_source).and_then(|response| {
             response_to_embedding(response, data, expected_count, expected_dimension)
@@ -311,6 +333,13 @@ where
             Ok(response) => return Ok(response),
             Err(retry) => {
                 tracing::warn!("Failed: {}", retry.error);
+                if let Some(embedder_stats) = &embedder_stats {
+                    let stringified_error = retry.error.to_string();
+                    let mut errors =
+                        embedder_stats.errors.write().unwrap_or_else(|p| p.into_inner());
+                    errors.0 = Some(stringified_error);
+                    errors.1 += 1;
+                }
                 if let Some(deadline) = deadline {
                     let now = std::time::Instant::now();
                     if now > deadline {
@@ -336,12 +365,26 @@ where
         std::thread::sleep(retry_duration);
     }
 
+    if let Some(embedder_stats) = &embedder_stats {
+        embedder_stats.total_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
     let response = request.send_json(&body);
-    let result = check_response(response, data.configuration_source);
-    result.map_err(Retry::into_error).and_then(|response| {
+    let result = check_response(response, data.configuration_source).and_then(|response| {
         response_to_embedding(response, data, expected_count, expected_dimension)
-            .map_err(Retry::into_error)
-    })
+    });
+
+    match result {
+        Ok(response) => Ok(response),
+        Err(retry) => {
+            if let Some(embedder_stats) = &embedder_stats {
+                let stringified_error = retry.error.to_string();
+                let mut errors = embedder_stats.errors.write().unwrap_or_else(|p| p.into_inner());
+                errors.0 = Some(stringified_error);
+                errors.1 += 1;
+            };
+            Err(retry.into_error())
+        }
+    }
 }
 
 fn check_response(

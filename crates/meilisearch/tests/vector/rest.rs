@@ -1,7 +1,10 @@
 use std::collections::BTreeMap;
+use std::sync::atomic::AtomicUsize;
 
 use meili_snap::{json_string, snapshot};
 use reqwest::IntoUrl;
+use std::time::Duration;
+use tokio::sync::mpsc;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
@@ -320,6 +323,41 @@ async fn create_mock_raw() -> (MockServer, Value) {
         })
         .mount(&mock_server)
         .await;
+    let url = mock_server.uri();
+
+    let embedder_settings = json!({
+        "source": "rest",
+        "url": url,
+        "dimensions": 3,
+        "request": "{{text}}",
+        "response": "{{embedding}}",
+        "documentTemplate": "{{doc.name}}"
+    });
+
+    (mock_server, embedder_settings)
+}
+
+async fn create_faulty_mock_raw(sender: mpsc::Sender<()>) -> (MockServer, Value) {
+    let mock_server = MockServer::start().await;
+    let count = AtomicUsize::new(0);
+
+    Mock::given(method("POST"))
+        .and(path("/"))
+        .respond_with(move |_req: &Request| {
+            let count = count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+
+            if count >= 5 {
+                let _ = sender.try_send(());
+                ResponseTemplate::new(500)
+                    .set_delay(Duration::from_secs(u64::MAX)) // Make the response hang forever
+                    .set_body_string("Service Unavailable")
+            } else {
+                ResponseTemplate::new(500).set_body_string("Service Unavailable")
+            }
+        })
+        .mount(&mock_server)
+        .await;
+
     let url = mock_server.uri();
 
     let embedder_settings = json!({
@@ -2110,4 +2148,71 @@ async fn searchable_reindex() {
       "finishedAt": "[date]"
     }
     "###);
+}
+
+#[actix_rt::test]
+async fn last_error_stats() {
+    let (sender, mut receiver) = mpsc::channel(10);
+    let (_mock, setting) = create_faulty_mock_raw(sender).await;
+    let server = get_server_vector().await;
+    let index = server.index("doggo");
+
+    let (response, code) = index
+        .update_settings(json!({
+          "embedders": {
+              "rest": setting,
+          },
+        }))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    let task = server.wait_task(response.uid()).await;
+    snapshot!(task["status"], @r###""succeeded""###);
+    let documents = json!([
+      {"id": 0, "name": "will_return_500"},
+      {"id": 1, "name": "will_error"},
+      {"id": 2, "name": "must_error"},
+    ]);
+    let (_value, code) = index.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+
+    // The task will eventually fail, so let's not wait for it.
+    // Let's just wait for the server's signal
+    receiver.recv().await;
+
+    let (response, _code) = index.filtered_batches(&[], &[], &[]).await;
+    snapshot!(json_string!(response["results"][0], {
+        ".progress" => "[ignored]",
+        ".stats.embedderRequests.total" => "[ignored]",
+        ".startedAt" => "[ignored]"
+    }), @r#"
+    {
+      "uid": 1,
+      "progress": "[ignored]",
+      "details": {
+        "receivedDocuments": 3,
+        "indexedDocuments": null
+      },
+      "stats": {
+        "totalNbTasks": 1,
+        "status": {
+          "processing": 1
+        },
+        "types": {
+          "documentAdditionOrUpdate": 1
+        },
+        "indexUids": {
+          "doggo": 1
+        },
+        "embedderRequests": {
+          "total": "[ignored]",
+          "failed": 5,
+          "lastError": "runtime error: received internal error HTTP 500 from embedding server\n  - server replied with `Service Unavailable`"
+        }
+      },
+      "duration": null,
+      "startedAt": "[ignored]",
+      "finishedAt": null,
+      "batchStrategy": "batched all enqueued tasks"
+    }
+    "#);
 }

@@ -103,6 +103,7 @@ impl TempIndex {
                 embedders,
                 &|| false,
                 &Progress::default(),
+                &Default::default(),
             )
         })
         .unwrap()?;
@@ -134,7 +135,7 @@ impl TempIndex {
     ) -> Result<(), crate::error::Error> {
         let mut builder = update::Settings::new(wtxn, &self.inner, &self.indexer_config);
         update(&mut builder);
-        builder.execute(drop, || false)?;
+        builder.execute(drop, || false, Default::default())?;
         Ok(())
     }
 
@@ -185,6 +186,7 @@ impl TempIndex {
                 embedders,
                 &|| false,
                 &Progress::default(),
+                &Default::default(),
             )
         })
         .unwrap()?;
@@ -259,6 +261,7 @@ fn aborting_indexation() {
                 embedders,
                 &|| should_abort.load(Relaxed),
                 &Progress::default(),
+                &Default::default(),
             )
         })
         .unwrap()

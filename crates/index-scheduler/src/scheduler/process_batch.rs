@@ -162,8 +162,13 @@ impl IndexScheduler {
                     .set_currently_updating_index(Some((index_uid.clone(), index.clone())));
 
                 let pre_commit_dabases_sizes = index.database_sizes(&index_wtxn)?;
-                let (tasks, congestion) =
-                    self.apply_index_operation(&mut index_wtxn, &index, op, &progress)?;
+                let (tasks, congestion) = self.apply_index_operation(
+                    &mut index_wtxn,
+                    &index,
+                    op,
+                    &progress,
+                    current_batch.embedder_stats.clone(),
+                )?;
 
                 {
                     progress.update_progress(FinalizingIndexStep::Committing);
@@ -238,10 +243,12 @@ impl IndexScheduler {
                     );
                     builder.set_primary_key(primary_key);
                     let must_stop_processing = self.scheduler.must_stop_processing.clone();
+
                     builder
                         .execute(
                             |indexing_step| tracing::debug!(update = ?indexing_step),
                             || must_stop_processing.get(),
+                            current_batch.embedder_stats.clone(),
                         )
                         .map_err(|e| Error::from_milli(e, Some(index_uid.to_string())))?;
                     index_wtxn.commit()?;

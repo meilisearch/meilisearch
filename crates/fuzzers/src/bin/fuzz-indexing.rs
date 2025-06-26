@@ -144,6 +144,7 @@ fn main() {
                                 embedders,
                                 &|| false,
                                 &Progress::default(),
+                                &Default::default(),
                             )
                             .unwrap();
 

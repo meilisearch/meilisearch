@@ -27,6 +27,7 @@ use crate::index::{
     DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS,
 };
 use crate::order_by_map::OrderByMap;
+use crate::progress::EmbedderStats;
 use crate::prompt::{default_max_bytes, default_template_text, PromptData};
 use crate::proximity::ProximityPrecision;
 use crate::update::index_documents::IndexDocumentsMethod;
@@ -466,7 +467,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
 
     #[tracing::instrument(
         level = "trace"
-        skip(self, progress_callback, should_abort, settings_diff),
+        skip(self, progress_callback, should_abort, settings_diff, embedder_stats),
         target = "indexing::documents"
     )]
     fn reindex<FP, FA>(
@@ -474,6 +475,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         progress_callback: &FP,
         should_abort: &FA,
         settings_diff: InnerIndexSettingsDiff,
+        embedder_stats: &Arc<EmbedderStats>,
     ) -> Result<()>
     where
         FP: Fn(UpdateIndexingStep) + Sync,
@@ -505,6 +507,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             IndexDocumentsConfig::default(),
             &progress_callback,
             &should_abort,
+            embedder_stats,
         )?;
 
         indexing_builder.execute_raw(output)?;
@@ -1355,7 +1358,12 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         }
     }
 
-    pub fn execute<FP, FA>(mut self, progress_callback: FP, should_abort: FA) -> Result<()>
+    pub fn execute<FP, FA>(
+        mut self,
+        progress_callback: FP,
+        should_abort: FA,
+        embedder_stats: Arc<EmbedderStats>,
+    ) -> Result<()>
     where
         FP: Fn(UpdateIndexingStep) + Sync,
         FA: Fn() -> bool + Sync,
@@ -1413,7 +1421,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         );
 
         if inner_settings_diff.any_reindexing_needed() {
-            self.reindex(&progress_callback, &should_abort, inner_settings_diff)?;
+            self.reindex(&progress_callback, &should_abort, inner_settings_diff, &embedder_stats)?;
         }
 
         Ok(())

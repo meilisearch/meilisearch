@@ -343,6 +343,7 @@ pub fn snapshot_batch(batch: &Batch) -> String {
         uid,
         details,
         stats,
+        embedder_stats,
         started_at,
         finished_at,
         progress: _,
@@ -366,6 +367,12 @@ pub fn snapshot_batch(batch: &Batch) -> String {
     snap.push_str(&format!("uid: {uid}, "));
     snap.push_str(&format!("details: {}, ", serde_json::to_string(details).unwrap()));
     snap.push_str(&format!("stats: {}, ", serde_json::to_string(&stats).unwrap()));
+    if !embedder_stats.skip_serializing() {
+        snap.push_str(&format!(
+            "embedder stats: {}, ",
+            serde_json::to_string(&embedder_stats).unwrap()
+        ));
+    }
     snap.push_str(&format!("stop reason: {}, ", serde_json::to_string(&stop_reason).unwrap()));
     snap.push('}');
     snap

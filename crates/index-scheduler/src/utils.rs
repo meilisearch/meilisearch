@@ -1,7 +1,9 @@
 //! Utility functions on the DBs. Mainly getter and setters.
 
+use crate::milli::progress::EmbedderStats;
 use std::collections::{BTreeSet, HashSet};
 use std::ops::Bound;
+use std::sync::Arc;
 
 use meilisearch_types::batches::{Batch, BatchEnqueuedAt, BatchId, BatchStats};
 use meilisearch_types::heed::{Database, RoTxn, RwTxn};
@@ -27,6 +29,7 @@ pub struct ProcessingBatch {
     pub uid: BatchId,
     pub details: DetailsView,
     pub stats: BatchStats,
+    pub embedder_stats: Arc<EmbedderStats>,
 
     pub statuses: HashSet<Status>,
     pub kinds: HashSet<Kind>,
@@ -48,6 +51,7 @@ impl ProcessingBatch {
             uid,
             details: DetailsView::default(),
             stats: BatchStats::default(),
+            embedder_stats: Default::default(),
 
             statuses,
             kinds: HashSet::default(),
@@ -146,6 +150,7 @@ impl ProcessingBatch {
             progress: None,
             details: self.details.clone(),
             stats: self.stats.clone(),
+            embedder_stats: self.embedder_stats.as_ref().into(),
             started_at: self.started_at,
             finished_at: self.finished_at,
             enqueued_at: self.enqueued_at,
