@@ -81,7 +81,7 @@ pub struct IndexDocuments<'t, 'i, 'a, FP, FA> {
     added_documents: u64,
     deleted_documents: u64,
     embedders: EmbeddingConfigs,
-    embedder_stats: Arc<EmbedderStats>,
+    embedder_stats: Arc<EmbedderStats>, // Cant change
 }
 
 #[derive(Default, Debug, Clone)]
@@ -104,7 +104,7 @@ where
         config: IndexDocumentsConfig,
         progress: FP,
         should_abort: FA,
-        embedder_stats: Arc<EmbedderStats>,
+        embedder_stats: Arc<EmbedderStats>, // Cant change
     ) -> Result<IndexDocuments<'t, 'i, 'a, FP, FA>> {
         let transform = Some(Transform::new(
             wtxn,
@@ -2030,7 +2030,7 @@ mod tests {
             EmbeddingConfigs::default(),
             &|| false,
             &Progress::default(),
-            Default::default(),
+            &Default::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();
@@ -2118,7 +2118,7 @@ mod tests {
             EmbeddingConfigs::default(),
             &|| false,
             &Progress::default(),
-            Default::default(),
+            &Default::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();
@@ -2304,7 +2304,7 @@ mod tests {
             embedders,
             &|| false,
             &Progress::default(),
-            Default::default(),
+            &Default::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();
@@ -2367,7 +2367,7 @@ mod tests {
             embedders,
             &|| false,
             &Progress::default(),
-            Default::default(),
+            &Default::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();
@@ -2421,7 +2421,7 @@ mod tests {
             embedders,
             &|| false,
             &Progress::default(),
-            Default::default(),
+            &Default::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();
@@ -2474,7 +2474,7 @@ mod tests {
             embedders,
             &|| false,
             &Progress::default(),
-            Default::default(),
+            &Default::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();
@@ -2529,7 +2529,7 @@ mod tests {
             embedders,
             &|| false,
             &Progress::default(),
-            Default::default(),
+            &Default::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();
@@ -2589,7 +2589,7 @@ mod tests {
             embedders,
             &|| false,
             &Progress::default(),
-            Default::default(),
+            &Default::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();
@@ -2642,7 +2642,7 @@ mod tests {
             embedders,
             &|| false,
             &Progress::default(),
-            Default::default(),
+            &Default::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();
@@ -2695,7 +2695,7 @@ mod tests {
             embedders,
             &|| false,
             &Progress::default(),
-            Default::default(),
+            &Default::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();
@@ -2894,7 +2894,7 @@ mod tests {
             embedders,
             &|| false,
             &Progress::default(),
-            Default::default(),
+            &Default::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();
@@ -2954,7 +2954,7 @@ mod tests {
             embedders,
             &|| false,
             &Progress::default(),
-            Default::default(),
+            &Default::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();
@@ -3011,7 +3011,7 @@ mod tests {
             embedders,
             &|| false,
             &Progress::default(),
-            Default::default(),
+            &Default::default(),
         )
         .unwrap();
         wtxn.commit().unwrap();

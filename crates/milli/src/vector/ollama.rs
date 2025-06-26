@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use std::time::Instant;
 
 use rayon::iter::{IntoParallelIterator as _, ParallelIterator as _};
@@ -106,7 +105,7 @@ impl Embedder {
         &self,
         texts: &[S],
         deadline: Option<Instant>,
-        embedder_stats: Option<Arc<EmbedderStats>>,
+        embedder_stats: Option<&EmbedderStats>,
     ) -> Result<Vec<Embedding>, EmbedError> {
         match self.rest_embedder.embed_ref(texts, deadline, embedder_stats) {
             Ok(embeddings) => Ok(embeddings),
@@ -121,21 +120,21 @@ impl Embedder {
         &self,
         text_chunks: Vec<Vec<String>>,
         threads: &ThreadPoolNoAbort,
-        embedder_stats: Arc<EmbedderStats>,
+        embedder_stats: &EmbedderStats,
     ) -> Result<Vec<Vec<Embedding>>, EmbedError> {
         // This condition helps reduce the number of active rayon jobs
         // so that we avoid consuming all the LMDB rtxns and avoid stack overflows.
         if threads.active_operations() >= REQUEST_PARALLELISM {
             text_chunks
                 .into_iter()
-                .map(move |chunk| self.embed(&chunk, None, Some(embedder_stats.clone())))
+                .map(move |chunk| self.embed(&chunk, None, Some(embedder_stats)))
                 .collect()
         } else {
             threads
                 .install(move || {
                     text_chunks
                         .into_par_iter()
-                        .map(move |chunk| self.embed(&chunk, None, Some(embedder_stats.clone())))
+                        .map(move |chunk| self.embed(&chunk, None, Some(embedder_stats)))
                         .collect()
                 })
                 .map_err(|error| EmbedError {
@@ -149,14 +148,14 @@ impl Embedder {
         &self,
         texts: &[&str],
         threads: &ThreadPoolNoAbort,
-        embedder_stats: Arc<EmbedderStats>,
+        embedder_stats: &EmbedderStats,
     ) -> Result<Vec<Vec<f32>>, EmbedError> {
         // This condition helps reduce the number of active rayon jobs
         // so that we avoid consuming all the LMDB rtxns and avoid stack overflows.
         if threads.active_operations() >= REQUEST_PARALLELISM {
             let embeddings: Result<Vec<Vec<Embedding>>, _> = texts
                 .chunks(self.prompt_count_in_chunk_hint())
-                .map(move |chunk| self.embed(chunk, None, Some(embedder_stats.clone())))
+                .map(move |chunk| self.embed(chunk, None, Some(embedder_stats)))
                 .collect();
 
             let embeddings = embeddings?;
@@ -166,7 +165,7 @@ impl Embedder {
                 .install(move || {
                     let embeddings: Result<Vec<Vec<Embedding>>, _> = texts
                         .par_chunks(self.prompt_count_in_chunk_hint())
-                        .map(move |chunk| self.embed(chunk, None, Some(embedder_stats.clone())))
+                        .map(move |chunk| self.embed(chunk, None, Some(embedder_stats)))
                         .collect();
 
                     let embeddings = embeddings?;

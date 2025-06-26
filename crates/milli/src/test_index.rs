@@ -103,7 +103,7 @@ impl TempIndex {
                 embedders,
                 &|| false,
                 &Progress::default(),
-                Default::default(),
+                &Default::default(),
             )
         })
         .unwrap()?;
@@ -186,7 +186,7 @@ impl TempIndex {
                 embedders,
                 &|| false,
                 &Progress::default(),
-                Default::default(),
+                &Default::default(),
             )
         })
         .unwrap()?;
@@ -261,7 +261,7 @@ fn aborting_indexation() {
                 embedders,
                 &|| should_abort.load(Relaxed),
                 &Progress::default(),
-                Default::default(),
+                &Default::default(),
             )
         })
         .unwrap()

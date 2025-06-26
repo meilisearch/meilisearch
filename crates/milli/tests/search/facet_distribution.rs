@@ -74,7 +74,7 @@ fn test_facet_distribution_with_no_facet_values() {
         embedders,
         &|| false,
         &Progress::default(),
-        Default::default(),
+        &Default::default(),
     )
     .unwrap();
 

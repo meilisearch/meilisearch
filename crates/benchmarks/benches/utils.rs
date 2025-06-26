@@ -128,7 +128,7 @@ pub fn base_setup(conf: &Conf) -> Index {
         EmbeddingConfigs::default(),
         &|| false,
         &Progress::default(),
-        Default::default(),
+        &Default::default(),
     )
     .unwrap();
 

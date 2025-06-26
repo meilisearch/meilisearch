@@ -344,7 +344,7 @@ fn criteria_ascdesc() {
         embedders,
         &|| false,
         &Progress::default(),
-        Default::default(),
+        &Default::default(),
     )
     .unwrap();
 

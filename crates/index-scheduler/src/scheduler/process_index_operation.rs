@@ -35,7 +35,7 @@ impl IndexScheduler {
         index: &'i Index,
         operation: IndexOperation,
         progress: &Progress,
-        embedder_stats: Arc<EmbedderStats>,
+        embedder_stats: Arc<EmbedderStats>, // Cant change
     ) -> Result<(Vec<Task>, Option<ChannelCongestion>)> {
         let indexer_alloc = Bump::new();
         let started_processing_at = std::time::Instant::now();
@@ -180,7 +180,7 @@ impl IndexScheduler {
                             embedders,
                             &|| must_stop_processing.get(),
                             progress,
-                            embedder_stats,
+                            &embedder_stats,
                         )
                         .map_err(|e| Error::from_milli(e, Some(index_uid.clone())))?,
                     );
@@ -292,7 +292,7 @@ impl IndexScheduler {
                             embedders,
                             &|| must_stop_processing.get(),
                             progress,
-                            embedder_stats,
+                            &embedder_stats,
                         )
                         .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?,
                     );
@@ -441,7 +441,7 @@ impl IndexScheduler {
                             embedders,
                             &|| must_stop_processing.get(),
                             progress,
-                            embedder_stats,
+                            &embedder_stats,
                         )
                         .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?,
                     );
@@ -478,7 +478,7 @@ impl IndexScheduler {
                     .execute(
                         |indexing_step| tracing::debug!(update = ?indexing_step),
                         || must_stop_processing.get(),
-                        embedder_stats,
+                        embedder_stats.clone(),
                     )
                     .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?;
 

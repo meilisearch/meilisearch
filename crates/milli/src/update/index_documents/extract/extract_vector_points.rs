@@ -684,7 +684,7 @@ pub fn extract_embeddings<R: io::Read + io::Seek>(
     embedder: Arc<Embedder>,
     embedder_name: &str,
     possible_embedding_mistakes: &PossibleEmbeddingMistakes,
-    embedder_stats: Arc<EmbedderStats>,
+    embedder_stats: &EmbedderStats,
     unused_vectors_distribution: &UnusedVectorsDistribution,
     request_threads: &ThreadPoolNoAbort,
 ) -> Result<grenad::Reader<BufReader<File>>> {
@@ -727,7 +727,7 @@ pub fn extract_embeddings<R: io::Read + io::Seek>(
                 std::mem::replace(&mut chunks, Vec::with_capacity(n_chunks)),
                 embedder_name,
                 possible_embedding_mistakes,
-                embedder_stats.clone(),
+                embedder_stats,
                 unused_vectors_distribution,
                 request_threads,
             )?;
@@ -750,7 +750,7 @@ pub fn extract_embeddings<R: io::Read + io::Seek>(
             std::mem::take(&mut chunks),
             embedder_name,
             possible_embedding_mistakes,
-            embedder_stats.clone(),
+            embedder_stats,
             unused_vectors_distribution,
             request_threads,
         )?;
@@ -789,7 +789,7 @@ fn embed_chunks(
     text_chunks: Vec<Vec<String>>,
     embedder_name: &str,
     possible_embedding_mistakes: &PossibleEmbeddingMistakes,
-    embedder_stats: Arc<EmbedderStats>,
+    embedder_stats: &EmbedderStats,
     unused_vectors_distribution: &UnusedVectorsDistribution,
     request_threads: &ThreadPoolNoAbort,
 ) -> Result<Vec<Vec<Embedding>>> {

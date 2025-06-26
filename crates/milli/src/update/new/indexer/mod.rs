@@ -1,5 +1,4 @@
 use std::sync::atomic::AtomicBool;
-use std::sync::Arc;
 use std::sync::{Once, RwLock};
 use std::thread::{self, Builder};
 
@@ -56,7 +55,7 @@ pub fn index<'pl, 'indexer, 'index, DC, MSP>(
     embedders: EmbeddingConfigs,
     must_stop_processing: &'indexer MSP,
     progress: &'indexer Progress,
-    embedder_stats: Arc<EmbedderStats>,
+    embedder_stats: &'indexer EmbedderStats,
 ) -> Result<ChannelCongestion>
 where
     DC: DocumentChanges<'pl>,

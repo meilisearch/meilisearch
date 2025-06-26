@@ -1,4 +1,4 @@
-use std::{cell::RefCell, sync::Arc};
+use std::cell::RefCell;
 
 use bumpalo::collections::Vec as BVec;
 use bumpalo::Bump;
@@ -23,7 +23,7 @@ pub struct EmbeddingExtractor<'a, 'b> {
     embedders: &'a EmbeddingConfigs,
     sender: EmbeddingSender<'a, 'b>,
     possible_embedding_mistakes: PossibleEmbeddingMistakes,
-    embedder_stats: Arc<EmbedderStats>,
+    embedder_stats: &'a EmbedderStats,
     threads: &'a ThreadPoolNoAbort,
 }
 
@@ -32,7 +32,7 @@ impl<'a, 'b> EmbeddingExtractor<'a, 'b> {
         embedders: &'a EmbeddingConfigs,
         sender: EmbeddingSender<'a, 'b>,
         field_distribution: &'a FieldDistribution,
-        embedder_stats: Arc<EmbedderStats>,
+        embedder_stats: &'a EmbedderStats,
         threads: &'a ThreadPoolNoAbort,
     ) -> Self {
         let possible_embedding_mistakes = PossibleEmbeddingMistakes::new(field_distribution);
@@ -78,7 +78,7 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
                 prompt,
                 context.data,
                 &self.possible_embedding_mistakes,
-                self.embedder_stats.clone(),
+                self.embedder_stats,
                 self.threads,
                 self.sender,
                 &context.doc_alloc,
@@ -311,7 +311,7 @@ struct Chunks<'a, 'b, 'extractor> {
     dimensions: usize,
     prompt: &'a Prompt,
     possible_embedding_mistakes: &'a PossibleEmbeddingMistakes,
-    embedder_stats: Arc<EmbedderStats>,
+    embedder_stats: &'a EmbedderStats,
     user_provided: &'a RefCell<EmbeddingExtractorData<'extractor>>,
     threads: &'a ThreadPoolNoAbort,
     sender: EmbeddingSender<'a, 'b>,
@@ -327,7 +327,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
         prompt: &'a Prompt,
         user_provided: &'a RefCell<EmbeddingExtractorData<'extractor>>,
         possible_embedding_mistakes: &'a PossibleEmbeddingMistakes,
-        embedder_stats: Arc<EmbedderStats>,
+        embedder_stats: &'a EmbedderStats,
         threads: &'a ThreadPoolNoAbort,
         sender: EmbeddingSender<'a, 'b>,
         doc_alloc: &'a Bump,
@@ -378,7 +378,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
             self.embedder_id,
             self.embedder_name,
             self.possible_embedding_mistakes,
-            self.embedder_stats.clone(),
+            self.embedder_stats,
             unused_vectors_distribution,
             self.threads,
             self.sender,
@@ -397,7 +397,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
             self.embedder_id,
             self.embedder_name,
             self.possible_embedding_mistakes,
-            self.embedder_stats.clone(),
+            self.embedder_stats,
             unused_vectors_distribution,
             self.threads,
             self.sender,
@@ -416,7 +416,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
         embedder_id: u8,
         embedder_name: &str,
         possible_embedding_mistakes: &PossibleEmbeddingMistakes,
-        embedder_stats: Arc<EmbedderStats>,
+        embedder_stats: &EmbedderStats,
         unused_vectors_distribution: &UnusedVectorsDistributionBump,
         threads: &ThreadPoolNoAbort,
         sender: EmbeddingSender<'a, 'b>,

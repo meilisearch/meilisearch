@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
 use std::sync::atomic::AtomicBool;
-use std::sync::Arc;
 use std::sync::OnceLock;
 
 use bumpalo::Bump;
@@ -36,7 +35,7 @@ pub(super) fn extract_all<'pl, 'extractor, DC, MSP>(
     mut index_embeddings: Vec<IndexEmbeddingConfig>,
     document_ids: &mut RoaringBitmap,
     modified_docids: &mut RoaringBitmap,
-    embedder_stats: Arc<EmbedderStats>,
+    embedder_stats: &EmbedderStats,
 ) -> Result<(FacetFieldIdsDelta, Vec<IndexEmbeddingConfig>)>
 where
     DC: DocumentChanges<'pl>,

@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use std::time::Instant;
 
 use arroy::Distance;
@@ -154,7 +153,7 @@ impl SubEmbedder {
         &self,
         texts: Vec<String>,
         deadline: Option<Instant>,
-        embedder_stats: Option<Arc<EmbedderStats>>,
+        embedder_stats: Option<&EmbedderStats>,
     ) -> std::result::Result<Vec<Embedding>, EmbedError> {
         match self {
             SubEmbedder::HuggingFace(embedder) => embedder.embed(texts),
@@ -169,7 +168,7 @@ impl SubEmbedder {
         &self,
         text: &str,
         deadline: Option<Instant>,
-        embedder_stats: Option<Arc<EmbedderStats>>,
+        embedder_stats: Option<&EmbedderStats>,
     ) -> std::result::Result<Embedding, EmbedError> {
         match self {
             SubEmbedder::HuggingFace(embedder) => embedder.embed_one(text),
@@ -196,7 +195,7 @@ impl SubEmbedder {
         &self,
         text_chunks: Vec<Vec<String>>,
         threads: &ThreadPoolNoAbort,
-        embedder_stats: Arc<EmbedderStats>,
+        embedder_stats: &EmbedderStats,
     ) -> std::result::Result<Vec<Vec<Embedding>>, EmbedError> {
         match self {
             SubEmbedder::HuggingFace(embedder) => embedder.embed_index(text_chunks),
@@ -218,7 +217,7 @@ impl SubEmbedder {
         &self,
         texts: &[&str],
         threads: &ThreadPoolNoAbort,
-        embedder_stats: Arc<EmbedderStats>,
+        embedder_stats: &EmbedderStats,
     ) -> std::result::Result<Vec<Embedding>, EmbedError> {
         match self {
             SubEmbedder::HuggingFace(embedder) => embedder.embed_index_ref(texts),

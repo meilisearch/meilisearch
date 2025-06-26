@@ -153,7 +153,7 @@ fn test_typo_disabled_on_word() {
         embedders,
         &|| false,
         &Progress::default(),
-        Default::default(),
+        &Default::default(),
     )
     .unwrap();
 

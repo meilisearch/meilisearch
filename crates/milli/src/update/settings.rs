@@ -475,7 +475,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         progress_callback: &FP,
         should_abort: &FA,
         settings_diff: InnerIndexSettingsDiff,
-        embedder_stats: Arc<EmbedderStats>,
+        embedder_stats: Arc<EmbedderStats>, // Cant change
     ) -> Result<()>
     where
         FP: Fn(UpdateIndexingStep) + Sync,
@@ -1362,7 +1362,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         mut self,
         progress_callback: FP,
         should_abort: FA,
-        embedder_stats: Arc<EmbedderStats>,
+        embedder_stats: Arc<EmbedderStats>, // Cant change
     ) -> Result<()>
     where
         FP: Fn(UpdateIndexingStep) + Sync,
