@@ -349,7 +349,7 @@ async fn create_faulty_mock_raw(sender: mpsc::Sender<()>) -> (MockServer, Value)
             if count >= 5 {
                 let _ = sender.try_send(());
                 ResponseTemplate::new(500)
-                    .set_delay(Duration::from_secs(u64::MAX))
+                    .set_delay(Duration::from_secs(u64::MAX)) // Make the response hang forever
                     .set_body_string("Service Unavailable")
             } else {
                 ResponseTemplate::new(500).set_body_string("Service Unavailable")
