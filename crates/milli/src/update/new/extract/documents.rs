@@ -9,9 +9,7 @@ use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::update::new::channel::{DocumentsSender, ExtractorBbqueueSender};
 use crate::update::new::document::{write_to_obkv, Document as _};
 use crate::update::new::document_change::DatabaseDocument;
-use crate::update::new::indexer::document_changes::{
-    DocumentChangeContext, Extractor, IndexingContext,
-};
+use crate::update::new::indexer::document_changes::{DocumentContext, Extractor, IndexingContext};
 use crate::update::new::indexer::settings_changes::{
     settings_change_extract, DatabaseDocuments, SettingsChangeExtractor,
 };
@@ -50,7 +48,7 @@ impl<'extractor> Extractor<'extractor> for DocumentsExtractor<'_, '_> {
     fn process<'doc>(
         &self,
         changes: impl Iterator<Item = Result<DocumentChange<'doc>>>,
-        context: &DocumentChangeContext<Self::Data>,
+        context: &DocumentContext<Self::Data>,
     ) -> Result<()> {
         let mut document_buffer = bumpalo::collections::Vec::new_in(&context.doc_alloc);
         let mut document_extractor_data = context.data.0.borrow_mut_or_yield();
@@ -196,7 +194,7 @@ impl<'extractor> SettingsChangeExtractor<'extractor> for SettingsChangeDocumentE
     fn process<'doc>(
         &self,
         documents: impl Iterator<Item = Result<DatabaseDocument<'doc>>>,
-        context: &DocumentChangeContext<Self::Data>,
+        context: &DocumentContext<Self::Data>,
     ) -> Result<()> {
         let mut document_buffer = bumpalo::collections::Vec::new_in(&context.doc_alloc);
 

@@ -4,7 +4,7 @@ use rayon::iter::IndexedParallelIterator;
 use rayon::slice::ParallelSlice as _;
 use roaring::RoaringBitmap;
 
-use super::document_changes::{DocumentChangeContext, DocumentChanges};
+use super::document_changes::{DocumentContext, DocumentChanges};
 use crate::documents::PrimaryKey;
 use crate::update::new::thread_local::MostlySend;
 use crate::update::new::{DatabaseDocument, DocumentChange};
@@ -58,7 +58,7 @@ impl<'pl> DocumentChanges<'pl> for DocumentDeletionChanges<'pl> {
         T: MostlySend,
     >(
         &'doc self,
-        context: &'doc DocumentChangeContext<T>,
+        context: &'doc DocumentContext<T>,
         docid: &'doc Self::Item,
     ) -> Result<Option<DocumentChange<'doc>>>
     where
@@ -94,7 +94,7 @@ mod test {
     use crate::index::tests::TempIndex;
     use crate::progress::Progress;
     use crate::update::new::indexer::document_changes::{
-        extract, DocumentChangeContext, Extractor, IndexingContext,
+        extract, DocumentContext, Extractor, IndexingContext,
     };
     use crate::update::new::indexer::DocumentDeletion;
     use crate::update::new::steps::IndexingStep;
@@ -125,7 +125,7 @@ mod test {
             fn process<'doc>(
                 &self,
                 changes: impl Iterator<Item = crate::Result<DocumentChange<'doc>>>,
-                context: &DocumentChangeContext<Self::Data>,
+                context: &DocumentContext<Self::Data>,
             ) -> crate::Result<()> {
                 for change in changes {
                     let change = change?;

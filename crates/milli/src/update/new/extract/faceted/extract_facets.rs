@@ -17,7 +17,7 @@ use crate::update::del_add::DelAdd;
 use crate::update::new::channel::FieldIdDocidFacetSender;
 use crate::update::new::extract::perm_json_p;
 use crate::update::new::indexer::document_changes::{
-    extract, DocumentChangeContext, DocumentChanges, Extractor, IndexingContext,
+    extract, DocumentContext, DocumentChanges, Extractor, IndexingContext,
 };
 use crate::update::new::ref_cell_ext::RefCellExt as _;
 use crate::update::new::steps::IndexingStep;
@@ -51,7 +51,7 @@ impl<'extractor> Extractor<'extractor> for FacetedExtractorData<'_, '_> {
     fn process<'doc>(
         &self,
         changes: impl Iterator<Item = Result<DocumentChange<'doc>>>,
-        context: &DocumentChangeContext<Self::Data>,
+        context: &DocumentContext<Self::Data>,
     ) -> Result<()> {
         for change in changes {
             let change = change?;
@@ -75,7 +75,7 @@ pub struct FacetedDocidsExtractor;
 impl FacetedDocidsExtractor {
     #[allow(clippy::too_many_arguments)]
     fn extract_document_change(
-        context: &DocumentChangeContext<RefCell<BalancedCaches>>,
+        context: &DocumentContext<RefCell<BalancedCaches>>,
         filterable_attributes: &[FilterableAttributesRule],
         sortable_fields: &HashSet<String>,
         asc_desc_fields: &HashSet<String>,
