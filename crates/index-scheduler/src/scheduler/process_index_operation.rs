@@ -478,7 +478,7 @@ impl IndexScheduler {
                     .execute(
                         |indexing_step| tracing::debug!(update = ?indexing_step),
                         || must_stop_processing.get(),
-                        embedder_stats.clone(),
+                        embedder_stats,
                     )
                     .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?;
 

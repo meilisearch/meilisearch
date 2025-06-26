@@ -507,7 +507,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             IndexDocumentsConfig::default(),
             &progress_callback,
             &should_abort,
-            &embedder_stats,
+            embedder_stats,
         )?;
 
         indexing_builder.execute_raw(output)?;
