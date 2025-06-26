@@ -289,14 +289,23 @@ async fn process_search_request(
         let (search, _is_finite_pagination, _max_total_hits, _offset) =
             prepare_search(&index_cloned, &rtxn, &query, &search_kind, time_budget, features)?;
 
-        search_from_kind(index_uid, search_kind, search)
-            .map(|(search_results, _)| (rtxn, search_results))
-            .map_err(ResponseError::from)
+        match search_from_kind(index_uid, search_kind, search) {
+            Ok((search_results, _)) => Ok((rtxn, Ok(search_results))),
+            Err(MeilisearchHttpError::Milli {
+                error: meilisearch_types::milli::Error::UserError(user_error),
+                index_name: _,
+            }) => Ok((rtxn, Err(user_error))),
+            Err(err) => Err(ResponseError::from(err)),
+        }
     })
     .await;
     permit.drop().await;
 
-    let output = output?;
+    let output = match output? {
+        Ok((rtxn, Ok(search_results))) => Ok((rtxn, search_results)),
+        Ok((_rtxn, Err(error))) => return Ok((index, Vec::new(), error.to_string())),
+        Err(err) => Err(ResponseError::from(err)),
+    };
     let mut documents = Vec::new();
     if let Ok((ref rtxn, ref search_result)) = output {
         MEILISEARCH_CHAT_SEARCH_REQUESTS.with_label_values(&["internal"]).inc();
@@ -730,7 +739,7 @@ async fn handle_meili_tools(
 
         let mut error = None;
 
-        let answer = match serde_json::from_str(&call.function.arguments) {
+        let result = match serde_json::from_str(&call.function.arguments) {
             Ok(SearchInIndexParameters { index_uid, q, filter }) => match process_search_request(
                 index_scheduler,
                 auth_ctrl.clone(),
