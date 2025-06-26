@@ -292,7 +292,7 @@ impl KindWithContent {
                 Some(Details::Export {
                     url: url.clone(),
                     api_key: api_key.clone(),
-                    payload_size: payload_size.clone(),
+                    payload_size: *payload_size,
                     indexes: indexes.iter().map(|(p, s)| (p.clone(), s.clone().into())).collect(),
                 })
             }
@@ -366,7 +366,7 @@ impl KindWithContent {
                 Some(Details::Export {
                     url: url.clone(),
                     api_key: api_key.clone(),
-                    payload_size: payload_size.clone(),
+                    payload_size: *payload_size,
                     indexes: indexes.iter().map(|(p, s)| (p.clone(), s.clone().into())).collect(),
                 })
             }
@@ -422,7 +422,7 @@ impl From<&KindWithContent> for Option<Details> {
                 Some(Details::Export {
                     url: url.clone(),
                     api_key: api_key.clone(),
-                    payload_size: payload_size.clone(),
+                    payload_size: *payload_size,
                     indexes: indexes.iter().map(|(p, s)| (p.clone(), s.clone().into())).collect(),
                 })
             }
