@@ -186,10 +186,10 @@ impl<'a, 'b> SettingsChangeDocumentExtractor<'a, 'b> {
 }
 
 impl<'extractor> SettingsChangeExtractor<'extractor> for SettingsChangeDocumentExtractor<'_, '_> {
-    type Data = FullySend<RefCell<DocumentExtractorData>>;
+    type Data = FullySend<()>;
 
     fn init_data(&self, _extractor_alloc: &'extractor Bump) -> Result<Self::Data> {
-        Ok(FullySend(Default::default()))
+        Ok(FullySend(()))
     }
 
     fn process<'doc>(
@@ -288,7 +288,7 @@ where
     // Check if any vector needs to be written back for the document
     for (name, action) in embedder_actions {
         // we only care about embedders that have a write_back
-        if !action.write_back().is_some() {
+        if action.write_back().is_none() {
             continue;
         }
 
