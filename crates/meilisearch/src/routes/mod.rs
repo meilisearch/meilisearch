@@ -55,6 +55,7 @@ pub mod batches;
 pub mod chats;
 mod dump;
 mod export;
+mod export_analytics;
 pub mod features;
 pub mod indexes;
 mod logs;

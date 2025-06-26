@@ -22,6 +22,7 @@ use utoipa::{OpenApi, ToSchema};
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::GuardedData;
+use crate::routes::export_analytics::ExportAnalytics;
 use crate::routes::{get_task_id, is_dry_run, SummarizedTaskView};
 use crate::Opt;
 
@@ -67,13 +68,15 @@ async fn export(
     export: AwebJson<Export, DeserrJsonError>,
     req: HttpRequest,
     opt: web::Data<Opt>,
-    _analytics: Data<Analytics>,
+    analytics: Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     // TODO make it experimental?
     // index_scheduler.features().check_network("Using the /network route")?;
 
     let export = export.into_inner();
     debug!(returns = ?export, "Trigger export");
+
+    let analytics_aggregate = ExportAnalytics::from_export(&export);
 
     let Export { url, api_key, payload_size, indexes } = export;
 
@@ -100,6 +103,8 @@ async fn export(
         tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run))
             .await??
             .into();
+
+    analytics.publish(analytics_aggregate, &req);
 
     Ok(HttpResponse::Ok().json(task))
 }
