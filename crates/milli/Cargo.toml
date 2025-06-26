@@ -87,7 +87,7 @@ rhai = { git = "https://github.com/rhaiscript/rhai", rev = "ef3df63121d27aacd838
     "no_time",
     "sync",
 ] }
-arroy = "0.6.1"
+arroy = { git = "https://github.com/meilisearch/arroy", branch = "no-simd-x86-arroy" }
 rand = "0.8.5"
 tracing = "0.1.41"
 ureq = { version = "2.12.1", features = ["json"] }
