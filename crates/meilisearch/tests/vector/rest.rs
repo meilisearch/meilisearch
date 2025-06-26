@@ -2182,7 +2182,7 @@ async fn last_error_stats() {
     let (response, _code) = index.filtered_batches(&[], &[], &[]).await;
     snapshot!(json_string!(response["results"][0], {
         ".progress" => "[ignored]",
-        ".stats.embedder.totalCount" => "[ignored]",
+        ".stats.embedderRequests.total" => "[ignored]",
         ".startedAt" => "[ignored]"
     }), @r#"
     {
@@ -2203,9 +2203,9 @@ async fn last_error_stats() {
         "indexUids": {
           "doggo": 1
         },
-        "embedder": {
-          "totalCount": "[ignored]",
-          "errorCount": 5,
+        "embedderRequests": {
+          "total": "[ignored]",
+          "failed": 5,
           "lastError": "runtime error: received internal error HTTP 500 from embedding server\n  - server replied with `Service Unavailable`"
         }
       },

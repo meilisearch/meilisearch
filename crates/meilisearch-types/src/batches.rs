@@ -92,8 +92,8 @@ pub struct BatchStats {
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct EmbedderStatsView {
-    pub total_count: usize,
-    pub error_count: usize,
+    pub total: usize,
+    pub failed: usize,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub last_error: Option<String>,
 }
@@ -102,8 +102,8 @@ impl From<&EmbedderStats> for EmbedderStatsView {
     fn from(stats: &EmbedderStats) -> Self {
         let errors = stats.errors.read().unwrap_or_else(|p| p.into_inner());
         Self {
-            total_count: stats.total_count.load(std::sync::atomic::Ordering::Relaxed),
-            error_count: errors.1 as usize,
+            total: stats.total_count.load(std::sync::atomic::Ordering::Relaxed),
+            failed: errors.1 as usize,
             last_error: errors.0.clone(),
         }
     }
@@ -111,6 +111,6 @@ impl From<&EmbedderStats> for EmbedderStatsView {
 
 impl EmbedderStatsView {
     pub fn skip_serializing(&self) -> bool {
-        self.total_count == 0 && self.error_count == 0 && self.last_error.is_none()
+        self.total == 0 && self.failed == 0 && self.last_error.is_none()
     }
 }

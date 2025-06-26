@@ -32,7 +32,7 @@ pub struct BatchStatsView {
     #[serde(flatten)]
     pub stats: BatchStats,
     #[serde(skip_serializing_if = "EmbedderStatsView::skip_serializing", default)]
-    pub embedder: EmbedderStatsView,
+    pub embedder_requests: EmbedderStatsView,
 }
 
 impl BatchView {
@@ -43,7 +43,7 @@ impl BatchView {
             details: batch.details.clone(),
             stats: BatchStatsView {
                 stats: batch.stats.clone(),
-                embedder: batch.embedder_stats.clone(),
+                embedder_requests: batch.embedder_stats.clone(),
             },
             duration: batch.finished_at.map(|finished_at| finished_at - batch.started_at),
             started_at: batch.started_at,
