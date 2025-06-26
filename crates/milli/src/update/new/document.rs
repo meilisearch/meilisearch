@@ -9,6 +9,7 @@ use super::vector_document::VectorDocument;
 use super::{KvReaderFieldId, KvWriterFieldId};
 use crate::constants::{RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME};
 use crate::documents::FieldIdMapper;
+use crate::vector::settings::EmbedderAction;
 use crate::{DocumentId, GlobalFieldsIdsMap, Index, InternalError, Result, UserError};
 
 /// A view into a document that can represent either the current version from the DB,
@@ -309,6 +310,7 @@ where
 pub fn write_to_obkv<'s, 'a, 'map, 'buffer>(
     document: &'s impl Document<'s>,
     vector_document: Option<&'s impl VectorDocument<'s>>,
+    embedder_actions: &'a BTreeMap<String, EmbedderAction>,
     fields_ids_map: &'a mut GlobalFieldsIdsMap<'map>,
     mut document_buffer: &'a mut bumpalo::collections::Vec<'buffer, u8>,
 ) -> Result<&'a KvReaderFieldId>
@@ -338,20 +340,39 @@ where
         for res in vector_document.iter_vectors() {
             let (name, entry) = res?;
             if entry.has_configured_embedder {
-                continue; // we don't write vectors with configured embedder in documents
+                if let Some(action) = embedder_actions.get(name) {
+                    if action.write_back().is_some() && !entry.regenerate {
+                        vectors.insert(
+                            name,
+                            serde_json::json!({
+                                "regenerate": entry.regenerate,
+                                // TODO: consider optimizing the shape of embedders here to store an array of f32 rather than a JSON object
+                                "embeddings": entry.embeddings,
+                            }),
+                        );
+                    }
+                }
+            } else {
+                match embedder_actions.get(name) {
+                    Some(action) if action.write_back().is_none() => {
+                        continue;
+                    }
+                    _ => {
+                        vectors.insert(
+                            name,
+                            if entry.implicit {
+                                serde_json::json!(entry.embeddings)
+                            } else {
+                                serde_json::json!({
+                                    "regenerate": entry.regenerate,
+                                    // TODO: consider optimizing the shape of embedders here to store an array of f32 rather than a JSON object
+                                    "embeddings": entry.embeddings,
+                                })
+                            },
+                        );
+                    }
+                }
             }
-            vectors.insert(
-                name,
-                if entry.implicit {
-                    serde_json::json!(entry.embeddings)
-                } else {
-                    serde_json::json!({
-                        "regenerate": entry.regenerate,
-                        // TODO: consider optimizing the shape of embedders here to store an array of f32 rather than a JSON object
-                        "embeddings": entry.embeddings,
-                    })
-                },
-            );
         }
 
         if vectors.is_empty() {

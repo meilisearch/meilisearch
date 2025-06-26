@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::sync::atomic::AtomicBool;
 
 use bstr::ByteSlice as _;
@@ -13,6 +14,7 @@ use crate::fields_ids_map::metadata::FieldIdMapWithMetadata;
 use crate::index::IndexEmbeddingConfig;
 use crate::progress::Progress;
 use crate::update::settings::InnerIndexSettings;
+use crate::vector::settings::EmbedderAction;
 use crate::vector::{ArroyWrapper, Embedder, EmbeddingConfigs, Embeddings};
 use crate::{Error, Index, InternalError, Result, UserError};
 
@@ -106,6 +108,7 @@ pub fn build_vectors<MSP>(
     index_embeddings: Vec<IndexEmbeddingConfig>,
     arroy_memory: Option<usize>,
     arroy_writers: &mut HashMap<u8, (&str, &Embedder, ArroyWrapper, usize)>,
+    embeder_actions: Option<&BTreeMap<String, EmbedderAction>>,
     must_stop_processing: &MSP,
 ) -> Result<()>
 where
@@ -117,14 +120,17 @@ where
 
     let seed = rand::random();
     let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
-    for (_index, (_embedder_name, _embedder, writer, dimensions)) in arroy_writers {
+    for (_index, (embedder_name, _embedder, writer, dimensions)) in arroy_writers {
         let dimensions = *dimensions;
+        let is_being_quantized = embeder_actions
+            .and_then(|actions| actions.get(*embedder_name).map(|action| action.is_being_quantized))
+            .unwrap_or(false);
         writer.build_and_quantize(
             wtxn,
             progress,
             &mut rng,
             dimensions,
-            false,
+            is_being_quantized,
             arroy_memory,
             must_stop_processing,
         )?;
