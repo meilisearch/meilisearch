@@ -151,7 +151,7 @@ impl Key {
             name: Some("Default Read-Only Admin API Key".to_string()),
             description: Some("Use it to peek into the instance in a read-only mode. Caution: This key gives you access to all the other api keys. Do not expose it on a public frontend".to_string()),
             uid,
-            actions: vec![Action::AllGet, Action::KeysGedt],
+            actions: vec![Action::AllGet, Action::KeysGet],
             indexes: vec![IndexUidPattern::all()],
             expires_at: None,
             created_at: now,
