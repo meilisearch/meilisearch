@@ -614,6 +614,8 @@ impl FromStr for Kind {
             Ok(Kind::DumpCreation)
         } else if kind.eq_ignore_ascii_case("snapshotCreation") {
             Ok(Kind::SnapshotCreation)
+        } else if kind.eq_ignore_ascii_case("export") {
+            Ok(Kind::Export)
         } else if kind.eq_ignore_ascii_case("upgradeDatabase") {
             Ok(Kind::UpgradeDatabase)
         } else {
