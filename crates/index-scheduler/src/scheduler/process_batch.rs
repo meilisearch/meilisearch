@@ -368,6 +368,44 @@ impl IndexScheduler {
                 task.status = Status::Succeeded;
                 Ok((vec![task], ProcessBatchInfo::default()))
             }
+            Batch::Export { mut task } => {
+                let KindWithContent::Export { url, api_key, payload_size, indexes } = &task.kind
+                else {
+                    unreachable!()
+                };
+
+                let ret = catch_unwind(AssertUnwindSafe(|| {
+                    self.process_export(
+                        url,
+                        api_key.as_deref(),
+                        payload_size.as_ref(),
+                        indexes,
+                        progress,
+                    )
+                }));
+
+                match ret {
+                    // TODO return the matched and exported documents
+                    Ok(Ok(())) => (),
+                    Ok(Err(Error::AbortedTask)) => return Err(Error::AbortedTask),
+                    Ok(Err(e)) => return Err(Error::Export(Box::new(e))),
+                    Err(e) => {
+                        let msg = match e.downcast_ref::<&'static str>() {
+                            Some(s) => *s,
+                            None => match e.downcast_ref::<String>() {
+                                Some(s) => &s[..],
+                                None => "Box<dyn Any>",
+                            },
+                        };
+                        return Err(Error::Export(Box::new(Error::ProcessBatchPanicked(
+                            msg.to_string(),
+                        ))));
+                    }
+                }
+
+                task.status = Status::Succeeded;
+                Ok((vec![task], ProcessBatchInfo::default()))
+            }
             Batch::UpgradeDatabase { mut tasks } => {
                 let KindWithContent::UpgradeDatabase { from } = tasks.last().unwrap().kind else {
                     unreachable!();
@@ -715,9 +753,11 @@ impl IndexScheduler {
                     from.1,
                     from.2
                 );
-                match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let ret = catch_unwind(std::panic::AssertUnwindSafe(|| {
                     self.process_rollback(from, progress)
-                })) {
+                }));
+
+                match ret {
                     Ok(Ok(())) => {}
                     Ok(Err(err)) => return Err(Error::DatabaseUpgrade(Box::new(err))),
                     Err(e) => {

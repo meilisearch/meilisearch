@@ -18,7 +18,7 @@ pub mod versioning;
 pub use milli::{heed, Index};
 use uuid::Uuid;
 pub use versioning::VERSION_FILE_NAME;
-pub use {milli, serde_cs};
+pub use {byte_unit, milli, serde_cs};
 
 pub type Document = serde_json::Map<String, serde_json::Value>;
 pub type InstanceUid = Uuid;

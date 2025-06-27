@@ -4,6 +4,7 @@ mod autobatcher_test;
 mod create_batch;
 mod process_batch;
 mod process_dump_creation;
+mod process_export;
 mod process_index_operation;
 mod process_snapshot_creation;
 mod process_upgrade;
