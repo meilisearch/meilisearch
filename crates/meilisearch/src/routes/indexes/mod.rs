@@ -73,6 +73,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
                     .route(web::delete().to(SeqHandler(delete_index))),
             )
             .service(web::resource("/stats").route(web::get().to(SeqHandler(get_index_stats))))
+            .service(web::resource("/fields").route(web::get().to(SeqHandler(get_index_fields))))
             .service(web::scope("/documents").configure(documents::configure))
             .service(web::scope("/search").configure(search::configure))
             .service(web::scope("/facet-search").configure(facet_search::configure))
@@ -579,4 +580,48 @@ pub async fn get_index_stats(
 
     debug!(returns = ?stats, "Get index stats");
     Ok(HttpResponse::Ok().json(stats))
+}
+
+/// Get fields of index
+///
+/// Get all field names in the index (including nested fields).
+#[utoipa::path(
+    get,
+    path = "/{indexUid}/fields",
+    tag = "Indexes",
+    security(("Bearer" = ["indexes.get", "indexes.*", "*"])),
+    params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
+    responses(
+        (status = OK, description = "The fields of the index", body = Vec<String>, content_type = "application/json", example = json!(
+            ["id", "title", "user.name", "user.email", "metadata.category"]
+        )),
+        (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "Index `movies` not found.",
+                "code": "index_not_found",
+                "type": "invalid_request",
+                "link": "https://docs.meilisearch.com/errors#index_not_found"
+            }
+        )),
+        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+    )
+)]
+pub async fn get_index_fields(
+    index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_GET }>, Data<IndexScheduler>>,
+    index_uid: web::Path<String>,
+) -> Result<HttpResponse, ResponseError> {
+    let index_uid = IndexUid::try_from(index_uid.into_inner())?;
+    let index = index_scheduler.index(&index_uid)?;
+    let rtxn = index.read_txn()?;
+    let fields: Vec<String> = index.fields_ids_map(&rtxn)?.names().map(|s| s.to_string()).collect();
+
+    debug!(returns = ?fields, "Get index fields");
+    Ok(HttpResponse::Ok().json(fields))
 }
