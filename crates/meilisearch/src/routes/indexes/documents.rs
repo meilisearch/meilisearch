@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::io::{ErrorKind, Seek as _};
 use std::marker::PhantomData;
+use std::str::FromStr;
 
 use actix_web::http::header::CONTENT_TYPE;
 use actix_web::web::Data;
@@ -17,9 +18,10 @@ use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
+use meilisearch_types::milli::facet::facet_sort_recursive::recursive_facet_sort;
 use meilisearch_types::milli::update::IndexDocumentsMethod;
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
-use meilisearch_types::milli::DocumentId;
+use meilisearch_types::milli::{AscDesc, DocumentId};
 use meilisearch_types::serde_cs::vec::CS;
 use meilisearch_types::star_or::OptionStarOrList;
 use meilisearch_types::tasks::KindWithContent;
@@ -42,6 +44,7 @@ use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::payload::Payload;
 use crate::extractors::sequential_extractor::SeqHandler;
+use crate::routes::indexes::search::fix_sort_query_parameters;
 use crate::routes::{
     get_task_id, is_dry_run, PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT,
 };
@@ -406,6 +409,8 @@ pub struct BrowseQueryGet {
     #[param(default, value_type = Option<String>, example = "popularity > 1000")]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentFilter>)]
     filter: Option<String>,
+    #[deserr(default, error = DeserrQueryParamError<InvalidDocumentSort>)]
+    sort: Option<String>,
 }
 
 #[derive(Debug, Deserr, ToSchema)]
@@ -430,6 +435,9 @@ pub struct BrowseQuery {
     #[schema(default, value_type = Option<Value>, example = "popularity > 1000")]
     #[deserr(default, error = DeserrJsonError<InvalidDocumentFilter>)]
     filter: Option<Value>,
+    #[schema(default, value_type = Option<Vec<String>>, example = json!(["title:asc", "rating:desc"]))]
+    #[deserr(default, error = DeserrJsonError<InvalidDocumentSort>)]
+    sort: Option<Vec<String>>,
 }
 
 /// Get documents with POST
@@ -571,7 +579,7 @@ pub async fn get_documents(
 ) -> Result<HttpResponse, ResponseError> {
     debug!(parameters = ?params, "Get documents GET");
 
-    let BrowseQueryGet { limit, offset, fields, retrieve_vectors, filter, ids } =
+    let BrowseQueryGet { limit, offset, fields, retrieve_vectors, filter, ids, sort } =
         params.into_inner();
 
     let filter = match filter {
@@ -582,15 +590,14 @@ pub async fn get_documents(
         None => None,
     };
 
-    let ids = ids.map(|ids| ids.into_iter().map(Into::into).collect());
-
     let query = BrowseQuery {
         offset: offset.0,
         limit: limit.0,
         fields: fields.merge_star_and_none(),
         retrieve_vectors: retrieve_vectors.0,
         filter,
-        ids,
+        ids: ids.map(|ids| ids.into_iter().map(Into::into).collect()),
+        sort: sort.map(|attr| fix_sort_query_parameters(&attr)),
     };
 
     analytics.publish(
@@ -615,7 +622,7 @@ fn documents_by_query(
     query: BrowseQuery,
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
-    let BrowseQuery { offset, limit, fields, retrieve_vectors, filter, ids } = query;
+    let BrowseQuery { offset, limit, fields, retrieve_vectors, filter, ids, sort } = query;
 
     let retrieve_vectors = RetrieveVectors::new(retrieve_vectors);
 
@@ -633,6 +640,22 @@ fn documents_by_query(
         None
     };
 
+    let sort_criteria = if let Some(sort) = &sort {
+        let sorts: Vec<_> =
+            match sort.iter().map(|s| milli::AscDesc::from_str(s)).collect() {
+                Ok(sorts) => sorts,
+                Err(asc_desc_error) => {
+                    return Err(milli::Error::from(milli::SortError::from(
+                        asc_desc_error,
+                    ))
+                    .into())
+                }
+            };
+        Some(sorts)
+    } else {
+        None
+    };
+
     let index = index_scheduler.index(&index_uid)?;
     let (total, documents) = retrieve_documents(
         &index,
@@ -643,6 +666,7 @@ fn documents_by_query(
         fields,
         retrieve_vectors,
         index_scheduler.features(),
+        sort_criteria,
     )?;
 
     let ret = PaginationView::new(offset, limit, total as usize, documents);
@@ -1501,6 +1525,7 @@ fn retrieve_documents<S: AsRef<str>>(
     attributes_to_retrieve: Option<Vec<S>>,
     retrieve_vectors: RetrieveVectors,
     features: RoFeatures,
+    sort_criteria: Option<Vec<AscDesc>>,
 ) -> Result<(u64, Vec<Document>), ResponseError> {
     let rtxn = index.read_txn()?;
     let filter = &filter;
@@ -1533,15 +1558,32 @@ fn retrieve_documents<S: AsRef<str>>(
         })?
     }
 
-    let (it, number_of_documents) = {
+    let mut facet_sort = None;
+    if let Some(sort) = sort_criteria {
+        facet_sort = Some(recursive_facet_sort(index, &rtxn, &sort, &candidates)?)
+    }
+
+    let (it, number_of_documents) = if let Some(facet_sort) = &facet_sort {
+        let number_of_documents = candidates.len();
+        let iter = facet_sort.iter()?;
+        (
+            itertools::Either::Left(some_documents(
+                index,
+                &rtxn,
+                iter.map(|d| d.unwrap()).skip(offset).take(limit),
+                retrieve_vectors,
+            )?),
+            number_of_documents,
+        )
+    } else {
         let number_of_documents = candidates.len();
         (
-            some_documents(
+            itertools::Either::Right(some_documents(
                 index,
                 &rtxn,
                 candidates.into_iter().skip(offset).take(limit),
                 retrieve_vectors,
-            )?,
+            )?),
             number_of_documents,
         )
     };
