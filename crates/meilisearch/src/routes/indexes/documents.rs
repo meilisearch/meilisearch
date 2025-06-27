@@ -1558,19 +1558,32 @@ fn retrieve_documents<S: AsRef<str>>(
         })?
     }
 
+    let mut facet_sort = None;
     if let Some(sort) = sort_criteria {
-        candidates = recursive_facet_sort(index, &rtxn, &sort, candidates)?;
+        facet_sort = Some(recursive_facet_sort(index, &rtxn, &sort, &candidates)?)
     }
 
-    let (it, number_of_documents) = {
+    let (it, number_of_documents) = if let Some(facet_sort) = &facet_sort {
+        let number_of_documents = candidates.len();
+        let iter = facet_sort.iter()?;
+        (
+            itertools::Either::Left(some_documents(
+                index,
+                &rtxn,
+                iter.map(|d| d.unwrap()).skip(offset).take(limit),
+                retrieve_vectors,
+            )?),
+            number_of_documents,
+        )
+    } else {
         let number_of_documents = candidates.len();
         (
-            some_documents(
+            itertools::Either::Right(some_documents(
                 index,
                 &rtxn,
                 candidates.into_iter().skip(offset).take(limit),
                 retrieve_vectors,
-            )?,
+            )?),
             number_of_documents,
         )
     };
