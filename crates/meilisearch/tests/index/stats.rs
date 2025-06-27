@@ -109,12 +109,10 @@ async fn fields() {
     // Test fields including nested fields
     let (response, code) = index.fields().await;
     assert_eq!(code, 200);
-    
+
     let fields = response.as_array().unwrap();
-    let field_names: Vec<&str> = fields.iter()
-        .map(|f| f.as_str().unwrap())
-        .collect();
-    
+    let field_names: Vec<&str> = fields.iter().map(|f| f.as_str().unwrap()).collect();
+
     // Check that all expected fields are present (including nested fields)
     assert!(field_names.contains(&"id"));
     assert!(field_names.contains(&"name"));
@@ -126,7 +124,7 @@ async fn fields() {
     assert!(field_names.contains(&"metadata.category"));
     assert!(field_names.contains(&"metadata.author.name"));
     assert!(field_names.contains(&"metadata.author.id"));
-    
+
     // Verify the response is a simple array of strings
     for field in fields {
         assert!(field.is_string());
@@ -248,12 +246,10 @@ async fn fields_nested_complex() {
     // Test fields with complex nested structures
     let (response, code) = index.fields().await;
     assert_eq!(code, 200);
-    
+
     let fields = response.as_array().unwrap();
-    let field_names: Vec<&str> = fields.iter()
-        .map(|f| f.as_str().unwrap())
-        .collect();
-    
+    let field_names: Vec<&str> = fields.iter().map(|f| f.as_str().unwrap()).collect();
+
     // Test deeply nested fields from the first document
     assert!(field_names.contains(&"product.name"));
     assert!(field_names.contains(&"product.specifications.hardware.cpu.brand"));
@@ -272,7 +268,7 @@ async fn fields_nested_complex() {
     assert!(field_names.contains(&"product.pricing.currency"));
     assert!(field_names.contains(&"product.pricing.discounts.student"));
     assert!(field_names.contains(&"product.pricing.discounts.bulk"));
-    
+
     // Test deeply nested fields from the second document
     assert!(field_names.contains(&"order.items"));
     assert!(field_names.contains(&"order.shipping.address.street"));
@@ -283,7 +279,7 @@ async fn fields_nested_complex() {
     assert!(field_names.contains(&"order.shipping.method"));
     assert!(field_names.contains(&"order.shipping.tracking.number"));
     assert!(field_names.contains(&"order.shipping.tracking.carrier"));
-    
+
     // Test customer fields
     assert!(field_names.contains(&"customer.info.name"));
     assert!(field_names.contains(&"customer.info.contact.email"));
@@ -293,16 +289,16 @@ async fn fields_nested_complex() {
     assert!(field_names.contains(&"customer.preferences.notifications.sms"));
     assert!(field_names.contains(&"customer.preferences.notifications.push.enabled"));
     assert!(field_names.contains(&"customer.preferences.notifications.push.frequency"));
-    
+
     // Verify all fields are strings and no duplicates
     let unique_fields: std::collections::HashSet<&str> = field_names.iter().cloned().collect();
     assert_eq!(unique_fields.len(), field_names.len(), "No duplicate fields should exist");
-    
+
     // Verify the response is a simple array of strings
     for field in fields {
         assert!(field.is_string());
     }
-    
+
     // Test that we have a reasonable number of fields (should be more than just top-level)
     assert!(field_names.len() > 10, "Should have more than 10 fields including nested ones");
 }
