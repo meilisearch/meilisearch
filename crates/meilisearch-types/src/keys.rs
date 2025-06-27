@@ -144,7 +144,7 @@ impl Key {
         }
     }
 
-    pub fn default_read_only_admin_key() -> Self {
+    pub fn default_read_only_admin() -> Self {
         let now = OffsetDateTime::now_utc();
         let uid = Uuid::new_v4();
         Self {
