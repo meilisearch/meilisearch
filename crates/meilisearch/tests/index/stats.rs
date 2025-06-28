@@ -65,7 +65,7 @@ async fn error_get_stats_unexisting_index() {
 async fn fields() {
     let server = Server::new_shared();
     let index = server.unique_index();
-    let (task, code) = index.create(Some("id")).await;
+    let (task, code) = index.create(None).await;
 
     assert_eq!(code, 202);
     server.wait_task(task.uid()).await.succeeded();
