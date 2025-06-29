@@ -24,7 +24,7 @@ use crate::progress::{EmbedderStats, Progress};
 use crate::update::settings::SettingsDelta;
 use crate::update::GrenadParameters;
 use crate::vector::settings::{EmbedderAction, WriteBackToDocuments};
-use crate::vector::{ArroyWrapper, Embedder, EmbeddingConfigs};
+use crate::vector::{ArroyWrapper, Embedder, RuntimeEmbedders};
 use crate::{FieldsIdsMap, GlobalFieldsIdsMap, Index, InternalError, Result, ThreadPoolNoAbort};
 
 pub(crate) mod de;
@@ -54,7 +54,7 @@ pub fn index<'pl, 'indexer, 'index, DC, MSP>(
     new_fields_ids_map: FieldsIdsMap,
     new_primary_key: Option<PrimaryKey<'pl>>,
     document_changes: &DC,
-    embedders: EmbeddingConfigs,
+    embedders: RuntimeEmbedders,
     must_stop_processing: &'indexer MSP,
     progress: &'indexer Progress,
     embedder_stats: &'indexer EmbedderStats,
@@ -93,7 +93,7 @@ where
         grenad_parameters: &grenad_parameters,
     };
 
-    let index_embeddings = index.embedding_configs(wtxn)?;
+    let index_embeddings = index.embedding_configs().embedding_configs(wtxn)?;
     let mut field_distribution = index.field_distribution(wtxn)?;
     let mut document_ids = index.documents_ids(wtxn)?;
     let mut modified_docids = roaring::RoaringBitmap::new();
@@ -133,20 +133,21 @@ where
         let arroy_writers: Result<HashMap<_, _>> = embedders
             .inner_as_ref()
             .iter()
-            .map(|(embedder_name, (embedder, _, was_quantized))| {
-                let embedder_index = index.embedder_category_id.get(wtxn, embedder_name)?.ok_or(
-                    InternalError::DatabaseMissingEntry {
+            .map(|(embedder_name, runtime)| {
+                let embedder_index = index
+                    .embedding_configs()
+                    .embedder_id(wtxn, embedder_name)?
+                    .ok_or(InternalError::DatabaseMissingEntry {
                         db_name: "embedder_category_id",
                         key: None,
-                    },
-                )?;
+                    })?;
 
-                let dimensions = embedder.dimensions();
-                let writer = ArroyWrapper::new(vector_arroy, embedder_index, *was_quantized);
+                let dimensions = runtime.embedder.dimensions();
+                let writer = ArroyWrapper::new(vector_arroy, embedder_index, runtime.is_quantized);
 
                 Ok((
                     embedder_index,
-                    (embedder_name.as_str(), embedder.as_ref(), writer, dimensions),
+                    (embedder_name.as_str(), &*runtime.embedder, writer, dimensions),
                 ))
             })
             .collect();

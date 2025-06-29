@@ -3,6 +3,7 @@ use bumpalo::Bump;
 use serde_json::Value;
 
 use super::{EmbedError, Embedder, Embedding};
+use crate::progress::EmbedderStats;
 use crate::{DocumentId, Result, ThreadPoolNoAbort};
 type ExtractorId = u8;
 
@@ -43,6 +44,8 @@ pub struct EmbedSession<'doc, C, I> {
 
     embedder_name: &'doc str,
 
+    embedder_stats: &'doc EmbedderStats,
+
     on_embed: C,
 }
 
@@ -51,6 +54,7 @@ pub trait Input: Sized {
         inputs: &[Self],
         embedder: &Embedder,
         threads: &ThreadPoolNoAbort,
+        embedder_stats: &EmbedderStats,
     ) -> std::result::Result<Vec<Embedding>, EmbedError>;
 }
 
@@ -59,8 +63,9 @@ impl Input for &'_ str {
         inputs: &[Self],
         embedder: &Embedder,
         threads: &ThreadPoolNoAbort,
+        embedder_stats: &EmbedderStats,
     ) -> std::result::Result<Vec<Embedding>, EmbedError> {
-        embedder.embed_index_ref(inputs, threads)
+        embedder.embed_index_ref(inputs, threads, embedder_stats)
     }
 }
 
@@ -69,8 +74,9 @@ impl Input for Value {
         inputs: &[Value],
         embedder: &Embedder,
         threads: &ThreadPoolNoAbort,
+        embedder_stats: &EmbedderStats,
     ) -> std::result::Result<Vec<Embedding>, EmbedError> {
-        embedder.embed_index_ref_fragments(inputs, threads)
+        embedder.embed_index_ref_fragments(inputs, threads, embedder_stats)
     }
 }
 
@@ -81,12 +87,21 @@ impl<'doc, C: OnEmbed<'doc>, I: Input> EmbedSession<'doc, C, I> {
         embedder_name: &'doc str,
         threads: &'doc ThreadPoolNoAbort,
         doc_alloc: &'doc Bump,
+        embedder_stats: &'doc EmbedderStats,
         on_embed: C,
     ) -> Self {
         let capacity = embedder.prompt_count_in_chunk_hint() * embedder.chunk_count_hint();
         let texts = BVec::with_capacity_in(capacity, doc_alloc);
         let ids = BVec::with_capacity_in(capacity, doc_alloc);
-        Self { inputs: texts, metadata: ids, embedder, threads, embedder_name, on_embed }
+        Self {
+            inputs: texts,
+            metadata: ids,
+            embedder,
+            threads,
+            embedder_name,
+            embedder_stats,
+            on_embed,
+        }
     }
 
     pub fn request_embedding(
@@ -114,7 +129,12 @@ impl<'doc, C: OnEmbed<'doc>, I: Input> EmbedSession<'doc, C, I> {
         if self.inputs.is_empty() {
             return Ok(());
         }
-        let res = match I::embed_ref(self.inputs.as_slice(), self.embedder, self.threads) {
+        let res = match I::embed_ref(
+            self.inputs.as_slice(),
+            self.embedder,
+            self.threads,
+            self.embedder_stats,
+        ) {
             Ok(embeddings) => {
                 for (metadata, embedding) in self.metadata.iter().copied().zip(embeddings) {
                     self.on_embed.process_embedding_response(EmbeddingResponse {

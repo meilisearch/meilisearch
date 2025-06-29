@@ -11,11 +11,11 @@ use super::super::channel::*;
 use crate::database_stats::DatabaseStats;
 use crate::documents::PrimaryKey;
 use crate::fields_ids_map::metadata::FieldIdMapWithMetadata;
-use crate::index::IndexEmbeddingConfig;
 use crate::progress::Progress;
 use crate::update::settings::InnerIndexSettings;
+use crate::vector::db::IndexEmbeddingConfig;
 use crate::vector::settings::EmbedderAction;
-use crate::vector::{ArroyWrapper, Embedder, EmbeddingConfigs, Embeddings};
+use crate::vector::{ArroyWrapper, Embedder, Embeddings, RuntimeEmbedders};
 use crate::{Error, Index, InternalError, Result, UserError};
 
 pub fn write_to_db(
@@ -63,6 +63,14 @@ pub fn write_to_db(
                 }
                 writer.del_items(wtxn, *dimensions, docid)?;
                 writer.add_items(wtxn, docid, &embeddings)?;
+            }
+            ReceiverAction::LargeVector(
+                large_vector @ LargeVector { docid, embedder_id, extractor_id, .. },
+            ) => {
+                let (_, _, writer, dimensions) =
+                    arroy_writers.get(&embedder_id).expect("requested a missing embedder");
+                let embedding = large_vector.read_embedding(*dimensions);
+                writer.add_item_in_store(wtxn, docid, extractor_id, embedding)?;
             }
         }
 
@@ -137,7 +145,7 @@ where
         )?;
     }
 
-    index.put_embedding_configs(wtxn, index_embeddings)?;
+    index.embedding_configs().put_embedding_configs(wtxn, index_embeddings)?;
     Ok(())
 }
 
@@ -147,7 +155,7 @@ pub(super) fn update_index(
     wtxn: &mut RwTxn<'_>,
     new_fields_ids_map: FieldIdMapWithMetadata,
     new_primary_key: Option<PrimaryKey<'_>>,
-    embedders: EmbeddingConfigs,
+    embedders: RuntimeEmbedders,
     field_distribution: std::collections::BTreeMap<String, u64>,
     document_ids: roaring::RoaringBitmap,
 ) -> Result<()> {
@@ -226,14 +234,36 @@ pub fn write_from_bbqueue(
                     arroy_writers.get(&embedder_id).expect("requested a missing embedder");
                 let mut embeddings = Embeddings::new(*dimensions);
                 let all_embeddings = asvs.read_all_embeddings_into_vec(frame, aligned_embedding);
-                if embeddings.append(all_embeddings.to_vec()).is_err() {
-                    return Err(Error::UserError(UserError::InvalidVectorDimensions {
-                        expected: *dimensions,
-                        found: all_embeddings.len(),
-                    }));
-                }
                 writer.del_items(wtxn, *dimensions, docid)?;
-                writer.add_items(wtxn, docid, &embeddings)?;
+                if !all_embeddings.is_empty() {
+                    if embeddings.append(all_embeddings.to_vec()).is_err() {
+                        return Err(Error::UserError(UserError::InvalidVectorDimensions {
+                            expected: *dimensions,
+                            found: all_embeddings.len(),
+                        }));
+                    }
+                    writer.add_items(wtxn, docid, &embeddings)?;
+                }
+            }
+            EntryHeader::ArroySetVector(
+                asv @ ArroySetVector { docid, embedder_id, extractor_id, .. },
+            ) => {
+                let frame = frame_with_header.frame();
+                let (_, _, writer, dimensions) =
+                    arroy_writers.get(&embedder_id).expect("requested a missing embedder");
+                let embedding = asv.read_all_embeddings_into_vec(frame, aligned_embedding);
+
+                if embedding.is_empty() {
+                    writer.del_item_in_store(wtxn, docid, extractor_id, *dimensions)?;
+                } else {
+                    if embedding.len() != *dimensions {
+                        return Err(Error::UserError(UserError::InvalidVectorDimensions {
+                            expected: *dimensions,
+                            found: embedding.len(),
+                        }));
+                    }
+                    writer.add_item_in_store(wtxn, docid, extractor_id, embedding)?;
+                }
             }
         }
     }

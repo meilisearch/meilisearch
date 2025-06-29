@@ -13,21 +13,17 @@ use super::super::thread_local::{FullySend, ThreadLocal};
 use super::super::FacetFieldIdsDelta;
 use super::document_changes::{extract, DocumentChanges, IndexingContext};
 use super::settings_changes::settings_change_extract;
-use crate::documents::FieldIdMapper;
-use crate::documents::PrimaryKey;
-use crate::index::IndexEmbeddingConfig;
-use crate::progress::EmbedderStats;
-use crate::progress::MergingWordCache;
+use crate::documents::{FieldIdMapper, PrimaryKey};
+use crate::progress::{EmbedderStats, MergingWordCache};
 use crate::proximity::ProximityPrecision;
 use crate::update::new::extract::EmbeddingExtractor;
 use crate::update::new::indexer::settings_changes::DocumentsIndentifiers;
 use crate::update::new::merger::merge_and_send_rtree;
 use crate::update::new::{merge_and_send_docids, merge_and_send_facet_docids, FacetDatabases};
 use crate::update::settings::SettingsDelta;
-use crate::vector::EmbeddingConfigs;
-use crate::Index;
-use crate::InternalError;
-use crate::{Result, ThreadPoolNoAbort, ThreadPoolNoAbortBuilder};
+use crate::vector::db::IndexEmbeddingConfig;
+use crate::vector::RuntimeEmbedders;
+use crate::{Index, InternalError, Result, ThreadPoolNoAbort, ThreadPoolNoAbortBuilder};
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn extract_all<'pl, 'extractor, DC, MSP>(
@@ -35,7 +31,7 @@ pub(super) fn extract_all<'pl, 'extractor, DC, MSP>(
     indexing_context: IndexingContext<MSP>,
     indexer_span: Span,
     extractor_sender: ExtractorBbqueueSender,
-    embedders: &EmbeddingConfigs,
+    embedders: &RuntimeEmbedders,
     extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
     finished_extraction: &AtomicBool,
     field_distribution: &mut BTreeMap<String, u64>,
@@ -275,14 +271,19 @@ where
             let span = tracing::debug_span!(target: "indexing::documents::merge", "vectors");
             let _entered = span.enter();
 
+            let embedder_configs = index.embedding_configs();
             for config in &mut index_embeddings {
+                let mut infos = embedder_configs.embedder_info(&rtxn, &config.name)?.unwrap();
+
                 'data: for data in datastore.iter_mut() {
                     let data = &mut data.get_mut().0;
-                    let Some(deladd) = data.remove(&config.name) else {
+                    let Some(delta) = data.remove(&config.name) else {
                         continue 'data;
                     };
-                    deladd.apply_to(&mut config.user_provided, modified_docids);
+                    delta.apply_to(&mut infos.embedding_status);
                 }
+
+                extractor_sender.embeddings().embedding_status(&config.name, infos).unwrap();
             }
         }
     }
