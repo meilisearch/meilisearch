@@ -61,6 +61,8 @@ pub struct SearchAggregator<Method: AggregateMethod> {
     semantic_ratio: bool,
     hybrid: bool,
     retrieve_vectors: bool,
+    // Number of requests containing `media`
+    total_media: usize,
 
     // every time a search is done, we increment the counter linked to the used settings
     matching_strategy: HashMap<String, usize>,
@@ -101,6 +103,7 @@ impl<Method: AggregateMethod> SearchAggregator<Method> {
         let SearchQuery {
             q,
             vector,
+            media,
             offset,
             limit,
             page,
@@ -175,6 +178,11 @@ impl<Method: AggregateMethod> SearchAggregator<Method> {
         if let Some(ref vector) = vector {
             ret.max_vector_size = vector.len();
         }
+
+        if media.is_some() {
+            ret.total_media = 1;
+        }
+
         ret.retrieve_vectors |= retrieve_vectors;
 
         if query.is_finite_pagination() {
@@ -277,6 +285,7 @@ impl<Method: AggregateMethod> Aggregate for SearchAggregator<Method> {
             show_ranking_score_details,
             semantic_ratio,
             hybrid,
+            total_media,
             total_degraded,
             total_used_negative_operator,
             ranking_score_threshold,
@@ -327,6 +336,7 @@ impl<Method: AggregateMethod> Aggregate for SearchAggregator<Method> {
         self.retrieve_vectors |= retrieve_vectors;
         self.semantic_ratio |= semantic_ratio;
         self.hybrid |= hybrid;
+        self.total_media += total_media;
 
         // pagination
         self.max_limit = self.max_limit.max(max_limit);
@@ -403,6 +413,7 @@ impl<Method: AggregateMethod> Aggregate for SearchAggregator<Method> {
             show_ranking_score_details,
             semantic_ratio,
             hybrid,
+            total_media,
             total_degraded,
             total_used_negative_operator,
             ranking_score_threshold,
@@ -450,6 +461,7 @@ impl<Method: AggregateMethod> Aggregate for SearchAggregator<Method> {
             "hybrid": {
                 "enabled": hybrid,
                 "semantic_ratio": semantic_ratio,
+                "total_media": total_media,
             },
             "pagination": {
                "max_limit": max_limit,
