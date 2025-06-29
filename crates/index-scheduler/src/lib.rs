@@ -57,12 +57,15 @@ use meilisearch_types::features::{
 use meilisearch_types::heed::byteorder::BE;
 use meilisearch_types::heed::types::{DecodeIgnore, SerdeJson, Str, I128};
 use meilisearch_types::heed::{self, Database, Env, RoTxn, WithoutTls};
-use meilisearch_types::milli::index::IndexEmbeddingConfig;
 use meilisearch_types::milli::update::IndexerConfig;
-use meilisearch_types::milli::vector::{Embedder, EmbedderOptions, EmbeddingConfigs};
+use meilisearch_types::milli::vector::json_template::JsonTemplate;
+use meilisearch_types::milli::vector::{
+    Embedder, EmbedderOptions, RuntimeEmbedder, RuntimeEmbedders, RuntimeFragment,
+};
 use meilisearch_types::milli::{self, Index};
 use meilisearch_types::task_view::TaskView;
 use meilisearch_types::tasks::{KindWithContent, Task};
+use milli::vector::db::IndexEmbeddingConfig;
 use processing::ProcessingTasks;
 pub use queue::Query;
 use queue::Queue;
@@ -851,29 +854,42 @@ impl IndexScheduler {
         &self,
         index_uid: String,
         embedding_configs: Vec<IndexEmbeddingConfig>,
-    ) -> Result<EmbeddingConfigs> {
+    ) -> Result<RuntimeEmbedders> {
         let res: Result<_> = embedding_configs
             .into_iter()
             .map(
                 |IndexEmbeddingConfig {
                      name,
                      config: milli::vector::EmbeddingConfig { embedder_options, prompt, quantized },
-                     ..
-                 }| {
-                    let prompt = Arc::new(
-                        prompt
-                            .try_into()
-                            .map_err(meilisearch_types::milli::Error::from)
-                            .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?,
-                    );
+                     fragments,
+                 }|
+                 -> Result<(String, Arc<RuntimeEmbedder>)> {
+                    let document_template = prompt
+                        .try_into()
+                        .map_err(meilisearch_types::milli::Error::from)
+                        .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?;
+
+                    let fragments = fragments
+                        .into_inner()
+                        .into_iter()
+                        .map(|fragment| {
+                            let value = embedder_options.fragment(&fragment.name).unwrap();
+                            let template = JsonTemplate::new(value.clone()).unwrap();
+                            RuntimeFragment { name: fragment.name, id: fragment.id, template }
+                        })
+                        .collect();
                     // optimistically return existing embedder
                     {
                         let embedders = self.embedders.read().unwrap();
                         if let Some(embedder) = embedders.get(&embedder_options) {
-                            return Ok((
-                                name,
-                                (embedder.clone(), prompt, quantized.unwrap_or_default()),
-                            ));
+                            let runtime = Arc::new(RuntimeEmbedder {
+                                embedder: embedder.clone(),
+                                document_template,
+                                fragments,
+                                is_quantized: quantized.unwrap_or_default(),
+                            });
+
+                            return Ok((name, runtime));
                         }
                     }
 
@@ -889,11 +905,19 @@ impl IndexScheduler {
                         let mut embedders = self.embedders.write().unwrap();
                         embedders.insert(embedder_options, embedder.clone());
                     }
-                    Ok((name, (embedder, prompt, quantized.unwrap_or_default())))
+
+                    let runtime = Arc::new(RuntimeEmbedder {
+                        embedder: embedder.clone(),
+                        document_template,
+                        fragments,
+                        is_quantized: quantized.unwrap_or_default(),
+                    });
+
+                    Ok((name, runtime))
                 },
             )
             .collect();
-        res.map(EmbeddingConfigs::new)
+        res.map(RuntimeEmbedders::new)
     }
 
     pub fn chat_settings(&self, uid: &str) -> Result<Option<ChatCompletionSettings>> {

@@ -399,10 +399,10 @@ impl SearchKind {
         route: Route,
     ) -> Result<(String, Arc<Embedder>, bool), ResponseError> {
         let rtxn = index.read_txn()?;
-        let embedder_configs = index.embedding_configs(&rtxn)?;
+        let embedder_configs = index.embedding_configs().embedding_configs(&rtxn)?;
         let embedders = index_scheduler.embedders(index_uid, embedder_configs)?;
 
-        let (embedder, _, quantized) = embedders
+        let (embedder, quantized) = embedders
             .get(embedder_name)
             .ok_or(match route {
                 Route::Search | Route::MultiSearch => {
@@ -412,6 +412,7 @@ impl SearchKind {
                     milli::UserError::InvalidSimilarEmbedder(embedder_name.to_owned())
                 }
             })
+            .map(|runtime| (runtime.embedder.clone(), runtime.is_quantized))
             .map_err(milli::Error::from)?;
 
         if let Some(vector_len) = vector_len {
@@ -1328,7 +1329,6 @@ struct HitMaker<'a> {
     vectors_fid: Option<FieldId>,
     retrieve_vectors: RetrieveVectors,
     to_retrieve_ids: BTreeSet<FieldId>,
-    embedding_configs: Vec<index::IndexEmbeddingConfig>,
     formatter_builder: MatcherBuilder<'a>,
     formatted_options: BTreeMap<FieldId, FormatOptions>,
     show_ranking_score: bool,
@@ -1443,8 +1443,6 @@ impl<'a> HitMaker<'a> {
             &displayed_ids,
         );
 
-        let embedding_configs = index.embedding_configs(rtxn)?;
-
         Ok(Self {
             index,
             rtxn,
@@ -1453,7 +1451,6 @@ impl<'a> HitMaker<'a> {
             vectors_fid,
             retrieve_vectors,
             to_retrieve_ids,
-            embedding_configs,
             formatter_builder,
             formatted_options,
             show_ranking_score: format.show_ranking_score,
@@ -1499,14 +1496,8 @@ impl<'a> HitMaker<'a> {
                 Some(Value::Object(map)) => map,
                 _ => Default::default(),
             };
-            for (name, vector) in self.index.embeddings(self.rtxn, id)? {
-                let user_provided = self
-                    .embedding_configs
-                    .iter()
-                    .find(|conf| conf.name == name)
-                    .is_some_and(|conf| conf.user_provided.contains(id));
-                let embeddings =
-                    ExplicitVectors { embeddings: Some(vector.into()), regenerate: !user_provided };
+            for (name, (vector, regenerate)) in self.index.embeddings(self.rtxn, id)? {
+                let embeddings = ExplicitVectors { embeddings: Some(vector.into()), regenerate };
                 vectors.insert(
                     name,
                     serde_json::to_value(embeddings).map_err(InternalError::SerdeJson)?,

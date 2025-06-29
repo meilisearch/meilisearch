@@ -8,7 +8,7 @@ use maplit::hashset;
 use milli::progress::Progress;
 use milli::update::new::indexer;
 use milli::update::{IndexerConfig, Settings};
-use milli::vector::EmbeddingConfigs;
+use milli::vector::RuntimeEmbedders;
 use milli::{AscDesc, Criterion, Index, Member, Search, SearchResult, TermsMatchingStrategy};
 use rand::Rng;
 use Criterion::*;
@@ -288,7 +288,7 @@ fn criteria_ascdesc() {
     let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-    let embedders = EmbeddingConfigs::default();
+    let embedders = RuntimeEmbedders::default();
     let mut indexer = indexer::DocumentOperation::new();
 
     let mut file = tempfile::tempfile().unwrap();

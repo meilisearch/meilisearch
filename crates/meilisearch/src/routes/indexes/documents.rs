@@ -1452,7 +1452,6 @@ fn some_documents<'a, 't: 'a>(
 ) -> Result<impl Iterator<Item = Result<Document, ResponseError>> + 'a, ResponseError> {
     let fields_ids_map = index.fields_ids_map(rtxn)?;
     let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
-    let embedding_configs = index.embedding_configs(rtxn)?;
 
     Ok(index.iter_documents(rtxn, doc_ids)?.map(move |ret| {
         ret.map_err(ResponseError::from).and_then(|(key, document)| -> Result<_, ResponseError> {
@@ -1468,15 +1467,9 @@ fn some_documents<'a, 't: 'a>(
                         Some(Value::Object(map)) => map,
                         _ => Default::default(),
                     };
-                    for (name, vector) in index.embeddings(rtxn, key)? {
-                        let user_provided = embedding_configs
-                            .iter()
-                            .find(|conf| conf.name == name)
-                            .is_some_and(|conf| conf.user_provided.contains(key));
-                        let embeddings = ExplicitVectors {
-                            embeddings: Some(vector.into()),
-                            regenerate: !user_provided,
-                        };
+                    for (name, (vector, regenerate)) in index.embeddings(rtxn, key)? {
+                        let embeddings =
+                            ExplicitVectors { embeddings: Some(vector.into()), regenerate };
                         vectors.insert(
                             name,
                             serde_json::to_value(embeddings).map_err(MeilisearchHttpError::from)?,
