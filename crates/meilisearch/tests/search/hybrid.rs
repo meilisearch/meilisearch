@@ -499,7 +499,7 @@ async fn query_combination() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "Invalid request: missing `hybrid` parameter when `vector` is present.",
+      "message": "Invalid request: missing `hybrid` parameter when `vector` or `media` are present.",
       "code": "missing_search_hybrid",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#missing_search_hybrid"

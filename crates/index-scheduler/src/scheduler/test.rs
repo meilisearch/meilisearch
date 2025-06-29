@@ -690,11 +690,20 @@ fn test_settings_update() {
     let index = index_scheduler.index("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
 
-    let configs = index.embedding_configs(&rtxn).unwrap();
-    let IndexEmbeddingConfig { name, config, user_provided } = configs.first().unwrap();
+    let embedders = index.embedding_configs();
+    let configs = embedders.embedding_configs(&rtxn).unwrap();
+    let IndexEmbeddingConfig { name, config, fragments } = configs.first().unwrap();
+    let info = embedders.embedder_info(&rtxn, name).unwrap().unwrap();
+    insta::assert_snapshot!(info.embedder_id, @"0");
+    insta::assert_debug_snapshot!(info.embedding_status.user_provided_docids(), @"RoaringBitmap<[]>");
+    insta::assert_debug_snapshot!(info.embedding_status.skip_regenerate_docids(), @"RoaringBitmap<[]>");
     insta::assert_snapshot!(name, @"default");
-    insta::assert_debug_snapshot!(user_provided, @"RoaringBitmap<[]>");
     insta::assert_json_snapshot!(config.embedder_options);
+    insta::assert_debug_snapshot!(fragments, @r###"
+    FragmentConfigs(
+        [],
+    )
+    "###);
 }
 
 #[test]
