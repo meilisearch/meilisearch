@@ -4,6 +4,7 @@ use std::fs::File;
 use std::io::{self, BufReader};
 
 use bytemuck::allocation::pod_collect_to_vec;
+use byteorder::{BigEndian, ReadBytesExt as _};
 use grenad::{MergeFunction, Merger, MergerBuilder};
 use heed::types::Bytes;
 use heed::{BytesDecode, RwTxn};
@@ -18,7 +19,6 @@ use super::helpers::{
 use crate::external_documents_ids::{DocumentOperation, DocumentOperationKind};
 use crate::facet::FacetType;
 use crate::index::db_name::DOCUMENTS;
-use crate::index::IndexEmbeddingConfig;
 use crate::proximity::MAX_DISTANCE;
 use crate::update::del_add::{deladd_serialize_add_side, DelAdd, KvReaderDelAdd};
 use crate::update::facet::FacetsUpdate;
@@ -26,6 +26,7 @@ use crate::update::index_documents::helpers::{
     as_cloneable_grenad, try_split_array_at, KeepLatestObkv,
 };
 use crate::update::settings::InnerIndexSettingsDiff;
+use crate::vector::db::{EmbeddingStatusDelta, IndexEmbeddingConfig};
 use crate::vector::ArroyWrapper;
 use crate::{
     lat_lng_to_xyz, CboRoaringBitmapCodec, DocumentId, FieldId, GeoPoint, Index, InternalError,
@@ -86,12 +87,14 @@ pub(crate) enum TypedChunk {
     GeoPoints(grenad::Reader<BufReader<File>>),
     VectorPoints {
         remove_vectors: grenad::Reader<BufReader<File>>,
-        embeddings: Option<grenad::Reader<BufReader<File>>>,
+        // docid -> vector
+        embeddings_from_prompts: Option<grenad::Reader<BufReader<File>>>,
+        // docid, extractor_id -> Option<vector>,
+        embeddings_from_fragments: Option<grenad::Reader<BufReader<File>>>,
         expected_dimension: usize,
         manual_vectors: grenad::Reader<BufReader<File>>,
         embedder_name: String,
-        add_to_user_provided: RoaringBitmap,
-        remove_from_user_provided: RoaringBitmap,
+        embedding_status_delta: EmbeddingStatusDelta,
     },
 }
 
@@ -155,6 +158,7 @@ pub(crate) fn write_typed_chunk_into_index(
             let mut iter = merger.into_stream_merger_iter()?;
 
             let embedders: BTreeSet<_> = index
+                .embedding_configs()
                 .embedding_configs(wtxn)?
                 .into_iter()
                 .map(|IndexEmbeddingConfig { name, .. }| name)
@@ -614,57 +618,66 @@ pub(crate) fn write_typed_chunk_into_index(
             let span = tracing::trace_span!(target: "indexing::write_db", "vector_points");
             let _entered = span.enter();
 
+            let embedders = index.embedding_configs();
+
             let mut remove_vectors_builder = MergerBuilder::new(KeepFirst);
             let mut manual_vectors_builder = MergerBuilder::new(KeepFirst);
-            let mut embeddings_builder = MergerBuilder::new(KeepFirst);
-            let mut add_to_user_provided = RoaringBitmap::new();
-            let mut remove_from_user_provided = RoaringBitmap::new();
+            let mut embeddings_from_prompts_builder = MergerBuilder::new(KeepFirst);
+            let mut embeddings_from_fragments_builder = MergerBuilder::new(KeepFirst);
             let mut params = None;
+            let mut infos = None;
             for typed_chunk in typed_chunks {
                 let TypedChunk::VectorPoints {
                     remove_vectors,
                     manual_vectors,
-                    embeddings,
+                    embeddings_from_prompts,
+                    embeddings_from_fragments,
                     expected_dimension,
                     embedder_name,
-                    add_to_user_provided: aud,
-                    remove_from_user_provided: rud,
+                    embedding_status_delta,
                 } = typed_chunk
                 else {
                     unreachable!();
                 };
 
+                if infos.is_none() {
+                    infos = Some(embedders.embedder_info(wtxn, &embedder_name)?.ok_or(
+                        InternalError::DatabaseMissingEntry {
+                            db_name: "embedder_category_id",
+                            key: None,
+                        },
+                    )?);
+                }
+
                 params = Some((expected_dimension, embedder_name));
 
                 remove_vectors_builder.push(remove_vectors.into_cursor()?);
                 manual_vectors_builder.push(manual_vectors.into_cursor()?);
-                if let Some(embeddings) = embeddings {
-                    embeddings_builder.push(embeddings.into_cursor()?);
+                if let Some(embeddings) = embeddings_from_prompts {
+                    embeddings_from_prompts_builder.push(embeddings.into_cursor()?);
                 }
-                add_to_user_provided |= aud;
-                remove_from_user_provided |= rud;
+                if let Some(embeddings) = embeddings_from_fragments {
+                    embeddings_from_fragments_builder.push(embeddings.into_cursor()?);
+                }
+
+                if let Some(infos) = &mut infos {
+                    embedding_status_delta.apply_to(&mut infos.embedding_status);
+                }
             }
 
             // typed chunks has always at least 1 chunk.
             let Some((expected_dimension, embedder_name)) = params else { unreachable!() };
+            let Some(infos) = infos else { unreachable!() };
 
-            let mut embedding_configs = index.embedding_configs(wtxn)?;
-            let index_embedder_config = embedding_configs
-                .iter_mut()
-                .find(|IndexEmbeddingConfig { name, .. }| name == &embedder_name)
-                .unwrap();
-            index_embedder_config.user_provided -= remove_from_user_provided;
-            index_embedder_config.user_provided |= add_to_user_provided;
+            embedders.put_embedder_info(wtxn, &embedder_name, &infos)?;
 
-            index.put_embedding_configs(wtxn, embedding_configs)?;
-
-            let embedder_index = index.embedder_category_id.get(wtxn, &embedder_name)?.ok_or(
-                InternalError::DatabaseMissingEntry { db_name: "embedder_category_id", key: None },
-            )?;
-            let binary_quantized =
-                settings_diff.old.embedding_configs.get(&embedder_name).is_some_and(|conf| conf.2);
+            let binary_quantized = settings_diff
+                .old
+                .embedding_configs
+                .get(&embedder_name)
+                .is_some_and(|conf| conf.is_quantized);
             // FIXME: allow customizing distance
-            let writer = ArroyWrapper::new(index.vector_arroy, embedder_index, binary_quantized);
+            let writer = ArroyWrapper::new(index.vector_arroy, infos.embedder_id, binary_quantized);
 
             // remove vectors for docids we want them removed
             let merger = remove_vectors_builder.build();
@@ -674,8 +687,8 @@ pub(crate) fn write_typed_chunk_into_index(
                 writer.del_items(wtxn, expected_dimension, docid)?;
             }
 
-            // add generated embeddings
-            let merger = embeddings_builder.build();
+            // add generated embeddings -- from prompts
+            let merger = embeddings_from_prompts_builder.build();
             let mut iter = merger.into_stream_merger_iter()?;
             while let Some((key, value)) = iter.next()? {
                 let docid = key.try_into().map(DocumentId::from_be_bytes).unwrap();
@@ -700,6 +713,24 @@ pub(crate) fn write_typed_chunk_into_index(
                     )));
                 }
                 writer.add_items(wtxn, docid, &embeddings)?;
+            }
+
+            // add generated embeddings -- from fragments
+            let merger = embeddings_from_fragments_builder.build();
+            let mut iter = merger.into_stream_merger_iter()?;
+            while let Some((mut key, value)) = iter.next()? {
+                let docid = key.read_u32::<BigEndian>().unwrap();
+                let extractor_id = key.read_u8().unwrap();
+                if value.is_empty() {
+                    writer.del_item_in_store(wtxn, docid, extractor_id, expected_dimension)?;
+                } else {
+                    let data = pod_collect_to_vec(value);
+                    // it is a code error to have embeddings and not expected_dimension
+                    if data.len() != expected_dimension {
+                        panic!("wrong dimensions")
+                    }
+                    writer.add_item_in_store(wtxn, docid, extractor_id, &data)?;
+                }
             }
 
             // perform the manual diff
