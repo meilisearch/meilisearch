@@ -797,6 +797,27 @@ pub enum EmbedderOptions {
     Composite(composite::EmbedderOptions),
 }
 
+impl EmbedderOptions {
+    pub fn fragment(&self, name: &str) -> Option<&serde_json::Value> {
+        match &self {
+            EmbedderOptions::HuggingFace(_)
+            | EmbedderOptions::OpenAi(_)
+            | EmbedderOptions::Ollama(_)
+            | EmbedderOptions::UserProvided(_) => None,
+            EmbedderOptions::Rest(embedder_options) => {
+                embedder_options.indexing_fragments.get(name)
+            }
+            EmbedderOptions::Composite(embedder_options) => {
+                if let SubEmbedderOptions::Rest(embedder_options) = &embedder_options.index {
+                    embedder_options.indexing_fragments.get(name)
+                } else {
+                    None
+                }
+            }
+        }
+    }
+}
+
 impl Default for EmbedderOptions {
     fn default() -> Self {
         Self::HuggingFace(Default::default())
@@ -838,6 +859,17 @@ impl Embedder {
     #[tracing::instrument(level = "debug", skip_all, target = "search")]
     pub fn embed_search(
         &self,
+        query: SearchQuery<'_>,
+        deadline: Option<Instant>,
+    ) -> std::result::Result<Embedding, EmbedError> {
+        match query {
+            SearchQuery::Text(text) => self.embed_search_text(text, deadline),
+            SearchQuery::Media { q, media } => self.embed_search_media(q, media, deadline),
+        }
+    }
+
+    pub fn embed_search_text(
+        &self,
         text: &str,
         deadline: Option<Instant>,
     ) -> std::result::Result<Embedding, EmbedError> {
@@ -858,10 +890,7 @@ impl Embedder {
                 .pop()
                 .ok_or_else(EmbedError::missing_embedding),
             Embedder::UserProvided(embedder) => embedder.embed_one(text),
-            Embedder::Rest(embedder) => embedder
-                .embed_ref(&[text], deadline, None)?
-                .pop()
-                .ok_or_else(EmbedError::missing_embedding),
+            Embedder::Rest(embedder) => embedder.embed_one(SearchQuery::Text(text), deadline, None),
             Embedder::Composite(embedder) => embedder.search.embed_one(text, deadline, None),
         }?;
 
@@ -870,6 +899,18 @@ impl Embedder {
         }
 
         Ok(embedding)
+    }
+
+    pub fn embed_search_media(
+        &self,
+        q: Option<&str>,
+        media: Option<&serde_json::Value>,
+        deadline: Option<Instant>,
+    ) -> std::result::Result<Embedding, EmbedError> {
+        let Embedder::Rest(embedder) = self else {
+            return Err(EmbedError::rest_media_not_a_rest());
+        };
+        embedder.embed_one(SearchQuery::Media { q, media }, deadline, None)
     }
 
     /// Embed multiple chunks of texts.
@@ -913,6 +954,26 @@ impl Embedder {
             Embedder::Composite(embedder) => {
                 embedder.index.embed_index_ref(texts, threads, embedder_stats)
             }
+        }
+    }
+
+    pub fn embed_index_ref_fragments(
+        &self,
+        fragments: &[serde_json::Value],
+        threads: &ThreadPoolNoAbort,
+        embedder_stats: &EmbedderStats,
+    ) -> std::result::Result<Vec<Embedding>, EmbedError> {
+        if let Embedder::Rest(embedder) = self {
+            embedder.embed_index_ref(fragments, threads, embedder_stats)
+        } else {
+            let Embedder::Composite(embedder) = self else {
+                unimplemented!("embedding fragments is only available for rest embedders")
+            };
+            let crate::vector::composite::SubEmbedder::Rest(embedder) = &embedder.index else {
+                unimplemented!("embedding fragments is only available for rest embedders")
+            };
+
+            embedder.embed_index_ref(fragments, threads, embedder_stats)
         }
     }
 
@@ -985,6 +1046,12 @@ impl Embedder {
             Embedder::Composite(embedder) => embedder.search.cache(),
         }
     }
+}
+
+#[derive(Clone, Copy)]
+pub enum SearchQuery<'a> {
+    Text(&'a str),
+    Media { q: Option<&'a str>, media: Option<&'a serde_json::Value> },
 }
 
 /// Describes the mean and sigma of distribution of embedding similarity in the embedding space.
