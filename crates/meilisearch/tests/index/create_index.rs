@@ -161,9 +161,9 @@ async fn test_create_multiple_indexes() {
     let (task2, _) = index2.create(None).await;
     let (task3, _) = index3.create(None).await;
 
-    index1.wait_task(task1.uid()).await.succeeded();
-    index2.wait_task(task2.uid()).await.succeeded();
-    index3.wait_task(task3.uid()).await.succeeded();
+    server.wait_task(task1.uid()).await.succeeded();
+    server.wait_task(task2.uid()).await.succeeded();
+    server.wait_task(task3.uid()).await.succeeded();
 
     assert_eq!(index1.get().await.1, 200);
     assert_eq!(index2.get().await.1, 200);

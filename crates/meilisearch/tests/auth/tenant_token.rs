@@ -100,11 +100,11 @@ macro_rules! compute_authorized_search {
         let index = server.index("sales");
         let documents = DOCUMENTS.clone();
         let (task1,_status_code) = index.add_documents(documents, None).await;
-        index.wait_task(task1.uid()).await.succeeded();
+        server.wait_task(task1.uid()).await.succeeded();
         let (task2,_status_code) = index
             .update_settings(json!({"filterableAttributes": ["color"]}))
             .await;
-        index.wait_task(task2.uid()).await.succeeded();
+        server.wait_task(task2.uid()).await.succeeded();
         drop(index);
 
         for key_content in ACCEPTED_KEYS.iter() {
@@ -147,7 +147,7 @@ macro_rules! compute_forbidden_search {
         let index = server.index("sales");
         let documents = DOCUMENTS.clone();
         let (task, _status_code) = index.add_documents(documents, None).await;
-        index.wait_task(task.uid()).await.succeeded();
+        server.wait_task(task.uid()).await.succeeded();
         drop(index);
 
         for key_content in $parent_keys.iter() {

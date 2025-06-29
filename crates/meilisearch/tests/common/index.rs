@@ -1,15 +1,13 @@
 use std::fmt::Write;
 use std::marker::PhantomData;
 use std::panic::{catch_unwind, resume_unwind, UnwindSafe};
-use std::time::Duration;
 
 use actix_web::http::StatusCode;
-use tokio::time::sleep;
 use urlencoding::encode as urlencode;
 
 use super::encoder::Encoder;
 use super::service::Service;
-use super::{Owned, Shared, Value};
+use super::{Owned, Server, Shared, Value};
 use crate::json;
 
 pub struct Index<'a, State = Owned> {
@@ -44,9 +42,9 @@ impl<'a> Index<'a, Owned> {
             )
             .await;
         assert_eq!(code, 202);
-        let update_id = response["taskUid"].as_i64().unwrap();
-        self.wait_task(update_id as u64).await;
-        update_id as u64
+        let update_id = response["taskUid"].as_u64().unwrap();
+        self.wait_task(update_id).await;
+        update_id
     }
 
     pub async fn load_test_set_ndjson(&self) -> u64 {
@@ -60,9 +58,9 @@ impl<'a> Index<'a, Owned> {
             )
             .await;
         assert_eq!(code, 202);
-        let update_id = response["taskUid"].as_i64().unwrap();
-        self.wait_task(update_id as u64).await;
-        update_id as u64
+        let update_id = response["taskUid"].as_u64().unwrap();
+        self.wait_task(update_id).await;
+        update_id
     }
 
     pub async fn create(&self, primary_key: Option<&str>) -> (Value, StatusCode) {
@@ -364,21 +362,8 @@ impl<State> Index<'_, State> {
         self.service.delete(url).await
     }
 
-    pub async fn wait_task(&self, update_id: u64) -> Value {
-        // try several times to get status, or panic to not wait forever
-        let url = format!("/tasks/{}", update_id);
-        for _ in 0..100 {
-            let (response, status_code) = self.service.get(&url).await;
-            assert_eq!(200, status_code, "response: {}", response);
-
-            if response["status"] == "succeeded" || response["status"] == "failed" {
-                return response;
-            }
-
-            // wait 0.5 second.
-            sleep(Duration::from_millis(500)).await;
-        }
-        panic!("Timeout waiting for update id");
+    async fn wait_task(&self, update_id: u64) -> Value {
+        Server::<Shared>::_wait_task(async |url| self.service.get(url).await, update_id).await
     }
 
     pub async fn get_task(&self, update_id: u64) -> (Value, StatusCode) {
