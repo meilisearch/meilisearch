@@ -18,6 +18,7 @@ use crate::prompt::{Prompt, PromptData};
 use crate::ThreadPoolNoAbort;
 
 pub mod composite;
+pub mod db;
 pub mod error;
 pub mod hf;
 pub mod json_template;
