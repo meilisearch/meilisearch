@@ -42,6 +42,7 @@ impl MultiSearchAggregator {
             federation_options,
             q: _,
             vector: _,
+            media: _,
             offset: _,
             limit: _,
             page: _,
