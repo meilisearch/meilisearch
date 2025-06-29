@@ -5,7 +5,7 @@ use milli::documents::mmap_from_objects;
 use milli::progress::Progress;
 use milli::update::new::indexer;
 use milli::update::{IndexerConfig, Settings};
-use milli::vector::EmbeddingConfigs;
+use milli::vector::RuntimeEmbedders;
 use milli::{FacetDistribution, FilterableAttributesRule, Index, Object, OrderBy};
 use serde_json::{from_value, json};
 
@@ -35,7 +35,7 @@ fn test_facet_distribution_with_no_facet_values() {
     let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-    let embedders = EmbeddingConfigs::default();
+    let embedders = RuntimeEmbedders::default();
     let mut indexer = indexer::DocumentOperation::new();
 
     let doc1: Object = from_value(

@@ -563,7 +563,7 @@ fn import_dump(
         let reader = BufReader::new(file);
         let reader = DocumentsBatchReader::from_reader(reader)?;
 
-        let embedder_configs = index.embedding_configs(&wtxn)?;
+        let embedder_configs = index.embedding_configs().embedding_configs(&wtxn)?;
         let embedders = index_scheduler.embedders(uid.to_string(), embedder_configs)?;
 
         let builder = milli::update::IndexDocuments::new(

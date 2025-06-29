@@ -545,7 +545,6 @@ fn export_documents(
             let rtxn = index.read_txn()?;
             let fields_ids_map = index.fields_ids_map(&rtxn)?;
             let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
-            let embedding_configs = index.embedding_configs(&rtxn)?;
 
             if let Some(offset) = offset {
                 eprintln!("Skipping {offset} documents");
@@ -592,17 +591,12 @@ fn export_documents(
                             .into());
                         };
 
-                        for (embedder_name, embeddings) in embeddings {
-                            let user_provided = embedding_configs
-                                .iter()
-                                .find(|conf| conf.name == embedder_name)
-                                .is_some_and(|conf| conf.user_provided.contains(id));
-
+                        for (embedder_name, (embeddings, regenerate)) in embeddings {
                             let embeddings = ExplicitVectors {
                                 embeddings: Some(VectorOrArrayOfVectors::from_array_of_vectors(
                                     embeddings,
                                 )),
-                                regenerate: !user_provided,
+                                regenerate,
                             };
                             vectors
                                 .insert(embedder_name, serde_json::to_value(embeddings).unwrap());
