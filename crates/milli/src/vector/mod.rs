@@ -584,6 +584,7 @@ pub struct ArroyStats {
     pub documents: RoaringBitmap,
 }
 /// One or multiple embeddings stored consecutively in a flat vector.
+#[derive(Debug, PartialEq)]
 pub struct Embeddings<F> {
     data: Vec<F>,
     dimension: usize,
@@ -734,15 +735,26 @@ impl EmbeddingConfig {
     }
 }
 
-/// Map of embedder configurations.
-///
-/// Each configuration is mapped to a name.
+/// Map of runtime embedder data.
 #[derive(Clone, Default)]
-pub struct EmbeddingConfigs(HashMap<String, (Arc<Embedder>, Arc<Prompt>, bool)>);
+pub struct RuntimeEmbedders(HashMap<String, Arc<RuntimeEmbedder>>);
 
-impl EmbeddingConfigs {
+pub struct RuntimeEmbedder {
+    pub embedder: Arc<Embedder>,
+    pub document_template: Prompt,
+    pub fragments: Vec<RuntimeFragment>,
+    pub is_quantized: bool,
+}
+
+pub struct RuntimeFragment {
+    pub name: String,
+    pub id: u8,
+    pub template: JsonTemplate,
+}
+
+impl RuntimeEmbedders {
     /// Create the map from its internal component.s
-    pub fn new(data: HashMap<String, (Arc<Embedder>, Arc<Prompt>, bool)>) -> Self {
+    pub fn new(data: HashMap<String, Arc<RuntimeEmbedder>>) -> Self {
         Self(data)
     }
 
@@ -751,24 +763,23 @@ impl EmbeddingConfigs {
     }
 
     /// Get an embedder configuration and template from its name.
-    pub fn get(&self, name: &str) -> Option<(Arc<Embedder>, Arc<Prompt>, bool)> {
+    pub fn get(&self, name: &str) -> Option<Arc<RuntimeEmbedder>> {
         self.0.get(name).cloned()
     }
 
-    pub fn inner_as_ref(&self) -> &HashMap<String, (Arc<Embedder>, Arc<Prompt>, bool)> {
+    pub fn inner_as_ref(&self) -> &HashMap<String, Arc<RuntimeEmbedder>> {
         &self.0
     }
 
-    pub fn into_inner(self) -> HashMap<String, (Arc<Embedder>, Arc<Prompt>, bool)> {
+    pub fn into_inner(self) -> HashMap<String, Arc<RuntimeEmbedder>> {
         self.0
     }
 }
 
-impl IntoIterator for EmbeddingConfigs {
-    type Item = (String, (Arc<Embedder>, Arc<Prompt>, bool));
+impl IntoIterator for RuntimeEmbedders {
+    type Item = (String, Arc<RuntimeEmbedder>);
 
-    type IntoIter =
-        std::collections::hash_map::IntoIter<String, (Arc<Embedder>, Arc<Prompt>, bool)>;
+    type IntoIter = std::collections::hash_map::IntoIter<String, Arc<RuntimeEmbedder>>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
