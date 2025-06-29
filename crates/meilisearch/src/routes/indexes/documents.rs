@@ -1551,9 +1551,10 @@ fn retrieve_documents<S: AsRef<str>>(
             Ok(match &attributes_to_retrieve {
                 Some(attributes_to_retrieve) => permissive_json_pointer::select_values(
                     &document?,
-                    attributes_to_retrieve.iter().map(|s| s.as_ref()).chain(
-                        (retrieve_vectors == RetrieveVectors::Retrieve).then_some("_vectors"),
-                    ),
+                    attributes_to_retrieve
+                        .iter()
+                        .map(|s| s.as_ref())
+                        .chain(retrieve_vectors.should_retrieve().then_some("_vectors")),
                 ),
                 None => document?,
             })
@@ -1586,7 +1587,7 @@ fn retrieve_document<S: AsRef<str>>(
             attributes_to_retrieve
                 .iter()
                 .map(|s| s.as_ref())
-                .chain((retrieve_vectors == RetrieveVectors::Retrieve).then_some("_vectors")),
+                .chain(retrieve_vectors.should_retrieve().then_some("_vectors")),
         ),
         None => document,
     };

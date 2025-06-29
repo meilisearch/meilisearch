@@ -7,7 +7,9 @@ use once_cell::sync::Lazy;
 use roaring::bitmap::RoaringBitmap;
 
 pub use self::facet::{FacetDistribution, Filter, OrderBy, DEFAULT_VALUES_PER_FACET};
-pub use self::new::matches::{FormatOptions, MatchBounds, MatcherBuilder, MatchingWords};
+pub use self::new::matches::{
+    FormatOptions, MarkerOptions, MatchBounds, MatcherBuilder, MatchingWords,
+};
 use self::new::{execute_vector_search, PartialSearchResult, VectorStoreStats};
 use crate::filterable_attributes_rules::{filtered_matching_patterns, matching_features};
 use crate::index::MatchingStrategy;
@@ -278,7 +280,7 @@ impl<'a> Search<'a> {
 
         // consume context and located_query_terms to build MatchingWords.
         let matching_words = match located_query_terms {
-            Some(located_query_terms) => MatchingWords::new(ctx, located_query_terms),
+            Some(located_query_terms) => MatchingWords::new(ctx, &located_query_terms),
             None => MatchingWords::default(),
         };
 
