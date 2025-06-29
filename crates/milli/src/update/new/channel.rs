@@ -138,6 +138,7 @@ pub enum ReceiverAction {
     WakeUp,
     LargeEntry(LargeEntry),
     LargeVectors(LargeVectors),
+    LargeVector(LargeVector),
 }
 
 /// An entry that cannot fit in the BBQueue buffers has been
@@ -171,6 +172,24 @@ pub struct LargeVectors {
 impl LargeVectors {
     pub fn read_embeddings(&self, dimensions: usize) -> impl Iterator<Item = &[f32]> {
         self.embeddings.chunks_exact(dimensions).map(bytemuck::cast_slice)
+    }
+}
+
+#[derive(Debug)]
+pub struct LargeVector {
+    /// The document id associated to the large embedding.
+    pub docid: DocumentId,
+    /// The embedder id in which to insert the large embedding.
+    pub embedder_id: u8,
+    /// The extractor id in which to insert the large embedding.
+    pub extractor_id: u8,
+    /// The large embedding that must be written.
+    pub embedding: Mmap,
+}
+
+impl LargeVector {
+    pub fn read_embedding(&self, dimensions: usize) -> &[f32] {
+        self.embedding.chunks_exact(dimensions).map(bytemuck::cast_slice).next().unwrap()
     }
 }
 
@@ -238,6 +257,7 @@ pub enum EntryHeader {
     DbOperation(DbOperation),
     ArroyDeleteVector(ArroyDeleteVector),
     ArroySetVectors(ArroySetVectors),
+    ArroySetVector(ArroySetVector),
 }
 
 impl EntryHeader {
@@ -250,6 +270,7 @@ impl EntryHeader {
             EntryHeader::DbOperation(_) => 0,
             EntryHeader::ArroyDeleteVector(_) => 1,
             EntryHeader::ArroySetVectors(_) => 2,
+            EntryHeader::ArroySetVector(_) => 3,
         }
     }
 
@@ -274,11 +295,17 @@ impl EntryHeader {
         Self::variant_size() + mem::size_of::<ArroySetVectors>() + embedding_size * count
     }
 
+    fn total_set_vector_size(dimensions: usize) -> usize {
+        let embedding_size = dimensions * mem::size_of::<f32>();
+        Self::variant_size() + mem::size_of::<ArroySetVector>() + embedding_size
+    }
+
     fn header_size(&self) -> usize {
         let payload_size = match self {
             EntryHeader::DbOperation(op) => mem::size_of_val(op),
             EntryHeader::ArroyDeleteVector(adv) => mem::size_of_val(adv),
             EntryHeader::ArroySetVectors(asvs) => mem::size_of_val(asvs),
+            EntryHeader::ArroySetVector(asv) => mem::size_of_val(asv),
         };
         Self::variant_size() + payload_size
     }
@@ -301,6 +328,11 @@ impl EntryHeader {
                 let header = checked::pod_read_unaligned(header_bytes);
                 EntryHeader::ArroySetVectors(header)
             }
+            3 => {
+                let header_bytes = &remaining[..mem::size_of::<ArroySetVector>()];
+                let header = checked::pod_read_unaligned(header_bytes);
+                EntryHeader::ArroySetVector(header)
+            }
             id => panic!("invalid variant id: {id}"),
         }
     }
@@ -311,6 +343,7 @@ impl EntryHeader {
             EntryHeader::DbOperation(op) => bytemuck::bytes_of(op),
             EntryHeader::ArroyDeleteVector(adv) => bytemuck::bytes_of(adv),
             EntryHeader::ArroySetVectors(asvs) => bytemuck::bytes_of(asvs),
+            EntryHeader::ArroySetVector(asv) => bytemuck::bytes_of(asv),
         };
         *first = self.variant_id();
         remaining.copy_from_slice(payload_bytes);
@@ -380,6 +413,37 @@ impl ArroySetVectors {
 }
 
 #[derive(Debug, Clone, Copy, NoUninit, CheckedBitPattern)]
+#[repr(C)]
+/// The embeddings are in the remaining space and represents
+/// non-aligned [f32] each with dimensions f32s.
+pub struct ArroySetVector {
+    pub docid: DocumentId,
+    pub embedder_id: u8,
+    pub extractor_id: u8,
+    _padding: [u8; 2],
+}
+
+impl ArroySetVector {
+    fn embeddings_bytes<'a>(frame: &'a FrameGrantR<'_>) -> &'a [u8] {
+        let skip = EntryHeader::variant_size() + mem::size_of::<Self>();
+        &frame[skip..]
+    }
+
+    /// Read the embedding and write it into an aligned `f32` Vec.
+    pub fn read_all_embeddings_into_vec<'v>(
+        &self,
+        frame: &FrameGrantR<'_>,
+        vec: &'v mut Vec<f32>,
+    ) -> &'v [f32] {
+        let embeddings_bytes = Self::embeddings_bytes(frame);
+        let embeddings_count = embeddings_bytes.len() / mem::size_of::<f32>();
+        vec.resize(embeddings_count, 0.0);
+        bytemuck::cast_slice_mut(vec.as_mut()).copy_from_slice(embeddings_bytes);
+        &vec[..]
+    }
+}
+
+#[derive(Debug, Clone, Copy, NoUninit, CheckedBitPattern)]
 #[repr(u16)]
 pub enum Database {
     Main,
@@ -398,6 +462,7 @@ pub enum Database {
     FacetIdStringDocids,
     FieldIdDocidFacetStrings,
     FieldIdDocidFacetF64s,
+    VectorEmbedderCategoryId,
 }
 
 impl Database {
@@ -419,6 +484,7 @@ impl Database {
             Database::FacetIdStringDocids => index.facet_id_string_docids.remap_types(),
             Database::FieldIdDocidFacetStrings => index.field_id_docid_facet_strings.remap_types(),
             Database::FieldIdDocidFacetF64s => index.field_id_docid_facet_f64s.remap_types(),
+            Database::VectorEmbedderCategoryId => index.embedder_category_id.remap_types(),
         }
     }
 
@@ -440,6 +506,7 @@ impl Database {
             Database::FacetIdStringDocids => db_name::FACET_ID_STRING_DOCIDS,
             Database::FieldIdDocidFacetStrings => db_name::FIELD_ID_DOCID_FACET_STRINGS,
             Database::FieldIdDocidFacetF64s => db_name::FIELD_ID_DOCID_FACET_F64S,
+            Database::VectorEmbedderCategoryId => db_name::VECTOR_EMBEDDER_CATEGORY_ID,
         }
     }
 }
@@ -566,6 +633,82 @@ impl<'b> ExtractorBbqueueSender<'b> {
         )?;
 
         Ok(())
+    }
+
+    fn set_vector_for_extractor(
+        &self,
+        docid: u32,
+        embedder_id: u8,
+        extractor_id: u8,
+        embedding: Option<Embedding>,
+    ) -> crate::Result<()> {
+        let max_grant = self.max_grant;
+        let refcell = self.producers.get().unwrap();
+        let mut producer = refcell.0.borrow_mut_or_yield();
+
+        // If there are no vectors we specify the dimensions
+        // to zero to allocate no extra space at all
+        let dimensions = embedding.as_ref().map_or(0, |emb| emb.len());
+
+        let arroy_set_vector =
+            ArroySetVector { docid, embedder_id, extractor_id, _padding: [0; 2] };
+        let payload_header = EntryHeader::ArroySetVector(arroy_set_vector);
+        let total_length = EntryHeader::total_set_vector_size(dimensions);
+        if total_length > max_grant {
+            let mut value_file = tempfile::tempfile().map(BufWriter::new)?;
+            let embedding = embedding.expect("set_vector without a vector does not fit in RAM");
+
+            let mut embedding_bytes = bytemuck::cast_slice(&embedding);
+            io::copy(&mut embedding_bytes, &mut value_file)?;
+
+            let value_file = value_file.into_inner().map_err(|ie| ie.into_error())?;
+            let embedding = unsafe { Mmap::map(&value_file)? };
+
+            let large_vectors = LargeVector { docid, embedder_id, extractor_id, embedding };
+            self.sender.send(ReceiverAction::LargeVector(large_vectors)).unwrap();
+
+            return Ok(());
+        }
+
+        // Spin loop to have a frame the size we requested.
+        reserve_and_write_grant(
+            &mut producer,
+            total_length,
+            &self.sender,
+            &self.sent_messages_attempts,
+            &self.blocking_sent_messages_attempts,
+            |grant| {
+                let header_size = payload_header.header_size();
+                let (header_bytes, remaining) = grant.split_at_mut(header_size);
+                payload_header.serialize_into(header_bytes);
+
+                if dimensions != 0 {
+                    let output_iter =
+                        remaining.chunks_exact_mut(dimensions * mem::size_of::<f32>());
+
+                    for (embedding, output) in embedding.iter().zip(output_iter) {
+                        output.copy_from_slice(bytemuck::cast_slice(embedding));
+                    }
+                }
+
+                Ok(())
+            },
+        )?;
+
+        Ok(())
+    }
+
+    fn embedding_status(
+        &self,
+        name: &str,
+        infos: crate::vector::db::EmbedderInfo,
+    ) -> crate::Result<()> {
+        let bytes = infos.to_bytes().map_err(|_| {
+            InternalError::Serialization(crate::SerializationError::Encoding {
+                db_name: Some(Database::VectorEmbedderCategoryId.database_name()),
+            })
+        })?;
+        self.write_key_value(Database::VectorEmbedderCategoryId, name.as_bytes(), &bytes)
     }
 
     fn write_key_value(&self, database: Database, key: &[u8], value: &[u8]) -> crate::Result<()> {
@@ -942,9 +1085,18 @@ impl EmbeddingSender<'_, '_> {
         &self,
         docid: DocumentId,
         embedder_id: u8,
-        embedding: Embedding,
+        extractor_id: u8,
+        embedding: Option<Embedding>,
     ) -> crate::Result<()> {
-        self.0.set_vectors(docid, embedder_id, &[embedding])
+        self.0.set_vector_for_extractor(docid, embedder_id, extractor_id, embedding)
+    }
+
+    pub(crate) fn embedding_status(
+        &self,
+        name: &str,
+        infos: crate::vector::db::EmbedderInfo,
+    ) -> crate::Result<()> {
+        self.0.embedding_status(name, infos)
     }
 }
 
