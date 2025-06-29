@@ -64,6 +64,8 @@ pub struct SearchQuery {
     pub q: Option<String>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchVector>)]
     pub vector: Option<Vec<f32>>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchMedia>)]
+    pub media: Option<serde_json::Value>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchHybridQuery>)]
     pub hybrid: Option<HybridQuery>,
     #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSearchOffset>)]
@@ -147,6 +149,7 @@ impl From<SearchParameters> for SearchQuery {
             ranking_score_threshold: ranking_score_threshold.map(RankingScoreThreshold::from),
             q: None,
             vector: None,
+            media: None,
             offset: DEFAULT_SEARCH_OFFSET(),
             page: None,
             hits_per_page: None,
@@ -220,6 +223,7 @@ impl fmt::Debug for SearchQuery {
         let Self {
             q,
             vector,
+            media,
             hybrid,
             offset,
             limit,
@@ -273,6 +277,9 @@ impl fmt::Debug for SearchQuery {
                     &format!("[{}, {}, {}, ... {} dimensions]", v[0], v[1], v[2], v.len()),
                 );
             }
+        }
+        if let Some(media) = media {
+            debug.field("media", media);
         }
         if let Some(hybrid) = hybrid {
             debug.field("hybrid", &hybrid);
@@ -482,8 +489,10 @@ pub struct SearchQueryWithIndex {
     pub index_uid: IndexUid,
     #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
     pub q: Option<String>,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchVector>)]
     pub vector: Option<Vec<f32>>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchMedia>)]
+    pub media: Option<serde_json::Value>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchHybridQuery>)]
     pub hybrid: Option<HybridQuery>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchOffset>)]
@@ -564,6 +573,7 @@ impl SearchQueryWithIndex {
         let SearchQuery {
             q,
             vector,
+            media,
             hybrid,
             offset,
             limit,
@@ -594,6 +604,7 @@ impl SearchQueryWithIndex {
             index_uid,
             q,
             vector,
+            media,
             hybrid,
             offset: if offset == DEFAULT_SEARCH_OFFSET() { None } else { Some(offset) },
             limit: if limit == DEFAULT_SEARCH_LIMIT() { None } else { Some(limit) },
@@ -628,6 +639,7 @@ impl SearchQueryWithIndex {
             federation_options,
             q,
             vector,
+            media,
             offset,
             limit,
             page,
@@ -658,6 +670,7 @@ impl SearchQueryWithIndex {
             SearchQuery {
                 q,
                 vector,
+                media,
                 offset: offset.unwrap_or(DEFAULT_SEARCH_OFFSET()),
                 limit: limit.unwrap_or(DEFAULT_SEARCH_LIMIT()),
                 page,
@@ -984,14 +997,27 @@ pub fn prepare_search<'t>(
 
                     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
 
+                    let q = query.q.as_deref();
+                    let media = query.media.as_ref();
+
+                    let search_query = match (q, media) {
+                        (Some(text), None) => milli::vector::SearchQuery::Text(text),
+                        (q, media) => milli::vector::SearchQuery::Media { q, media },
+                    };
+
                     embedder
-                        .embed_search(query.q.as_ref().unwrap(), Some(deadline))
+                        .embed_search(search_query, Some(deadline))
                         .map_err(milli::vector::Error::from)
                         .map_err(milli::Error::from)?
                 }
             };
-
-            search.semantic(embedder_name.clone(), embedder.clone(), *quantized, Some(vector));
+            search.semantic(
+                embedder_name.clone(),
+                embedder.clone(),
+                *quantized,
+                Some(vector),
+                query.media.clone(),
+            );
         }
         SearchKind::Hybrid { embedder_name, embedder, quantized, semantic_ratio: _ } => {
             if let Some(q) = &query.q {
@@ -1003,6 +1029,7 @@ pub fn prepare_search<'t>(
                 embedder.clone(),
                 *quantized,
                 query.vector.clone(),
+                query.media.clone(),
             );
         }
     }
@@ -1127,6 +1154,7 @@ pub fn perform_search(
         locales,
         // already used in prepare_search
         vector: _,
+        media: _,
         hybrid: _,
         offset: _,
         ranking_score_threshold: _,

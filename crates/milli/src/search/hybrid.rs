@@ -7,6 +7,7 @@ use roaring::RoaringBitmap;
 use crate::score_details::{ScoreDetails, ScoreValue, ScoringStrategy};
 use crate::search::new::{distinct_fid, distinct_single_docid};
 use crate::search::SemanticSearch;
+use crate::vector::SearchQuery;
 use crate::{Index, MatchingWords, Result, Search, SearchResult};
 
 struct ScoreWithRatioResult {
@@ -225,12 +226,9 @@ impl Search<'_> {
             return Ok(return_keyword_results(self.limit, self.offset, keyword_results));
         }
 
-        // no vector search against placeholder search
-        let Some(query) = search.query.take() else {
-            return Ok(return_keyword_results(self.limit, self.offset, keyword_results));
-        };
         // no embedder, no semantic search
-        let Some(SemanticSearch { vector, embedder_name, embedder, quantized }) = semantic else {
+        let Some(SemanticSearch { vector, embedder_name, embedder, quantized, media }) = semantic
+        else {
             return Ok(return_keyword_results(self.limit, self.offset, keyword_results));
         };
 
@@ -241,9 +239,17 @@ impl Search<'_> {
                 let span = tracing::trace_span!(target: "search::hybrid", "embed_one");
                 let _entered = span.enter();
 
+                let q = search.query.as_deref();
+                let media = media.as_ref();
+
+                let query = match (q, media) {
+                    (Some(text), None) => SearchQuery::Text(text),
+                    (q, media) => SearchQuery::Media { q, media },
+                };
+
                 let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
 
-                match embedder.embed_search(&query, Some(deadline)) {
+                match embedder.embed_search(query, Some(deadline)) {
                     Ok(embedding) => embedding,
                     Err(error) => {
                         tracing::error!(error=%error, "Embedding failed");
@@ -257,8 +263,13 @@ impl Search<'_> {
             }
         };
 
-        search.semantic =
-            Some(SemanticSearch { vector: Some(vector_query), embedder_name, embedder, quantized });
+        search.semantic = Some(SemanticSearch {
+            vector: Some(vector_query),
+            embedder_name,
+            embedder,
+            quantized,
+            media,
+        });
 
         // TODO: would be better to have two distinct functions at this point
         let vector_results = search.execute()?;

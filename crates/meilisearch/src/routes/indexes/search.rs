@@ -205,6 +205,8 @@ impl TryFrom<SearchQueryGet> for SearchQuery {
 
         Ok(Self {
             q: other.q,
+            // `media` not supported for `GET`
+            media: None,
             vector: other.vector.map(CS::into_inner),
             offset: other.offset.0,
             limit: other.limit.0,
