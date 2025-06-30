@@ -82,7 +82,7 @@ fn facet_value_docids(
 }
 
 /// Return an iterator over each number value in the given field of the given document.
-fn facet_number_values<'a>(
+pub(crate) fn facet_number_values<'a>(
     docid: u32,
     field_id: u16,
     index: &Index,

@@ -1,7 +1,7 @@
 mod bucket_sort;
 mod db_cache;
 mod distinct;
-mod geo_sort;
+pub(crate) mod geo_sort;
 mod graph_based_ranking_rule;
 mod interner;
 mod limits;

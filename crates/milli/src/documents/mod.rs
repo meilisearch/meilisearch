@@ -3,6 +3,7 @@ mod enriched;
 mod primary_key;
 mod reader;
 mod serde_impl;
+pub mod geo_sort;
 
 use std::fmt::Debug;
 use std::io;
