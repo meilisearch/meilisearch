@@ -753,6 +753,7 @@ pub struct IndexerOpts {
     pub skip_index_budget: bool,
 
     /// Experimental no edition 2024 for settings feature. For more information,
+    /// see: <https://github.com/orgs/meilisearch/discussions/847>
     ///
     /// Enables the experimental no edition 2024 for settings feature.
     #[clap(long, env = MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_SETTINGS)]
