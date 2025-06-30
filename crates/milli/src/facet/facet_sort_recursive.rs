@@ -88,39 +88,24 @@ impl<'ctx> SortedDocumentsIteratorBuilder<'ctx> {
         };
 
         // Create builders for the next level of the tree
-        let number_db2 = number_db;
-        let string_db2 = string_db;
-        let number_iter =
-            number_iter.map(move |r| -> crate::Result<SortedDocumentsIteratorBuilder> {
-                let (docids, _bytes) = r?;
-                Ok(SortedDocumentsIteratorBuilder {
-                    index,
-                    rtxn,
-                    number_db,
-                    string_db,
-                    fields: &fields[1..],
-                    candidates: docids,
-                    geo_candidates,
-                })
-            });
-        let string_iter =
-            string_iter.map(move |r| -> crate::Result<SortedDocumentsIteratorBuilder> {
-                let (docids, _bytes) = r?;
-                Ok(SortedDocumentsIteratorBuilder {
-                    index,
-                    rtxn,
-                    number_db: number_db2,
-                    string_db: string_db2,
-                    fields: &fields[1..],
-                    candidates: docids,
-                    geo_candidates,
-                })
-            });
+        let number_iter = number_iter.map(|r| r.map(|(d, _)| d));
+        let string_iter = string_iter.map(|r| r.map(|(d, _)| d));
+        let next_children = number_iter.chain(string_iter).map(move |r| {
+            Ok(SortedDocumentsIteratorBuilder {
+                index,
+                rtxn,
+                number_db,
+                string_db,
+                fields: &fields[1..],
+                candidates: r?,
+                geo_candidates,
+            })
+        });
 
         Ok(SortedDocumentsIterator::Branch {
             current_child: None,
             next_children_size: size,
-            next_children: Box::new(number_iter.chain(string_iter)),
+            next_children: Box::new(next_children),
         })
     }
 
