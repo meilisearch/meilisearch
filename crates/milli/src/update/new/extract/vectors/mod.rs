@@ -310,6 +310,7 @@ pub struct SettingsChangeEmbeddingExtractor<'a, 'b> {
 }
 
 impl<'a, 'b> SettingsChangeEmbeddingExtractor<'a, 'b> {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         embedders: &'a EmbeddingConfigs,
         old_embedders: &'a EmbeddingConfigs,

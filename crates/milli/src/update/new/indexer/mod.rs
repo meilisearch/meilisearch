@@ -205,6 +205,7 @@ where
     Ok(congestion)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn reindex<'indexer, 'index, MSP, SD>(
     wtxn: &mut RwTxn<'index>,
     index: &'index Index,
