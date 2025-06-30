@@ -86,10 +86,11 @@ impl IndexScheduler {
             }
             // Retry logic for sending settings
             let url = format!("{base_url}/indexes/{uid}/settings");
+            let bearer = api_key.map(|api_key| format!("Bearer {api_key}"));
             retry(&must_stop_processing, || {
                 let mut request = agent.patch(&url);
-                if let Some(api_key) = api_key {
-                    request = request.set("Authorization", &format!("Bearer {api_key}"));
+                if let Some(bearer) = bearer.as_ref() {
+                    request = request.set("Authorization", bearer);
                 }
                 request.send_json(settings.clone()).map_err(into_backoff_error)
             })?;

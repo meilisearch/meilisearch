@@ -42,17 +42,18 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 }
 
 #[utoipa::path(
-    get,
+    post,
     path = "",
     tag = "Export",
     security(("Bearer" = ["export", "*"])),
     responses(
         (status = OK, description = "Known nodes are returned", body = Export, content_type = "application/json", example = json!(
-        {
-            "indexes": ["movie", "steam-*"],
-            "skip_embeddings": true,
-            "apiKey": "meilisearch-api-key"
-        })),
+            {
+                "taskUid": 1,
+                "status": "enqueued",
+                "type": "export",
+                "enqueuedAt": "2021-08-11T09:25:53.000000Z"
+            })),
         (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
@@ -126,7 +127,7 @@ pub struct Export {
     #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidExportPayloadSize>)]
     pub payload_size: Option<ByteWithDeserr>,
-    #[schema(value_type = Option<BTreeSet<String>>, example = json!(["movies", "steam-*"]))]
+    #[schema(value_type = Option<BTreeMap<String, ExportIndexSettings>>, example = json!({ "*": { "filter": null } }))]
     #[deserr(default)]
     #[serde(default)]
     pub indexes: BTreeMap<IndexUidPattern, ExportIndexSettings>,

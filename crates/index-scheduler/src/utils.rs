@@ -273,7 +273,7 @@ pub fn swap_index_uid_in_task(task: &mut Task, swap: (&str, &str)) {
         K::TaskCancelation { .. }
         | K::TaskDeletion { .. }
         | K::DumpCreation { .. }
-        | K::Export { .. } // TODO I have patterns, not index uids
+        | K::Export { .. }
         | K::UpgradeDatabase { .. }
         | K::SnapshotCreation => (),
     };

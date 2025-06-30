@@ -371,7 +371,10 @@ impl From<Details> for DetailsView {
             }
             Details::Export { url, api_key, payload_size, indexes } => DetailsView {
                 url: Some(url),
-                api_key,
+                api_key: api_key.map(|mut api_key| {
+                    hide_secret(&mut api_key);
+                    api_key
+                }),
                 payload_size: payload_size
                     .map(|ps| ps.get_appropriate_unit(UnitType::Both).to_string()),
                 indexes: Some(
@@ -387,6 +390,24 @@ impl From<Details> for DetailsView {
                 upgrade_to: Some(format!("v{}.{}.{}", to.0, to.1, to.2)),
                 ..Default::default()
             },
+        }
+    }
+}
+
+// We definitely need to factorize the code to hide the secret key
+fn hide_secret(secret: &mut String) {
+    match secret.len() {
+        x if x < 10 => {
+            secret.replace_range(.., "XXX...");
+        }
+        x if x < 20 => {
+            secret.replace_range(2.., "XXXX...");
+        }
+        x if x < 30 => {
+            secret.replace_range(3.., "XXXXX...");
+        }
+        _x => {
+            secret.replace_range(5.., "XXXXXX...");
         }
     }
 }
