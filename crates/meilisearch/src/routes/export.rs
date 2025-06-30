@@ -81,15 +81,17 @@ async fn export(
 
     let Export { url, api_key, payload_size, indexes } = export;
 
-    let indexes = if indexes.is_empty() {
-        BTreeMap::from([(IndexUidPattern::new_unchecked("*"), DbExportIndexSettings::default())])
-    } else {
-        indexes
+    let indexes = match indexes {
+        Some(indexes) => indexes
             .into_iter()
             .map(|(pattern, ExportIndexSettings { filter })| {
                 (pattern, DbExportIndexSettings { filter })
             })
-            .collect()
+            .collect(),
+        None => BTreeMap::from([(
+            IndexUidPattern::new_unchecked("*"),
+            DbExportIndexSettings::default(),
+        )]),
     };
 
     let task = KindWithContent::Export {
@@ -130,7 +132,7 @@ pub struct Export {
     #[schema(value_type = Option<BTreeMap<String, ExportIndexSettings>>, example = json!({ "*": { "filter": null } }))]
     #[deserr(default)]
     #[serde(default)]
-    pub indexes: BTreeMap<IndexUidPattern, ExportIndexSettings>,
+    pub indexes: Option<BTreeMap<IndexUidPattern, ExportIndexSettings>>,
 }
 
 /// A wrapper around the `Byte` type that implements `Deserr`.

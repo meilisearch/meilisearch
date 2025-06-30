@@ -15,9 +15,10 @@ impl ExportAnalytics {
         let Export { url: _, api_key, payload_size, indexes } = export;
 
         let has_api_key = api_key.is_some();
-        let index_patterns_count = indexes.len();
-        let patterns_with_filter_count =
-            indexes.values().filter(|settings| settings.filter.is_some()).count();
+        let index_patterns_count = indexes.as_ref().map_or(0, |indexes| indexes.len());
+        let patterns_with_filter_count = indexes.as_ref().map_or(0, |indexes| {
+            indexes.values().filter(|settings| settings.filter.is_some()).count()
+        });
         let payload_sizes =
             if let Some(crate::routes::export::ByteWithDeserr(byte_size)) = payload_size {
                 vec![byte_size.as_u64()]

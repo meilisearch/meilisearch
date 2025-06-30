@@ -210,7 +210,7 @@ impl KindWithContent {
             | SnapshotCreation
             | TaskCancelation { .. }
             | TaskDeletion { .. }
-            | Export { .. } // TODO Should I resolve the index names?
+            | Export { .. }
             | UpgradeDatabase { .. } => vec![],
             DocumentAdditionOrUpdate { index_uid, .. }
             | DocumentEdition { index_uid, .. }
