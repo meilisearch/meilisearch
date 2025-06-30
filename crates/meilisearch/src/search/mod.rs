@@ -972,6 +972,9 @@ pub fn prepare_search<'t>(
     time_budget: TimeBudget,
     features: RoFeatures,
 ) -> Result<(milli::Search<'t>, bool, usize, usize), ResponseError> {
+    if query.media.is_some() {
+        features.check_multimodal("passing `media` in a search query")?;
+    }
     let mut search = index.search(rtxn);
     search.time_budget(time_budget);
     if let Some(ranking_score_threshold) = query.ranking_score_threshold {

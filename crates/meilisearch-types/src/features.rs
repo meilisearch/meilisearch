@@ -21,6 +21,7 @@ pub struct RuntimeTogglableFeatures {
     pub get_task_documents_route: bool,
     pub composite_embedders: bool,
     pub chat_completions: bool,
+    pub multimodal: bool,
 }
 
 #[derive(Default, Debug, Clone, Copy)]
