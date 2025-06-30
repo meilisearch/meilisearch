@@ -707,16 +707,14 @@ pub enum Details {
 #[schema(rename_all = "camelCase")]
 pub struct DetailsExportIndexSettings {
     #[serde(flatten)]
-    settings: ExportIndexSettings,
+    pub settings: ExportIndexSettings,
     #[serde(skip_serializing_if = "Option::is_none")]
-    matched_documents: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    exported_documents: Option<u64>,
+    pub matched_documents: Option<u64>,
 }
 
 impl From<ExportIndexSettings> for DetailsExportIndexSettings {
     fn from(settings: ExportIndexSettings) -> Self {
-        DetailsExportIndexSettings { settings, matched_documents: None, exported_documents: None }
+        DetailsExportIndexSettings { settings, matched_documents: None }
     }
 }
 

@@ -14,7 +14,7 @@ use meilisearch_types::milli::update::{request_threads, Setting};
 use meilisearch_types::milli::vector::parsed_vectors::{ExplicitVectors, VectorOrArrayOfVectors};
 use meilisearch_types::milli::{self, obkv_to_json, Filter, InternalError};
 use meilisearch_types::settings::{self, SecretPolicy};
-use meilisearch_types::tasks::ExportIndexSettings;
+use meilisearch_types::tasks::{DetailsExportIndexSettings, ExportIndexSettings};
 use serde::Deserialize;
 use ureq::{json, Response};
 
@@ -30,7 +30,7 @@ impl IndexScheduler {
         payload_size: Option<&Byte>,
         indexes: &BTreeMap<IndexUidPattern, ExportIndexSettings>,
         progress: Progress,
-    ) -> Result<()> {
+    ) -> Result<BTreeMap<IndexUidPattern, DetailsExportIndexSettings>> {
         #[cfg(test)]
         self.maybe_fail(crate::test_utils::FailureLocation::ProcessExport)?;
 
@@ -41,13 +41,14 @@ impl IndexScheduler {
                 indexes
                     .iter()
                     .find(|(pattern, _)| pattern.matches_str(&uid))
-                    .map(|(_pattern, settings)| (uid, settings))
+                    .map(|(pattern, settings)| (pattern, uid, settings))
             })
             .collect();
 
+        let mut output = BTreeMap::new();
         let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(5)).build();
         let must_stop_processing = self.scheduler.must_stop_processing.clone();
-        for (i, (uid, settings)) in indexes.iter().enumerate() {
+        for (i, (pattern, uid, export_settings)) in indexes.iter().enumerate() {
             if must_stop_processing.get() {
                 return Err(Error::AbortedTask);
             }
@@ -58,7 +59,7 @@ impl IndexScheduler {
                 indexes.len() as u32,
             ));
 
-            let ExportIndexSettings { filter } = settings;
+            let ExportIndexSettings { filter } = export_settings;
             let index = self.index(uid)?;
             let index_rtxn = index.read_txn()?;
 
@@ -124,6 +125,14 @@ impl IndexScheduler {
             let total_documents = universe.len() as u32;
             let (step, progress_step) = AtomicDocumentStep::new(total_documents);
             progress.update_progress(progress_step);
+
+            output.insert(
+                (*pattern).clone(),
+                DetailsExportIndexSettings {
+                    settings: (*export_settings).clone(),
+                    matched_documents: Some(total_documents as u64),
+                },
+            );
 
             let limit = payload_size.map(|ps| ps.as_u64() as usize).unwrap_or(50 * 1024 * 1024); // defaults to 50 MiB
             let documents_url = format!("{base_url}/indexes/{uid}/documents");
@@ -265,7 +274,7 @@ impl IndexScheduler {
             step.store(total_documents, atomic::Ordering::Relaxed);
         }
 
-        Ok(())
+        Ok(output)
     }
 }
 

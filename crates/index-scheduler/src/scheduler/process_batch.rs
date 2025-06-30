@@ -377,9 +377,8 @@ impl IndexScheduler {
                     )
                 }));
 
-                match ret {
-                    // TODO return the matched and exported documents
-                    Ok(Ok(())) => (),
+                let stats = match ret {
+                    Ok(Ok(stats)) => stats,
                     Ok(Err(Error::AbortedTask)) => return Err(Error::AbortedTask),
                     Ok(Err(e)) => return Err(Error::Export(Box::new(e))),
                     Err(e) => {
@@ -394,9 +393,12 @@ impl IndexScheduler {
                             msg.to_string(),
                         ))));
                     }
-                }
+                };
 
                 task.status = Status::Succeeded;
+                if let Some(Details::Export { indexes, .. }) = task.details.as_mut() {
+                    *indexes = stats;
+                }
                 Ok((vec![task], ProcessBatchInfo::default()))
             }
             Batch::UpgradeDatabase { mut tasks } => {
