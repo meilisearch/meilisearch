@@ -1,6 +1,16 @@
-use roaring::RoaringBitmap;
+use crate::{
+    heed_codec::{
+        facet::{FacetGroupKeyCodec, FacetGroupValueCodec},
+        BytesRefCodec,
+    },
+    search::{
+        facet::{ascending_facet_sort, descending_facet_sort},
+        new::check_sort_criteria,
+    },
+    AscDesc, DocumentId, Member,
+};
 use heed::Database;
-use crate::{heed_codec::{facet::{FacetGroupKeyCodec, FacetGroupValueCodec}, BytesRefCodec}, search::{facet::{ascending_facet_sort, descending_facet_sort}, new::check_sort_criteria}, AscDesc, DocumentId, Member};
+use roaring::RoaringBitmap;
 
 /// Builder for a [`SortedDocumentsIterator`].
 /// Most builders won't ever be built, because pagination will skip them.
@@ -15,13 +25,8 @@ pub struct SortedDocumentsIteratorBuilder<'ctx> {
 impl<'ctx> SortedDocumentsIteratorBuilder<'ctx> {
     /// Performs the sort and builds a [`SortedDocumentsIterator`].
     fn build(self) -> heed::Result<SortedDocumentsIterator<'ctx>> {
-        let SortedDocumentsIteratorBuilder {
-            rtxn,
-            number_db,
-            string_db,
-            fields,
-            candidates,
-        } = self;
+        let SortedDocumentsIteratorBuilder { rtxn, number_db, string_db, fields, candidates } =
+            self;
         let size = candidates.len() as usize;
 
         // There is no point sorting a 1-element array
@@ -42,33 +47,13 @@ impl<'ctx> SortedDocumentsIteratorBuilder<'ctx> {
 
         // Perform the sort on the first field
         let (number_iter, string_iter) = if ascending {
-            let number_iter = ascending_facet_sort(
-                rtxn,
-                number_db,
-                field_id,
-                candidates.clone(),
-            )?;
-            let string_iter = ascending_facet_sort(
-                rtxn,
-                string_db,
-                field_id,
-                candidates,
-            )?;
+            let number_iter = ascending_facet_sort(rtxn, number_db, field_id, candidates.clone())?;
+            let string_iter = ascending_facet_sort(rtxn, string_db, field_id, candidates)?;
 
             (itertools::Either::Left(number_iter), itertools::Either::Left(string_iter))
         } else {
-            let number_iter = descending_facet_sort(
-                rtxn,
-                number_db,
-                field_id,
-                candidates.clone(),
-            )?;
-            let string_iter = descending_facet_sort(
-                rtxn,
-                string_db,
-                field_id,
-                candidates,
-            )?;
+            let number_iter = descending_facet_sort(rtxn, number_db, field_id, candidates.clone())?;
+            let string_iter = descending_facet_sort(rtxn, string_db, field_id, candidates)?;
 
             (itertools::Either::Right(number_iter), itertools::Either::Right(string_iter))
         };
@@ -76,26 +61,28 @@ impl<'ctx> SortedDocumentsIteratorBuilder<'ctx> {
         // Create builders for the next level of the tree
         let number_db2 = number_db;
         let string_db2 = string_db;
-        let number_iter = number_iter.map(move |r| -> heed::Result<SortedDocumentsIteratorBuilder> {
-            let (docids, _bytes) = r?;
-            Ok(SortedDocumentsIteratorBuilder {
-                rtxn,
-                number_db,
-                string_db,
-                fields: &fields[1..],
-                candidates: docids,
-            })
-        });
-        let string_iter = string_iter.map(move |r| -> heed::Result<SortedDocumentsIteratorBuilder> {
-            let (docids, _bytes) = r?;
-            Ok(SortedDocumentsIteratorBuilder {
-                rtxn,
-                number_db: number_db2,
-                string_db: string_db2,
-                fields: &fields[1..],
-                candidates: docids,
-            })
-        });
+        let number_iter =
+            number_iter.map(move |r| -> heed::Result<SortedDocumentsIteratorBuilder> {
+                let (docids, _bytes) = r?;
+                Ok(SortedDocumentsIteratorBuilder {
+                    rtxn,
+                    number_db,
+                    string_db,
+                    fields: &fields[1..],
+                    candidates: docids,
+                })
+            });
+        let string_iter =
+            string_iter.map(move |r| -> heed::Result<SortedDocumentsIteratorBuilder> {
+                let (docids, _bytes) = r?;
+                Ok(SortedDocumentsIteratorBuilder {
+                    rtxn,
+                    number_db: number_db2,
+                    string_db: string_db2,
+                    fields: &fields[1..],
+                    candidates: docids,
+                })
+            });
 
         Ok(SortedDocumentsIterator::Branch {
             current_child: None,
@@ -112,7 +99,7 @@ pub enum SortedDocumentsIterator<'ctx> {
     Leaf {
         /// The exact number of documents remaining
         size: usize,
-        values: Box<dyn Iterator<Item = DocumentId> + 'ctx>
+        values: Box<dyn Iterator<Item = DocumentId> + 'ctx>,
     },
     Branch {
         /// The current child, got from the children iterator
@@ -120,20 +107,27 @@ pub enum SortedDocumentsIterator<'ctx> {
         /// The exact number of documents remaining, excluding documents in the current child
         next_children_size: usize,
         /// Iterators to become the current child once it is exhausted
-        next_children: Box<dyn Iterator<Item = heed::Result<SortedDocumentsIteratorBuilder<'ctx>>> + 'ctx>,
-    }
+        next_children:
+            Box<dyn Iterator<Item = heed::Result<SortedDocumentsIteratorBuilder<'ctx>>> + 'ctx>,
+    },
 }
 
 impl SortedDocumentsIterator<'_> {
     /// Takes care of updating the current child if it is `None`, and also updates the size
-    fn update_current<'ctx>(current_child: &mut Option<Box<SortedDocumentsIterator<'ctx>>>, next_children_size: &mut usize, next_children: &mut Box<dyn Iterator<Item = heed::Result<SortedDocumentsIteratorBuilder<'ctx>>> + 'ctx>) -> heed::Result<()> {
+    fn update_current<'ctx>(
+        current_child: &mut Option<Box<SortedDocumentsIterator<'ctx>>>,
+        next_children_size: &mut usize,
+        next_children: &mut Box<
+            dyn Iterator<Item = heed::Result<SortedDocumentsIteratorBuilder<'ctx>>> + 'ctx,
+        >,
+    ) -> heed::Result<()> {
         if current_child.is_none() {
             *current_child = match next_children.next() {
                 Some(Ok(builder)) => {
                     let next_child = Box::new(builder.build()?);
                     *next_children_size -= next_child.size_hint().0;
                     Some(next_child)
-                },
+                }
                 Some(Err(e)) => return Err(e),
                 None => return Ok(()),
             };
@@ -150,15 +144,23 @@ impl Iterator for SortedDocumentsIterator<'_> {
         let (current_child, next_children, next_children_size) = match self {
             SortedDocumentsIterator::Leaf { values, size } => {
                 *size = size.saturating_sub(n);
-                return values.nth(n).map(Ok)
-            },
-            SortedDocumentsIterator::Branch { current_child, next_children, next_children_size } => (current_child, next_children, next_children_size),
+                return values.nth(n).map(Ok);
+            }
+            SortedDocumentsIterator::Branch {
+                current_child,
+                next_children,
+                next_children_size,
+            } => (current_child, next_children, next_children_size),
         };
 
         // Otherwise don't directly iterate over children, skip them if we know we will go further
         let mut to_skip = n - 1;
         while to_skip > 0 {
-            if let Err(e) = SortedDocumentsIterator::update_current(current_child, next_children_size, next_children) {
+            if let Err(e) = SortedDocumentsIterator::update_current(
+                current_child,
+                next_children_size,
+                next_children,
+            ) {
                 return Some(Err(e));
             }
             let Some(inner) = current_child else {
@@ -183,8 +185,14 @@ impl Iterator for SortedDocumentsIterator<'_> {
     fn size_hint(&self) -> (usize, Option<usize>) {
         let size = match self {
             SortedDocumentsIterator::Leaf { size, .. } => *size,
-            SortedDocumentsIterator::Branch { next_children_size, current_child: Some(current_child), .. } => current_child.size_hint().0 + next_children_size,
-            SortedDocumentsIterator::Branch { next_children_size, current_child: None, .. } => *next_children_size,
+            SortedDocumentsIterator::Branch {
+                next_children_size,
+                current_child: Some(current_child),
+                ..
+            } => current_child.size_hint().0 + next_children_size,
+            SortedDocumentsIterator::Branch { next_children_size, current_child: None, .. } => {
+                *next_children_size
+            }
         };
 
         (size, Some(size))
@@ -198,12 +206,20 @@ impl Iterator for SortedDocumentsIterator<'_> {
                     *size -= 1;
                 }
                 result
-            },
-            SortedDocumentsIterator::Branch { current_child, next_children_size, next_children } => {
+            }
+            SortedDocumentsIterator::Branch {
+                current_child,
+                next_children_size,
+                next_children,
+            } => {
                 let mut result = None;
                 while result.is_none() {
                     // Ensure we have selected an iterator to work with
-                    if let Err(e) = SortedDocumentsIterator::update_current(current_child, next_children_size, next_children) {
+                    if let Err(e) = SortedDocumentsIterator::update_current(
+                        current_child,
+                        next_children_size,
+                        next_children,
+                    ) {
                         return Some(Err(e));
                     }
                     let Some(inner) = current_child else {
@@ -232,7 +248,7 @@ pub struct SortedDocuments<'ctx> {
     candidates: &'ctx RoaringBitmap,
 }
 
-impl <'ctx> SortedDocuments<'ctx> {
+impl<'ctx> SortedDocuments<'ctx> {
     pub fn iter(&'ctx self) -> heed::Result<SortedDocumentsIterator<'ctx>> {
         let builder = SortedDocumentsIteratorBuilder {
             rtxn: self.rtxn,
@@ -266,19 +282,10 @@ pub fn recursive_facet_sort<'ctx>(
             fields.push((field_id, ascending)); // FIXME: Should this return an error if the field is not found?
         }
     }
-        
-    let number_db = index
-        .facet_id_f64_docids
-        .remap_key_type::<FacetGroupKeyCodec<BytesRefCodec>>();
-    let string_db = index
-        .facet_id_string_docids
-        .remap_key_type::<FacetGroupKeyCodec<BytesRefCodec>>();
 
-    Ok(SortedDocuments {
-        rtxn,
-        fields,
-        number_db,
-        string_db,
-        candidates,
-    })
+    let number_db = index.facet_id_f64_docids.remap_key_type::<FacetGroupKeyCodec<BytesRefCodec>>();
+    let string_db =
+        index.facet_id_string_docids.remap_key_type::<FacetGroupKeyCodec<BytesRefCodec>>();
+
+    Ok(SortedDocuments { rtxn, fields, number_db, string_db, candidates })
 }

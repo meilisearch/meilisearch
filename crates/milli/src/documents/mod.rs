@@ -1,9 +1,9 @@
 mod builder;
 mod enriched;
+pub mod geo_sort;
 mod primary_key;
 mod reader;
 mod serde_impl;
-pub mod geo_sort;
 
 use std::fmt::Debug;
 use std::io;
@@ -20,6 +20,7 @@ pub use primary_key::{
 pub use reader::{DocumentsBatchCursor, DocumentsBatchCursorError, DocumentsBatchReader};
 use serde::{Deserialize, Serialize};
 
+pub use self::geo_sort::{GeoSortParameter, GeoSortStrategy};
 use crate::error::{FieldIdMapMissingEntry, InternalError};
 use crate::{FieldId, Object, Result};
 

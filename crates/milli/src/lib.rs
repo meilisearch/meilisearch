@@ -43,12 +43,13 @@ use std::fmt;
 use std::hash::BuildHasherDefault;
 
 use charabia::normalizer::{CharNormalizer, CompatibilityDecompositionNormalizer};
+pub use documents::GeoSortStrategy;
 pub use filter_parser::{Condition, FilterCondition, Span, Token};
 use fxhash::{FxHasher32, FxHasher64};
 pub use grenad::CompressionType;
 pub use search::new::{
-    execute_search, filtered_universe, DefaultSearchLogger, GeoSortStrategy, SearchContext,
-    SearchLogger, VisualSearchLogger,
+    execute_search, filtered_universe, DefaultSearchLogger, SearchContext, SearchLogger,
+    VisualSearchLogger,
 };
 use serde_json::Value;
 pub use thread_pool_no_abort::{PanicCatched, ThreadPoolNoAbort, ThreadPoolNoAbortBuilder};

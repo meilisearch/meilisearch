@@ -641,16 +641,12 @@ fn documents_by_query(
     };
 
     let sort_criteria = if let Some(sort) = &sort {
-        let sorts: Vec<_> =
-            match sort.iter().map(|s| milli::AscDesc::from_str(s)).collect() {
-                Ok(sorts) => sorts,
-                Err(asc_desc_error) => {
-                    return Err(milli::Error::from(milli::SortError::from(
-                        asc_desc_error,
-                    ))
-                    .into())
-                }
-            };
+        let sorts: Vec<_> = match sort.iter().map(|s| milli::AscDesc::from_str(s)).collect() {
+            Ok(sorts) => sorts,
+            Err(asc_desc_error) => {
+                return Err(milli::Error::from(milli::SortError::from(asc_desc_error)).into())
+            }
+        };
         Some(sorts)
     } else {
         None

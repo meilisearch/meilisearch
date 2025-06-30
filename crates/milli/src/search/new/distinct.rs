@@ -118,7 +118,7 @@ pub fn facet_string_values<'a>(
 }
 
 #[allow(clippy::drop_non_drop)]
-fn facet_values_prefix_key(distinct: u16, id: u32) -> [u8; FID_SIZE + DOCID_SIZE] {
+pub(crate) fn facet_values_prefix_key(distinct: u16, id: u32) -> [u8; FID_SIZE + DOCID_SIZE] {
     concat_arrays::concat_arrays!(distinct.to_be_bytes(), id.to_be_bytes())
 }
 
