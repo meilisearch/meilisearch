@@ -1556,7 +1556,7 @@ fn retrieve_documents<S: AsRef<str>>(
 
     let mut facet_sort = None;
     if let Some(sort) = sort_criteria {
-        facet_sort = Some(recursive_facet_sort(index, &rtxn, &sort, &candidates)?)
+        facet_sort = Some(recursive_facet_sort(index, &rtxn, sort, &candidates)?)
     }
 
     let (it, number_of_documents) = if let Some(facet_sort) = &facet_sort {

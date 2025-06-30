@@ -66,7 +66,6 @@ impl GeoSortStrategy {
     }
 }
 
-// TODO: Make it take a mut reference to cache
 #[allow(clippy::too_many_arguments)]
 pub fn fill_cache(
     index: &Index,

@@ -10,7 +10,6 @@ pub use self::facet::{FacetDistribution, Filter, OrderBy, DEFAULT_VALUES_PER_FAC
 pub use self::new::matches::{FormatOptions, MatchBounds, MatcherBuilder, MatchingWords};
 use self::new::{execute_vector_search, PartialSearchResult, VectorStoreStats};
 use crate::documents::GeoSortParameter;
-use crate::documents::GeoSortStrategy;
 use crate::filterable_attributes_rules::{filtered_matching_patterns, matching_features};
 use crate::index::MatchingStrategy;
 use crate::score_details::{ScoreDetails, ScoringStrategy};
@@ -147,7 +146,7 @@ impl<'a> Search<'a> {
     }
 
     #[cfg(test)]
-    pub fn geo_sort_strategy(&mut self, strategy: GeoSortStrategy) -> &mut Search<'a> {
+    pub fn geo_sort_strategy(&mut self, strategy: crate::GeoSortStrategy) -> &mut Search<'a> {
         self.geo_param.strategy = strategy;
         self
     }

@@ -1,25 +1,13 @@
 use std::collections::VecDeque;
 
-use heed::types::{Bytes, Unit};
-use heed::{RoPrefix, RoTxn};
 use roaring::RoaringBitmap;
 use rstar::RTree;
 
-use super::facet_string_values;
 use super::ranking_rules::{RankingRule, RankingRuleOutput, RankingRuleQueryTrait};
 use crate::documents::geo_sort::{fill_cache, next_bucket};
 use crate::documents::{GeoSortParameter, GeoSortStrategy};
-use crate::heed_codec::facet::{FieldDocIdFacetCodec, OrderedF64Codec};
 use crate::score_details::{self, ScoreDetails};
-use crate::{GeoPoint, Index, Result, SearchContext, SearchLogger};
-
-const FID_SIZE: usize = 2;
-const DOCID_SIZE: usize = 4;
-
-#[allow(clippy::drop_non_drop)]
-fn facet_values_prefix_key(distinct: u16, id: u32) -> [u8; FID_SIZE + DOCID_SIZE] {
-    concat_arrays::concat_arrays!(distinct.to_be_bytes(), id.to_be_bytes())
-}
+use crate::{GeoPoint, Result, SearchContext, SearchLogger};
 
 pub struct GeoSort<Q: RankingRuleQueryTrait> {
     query: Option<Q>,
