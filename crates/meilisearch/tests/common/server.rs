@@ -464,6 +464,7 @@ pub fn default_settings(dir: impl AsRef<Path>) -> Opt {
             skip_index_budget: true,
             // Having 2 threads makes the tests way faster
             max_indexing_threads: MaxThreads::from_str("2").unwrap(),
+            experimental_no_edition_2024_for_settings: false,
         },
         experimental_enable_metrics: false,
         ..Parser::parse_from(None as Option<&str>)

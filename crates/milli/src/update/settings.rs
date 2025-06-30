@@ -1441,7 +1441,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         MSP: Fn() -> bool + Sync,
     {
         // force the old indexer if the environment says so
-        if std::env::var_os("MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_SETTINGS").is_some() {
+        if self.indexer_config.experimental_no_edition_2024_for_settings {
             return self
                 .legacy_execute(
                     |indexing_step| tracing::debug!(update = ?indexing_step),
