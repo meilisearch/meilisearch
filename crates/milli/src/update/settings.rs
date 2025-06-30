@@ -27,8 +27,8 @@ use crate::index::{
     DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS,
 };
 use crate::order_by_map::OrderByMap;
-use crate::progress::Progress;
 use crate::progress::EmbedderStats;
+use crate::progress::Progress;
 use crate::prompt::{default_max_bytes, default_template_text, PromptData};
 use crate::proximity::ProximityPrecision;
 use crate::update::index_documents::IndexDocumentsMethod;
@@ -1362,7 +1362,12 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         }
     }
 
-    pub fn legacy_execute<FP, FA>(mut self, progress_callback: FP, should_abort: FA) -> Result<()>
+    pub fn legacy_execute<FP, FA>(
+        mut self,
+        progress_callback: FP,
+        should_abort: FA,
+        embedder_stats: Arc<EmbedderStats>,
+    ) -> Result<()>
     where
         FP: Fn(UpdateIndexingStep) + Sync,
         FA: Fn() -> bool + Sync,
@@ -1430,6 +1435,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         mut self,
         must_stop_processing: &'indexer MSP,
         progress: &'indexer Progress,
+        embedder_stats: Arc<EmbedderStats>,
     ) -> Result<Option<ChannelCongestion>>
     where
         MSP: Fn() -> bool + Sync,
@@ -1440,6 +1446,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                 .legacy_execute(
                     |indexing_step| tracing::debug!(update = ?indexing_step),
                     must_stop_processing,
+                    embedder_stats,
                 )
                 .map(|_| None);
         }
@@ -1510,6 +1517,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                     &inner_settings_diff,
                     must_stop_processing,
                     progress,
+                    embedder_stats,
                 )
                 .map(Some)
             } else {
@@ -1519,6 +1527,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             self.legacy_execute(
                 |indexing_step| tracing::debug!(update = ?indexing_step),
                 must_stop_processing,
+                embedder_stats,
             )
             .map(|_| None)
         }

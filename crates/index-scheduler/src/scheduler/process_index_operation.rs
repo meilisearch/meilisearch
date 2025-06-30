@@ -475,7 +475,7 @@ impl IndexScheduler {
 
                 progress.update_progress(SettingsProgress::ApplyTheSettings);
                 let congestion = builder
-                    .execute(&|| must_stop_processing.get(), progress)
+                    .execute(&|| must_stop_processing.get(), progress, embedder_stats)
                     .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?;
 
                 Ok((tasks, congestion))

@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use std::sync::atomic::AtomicBool;
-use std::sync::{Once, RwLock};
+use std::sync::{Arc, Once, RwLock};
 use std::thread::{self, Builder};
 
 use big_s::S;
@@ -20,8 +20,8 @@ use super::steps::IndexingStep;
 use super::thread_local::ThreadLocal;
 use crate::documents::PrimaryKey;
 use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
-use crate::update::settings::SettingsDelta;
 use crate::progress::{EmbedderStats, Progress};
+use crate::update::settings::SettingsDelta;
 use crate::update::GrenadParameters;
 use crate::vector::settings::{EmbedderAction, WriteBackToDocuments};
 use crate::vector::{ArroyWrapper, Embedder, EmbeddingConfigs};
@@ -213,6 +213,7 @@ pub fn reindex<'indexer, 'index, MSP, SD>(
     settings_delta: &'indexer SD,
     must_stop_processing: &'indexer MSP,
     progress: &'indexer Progress,
+    embedder_stats: Arc<EmbedderStats>,
 ) -> Result<ChannelCongestion>
 where
     MSP: Fn() -> bool + Sync,
@@ -274,6 +275,7 @@ where
                         field_distribution,
                         index_embeddings,
                         modified_docids,
+                        &embedder_stats,
                     )
                 })
                 .unwrap()

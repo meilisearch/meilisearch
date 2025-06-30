@@ -20,7 +20,7 @@ macro_rules! test_distinct {
             let config = milli::update::IndexerConfig::default();
             let mut builder = Settings::new(&mut wtxn, &index, &config);
             builder.set_distinct_field(S(stringify!($distinct)));
-            builder.execute(&|| false, &Progress::default()).unwrap();
+            builder.execute(&|| false, &Progress::default(), Default::default()).unwrap();
             wtxn.commit().unwrap();
 
             let rtxn = index.read_txn().unwrap();

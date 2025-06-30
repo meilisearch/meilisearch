@@ -25,7 +25,7 @@ fn test_facet_distribution_with_no_facet_values() {
         FilterableAttributesRule::Field(S("genres")),
         FilterableAttributesRule::Field(S("tags")),
     ]);
-    builder.execute(&|| false, &Progress::default()).unwrap();
+    builder.execute(&|| false, &Progress::default(), Default::default()).unwrap();
     wtxn.commit().unwrap();
 
     // index documents

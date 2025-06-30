@@ -65,7 +65,7 @@ fn setup_settings<'t>(
     let sortable_fields = sortable_fields.iter().map(|s| s.to_string()).collect();
     builder.set_sortable_fields(sortable_fields);
 
-    builder.execute(&|| false, &Progress::default()).unwrap();
+    builder.execute(&|| false, &Progress::default(), Default::default()).unwrap();
 }
 
 fn setup_index_with_settings(

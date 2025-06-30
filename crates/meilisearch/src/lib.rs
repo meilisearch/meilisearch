@@ -37,7 +37,7 @@ use index_scheduler::{IndexScheduler, IndexSchedulerOptions};
 use meilisearch_auth::{open_auth_store_env, AuthController};
 use meilisearch_types::milli::constants::VERSION_MAJOR;
 use meilisearch_types::milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
-use meilisearch_types::milli::progress::Progress;
+use meilisearch_types::milli::progress::{EmbedderStats, Progress};
 use meilisearch_types::milli::update::{
     default_thread_pool_and_threads, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig,
 };
@@ -544,7 +544,8 @@ fn import_dump(
         tracing::info!("Importing the settings.");
         let settings = index_reader.settings()?;
         apply_settings_to_builder(&settings, &mut builder);
-        builder.execute(&|| false, &progress)?;
+        let embedder_stats: Arc<EmbedderStats> = Default::default();
+        builder.execute(&|| false, &progress, embedder_stats.clone())?;
 
         // 4.3 Import the documents.
         // 4.3.1 We need to recreate the grenad+obkv format accepted by the index.

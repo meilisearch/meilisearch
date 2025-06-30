@@ -333,6 +333,7 @@ pub(super) fn extract_all_settings_changes<MSP, SD>(
     field_distribution: &mut BTreeMap<String, u64>,
     mut index_embeddings: Vec<IndexEmbeddingConfig>,
     modified_docids: &mut RoaringBitmap,
+    embedder_stats: &EmbedderStats,
 ) -> Result<Vec<IndexEmbeddingConfig>>
 where
     MSP: Fn() -> bool + Sync,
@@ -371,6 +372,7 @@ where
             settings_delta.old_embedders(),
             settings_delta.embedder_actions(),
             settings_delta.new_embedder_category_id(),
+            embedder_stats,
             embedding_sender,
             field_distribution,
             request_threads(),
