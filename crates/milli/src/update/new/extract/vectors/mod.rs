@@ -351,13 +351,17 @@ impl<'extractor> SettingsChangeExtractor<'extractor> for SettingsChangeEmbedding
         for (embedder_name, (embedder, prompt, _is_quantized)) in embedders {
             // if the embedder is not in the embedder_actions, we don't need to reindex.
             if let Some((embedder_id, reindex_action)) =
-                self.embedder_actions.get(embedder_name).and_then(|action| {
-                    let embedder_id = self
-                        .embedder_category_id
-                        .get(embedder_name)
-                        .expect("embedder_category_id should be present");
-                    action.reindex().map(|reindex| (*embedder_id, reindex))
-                })
+                self.embedder_actions
+                    .get(embedder_name)
+                    // keep only the reindex actions
+                    .and_then(EmbedderAction::reindex)
+                    // map the reindex action to the embedder_id
+                    .map(|reindex| {
+                        let embedder_id = self.embedder_category_id.get(embedder_name).expect(
+                            "An embedder_category_id must exist for all reindexed embedders",
+                        );
+                        (*embedder_id, reindex)
+                    })
             {
                 all_chunks.push((
                     Chunks::new(

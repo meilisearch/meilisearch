@@ -7,7 +7,7 @@ use hashbrown::HashMap;
 use super::DelAddRoaringBitmap;
 use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::update::new::channel::{DocumentsSender, ExtractorBbqueueSender};
-use crate::update::new::document::{write_to_obkv, Document as _};
+use crate::update::new::document::{write_to_obkv, Document};
 use crate::update::new::document_change::DatabaseDocument;
 use crate::update::new::indexer::document_changes::{DocumentContext, Extractor, IndexingContext};
 use crate::update::new::indexer::settings_changes::{
@@ -15,6 +15,7 @@ use crate::update::new::indexer::settings_changes::{
 };
 use crate::update::new::ref_cell_ext::RefCellExt as _;
 use crate::update::new::thread_local::{FullySend, ThreadLocal};
+use crate::update::new::vector_document::VectorDocument;
 use crate::update::new::DocumentChange;
 use crate::update::settings::SettingsDelta;
 use crate::vector::settings::EmbedderAction;
@@ -214,6 +215,11 @@ impl<'extractor> SettingsChangeExtractor<'extractor> for SettingsChangeDocumentE
                 &context.doc_alloc,
             )?;
 
+            // if the document doesn't need to be updated, we skip it
+            if !must_update_document(&vector_content, self.embedder_actions)? {
+                continue;
+            }
+
             let content = write_to_obkv(
                 &content,
                 Some(&vector_content),
@@ -246,8 +252,7 @@ where
     MSP: Fn() -> bool + Sync,
     SD: SettingsDelta,
 {
-    // skip if no embedder_actions
-    if settings_delta.embedder_actions().is_empty() {
+    if !must_update_database(settings_delta) {
         return Ok(());
     }
 
@@ -266,4 +271,43 @@ where
     )?;
 
     Ok(())
+}
+
+fn must_update_database<SD: SettingsDelta>(settings_delta: &SD) -> bool {
+    settings_delta.embedder_actions().iter().any(|(name, action)| {
+        if action.reindex().is_some() {
+            // if action has a reindex, we need to update the documents database if the embedder is a new one
+            settings_delta.old_embedders().get(name).is_none()
+        } else {
+            // if action has a write_back, we need to update the documents database
+            action.write_back().is_some()
+        }
+    })
+}
+
+fn must_update_document<'s, 'a>(
+    vector_document: &'s impl VectorDocument<'s>,
+    embedder_actions: &'a BTreeMap<String, EmbedderAction>,
+) -> Result<bool>
+where
+    's: 'a,
+{
+    // Check if any vector needs to be written back for the document
+    for (name, action) in embedder_actions {
+        // if the vector entry is not found, we don't need to update the document
+        let Some(vector_entry) = vector_document.vectors_for_key(name)? else {
+            continue;
+        };
+
+        // if the vector entry is user provided, we need to update the document by writing back vectors.
+        let write_back = action.write_back().is_some() && !vector_entry.regenerate;
+        // if the vector entry is a new embedder, we need to update the document removing the vectors from the document.
+        let new_embedder = action.reindex().is_some() && !vector_entry.has_configured_embedder;
+
+        if write_back || new_embedder {
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
 }
