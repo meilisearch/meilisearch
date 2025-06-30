@@ -7,10 +7,10 @@ use bumpalo::Bump;
 use super::match_searchable_field;
 use super::tokenize_document::{tokenizer_builder, DocumentTokenizer};
 use crate::proximity::{index_proximity, MAX_DISTANCE};
-use crate::update::new::document::Document;
+use crate::update::new::document::{Document, DocumentContext};
 use crate::update::new::extract::cache::BalancedCaches;
 use crate::update::new::indexer::document_changes::{
-    extract, DocumentContext, DocumentChanges, Extractor, IndexingContext,
+    extract, DocumentChanges, Extractor, IndexingContext,
 };
 use crate::update::new::ref_cell_ext::RefCellExt as _;
 use crate::update::new::steps::IndexingStep;

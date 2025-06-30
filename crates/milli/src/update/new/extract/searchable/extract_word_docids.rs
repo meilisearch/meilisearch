@@ -8,10 +8,11 @@ use bumpalo::Bump;
 
 use super::match_searchable_field;
 use super::tokenize_document::{tokenizer_builder, DocumentTokenizer};
+use crate::update::new::document::DocumentContext;
 use crate::update::new::extract::cache::BalancedCaches;
 use crate::update::new::extract::perm_json_p::contained_in;
 use crate::update::new::indexer::document_changes::{
-    extract, DocumentContext, DocumentChanges, Extractor, IndexingContext,
+    extract, DocumentChanges, Extractor, IndexingContext,
 };
 use crate::update::new::ref_cell_ext::RefCellExt as _;
 use crate::update::new::steps::IndexingStep;

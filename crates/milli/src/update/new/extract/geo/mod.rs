@@ -10,8 +10,8 @@ use serde_json::value::RawValue;
 use serde_json::Value;
 
 use crate::error::GeoError;
-use crate::update::new::document::Document;
-use crate::update::new::indexer::document_changes::{DocumentContext, Extractor};
+use crate::update::new::document::{Document, DocumentContext};
+use crate::update::new::indexer::document_changes::Extractor;
 use crate::update::new::ref_cell_ext::RefCellExt as _;
 use crate::update::new::thread_local::MostlySend;
 use crate::update::new::DocumentChange;

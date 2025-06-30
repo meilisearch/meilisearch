@@ -5,10 +5,10 @@ use rayon::iter::IndexedParallelIterator;
 use rustc_hash::FxBuildHasher;
 use serde_json::value::RawValue;
 
-use super::document_changes::{DocumentContext, DocumentChanges};
+use super::document_changes::DocumentChanges;
 use crate::documents::PrimaryKey;
 use crate::update::concurrent_available_ids::ConcurrentAvailableIds;
-use crate::update::new::document::Versions;
+use crate::update::new::document::{DocumentContext, Versions};
 use crate::update::new::ref_cell_ext::RefCellExt as _;
 use crate::update::new::thread_local::MostlySend;
 use crate::update::new::{DocumentChange, Insertion};

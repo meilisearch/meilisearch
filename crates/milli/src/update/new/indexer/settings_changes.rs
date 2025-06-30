@@ -8,8 +8,7 @@ use rayon::slice::ParallelSlice;
 use super::document_changes::IndexingContext;
 use crate::documents::PrimaryKey;
 use crate::progress::AtomicDocumentStep;
-use crate::update::new::document_change::DatabaseDocument;
-use crate::update::new::indexer::document_changes::DocumentContext;
+use crate::update::new::document::{DocumentContext, DocumentIdentifiers};
 use crate::update::new::parallel_iterator_ext::ParallelIteratorExt as _;
 use crate::update::new::steps::IndexingStep;
 use crate::update::new::thread_local::{FullySend, MostlySend, ThreadLocal};
@@ -23,16 +22,16 @@ pub trait SettingsChangeExtractor<'extractor>: Sync {
 
     fn process<'doc>(
         &'doc self,
-        documents: impl Iterator<Item = Result<DatabaseDocument<'doc>>>,
+        documents: impl Iterator<Item = Result<DocumentIdentifiers<'doc>>>,
         context: &'doc DocumentContext<Self::Data>,
     ) -> Result<()>;
 }
-pub struct DatabaseDocuments<'indexer> {
+pub struct DocumentsIndentifiers<'indexer> {
     documents: &'indexer [DocumentId],
     primary_key: PrimaryKey<'indexer>,
 }
 
-impl<'indexer> DatabaseDocuments<'indexer> {
+impl<'indexer> DocumentsIndentifiers<'indexer> {
     pub fn new(documents: &'indexer [DocumentId], primary_key: PrimaryKey<'indexer>) -> Self {
         Self { documents, primary_key }
     }
@@ -48,7 +47,7 @@ impl<'indexer> DatabaseDocuments<'indexer> {
         &'doc self,
         context: &'doc DocumentContext<T>,
         docid: &'doc DocumentId,
-    ) -> Result<Option<DatabaseDocument<'doc>>> {
+    ) -> Result<Option<DocumentIdentifiers<'doc>>> {
         let current = context.index.document(&context.rtxn, *docid)?;
 
         let external_document_id = self.primary_key.extract_docid_from_db(
@@ -59,7 +58,7 @@ impl<'indexer> DatabaseDocuments<'indexer> {
 
         let external_document_id = external_document_id.to_bump(&context.doc_alloc);
 
-        Ok(Some(DatabaseDocument::create(*docid, external_document_id)))
+        Ok(Some(DocumentIdentifiers::create(*docid, external_document_id)))
     }
 
     fn len(&self) -> usize {
@@ -78,7 +77,7 @@ pub fn settings_change_extract<
     EX: SettingsChangeExtractor<'extractor>,
     MSP: Fn() -> bool + Sync,
 >(
-    documents: &'indexer DatabaseDocuments<'indexer>,
+    documents: &'indexer DocumentsIndentifiers<'indexer>,
     extractor: &EX,
     IndexingContext {
         index,

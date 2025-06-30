@@ -10,8 +10,8 @@ use crate::error::FaultSource;
 use crate::progress::EmbedderStats;
 use crate::prompt::Prompt;
 use crate::update::new::channel::EmbeddingSender;
-use crate::update::new::document_change::DatabaseDocument;
-use crate::update::new::indexer::document_changes::{DocumentContext, Extractor};
+use crate::update::new::document::{DocumentContext, DocumentIdentifiers};
+use crate::update::new::indexer::document_changes::Extractor;
 use crate::update::new::indexer::settings_changes::SettingsChangeExtractor;
 use crate::update::new::thread_local::MostlySend;
 use crate::update::new::vector_document::VectorDocument;
@@ -343,7 +343,7 @@ impl<'extractor> SettingsChangeExtractor<'extractor> for SettingsChangeEmbedding
 
     fn process<'doc>(
         &'doc self,
-        documents: impl Iterator<Item = crate::Result<DatabaseDocument<'doc>>>,
+        documents: impl Iterator<Item = crate::Result<DocumentIdentifiers<'doc>>>,
         context: &'doc DocumentContext<Self::Data>,
     ) -> crate::Result<()> {
         let embedders = self.embedders.inner_as_ref();

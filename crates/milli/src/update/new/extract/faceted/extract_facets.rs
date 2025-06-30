@@ -15,9 +15,10 @@ use crate::filterable_attributes_rules::match_faceted_field;
 use crate::heed_codec::facet::OrderedF64Codec;
 use crate::update::del_add::DelAdd;
 use crate::update::new::channel::FieldIdDocidFacetSender;
+use crate::update::new::document::DocumentContext;
 use crate::update::new::extract::perm_json_p;
 use crate::update::new::indexer::document_changes::{
-    extract, DocumentContext, DocumentChanges, Extractor, IndexingContext,
+    extract, DocumentChanges, Extractor, IndexingContext,
 };
 use crate::update::new::ref_cell_ext::RefCellExt as _;
 use crate::update::new::steps::IndexingStep;

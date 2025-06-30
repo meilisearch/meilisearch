@@ -12,14 +12,14 @@ use serde_json::value::RawValue;
 use serde_json::Deserializer;
 
 use super::super::document_change::DocumentChange;
-use super::document_changes::{DocumentContext, DocumentChanges};
+use super::document_changes::DocumentChanges;
 use super::guess_primary_key::retrieve_or_guess_primary_key;
 use crate::documents::PrimaryKey;
 use crate::progress::{AtomicPayloadStep, Progress};
-use crate::update::new::document::Versions;
+use crate::update::new::document::{DocumentContext, Versions};
 use crate::update::new::steps::IndexingStep;
 use crate::update::new::thread_local::MostlySend;
-use crate::update::new::{DatabaseDocument, Insertion, Update};
+use crate::update::new::{DocumentIdentifiers, Insertion, Update};
 use crate::update::{AvailableIds, IndexDocumentsMethod};
 use crate::{DocumentId, Error, FieldsIdsMap, Index, InternalError, Result, UserError};
 
@@ -577,7 +577,7 @@ impl<'pl> PayloadOperations<'pl> {
                 if self.is_new {
                     Ok(None)
                 } else {
-                    let deletion = DatabaseDocument::create(self.docid, external_doc);
+                    let deletion = DocumentIdentifiers::create(self.docid, external_doc);
                     Ok(Some(DocumentChange::Deletion(deletion)))
                 }
             }

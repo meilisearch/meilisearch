@@ -20,7 +20,7 @@ use crate::progress::EmbedderStats;
 use crate::progress::MergingWordCache;
 use crate::proximity::ProximityPrecision;
 use crate::update::new::extract::EmbeddingExtractor;
-use crate::update::new::indexer::settings_changes::DatabaseDocuments;
+use crate::update::new::indexer::settings_changes::DocumentsIndentifiers;
 use crate::update::new::merger::merge_and_send_rtree;
 use crate::update::new::{merge_and_send_docids, merge_and_send_facet_docids, FacetDatabases};
 use crate::update::settings::SettingsDelta;
@@ -345,7 +345,7 @@ where
         indexing_context.index.documents_ids(&rtxn)?.into_iter().collect::<Vec<_>>();
     let primary_key =
         primary_key_from_db(indexing_context.index, &rtxn, &indexing_context.db_fields_ids_map)?;
-    let documents = DatabaseDocuments::new(&all_document_ids, primary_key);
+    let documents = DocumentsIndentifiers::new(&all_document_ids, primary_key);
 
     let span =
         tracing::trace_span!(target: "indexing::documents", parent: &indexer_span, "extract");

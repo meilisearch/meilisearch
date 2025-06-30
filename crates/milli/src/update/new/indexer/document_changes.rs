@@ -3,99 +3,17 @@ use std::sync::atomic::Ordering;
 use std::sync::{Arc, RwLock};
 
 use bumpalo::Bump;
-use heed::{RoTxn, WithoutTls};
 use rayon::iter::IndexedParallelIterator;
 
 use super::super::document_change::DocumentChange;
 use crate::fields_ids_map::metadata::FieldIdMapWithMetadata;
 use crate::progress::{AtomicDocumentStep, Progress};
+use crate::update::new::document::DocumentContext;
 use crate::update::new::parallel_iterator_ext::ParallelIteratorExt as _;
 use crate::update::new::steps::IndexingStep;
 use crate::update::new::thread_local::{FullySend, MostlySend, ThreadLocal};
 use crate::update::GrenadParameters;
 use crate::{FieldsIdsMap, GlobalFieldsIdsMap, Index, InternalError, Result};
-
-pub struct DocumentContext<
-    'doc,             // covariant lifetime of a single `process` call
-    'extractor: 'doc, // invariant lifetime of the extractor_allocs
-    'fid: 'doc,       // invariant lifetime of the new_fields_ids_map
-    'indexer: 'doc,   // covariant lifetime of objects that outlive a single `process` call
-    T: MostlySend,
-> {
-    /// The index we're indexing in
-    pub index: &'indexer Index,
-    /// The fields ids map as it was at the start of this indexing process. Contains at least all top-level fields from documents
-    /// inside of the DB.
-    pub db_fields_ids_map: &'indexer FieldsIdsMap,
-    /// A transaction providing data from the DB before all indexing operations
-    pub rtxn: RoTxn<'indexer, WithoutTls>,
-
-    /// Global field id map that is up to date with the current state of the indexing process.
-    ///
-    /// - Inserting a field will take a lock
-    /// - Retrieving a field may take a lock as well
-    pub new_fields_ids_map: &'doc std::cell::RefCell<GlobalFieldsIdsMap<'fid>>,
-
-    /// Data allocated in this allocator is cleared between each call to `process`.
-    pub doc_alloc: Bump,
-
-    /// Data allocated in this allocator is not cleared between each call to `process`, unless the data spills.
-    pub extractor_alloc: &'extractor Bump,
-
-    /// Pool of doc allocators, used to retrieve the doc allocator we provided for the documents
-    pub doc_allocs: &'doc ThreadLocal<FullySend<Cell<Bump>>>,
-
-    /// Extractor-specific data
-    pub data: &'doc T,
-}
-
-impl<
-        'doc,             // covariant lifetime of a single `process` call
-        'data: 'doc,      // invariant on T lifetime of the datastore
-        'extractor: 'doc, // invariant lifetime of extractor_allocs
-        'fid: 'doc,       // invariant lifetime of fields ids map
-        'indexer: 'doc,   // covariant lifetime of objects that survive a `process` call
-        T: MostlySend,
-    > DocumentContext<'doc, 'extractor, 'fid, 'indexer, T>
-{
-    #[allow(clippy::too_many_arguments)]
-    pub fn new<F>(
-        index: &'indexer Index,
-        db_fields_ids_map: &'indexer FieldsIdsMap,
-        new_fields_ids_map: &'fid RwLock<FieldIdMapWithMetadata>,
-        extractor_allocs: &'extractor ThreadLocal<FullySend<Bump>>,
-        doc_allocs: &'doc ThreadLocal<FullySend<Cell<Bump>>>,
-        datastore: &'data ThreadLocal<T>,
-        fields_ids_map_store: &'doc ThreadLocal<FullySend<RefCell<GlobalFieldsIdsMap<'fid>>>>,
-        init_data: F,
-    ) -> Result<Self>
-    where
-        F: FnOnce(&'extractor Bump) -> Result<T>,
-    {
-        let doc_alloc =
-            doc_allocs.get_or(|| FullySend(Cell::new(Bump::with_capacity(1024 * 1024))));
-        let doc_alloc = doc_alloc.0.take();
-        let fields_ids_map = fields_ids_map_store
-            .get_or(|| RefCell::new(GlobalFieldsIdsMap::new(new_fields_ids_map)).into());
-
-        let fields_ids_map = &fields_ids_map.0;
-        let extractor_alloc = extractor_allocs.get_or_default();
-
-        let data = datastore.get_or_try(move || init_data(&extractor_alloc.0))?;
-
-        let txn = index.read_txn()?;
-        Ok(DocumentContext {
-            index,
-            rtxn: txn,
-            db_fields_ids_map,
-            new_fields_ids_map: fields_ids_map,
-            doc_alloc,
-            extractor_alloc: &extractor_alloc.0,
-            data,
-            doc_allocs,
-        })
-    }
-}
 
 /// An internal iterator (i.e. using `foreach`) of `DocumentChange`s
 pub trait Extractor<'extractor>: Sync {

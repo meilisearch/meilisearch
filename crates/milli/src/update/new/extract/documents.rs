@@ -8,10 +8,10 @@ use super::DelAddRoaringBitmap;
 use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::update::new::channel::{DocumentsSender, ExtractorBbqueueSender};
 use crate::update::new::document::{write_to_obkv, Document};
-use crate::update::new::document_change::DatabaseDocument;
-use crate::update::new::indexer::document_changes::{DocumentContext, Extractor, IndexingContext};
+use crate::update::new::document::{DocumentContext, DocumentIdentifiers};
+use crate::update::new::indexer::document_changes::{Extractor, IndexingContext};
 use crate::update::new::indexer::settings_changes::{
-    settings_change_extract, DatabaseDocuments, SettingsChangeExtractor,
+    settings_change_extract, DocumentsIndentifiers, SettingsChangeExtractor,
 };
 use crate::update::new::ref_cell_ext::RefCellExt as _;
 use crate::update::new::thread_local::{FullySend, ThreadLocal};
@@ -194,7 +194,7 @@ impl<'extractor> SettingsChangeExtractor<'extractor> for SettingsChangeDocumentE
 
     fn process<'doc>(
         &self,
-        documents: impl Iterator<Item = Result<DatabaseDocument<'doc>>>,
+        documents: impl Iterator<Item = Result<DocumentIdentifiers<'doc>>>,
         context: &DocumentContext<Self::Data>,
     ) -> Result<()> {
         let mut document_buffer = bumpalo::collections::Vec::new_in(&context.doc_alloc);
@@ -242,7 +242,7 @@ impl<'extractor> SettingsChangeExtractor<'extractor> for SettingsChangeDocumentE
 /// and then updates the database.
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::documents::extract")]
 pub fn update_database_documents<'indexer, 'extractor, MSP, SD>(
-    documents: &'indexer DatabaseDocuments<'indexer>,
+    documents: &'indexer DocumentsIndentifiers<'indexer>,
     indexing_context: IndexingContext<MSP>,
     extractor_sender: &ExtractorBbqueueSender,
     settings_delta: &SD,
