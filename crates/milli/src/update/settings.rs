@@ -1578,6 +1578,7 @@ pub struct InnerIndexSettingsDiff {
     /// The set of only the additional searchable fields.
     /// If any other searchable field has been modified, is set to None.
     pub(crate) only_additional_fields: Option<HashSet<String>>,
+    fragment_diffs: BTreeMap<String, Vec<(Option<usize>, usize)>>,
 
     // Cache the check to see if all the stop_words, allowed_separators, dictionary,
     // exact_attributes, proximity_precision are different.
@@ -1695,10 +1696,59 @@ impl InnerIndexSettingsDiff {
             }
         }
 
+        // build the fragment diffs
+        let mut fragment_diffs = BTreeMap::new();
+        for (embedder_name, embedder_action) in &embedding_config_updates {
+            let Some(new_embedder) = new_settings.runtime_embedders.get(embedder_name) else {
+                continue;
+            };
+            let regenerate_fragments =
+                if let Some(ReindexAction::RegenerateFragments(regenerate_fragments)) =
+                    embedder_action.reindex()
+                {
+                    either::Either::Left(
+                        regenerate_fragments
+                            .iter()
+                            .filter(|(_, action)| {
+                                !matches!(
+                                    action,
+                                    crate::vector::settings::RegenerateFragment::Remove
+                                )
+                            })
+                            .map(|(name, _)| name),
+                    )
+                } else {
+                    either::Either::Right(
+                        new_embedder.fragments().iter().map(|fragment| &fragment.name),
+                    )
+                };
+
+            let old_embedder = old_settings.runtime_embedders.get(embedder_name);
+
+            let mut fragments = Vec::new();
+            for fragment_name in regenerate_fragments {
+                let Ok(new) = new_embedder
+                    .fragments()
+                    .binary_search_by_key(&fragment_name, |fragment| &fragment.name)
+                else {
+                    continue;
+                };
+                let old = old_embedder.as_ref().and_then(|old_embedder| {
+                    old_embedder
+                        .fragments()
+                        .binary_search_by_key(&fragment_name, |fragment| &fragment.name)
+                        .ok()
+                });
+                fragments.push((old, new));
+            }
+            fragment_diffs.insert(embedder_name.clone(), fragments);
+        }
+
         InnerIndexSettingsDiff {
             old: old_settings,
             new: new_settings,
             primary_key_id,
+            fragment_diffs,
             embedding_config_updates,
             settings_update_only,
             only_additional_fields,
@@ -2341,7 +2391,19 @@ pub trait SettingsDelta {
     fn old_embedders(&self) -> &EmbeddingConfigs;
     fn new_embedder_category_id(&self) -> &HashMap<String, u8>;
     fn embedder_actions(&self) -> &BTreeMap<String, EmbedderAction>;
+    fn try_for_each_fragment_diff<F, E>(
+        &self,
+        embedder_name: &str,
+        for_each: F,
+    ) -> std::result::Result<(), E>
+    where
+        F: FnMut(FragmentDiff) -> std::result::Result<(), E>;
     fn new_fields_ids_map(&self) -> &FieldIdMapWithMetadata;
+}
+
+pub struct FragmentDiff<'a> {
+    pub old: Option<&'a RuntimeFragment>,
+    pub new: &'a RuntimeFragment,
 }
 
 impl SettingsDelta for InnerIndexSettingsDiff {
@@ -2363,6 +2425,37 @@ impl SettingsDelta for InnerIndexSettingsDiff {
 
     fn new_fields_ids_map(&self) -> &FieldIdMapWithMetadata {
         &self.new.fields_ids_map
+    }
+
+    fn try_for_each_fragment_diff<F, E>(
+        &self,
+        embedder_name: &str,
+        mut for_each: F,
+    ) -> std::result::Result<(), E>
+    where
+        F: FnMut(FragmentDiff) -> std::result::Result<(), E>,
+    {
+        let Some(fragment_diff) = self.fragment_diffs.get(embedder_name) else { return Ok(()) };
+        for (old, new) in fragment_diff {
+            let Some(new_runtime) = self.new.runtime_embedders.get(embedder_name) else {
+                continue;
+            };
+
+            let new = new_runtime.fragments().get(*new).unwrap();
+
+            match old {
+                Some(old) => {
+                    if let Some(old_runtime) = self.old.runtime_embedders.get(embedder_name) {
+                        let old = &old_runtime.fragments().get(*old).unwrap();
+                        for_each(FragmentDiff { old: Some(old), new })?;
+                    } else {
+                        for_each(FragmentDiff { old: None, new })?;
+                    }
+                }
+                None => for_each(FragmentDiff { old: None, new })?,
+            };
+        }
+        Ok(())
     }
 }
 
