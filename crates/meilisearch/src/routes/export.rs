@@ -47,7 +47,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     tag = "Export",
     security(("Bearer" = ["export", "*"])),
     responses(
-        (status = OK, description = "Known nodes are returned", body = Export, content_type = "application/json", example = json!(
+        (status = 202, description = "Export successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 1,
                 "status": "enqueued",
