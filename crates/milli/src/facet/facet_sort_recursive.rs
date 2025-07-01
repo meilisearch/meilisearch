@@ -370,7 +370,7 @@ pub fn recursive_facet_sort<'ctx>(
 
     let mut fields = Vec::new();
     let fields_ids_map = index.fields_ids_map(rtxn)?;
-    let geo_candidates = index.geo_faceted_documents_ids(rtxn)?; // TODO: skip when no geo sort
+    let mut need_geo_candidates = false;
     for sort in sort {
         match sort {
             AscDesc::Asc(Member::Field(field)) => {
@@ -387,6 +387,7 @@ pub fn recursive_facet_sort<'ctx>(
                 if let (Some(lat), Some(lng)) =
                     (fields_ids_map.id("_geo.lat"), fields_ids_map.id("_geo.lng"))
                 {
+                    need_geo_candidates = true;
                     fields.push(AscDescId::Geo {
                         field_ids: [lat, lng],
                         target_point,
@@ -398,6 +399,7 @@ pub fn recursive_facet_sort<'ctx>(
                 if let (Some(lat), Some(lng)) =
                     (fields_ids_map.id("_geo.lat"), fields_ids_map.id("_geo.lng"))
                 {
+                    need_geo_candidates = true;
                     fields.push(AscDescId::Geo {
                         field_ids: [lat, lng],
                         target_point,
@@ -408,6 +410,12 @@ pub fn recursive_facet_sort<'ctx>(
         };
         // FIXME: Should this return an error if the field is not found?
     }
+
+    let geo_candidates = if need_geo_candidates {        
+        index.geo_faceted_documents_ids(rtxn)?
+    } else {
+        RoaringBitmap::new()
+    };
 
     let number_db = index.facet_id_f64_docids.remap_key_type::<FacetGroupKeyCodec<BytesRefCodec>>();
     let string_db =
