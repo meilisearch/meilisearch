@@ -33,6 +33,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
     time_budget: TimeBudget,
     ranking_score_threshold: Option<f64>,
     exhaustive_number_hits: bool,
+    max_total_hits: Option<usize>,
 ) -> Result<BucketSortOutput> {
     logger.initial_query(query);
     logger.ranking_rules(&ranking_rules);
@@ -160,8 +161,11 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
         };
     }
 
+    let max_total_hits = max_total_hits.unwrap_or(usize::MAX);
     while valid_docids.len() < length
-        || (exhaustive_number_hits && ranking_score_threshold.is_some())
+        || (exhaustive_number_hits
+            && ranking_score_threshold.is_some()
+            && valid_docids.len() < max_total_hits)
     {
         if time_budget.exceeded() {
             loop {

@@ -627,6 +627,7 @@ pub fn execute_vector_search(
     vector: &[f32],
     scoring_strategy: ScoringStrategy,
     exhaustive_number_hits: bool,
+    max_total_hits: Option<usize>,
     universe: RoaringBitmap,
     sort_criteria: &Option<Vec<AscDesc>>,
     distinct: &Option<String>,
@@ -671,6 +672,7 @@ pub fn execute_vector_search(
         time_budget,
         ranking_score_threshold,
         exhaustive_number_hits,
+        max_total_hits,
     )?;
 
     Ok(PartialSearchResult {
@@ -691,6 +693,7 @@ pub fn execute_search(
     terms_matching_strategy: TermsMatchingStrategy,
     scoring_strategy: ScoringStrategy,
     exhaustive_number_hits: bool,
+    max_total_hits: Option<usize>,
     mut universe: RoaringBitmap,
     sort_criteria: &Option<Vec<AscDesc>>,
     distinct: &Option<String>,
@@ -828,6 +831,7 @@ pub fn execute_search(
             time_budget,
             ranking_score_threshold,
             exhaustive_number_hits,
+            max_total_hits,
         )?
     } else {
         let ranking_rules =
@@ -845,6 +849,7 @@ pub fn execute_search(
             time_budget,
             ranking_score_threshold,
             exhaustive_number_hits,
+            max_total_hits,
         )?
     };
 

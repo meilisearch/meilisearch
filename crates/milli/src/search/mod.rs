@@ -51,6 +51,7 @@ pub struct Search<'a> {
     scoring_strategy: ScoringStrategy,
     words_limit: usize,
     exhaustive_number_hits: bool,
+    max_total_hits: Option<usize>,
     rtxn: &'a heed::RoTxn<'a>,
     index: &'a Index,
     semantic: Option<SemanticSearch>,
@@ -73,6 +74,7 @@ impl<'a> Search<'a> {
             terms_matching_strategy: TermsMatchingStrategy::default(),
             scoring_strategy: Default::default(),
             exhaustive_number_hits: false,
+            max_total_hits: None,
             words_limit: 10,
             rtxn,
             index,
@@ -163,6 +165,11 @@ impl<'a> Search<'a> {
         self
     }
 
+    pub fn max_total_hits(&mut self, max_total_hits: Option<usize>) -> &mut Search<'a> {
+        self.max_total_hits = max_total_hits;
+        self
+    }
+
     pub fn time_budget(&mut self, time_budget: TimeBudget) -> &mut Search<'a> {
         self.time_budget = time_budget;
         self
@@ -237,6 +244,7 @@ impl<'a> Search<'a> {
                     vector,
                     self.scoring_strategy,
                     self.exhaustive_number_hits,
+                    self.max_total_hits,
                     universe,
                     &self.sort_criteria,
                     &self.distinct,
@@ -256,6 +264,7 @@ impl<'a> Search<'a> {
                 self.terms_matching_strategy,
                 self.scoring_strategy,
                 self.exhaustive_number_hits,
+                self.max_total_hits,
                 universe,
                 &self.sort_criteria,
                 &self.distinct,
@@ -309,6 +318,7 @@ impl fmt::Debug for Search<'_> {
             scoring_strategy,
             words_limit,
             exhaustive_number_hits,
+            max_total_hits,
             rtxn: _,
             index: _,
             semantic,
@@ -328,6 +338,7 @@ impl fmt::Debug for Search<'_> {
             .field("terms_matching_strategy", terms_matching_strategy)
             .field("scoring_strategy", scoring_strategy)
             .field("exhaustive_number_hits", exhaustive_number_hits)
+            .field("max_total_hits", max_total_hits)
             .field("words_limit", words_limit)
             .field(
                 "semantic.embedder_name",
