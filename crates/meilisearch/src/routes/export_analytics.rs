@@ -7,6 +7,7 @@ pub struct ExportAnalytics {
     has_api_key: bool,
     sum_index_patterns: usize,
     sum_patterns_with_filter: usize,
+    sum_patterns_with_override_settings: usize,
     payload_sizes: Vec<u64>,
 }
 
@@ -18,6 +19,9 @@ impl ExportAnalytics {
         let index_patterns_count = indexes.as_ref().map_or(0, |indexes| indexes.len());
         let patterns_with_filter_count = indexes.as_ref().map_or(0, |indexes| {
             indexes.values().filter(|settings| settings.filter.is_some()).count()
+        });
+        let patterns_with_override_settings_count = indexes.as_ref().map_or(0, |indexes| {
+            indexes.values().filter(|settings| settings.override_settings).count()
         });
         let payload_sizes =
             if let Some(crate::routes::export::ByteWithDeserr(byte_size)) = payload_size {
@@ -31,6 +35,7 @@ impl ExportAnalytics {
             has_api_key,
             sum_index_patterns: index_patterns_count,
             sum_patterns_with_filter: patterns_with_filter_count,
+            sum_patterns_with_override_settings: patterns_with_override_settings_count,
             payload_sizes,
         }
     }
@@ -46,6 +51,7 @@ impl Aggregate for ExportAnalytics {
         self.has_api_key |= other.has_api_key;
         self.sum_index_patterns += other.sum_index_patterns;
         self.sum_patterns_with_filter += other.sum_patterns_with_filter;
+        self.sum_patterns_with_override_settings += other.sum_patterns_with_override_settings;
         self.payload_sizes.extend(other.payload_sizes);
         self
     }
@@ -69,11 +75,18 @@ impl Aggregate for ExportAnalytics {
             Some(self.sum_patterns_with_filter as f64 / self.total_received as f64)
         };
 
+        let avg_patterns_with_override_settings = if self.total_received == 0 {
+            None
+        } else {
+            Some(self.sum_patterns_with_override_settings as f64 / self.total_received as f64)
+        };
+
         serde_json::json!({
             "total_received": self.total_received,
             "has_api_key": self.has_api_key,
             "avg_index_patterns": avg_index_patterns,
             "avg_patterns_with_filter": avg_patterns_with_filter,
+            "avg_patterns_with_override_settings": avg_patterns_with_override_settings,
             "avg_payload_size": avg_payload_size,
         })
     }
