@@ -367,7 +367,7 @@ pub fn recursive_facet_sort<'ctx>(
 ) -> crate::Result<SortedDocuments<'ctx>> {
     let sortable_fields: BTreeSet<_> = index.sortable_fields(rtxn)?.into_iter().collect();
     let fields_ids_map = index.fields_ids_map(rtxn)?;
-    
+
     let mut fields = Vec::new();
     let mut need_geo_candidates = false;
     for asc_desc in sort {
