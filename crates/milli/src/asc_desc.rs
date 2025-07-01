@@ -168,6 +168,16 @@ pub enum SortError {
     ReservedNameForFilter { name: String },
 }
 
+impl SortError {
+    pub fn into_search_error(self) -> Error {
+        Error::UserError(UserError::SortError { error: self, search: true })
+    }
+
+    pub fn into_documents_error(self) -> Error {
+        Error::UserError(UserError::SortError { error: self, search: false })
+    }
+}
+
 impl From<AscDescError> for SortError {
     fn from(error: AscDescError) -> Self {
         match error {
@@ -187,12 +197,6 @@ impl From<AscDescError> for SortError {
             }
             AscDescError::ReservedKeyword { name } => SortError::ReservedName { name },
         }
-    }
-}
-
-impl From<SortError> for Error {
-    fn from(error: SortError) -> Self {
-        Self::UserError(UserError::SortError(error))
     }
 }
 

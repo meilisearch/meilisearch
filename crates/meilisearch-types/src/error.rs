@@ -483,7 +483,8 @@ impl ErrorCode for milli::Error {
                     UserError::InvalidVectorsMapType { .. }
                     | UserError::InvalidVectorsEmbedderConf { .. } => Code::InvalidVectorsType,
                     UserError::TooManyVectors(_, _) => Code::TooManyVectors,
-                    UserError::SortError(_) => Code::InvalidSearchSort,
+                    UserError::SortError { search: true, .. } => Code::InvalidSearchSort,
+                    UserError::SortError { search: false, .. } => Code::InvalidDocumentSort,
                     UserError::InvalidMinTypoWordLenSetting(_, _) => {
                         Code::InvalidSettingsTypoTolerance
                     }

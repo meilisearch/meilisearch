@@ -411,7 +411,7 @@ pub fn recursive_facet_sort<'ctx>(
         // FIXME: Should this return an error if the field is not found?
     }
 
-    let geo_candidates = if need_geo_candidates {        
+    let geo_candidates = if need_geo_candidates {
         index.geo_faceted_documents_ids(rtxn)?
     } else {
         RoaringBitmap::new()

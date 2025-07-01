@@ -1060,7 +1060,7 @@ pub fn prepare_search<'t>(
         let sort = match sort.iter().map(|s| AscDesc::from_str(s)).collect() {
             Ok(sorts) => sorts,
             Err(asc_desc_error) => {
-                return Err(milli::Error::from(SortError::from(asc_desc_error)).into())
+                return Err(SortError::from(asc_desc_error).into_search_error().into())
             }
         };
 
