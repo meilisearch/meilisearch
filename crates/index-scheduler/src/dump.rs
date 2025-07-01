@@ -4,6 +4,7 @@ use std::io;
 use dump::{KindDump, TaskDump, UpdateFile};
 use meilisearch_types::batches::{Batch, BatchId};
 use meilisearch_types::heed::RwTxn;
+use meilisearch_types::index_uid_pattern::IndexUidPattern;
 use meilisearch_types::milli;
 use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
 use roaring::RoaringBitmap;
@@ -211,6 +212,23 @@ impl<'a> Dump<'a> {
                     KindWithContent::DumpCreation { keys, instance_uid }
                 }
                 KindDump::SnapshotCreation => KindWithContent::SnapshotCreation,
+                KindDump::Export { url, api_key, payload_size, indexes } => {
+                    KindWithContent::Export {
+                        url,
+                        api_key,
+                        payload_size,
+                        indexes: indexes
+                            .into_iter()
+                            .map(|(pattern, settings)| {
+                                Ok((
+                                    IndexUidPattern::try_from(pattern)
+                                        .map_err(|_| Error::CorruptedDump)?,
+                                    settings,
+                                ))
+                            })
+                            .collect::<Result<_, Error>>()?,
+                    }
+                }
                 KindDump::UpgradeDatabase { from } => KindWithContent::UpgradeDatabase { from },
             },
         };

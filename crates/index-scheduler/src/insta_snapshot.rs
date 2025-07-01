@@ -289,6 +289,9 @@ fn snapshot_details(d: &Details) -> String {
         Details::IndexSwap { swaps } => {
             format!("{{ swaps: {swaps:?} }}")
         }
+        Details::Export { url, api_key, payload_size, indexes } => {
+            format!("{{ url: {url:?}, api_key: {api_key:?}, payload_size: {payload_size:?}, indexes: {indexes:?} }}")
+        }
         Details::UpgradeDatabase { from, to } => {
             format!("{{ from: {from:?}, to: {to:?} }}")
         }

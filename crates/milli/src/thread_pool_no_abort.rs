@@ -1,7 +1,7 @@
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use rayon::{ThreadPool, ThreadPoolBuilder};
+use rayon::{BroadcastContext, ThreadPool, ThreadPoolBuilder};
 use thiserror::Error;
 
 /// A rayon ThreadPool wrapper that can catch panics in the pool
@@ -23,6 +23,22 @@ impl ThreadPoolNoAbort {
     {
         self.active_operations.fetch_add(1, Ordering::Relaxed);
         let output = self.thread_pool.install(op);
+        self.active_operations.fetch_sub(1, Ordering::Relaxed);
+        // While reseting the pool panic catcher we return an error if we catched one.
+        if self.pool_catched_panic.swap(false, Ordering::SeqCst) {
+            Err(PanicCatched)
+        } else {
+            Ok(output)
+        }
+    }
+
+    pub fn broadcast<OP, R>(&self, op: OP) -> Result<Vec<R>, PanicCatched>
+    where
+        OP: Fn(BroadcastContext<'_>) -> R + Sync,
+        R: Send,
+    {
+        self.active_operations.fetch_add(1, Ordering::Relaxed);
+        let output = self.thread_pool.broadcast(op);
         self.active_operations.fetch_sub(1, Ordering::Relaxed);
         // While reseting the pool panic catcher we return an error if we catched one.
         if self.pool_catched_panic.swap(false, Ordering::SeqCst) {

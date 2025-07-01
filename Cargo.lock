@@ -2997,6 +2997,7 @@ name = "index-scheduler"
 version = "1.15.2"
 dependencies = [
  "anyhow",
+ "backoff",
  "big_s",
  "bincode",
  "bumpalo",
@@ -3854,6 +3855,7 @@ dependencies = [
  "anyhow",
  "bumpalo",
  "bumparaw-collections",
+ "byte-unit",
  "convert_case 0.8.0",
  "csv",
  "deserr",

@@ -969,6 +969,7 @@ pub fn settings(
     if let SecretPolicy::HideSecrets = secret_policy {
         settings.hide_secrets()
     }
+
     Ok(settings)
 }
 
