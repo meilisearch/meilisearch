@@ -882,12 +882,12 @@ impl IndexScheduler {
                     {
                         let embedders = self.embedders.read().unwrap();
                         if let Some(embedder) = embedders.get(&embedder_options) {
-                            let runtime = Arc::new(RuntimeEmbedder {
-                                embedder: embedder.clone(),
+                            let runtime = Arc::new(RuntimeEmbedder::new(
+                                embedder.clone(),
                                 document_template,
                                 fragments,
-                                is_quantized: quantized.unwrap_or_default(),
-                            });
+                                quantized.unwrap_or_default(),
+                            ));
 
                             return Ok((name, runtime));
                         }
@@ -906,12 +906,12 @@ impl IndexScheduler {
                         embedders.insert(embedder_options, embedder.clone());
                     }
 
-                    let runtime = Arc::new(RuntimeEmbedder {
-                        embedder: embedder.clone(),
+                    let runtime = Arc::new(RuntimeEmbedder::new(
+                        embedder.clone(),
                         document_template,
                         fragments,
-                        is_quantized: quantized.unwrap_or_default(),
-                    });
+                        quantized.unwrap_or_default(),
+                    ));
 
                     Ok((name, runtime))
                 },

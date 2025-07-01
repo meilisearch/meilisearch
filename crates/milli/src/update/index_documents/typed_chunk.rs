@@ -673,7 +673,7 @@ pub(crate) fn write_typed_chunk_into_index(
 
             let binary_quantized = settings_diff
                 .old
-                .embedding_configs
+                .runtime_embedders
                 .get(&embedder_name)
                 .is_some_and(|conf| conf.is_quantized);
             // FIXME: allow customizing distance

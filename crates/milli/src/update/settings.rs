@@ -1647,9 +1647,9 @@ impl InnerIndexSettingsDiff {
 
         // if the user-defined searchables changed, then we need to reindex prompts.
         if cache_user_defined_searchables {
-            for (embedder_name, runtime) in new_settings.embedding_configs.inner_as_ref() {
+            for (embedder_name, runtime) in new_settings.runtime_embedders.inner_as_ref() {
                 let was_quantized = old_settings
-                    .embedding_configs
+                    .runtime_embedders
                     .get(embedder_name)
                     .is_some_and(|conf| conf.is_quantized);
                 // skip embedders that don't use document templates
@@ -1893,7 +1893,7 @@ pub(crate) struct InnerIndexSettings {
     pub exact_attributes: HashSet<FieldId>,
     pub disabled_typos_terms: DisabledTyposTerms,
     pub proximity_precision: ProximityPrecision,
-    pub embedding_configs: RuntimeEmbedders,
+    pub runtime_embedders: RuntimeEmbedders,
     pub embedder_category_id: HashMap<String, u8>,
     pub geo_fields_ids: Option<(FieldId, FieldId)>,
     pub prefix_search: PrefixSearch,
@@ -1904,7 +1904,7 @@ impl InnerIndexSettings {
     pub fn from_index(
         index: &Index,
         rtxn: &heed::RoTxn<'_>,
-        embedding_configs: Option<RuntimeEmbedders>,
+        runtime_embedders: Option<RuntimeEmbedders>,
     ) -> Result<Self> {
         let stop_words = index.stop_words(rtxn)?;
         let stop_words = stop_words.map(|sw| sw.map_data(Vec::from).unwrap());
@@ -1913,13 +1913,13 @@ impl InnerIndexSettings {
         let mut fields_ids_map = index.fields_ids_map(rtxn)?;
         let exact_attributes = index.exact_attributes_ids(rtxn)?;
         let proximity_precision = index.proximity_precision(rtxn)?.unwrap_or_default();
-        let embedding_configs = match embedding_configs {
+        let runtime_embedders = match runtime_embedders {
             Some(embedding_configs) => embedding_configs,
             None => embedders(index.embedding_configs().embedding_configs(rtxn)?)?,
         };
         let embedder_category_id = index
-            .embedder_category_id
-            .iter(rtxn)?
+            .embedding_configs()
+            .iter_embedder_id(rtxn)?
             .map(|r| r.map(|(k, v)| (k.to_string(), v)))
             .collect::<heed::Result<_>>()?;
         let prefix_search = index.prefix_search(rtxn)?.unwrap_or_default();
@@ -1960,7 +1960,7 @@ impl InnerIndexSettings {
             sortable_fields,
             exact_attributes,
             proximity_precision,
-            embedding_configs,
+            runtime_embedders,
             embedder_category_id,
             geo_fields_ids,
             prefix_search,
@@ -2035,12 +2035,12 @@ fn embedders(embedding_configs: Vec<IndexEmbeddingConfig>) -> Result<RuntimeEmbe
 
                 Ok((
                     name,
-                    Arc::new(RuntimeEmbedder {
+                    Arc::new(RuntimeEmbedder::new(
                         embedder,
                         document_template,
                         fragments,
-                        is_quantized: quantized.unwrap_or_default(),
-                    }),
+                        quantized.unwrap_or_default(),
+                    )),
                 ))
             },
         )
@@ -2387,8 +2387,8 @@ fn deserialize_sub_embedder(
 /// Implement this trait for the settings delta type.
 /// This is used in the new settings update flow and will allow to easily replace the old settings delta type: `InnerIndexSettingsDiff`.
 pub trait SettingsDelta {
-    fn new_embedders(&self) -> &EmbeddingConfigs;
-    fn old_embedders(&self) -> &EmbeddingConfigs;
+    fn new_embedders(&self) -> &RuntimeEmbedders;
+    fn old_embedders(&self) -> &RuntimeEmbedders;
     fn new_embedder_category_id(&self) -> &HashMap<String, u8>;
     fn embedder_actions(&self) -> &BTreeMap<String, EmbedderAction>;
     fn try_for_each_fragment_diff<F, E>(
@@ -2407,12 +2407,12 @@ pub struct FragmentDiff<'a> {
 }
 
 impl SettingsDelta for InnerIndexSettingsDiff {
-    fn new_embedders(&self) -> &EmbeddingConfigs {
-        &self.new.embedding_configs
+    fn new_embedders(&self) -> &RuntimeEmbedders {
+        &self.new.runtime_embedders
     }
 
-    fn old_embedders(&self) -> &EmbeddingConfigs {
-        &self.old.embedding_configs
+    fn old_embedders(&self) -> &RuntimeEmbedders {
+        &self.old.runtime_embedders
     }
 
     fn new_embedder_category_id(&self) -> &HashMap<String, u8> {

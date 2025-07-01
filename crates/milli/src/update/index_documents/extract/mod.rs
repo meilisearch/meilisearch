@@ -242,7 +242,7 @@ fn send_original_documents_data(
 
     let index_vectors = (settings_diff.reindex_vectors() || !settings_diff.settings_update_only())
         // no point in indexing vectors without embedders
-        && (!settings_diff.new.embedding_configs.inner_as_ref().is_empty());
+        && (!settings_diff.new.runtime_embedders.inner_as_ref().is_empty());
 
     if index_vectors {
         let settings_diff = settings_diff.clone();

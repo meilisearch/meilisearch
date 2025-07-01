@@ -66,7 +66,7 @@ impl TempIndex {
         let db_fields_ids_map = self.inner.fields_ids_map(&rtxn)?;
         let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-        let embedders = InnerIndexSettings::from_index(&self.inner, &rtxn, None)?.embedding_configs;
+        let embedders = InnerIndexSettings::from_index(&self.inner, &rtxn, None)?.runtime_embedders;
         let mut indexer = indexer::DocumentOperation::new();
         match self.index_documents_config.update_method {
             IndexDocumentsMethod::ReplaceDocuments => {
@@ -151,7 +151,7 @@ impl TempIndex {
         let db_fields_ids_map = self.inner.fields_ids_map(&rtxn)?;
         let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-        let embedders = InnerIndexSettings::from_index(&self.inner, &rtxn, None)?.embedding_configs;
+        let embedders = InnerIndexSettings::from_index(&self.inner, &rtxn, None)?.runtime_embedders;
 
         let mut indexer = indexer::DocumentOperation::new();
         let external_document_ids: Vec<_> =

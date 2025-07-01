@@ -236,8 +236,8 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
 
     let mut extractors = Vec::new();
 
-    let mut configs = settings_diff.new.embedding_configs.clone().into_inner();
-    let old_configs = &settings_diff.old.embedding_configs;
+    let mut configs = settings_diff.new.runtime_embedders.clone().into_inner();
+    let old_configs = &settings_diff.old.runtime_embedders;
     if reindex_vectors {
         for (name, action) in settings_diff.embedding_config_updates.iter() {
             if let Some(action) = action.reindex() {
@@ -284,16 +284,16 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                             continue;
                         };
 
-                        let fragments = regenerate_fragments
+                        let fragment_diffs = regenerate_fragments
                             .iter()
                             .filter_map(|(name, fragment)| match fragment {
                                 crate::vector::settings::RegenerateFragment::Update => {
                                     let old_value = old_runtime
-                                        .fragments
+                                        .fragments()
                                         .binary_search_by_key(&name, |fragment| &fragment.name)
                                         .ok();
                                     let Ok(new_value) = runtime
-                                        .fragments
+                                        .fragments()
                                         .binary_search_by_key(&name, |fragment| &fragment.name)
                                     else {
                                         return None;
@@ -304,7 +304,7 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                                 crate::vector::settings::RegenerateFragment::Remove => None,
                                 crate::vector::settings::RegenerateFragment::Add => {
                                     let Ok(new_value) = runtime
-                                        .fragments
+                                        .fragments()
                                         .binary_search_by_key(&name, |fragment| &fragment.name)
                                     else {
                                         return None;
@@ -314,8 +314,8 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                             })
                             .collect();
                         ExtractionAction::SettingsRegenerateFragments {
-                            old_runtime,
-                            must_regenerate_fragments: fragments,
+                            old_runtime: old_runtime.clone(),
+                            must_regenerate_fragments: fragment_diffs,
                         }
                     }
 
@@ -325,7 +325,9 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                             continue;
                         };
 
-                        ExtractionAction::SettingsRegeneratePrompts { old_runtime }
+                        ExtractionAction::SettingsRegeneratePrompts {
+                            old_runtime: old_runtime.clone(),
+                        }
                     }
                 };
 
@@ -473,11 +475,11 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                             );
                             continue;
                         }
-                        let has_fragments = !runtime.fragments.is_empty();
+                        let has_fragments = !runtime.fragments().is_empty();
 
                         if has_fragments {
                             regenerate_all_fragments(
-                                &runtime.fragments,
+                                runtime.fragments(),
                                 &doc_alloc,
                                 new_fields_ids_map,
                                 obkv,
@@ -492,14 +494,14 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                     old_runtime,
                 } => {
                     if old.must_regenerate() {
-                        let has_fragments = !runtime.fragments.is_empty();
-                        let old_has_fragments = !old_runtime.fragments.is_empty();
+                        let has_fragments = !runtime.fragments().is_empty();
+                        let old_has_fragments = !old_runtime.fragments().is_empty();
 
                         let is_adding_fragments = has_fragments && !old_has_fragments;
 
                         if is_adding_fragments {
                             regenerate_all_fragments(
-                                &runtime.fragments,
+                                runtime.fragments(),
                                 &doc_alloc,
                                 new_fields_ids_map,
                                 obkv,
@@ -517,14 +519,16 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                                 new_fields_ids_map,
                             );
                             for (name, (old_index, new_index)) in must_regenerate_fragments {
-                                let Some(new) = runtime.fragments.get(*new_index) else { continue };
+                                let Some(new) = runtime.fragments().get(*new_index) else {
+                                    continue;
+                                };
 
                                 let new =
                                     RequestFragmentExtractor::new(new, &doc_alloc).ignore_errors();
 
                                 let diff = {
                                     let old = old_index.as_ref().and_then(|old| {
-                                        let old = old_runtime.fragments.get(*old)?;
+                                        let old = old_runtime.fragments().get(*old)?;
                                         Some(
                                             RequestFragmentExtractor::new(old, &doc_alloc)
                                                 .ignore_errors(),
@@ -555,11 +559,11 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                             );
                             continue;
                         }
-                        let has_fragments = !runtime.fragments.is_empty();
+                        let has_fragments = !runtime.fragments().is_empty();
 
                         if has_fragments {
                             regenerate_all_fragments(
-                                &runtime.fragments,
+                                runtime.fragments(),
                                 &doc_alloc,
                                 new_fields_ids_map,
                                 obkv,
@@ -607,7 +611,7 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                 manual_vectors_writer,
                 &mut key_buffer,
                 delta,
-                &runtime.fragments,
+                runtime.fragments(),
             )?;
         }
 
@@ -720,7 +724,7 @@ fn extract_vector_document_diff(
                     ManualEmbedderErrors::push_error(manual_errors, embedder_name, document_id);
                     return Ok(VectorStateDelta::NoChange);
                 }
-                let has_fragments = !runtime.fragments.is_empty();
+                let has_fragments = !runtime.fragments().is_empty();
                 if has_fragments {
                     let prompt = &runtime.document_template;
                     // Don't give up if the old prompt was failing
@@ -753,7 +757,7 @@ fn extract_vector_document_diff(
                             new_fields_ids_map,
                         );
 
-                        for new in &runtime.fragments {
+                        for new in runtime.fragments() {
                             let name = &new.name;
                             let fragment =
                                 RequestFragmentExtractor::new(new, doc_alloc).ignore_errors();
@@ -791,11 +795,11 @@ fn extract_vector_document_diff(
                     return Ok(VectorStateDelta::NoChange);
                 }
 
-                let has_fragments = !runtime.fragments.is_empty();
+                let has_fragments = !runtime.fragments().is_empty();
 
                 if has_fragments {
                     regenerate_all_fragments(
-                        &runtime.fragments,
+                        runtime.fragments(),
                         doc_alloc,
                         new_fields_ids_map,
                         obkv,

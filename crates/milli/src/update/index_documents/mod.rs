@@ -517,7 +517,7 @@ where
             let embedder_config = settings_diff.embedding_config_updates.get(&embedder_name);
             let was_quantized = settings_diff
                 .old
-                .embedding_configs
+                .runtime_embedders
                 .get(&embedder_name)
                 .is_some_and(|conf| conf.is_quantized);
             let is_quantizing = embedder_config.is_some_and(|action| action.is_being_quantized);

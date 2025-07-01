@@ -742,8 +742,25 @@ pub struct RuntimeEmbedders(HashMap<String, Arc<RuntimeEmbedder>>);
 pub struct RuntimeEmbedder {
     pub embedder: Arc<Embedder>,
     pub document_template: Prompt,
-    pub fragments: Vec<RuntimeFragment>,
+    fragments: Vec<RuntimeFragment>,
     pub is_quantized: bool,
+}
+
+impl RuntimeEmbedder {
+    pub fn new(
+        embedder: Arc<Embedder>,
+        document_template: Prompt,
+        mut fragments: Vec<RuntimeFragment>,
+        is_quantized: bool,
+    ) -> Self {
+        fragments.sort_unstable_by(|left, right| left.name.cmp(&right.name));
+        Self { embedder, document_template, fragments, is_quantized }
+    }
+
+    /// The runtime fragments sorted by name.
+    pub fn fragments(&self) -> &[RuntimeFragment] {
+        self.fragments.as_slice()
+    }
 }
 
 pub struct RuntimeFragment {
@@ -763,8 +780,8 @@ impl RuntimeEmbedders {
     }
 
     /// Get an embedder configuration and template from its name.
-    pub fn get(&self, name: &str) -> Option<Arc<RuntimeEmbedder>> {
-        self.0.get(name).cloned()
+    pub fn get(&self, name: &str) -> Option<&Arc<RuntimeEmbedder>> {
+        self.0.get(name)
     }
 
     pub fn inner_as_ref(&self) -> &HashMap<String, Arc<RuntimeEmbedder>> {
@@ -773,6 +790,14 @@ impl RuntimeEmbedders {
 
     pub fn into_inner(self) -> HashMap<String, Arc<RuntimeEmbedder>> {
         self.0
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
 }
 
