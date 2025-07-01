@@ -1679,9 +1679,6 @@ impl InnerIndexSettingsDiff {
 
                         // fixup reindex to make sure we regenerate all fragments
                         *reindex = match reindex.take() {
-                            Some(ReindexAction::RegenerateFragments(_)) => {
-                                Some(ReindexAction::RegeneratePrompts)
-                            }
                             Some(reindex) => Some(reindex), // We are at least regenerating prompts
                             None => {
                                 if write_back.is_none() {
