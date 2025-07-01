@@ -30,7 +30,7 @@ impl IndexScheduler {
         payload_size: Option<&Byte>,
         indexes: &BTreeMap<IndexUidPattern, ExportIndexSettings>,
         progress: Progress,
-    ) -> Result<BTreeMap<String, DetailsExportIndexSettings>> {
+    ) -> Result<BTreeMap<IndexUidPattern, DetailsExportIndexSettings>> {
         #[cfg(test)]
         self.maybe_fail(crate::test_utils::FailureLocation::ProcessExport)?;
 
@@ -157,7 +157,7 @@ impl IndexScheduler {
             progress.update_progress(progress_step);
 
             output.insert(
-                uid.clone(),
+                IndexUidPattern::new_unchecked(uid.clone()),
                 DetailsExportIndexSettings {
                     settings: (*export_settings).clone(),
                     matched_documents: Some(total_documents as u64),
