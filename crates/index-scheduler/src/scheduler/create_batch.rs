@@ -510,7 +510,7 @@ impl IndexScheduler {
         // 3. we batch the export.
         let to_export = self.queue.tasks.get_kind(rtxn, Kind::Export)? & enqueued;
         if !to_export.is_empty() {
-            let task_id = to_export.iter().next().expect("There must be only one export task");
+            let task_id = to_export.iter().next().expect("There must be at least one export task");
             let mut task = self.queue.tasks.get_task(rtxn, task_id)?.unwrap();
             current_batch.processing([&mut task]);
             current_batch.reason(BatchStopReason::TaskKindCannotBeBatched { kind: Kind::Export });
