@@ -53,6 +53,8 @@ const MEILI_EXPERIMENTAL_DUMPLESS_UPGRADE: &str = "MEILI_EXPERIMENTAL_DUMPLESS_U
 const MEILI_EXPERIMENTAL_REPLICATION_PARAMETERS: &str = "MEILI_EXPERIMENTAL_REPLICATION_PARAMETERS";
 const MEILI_EXPERIMENTAL_ENABLE_LOGS_ROUTE: &str = "MEILI_EXPERIMENTAL_ENABLE_LOGS_ROUTE";
 const MEILI_EXPERIMENTAL_CONTAINS_FILTER: &str = "MEILI_EXPERIMENTAL_CONTAINS_FILTER";
+const MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_SETTINGS: &str =
+    "MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_SETTINGS";
 const MEILI_EXPERIMENTAL_ENABLE_METRICS: &str = "MEILI_EXPERIMENTAL_ENABLE_METRICS";
 const MEILI_EXPERIMENTAL_SEARCH_QUEUE_SIZE: &str = "MEILI_EXPERIMENTAL_SEARCH_QUEUE_SIZE";
 const MEILI_EXPERIMENTAL_DROP_SEARCH_AFTER: &str = "MEILI_EXPERIMENTAL_DROP_SEARCH_AFTER";
@@ -749,12 +751,25 @@ pub struct IndexerOpts {
     #[clap(skip)]
     #[serde(skip)]
     pub skip_index_budget: bool,
+
+    /// Experimental no edition 2024 for settings feature. For more information,
+    /// see: <https://github.com/orgs/meilisearch/discussions/847>
+    ///
+    /// Enables the experimental no edition 2024 for settings feature.
+    #[clap(long, env = MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_SETTINGS)]
+    #[serde(default)]
+    pub experimental_no_edition_2024_for_settings: bool,
 }
 
 impl IndexerOpts {
     /// Exports the values to their corresponding env vars if they are not set.
     pub fn export_to_env(self) {
-        let IndexerOpts { max_indexing_memory, max_indexing_threads, skip_index_budget: _ } = self;
+        let IndexerOpts {
+            max_indexing_memory,
+            max_indexing_threads,
+            skip_index_budget: _,
+            experimental_no_edition_2024_for_settings,
+        } = self;
         if let Some(max_indexing_memory) = max_indexing_memory.0 {
             export_to_env_if_not_present(
                 MEILI_MAX_INDEXING_MEMORY,
@@ -765,6 +780,12 @@ impl IndexerOpts {
             export_to_env_if_not_present(
                 MEILI_MAX_INDEXING_THREADS,
                 max_indexing_threads.to_string(),
+            );
+        }
+        if experimental_no_edition_2024_for_settings {
+            export_to_env_if_not_present(
+                MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_SETTINGS,
+                experimental_no_edition_2024_for_settings.to_string(),
             );
         }
     }
@@ -785,7 +806,12 @@ impl TryFrom<&IndexerOpts> for IndexerConfig {
             max_threads: *other.max_indexing_threads,
             max_positions_per_attributes: None,
             skip_index_budget: other.skip_index_budget,
-            ..Default::default()
+            experimental_no_edition_2024_for_settings: other
+                .experimental_no_edition_2024_for_settings,
+            chunk_compression_type: Default::default(),
+            chunk_compression_level: Default::default(),
+            documents_chunk_size: Default::default(),
+            max_nb_chunks: Default::default(),
         })
     }
 }

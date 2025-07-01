@@ -202,6 +202,7 @@ struct Infos {
     experimental_composite_embedders: bool,
     experimental_embedding_cache_entries: usize,
     experimental_no_snapshot_compaction: bool,
+    experimental_no_edition_2024_for_settings: bool,
     gpu_enabled: bool,
     db_path: bool,
     import_dump: bool,
@@ -286,8 +287,12 @@ impl Infos {
             ScheduleSnapshot::Enabled(interval) => Some(interval),
         };
 
-        let IndexerOpts { max_indexing_memory, max_indexing_threads, skip_index_budget: _ } =
-            indexer_options;
+        let IndexerOpts {
+            max_indexing_memory,
+            max_indexing_threads,
+            skip_index_budget: _,
+            experimental_no_edition_2024_for_settings,
+        } = indexer_options;
 
         let RuntimeTogglableFeatures {
             metrics,
@@ -350,6 +355,7 @@ impl Infos {
             ssl_require_auth,
             ssl_resumption,
             ssl_tickets,
+            experimental_no_edition_2024_for_settings,
         }
     }
 }

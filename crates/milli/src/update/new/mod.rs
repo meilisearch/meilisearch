@@ -1,4 +1,5 @@
-pub use document_change::{Deletion, DocumentChange, Insertion, Update};
+pub use document::DocumentIdentifiers;
+pub use document_change::{DocumentChange, Insertion, Update};
 pub use indexer::ChannelCongestion;
 pub use merger::{
     merge_and_send_docids, merge_and_send_facet_docids, FacetDatabases, FacetFieldIdsDelta,

@@ -474,15 +474,11 @@ impl IndexScheduler {
                 }
 
                 progress.update_progress(SettingsProgress::ApplyTheSettings);
-                builder
-                    .execute(
-                        |indexing_step| tracing::debug!(update = ?indexing_step),
-                        || must_stop_processing.get(),
-                        embedder_stats,
-                    )
+                let congestion = builder
+                    .execute(&|| must_stop_processing.get(), progress, embedder_stats)
                     .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?;
 
-                Ok((tasks, None))
+                Ok((tasks, congestion))
             }
             IndexOperation::DocumentClearAndSetting {
                 index_uid,

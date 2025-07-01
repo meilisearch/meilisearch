@@ -246,8 +246,8 @@ impl IndexScheduler {
 
                     builder
                         .execute(
-                            |indexing_step| tracing::debug!(update = ?indexing_step),
-                            || must_stop_processing.get(),
+                            &|| must_stop_processing.get(),
+                            &progress,
                             current_batch.embedder_stats.clone(),
                         )
                         .map_err(|e| Error::from_milli(e, Some(index_uid.to_string())))?;

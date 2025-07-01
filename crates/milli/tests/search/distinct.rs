@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
 use big_s::S;
+use milli::progress::Progress;
 use milli::update::Settings;
 use milli::{Criterion, Search, SearchResult, TermsMatchingStrategy};
 use Criterion::*;
@@ -19,7 +20,7 @@ macro_rules! test_distinct {
             let config = milli::update::IndexerConfig::default();
             let mut builder = Settings::new(&mut wtxn, &index, &config);
             builder.set_distinct_field(S(stringify!($distinct)));
-            builder.execute(|_| (), || false, Default::default()).unwrap();
+            builder.execute(&|| false, &Progress::default(), Default::default()).unwrap();
             wtxn.commit().unwrap();
 
             let rtxn = index.read_txn().unwrap();

@@ -4,10 +4,11 @@ use rayon::iter::IndexedParallelIterator;
 use rayon::slice::ParallelSlice as _;
 use roaring::RoaringBitmap;
 
-use super::document_changes::{DocumentChangeContext, DocumentChanges};
+use super::document_changes::DocumentChanges;
 use crate::documents::PrimaryKey;
+use crate::update::new::document::DocumentContext;
 use crate::update::new::thread_local::MostlySend;
-use crate::update::new::{Deletion, DocumentChange};
+use crate::update::new::{DocumentChange, DocumentIdentifiers};
 use crate::{DocumentId, Result};
 
 #[derive(Default)]
@@ -58,7 +59,7 @@ impl<'pl> DocumentChanges<'pl> for DocumentDeletionChanges<'pl> {
         T: MostlySend,
     >(
         &'doc self,
-        context: &'doc DocumentChangeContext<T>,
+        context: &'doc DocumentContext<T>,
         docid: &'doc Self::Item,
     ) -> Result<Option<DocumentChange<'doc>>>
     where
@@ -74,7 +75,10 @@ impl<'pl> DocumentChanges<'pl> for DocumentDeletionChanges<'pl> {
 
         let external_document_id = external_document_id.to_bump(&context.doc_alloc);
 
-        Ok(Some(DocumentChange::Deletion(Deletion::create(*docid, external_document_id))))
+        Ok(Some(DocumentChange::Deletion(DocumentIdentifiers::create(
+            *docid,
+            external_document_id,
+        ))))
     }
 
     fn len(&self) -> usize {
@@ -93,9 +97,8 @@ mod test {
     use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
     use crate::index::tests::TempIndex;
     use crate::progress::Progress;
-    use crate::update::new::indexer::document_changes::{
-        extract, DocumentChangeContext, Extractor, IndexingContext,
-    };
+    use crate::update::new::document::DocumentContext;
+    use crate::update::new::indexer::document_changes::{extract, Extractor, IndexingContext};
     use crate::update::new::indexer::DocumentDeletion;
     use crate::update::new::steps::IndexingStep;
     use crate::update::new::thread_local::{MostlySend, ThreadLocal};
@@ -125,7 +128,7 @@ mod test {
             fn process<'doc>(
                 &self,
                 changes: impl Iterator<Item = crate::Result<DocumentChange<'doc>>>,
-                context: &DocumentChangeContext<Self::Data>,
+                context: &DocumentContext<Self::Data>,
             ) -> crate::Result<()> {
                 for change in changes {
                     let change = change?;
