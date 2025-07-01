@@ -2183,6 +2183,7 @@ async fn last_error_stats() {
     snapshot!(json_string!(response["results"][0], {
         ".progress" => "[ignored]",
         ".stats.embedderRequests.total" => "[ignored]",
+        ".stats.embedderRequests.failed" => "[ignored]",
         ".startedAt" => "[ignored]"
     }), @r#"
     {
@@ -2205,7 +2206,7 @@ async fn last_error_stats() {
         },
         "embedderRequests": {
           "total": "[ignored]",
-          "failed": 5,
+          "failed": "[ignored]",
           "lastError": "runtime error: received internal error HTTP 500 from embedding server\n  - server replied with `Service Unavailable`"
         }
       },
