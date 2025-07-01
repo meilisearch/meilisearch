@@ -107,8 +107,8 @@ impl Prompt {
     }
 
     pub fn render_document<
-        'a,       // lifetime of the borrow of the document
-        'doc: 'a, // lifetime of the allocator, will live for an entire chunk of documents
+        'a,   // lifetime of the borrow of the document
+        'doc, // lifetime of the allocator, will live for an entire chunk of documents
     >(
         &self,
         external_docid: &str,

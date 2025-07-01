@@ -144,18 +144,19 @@ impl ValueView for Document<'_> {
 use crate::update::new::document::Document as DocumentTrait;
 
 #[derive(Debug)]
-pub struct ParseableDocument<'doc, D> {
+pub struct ParseableDocument<'a, 'doc, D: DocumentTrait<'a> + Debug> {
     document: D,
     doc_alloc: &'doc Bump,
+    _marker: std::marker::PhantomData<&'a ()>,
 }
 
-impl<'doc, D> ParseableDocument<'doc, D> {
+impl<'a, 'doc, D: DocumentTrait<'a> + Debug> ParseableDocument<'a, 'doc, D> {
     pub fn new(document: D, doc_alloc: &'doc Bump) -> Self {
-        Self { document, doc_alloc }
+        Self { document, doc_alloc, _marker: std::marker::PhantomData }
     }
 }
 
-impl<'doc, D: DocumentTrait<'doc> + Debug> ObjectView for ParseableDocument<'doc, D> {
+impl<'a, D: DocumentTrait<'a> + Debug> ObjectView for ParseableDocument<'a, '_, D> {
     fn as_value(&self) -> &dyn ValueView {
         self
     }
@@ -195,7 +196,7 @@ impl<'doc, D: DocumentTrait<'doc> + Debug> ObjectView for ParseableDocument<'doc
     }
 }
 
-impl<'doc, D: DocumentTrait<'doc> + Debug> ValueView for ParseableDocument<'doc, D> {
+impl<'a, D: DocumentTrait<'a> + Debug> ValueView for ParseableDocument<'a, '_, D> {
     fn as_debug(&self) -> &dyn Debug {
         self
     }
