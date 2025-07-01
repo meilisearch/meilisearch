@@ -128,37 +128,60 @@ impl<'ctx> SortedDocumentsIteratorBuilder<'ctx> {
         let mut cache = VecDeque::new();
         let mut rtree = None;
         let size = candidates.len() as usize;
+        let not_geo_candidates = candidates.clone() - geo_candidates;
+        let mut geo_remaining = size - not_geo_candidates.len() as usize;
+        let mut not_geo_candidates = Some(not_geo_candidates);
 
         let next_children = std::iter::from_fn(move || {
-            match next_bucket(
-                index,
-                rtxn,
-                &candidates,
-                ascending,
-                target_point,
-                &Some(field_ids),
-                &mut rtree,
-                &mut cache,
-                geo_candidates,
-                GeoSortParameter::default(),
-            ) {
-                Ok(Some((docids, _point))) => Some(Ok(SortedDocumentsIteratorBuilder {
+            // Find the next bucket of geo-sorted documents.
+            // next_bucket loops and will go back to the beginning so we use a variable to track how many are left.
+            if geo_remaining > 0 {
+                if let Ok(Some((docids, _point))) = next_bucket(
                     index,
                     rtxn,
-                    number_db,
-                    string_db,
-                    fields: &fields[1..],
-                    candidates: docids,
+                    &candidates,
+                    ascending,
+                    target_point,
+                    &Some(field_ids),
+                    &mut rtree,
+                    &mut cache,
                     geo_candidates,
-                })),
-                Ok(None) => None,
-                Err(e) => Some(Err(e)),
+                    GeoSortParameter::default(),
+                ) {
+                    geo_remaining -= docids.len() as usize;
+                    return Some(Ok(SortedDocumentsIteratorBuilder {
+                        index,
+                        rtxn,
+                        number_db,
+                        string_db,
+                        fields: &fields[1..],
+                        candidates: docids,
+                        geo_candidates,
+                    }));
+                }
             }
+            
+            // Once all geo candidates have been processed, we can return the others
+            if let Some(not_geo_candidates) = not_geo_candidates.take() {
+                if !not_geo_candidates.is_empty() {
+                    return Some(Ok(SortedDocumentsIteratorBuilder {
+                        index,
+                        rtxn,
+                        number_db,
+                        string_db,
+                        fields: &fields[1..],
+                        candidates: not_geo_candidates,
+                        geo_candidates,
+                    }));
+                }
+            }
+
+            None
         });
 
         Ok(SortedDocumentsIterator::Branch {
             current_child: None,
-            next_children_size: size, // TODO: confirm all candidates will be included
+            next_children_size: size,
             next_children: Box::new(next_children),
         })
     }
