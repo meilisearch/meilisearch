@@ -1150,6 +1150,7 @@ impl SettingsDiff {
             (left, Setting::NotSet) => left,
         };
         if !regenerate_fragments.is_empty() {
+            regenerate_fragments.sort_unstable_by(|(left, _), (right, _)| left.cmp(right));
             ReindexAction::push_action(
                 reindex_action,
                 ReindexAction::RegenerateFragments(regenerate_fragments),
