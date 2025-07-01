@@ -130,6 +130,12 @@ pub enum PatternMatch {
     NoMatch,
 }
 
+impl PatternMatch {
+    pub fn matches(&self) -> bool {
+        matches!(self, PatternMatch::Match)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
