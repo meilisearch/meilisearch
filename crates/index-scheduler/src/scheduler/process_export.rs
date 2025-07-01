@@ -71,16 +71,16 @@ impl IndexScheduler {
                     request = request.set("Authorization", &format!("Bearer {api_key}"));
                 }
 
-                request.send_string("").map_err(into_backoff_error)
+                request.send_bytes(Default::default()).map_err(into_backoff_error)
             })?;
-            let already_existed = response.status() == 200;
+            let index_exists = response.status() == 200;
 
             let primary_key = index
                 .primary_key(&index_rtxn)
                 .map_err(|e| Error::from_milli(e.into(), Some(uid.to_string())))?;
 
             // Create the index
-            if !already_existed {
+            if !index_exists {
                 let url = format!("{base_url}/indexes");
                 retry(&must_stop_processing, || {
                     let mut request = agent.post(&url);
@@ -93,7 +93,7 @@ impl IndexScheduler {
             }
 
             // Patch the index primary key
-            if already_existed && *override_settings {
+            if index_exists && *override_settings {
                 let url = format!("{base_url}/indexes/{uid}");
                 retry(&must_stop_processing, || {
                     let mut request = agent.patch(&url);
@@ -106,7 +106,7 @@ impl IndexScheduler {
             }
 
             // Send the index settings
-            if !already_existed || *override_settings {
+            if !index_exists || *override_settings {
                 let mut settings =
                     settings::settings(&index, &index_rtxn, SecretPolicy::RevealSecrets)
                         .map_err(|e| Error::from_milli(e, Some(uid.to_string())))?;
