@@ -5,8 +5,8 @@ use urlencoding::encode as urlencode;
 
 use crate::common::encoder::Encoder;
 use crate::common::{
-    shared_does_not_exists_index, shared_empty_index, shared_index_with_test_set,
-    GetAllDocumentsOptions, Server, Value,
+    shared_does_not_exists_index, shared_empty_index, shared_index_with_geo_documents,
+    shared_index_with_test_set, GetAllDocumentsOptions, Server, Value,
 };
 use crate::json;
 
@@ -82,6 +82,291 @@ async fn get_document() {
         })
     );
 }
+
+#[actix_rt::test]
+async fn get_document_sorted() {
+    let server = Server::new_shared();
+    let index = server.unique_index();
+    index.load_test_set().await;
+
+    let (task, _status_code) =
+        index.update_settings_sortable_attributes(json!(["age", "email", "gender", "name"])).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (response, _code) = index
+        .get_all_documents(GetAllDocumentsOptions {
+            fields: Some(vec!["id", "age", "email"]),
+            sort: Some(vec!["age:asc", "email:desc"]),
+            ..Default::default()
+        })
+        .await;
+    let results = response["results"].as_array().unwrap();
+    snapshot!(json_string!(results), @r#"
+    [
+      {
+        "id": 5,
+        "age": 20,
+        "email": "warrenwatson@chorizon.com"
+      },
+      {
+        "id": 6,
+        "age": 20,
+        "email": "sheliaberry@chorizon.com"
+      },
+      {
+        "id": 57,
+        "age": 20,
+        "email": "kaitlinconner@chorizon.com"
+      },
+      {
+        "id": 45,
+        "age": 20,
+        "email": "irenebennett@chorizon.com"
+      },
+      {
+        "id": 40,
+        "age": 21,
+        "email": "staffordemerson@chorizon.com"
+      },
+      {
+        "id": 41,
+        "age": 21,
+        "email": "salinasgamble@chorizon.com"
+      },
+      {
+        "id": 63,
+        "age": 21,
+        "email": "knowleshebert@chorizon.com"
+      },
+      {
+        "id": 50,
+        "age": 21,
+        "email": "guerramcintyre@chorizon.com"
+      },
+      {
+        "id": 44,
+        "age": 22,
+        "email": "jonispears@chorizon.com"
+      },
+      {
+        "id": 56,
+        "age": 23,
+        "email": "tuckerbarry@chorizon.com"
+      },
+      {
+        "id": 51,
+        "age": 23,
+        "email": "keycervantes@chorizon.com"
+      },
+      {
+        "id": 60,
+        "age": 23,
+        "email": "jodyherrera@chorizon.com"
+      },
+      {
+        "id": 70,
+        "age": 23,
+        "email": "glassperkins@chorizon.com"
+      },
+      {
+        "id": 75,
+        "age": 24,
+        "email": "emmajacobs@chorizon.com"
+      },
+      {
+        "id": 68,
+        "age": 24,
+        "email": "angelinadyer@chorizon.com"
+      },
+      {
+        "id": 17,
+        "age": 25,
+        "email": "ortegabrennan@chorizon.com"
+      },
+      {
+        "id": 76,
+        "age": 25,
+        "email": "claricegardner@chorizon.com"
+      },
+      {
+        "id": 43,
+        "age": 25,
+        "email": "arnoldbender@chorizon.com"
+      },
+      {
+        "id": 12,
+        "age": 25,
+        "email": "aidakirby@chorizon.com"
+      },
+      {
+        "id": 9,
+        "age": 26,
+        "email": "kellimendez@chorizon.com"
+      }
+    ]
+    "#);
+
+    let (response, _code) = index
+        .get_all_documents(GetAllDocumentsOptions {
+            fields: Some(vec!["id", "gender", "name"]),
+            sort: Some(vec!["gender:asc", "name:asc"]),
+            ..Default::default()
+        })
+        .await;
+    let results = response["results"].as_array().unwrap();
+    snapshot!(json_string!(results), @r#"
+    [
+      {
+        "id": 3,
+        "name": "Adeline Flynn",
+        "gender": "female"
+      },
+      {
+        "id": 12,
+        "name": "Aida Kirby",
+        "gender": "female"
+      },
+      {
+        "id": 68,
+        "name": "Angelina Dyer",
+        "gender": "female"
+      },
+      {
+        "id": 15,
+        "name": "Aurelia Contreras",
+        "gender": "female"
+      },
+      {
+        "id": 36,
+        "name": "Barbra Valenzuela",
+        "gender": "female"
+      },
+      {
+        "id": 23,
+        "name": "Blanca Mcclain",
+        "gender": "female"
+      },
+      {
+        "id": 53,
+        "name": "Caitlin Burnett",
+        "gender": "female"
+      },
+      {
+        "id": 71,
+        "name": "Candace Sawyer",
+        "gender": "female"
+      },
+      {
+        "id": 65,
+        "name": "Carole Rowland",
+        "gender": "female"
+      },
+      {
+        "id": 33,
+        "name": "Cecilia Greer",
+        "gender": "female"
+      },
+      {
+        "id": 1,
+        "name": "Cherry Orr",
+        "gender": "female"
+      },
+      {
+        "id": 38,
+        "name": "Christina Short",
+        "gender": "female"
+      },
+      {
+        "id": 7,
+        "name": "Chrystal Boyd",
+        "gender": "female"
+      },
+      {
+        "id": 76,
+        "name": "Clarice Gardner",
+        "gender": "female"
+      },
+      {
+        "id": 73,
+        "name": "Eleanor Shepherd",
+        "gender": "female"
+      },
+      {
+        "id": 75,
+        "name": "Emma Jacobs",
+        "gender": "female"
+      },
+      {
+        "id": 16,
+        "name": "Estella Bass",
+        "gender": "female"
+      },
+      {
+        "id": 62,
+        "name": "Estelle Ramirez",
+        "gender": "female"
+      },
+      {
+        "id": 20,
+        "name": "Florence Long",
+        "gender": "female"
+      },
+      {
+        "id": 42,
+        "name": "Graciela Russell",
+        "gender": "female"
+      }
+    ]
+    "#);
+}
+
+#[actix_rt::test]
+async fn get_document_geosorted() {
+    let index = shared_index_with_geo_documents().await;
+
+    let (response, _code) = index
+        .get_all_documents(GetAllDocumentsOptions {
+            sort: Some(vec!["_geoPoint(45.4777599, 9.1967508):asc"]),
+            ..Default::default()
+        })
+        .await;
+    let results = response["results"].as_array().unwrap();
+    snapshot!(json_string!(results), @r#"
+    [
+      {
+        "id": 2,
+        "name": "La Bella Italia",
+        "address": "456 Elm Street, Townsville",
+        "type": "Italian",
+        "rating": 9,
+        "_geo": {
+          "lat": "45.4777599",
+          "lng": "9.1967508"
+        }
+      },
+      {
+        "id": 1,
+        "name": "Taco Truck",
+        "address": "444 Salsa Street, Burritoville",
+        "type": "Mexican",
+        "rating": 9,
+        "_geo": {
+          "lat": 34.0522,
+          "lng": -118.2437
+        }
+      },
+      {
+        "id": 3,
+        "name": "Crêpe Truck",
+        "address": "2 Billig Avenue, Rouenville",
+        "type": "French",
+        "rating": 10
+      }
+    ]
+    "#);
+}
+
+// TODO test on not sortable attributes
 
 #[actix_rt::test]
 async fn error_get_unexisting_index_all_documents() {

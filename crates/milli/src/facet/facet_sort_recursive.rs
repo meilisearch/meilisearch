@@ -160,7 +160,7 @@ impl<'ctx> SortedDocumentsIteratorBuilder<'ctx> {
                     }));
                 }
             }
-            
+
             // Once all geo candidates have been processed, we can return the others
             if let Some(not_geo_candidates) = not_geo_candidates.take() {
                 if !not_geo_candidates.is_empty() {
