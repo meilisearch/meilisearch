@@ -366,7 +366,27 @@ async fn get_document_geosorted() {
     "#);
 }
 
-// TODO test on not sortable attributes
+#[actix_rt::test]
+async fn get_document_sort_the_unsortable() {
+    let index = shared_index_with_test_set().await;
+
+    let (response, _code) = index
+        .get_all_documents(GetAllDocumentsOptions {
+            fields: Some(vec!["id", "name"]),
+            sort: Some(vec!["name:asc"]),
+            ..Default::default()
+        })
+        .await;
+
+    snapshot!(json_string!(response), @r#"
+    {
+      "message": "Attribute `name` is not sortable. This index does not have configured sortable attributes.",
+      "code": "invalid_document_sort",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_document_sort"
+    }
+    "#);
+}
 
 #[actix_rt::test]
 async fn error_get_unexisting_index_all_documents() {
