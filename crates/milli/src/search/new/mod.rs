@@ -638,7 +638,7 @@ pub fn execute_vector_search(
     time_budget: TimeBudget,
     ranking_score_threshold: Option<f64>,
 ) -> Result<PartialSearchResult> {
-    check_sort_criteria(ctx.index, ctx.txn, sort_criteria.as_deref())?;
+    check_sort_criteria(ctx, sort_criteria.as_ref())?;
 
     // FIXME: input universe = universe & documents_with_vectors
     // for now if we're computing embeddings for ALL documents, we can assume that this is just universe
@@ -702,7 +702,7 @@ pub fn execute_search(
     ranking_score_threshold: Option<f64>,
     locales: Option<&Vec<Language>>,
 ) -> Result<PartialSearchResult> {
-    check_sort_criteria(ctx.index, ctx.txn, sort_criteria.as_deref())?;
+    check_sort_criteria(ctx, sort_criteria.as_ref())?;
 
     let mut used_negative_operator = false;
     let mut located_query_terms = None;
@@ -873,9 +873,8 @@ pub fn execute_search(
 }
 
 pub(crate) fn check_sort_criteria(
-    index: &Index,
-    rtxn: &RoTxn<'_>,
-    sort_criteria: Option<&[AscDesc]>,
+    ctx: &SearchContext<'_>,
+    sort_criteria: Option<&Vec<AscDesc>>,
 ) -> Result<()> {
     let sort_criteria = if let Some(sort_criteria) = sort_criteria {
         sort_criteria
@@ -889,19 +888,19 @@ pub(crate) fn check_sort_criteria(
 
     // We check that the sort ranking rule exists and throw an
     // error if we try to use it and that it doesn't.
-    let sort_ranking_rule_missing = !index.criteria(rtxn)?.contains(&crate::Criterion::Sort);
+    let sort_ranking_rule_missing = !ctx.index.criteria(ctx.txn)?.contains(&crate::Criterion::Sort);
     if sort_ranking_rule_missing {
         return Err(UserError::SortRankingRuleMissing.into());
     }
 
     // We check that we are allowed to use the sort criteria, we check
     // that they are declared in the sortable fields.
-    let sortable_fields = index.sortable_fields(rtxn)?;
+    let sortable_fields = ctx.index.sortable_fields(ctx.txn)?;
     for asc_desc in sort_criteria {
         match asc_desc.member() {
             Member::Field(ref field) if !crate::is_faceted(field, &sortable_fields) => {
                 let (valid_fields, hidden_fields) =
-                    index.remove_hidden_fields(rtxn, sortable_fields)?;
+                    ctx.index.remove_hidden_fields(ctx.txn, sortable_fields)?;
 
                 return Err(UserError::InvalidSearchSortableAttribute {
                     field: field.to_string(),
@@ -912,7 +911,7 @@ pub(crate) fn check_sort_criteria(
             }
             Member::Geo(_) if !sortable_fields.contains(RESERVED_GEO_FIELD_NAME) => {
                 let (valid_fields, hidden_fields) =
-                    index.remove_hidden_fields(rtxn, sortable_fields)?;
+                    ctx.index.remove_hidden_fields(ctx.txn, sortable_fields)?;
 
                 return Err(UserError::InvalidSearchSortableAttribute {
                     field: RESERVED_GEO_FIELD_NAME.to_string(),
