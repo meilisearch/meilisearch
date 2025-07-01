@@ -71,9 +71,6 @@ async fn export(
     opt: web::Data<Opt>,
     analytics: Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    // TODO make it experimental?
-    // index_scheduler.features().check_network("Using the /network route")?;
-
     let export = export.into_inner();
     debug!(returns = ?export, "Trigger export");
 
