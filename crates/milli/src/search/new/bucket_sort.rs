@@ -32,6 +32,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
     logger: &mut dyn SearchLogger<Q>,
     time_budget: TimeBudget,
     ranking_score_threshold: Option<f64>,
+    exhaustive_number_hits: bool,
 ) -> Result<BucketSortOutput> {
     logger.initial_query(query);
     logger.ranking_rules(&ranking_rules);
@@ -159,7 +160,9 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
         };
     }
 
-    while valid_docids.len() < length {
+    while valid_docids.len() < length
+        || (exhaustive_number_hits && ranking_score_threshold.is_some())
+    {
         if time_budget.exceeded() {
             loop {
                 let bucket = std::mem::take(&mut ranking_rule_universes[cur_ranking_rule_index]);

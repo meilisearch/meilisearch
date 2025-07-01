@@ -236,6 +236,7 @@ impl<'a> Search<'a> {
                     &mut ctx,
                     vector,
                     self.scoring_strategy,
+                    self.exhaustive_number_hits,
                     universe,
                     &self.sort_criteria,
                     &self.distinct,

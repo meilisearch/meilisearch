@@ -626,6 +626,7 @@ pub fn execute_vector_search(
     ctx: &mut SearchContext<'_>,
     vector: &[f32],
     scoring_strategy: ScoringStrategy,
+    exhaustive_number_hits: bool,
     universe: RoaringBitmap,
     sort_criteria: &Option<Vec<AscDesc>>,
     distinct: &Option<String>,
@@ -669,6 +670,7 @@ pub fn execute_vector_search(
         placeholder_search_logger,
         time_budget,
         ranking_score_threshold,
+        exhaustive_number_hits,
     )?;
 
     Ok(PartialSearchResult {
@@ -825,6 +827,7 @@ pub fn execute_search(
             query_graph_logger,
             time_budget,
             ranking_score_threshold,
+            exhaustive_number_hits,
         )?
     } else {
         let ranking_rules =
@@ -841,6 +844,7 @@ pub fn execute_search(
             placeholder_search_logger,
             time_budget,
             ranking_score_threshold,
+            exhaustive_number_hits,
         )?
     };
 
