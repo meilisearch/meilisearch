@@ -173,7 +173,7 @@ impl SortError {
         Error::UserError(UserError::SortError { error: self, search: true })
     }
 
-    pub fn into_documents_error(self) -> Error {
+    pub fn into_document_error(self) -> Error {
         Error::UserError(UserError::SortError { error: self, search: false })
     }
 }

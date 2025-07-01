@@ -663,7 +663,7 @@ fn documents_by_query(
         let sorts: Vec<_> = match sort.iter().map(|s| milli::AscDesc::from_str(s)).collect() {
             Ok(sorts) => sorts,
             Err(asc_desc_error) => {
-                return Err(milli::SortError::from(asc_desc_error).into_documents_error().into())
+                return Err(milli::SortError::from(asc_desc_error).into_document_error().into())
             }
         };
         Some(sorts)
