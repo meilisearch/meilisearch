@@ -395,6 +395,7 @@ InvalidExportApiKey                            , InvalidRequest       , BAD_REQU
 InvalidExportPayloadSize                       , InvalidRequest       , BAD_REQUEST ;
 InvalidExportIndexesPatterns                   , InvalidRequest       , BAD_REQUEST ;
 InvalidExportIndexFilter                       , InvalidRequest       , BAD_REQUEST ;
+InvalidExportIndexOverrideSettings             , InvalidRequest       , BAD_REQUEST ;
 // Experimental features - Chat Completions
 UnimplementedExternalFunctionCalling           , InvalidRequest       , NOT_IMPLEMENTED ;
 UnimplementedNonStreamingChatCompletions       , InvalidRequest       , NOT_IMPLEMENTED ;

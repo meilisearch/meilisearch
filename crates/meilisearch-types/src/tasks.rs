@@ -178,6 +178,7 @@ pub struct IndexSwap {
 #[serde(rename_all = "camelCase")]
 pub struct ExportIndexSettings {
     pub filter: Option<Value>,
+    pub override_settings: bool,
 }
 
 impl KindWithContent {

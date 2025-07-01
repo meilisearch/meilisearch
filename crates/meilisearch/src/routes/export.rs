@@ -84,8 +84,8 @@ async fn export(
     let indexes = match indexes {
         Some(indexes) => indexes
             .into_iter()
-            .map(|(pattern, ExportIndexSettings { filter })| {
-                (pattern, DbExportIndexSettings { filter })
+            .map(|(pattern, ExportIndexSettings { filter, override_settings })| {
+                (pattern, DbExportIndexSettings { filter, override_settings })
             })
             .collect(),
         None => BTreeMap::from([(
@@ -179,4 +179,8 @@ pub struct ExportIndexSettings {
     #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidExportIndexFilter>)]
     pub filter: Option<Value>,
+    #[schema(value_type = Option<bool>, example = json!(true))]
+    #[serde(default)]
+    #[deserr(default, error = DeserrJsonError<InvalidExportIndexOverrideSettings>)]
+    pub override_settings: bool,
 }

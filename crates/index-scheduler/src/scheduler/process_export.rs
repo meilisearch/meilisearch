@@ -59,42 +59,73 @@ impl IndexScheduler {
                 indexes.len() as u32,
             ));
 
-            let ExportIndexSettings { filter } = export_settings;
+            let ExportIndexSettings { filter, override_settings } = export_settings;
             let index = self.index(uid)?;
             let index_rtxn = index.read_txn()?;
 
-            // Send the primary key
+            let url = format!("{base_url}/indexes/{uid}");
+
+            // First, check if the index already exists
+            let response = retry(&must_stop_processing, || {
+                let mut request = agent.get(&url);
+                if let Some(api_key) = api_key {
+                    request = request.set("Authorization", &format!("Bearer {api_key}"));
+                }
+
+                request.send_string("").map_err(into_backoff_error)
+            })?;
+            let already_existed = response.status() == 200;
+
             let primary_key = index
                 .primary_key(&index_rtxn)
                 .map_err(|e| Error::from_milli(e.into(), Some(uid.to_string())))?;
 
-            let url = format!("{base_url}/indexes");
-            retry(&must_stop_processing, || {
-                let mut request = agent.post(&url);
-                if let Some(api_key) = api_key {
-                    request = request.set("Authorization", &format!("Bearer {api_key}"));
-                }
-                let index_param = json!({ "uid": uid, "primaryKey": primary_key });
-                request.send_json(&index_param).map_err(into_backoff_error)
-            })?;
+            // Create the index
+            if !already_existed {
+                let url = format!("{base_url}/indexes");
+                retry(&must_stop_processing, || {
+                    let mut request = agent.post(&url);
+                    if let Some(api_key) = api_key {
+                        request = request.set("Authorization", &format!("Bearer {api_key}"));
+                    }
+                    let index_param = json!({ "uid": uid, "primaryKey": primary_key });
+                    request.send_json(&index_param).map_err(into_backoff_error)
+                })?;
+            }
+
+            // Patch the index primary key
+            if already_existed && *override_settings {
+                let url = format!("{base_url}/indexes/{uid}");
+                retry(&must_stop_processing, || {
+                    let mut request = agent.patch(&url);
+                    if let Some(api_key) = api_key {
+                        request = request.set("Authorization", &format!("Bearer {api_key}"));
+                    }
+                    let index_param = json!({ "primaryKey": primary_key });
+                    request.send_json(&index_param).map_err(into_backoff_error)
+                })?;
+            }
 
             // Send the index settings
-            let mut settings = settings::settings(&index, &index_rtxn, SecretPolicy::RevealSecrets)
-                .map_err(|e| Error::from_milli(e, Some(uid.to_string())))?;
-            // Remove the experimental chat setting if not enabled
-            if self.features().check_chat_completions("exporting chat settings").is_err() {
-                settings.chat = Setting::NotSet;
-            }
-            // Retry logic for sending settings
-            let url = format!("{base_url}/indexes/{uid}/settings");
-            let bearer = api_key.map(|api_key| format!("Bearer {api_key}"));
-            retry(&must_stop_processing, || {
-                let mut request = agent.patch(&url);
-                if let Some(bearer) = bearer.as_ref() {
-                    request = request.set("Authorization", bearer);
+            if !already_existed || *override_settings {
+                let mut settings =
+                    settings::settings(&index, &index_rtxn, SecretPolicy::RevealSecrets)
+                        .map_err(|e| Error::from_milli(e, Some(uid.to_string())))?;
+                // Remove the experimental chat setting if not enabled
+                if self.features().check_chat_completions("exporting chat settings").is_err() {
+                    settings.chat = Setting::NotSet;
                 }
-                request.send_json(settings.clone()).map_err(into_backoff_error)
-            })?;
+                // Retry logic for sending settings
+                let url = format!("{base_url}/indexes/{uid}/settings");
+                let bearer = api_key.map(|api_key| format!("Bearer {api_key}"));
+                retry(&must_stop_processing, || {
+                    let mut request = agent.patch(&url);
+                    if let Some(bearer) = bearer.as_ref() {
+                        request = request.set("Authorization", bearer);
+                    }
+                    request.send_json(settings.clone()).map_err(into_backoff_error)
+                })?;
+            }
 
             let filter = filter
                 .as_ref()
