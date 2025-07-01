@@ -467,7 +467,8 @@ impl ErrorCode for milli::Error {
                     UserError::InvalidDistinctAttribute { .. } => Code::InvalidSearchDistinct,
                     UserError::SortRankingRuleMissing => Code::InvalidSearchSort,
                     UserError::InvalidFacetsDistribution { .. } => Code::InvalidSearchFacets,
-                    UserError::InvalidSortableAttribute { .. } => Code::InvalidSearchSort,
+                    UserError::InvalidSearchSortableAttribute { .. } => Code::InvalidSearchSort,
+                    UserError::InvalidDocumentSortableAttribute { .. } => Code::InvalidDocumentSort,
                     UserError::InvalidSearchableAttribute { .. } => {
                         Code::InvalidSearchAttributesToSearchOn
                     }

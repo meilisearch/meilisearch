@@ -191,7 +191,21 @@ and can not be more than 511 bytes.", .document_id.to_string()
                 ),
         }
     )]
-    InvalidSortableAttribute { field: String, valid_fields: BTreeSet<String>, hidden_fields: bool },
+    InvalidSearchSortableAttribute {
+        field: String,
+        valid_fields: BTreeSet<String>,
+        hidden_fields: bool,
+    },
+    #[error("Attribute `{}` is not sortable. {}",
+        .field,
+        match .sortable_fields.is_empty() {
+            true => "This index does not have configured sortable attributes.".to_string(),
+            false => format!("Available sortable attributes are: `{}`.",
+                    sortable_fields.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", ")
+                ),
+        }
+    )]
+    InvalidDocumentSortableAttribute { field: String, sortable_fields: BTreeSet<String> },
     #[error("Attribute `{}` is not filterable and thus, cannot be used as distinct attribute. {}",
         .field,
         match (.valid_patterns.is_empty(), .matching_rule_index) {
@@ -614,7 +628,7 @@ fn conditionally_lookup_for_error_message() {
     ];
 
     for (list, suffix) in messages {
-        let err = UserError::InvalidSortableAttribute {
+        let err = UserError::InvalidSearchSortableAttribute {
             field: "name".to_string(),
             valid_fields: list,
             hidden_fields: false,

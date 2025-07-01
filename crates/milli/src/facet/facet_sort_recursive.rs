@@ -1,16 +1,15 @@
-use std::collections::VecDeque;
+use std::collections::{BTreeSet, VecDeque};
 
 use crate::{
+    constants::RESERVED_GEO_FIELD_NAME,
     documents::{geo_sort::next_bucket, GeoSortParameter},
     heed_codec::{
         facet::{FacetGroupKeyCodec, FacetGroupValueCodec},
         BytesRefCodec,
     },
-    search::{
-        facet::{ascending_facet_sort, descending_facet_sort},
-        new::check_sort_criteria,
-    },
-    AscDesc, DocumentId, Member,
+    is_faceted,
+    search::facet::{ascending_facet_sort, descending_facet_sort},
+    AscDesc, DocumentId, Member, UserError,
 };
 use heed::Database;
 use roaring::RoaringBitmap;
@@ -366,49 +365,47 @@ pub fn recursive_facet_sort<'ctx>(
     sort: Vec<AscDesc>,
     candidates: &'ctx RoaringBitmap,
 ) -> crate::Result<SortedDocuments<'ctx>> {
-    check_sort_criteria(index, rtxn, Some(&sort))?;
-
-    let mut fields = Vec::new();
+    let sortable_fields: BTreeSet<_> = index.sortable_fields(rtxn)?.into_iter().collect();
     let fields_ids_map = index.fields_ids_map(rtxn)?;
+    
+    let mut fields = Vec::new();
     let mut need_geo_candidates = false;
-    for sort in sort {
-        match sort {
-            AscDesc::Asc(Member::Field(field)) => {
-                if let Some(field_id) = fields_ids_map.id(&field) {
-                    fields.push(AscDescId::Facet { field_id, ascending: true });
-                }
-            }
-            AscDesc::Desc(Member::Field(field)) => {
-                if let Some(field_id) = fields_ids_map.id(&field) {
-                    fields.push(AscDescId::Facet { field_id, ascending: false });
-                }
-            }
-            AscDesc::Asc(Member::Geo(target_point)) => {
-                if let (Some(lat), Some(lng)) =
-                    (fields_ids_map.id("_geo.lat"), fields_ids_map.id("_geo.lng"))
-                {
-                    need_geo_candidates = true;
-                    fields.push(AscDescId::Geo {
-                        field_ids: [lat, lng],
-                        target_point,
-                        ascending: true,
-                    });
-                }
-            }
-            AscDesc::Desc(Member::Geo(target_point)) => {
-                if let (Some(lat), Some(lng)) =
-                    (fields_ids_map.id("_geo.lat"), fields_ids_map.id("_geo.lng"))
-                {
-                    need_geo_candidates = true;
-                    fields.push(AscDescId::Geo {
-                        field_ids: [lat, lng],
-                        target_point,
-                        ascending: false,
-                    });
-                }
-            }
+    for asc_desc in sort {
+        let (field, geofield) = match asc_desc {
+            AscDesc::Asc(Member::Field(field)) => (Some((field, true)), None),
+            AscDesc::Desc(Member::Field(field)) => (Some((field, false)), None),
+            AscDesc::Asc(Member::Geo(target_point)) => (None, Some((target_point, true))),
+            AscDesc::Desc(Member::Geo(target_point)) => (None, Some((target_point, false))),
         };
-        // FIXME: Should this return an error if the field is not found?
+        if let Some((field, ascending)) = field {
+            if is_faceted(&field, &sortable_fields) {
+                if let Some(field_id) = fields_ids_map.id(&field) {
+                    fields.push(AscDescId::Facet { field_id, ascending });
+                    continue;
+                }
+            }
+            return Err(UserError::InvalidDocumentSortableAttribute {
+                field: field.to_string(),
+                sortable_fields: sortable_fields.clone(),
+            }
+            .into());
+        }
+        if let Some((target_point, ascending)) = geofield {
+            if sortable_fields.contains(RESERVED_GEO_FIELD_NAME) {
+                if let (Some(lat), Some(lng)) =
+                    (fields_ids_map.id("_geo.lat"), fields_ids_map.id("_geo.lng"))
+                {
+                    need_geo_candidates = true;
+                    fields.push(AscDescId::Geo { field_ids: [lat, lng], target_point, ascending });
+                    continue;
+                }
+            }
+            return Err(UserError::InvalidDocumentSortableAttribute {
+                field: RESERVED_GEO_FIELD_NAME.to_string(),
+                sortable_fields: sortable_fields.clone(),
+            }
+            .into());
+        }
     }
 
     let geo_candidates = if need_geo_candidates {

@@ -903,7 +903,7 @@ pub(crate) fn check_sort_criteria(
                 let (valid_fields, hidden_fields) =
                     index.remove_hidden_fields(rtxn, sortable_fields)?;
 
-                return Err(UserError::InvalidSortableAttribute {
+                return Err(UserError::InvalidSearchSortableAttribute {
                     field: field.to_string(),
                     valid_fields,
                     hidden_fields,
@@ -914,7 +914,7 @@ pub(crate) fn check_sort_criteria(
                 let (valid_fields, hidden_fields) =
                     index.remove_hidden_fields(rtxn, sortable_fields)?;
 
-                return Err(UserError::InvalidSortableAttribute {
+                return Err(UserError::InvalidSearchSortableAttribute {
                     field: RESERVED_GEO_FIELD_NAME.to_string(),
                     valid_fields,
                     hidden_fields,
