@@ -30,7 +30,7 @@ impl IndexScheduler {
         payload_size: Option<&Byte>,
         indexes: &BTreeMap<IndexUidPattern, ExportIndexSettings>,
         progress: Progress,
-    ) -> Result<BTreeMap<IndexUidPattern, DetailsExportIndexSettings>> {
+    ) -> Result<BTreeMap<String, DetailsExportIndexSettings>> {
         #[cfg(test)]
         self.maybe_fail(crate::test_utils::FailureLocation::ProcessExport)?;
 
@@ -48,7 +48,7 @@ impl IndexScheduler {
         let mut output = BTreeMap::new();
         let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(5)).build();
         let must_stop_processing = self.scheduler.must_stop_processing.clone();
-        for (i, (pattern, uid, export_settings)) in indexes.iter().enumerate() {
+        for (i, (_pattern, uid, export_settings)) in indexes.iter().enumerate() {
             if must_stop_processing.get() {
                 return Err(Error::AbortedTask);
             }
@@ -63,9 +63,8 @@ impl IndexScheduler {
             let index = self.index(uid)?;
             let index_rtxn = index.read_txn()?;
 
-            let url = format!("{base_url}/indexes/{uid}");
-
             // First, check if the index already exists
+            let url = format!("{base_url}/indexes/{uid}");
             let response = retry(&must_stop_processing, || {
                 let mut request = agent.get(&url);
                 if let Some(api_key) = api_key {
@@ -158,7 +157,7 @@ impl IndexScheduler {
             progress.update_progress(progress_step);
 
             output.insert(
-                (*pattern).clone(),
+                uid.clone(),
                 DetailsExportIndexSettings {
                     settings: (*export_settings).clone(),
                     matched_documents: Some(total_documents as u64),
