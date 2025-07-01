@@ -72,8 +72,12 @@ impl IndexScheduler {
                 }
 
                 request.send_bytes(Default::default()).map_err(into_backoff_error)
-            })?;
-            let index_exists = response.status() == 200;
+            });
+            let index_exists = match response {
+                Ok(response) => response.status() == 200,
+                Err(Error::FromRemoteWhenExporting { code, .. }) if code == "index_not_found" => false,
+                Err(e) => return Err(e),
+            };
 
             let primary_key = index
                 .primary_key(&index_rtxn)
