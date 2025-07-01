@@ -67,6 +67,7 @@ mod swap_indexes;
 pub mod tasks;
 #[cfg(test)]
 mod tasks_test;
+mod usage;
 
 #[derive(OpenApi)]
 #[openapi(
@@ -115,7 +116,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(web::scope("/metrics").configure(metrics::configure))
         .service(web::scope("/experimental-features").configure(features::configure))
         .service(web::scope("/network").configure(network::configure))
-        .service(web::scope("/chats").configure(chats::configure));
+        .service(web::scope("/chats").configure(chats::configure))
+        .service(web::scope("/usage").configure(usage::configure));
 
     #[cfg(feature = "swagger")]
     {
