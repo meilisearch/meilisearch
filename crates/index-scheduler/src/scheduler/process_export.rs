@@ -75,7 +75,9 @@ impl IndexScheduler {
             });
             let index_exists = match response {
                 Ok(response) => response.status() == 200,
-                Err(Error::FromRemoteWhenExporting { code, .. }) if code == "index_not_found" => false,
+                Err(Error::FromRemoteWhenExporting { code, .. }) if code == "index_not_found" => {
+                    false
+                }
                 Err(e) => return Err(e),
             };
 
