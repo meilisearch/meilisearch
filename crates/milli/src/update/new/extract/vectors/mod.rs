@@ -1,5 +1,4 @@
 use std::cell::RefCell;
-use std::collections::BTreeMap;
 use std::fmt::Debug;
 
 use bumpalo::collections::Vec as BVec;
@@ -16,15 +15,17 @@ use crate::update::new::indexer::settings_changes::SettingsChangeExtractor;
 use crate::update::new::thread_local::MostlySend;
 use crate::update::new::vector_document::VectorDocument;
 use crate::update::new::DocumentChange;
+use crate::update::settings::SettingsDelta;
 use crate::vector::db::{EmbedderInfo, EmbeddingStatus, EmbeddingStatusDelta};
 use crate::vector::error::{
     EmbedErrorKind, PossibleEmbeddingMistakes, UnusedVectorsDistributionBump,
 };
 use crate::vector::extractor::{
-    DocumentTemplateExtractor, Extractor as VectorExtractor, RequestFragmentExtractor,
+    DocumentTemplateExtractor, Extractor as VectorExtractor, ExtractorDiff,
+    RequestFragmentExtractor,
 };
 use crate::vector::session::{EmbedSession, Input, Metadata, OnEmbed};
-use crate::vector::settings::{EmbedderAction, ReindexAction};
+use crate::vector::settings::ReindexAction;
 use crate::vector::{Embedding, RuntimeEmbedder, RuntimeEmbedders, RuntimeFragment};
 use crate::{DocumentId, FieldDistribution, InternalError, Result, ThreadPoolNoAbort, UserError};
 
@@ -260,44 +261,31 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
     }
 }
 
-pub struct SettingsChangeEmbeddingExtractor<'a, 'b> {
-    embedders: &'a EmbeddingConfigs,
-    old_embedders: &'a EmbeddingConfigs,
-    embedder_actions: &'a BTreeMap<String, EmbedderAction>,
-    embedder_category_id: &'a std::collections::HashMap<String, u8>,
+pub struct SettingsChangeEmbeddingExtractor<'a, 'b, SD> {
+    settings_delta: &'a SD,
     embedder_stats: &'a EmbedderStats,
     sender: EmbeddingSender<'a, 'b>,
     possible_embedding_mistakes: PossibleEmbeddingMistakes,
     threads: &'a ThreadPoolNoAbort,
 }
 
-impl<'a, 'b> SettingsChangeEmbeddingExtractor<'a, 'b> {
+impl<'a, 'b, SD: SettingsDelta> SettingsChangeEmbeddingExtractor<'a, 'b, SD> {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        embedders: &'a EmbeddingConfigs,
-        old_embedders: &'a EmbeddingConfigs,
-        embedder_actions: &'a BTreeMap<String, EmbedderAction>,
-        embedder_category_id: &'a std::collections::HashMap<String, u8>,
+        settings_delta: &'a SD,
         embedder_stats: &'a EmbedderStats,
         sender: EmbeddingSender<'a, 'b>,
         field_distribution: &'a FieldDistribution,
         threads: &'a ThreadPoolNoAbort,
     ) -> Self {
         let possible_embedding_mistakes = PossibleEmbeddingMistakes::new(field_distribution);
-        Self {
-            embedders,
-            old_embedders,
-            embedder_actions,
-            embedder_category_id,
-            embedder_stats,
-            sender,
-            threads,
-            possible_embedding_mistakes,
-        }
+        Self { settings_delta, embedder_stats, sender, threads, possible_embedding_mistakes }
     }
 }
 
-impl<'extractor> SettingsChangeExtractor<'extractor> for SettingsChangeEmbeddingExtractor<'_, '_> {
+impl<'extractor, SD: SettingsDelta + Sync> SettingsChangeExtractor<'extractor>
+    for SettingsChangeEmbeddingExtractor<'_, '_, SD>
+{
     type Data = RefCell<EmbeddingExtractorData<'extractor>>;
 
     fn init_data<'doc>(&'doc self, extractor_alloc: &'extractor Bump) -> crate::Result<Self::Data> {
@@ -309,44 +297,49 @@ impl<'extractor> SettingsChangeExtractor<'extractor> for SettingsChangeEmbedding
         documents: impl Iterator<Item = crate::Result<DocumentIdentifiers<'doc>>>,
         context: &'doc DocumentContext<Self::Data>,
     ) -> crate::Result<()> {
-        let embedders = self.embedders.inner_as_ref();
-        let old_embedders = self.old_embedders.inner_as_ref();
+        let embedders = self.settings_delta.new_embedders();
+        let old_embedders = self.settings_delta.old_embedders();
         let unused_vectors_distribution = UnusedVectorsDistributionBump::new_in(&context.doc_alloc);
 
         let mut all_chunks = BVec::with_capacity_in(embedders.len(), &context.doc_alloc);
-        for (embedder_name, (embedder, prompt, _is_quantized)) in embedders {
-            // if the embedder is not in the embedder_actions, we don't need to reindex.
-            if let Some((embedder_id, reindex_action)) =
-                self.embedder_actions
-                    .get(embedder_name)
-                    // keep only the reindex actions
-                    .and_then(EmbedderAction::reindex)
-                    // map the reindex action to the embedder_id
-                    .map(|reindex| {
-                        let embedder_id = self.embedder_category_id.get(embedder_name).expect(
-                            "An embedder_category_id must exist for all reindexed embedders",
-                        );
-                        (*embedder_id, reindex)
-                    })
-            {
-                all_chunks.push((
-                    Chunks::new(
-                        embedder,
-                        embedder_id,
-                        embedder_name,
-                        prompt,
-                        context.data,
-                        &self.possible_embedding_mistakes,
-                        self.embedder_stats,
-                        self.threads,
-                        self.sender,
-                        &context.doc_alloc,
-                    ),
-                    reindex_action,
-                ))
-            }
+        let embedder_configs = context.index.embedding_configs();
+        for (embedder_name, action) in self.settings_delta.embedder_actions().iter() {
+            let Some(reindex_action) = action.reindex() else {
+                continue;
+            };
+            let runtime = embedders
+                .get(embedder_name)
+                .expect("A runtime must exist for all reindexed embedder");
+            let embedder_info = embedder_configs
+                .embedder_info(&context.rtxn, embedder_name)?
+                .unwrap_or_else(|| {
+                    // new embedder
+                    EmbedderInfo {
+                        embedder_id: *self
+                            .settings_delta
+                            .new_embedder_category_id()
+                            .get(embedder_name)
+                            .expect(
+                                "An embedder_category_id must exist for all reindexed embedders",
+                            ),
+                        embedding_status: EmbeddingStatus::new(),
+                    }
+                });
+            all_chunks.push((
+                Chunks::new(
+                    runtime,
+                    embedder_info,
+                    embedder_name.as_str(),
+                    context.data,
+                    &self.possible_embedding_mistakes,
+                    self.embedder_stats,
+                    self.threads,
+                    self.sender,
+                    &context.doc_alloc,
+                ),
+                reindex_action,
+            ));
         }
-
         for document in documents {
             let document = document?;
 
@@ -360,6 +353,16 @@ impl<'extractor> SettingsChangeExtractor<'extractor> for SettingsChangeEmbedding
             for (chunks, reindex_action) in &mut all_chunks {
                 let embedder_name = chunks.embedder_name();
                 let current_vectors = current_vectors.vectors_for_key(embedder_name)?;
+                let (old_is_user_provided, _) =
+                    chunks.is_user_provided_must_regenerate(document.docid());
+                let old_has_fragments = old_embedders
+                    .get(embedder_name)
+                    .map(|embedder| embedder.fragments().is_empty())
+                    .unwrap_or_default();
+
+                let new_has_fragments = chunks.has_fragments();
+
+                let fragments_changed = old_has_fragments ^ new_has_fragments;
 
                 // if the vectors for this document have been already provided, we don't need to reindex.
                 let (is_new_embedder, must_regenerate) =
@@ -368,60 +371,33 @@ impl<'extractor> SettingsChangeExtractor<'extractor> for SettingsChangeEmbedding
                     });
 
                 match reindex_action {
-                    ReindexAction::RegeneratePrompts => {
+                    ReindexAction::RegeneratePrompts | ReindexAction::RegenerateFragments(_) => {
                         if !must_regenerate {
                             continue;
                         }
                         // we need to regenerate the prompts for the document
-
-                        // Get the old prompt and render the document with it
-                        let Some((_, old_prompt, _)) = old_embedders.get(embedder_name) else {
-                            unreachable!("ReindexAction::RegeneratePrompts implies that the embedder {embedder_name} is in the old_embedders")
-                        };
-                        let old_rendered = old_prompt.render_document(
+                        chunks.settings_change_autogenerated(
+                            document.docid(),
                             document.external_document_id(),
                             document.current(
                                 &context.rtxn,
                                 context.index,
                                 context.db_fields_ids_map,
                             )?,
+                            self.settings_delta,
                             context.new_fields_ids_map,
-                            &context.doc_alloc,
+                            &unused_vectors_distribution,
+                            old_is_user_provided,
+                            fragments_changed,
                         )?;
-
-                        // Get the new prompt and render the document with it
-                        let new_prompt = chunks.prompt();
-                        let new_rendered = new_prompt.render_document(
-                            document.external_document_id(),
-                            document.current(
-                                &context.rtxn,
-                                context.index,
-                                context.db_fields_ids_map,
-                            )?,
-                            context.new_fields_ids_map,
-                            &context.doc_alloc,
-                        )?;
-
-                        // Compare the rendered documents
-                        // if they are different, regenerate the vectors
-                        if new_rendered != old_rendered {
-                            chunks.set_autogenerated(
-                                document.docid(),
-                                document.external_document_id(),
-                                new_rendered,
-                                &unused_vectors_distribution,
-                            )?;
-                        }
                     }
                     ReindexAction::FullReindex => {
-                        let prompt = chunks.prompt();
                         // if no inserted vectors, then regenerate: true + no embeddings => autogenerate
                         if let Some(embeddings) = current_vectors
                             .and_then(|vectors| vectors.embeddings)
                             // insert the embeddings only for new embedders
                             .filter(|_| is_new_embedder)
                         {
-                            chunks.set_regenerate(document.docid(), must_regenerate);
                             chunks.set_vectors(
                                 document.external_document_id(),
                                 document.docid(),
@@ -431,24 +407,27 @@ impl<'extractor> SettingsChangeExtractor<'extractor> for SettingsChangeEmbedding
                                         error: error.to_string(),
                                     },
                                 )?,
+                                old_is_user_provided,
+                                true,
+                                must_regenerate,
                             )?;
                         } else if must_regenerate {
-                            let rendered = prompt.render_document(
+                            chunks.settings_change_autogenerated(
+                                document.docid(),
                                 document.external_document_id(),
                                 document.current(
                                     &context.rtxn,
                                     context.index,
                                     context.db_fields_ids_map,
                                 )?,
+                                self.settings_delta,
                                 context.new_fields_ids_map,
-                                &context.doc_alloc,
-                            )?;
-                            chunks.set_autogenerated(
-                                document.docid(),
-                                document.external_document_id(),
-                                rendered,
                                 &unused_vectors_distribution,
+                                old_is_user_provided,
+                                true,
                             )?;
+                        } else if is_new_embedder {
+                            chunks.set_status(document.docid(), false, true, false, false);
                         }
                     }
                 }
@@ -585,7 +564,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
         let embedder = &runtime.embedder;
         let dimensions = embedder.dimensions();
 
-        let fragments = runtime.fragments.as_slice();
+        let fragments = runtime.fragments();
         let kind = if fragments.is_empty() {
             ChunkType::DocumentTemplate {
                 document_template: &runtime.document_template,
@@ -625,6 +604,117 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
 
     pub fn is_user_provided_must_regenerate(&self, docid: DocumentId) -> (bool, bool) {
         self.status.is_user_provided_must_regenerate(docid)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn settings_change_autogenerated<'doc, D: Document<'doc> + Debug, SD: SettingsDelta>(
+        &mut self,
+        docid: DocumentId,
+        external_docid: &'a str,
+        document: D,
+        settings_delta: &SD,
+        fields_ids_map: &'a RefCell<crate::GlobalFieldsIdsMap>,
+        unused_vectors_distribution: &UnusedVectorsDistributionBump<'a>,
+        old_is_user_provided: bool,
+        full_reindex: bool,
+    ) -> Result<()>
+    where
+        'a: 'doc,
+    {
+        match &mut self.kind {
+            ChunkType::Fragments { fragments: _, session } => {
+                let doc_alloc = session.doc_alloc();
+
+                if old_is_user_provided | full_reindex {
+                    session.on_embed_mut().clear_vectors(docid);
+                }
+
+                let mut extracted = false;
+                let extracted = &mut extracted;
+
+                settings_delta.try_for_each_fragment_diff(
+                    session.embedder_name(),
+                    |fragment_diff| {
+                        let extractor = RequestFragmentExtractor::new(fragment_diff.new, doc_alloc)
+                            .ignore_errors();
+                        let old = if full_reindex {
+                            None
+                        } else {
+                            fragment_diff.old.map(|old| {
+                                RequestFragmentExtractor::new(old, doc_alloc).ignore_errors()
+                            })
+                        };
+                        let metadata = Metadata {
+                            docid,
+                            external_docid,
+                            extractor_id: extractor.extractor_id(),
+                        };
+
+                        match extractor.diff_settings(&document, &(), old.as_ref())? {
+                            ExtractorDiff::Removed => {
+                                OnEmbed::process_embedding_response(
+                                    session.on_embed_mut(),
+                                    crate::vector::session::EmbeddingResponse {
+                                        metadata,
+                                        embedding: None,
+                                    },
+                                );
+                            }
+                            ExtractorDiff::Added(input) | ExtractorDiff::Updated(input) => {
+                                *extracted = true;
+                                session.request_embedding(
+                                    metadata,
+                                    input,
+                                    unused_vectors_distribution,
+                                )?;
+                            }
+                            ExtractorDiff::Unchanged => { /* nothing to do */ }
+                        }
+
+                        Result::Ok(())
+                    },
+                )?;
+                self.set_status(
+                    docid,
+                    old_is_user_provided,
+                    true,
+                    old_is_user_provided & !*extracted,
+                    true,
+                );
+            }
+            ChunkType::DocumentTemplate { document_template, session } => {
+                let doc_alloc = session.doc_alloc();
+
+                let old_embedder = settings_delta.old_embedders().get(session.embedder_name());
+                let old_document_template = if full_reindex {
+                    None
+                } else {
+                    old_embedder.as_ref().map(|old_embedder| &old_embedder.document_template)
+                };
+                let extractor =
+                    DocumentTemplateExtractor::new(document_template, doc_alloc, fields_ids_map);
+                let old_extractor = old_document_template.map(|old_document_template| {
+                    DocumentTemplateExtractor::new(old_document_template, doc_alloc, fields_ids_map)
+                });
+                let metadata =
+                    Metadata { docid, external_docid, extractor_id: extractor.extractor_id() };
+
+                match extractor.diff_settings(document, &external_docid, old_extractor.as_ref())? {
+                    ExtractorDiff::Removed => {
+                        OnEmbed::process_embedding_response(
+                            session.on_embed_mut(),
+                            crate::vector::session::EmbeddingResponse { metadata, embedding: None },
+                        );
+                    }
+                    ExtractorDiff::Added(input) | ExtractorDiff::Updated(input) => {
+                        session.request_embedding(metadata, input, unused_vectors_distribution)?;
+                    }
+                    ExtractorDiff::Unchanged => { /* do nothing */ }
+                }
+                self.set_status(docid, old_is_user_provided, true, false, true);
+            }
+        }
+        Ok(())
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -861,6 +951,10 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
         }
 
         Ok(())
+    }
+
+    fn has_fragments(&self) -> bool {
+        matches!(self.kind, ChunkType::Fragments { .. })
     }
 }
 

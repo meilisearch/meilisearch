@@ -23,7 +23,7 @@ use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
 use crate::progress::{EmbedderStats, Progress};
 use crate::update::settings::SettingsDelta;
 use crate::update::GrenadParameters;
-use crate::vector::settings::{EmbedderAction, WriteBackToDocuments};
+use crate::vector::settings::{EmbedderAction, RemoveFragments, WriteBackToDocuments};
 use crate::vector::{ArroyWrapper, Embedder, RuntimeEmbedders};
 use crate::{FieldsIdsMap, GlobalFieldsIdsMap, Index, InternalError, Result, ThreadPoolNoAbort};
 
@@ -221,7 +221,7 @@ where
     MSP: Fn() -> bool + Sync,
     SD: SettingsDelta + Sync,
 {
-    delete_old_embedders(wtxn, index, settings_delta)?;
+    delete_old_embedders_and_fragments(wtxn, index, settings_delta)?;
 
     let mut bbbuffers = Vec::new();
     let finished_extraction = AtomicBool::new(false);
@@ -254,16 +254,14 @@ where
         grenad_parameters: &grenad_parameters,
     };
 
-    let index_embeddings = index.embedding_configs(wtxn)?;
+    let index_embeddings = index.embedding_configs().embedding_configs(wtxn)?;
     let mut field_distribution = index.field_distribution(wtxn)?;
-    let mut modified_docids = roaring::RoaringBitmap::new();
 
     let congestion = thread::scope(|s| -> Result<ChannelCongestion> {
         let indexer_span = tracing::Span::current();
         let finished_extraction = &finished_extraction;
         // prevent moving the field_distribution and document_ids in the inner closure...
         let field_distribution = &mut field_distribution;
-        let modified_docids = &mut modified_docids;
         let extractor_handle =
             Builder::new().name(S("indexer-extractors")).spawn_scoped(s, move || {
                 pool.install(move || {
@@ -276,7 +274,6 @@ where
                         finished_extraction,
                         field_distribution,
                         index_embeddings,
-                        modified_docids,
                         &embedder_stats,
                     )
                 })
@@ -342,7 +339,7 @@ where
 fn arroy_writers_from_embedder_actions<'indexer>(
     index: &Index,
     embedder_actions: &'indexer BTreeMap<String, EmbedderAction>,
-    embedders: &'indexer EmbeddingConfigs,
+    embedders: &'indexer RuntimeEmbedders,
     index_embedder_category_ids: &'indexer std::collections::HashMap<String, u8>,
 ) -> Result<HashMap<u8, (&'indexer str, &'indexer Embedder, ArroyWrapper, usize)>> {
     let vector_arroy = index.vector_arroy;
@@ -350,7 +347,7 @@ fn arroy_writers_from_embedder_actions<'indexer>(
     embedders
         .inner_as_ref()
         .iter()
-        .filter_map(|(embedder_name, (embedder, _, _))| match embedder_actions.get(embedder_name) {
+        .filter_map(|(embedder_name, runtime)| match embedder_actions.get(embedder_name) {
             None => None,
             Some(action) if action.write_back().is_some() => None,
             Some(action) => {
@@ -365,25 +362,65 @@ fn arroy_writers_from_embedder_actions<'indexer>(
                 };
                 let writer =
                     ArroyWrapper::new(vector_arroy, embedder_category_id, action.was_quantized);
-                let dimensions = embedder.dimensions();
+                let dimensions = runtime.embedder.dimensions();
                 Some(Ok((
                     embedder_category_id,
-                    (embedder_name.as_str(), embedder.as_ref(), writer, dimensions),
+                    (embedder_name.as_str(), runtime.embedder.as_ref(), writer, dimensions),
                 )))
             }
         })
         .collect()
 }
 
-fn delete_old_embedders<SD>(wtxn: &mut RwTxn<'_>, index: &Index, settings_delta: &SD) -> Result<()>
+fn delete_old_embedders_and_fragments<SD>(
+    wtxn: &mut RwTxn<'_>,
+    index: &Index,
+    settings_delta: &SD,
+) -> Result<()>
 where
     SD: SettingsDelta,
 {
     for action in settings_delta.embedder_actions().values() {
-        if let Some(WriteBackToDocuments { embedder_id, .. }) = action.write_back() {
-            let reader = ArroyWrapper::new(index.vector_arroy, *embedder_id, action.was_quantized);
-            let dimensions = reader.dimensions(wtxn)?;
-            reader.clear(wtxn, dimensions)?;
+        let Some(WriteBackToDocuments { embedder_id, .. }) = action.write_back() else {
+            continue;
+        };
+        let reader = ArroyWrapper::new(index.vector_arroy, *embedder_id, action.was_quantized);
+        let Some(dimensions) = reader.dimensions(wtxn)? else {
+            continue;
+        };
+        reader.clear(wtxn, dimensions)?;
+    }
+
+    // remove all vectors for the specified fragments
+    for (embedder_name, RemoveFragments { fragment_ids }, was_quantized) in
+        settings_delta.embedder_actions().iter().filter_map(|(name, action)| {
+            action.remove_fragments().map(|fragments| (name, fragments, action.was_quantized))
+        })
+    {
+        let Some(infos) = index.embedding_configs().embedder_info(wtxn, embedder_name)? else {
+            continue;
+        };
+        let arroy = ArroyWrapper::new(index.vector_arroy, infos.embedder_id, was_quantized);
+        let Some(dimensions) = arroy.dimensions(wtxn)? else {
+            continue;
+        };
+        for fragment_id in fragment_ids {
+            // we must keep the user provided embeddings that ended up in this store
+
+            if infos.embedding_status.user_provided_docids().is_empty() {
+                // no user provided: clear store
+                arroy.clear_store(wtxn, *fragment_id, dimensions)?;
+                continue;
+            }
+
+            // some user provided, remove only the ids that are not user provided
+            let to_delete = arroy.items_in_store(wtxn, *fragment_id, |items| {
+                items - infos.embedding_status.user_provided_docids()
+            })?;
+
+            for to_delete in to_delete {
+                arroy.del_item_in_store(wtxn, to_delete, *fragment_id, dimensions)?;
+            }
         }
     }
 

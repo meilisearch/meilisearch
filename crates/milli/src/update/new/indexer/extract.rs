@@ -21,7 +21,7 @@ use crate::update::new::indexer::settings_changes::DocumentsIndentifiers;
 use crate::update::new::merger::merge_and_send_rtree;
 use crate::update::new::{merge_and_send_docids, merge_and_send_facet_docids, FacetDatabases};
 use crate::update::settings::SettingsDelta;
-use crate::vector::db::IndexEmbeddingConfig;
+use crate::vector::db::{EmbedderInfo, IndexEmbeddingConfig};
 use crate::vector::RuntimeEmbedders;
 use crate::{Index, InternalError, Result, ThreadPoolNoAbort, ThreadPoolNoAbortBuilder};
 
@@ -333,12 +333,11 @@ pub(super) fn extract_all_settings_changes<MSP, SD>(
     finished_extraction: &AtomicBool,
     field_distribution: &mut BTreeMap<String, u64>,
     mut index_embeddings: Vec<IndexEmbeddingConfig>,
-    modified_docids: &mut RoaringBitmap,
     embedder_stats: &EmbedderStats,
 ) -> Result<Vec<IndexEmbeddingConfig>>
 where
     MSP: Fn() -> bool + Sync,
-    SD: SettingsDelta,
+    SD: SettingsDelta + Sync,
 {
     // Create the list of document ids to extract
     let rtxn = indexing_context.index.read_txn()?;
@@ -369,10 +368,7 @@ where
 
         // extract the remaining embeddings
         let extractor = SettingsChangeEmbeddingExtractor::new(
-            settings_delta.new_embedders(),
-            settings_delta.old_embedders(),
-            settings_delta.embedder_actions(),
-            settings_delta.new_embedder_category_id(),
+            settings_delta,
             embedder_stats,
             embedding_sender,
             field_distribution,
@@ -396,14 +392,25 @@ where
             let span = tracing::debug_span!(target: "indexing::documents::merge", "vectors");
             let _entered = span.enter();
 
+            let embedder_configs = indexing_context.index.embedding_configs();
             for config in &mut index_embeddings {
+                // retrieve infos for existing embedder or create a fresh one
+                let mut infos =
+                    embedder_configs.embedder_info(&rtxn, &config.name)?.unwrap_or_else(|| {
+                        let embedder_id =
+                            *settings_delta.new_embedder_category_id().get(&config.name).unwrap();
+                        EmbedderInfo { embedder_id, embedding_status: Default::default() }
+                    });
+
                 'data: for data in datastore.iter_mut() {
                     let data = &mut data.get_mut().0;
-                    let Some(deladd) = data.remove(&config.name) else {
+                    let Some(delta) = data.remove(&config.name) else {
                         continue 'data;
                     };
-                    deladd.apply_to(&mut config.user_provided, modified_docids);
+                    delta.apply_to(&mut infos.embedding_status);
                 }
+
+                extractor_sender.embeddings().embedding_status(&config.name, infos).unwrap();
             }
         }
     }
