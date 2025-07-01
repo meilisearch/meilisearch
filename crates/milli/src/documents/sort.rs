@@ -359,7 +359,7 @@ impl<'ctx> SortedDocuments<'ctx> {
     }
 }
 
-pub fn recursive_facet_sort<'ctx>(
+pub fn recursive_sort<'ctx>(
     index: &'ctx crate::Index,
     rtxn: &'ctx heed::RoTxn<'ctx>,
     sort: Vec<AscDesc>,

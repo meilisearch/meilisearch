@@ -18,7 +18,7 @@ use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
-use meilisearch_types::milli::facet::facet_sort_recursive::recursive_facet_sort;
+use meilisearch_types::milli::documents::sort::recursive_sort;
 use meilisearch_types::milli::update::IndexDocumentsMethod;
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::{AscDesc, DocumentId};
@@ -1576,7 +1576,7 @@ fn retrieve_documents<S: AsRef<str>>(
     let facet_sort;
     let (it, number_of_documents) = if let Some(sort) = sort_criteria {
         let number_of_documents = candidates.len();
-        facet_sort = recursive_facet_sort(index, &rtxn, sort, &candidates)?;
+        facet_sort = recursive_sort(index, &rtxn, sort, &candidates)?;
         let iter = facet_sort.iter()?;
         (
             itertools::Either::Left(some_documents(

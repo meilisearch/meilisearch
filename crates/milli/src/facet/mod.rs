@@ -1,4 +1,3 @@
-pub mod facet_sort_recursive;
 mod facet_type;
 mod facet_value;
 pub mod value_encoding;

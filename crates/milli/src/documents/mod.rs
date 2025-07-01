@@ -4,6 +4,7 @@ pub mod geo_sort;
 mod primary_key;
 mod reader;
 mod serde_impl;
+pub mod sort;
 
 use std::fmt::Debug;
 use std::io;
