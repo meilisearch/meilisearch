@@ -20,6 +20,158 @@ enum AscDescId {
     Geo { field_ids: [u16; 2], target_point: [f64; 2], ascending: bool },
 }
 
+/// A [`SortedDocumentsIterator`] allows efficient access to a continuous range of sorted documents.
+/// This is ideal in the context of paginated queries in which only a small number of documents are needed at a time.
+/// Search operations will only be performed upon access.
+pub enum SortedDocumentsIterator<'ctx> {
+    Leaf {
+        /// The exact number of documents remaining
+        size: usize,
+        values: Box<dyn Iterator<Item = DocumentId> + 'ctx>,
+    },
+    Branch {
+        /// The current child, got from the children iterator
+        current_child: Option<Box<SortedDocumentsIterator<'ctx>>>,
+        /// The exact number of documents remaining, excluding documents in the current child
+        next_children_size: usize,
+        /// Iterators to become the current child once it is exhausted
+        next_children:
+            Box<dyn Iterator<Item = crate::Result<SortedDocumentsIteratorBuilder<'ctx>>> + 'ctx>,
+    },
+}
+
+impl SortedDocumentsIterator<'_> {
+    /// Takes care of updating the current child if it is `None`, and also updates the size
+    fn update_current<'ctx>(
+        current_child: &mut Option<Box<SortedDocumentsIterator<'ctx>>>,
+        next_children_size: &mut usize,
+        next_children: &mut Box<
+            dyn Iterator<Item = crate::Result<SortedDocumentsIteratorBuilder<'ctx>>> + 'ctx,
+        >,
+    ) -> crate::Result<()> {
+        if current_child.is_none() {
+            *current_child = match next_children.next() {
+                Some(Ok(builder)) => {
+                    let next_child = Box::new(builder.build()?);
+                    *next_children_size -= next_child.size_hint().0;
+                    Some(next_child)
+                }
+                Some(Err(e)) => return Err(e),
+                None => return Ok(()),
+            };
+        }
+        Ok(())
+    }
+}
+
+impl Iterator for SortedDocumentsIterator<'_> {
+    type Item = crate::Result<DocumentId>;
+
+    /// Implementing the `nth` method allows for efficient access to the nth document in the sorted order.
+    /// It's used by `skip` internally.
+    /// The default implementation of `nth` would iterate over all children, which is inefficient for large datasets.
+    /// This implementation will jump over whole chunks of children until it gets close.
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        // If it's at the leaf level, just forward the call to the values iterator
+        let (current_child, next_children, next_children_size) = match self {
+            SortedDocumentsIterator::Leaf { values, size } => {
+                *size = size.saturating_sub(n);
+                return values.nth(n).map(Ok);
+            }
+            SortedDocumentsIterator::Branch {
+                current_child,
+                next_children,
+                next_children_size,
+            } => (current_child, next_children, next_children_size),
+        };
+
+        // Otherwise don't directly iterate over children, skip them if we know we will go further
+        let mut to_skip = n - 1;
+        while to_skip > 0 {
+            if let Err(e) = SortedDocumentsIterator::update_current(
+                current_child,
+                next_children_size,
+                next_children,
+            ) {
+                return Some(Err(e));
+            }
+            let Some(inner) = current_child else {
+                return None; // No more inner iterators, everything has been consumed.
+            };
+
+            if to_skip >= inner.size_hint().0 {
+                // The current child isn't large enough to contain the nth element.
+                // Skip it and continue with the next one.
+                to_skip -= inner.size_hint().0;
+                *current_child = None;
+                continue;
+            } else {
+                // The current iterator is large enough, so we can forward the call to it.
+                return inner.nth(to_skip + 1);
+            }
+        }
+
+        self.next()
+    }
+
+    /// Iterators need to keep track of their size so that they can be skipped efficiently by the `nth` method.
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let size = match self {
+            SortedDocumentsIterator::Leaf { size, .. } => *size,
+            SortedDocumentsIterator::Branch {
+                next_children_size,
+                current_child: Some(current_child),
+                ..
+            } => current_child.size_hint().0 + next_children_size,
+            SortedDocumentsIterator::Branch { next_children_size, current_child: None, .. } => {
+                *next_children_size
+            }
+        };
+
+        (size, Some(size))
+    }
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            SortedDocumentsIterator::Leaf { values, size } => {
+                let result = values.next().map(Ok);
+                if result.is_some() {
+                    *size -= 1;
+                }
+                result
+            }
+            SortedDocumentsIterator::Branch {
+                current_child,
+                next_children_size,
+                next_children,
+            } => {
+                let mut result = None;
+                while result.is_none() {
+                    // Ensure we have selected an iterator to work with
+                    if let Err(e) = SortedDocumentsIterator::update_current(
+                        current_child,
+                        next_children_size,
+                        next_children,
+                    ) {
+                        return Some(Err(e));
+                    }
+                    let Some(inner) = current_child else {
+                        return None;
+                    };
+
+                    result = inner.next();
+
+                    // If the current iterator is exhausted, we need to try the next one
+                    if result.is_none() {
+                        *current_child = None;
+                    }
+                }
+                result
+            }
+        }
+    }
+}
+
 /// Builder for a [`SortedDocumentsIterator`].
 /// Most builders won't ever be built, because pagination will skip them.
 pub struct SortedDocumentsIteratorBuilder<'ctx> {
@@ -57,6 +209,7 @@ impl<'ctx> SortedDocumentsIteratorBuilder<'ctx> {
         }
     }
 
+    /// Builds a [`SortedDocumentsIterator`] based on the results of a facet sort.
     fn build_facet(
         self,
         field_id: u16,
@@ -108,6 +261,7 @@ impl<'ctx> SortedDocumentsIteratorBuilder<'ctx> {
         })
     }
 
+    /// Builds a [`SortedDocumentsIterator`] based on the (lazy) results of a geo sort.
     fn build_geo(
         self,
         field_ids: [u16; 2],
@@ -186,153 +340,6 @@ impl<'ctx> SortedDocumentsIteratorBuilder<'ctx> {
     }
 }
 
-/// A [`SortedDocumentsIterator`] allows efficient access to a continuous range of sorted documents.
-/// This is ideal in the context of paginated queries in which only a small number of documents are needed at a time.
-/// Search operations will only be performed upon access.
-pub enum SortedDocumentsIterator<'ctx> {
-    Leaf {
-        /// The exact number of documents remaining
-        size: usize,
-        values: Box<dyn Iterator<Item = DocumentId> + 'ctx>,
-    },
-    Branch {
-        /// The current child, got from the children iterator
-        current_child: Option<Box<SortedDocumentsIterator<'ctx>>>,
-        /// The exact number of documents remaining, excluding documents in the current child
-        next_children_size: usize,
-        /// Iterators to become the current child once it is exhausted
-        next_children:
-            Box<dyn Iterator<Item = crate::Result<SortedDocumentsIteratorBuilder<'ctx>>> + 'ctx>,
-    },
-}
-
-impl SortedDocumentsIterator<'_> {
-    /// Takes care of updating the current child if it is `None`, and also updates the size
-    fn update_current<'ctx>(
-        current_child: &mut Option<Box<SortedDocumentsIterator<'ctx>>>,
-        next_children_size: &mut usize,
-        next_children: &mut Box<
-            dyn Iterator<Item = crate::Result<SortedDocumentsIteratorBuilder<'ctx>>> + 'ctx,
-        >,
-    ) -> crate::Result<()> {
-        if current_child.is_none() {
-            *current_child = match next_children.next() {
-                Some(Ok(builder)) => {
-                    let next_child = Box::new(builder.build()?);
-                    *next_children_size -= next_child.size_hint().0;
-                    Some(next_child)
-                }
-                Some(Err(e)) => return Err(e),
-                None => return Ok(()),
-            };
-        }
-        Ok(())
-    }
-}
-
-impl Iterator for SortedDocumentsIterator<'_> {
-    type Item = crate::Result<DocumentId>;
-
-    fn nth(&mut self, n: usize) -> Option<Self::Item> {
-        // If it's at the leaf level, just forward the call to the values iterator
-        let (current_child, next_children, next_children_size) = match self {
-            SortedDocumentsIterator::Leaf { values, size } => {
-                *size = size.saturating_sub(n);
-                return values.nth(n).map(Ok);
-            }
-            SortedDocumentsIterator::Branch {
-                current_child,
-                next_children,
-                next_children_size,
-            } => (current_child, next_children, next_children_size),
-        };
-
-        // Otherwise don't directly iterate over children, skip them if we know we will go further
-        let mut to_skip = n - 1;
-        while to_skip > 0 {
-            if let Err(e) = SortedDocumentsIterator::update_current(
-                current_child,
-                next_children_size,
-                next_children,
-            ) {
-                return Some(Err(e));
-            }
-            let Some(inner) = current_child else {
-                return None; // No more inner iterators, everything has been consumed.
-            };
-
-            if to_skip >= inner.size_hint().0 {
-                // The current child isn't large enough to contain the nth element.
-                // Skip it and continue with the next one.
-                to_skip -= inner.size_hint().0;
-                *current_child = None;
-                continue;
-            } else {
-                // The current iterator is large enough, so we can forward the call to it.
-                return inner.nth(to_skip + 1);
-            }
-        }
-
-        self.next()
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        let size = match self {
-            SortedDocumentsIterator::Leaf { size, .. } => *size,
-            SortedDocumentsIterator::Branch {
-                next_children_size,
-                current_child: Some(current_child),
-                ..
-            } => current_child.size_hint().0 + next_children_size,
-            SortedDocumentsIterator::Branch { next_children_size, current_child: None, .. } => {
-                *next_children_size
-            }
-        };
-
-        (size, Some(size))
-    }
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self {
-            SortedDocumentsIterator::Leaf { values, size } => {
-                let result = values.next().map(Ok);
-                if result.is_some() {
-                    *size -= 1;
-                }
-                result
-            }
-            SortedDocumentsIterator::Branch {
-                current_child,
-                next_children_size,
-                next_children,
-            } => {
-                let mut result = None;
-                while result.is_none() {
-                    // Ensure we have selected an iterator to work with
-                    if let Err(e) = SortedDocumentsIterator::update_current(
-                        current_child,
-                        next_children_size,
-                        next_children,
-                    ) {
-                        return Some(Err(e));
-                    }
-                    let Some(inner) = current_child else {
-                        return None;
-                    };
-
-                    result = inner.next();
-
-                    // If the current iterator is exhausted, we need to try the next one
-                    if result.is_none() {
-                        *current_child = None;
-                    }
-                }
-                result
-            }
-        }
-    }
-}
-
 /// A structure owning the data needed during the lifetime of a [`SortedDocumentsIterator`].
 pub struct SortedDocuments<'ctx> {
     index: &'ctx crate::Index,
@@ -368,6 +375,7 @@ pub fn recursive_sort<'ctx>(
     let sortable_fields: BTreeSet<_> = index.sortable_fields(rtxn)?.into_iter().collect();
     let fields_ids_map = index.fields_ids_map(rtxn)?;
 
+    // Retrieve the field ids that are used for sorting
     let mut fields = Vec::new();
     let mut need_geo_candidates = false;
     for asc_desc in sort {
