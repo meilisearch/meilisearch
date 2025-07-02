@@ -49,35 +49,35 @@ const BASE_CONF: Conf = Conf {
 fn bench_sort(c: &mut criterion::Criterion) {
     #[rustfmt::skip]
     let confs = &[
-        // utils::Conf {
-        //     group_name: "without sort",
-        //     sort: None,
-        //     ..BASE_CONF
-        // },
+        utils::Conf {
+            group_name: "without sort",
+            sort: None,
+            ..BASE_CONF
+        },
 
-        // utils::Conf {
-        //     group_name: "sort on many different values",
-        //     sort: Some(vec!["name:asc"]),
-        //     ..BASE_CONF
-        // },
+        utils::Conf {
+            group_name: "sort on many different values",
+            sort: Some(vec!["name:asc"]),
+            ..BASE_CONF
+        },
 
-        // utils::Conf {
-        //     group_name: "sort on many similar values",
-        //     sort: Some(vec!["timezone:desc"]),
-        //     ..BASE_CONF
-        // },
+        utils::Conf {
+            group_name: "sort on many similar values",
+            sort: Some(vec!["timezone:desc"]),
+            ..BASE_CONF
+        },
 
-        // utils::Conf {
-        //     group_name: "sort on many similar then different values",
-        //     sort: Some(vec!["timezone:desc", "name:asc"]),
-        //     ..BASE_CONF
-        // },
+        utils::Conf {
+            group_name: "sort on many similar then different values",
+            sort: Some(vec!["timezone:desc", "name:asc"]),
+            ..BASE_CONF
+        },
 
-        // utils::Conf {
-        //     group_name: "sort on many different then similar values",
-        //     sort: Some(vec!["timezone:desc", "name:asc"]),
-        //     ..BASE_CONF
-        // },
+        utils::Conf {
+            group_name: "sort on many different then similar values",
+            sort: Some(vec!["timezone:desc", "name:asc"]),
+            ..BASE_CONF
+        },
 
         utils::Conf {
             group_name: "geo sort",
@@ -88,15 +88,21 @@ fn bench_sort(c: &mut criterion::Criterion) {
 
         utils::Conf {
             group_name: "sort on many similar values then geo sort",
-            sample_size: Some(10),
+            sample_size: Some(50),
             sort: Some(vec!["timezone:desc", "_geoPoint(45.4777599, 9.1967508):asc"]),
             ..BASE_CONF
         },
 
         utils::Conf {
             group_name: "sort on many different values then geo sort",
-            sample_size: Some(10),
+            sample_size: Some(50),
             sort: Some(vec!["name:desc", "_geoPoint(45.4777599, 9.1967508):asc"]),
+            ..BASE_CONF
+        },
+
+        utils::Conf {
+            group_name: "sort on many fields",
+            sort: Some(vec!["population:asc", "name:asc", "elevation:asc", "timezone:asc"]),
             ..BASE_CONF
         },
     ];
