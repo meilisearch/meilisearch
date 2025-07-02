@@ -615,6 +615,12 @@ pub struct SubEmbeddingSettings {
     pub indexing_embedder: Setting<serde_json::Value>,
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum EmbeddingValidationContext {
+    FullSettings,
+    SettingsPartialUpdate,
+}
+
 /// Indicates what action should take place during a reindexing operation for an embedder
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ReindexAction {

@@ -35,8 +35,8 @@ use crate::update::{IndexDocuments, UpdateIndexingStep};
 use crate::vector::db::{FragmentConfigs, IndexEmbeddingConfig};
 use crate::vector::json_template::JsonTemplate;
 use crate::vector::settings::{
-    EmbedderAction, EmbedderSource, EmbeddingSettings, NestingContext, ReindexAction,
-    SubEmbeddingSettings, WriteBackToDocuments,
+    EmbedderAction, EmbedderSource, EmbeddingSettings, EmbeddingValidationContext, NestingContext,
+    ReindexAction, SubEmbeddingSettings, WriteBackToDocuments,
 };
 use crate::vector::{
     Embedder, EmbeddingConfig, RuntimeEmbedder, RuntimeEmbedders, RuntimeFragment,
@@ -1181,13 +1181,20 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                             };
 
                             embedder_actions.insert(name.clone(), embedder_action);
-                            let new = validate_embedding_settings(updated_settings, &name)?;
+                            let new = validate_embedding_settings(
+                                updated_settings,
+                                &name,
+                                EmbeddingValidationContext::FullSettings,
+                            )?;
                             updated_configs.insert(name, (new, fragments));
                         }
                         SettingsDiff::UpdateWithoutReindex { updated_settings, quantize } => {
                             tracing::debug!(embedder = name, "update without reindex embedder");
-                            let new =
-                                validate_embedding_settings(Setting::Set(updated_settings), &name)?;
+                            let new = validate_embedding_settings(
+                                Setting::Set(updated_settings),
+                                &name,
+                                EmbeddingValidationContext::FullSettings,
+                            )?;
                             if quantize {
                                 embedder_actions.insert(
                                     name.clone(),
@@ -1211,7 +1218,11 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                     crate::vector::settings::EmbeddingSettings::apply_default_openai_model(
                         &mut setting,
                     );
-                    let setting = validate_embedding_settings(setting, &name)?;
+                    let setting = validate_embedding_settings(
+                        setting,
+                        &name,
+                        EmbeddingValidationContext::FullSettings,
+                    )?;
                     embedder_actions.insert(
                         name.clone(),
                         EmbedderAction::with_reindex(ReindexAction::FullReindex, false),
@@ -2079,6 +2090,7 @@ fn validate_prompt(
 pub fn validate_embedding_settings(
     settings: Setting<EmbeddingSettings>,
     name: &str,
+    context: EmbeddingValidationContext,
 ) -> Result<Setting<EmbeddingSettings>> {
     let Setting::Set(settings) = settings else { return Ok(settings) };
     let EmbeddingSettings {
@@ -2119,10 +2131,10 @@ pub fn validate_embedding_settings(
         })?;
     }
 
-    if let Some(request) = request.as_ref().set() {
-        let request = crate::vector::rest::RequestData::new(
-            request.to_owned(),
-            indexing_fragments
+    // if we are working with partial settings, the user could have changed only the `request` and not given again the fragments
+    if context == EmbeddingValidationContext::FullSettings {
+        if let Some(request) = request.as_ref().set() {
+            let indexing_fragments: BTreeMap<_, _> = indexing_fragments
                 .as_ref()
                 .set()
                 .iter()
@@ -2130,8 +2142,8 @@ pub fn validate_embedding_settings(
                 .filter_map(|(name, fragment)| {
                     Some((name.clone(), fragment.as_ref().map(|fragment| fragment.value.clone())?))
                 })
-                .collect(),
-            search_fragments
+                .collect();
+            let search_fragments: BTreeMap<_, _> = search_fragments
                 .as_ref()
                 .set()
                 .iter()
@@ -2139,12 +2151,29 @@ pub fn validate_embedding_settings(
                 .filter_map(|(name, fragment)| {
                     Some((name.clone(), fragment.as_ref().map(|fragment| fragment.value.clone())?))
                 })
-                .collect(),
-        )
-        .map_err(|error| crate::UserError::VectorEmbeddingError(error.into()))?;
-        if let Some(response) = response.as_ref().set() {
-            crate::vector::rest::Response::new(response.to_owned(), &request)
-                .map_err(|error| crate::UserError::VectorEmbeddingError(error.into()))?;
+                .collect();
+
+            let are_fragments_inconsistent =
+                indexing_fragments.is_empty() ^ search_fragments.is_empty();
+            if are_fragments_inconsistent {
+                return Err(crate::vector::error::NewEmbedderError::rest_inconsistent_fragments(
+                    indexing_fragments.is_empty(),
+                    indexing_fragments,
+                    search_fragments,
+                ))
+                .map_err(|error| crate::UserError::VectorEmbeddingError(error.into()).into());
+            }
+
+            let request = crate::vector::rest::RequestData::new(
+                request.to_owned(),
+                indexing_fragments,
+                search_fragments,
+            )
+            .map_err(|error| crate::UserError::VectorEmbeddingError(error.into()))?;
+            if let Some(response) = response.as_ref().set() {
+                crate::vector::rest::Response::new(response.to_owned(), &request)
+                    .map_err(|error| crate::UserError::VectorEmbeddingError(error.into()))?;
+            }
         }
     }
 
