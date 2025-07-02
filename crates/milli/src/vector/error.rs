@@ -477,6 +477,19 @@ impl NewEmbedderError {
             fault: FaultSource::User,
         }
     }
+
+    pub(crate) fn rest_document_template_and_fragments(
+        indexing_fragments_len: usize,
+        search_fragments_len: usize,
+    ) -> Self {
+        Self {
+            kind: NewEmbedderErrorKind::RestDocumentTemplateAndFragments {
+                indexing_fragments_len,
+                search_fragments_len,
+            },
+            fault: FaultSource::User,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -598,6 +611,8 @@ pub enum NewEmbedderErrorKind {
     RestCannotInferDimensionsForFragment,
     #[error("inconsistent fragments: {message}")]
     RestInconsistentFragments { message: String },
+    #[error("cannot pass both fragments and a document template.\n  - Note: {indexing_fragments_len} fragments declared in `indexingFragments` and {search_fragments_len} fragments declared in `search_fragments_len`.\n  - Hint: remove the declared fragments or remove the `documentTemplate`")]
+    RestDocumentTemplateAndFragments { indexing_fragments_len: usize, search_fragments_len: usize },
 }
 
 pub struct PossibleEmbeddingMistakes {
