@@ -1,92 +1,54 @@
-mod best_match_interval;
+mod adjust_indices;
+mod best_match_range;
 mod r#match;
+mod match_bounds;
 mod matching_words;
-mod simple_token_kind;
 
-use std::borrow::Cow;
-use std::cmp::{max, min};
-
-use charabia::{Language, SeparatorKind, Token, Tokenizer};
-use either::Either;
-use itertools::Itertools;
+use charabia::{Language, Token, Tokenizer};
+pub use match_bounds::MatchBounds;
 pub use matching_words::MatchingWords;
-use matching_words::{MatchType, PartialMatch};
-use r#match::{Match, MatchPosition};
-use serde::{Deserialize, Serialize};
-use simple_token_kind::SimpleTokenKind;
-use utoipa::ToSchema;
+use matching_words::QueryPosition;
+use r#match::Match;
 
-const DEFAULT_CROP_MARKER: &str = "…";
-const DEFAULT_HIGHLIGHT_PREFIX: &str = "<em>";
-const DEFAULT_HIGHLIGHT_SUFFIX: &str = "</em>";
-
-/// Structure used to build a Matcher allowing to customize formatting tags.
-pub struct MatcherBuilder<'m> {
-    matching_words: MatchingWords,
-    tokenizer: Tokenizer<'m>,
-    crop_marker: Option<String>,
-    highlight_prefix: Option<String>,
-    highlight_suffix: Option<String>,
+pub struct MarkerOptions {
+    pub highlight_pre_tag: String,
+    pub highlight_post_tag: String,
+    pub crop_marker: String,
 }
 
-impl<'m> MatcherBuilder<'m> {
-    pub fn new(matching_words: MatchingWords, tokenizer: Tokenizer<'m>) -> Self {
-        Self {
-            matching_words,
-            tokenizer,
-            crop_marker: None,
-            highlight_prefix: None,
-            highlight_suffix: None,
-        }
-    }
+/// Structure used to build a Matcher allowing to customize formatting tags.
+pub struct MatcherBuilder<'a> {
+    matching_words: MatchingWords,
+    tokenizer: Tokenizer<'a>,
+    marker_options: MarkerOptions,
+}
 
-    pub fn crop_marker(&mut self, marker: String) -> &Self {
-        self.crop_marker = Some(marker);
-        self
-    }
-
-    pub fn highlight_prefix(&mut self, prefix: String) -> &Self {
-        self.highlight_prefix = Some(prefix);
-        self
-    }
-
-    pub fn highlight_suffix(&mut self, suffix: String) -> &Self {
-        self.highlight_suffix = Some(suffix);
-        self
+impl<'a> MatcherBuilder<'a> {
+    pub fn new(
+        matching_words: MatchingWords,
+        tokenizer: Tokenizer<'a>,
+        marker_options: MarkerOptions,
+    ) -> Self {
+        Self { matching_words, tokenizer, marker_options }
     }
 
     pub fn build<'t, 'lang>(
         &self,
         text: &'t str,
         locales: Option<&'lang [Language]>,
-    ) -> Matcher<'t, 'm, '_, 'lang> {
-        let crop_marker = match &self.crop_marker {
-            Some(marker) => marker.as_str(),
-            None => DEFAULT_CROP_MARKER,
-        };
-
-        let highlight_prefix = match &self.highlight_prefix {
-            Some(marker) => marker.as_str(),
-            None => DEFAULT_HIGHLIGHT_PREFIX,
-        };
-        let highlight_suffix = match &self.highlight_suffix {
-            Some(marker) => marker.as_str(),
-            None => DEFAULT_HIGHLIGHT_SUFFIX,
-        };
+    ) -> Matcher<'t, 'a, '_, 'lang> {
         Matcher {
             text,
             matching_words: &self.matching_words,
             tokenizer: &self.tokenizer,
-            crop_marker,
-            highlight_prefix,
-            highlight_suffix,
-            matches: None,
+            marker_options: &self.marker_options,
+            tokens_matches_and_query_positions: None,
             locales,
         }
     }
 }
 
-#[derive(Copy, Clone, Default, Debug)]
+#[derive(Copy, Clone, Default)]
 pub struct FormatOptions {
     pub highlight: bool,
     pub crop: Option<usize>,
@@ -102,14 +64,6 @@ impl FormatOptions {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, ToSchema)]
-pub struct MatchBounds {
-    pub start: usize,
-    pub length: usize,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub indices: Option<Vec<usize>>,
-}
-
 /// Structure used to analyze a string, compute words that match,
 /// and format the source string, returning a highlighted and cropped sub-string.
 pub struct Matcher<'t, 'tokenizer, 'b, 'lang> {
@@ -117,388 +71,88 @@ pub struct Matcher<'t, 'tokenizer, 'b, 'lang> {
     matching_words: &'b MatchingWords,
     tokenizer: &'b Tokenizer<'tokenizer>,
     locales: Option<&'lang [Language]>,
-    crop_marker: &'b str,
-    highlight_prefix: &'b str,
-    highlight_suffix: &'b str,
-    matches: Option<(Vec<Token<'t>>, Vec<Match>)>,
+    marker_options: &'b MarkerOptions,
+    tokens_matches_and_query_positions: Option<((Vec<Match>, Vec<QueryPosition>), Vec<Token<'t>>)>,
 }
 
-impl<'t> Matcher<'t, '_, '_, '_> {
-    /// Iterates over tokens and save any of them that matches the query.
-    fn compute_matches(&mut self) -> &mut Self {
-        /// some words are counted as matches only if they are close together and in the good order,
-        /// compute_partial_match peek into next words to validate if the match is complete.
-        fn compute_partial_match<'a>(
-            mut partial: PartialMatch<'a>,
-            first_token_position: usize,
-            first_word_position: usize,
-            first_word_char_start: &usize,
-            words_positions: &mut impl Iterator<Item = (usize, usize, &'a Token<'a>)>,
-            matches: &mut Vec<Match>,
-        ) -> bool {
-            for (token_position, word_position, word) in words_positions {
-                partial = match partial.match_token(word) {
-                    // token matches the partial match, but the match is not full,
-                    // we temporarily save the current token then we try to match the next one.
-                    Some(MatchType::Partial(partial)) => partial,
-                    // partial match is now full, we keep this matches and we advance positions
-                    Some(MatchType::Full { ids, .. }) => {
-                        // save the token that closes the partial match as a match.
-                        matches.push(Match {
-                            char_count: word.char_end - *first_word_char_start,
-                            ids: ids.clone().collect(),
-                            position: MatchPosition::Phrase {
-                                word_positions: [first_word_position, word_position],
-                                token_positions: [first_token_position, token_position],
-                            },
-                        });
-
-                        // the match is complete, we return true.
-                        return true;
-                    }
-                    // no match, continue to next match.
-                    None => break,
-                };
-            }
-
-            // the match is not complete, we return false.
-            false
+impl Matcher<'_, '_, '_, '_> {
+    /// TODO: description
+    pub fn get_match_bounds(
+        &mut self,
+        // TODO: Add option to count UTF-16 segments, or whatever JS works with when slicing strings
+        // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String#utf-16_characters_unicode_code_points_and_grapheme_clusters
+        // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/slice
+        format_options: Option<FormatOptions>,
+    ) -> Option<MatchBounds> {
+        if self.text.is_empty() {
+            return None;
         }
 
-        let tokens: Vec<_> =
-            self.tokenizer.tokenize_with_allow_list(self.text, self.locales).collect();
-        let mut matches = Vec::new();
+        let ((matches, query_positions), tokens) =
+            self.tokens_matches_and_query_positions.get_or_insert_with(|| {
+                let tokens = self
+                    .tokenizer
+                    .tokenize_with_allow_list(self.text, self.locales)
+                    .collect::<Vec<_>>();
 
-        let mut words_positions = tokens
-            .iter()
-            .scan((0, 0), |(token_position, word_position), token| {
-                let current_token_position = *token_position;
-                let current_word_position = *word_position;
-                *token_position += 1;
-                if !token.is_separator() {
-                    *word_position += 1;
-                }
+                (self.matching_words.get_matches_and_query_positions(&tokens, self.text), tokens)
+            });
 
-                Some((current_token_position, current_word_position, token))
-            })
-            .filter(|(_, _, token)| !token.is_separator());
-
-        while let Some((token_position, word_position, word)) = words_positions.next() {
-            for match_type in self.matching_words.match_token(word) {
-                match match_type {
-                    // we match, we save the current token as a match,
-                    // then we continue the rest of the tokens.
-                    MatchType::Full { ids, char_count, .. } => {
-                        let ids: Vec<_> = ids.clone().collect();
-                        matches.push(Match {
-                            char_count,
-                            ids,
-                            position: MatchPosition::Word { word_position, token_position },
-                        });
-                        break;
-                    }
-                    // we match partially, iterate over next tokens to check if we can complete the match.
-                    MatchType::Partial(partial) => {
-                        // if match is completed, we break the matching loop over the current token,
-                        // then we continue the rest of the tokens.
-                        let mut wp = words_positions.clone();
-                        if compute_partial_match(
-                            partial,
-                            token_position,
-                            word_position,
-                            &word.char_start,
-                            &mut wp,
-                            &mut matches,
-                        ) {
-                            words_positions = wp;
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-
-        self.matches = Some((tokens, matches));
-        self
+        MatchBounds::try_new(tokens, matches, query_positions, format_options.unwrap_or_default())
     }
 
-    /// Returns boundaries of the words that match the query.
-    pub fn matches(&mut self, array_indices: &[usize]) -> Vec<MatchBounds> {
-        match &self.matches {
-            None => self.compute_matches().matches(array_indices),
-            Some((tokens, matches)) => matches
-                .iter()
-                .map(|m| MatchBounds {
-                    start: tokens[m.get_first_token_pos()].byte_start,
-                    length: self.calc_byte_length(tokens, m),
-                    indices: if array_indices.is_empty() {
-                        None
-                    } else {
-                        Some(array_indices.to_owned())
-                    },
-                })
-                .collect(),
+    pub fn get_formatted_text(&mut self, format_options: Option<FormatOptions>) -> Option<String> {
+        let MatchBounds { mut highlight_toggle, ref indices } =
+            self.get_match_bounds(format_options)?;
+
+        let MarkerOptions { highlight_pre_tag, highlight_post_tag, crop_marker } =
+            &self.marker_options;
+
+        let mut formatted_text = Vec::new();
+
+        let mut indices_iter = indices.iter();
+        let mut previous_index = indices_iter.next().expect("TODO");
+
+        // push crop marker if it's not the start of the text
+        if !crop_marker.is_empty() && *previous_index != 0 {
+            formatted_text.push(crop_marker.as_str());
         }
-    }
 
-    fn calc_byte_length(&self, tokens: &[Token<'t>], m: &Match) -> usize {
-        (m.get_first_token_pos()..=m.get_last_token_pos())
-            .flat_map(|i| match &tokens[i].char_map {
-                Some(char_map) => {
-                    char_map.iter().map(|(original, _)| *original as usize).collect_vec()
-                }
-                None => tokens[i].lemma().chars().map(|c| c.len_utf8()).collect_vec(),
-            })
-            .take(m.char_count)
-            .sum()
-    }
-
-    /// Returns the bounds in byte index of the crop window.
-    fn crop_bounds(&self, tokens: &[Token<'_>], matches: &[Match], crop_size: usize) -> [usize; 2] {
-        let (
-            mut remaining_words,
-            is_iterating_forward,
-            before_tokens_starting_index,
-            after_tokens_starting_index,
-        ) = if !matches.is_empty() {
-            let [matches_first, matches_last] =
-                best_match_interval::find_best_match_interval(matches, crop_size);
-
-            let matches_size =
-                matches_last.get_last_word_pos() - matches_first.get_first_word_pos() + 1;
-
-            let is_crop_size_gte_match_size = crop_size >= matches_size;
-            let is_iterating_forward = matches_size == 0 || is_crop_size_gte_match_size;
-
-            let remaining_words = if is_crop_size_gte_match_size {
-                crop_size - matches_size
-            } else {
-                // in case matches size is greater than crop size, which implies there's only one match,
-                // we count words backwards, because we have to remove words, as they're extra words outside of
-                // crop window
-                matches_size - crop_size
-            };
-
-            let after_tokens_starting_index = if matches_size == 0 {
-                0
-            } else {
-                let last_match_last_token_position_plus_one = matches_last.get_last_token_pos() + 1;
-                if last_match_last_token_position_plus_one < tokens.len() {
-                    last_match_last_token_position_plus_one
-                } else {
-                    // we have matched the end of possible tokens, there's nothing to advance
-                    tokens.len()
-                }
-            };
-
-            (
-                remaining_words,
-                is_iterating_forward,
-                if is_iterating_forward { matches_first.get_first_token_pos() } else { 0 },
-                after_tokens_starting_index,
-            )
-        } else {
-            (crop_size, true, 0, 0)
-        };
-
-        // create the initial state of the crop window: 2 iterators starting from the matches positions,
-        // a reverse iterator starting from the first match token position and going towards the beginning of the text,
-        let mut before_tokens = tokens[..before_tokens_starting_index].iter().rev().peekable();
-        // an iterator ...
-        let mut after_tokens = if is_iterating_forward {
-            // ... starting from the last match token position and going towards the end of the text.
-            Either::Left(tokens[after_tokens_starting_index..].iter().peekable())
-        } else {
-            // ... starting from the last match token position and going towards the start of the text.
-            Either::Right(tokens[..=after_tokens_starting_index].iter().rev().peekable())
-        };
-
-        // grows the crop window peeking in both directions
-        // until the window contains the good number of words:
-        while remaining_words > 0 {
-            let before_token_kind = before_tokens.peek().map(SimpleTokenKind::new);
-            let after_token_kind =
-                after_tokens.as_mut().either(|v| v.peek(), |v| v.peek()).map(SimpleTokenKind::new);
-
-            match (before_token_kind, after_token_kind) {
-                // we can expand both sides.
-                (Some(before_token_kind), Some(after_token_kind)) => {
-                    match (before_token_kind, after_token_kind) {
-                        // if they are both separators and are the same kind then advance both,
-                        // or expand in the soft separator separator side.
-                        (
-                            SimpleTokenKind::Separator(before_token_separator_kind),
-                            SimpleTokenKind::Separator(after_token_separator_kind),
-                        ) => {
-                            if before_token_separator_kind == after_token_separator_kind {
-                                before_tokens.next();
-
-                                // this avoid having an ending separator before crop marker.
-                                if remaining_words > 1 {
-                                    after_tokens.next();
-                                }
-                            } else if matches!(before_token_separator_kind, SeparatorKind::Hard) {
-                                after_tokens.next();
-                            } else {
-                                before_tokens.next();
-                            }
-                        }
-                        // if one of the tokens is a word, we expend in the side of the word.
-                        // left is a word, advance left.
-                        (SimpleTokenKind::NotSeparator, SimpleTokenKind::Separator(_)) => {
-                            before_tokens.next();
-                            remaining_words -= 1;
-                        }
-                        // right is a word, advance right.
-                        (SimpleTokenKind::Separator(_), SimpleTokenKind::NotSeparator) => {
-                            after_tokens.next();
-                            remaining_words -= 1;
-                        }
-                        // both are words, advance left then right if remaining_word > 0.
-                        (SimpleTokenKind::NotSeparator, SimpleTokenKind::NotSeparator) => {
-                            before_tokens.next();
-                            remaining_words -= 1;
-
-                            if remaining_words > 0 {
-                                after_tokens.next();
-                                remaining_words -= 1;
-                            }
-                        }
-                    }
-                }
-                // the end of the text is reached, advance left.
-                (Some(before_token_kind), None) => {
-                    before_tokens.next();
-                    if matches!(before_token_kind, SimpleTokenKind::NotSeparator) {
-                        remaining_words -= 1;
-                    }
-                }
-                // the start of the text is reached, advance right.
-                (None, Some(after_token_kind)) => {
-                    after_tokens.next();
-                    if matches!(after_token_kind, SimpleTokenKind::NotSeparator) {
-                        remaining_words -= 1;
-                    }
-                }
-                // no more token to add.
-                (None, None) => break,
+        for index in indices_iter {
+            if highlight_toggle {
+                formatted_text.push(highlight_pre_tag.as_str());
             }
-        }
 
-        // finally, keep the byte index of each bound of the crop window.
-        let crop_byte_start = before_tokens.next().map_or(0, |t| t.byte_end);
-        let crop_byte_end = after_tokens.next().map_or(self.text.len(), |t| t.byte_start);
+            formatted_text.push(&self.text[*previous_index..*index]);
 
-        [crop_byte_start, crop_byte_end]
-    }
-
-    // Returns the formatted version of the original text.
-    pub fn format(&mut self, format_options: FormatOptions) -> Cow<'t, str> {
-        if !format_options.highlight && format_options.crop.is_none() {
-            // compute matches is not needed if no highlight nor crop is requested.
-            Cow::Borrowed(self.text)
-        } else {
-            match &self.matches {
-                Some((tokens, matches)) => {
-                    // If the text has to be cropped, crop around the best interval.
-                    let [crop_byte_start, crop_byte_end] = match format_options.crop {
-                        Some(crop_size) if crop_size > 0 => {
-                            self.crop_bounds(tokens, matches, crop_size)
-                        }
-                        _ => [0, self.text.len()],
-                    };
-
-                    let mut formatted = Vec::new();
-
-                    // push crop marker if it's not the start of the text.
-                    if crop_byte_start > 0 && !self.crop_marker.is_empty() {
-                        formatted.push(self.crop_marker);
-                    }
-
-                    let mut byte_index = crop_byte_start;
-
-                    if format_options.highlight {
-                        // insert highlight markers around matches.
-                        for m in matches {
-                            let [m_byte_start, m_byte_end] = match m.position {
-                                MatchPosition::Word { token_position, .. } => {
-                                    let token = &tokens[token_position];
-                                    [&token.byte_start, &token.byte_end]
-                                }
-                                MatchPosition::Phrase { token_positions: [ftp, ltp], .. } => {
-                                    [&tokens[ftp].byte_start, &tokens[ltp].byte_end]
-                                }
-                            };
-
-                            // skip matches out of the crop window
-                            if *m_byte_end < crop_byte_start || *m_byte_start > crop_byte_end {
-                                continue;
-                            }
-
-                            // adjust start and end to the crop window size
-                            let [m_byte_start, m_byte_end] = [
-                                max(m_byte_start, &crop_byte_start),
-                                min(m_byte_end, &crop_byte_end),
-                            ];
-
-                            // push text that is positioned before our matches
-                            if byte_index < *m_byte_start {
-                                formatted.push(&self.text[byte_index..*m_byte_start]);
-                            }
-
-                            formatted.push(self.highlight_prefix);
-
-                            // TODO: This is additional work done, charabia::token::Token byte_len
-                            // should already get us the original byte length, however, that doesn't work as
-                            // it's supposed to, investigate why
-                            let highlight_byte_index = self.text[*m_byte_start..]
-                                .char_indices()
-                                .nth(m.char_count)
-                                .map_or(*m_byte_end, |(i, _)| min(i + *m_byte_start, *m_byte_end));
-                            formatted.push(&self.text[*m_byte_start..highlight_byte_index]);
-
-                            formatted.push(self.highlight_suffix);
-
-                            // if it's a prefix highlight, we put the end of the word after the highlight marker.
-                            if highlight_byte_index < *m_byte_end {
-                                formatted.push(&self.text[highlight_byte_index..*m_byte_end]);
-                            }
-
-                            byte_index = *m_byte_end;
-                        }
-                    }
-
-                    // push the rest of the text between last match and the end of crop.
-                    if byte_index < crop_byte_end {
-                        formatted.push(&self.text[byte_index..crop_byte_end]);
-                    }
-
-                    // push crop marker if it's not the end of the text.
-                    if crop_byte_end < self.text.len() && !self.crop_marker.is_empty() {
-                        formatted.push(self.crop_marker);
-                    }
-
-                    if formatted.len() == 1 {
-                        // avoid concatenating if there is already 1 slice.
-                        Cow::Borrowed(&self.text[crop_byte_start..crop_byte_end])
-                    } else {
-                        Cow::Owned(formatted.concat())
-                    }
-                }
-                None => self.compute_matches().format(format_options),
+            if highlight_toggle {
+                formatted_text.push(highlight_post_tag.as_str());
             }
+
+            highlight_toggle = !highlight_toggle;
+            previous_index = index;
         }
+
+        // push crop marker if it's not the end of the text
+        if !crop_marker.is_empty() && *previous_index < self.text.len() {
+            formatted_text.push(crop_marker.as_str());
+        }
+
+        if formatted_text.len() == 1 {
+            // avoid concatenating if there is only one element
+            return Some(formatted_text[0].to_string());
+        }
+
+        Some(formatted_text.concat())
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use charabia::TokenizerBuilder;
-    use matching_words::tests::temp_index_with_documents;
-
     use super::*;
     use crate::index::tests::TempIndex;
     use crate::{execute_search, filtered_universe, SearchContext, TimeBudget};
+    use charabia::TokenizerBuilder;
 
     impl<'a> MatcherBuilder<'a> {
         fn new_test(rtxn: &'a heed::RoTxn<'a>, index: &'a TempIndex, query: &str) -> Self {
@@ -526,423 +180,321 @@ mod tests {
             .unwrap();
 
             // consume context and located_query_terms to build MatchingWords.
-            let matching_words = match located_query_terms {
-                Some(located_query_terms) => MatchingWords::new(ctx, located_query_terms),
-                None => MatchingWords::default(),
-            };
+            let matching_words = located_query_terms
+                .map(|located_query_terms| MatchingWords::new(ctx, &located_query_terms))
+                .unwrap_or_default();
 
-            MatcherBuilder::new(matching_words, TokenizerBuilder::default().into_tokenizer())
+            MatcherBuilder::new(
+                matching_words,
+                TokenizerBuilder::default().into_tokenizer(),
+                MarkerOptions {
+                    highlight_pre_tag: "<em>".to_string(),
+                    highlight_post_tag: "</em>".to_string(),
+                    crop_marker: "…".to_string(),
+                },
+            )
         }
     }
 
-    #[test]
-    fn format_identity() {
-        let temp_index = temp_index_with_documents();
-        let rtxn = temp_index.read_txn().unwrap();
-        let builder = MatcherBuilder::new_test(&rtxn, &temp_index, "split the world");
-
-        let format_options = FormatOptions { highlight: false, crop: None };
-
-        // Text without any match.
-        let text = "A quick brown fox can not jump 32 feet, right? Brr, it is cold!";
-        let mut matcher = builder.build(text, None);
-        // no crop and no highlight should return complete text.
-        assert_eq!(&matcher.format(format_options), &text);
-
-        // Text containing all matches.
-        let text = "Natalie risk her future to build a world with the boy she loves. Emily Henry: The Love That Split The World.";
-        let mut matcher = builder.build(text, None);
-        // no crop and no highlight should return complete text.
-        assert_eq!(&matcher.format(format_options), &text);
-
-        // Text containing some matches.
-        let text = "Natalie risk her future to build a world with the boy she loves.";
-        let mut matcher = builder.build(text, None);
-        // no crop and no highlight should return complete text.
-        assert_eq!(&matcher.format(format_options), &text);
-    }
-
-    #[test]
-    fn format_highlight() {
-        let temp_index = temp_index_with_documents();
-        let rtxn = temp_index.read_txn().unwrap();
-        let builder = MatcherBuilder::new_test(&rtxn, &temp_index, "split the world");
-
-        let format_options = FormatOptions { highlight: true, crop: None };
-
-        // empty text.
-        let text = "";
-        let mut matcher = builder.build(text, None);
-        assert_eq!(&matcher.format(format_options), "");
-
-        // text containing only separators.
-        let text = ":-)";
-        let mut matcher = builder.build(text, None);
-        assert_eq!(&matcher.format(format_options), ":-)");
-
-        // Text without any match.
-        let text = "A quick brown fox can not jump 32 feet, right? Brr, it is cold!";
-        let mut matcher = builder.build(text, None);
-        // no crop should return complete text, because there is no matches.
-        assert_eq!(&matcher.format(format_options), &text);
-
-        // Text containing all matches.
-        let text = "Natalie risk her future to build a world with the boy she loves. Emily Henry: The Love That Split The World.";
-        let mut matcher = builder.build(text, None);
-        // no crop should return complete text with highlighted matches.
-        insta::assert_snapshot!(
-            matcher.format(format_options),
-            @"Natalie risk her future to build a <em>world</em> with <em>the</em> boy she loves. Emily Henry: <em>The</em> Love That <em>Split</em> <em>The</em> <em>World</em>."
-        );
-
-        // Text containing some matches.
-        let text = "Natalie risk her future to build a world with the boy she loves.";
-        let mut matcher = builder.build(text, None);
-        // no crop should return complete text with highlighted matches.
-        insta::assert_snapshot!(
-            matcher.format(format_options),
-            @"Natalie risk her future to build a <em>world</em> with <em>the</em> boy she loves."
-        );
-    }
-
-    #[test]
-    fn highlight_unicode() {
-        let temp_index = temp_index_with_documents();
-        let rtxn = temp_index.read_txn().unwrap();
-        let builder = MatcherBuilder::new_test(&rtxn, &temp_index, "world");
-        let format_options = FormatOptions { highlight: true, crop: None };
-
-        // Text containing prefix match.
-        let text = "Ŵôřlḑôle";
-        let mut matcher = builder.build(text, None);
-        // no crop should return complete text with highlighted matches.
-        insta::assert_snapshot!(
-            matcher.format(format_options),
-            @"<em>Ŵôřlḑ</em>ôle"
-        );
-
-        // Text containing unicode match.
-        let text = "Ŵôřlḑ";
-        let mut matcher = builder.build(text, None);
-        // no crop should return complete text with highlighted matches.
-        insta::assert_snapshot!(
-            matcher.format(format_options),
-            @"<em>Ŵôřlḑ</em>"
-        );
-
-        let builder = MatcherBuilder::new_test(&rtxn, &temp_index, "westfali");
-        let format_options = FormatOptions { highlight: true, crop: None };
-
-        // Text containing unicode match.
-        let text = "Westfália";
-        let mut matcher = builder.build(text, None);
-        // no crop should return complete text with highlighted matches.
-        insta::assert_snapshot!(
-            matcher.format(format_options),
-            @"<em>Westfáli</em>a"
-        );
-    }
-
-    #[test]
-    fn format_crop() {
-        let temp_index = temp_index_with_documents();
-        let rtxn = temp_index.read_txn().unwrap();
-        let builder = MatcherBuilder::new_test(&rtxn, &temp_index, "split the world");
-
-        let format_options = FormatOptions { highlight: false, crop: Some(10) };
-
-        // empty text.
-        let text = "";
-        let mut matcher = builder.build(text, None);
-        insta::assert_snapshot!(
-            matcher.format(format_options),
-            @""
-        );
-
-        // text containing only separators.
-        let text = ":-)";
-        let mut matcher = builder.build(text, None);
-        insta::assert_snapshot!(
-            matcher.format(format_options),
-            @":-)"
-        );
-
-        // Text without any match.
-        let text = "A quick brown fox can not jump 32 feet, right? Brr, it is cold!";
-        let mut matcher = builder.build(text, None);
-        // no highlight should return 10 first words with a marker at the end.
-        insta::assert_snapshot!(
-            matcher.format(format_options),
-            @"A quick brown fox can not jump 32 feet, right…"
-        );
-
-        // Text without any match starting by a separator.
-        let text = "(A quick brown fox can not jump 32 feet, right? Brr, it is cold!)";
-        let mut matcher = builder.build(text, None);
-        // no highlight should return 10 first words with a marker at the end.
-        insta::assert_snapshot!(
-            matcher.format(format_options),
-            @"(A quick brown fox can not jump 32 feet, right…"
-        );
-
-        // Test phrase propagation
-        let text = "Natalie risk her future. Split The World is a book written by Emily Henry. I never read it.";
-        let mut matcher = builder.build(text, None);
-        // should crop the phrase instead of croping around the match.
-        insta::assert_snapshot!(
-            matcher.format(format_options),
-            @"…Split The World is a book written by Emily Henry…"
-        );
-
-        // Text containing some matches.
-        let text = "Natalie risk her future to build a world with the boy she loves.";
-        let mut matcher = builder.build(text, None);
-        // no highlight should return 10 last words with a marker at the start.
-        insta::assert_snapshot!(
-            matcher.format(format_options),
-            @"…future to build a world with the boy she loves…"
-        );
-
-        // Text containing all matches.
-        let text = "Natalie risk her future to build a world with the boy she loves. Emily Henry: The Love That Split The World.";
-        let mut matcher = builder.build(text, None);
-        // no highlight should return 10 last words with a marker at the start.
-        insta::assert_snapshot!(
-            matcher.format(format_options),
-            @"…she loves. Emily Henry: The Love That Split The World."
-        );
-
-        // Text containing a match unordered and a match ordered.
-        let text = "The world split void void void void void void void void void split the world void void";
-        let mut matcher = builder.build(text, None);
-        // crop should return 10 last words with a marker at the start.
-        insta::assert_snapshot!(
-            matcher.format(format_options),
-            @"…void void void void void split the world void void"
-        );
-
-        // Text containing matches with different density.
-        let text = "split void the void void world void void void void void void void void void void split the world void void";
-        let mut matcher = builder.build(text, None);
-        // crop should return 10 last words with a marker at the start.
-        insta::assert_snapshot!(
-            matcher.format(format_options),
-            @"…void void void void void split the world void void"
-        );
-
-        // Text containing matches with same word.
-        let text = "split split split split split split void void void void void void void void void void split the world void void";
-        let mut matcher = builder.build(text, None);
-        // crop should return 10 last words with a marker at the start.
-        insta::assert_snapshot!(
-            matcher.format(format_options),
-            @"…void void void void void split the world void void"
-        );
-    }
-
-    #[test]
-    fn format_highlight_crop() {
-        let temp_index = temp_index_with_documents();
-        let rtxn = temp_index.read_txn().unwrap();
-        let builder = MatcherBuilder::new_test(&rtxn, &temp_index, "split the world");
-
-        let format_options = FormatOptions { highlight: true, crop: Some(10) };
-
-        // empty text.
-        let text = "";
-        let mut matcher = builder.build(text, None);
-        insta::assert_snapshot!(
-            matcher.format(format_options),
-            @""
-        );
-
-        // text containing only separators.
-        let text = ":-)";
-        let mut matcher = builder.build(text, None);
-        insta::assert_snapshot!(
-            matcher.format(format_options),
-            @":-)"
-        );
-
-        // Text without any match.
-        let text = "A quick brown fox can not jump 32 feet, right? Brr, it is cold!";
-        let mut matcher = builder.build(text, None);
-        // both should return 10 first words with a marker at the end.
-        insta::assert_snapshot!(
-            matcher.format(format_options),
-            @"A quick brown fox can not jump 32 feet, right…"
-        );
-
-        // Text containing some matches.
-        let text = "Natalie risk her future to build a world with the boy she loves.";
-        let mut matcher = builder.build(text, None);
-        // both should return 10 last words with a marker at the start and highlighted matches.
-        insta::assert_snapshot!(
-            matcher.format(format_options),
-            @"…future to build a <em>world</em> with <em>the</em> boy she loves…"
-        );
-
-        // Text containing all matches.
-        let text = "Natalie risk her future to build a world with the boy she loves. Emily Henry: The Love That Split The World.";
-        let mut matcher = builder.build(text, None);
-        // both should return 10 last words with a marker at the start and highlighted matches.
-        insta::assert_snapshot!(
-            matcher.format(format_options),
-            @"…she loves. Emily Henry: <em>The</em> Love That <em>Split</em> <em>The</em> <em>World</em>."
-        );
-
-        // Text containing a match unordered and a match ordered.
-        let text = "The world split void void void void void void void void void split the world void void";
-        let mut matcher = builder.build(text, None);
-        // crop should return 10 last words with a marker at the start.
-        insta::assert_snapshot!(
-            matcher.format(format_options),
-            @"…void void void void void <em>split</em> <em>the</em> <em>world</em> void void"
-        );
-    }
-
-    #[test]
-    fn format_highlight_crop_phrase_query() {
-        //! testing: https://github.com/meilisearch/meilisearch/issues/3975
+    pub fn rename_me(
+        format_options: Option<FormatOptions>,
+        text: &str,
+        query: &str,
+        expected_maybe_text: Option<&str>,
+    ) {
         let temp_index = TempIndex::new();
 
-        let text = "The groundbreaking invention had the power to split the world between those who embraced progress and those who resisted change!";
+        // document will always contain the same exact text normally
+        // TODO: Describe this better and ask if this is actually the case
         temp_index
             .add_documents(documents!([
-                { "id": 1, "text": text }
+                { "id": 1, "text": text.to_string() },
             ]))
             .unwrap();
 
         let rtxn = temp_index.read_txn().unwrap();
-
-        let format_options = FormatOptions { highlight: true, crop: Some(10) };
-
-        let builder = MatcherBuilder::new_test(&rtxn, &temp_index, "\"the world\"");
+        let builder = MatcherBuilder::new_test(&rtxn, &temp_index, query);
         let mut matcher = builder.build(text, None);
-        // should return 10 words with a marker at the start as well the end, and the highlighted matches.
-        insta::assert_snapshot!(
-            matcher.format(format_options),
-            @"…the power to split <em>the world</em> between those who embraced…"
-        );
 
-        let builder = MatcherBuilder::new_test(&rtxn, &temp_index, "those \"and those\"");
-        let mut matcher = builder.build(text, None);
-        // should highlight "those" and the phrase "and those".
-        insta::assert_snapshot!(
-            matcher.format(format_options),
-            @"…world between <em>those</em> who embraced progress <em>and those</em> who resisted…"
+        assert_eq!(
+            matcher.get_formatted_text(format_options),
+            expected_maybe_text.map(|v| v.to_string())
         );
+    }
 
-        let builder = MatcherBuilder::new_test(
-            &rtxn,
-            &temp_index,
-            "\"The groundbreaking invention had the power to split the world\"",
-        );
-        let mut matcher = builder.build(text, None);
-        insta::assert_snapshot!(
-            matcher.format(format_options),
-            @"<em>The groundbreaking invention had the power to split the world</em>…"
-        );
+    struct FormatVariations<'a> {
+        highlight_with_crop: Option<&'a str>,
+        highlight: Option<&'a str>,
+        crop: Option<&'a str>,
+    }
 
-        let builder = MatcherBuilder::new_test(
-            &rtxn,
-            &temp_index,
-            "\"The groundbreaking invention had the power to split the world between those\"",
-        );
-        let mut matcher = builder.build(text, None);
-        insta::assert_snapshot!(
-            matcher.format(format_options),
-            @"<em>The groundbreaking invention had the power to split the world</em>…"
-        );
+    impl<'a> FormatVariations<'a> {
+        fn get(&self) -> [(Option<FormatOptions>, Option<&'a str>); 5] {
+            [
+                (None, None),
+                (Some(FormatOptions { highlight: true, crop: Some(2) }), self.highlight_with_crop),
+                (Some(FormatOptions { highlight: true, crop: None }), self.highlight),
+                (Some(FormatOptions { highlight: false, crop: Some(2) }), self.crop),
+                (Some(FormatOptions { highlight: false, crop: None }), None),
+            ]
+        }
+    }
 
-        let builder = MatcherBuilder::new_test(
-            &rtxn,
-            &temp_index,
-            "\"The groundbreaking invention\" \"embraced progress and those who resisted change!\"",
-        );
-        let mut matcher = builder.build(text, None);
-        insta::assert_snapshot!(
-            matcher.format(format_options),
-            // TODO: Should include exclamation mark without crop markers
-            @"…between those who <em>embraced progress and those who resisted change</em>…"
-        );
-
-        let builder = MatcherBuilder::new_test(
-            &rtxn,
-            &temp_index,
-            "\"groundbreaking invention\" \"split the world between\"",
-        );
-        let mut matcher = builder.build(text, None);
-        insta::assert_snapshot!(
-            matcher.format(format_options),
-            @"…<em>groundbreaking invention</em> had the power to <em>split the world between</em>…"
-        );
-
-        let builder = MatcherBuilder::new_test(
-            &rtxn,
-            &temp_index,
-            "\"groundbreaking invention\" \"had the power to split the world between those\"",
-        );
-        let mut matcher = builder.build(text, None);
-        insta::assert_snapshot!(
-            matcher.format(format_options),
-            @"…<em>invention</em> <em>had the power to split the world between those</em>…"
+    /// "Dei store fiskane eta dei små — dei liger under som minst förmå."
+    ///
+    /// (Men are like fish; the great ones devour the small.)
+    fn rename_me_with_base_text(
+        format_options: Option<FormatOptions>,
+        query: &str,
+        expected_maybe_text: Option<&str>,
+    ) {
+        rename_me(
+            format_options,
+            "Dei store fiskane eta dei små — dei liger under som minst förmå.",
+            query,
+            expected_maybe_text,
         );
     }
 
     #[test]
-    fn smaller_crop_size() {
-        //! testing: https://github.com/meilisearch/specifications/pull/120#discussion_r836536295
-        let temp_index = temp_index_with_documents();
-        let rtxn = temp_index.read_txn().unwrap();
-        let builder = MatcherBuilder::new_test(&rtxn, &temp_index, "split the world");
+    fn empty_query() {
+        for (format_options, expected_maybe_text) in (FormatVariations {
+            highlight_with_crop: Some("Dei store…"),
+            highlight: None,
+            crop: Some("Dei store…"),
+        }
+        .get())
+        {
+            rename_me_with_base_text(format_options, "", expected_maybe_text);
+        }
+    }
 
-        let text = "void void split the world void void.";
+    #[test]
+    fn only_separators() {
+        for (format_options, expected_maybe_text) in (FormatVariations {
+            highlight_with_crop: Some(":-…"),
+            highlight: None,
+            crop: Some(":-…"),
+        }
+        .get())
+        {
+            rename_me(format_options, ":-)", ":-)", expected_maybe_text);
+        }
+    }
 
-        // set a smaller crop size
-        let format_options = FormatOptions { highlight: false, crop: Some(2) };
-        let mut matcher = builder.build(text, None);
-        // because crop size < query size, partially format matches.
-        insta::assert_snapshot!(
-            matcher.format(format_options),
-            @"…split the…"
-        );
+    #[test]
+    fn highlight_end() {
+        // TODO: Why is "förmå" marked as prefix in located matching words?
+        for (format_options, expected_maybe_text) in (FormatVariations {
+            highlight_with_crop: Some("…<em>minst</em> <em>förmå</em>."),
+            highlight: Some("Dei store fiskane eta dei små — dei liger under som <em>minst</em> <em>förmå</em>."),
+            crop: Some("…minst förmå."),
+        }
+        .get()) {
+            rename_me_with_base_text(format_options, "minst förmå", expected_maybe_text);
+        }
+    }
 
-        // set a smaller crop size
-        let format_options = FormatOptions { highlight: false, crop: Some(1) };
-        let mut matcher = builder.build(text, None);
-        // because crop size < query size, partially format matches.
-        insta::assert_snapshot!(
-            matcher.format(format_options),
-            @"…split…"
-        );
+    #[test]
+    fn highlight_beginning_and_middle() {
+        // TODO: Why is "store" marked as prefix in located matching words?
+        for (format_options, expected_maybe_text) in (FormatVariations {
+            highlight_with_crop: Some("<em>Dei</em> <em>store</em>…"),
+            highlight: Some("<em>Dei</em> <em>store</em> fiskane eta <em>dei</em> små — <em>dei</em> liger under som minst förmå."),
+            crop: Some("Dei store…"),
+        }
+        .get()) {
+            rename_me_with_base_text(format_options, "Dei store", expected_maybe_text);
+        }
+    }
 
-        // set  crop size to 0
-        let format_options = FormatOptions { highlight: false, crop: Some(0) };
-        let mut matcher = builder.build(text, None);
-        // because crop size is 0, crop is ignored.
-        insta::assert_snapshot!(
-            matcher.format(format_options),
-            @"void void split the world void void."
+    #[test]
+    fn partial_match_middle() {
+        // TODO: Is this intentional?
+        // Here the only interned word is "forma", hence it cannot find the searched prefix
+        // word "fo" inside "forma" within milli::search::new::matches::matching_words::MatchingWords::try_get_word_match
+        // `milli::search::new::query_term::QueryTerm::all_computed_derivations` might be at fault here
+
+        // interned words = ["forma"]
+        for (format_options, expected_maybe_text) in (FormatVariations {
+            highlight_with_crop: Some("…<em>förmå</em>, på…"),
+            highlight: Some("altså, <em>förmå</em>, på en måte"),
+            crop: Some("…förmå, på…"),
+        }
+        .get())
+        {
+            rename_me(format_options, "altså, förmå, på en måte", "fo", expected_maybe_text);
+        }
+
+        // interned words = ["fo", "forma"]
+        for (format_options, expected_maybe_text) in (FormatVariations {
+            highlight_with_crop: Some("…<em>fo</em> <em>fö</em>rmå…"),
+            highlight: Some("altså, <em>fo</em> <em>fö</em>rmå, på en måte"),
+            crop: Some("…fo förmå…"),
+        }
+        .get())
+        {
+            rename_me(format_options, "altså, fo förmå, på en måte", "fo", expected_maybe_text);
+        }
+    }
+
+    #[test]
+    fn partial_match_end() {
+        for (format_options, expected_maybe_text) in (FormatVariations {
+            highlight_with_crop: Some("<em>förmå</em>, på…"),
+            highlight: Some("<em>förmå</em>, på en måte"),
+            crop: Some("förmå, på…"),
+        }
+        .get())
+        {
+            rename_me(format_options, "förmå, på en måte", "fo", expected_maybe_text);
+        }
+
+        for (format_options, expected_maybe_text) in (FormatVariations {
+            highlight_with_crop: Some("<em>fo</em> <em>fö</em>rmå…"),
+            highlight: Some("<em>fo</em> <em>fö</em>rmå, på en måte"),
+            crop: Some("fo förmå…"),
+        }
+        .get())
+        {
+            rename_me(format_options, "fo förmå, på en måte", "fo", expected_maybe_text);
+        }
+    }
+
+    #[test]
+    fn partial_match_beginning() {
+        for (format_options, expected_maybe_text) in (FormatVariations {
+            highlight_with_crop: Some("altså, <em>förmå</em>"),
+            highlight: Some("altså, <em>förmå</em>"),
+            crop: Some("altså, förmå"),
+        }
+        .get())
+        {
+            rename_me(format_options, "altså, förmå", "fo", expected_maybe_text);
+        }
+
+        for (format_options, expected_maybe_text) in (FormatVariations {
+            highlight_with_crop: Some("…<em>fo</em> <em>fö</em>rmå"),
+            highlight: Some("altså, <em>fo</em> <em>fö</em>rmå"),
+            crop: Some("…fo förmå"),
+        }
+        .get())
+        {
+            rename_me(format_options, "altså, fo förmå", "fo", expected_maybe_text);
+        }
+    }
+
+    #[test]
+    fn separator_at_end() {
+        for (format_options, expected_maybe_text) in (FormatVariations {
+            highlight_with_crop: Some("…<em>minst</em> förmå. , ;"),
+            highlight: Some("; , — dei liger under som <em>minst</em> förmå. , ;"),
+            crop: Some("…minst förmå. , ;"),
+        }
+        .get())
+        {
+            rename_me(
+                format_options,
+                "; , — dei liger under som minst förmå. , ;",
+                "minst",
+                expected_maybe_text,
+            );
+        }
+    }
+
+    #[test]
+    fn separator_at_beginning() {
+        for (format_options, expected_maybe_text) in (FormatVariations {
+            highlight_with_crop: Some("; , — <em>dei</em> liger…"),
+            highlight: Some("; , — <em>dei</em> liger under som minst förmå. , ;"),
+            crop: Some("; , — dei liger…"),
+        }
+        .get())
+        {
+            rename_me(
+                format_options,
+                "; , — dei liger under som minst förmå. , ;",
+                "dei",
+                expected_maybe_text,
+            );
+        }
+    }
+
+    #[test]
+    fn phrase() {
+        for (format_options, expected_maybe_text) in (FormatVariations {
+            highlight_with_crop: Some("…<em>dei liger</em>…"),
+            highlight: Some(
+                "Dei store fiskane eta dei små — <em>dei liger</em> under som minst förmå.",
+            ),
+            crop: Some("…dei liger…"),
+        }
+        .get())
+        {
+            rename_me_with_base_text(format_options, "\"dei liger\"", expected_maybe_text);
+        }
+    }
+
+    #[test]
+    fn phrase_highlight_bigger_than_crop() {
+        rename_me_with_base_text(
+            Some(FormatOptions { highlight: true, crop: Some(1) }),
+            "\"dei liger\"",
+            Some("…<em>dei</em>…"),
         );
     }
 
     #[test]
-    fn partial_matches() {
-        let temp_index = temp_index_with_documents();
-        let rtxn = temp_index.read_txn().unwrap();
-        let mut builder =
-            MatcherBuilder::new_test(&rtxn, &temp_index, "the \"t he\" door \"do or\"");
-        builder.highlight_prefix("_".to_string());
-        builder.highlight_suffix("_".to_string());
+    fn phrase_bigger_than_crop() {
+        rename_me_with_base_text(
+            Some(FormatOptions { highlight: false, crop: Some(1) }),
+            "\"dei liger\"",
+            Some("…dei…"),
+        );
+    }
 
-        let format_options = FormatOptions { highlight: true, crop: None };
+    #[test]
+    fn phrase_highlight_crop_middle() {
+        rename_me_with_base_text(
+            Some(FormatOptions { highlight: true, crop: Some(4) }),
+            "\"dei liger\"",
+            Some("…små — <em>dei liger</em> under…"),
+        );
+    }
 
-        let text = "the do or die can't be he do and or isn't he";
-        let mut matcher = builder.build(text, None);
-        insta::assert_snapshot!(
-            matcher.format(format_options),
-            @"_the_ _do or_ die can't be he do and or isn'_t he_"
+    #[test]
+    fn phrase_crop_middle() {
+        rename_me_with_base_text(
+            Some(FormatOptions { highlight: false, crop: Some(4) }),
+            "\"dei liger\"",
+            Some("…små — dei liger under…"),
+        );
+    }
+
+    #[test]
+    fn phrase_highlight_crop_end() {
+        rename_me_with_base_text(
+            Some(FormatOptions { highlight: true, crop: Some(4) }),
+            "\"minst förmå\"",
+            Some("…under som <em>minst förmå</em>."),
+        );
+    }
+
+    #[test]
+    fn phrase_crop_end() {
+        rename_me_with_base_text(
+            Some(FormatOptions { highlight: false, crop: Some(4) }),
+            "\"minst förmå\"",
+            Some("…under som minst förmå."),
+        );
+    }
+
+    #[test]
+    fn phrase_highlight_crop_beginning() {
+        rename_me_with_base_text(
+            Some(FormatOptions { highlight: true, crop: Some(4) }),
+            "\"Dei store\"",
+            Some("<em>Dei store</em> fiskane eta…"),
         );
     }
 }

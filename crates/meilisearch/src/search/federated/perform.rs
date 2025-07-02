@@ -815,7 +815,8 @@ impl SearchByIndex {
 
                 let (result, _semantic_hit_count) =
                     super::super::search_from_kind(index_uid.to_string(), search_kind, search)?;
-                let format = AttributesFormat {
+
+                let attributes_format = AttributesFormat {
                     attributes_to_retrieve: query.attributes_to_retrieve,
                     retrieve_vectors,
                     attributes_to_highlight: query.attributes_to_highlight,
@@ -846,12 +847,11 @@ impl SearchByIndex {
 
                 let tokenizer = HitMaker::tokenizer(dictionary.as_deref(), separators.as_deref());
 
-                let formatter_builder = HitMaker::formatter_builder(matching_words, tokenizer);
-
                 let hit_maker =
-                    HitMaker::new(&index, &rtxn, format, formatter_builder).map_err(|e| {
-                        MeilisearchHttpError::from_milli(e, Some(index_uid.to_string()))
-                    })?;
+                    HitMaker::new(matching_words, tokenizer, attributes_format, &index, &rtxn)
+                        .map_err(|e| {
+                            MeilisearchHttpError::from_milli(e, Some(index_uid.to_string()))
+                        })?;
 
                 results_by_query.push(SearchResultByQuery {
                     weight,
