@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 use bumpalo::Bump;
 use hf_hub::api::sync::ApiError;
+use itertools::Itertools as _;
 
 use super::parsed_vectors::ParsedVectorsDiff;
 use super::rest::ConfigurationSource;
@@ -453,6 +454,29 @@ impl NewEmbedderError {
             fault: FaultSource::User,
         }
     }
+
+    pub(crate) fn rest_inconsistent_fragments(
+        indexing_fragments_is_empty: bool,
+        indexing_fragments: BTreeMap<String, serde_json::Value>,
+        search_fragments: BTreeMap<String, serde_json::Value>,
+    ) -> NewEmbedderError {
+        let message = if indexing_fragments_is_empty {
+            format!("`indexingFragments` is empty, but `searchFragments` declares {} fragments: {}{}\n  - Hint: declare at least one fragment in `indexingFragments` or remove fragments from `searchFragments` by setting them to `null`",
+                search_fragments.len(),
+                search_fragments.keys().take(3).join(", "), if search_fragments.len() > 3 { ", ..." } else { "" }
+        )
+        } else {
+            format!("`searchFragments` is empty, but `indexingFragments` declares {} fragments: {}{}\n - Hint: declare at least one fragment in `searchFragments` or remove fragments from `indexingFragments` by setting them to `null`",
+                indexing_fragments.len(),
+                indexing_fragments.keys().take(3).join(", "), if indexing_fragments.len() > 3 { ", ..." } else { "" }
+        )
+        };
+
+        Self {
+            kind: NewEmbedderErrorKind::RestInconsistentFragments { message },
+            fault: FaultSource::User,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -572,6 +596,8 @@ pub enum NewEmbedderErrorKind {
     CompositeEmbeddingValueMismatch { distance: f32, hint: CompositeEmbedderContainsHuggingFace },
     #[error("cannot infer `dimensions` for an embedder using `indexingFragments`.\n  - Note: Specify `dimensions` explicitly or don't use `indexingFragments`.")]
     RestCannotInferDimensionsForFragment,
+    #[error("inconsistent fragments: {message}")]
+    RestInconsistentFragments { message: String },
 }
 
 pub struct PossibleEmbeddingMistakes {
