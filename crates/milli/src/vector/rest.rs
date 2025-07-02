@@ -110,6 +110,13 @@ impl RequestData {
         Ok(if indexing_fragments.is_empty() && search_fragments.is_empty() {
             RequestData::Single(Request::new(request)?)
         } else {
+            for (name, value) in indexing_fragments {
+                JsonTemplate::new(value).map_err(|error| {
+                    NewEmbedderError::rest_could_not_parse_template(
+                        error.parsing(&format!(".indexingFragments.{name}")),
+                    )
+                })?;
+            }
             RequestData::FromFragments(RequestFromFragments::new(request, search_fragments)?)
         })
     }
@@ -614,14 +621,12 @@ impl RequestFromFragments {
         let search_fragments: Result<_, NewEmbedderError> = search_fragments
             .into_iter()
             .map(|(name, value)| {
-                Ok((
-                    name,
-                    JsonTemplate::new(value).map_err(|error| {
-                        NewEmbedderError::rest_could_not_parse_template(
-                            error.parsing("searchFragments"),
-                        )
-                    })?,
-                ))
+                let json_template = JsonTemplate::new(value).map_err(|error| {
+                    NewEmbedderError::rest_could_not_parse_template(
+                        error.parsing(&format!(".searchFragments.{name}")),
+                    )
+                })?;
+                Ok((name, json_template))
             })
             .collect();
 
