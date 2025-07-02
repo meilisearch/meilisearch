@@ -2420,8 +2420,17 @@ pub(crate) fn fragments_from_settings(
     setting: &Setting<EmbeddingSettings>,
 ) -> impl Iterator<Item = String> + '_ {
     let Some(setting) = setting.as_ref().set() else { return Either::Left(None.into_iter()) };
+
+    let filter_map = |(name, fragment): (&String, &Option<Fragment>)| {
+        if fragment.is_some() {
+            Some(name.clone())
+        } else {
+            None
+        }
+    };
+
     if let Some(setting) = setting.indexing_fragments.as_ref().set() {
-        Either::Right(setting.keys().cloned())
+        Either::Right(setting.iter().filter_map(filter_map))
     } else {
         let Some(setting) = setting.indexing_embedder.as_ref().set() else {
             return Either::Left(None.into_iter());
@@ -2429,6 +2438,6 @@ pub(crate) fn fragments_from_settings(
         let Some(setting) = setting.indexing_fragments.as_ref().set() else {
             return Either::Left(None.into_iter());
         };
-        Either::Right(setting.keys().cloned())
+        Either::Right(setting.iter().filter_map(filter_map))
     }
 }
