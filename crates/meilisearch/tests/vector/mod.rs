@@ -4,6 +4,7 @@ mod ollama;
 mod openai;
 mod rest;
 mod settings;
+mod fragments;
 
 use std::str::FromStr;
 

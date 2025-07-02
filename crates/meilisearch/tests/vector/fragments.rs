@@ -1,0 +1,198 @@
+use std::collections::BTreeMap;
+
+use meili_snap::{json_string, snapshot};
+use wiremock::matchers::{method, path};
+use wiremock::{Mock, MockServer, Request, ResponseTemplate};
+
+use crate::common::Value;
+use crate::json;
+use crate::vector::{get_server_vector, GetAllDocumentsOptions};
+
+async fn create_mock(indexing_fragments: Value, search_fragments: Value) -> (MockServer, Value) {
+    let mock_server = MockServer::start().await;
+
+    let text_to_embedding: BTreeMap<_, _> = vec![
+        ("kefir", [0.5, -0.5, 2.0]),
+        ("intel", [1.0, 1.0, 1.0]),
+        ("bulldog", [1.5, -2.5, 0.0]),
+        ("dustin", [-0.5, 0.5, 2.5]),
+        ("labrador", [-3.5, 0.5, -1.0]),
+    ]
+    .into_iter()
+    .collect();
+
+    Mock::given(method("POST"))
+        .and(path("/"))
+        .respond_with(move |req: &Request| {
+            let text = String::from_utf8_lossy(&req.body).to_string();
+            let mut data = [0.0, 0.0, 0.0];
+            for (inner_text, inner_data) in &text_to_embedding {
+                if text.contains(inner_text) {
+                    for (i, &value) in inner_data.iter().enumerate() {
+                        data[i] += value;
+                    }
+                }
+            }
+            ResponseTemplate::new(200).set_body_json(
+                json!({ "data": data })
+            )
+        })
+        .mount(&mock_server)
+        .await;
+    let url = mock_server.uri();
+
+    let embedder_settings = json!({
+        "source": "rest",
+        "url": url,
+        "dimensions": 3,
+        "request": "{{fragment}}",
+        "response": {
+          "data": "{{embedding}}"
+        },
+        "indexingFragments": indexing_fragments,
+        "searchFragments": search_fragments,
+        "documentTemplate": "document template: {{dog.name}}",
+    });
+
+    (mock_server, embedder_settings)
+}
+
+
+#[actix_rt::test]
+async fn test_fragment_indexing() {
+    let (_mock, settings) = create_mock(
+        json!({
+            "withBreed": {"value": "{{ doc.name }} is a {{ doc.breed }}"},
+            "basic": {"value": "{{ doc.name }} is a dog"},
+        }),
+        json!({
+            "withBreed": {"value": "{{ doc.name }} is a {{ doc.breed }}"},
+            "basic": {"value": "{{ doc.name }} is a dog"},
+        })
+    ).await;
+    let server = get_server_vector().await;
+    let index = server.index("doggo");
+
+    // Enable the experimental feature
+    let (_response, code) = server.set_features(json!({"multimodal": true})).await;
+    snapshot!(code, @"200 OK");
+
+    // Configure the index to use our mock embedder
+    let (response, code) = index
+        .update_settings(json!({
+            "embedders": {
+                "rest": settings,
+            },
+        }))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    
+    let task = server.wait_task(response.uid()).await;
+    println!("[task] {:?}", task);
+    snapshot!(task["status"], @r###""succeeded""###);
+
+    // Send documents
+    let documents = json!([
+        {"id": 0, "name": "kefir"},
+        {"id": 1, "name": "echo", "_vectors": { "rest": [1, 1, 1] }},
+        {"id": 2, "name": "intel", "breed": "labrador"},
+        {"id": 3, "name": "dustin", "breed": "bulldog"},
+    ]);
+    let (value, code) = index.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+    
+    let task = index.wait_task(value.uid()).await;
+    snapshot!(task["status"], @r###""succeeded""###);
+
+    // Make sure the documents have been indexed and their embeddings retrieved
+    let (documents, code) = index
+        .get_all_documents(GetAllDocumentsOptions { retrieve_vectors: true, ..Default::default() })
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(documents), @r#"
+    {
+      "results": [
+        {
+          "id": 0,
+          "name": "kefir",
+          "_vectors": {
+            "rest": {
+              "embeddings": [
+                [
+                  0.5,
+                  -0.5,
+                  2.0
+                ]
+              ],
+              "regenerate": true
+            }
+          }
+        },
+        {
+          "id": 1,
+          "name": "echo",
+          "_vectors": {
+            "rest": {
+              "embeddings": [
+                [
+                  1.0,
+                  1.0,
+                  1.0
+                ]
+              ],
+              "regenerate": false
+            }
+          }
+        },
+        {
+          "id": 2,
+          "name": "intel",
+          "breed": "labrador",
+          "_vectors": {
+            "rest": {
+              "embeddings": [
+                [
+                  1.0,
+                  1.0,
+                  1.0
+                ],
+                [
+                  -2.5,
+                  1.5,
+                  0.0
+                ]
+              ],
+              "regenerate": true
+            }
+          }
+        },
+        {
+          "id": 3,
+          "name": "dustin",
+          "breed": "bulldog",
+          "_vectors": {
+            "rest": {
+              "embeddings": [
+                [
+                  -0.5,
+                  0.5,
+                  2.5
+                ],
+                [
+                  1.0,
+                  -2.0,
+                  2.5
+                ]
+              ],
+              "regenerate": true
+            }
+          }
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 4
+    }
+    "#);
+}
+
