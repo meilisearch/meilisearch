@@ -510,6 +510,7 @@ mod tests {
                 crate::TermsMatchingStrategy::default(),
                 crate::score_details::ScoringStrategy::Skip,
                 false,
+                None,
                 universe,
                 &None,
                 &None,
