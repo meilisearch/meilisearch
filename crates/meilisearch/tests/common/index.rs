@@ -467,6 +467,11 @@ impl<State> Index<'_, State> {
         self.service.get(url).await
     }
 
+    pub async fn fields(&self) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/fields", urlencode(self.uid.as_ref()));
+        self.service.get(url).await
+    }
+
     /// Performs both GET and POST search queries
     pub async fn search(
         &self,
