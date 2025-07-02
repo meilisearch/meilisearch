@@ -1932,8 +1932,18 @@ impl EmbeddingSettings {
             pooling: Setting::NotSet,
             api_key: Setting::some_or_not_set(api_key),
             dimensions: Setting::some_or_not_set(dimensions),
-            document_template,
-            document_template_max_bytes,
+            document_template: if indexing_fragments.is_empty() && search_fragments.is_empty() {
+                document_template
+            } else {
+                Setting::NotSet
+            },
+            document_template_max_bytes: if indexing_fragments.is_empty()
+                && search_fragments.is_empty()
+            {
+                document_template_max_bytes
+            } else {
+                Setting::NotSet
+            },
             url: Setting::Set(url),
             indexing_fragments: if indexing_fragments.is_empty() {
                 Setting::NotSet
