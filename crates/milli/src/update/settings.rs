@@ -2131,28 +2131,41 @@ pub fn validate_embedding_settings(
         })?;
     }
 
-    // if we are working with partial settings, the user could have changed only the `request` and not given again the fragments
-    if context == EmbeddingValidationContext::FullSettings {
-        if let Some(request) = request.as_ref().set() {
-            let indexing_fragments: BTreeMap<_, _> = indexing_fragments
-                .as_ref()
-                .set()
-                .iter()
-                .flat_map(|map| map.iter())
-                .filter_map(|(name, fragment)| {
-                    Some((name.clone(), fragment.as_ref().map(|fragment| fragment.value.clone())?))
-                })
-                .collect();
-            let search_fragments: BTreeMap<_, _> = search_fragments
-                .as_ref()
-                .set()
-                .iter()
-                .flat_map(|map| map.iter())
-                .filter_map(|(name, fragment)| {
-                    Some((name.clone(), fragment.as_ref().map(|fragment| fragment.value.clone())?))
-                })
-                .collect();
+    // used below
+    enum WithFragments {
+        Yes {
+            indexing_fragments: BTreeMap<String, serde_json::Value>,
+            search_fragments: BTreeMap<String, serde_json::Value>,
+        },
+        No,
+        Maybe,
+    }
 
+    let with_fragments = {
+        let has_reset = matches!(indexing_fragments, Setting::Reset)
+            || matches!(search_fragments, Setting::Reset);
+        let indexing_fragments: BTreeMap<_, _> = indexing_fragments
+            .as_ref()
+            .set()
+            .iter()
+            .flat_map(|map| map.iter())
+            .filter_map(|(name, fragment)| {
+                Some((name.clone(), fragment.as_ref().map(|fragment| fragment.value.clone())?))
+            })
+            .collect();
+        let search_fragments: BTreeMap<_, _> = search_fragments
+            .as_ref()
+            .set()
+            .iter()
+            .flat_map(|map| map.iter())
+            .filter_map(|(name, fragment)| {
+                Some((name.clone(), fragment.as_ref().map(|fragment| fragment.value.clone())?))
+            })
+            .collect();
+
+        let has_fragments = !indexing_fragments.is_empty() || !search_fragments.is_empty();
+
+        if context == EmbeddingValidationContext::FullSettings {
             let are_fragments_inconsistent =
                 indexing_fragments.is_empty() ^ search_fragments.is_empty();
             if are_fragments_inconsistent {
@@ -2163,17 +2176,64 @@ pub fn validate_embedding_settings(
                 ))
                 .map_err(|error| crate::UserError::VectorEmbeddingError(error.into()).into());
             }
-
-            let request = crate::vector::rest::RequestData::new(
-                request.to_owned(),
-                indexing_fragments,
-                search_fragments,
-            )
-            .map_err(|error| crate::UserError::VectorEmbeddingError(error.into()))?;
-            if let Some(response) = response.as_ref().set() {
-                crate::vector::rest::Response::new(response.to_owned(), &request)
-                    .map_err(|error| crate::UserError::VectorEmbeddingError(error.into()))?;
+        }
+        if has_fragments {
+            if context == EmbeddingValidationContext::SettingsPartialUpdate
+                && matches!(document_template, Setting::Set(_))
+            {
+                return Err(
+                    crate::vector::error::NewEmbedderError::rest_document_template_and_fragments(
+                        indexing_fragments.len(),
+                        search_fragments.len(),
+                    ),
+                )
+                .map_err(|error| crate::UserError::VectorEmbeddingError(error.into()).into());
             }
+            WithFragments::Yes { indexing_fragments, search_fragments }
+        } else if has_reset || context == EmbeddingValidationContext::FullSettings {
+            WithFragments::No
+        } else {
+            // if we are working with partial settings, the user could have changed only the `request` and not given again the fragments
+            WithFragments::Maybe
+        }
+    };
+    if let Some(request) = request.as_ref().set() {
+        let request = match with_fragments {
+            WithFragments::Yes { indexing_fragments, search_fragments } => {
+                crate::vector::rest::RequestData::new(
+                    request.to_owned(),
+                    indexing_fragments,
+                    search_fragments,
+                )
+                .map_err(|error| crate::UserError::VectorEmbeddingError(error.into()))
+            }
+            WithFragments::No => crate::vector::rest::RequestData::new(
+                request.to_owned(),
+                Default::default(),
+                Default::default(),
+            )
+            .map_err(|error| crate::UserError::VectorEmbeddingError(error.into())),
+            WithFragments::Maybe => {
+                let mut indexing_fragments = BTreeMap::new();
+                indexing_fragments.insert("test".to_string(), serde_json::json!("test"));
+                crate::vector::rest::RequestData::new(
+                    request.to_owned(),
+                    indexing_fragments,
+                    Default::default(),
+                )
+                .or_else(|_| {
+                    crate::vector::rest::RequestData::new(
+                        request.to_owned(),
+                        Default::default(),
+                        Default::default(),
+                    )
+                })
+                .map_err(|error| crate::UserError::VectorEmbeddingError(error.into()))
+            }
+        }?;
+        if let Some(response) = response.as_ref().set() {
+            crate::vector::rest::Response::new(response.to_owned(), &request)
+                .map_err(|error| crate::UserError::VectorEmbeddingError(error.into()))?;
         }
     }
 
