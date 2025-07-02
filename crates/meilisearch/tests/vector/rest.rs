@@ -1,9 +1,9 @@
 use std::collections::BTreeMap;
 use std::sync::atomic::AtomicUsize;
+use std::time::Duration;
 
 use meili_snap::{json_string, snapshot};
 use reqwest::IntoUrl;
-use std::time::Duration;
 use tokio::sync::mpsc;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
@@ -408,13 +408,13 @@ async fn bad_request() {
       .await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
-  {
-    "message": "Error while generating embeddings: user error: in `request`: \"{{text}}\" not found",
-    "code": "vector_embedding_error",
-    "type": "invalid_request",
-    "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
-  }
-  "###);
+    {
+      "message": "Error while generating embeddings: user error: in `request`: \"{{text}}\" not found\n  - Note: this template is using a document template, and so expects to contain the placeholder \"{{text}}\" rather than \"{{fragment}}\"",
+      "code": "vector_embedding_error",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+    }
+    "###);
 
     // A repeat string appears inside a repeated value
     let (response, code) = index
@@ -437,7 +437,7 @@ async fn bad_request() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "Error while generating embeddings: user error: in `request.input.input`: \"{{..}}\" appears nested inside of a value that is itself repeated",
+      "message": "Error while generating embeddings: user error: in `request.input.input`: \"{{..}}\" appears nested inside of a value that is itself repeated\n  - Note: this template is using a document template, and so expects to contain the placeholder \"{{text}}\" rather than \"{{fragment}}\"",
       "code": "vector_embedding_error",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
@@ -460,7 +460,7 @@ async fn bad_request() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "Error while generating embeddings: user error: in `request.input.repeat`: \"{{..}}\" appears outside of an array",
+      "message": "Error while generating embeddings: user error: in `request.input.repeat`: \"{{..}}\" appears outside of an array\n  - Note: this template is using a document template, and so expects to contain the placeholder \"{{text}}\" rather than \"{{fragment}}\"",
       "code": "vector_embedding_error",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
@@ -483,7 +483,7 @@ async fn bad_request() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "Error while generating embeddings: user error: in `request.input`: \"{{..}}\" expected at position #1, but found at position #0",
+      "message": "Error while generating embeddings: user error: in `request.input`: \"{{..}}\" expected at position #1, but found at position #0\n  - Note: this template is using a document template, and so expects to contain the placeholder \"{{text}}\" rather than \"{{fragment}}\"",
       "code": "vector_embedding_error",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
@@ -506,7 +506,7 @@ async fn bad_request() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "Error while generating embeddings: user error: in `request.input`: \"{{..}}\" expected at position #1, but found at position #2",
+      "message": "Error while generating embeddings: user error: in `request.input`: \"{{..}}\" expected at position #1, but found at position #2\n  - Note: this template is using a document template, and so expects to contain the placeholder \"{{text}}\" rather than \"{{fragment}}\"",
       "code": "vector_embedding_error",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
@@ -529,7 +529,7 @@ async fn bad_request() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "Error while generating embeddings: user error: in `request.input[0]`: Expected \"{{text}}\" inside of the repeated value",
+      "message": "Error while generating embeddings: user error: in `request.input[0]`: Expected \"{{text}}\" inside of the repeated value\n  - Note: this template is using a document template, and so expects to contain the placeholder \"{{text}}\" rather than \"{{fragment}}\"",
       "code": "vector_embedding_error",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
@@ -556,7 +556,7 @@ async fn bad_request() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "Error while generating embeddings: user error: in `request.data`: Found \"{{..}}\", but it was already present in `request.input`",
+      "message": "Error while generating embeddings: user error: in `request.data`: Found \"{{..}}\", but it was already present in `request.input`\n  - Note: this template is using a document template, and so expects to contain the placeholder \"{{text}}\" rather than \"{{fragment}}\"",
       "code": "vector_embedding_error",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
@@ -577,7 +577,7 @@ async fn bad_request() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "Error while generating embeddings: user error: in `request.data`: Found \"{{text}}\", but it was already present in `request.input`",
+      "message": "Error while generating embeddings: user error: in `request.data`: Found \"{{text}}\", but it was already present in `request.input`\n  - Note: this template is using a document template, and so expects to contain the placeholder \"{{text}}\" rather than \"{{fragment}}\"",
       "code": "vector_embedding_error",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
@@ -598,7 +598,7 @@ async fn bad_request() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "Error while generating embeddings: user error: in `request.repeated.data[1]`: Found \"{{text}}\", but it was already present in `request.repeated.input`",
+      "message": "Error while generating embeddings: user error: in `request.repeated.data[1]`: Found \"{{text}}\", but it was already present in `request.repeated.input`\n  - Note: this template is using a document template, and so expects to contain the placeholder \"{{text}}\" rather than \"{{fragment}}\"",
       "code": "vector_embedding_error",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
@@ -619,7 +619,7 @@ async fn bad_request() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "Error while generating embeddings: user error: in `request.data`: Found \"{{text}}\", but it was already present in `request.input[0]` (repeated)",
+      "message": "Error while generating embeddings: user error: in `request.data`: Found \"{{text}}\", but it was already present in `request.input[0]` (repeated)\n  - Note: this template is using a document template, and so expects to contain the placeholder \"{{text}}\" rather than \"{{fragment}}\"",
       "code": "vector_embedding_error",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
@@ -920,7 +920,7 @@ async fn bad_settings() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "Error while generating embeddings: user error: in `request`: \"{{text}}\" not found",
+      "message": "Error while generating embeddings: user error: in `request`: \"{{text}}\" not found\n  - Note: this template is using a document template, and so expects to contain the placeholder \"{{text}}\" rather than \"{{fragment}}\"",
       "code": "vector_embedding_error",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
