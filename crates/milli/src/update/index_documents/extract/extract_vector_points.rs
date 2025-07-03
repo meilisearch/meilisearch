@@ -726,6 +726,35 @@ fn extract_vector_document_diff(
                 }
                 let has_fragments = !runtime.fragments().is_empty();
                 if has_fragments {
+                    let mut fragment_diff = Vec::new();
+                    let old_fields_ids_map = old_fields_ids_map.as_fields_ids_map();
+                    let new_fields_ids_map = new_fields_ids_map.as_fields_ids_map();
+
+                    let old_document = crate::update::new::document::KvDelAddDocument::new(
+                        obkv,
+                        DelAdd::Deletion,
+                        old_fields_ids_map,
+                    );
+
+                    let new_document = crate::update::new::document::KvDelAddDocument::new(
+                        obkv,
+                        DelAdd::Addition,
+                        new_fields_ids_map,
+                    );
+
+                    for new in runtime.fragments() {
+                        let name = &new.name;
+                        let fragment =
+                            RequestFragmentExtractor::new(new, doc_alloc).ignore_errors();
+
+                        let diff = fragment
+                            .diff_documents(&old_document, &new_document, &())
+                            .expect("ignoring errors so this cannot fail");
+
+                        fragment_diff.push((name.clone(), diff));
+                    }
+                    VectorStateDelta::UpdateGeneratedFromFragments(fragment_diff)
+                } else {
                     let prompt = &runtime.document_template;
                     // Don't give up if the old prompt was failing
                     let old_prompt = Some(&prompt).map(|p| {
@@ -741,38 +770,9 @@ fn extract_vector_document_diff(
                         );
                         VectorStateDelta::NowGenerated(new_prompt)
                     } else {
-                        let mut fragment_diff = Vec::new();
-                        let old_fields_ids_map = old_fields_ids_map.as_fields_ids_map();
-                        let new_fields_ids_map = new_fields_ids_map.as_fields_ids_map();
-
-                        let old_document = crate::update::new::document::KvDelAddDocument::new(
-                            obkv,
-                            DelAdd::Deletion,
-                            old_fields_ids_map,
-                        );
-
-                        let new_document = crate::update::new::document::KvDelAddDocument::new(
-                            obkv,
-                            DelAdd::Addition,
-                            new_fields_ids_map,
-                        );
-
-                        for new in runtime.fragments() {
-                            let name = &new.name;
-                            let fragment =
-                                RequestFragmentExtractor::new(new, doc_alloc).ignore_errors();
-
-                            let diff = fragment
-                                .diff_documents(&old_document, &new_document, &())
-                                .expect("ignoring errors so this cannot fail");
-
-                            fragment_diff.push((name.clone(), diff));
-                        }
-                        VectorStateDelta::UpdateGeneratedFromFragments(fragment_diff)
+                        tracing::trace!("⏭️ Prompt unmodified, skipping");
+                        VectorStateDelta::NoChange
                     }
-                } else {
-                    tracing::trace!("⏭️ Prompt unmodified, skipping");
-                    VectorStateDelta::NoChange
                 }
             } else {
                 VectorStateDelta::NowRemoved
