@@ -8,8 +8,7 @@ use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 use crate::common::index::Index;
 use crate::common::{Owned, Shared};
 use crate::json;
-use crate::vector::Server;
-use crate::vector::GetAllDocumentsOptions;
+use crate::vector::{GetAllDocumentsOptions, Server};
 
 async fn shared_index_for_fragments() -> Index<'static, Shared> {
     static INDEX: OnceCell<(Server<Shared>, String)> = OnceCell::const_new();
@@ -82,9 +81,7 @@ pub async fn init_fragments_index() -> (Server<Owned>, String, crate::common::Va
             },
         },
     });
-    let (response, code) = index
-        .update_settings(settings.clone())
-        .await;
+    let (response, code) = index.update_settings(settings.clone()).await;
     snapshot!(code, @"202 Accepted");
 
     let task = server.wait_task(response.uid()).await;
@@ -359,9 +356,7 @@ async fn deleting_fragments_deletes_vectors() {
         .await;
     println!("Documents before update: {documents:?}");
 
-    let (response, code) = index
-        .update_settings(settings)
-        .await;
+    let (response, code) = index.update_settings(settings).await;
     snapshot!(code, @"202 Accepted");
     let value = server.wait_task(response.uid()).await.succeeded();
     snapshot!(value, @r#"
@@ -410,11 +405,91 @@ async fn deleting_fragments_deletes_vectors() {
     }
     "#);
 
+    let (value, code) = index.settings().await;
+    snapshot!(value, @r###"
+    {
+      "displayedAttributes": [
+        "*"
+      ],
+      "searchableAttributes": [
+        "*"
+      ],
+      "filterableAttributes": [],
+      "sortableAttributes": [],
+      "rankingRules": [
+        "words",
+        "typo",
+        "proximity",
+        "attribute",
+        "sort",
+        "exactness"
+      ],
+      "stopWords": [],
+      "nonSeparatorTokens": [],
+      "separatorTokens": [],
+      "dictionary": [],
+      "synonyms": {},
+      "distinctAttribute": null,
+      "proximityPrecision": "byWord",
+      "typoTolerance": {
+        "enabled": true,
+        "minWordSizeForTypos": {
+          "oneTypo": 5,
+          "twoTypos": 9
+        },
+        "disableOnWords": [],
+        "disableOnAttributes": [],
+        "disableOnNumbers": false
+      },
+      "faceting": {
+        "maxValuesPerFacet": 100,
+        "sortFacetValuesBy": {
+          "*": "alpha"
+        }
+      },
+      "pagination": {
+        "maxTotalHits": 1000
+      },
+      "embedders": {
+        "rest": {
+          "source": "rest",
+          "dimensions": 3,
+          "url": "http://127.0.0.1:53832",
+          "indexingFragments": {
+            "withBreed": {
+              "value": "{{ doc.name }} is a {{ doc.breed }}"
+            }
+          },
+          "searchFragments": {
+            "justBreed": {
+              "value": "It's a {{ media.breed }}"
+            },
+            "justName": {
+              "value": "{{ media.name }} is a dog"
+            },
+            "query": {
+              "value": "Some pre-prompt for query {{ q }}"
+            }
+          },
+          "request": "{{fragment}}",
+          "response": {
+            "data": "{{embedding}}"
+          },
+          "headers": {}
+        }
+      },
+      "searchCutoffMs": null,
+      "localizedAttributes": null,
+      "facetSearch": true,
+      "prefixSearch": "indexingTime"
+    }
+    "###);
+
     let (documents, code) = index
         .get_all_documents(GetAllDocumentsOptions { retrieve_vectors: true, ..Default::default() })
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(documents), @r#"
+    snapshot!(json_string!(documents), @r###"
     {
       "results": [
         {
@@ -453,7 +528,7 @@ async fn deleting_fragments_deletes_vectors() {
                 [
                   1.0,
                   1.0,
-                  0.0
+                  -1.0
                 ]
               ],
               "regenerate": true
@@ -470,7 +545,7 @@ async fn deleting_fragments_deletes_vectors() {
                 [
                   -0.5,
                   0.5,
-                  0.0
+                  1.0
                 ]
               ],
               "regenerate": true
@@ -482,5 +557,5 @@ async fn deleting_fragments_deletes_vectors() {
       "limit": 20,
       "total": 4
     }
-    "#);
+    "###);
 }
