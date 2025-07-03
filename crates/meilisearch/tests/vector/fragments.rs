@@ -109,6 +109,12 @@ pub async fn init_fragments_index() -> (Server<Owned>, String, crate::common::Va
 
 // TODO: Test cannot pass both fragments and document
 
+// TODO: test with 2 embedders
+
+// TODO: edit fragment
+
+// TODO: document fragment replaced
+
 #[actix_rt::test]
 async fn indexing_fragments() {
     let index = shared_index_for_fragments().await;
