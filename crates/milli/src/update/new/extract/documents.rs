@@ -7,8 +7,7 @@ use hashbrown::HashMap;
 use super::DelAddRoaringBitmap;
 use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::update::new::channel::{DocumentsSender, ExtractorBbqueueSender};
-use crate::update::new::document::{write_to_obkv, Document};
-use crate::update::new::document::{DocumentContext, DocumentIdentifiers};
+use crate::update::new::document::{write_to_obkv, Document, DocumentContext, DocumentIdentifiers};
 use crate::update::new::indexer::document_changes::{Extractor, IndexingContext};
 use crate::update::new::indexer::settings_changes::{
     settings_change_extract, DocumentsIndentifiers, SettingsChangeExtractor,
@@ -19,16 +18,16 @@ use crate::update::new::vector_document::VectorDocument;
 use crate::update::new::DocumentChange;
 use crate::update::settings::SettingsDelta;
 use crate::vector::settings::EmbedderAction;
-use crate::vector::EmbeddingConfigs;
+use crate::vector::RuntimeEmbedders;
 use crate::Result;
 
 pub struct DocumentsExtractor<'a, 'b> {
     document_sender: DocumentsSender<'a, 'b>,
-    embedders: &'a EmbeddingConfigs,
+    embedders: &'a RuntimeEmbedders,
 }
 
 impl<'a, 'b> DocumentsExtractor<'a, 'b> {
-    pub fn new(document_sender: DocumentsSender<'a, 'b>, embedders: &'a EmbeddingConfigs) -> Self {
+    pub fn new(document_sender: DocumentsSender<'a, 'b>, embedders: &'a RuntimeEmbedders) -> Self {
         Self { document_sender, embedders }
     }
 }

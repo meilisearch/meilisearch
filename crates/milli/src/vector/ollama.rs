@@ -71,6 +71,8 @@ impl EmbedderOptions {
             request,
             response,
             headers: Default::default(),
+            indexing_fragments: Default::default(),
+            search_fragments: Default::default(),
         })
     }
 }

@@ -9,10 +9,11 @@ use std::str::FromStr;
 use deserr::{DeserializeError, Deserr, ErrorKind, MergeWithError, ValuePointerRef};
 use fst::IntoStreamer;
 use milli::disabled_typos_terms::DisabledTyposTerms;
-use milli::index::{IndexEmbeddingConfig, PrefixSearch};
+use milli::index::PrefixSearch;
 use milli::proximity::ProximityPrecision;
 pub use milli::update::ChatSettings;
 use milli::update::Setting;
+use milli::vector::db::IndexEmbeddingConfig;
 use milli::{Criterion, CriterionError, FilterableAttributesRule, Index, DEFAULT_VALUES_PER_FACET};
 use serde::{Deserialize, Serialize, Serializer};
 use utoipa::ToSchema;
@@ -500,8 +501,11 @@ impl Settings<Unchecked> {
         let Setting::Set(mut configs) = self.embedders else { return Ok(self) };
         for (name, config) in configs.iter_mut() {
             let config_to_check = std::mem::take(config);
-            let checked_config =
-                milli::update::validate_embedding_settings(config_to_check.inner, name)?;
+            let checked_config = milli::update::validate_embedding_settings(
+                config_to_check.inner,
+                name,
+                milli::vector::settings::EmbeddingValidationContext::SettingsPartialUpdate,
+            )?;
             *config = SettingEmbeddingSettings { inner: checked_config };
         }
         self.embedders = Setting::Set(configs);
@@ -911,6 +915,7 @@ pub fn settings(
     };
 
     let embedders: BTreeMap<_, _> = index
+        .embedding_configs()
         .embedding_configs(rtxn)?
         .into_iter()
         .map(|IndexEmbeddingConfig { name, config, .. }| {

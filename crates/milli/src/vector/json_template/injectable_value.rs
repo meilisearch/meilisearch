@@ -1,20 +1,17 @@
-//! Module to manipulate JSON templates.
+//! Module to manipulate JSON values containing placeholder strings.
 //!
 //! This module allows two main operations:
-//! 1. Render JSON values from a template and a context value.
-//! 2. Retrieve data from a template and JSON values.
-
-#![warn(rustdoc::broken_intra_doc_links)]
-#![warn(missing_docs)]
+//! 1. Render JSON values from a template value containing placeholders and a value to inject.
+//! 2. Extract data from a template value containing placeholders and a concrete JSON value that fits the template value.
 
 use serde::Deserialize;
 use serde_json::{Map, Value};
 
-type ValuePath = Vec<PathComponent>;
+use super::{format_value, inject_value, path_with_root, PathComponent, ValuePath};
 
 /// Encapsulates a JSON template and allows injecting and extracting values from it.
 #[derive(Debug)]
-pub struct ValueTemplate {
+pub struct InjectableValue {
     template: Value,
     value_kind: ValueKind,
 }
@@ -32,34 +29,13 @@ struct ArrayPath {
     value_path_in_array: ValuePath,
 }
 
-/// Component of a path to a Value
-#[derive(Debug, Clone)]
-pub enum PathComponent {
-    /// A key inside of an object
-    MapKey(String),
-    /// An index inside of an array
-    ArrayIndex(usize),
-}
-
-impl PartialEq for PathComponent {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::MapKey(l0), Self::MapKey(r0)) => l0 == r0,
-            (Self::ArrayIndex(l0), Self::ArrayIndex(r0)) => l0 == r0,
-            _ => false,
-        }
-    }
-}
-
-impl Eq for PathComponent {}
-
-/// Error that occurs when no few value was provided to a template for injection.
+/// Error that occurs when no value was provided to a template for injection.
 #[derive(Debug)]
 pub struct MissingValue;
 
-/// Error that occurs when trying to parse a template in [`ValueTemplate::new`]
+/// Error that occurs when trying to parse a template in [`InjectableValue::new`]
 #[derive(Debug)]
-pub enum TemplateParsingError {
+pub enum InjectableParsingError {
     /// A repeat string appears inside a repeated value
     NestedRepeatString(ValuePath),
     /// A repeat string appears outside of an array
@@ -85,42 +61,42 @@ pub enum TemplateParsingError {
     },
 }
 
-impl TemplateParsingError {
+impl InjectableParsingError {
     /// Produce an error message from the error kind, the name of the root object, the placeholder string and the repeat string
     pub fn error_message(&self, root: &str, placeholder: &str, repeat: &str) -> String {
         match self {
-            TemplateParsingError::NestedRepeatString(path) => {
+            InjectableParsingError::NestedRepeatString(path) => {
                 format!(
                     r#"in {}: "{repeat}" appears nested inside of a value that is itself repeated"#,
                     path_with_root(root, path)
                 )
             }
-            TemplateParsingError::RepeatStringNotInArray(path) => format!(
+            InjectableParsingError::RepeatStringNotInArray(path) => format!(
                 r#"in {}: "{repeat}" appears outside of an array"#,
                 path_with_root(root, path)
             ),
-            TemplateParsingError::BadIndexForRepeatString(path, index) => format!(
+            InjectableParsingError::BadIndexForRepeatString(path, index) => format!(
                 r#"in {}: "{repeat}" expected at position #1, but found at position #{index}"#,
                 path_with_root(root, path)
             ),
-            TemplateParsingError::MissingPlaceholderInRepeatedValue(path) => format!(
+            InjectableParsingError::MissingPlaceholderInRepeatedValue(path) => format!(
                 r#"in {}: Expected "{placeholder}" inside of the repeated value"#,
                 path_with_root(root, path)
             ),
-            TemplateParsingError::MultipleRepeatString(current, previous) => format!(
+            InjectableParsingError::MultipleRepeatString(current, previous) => format!(
                 r#"in {}: Found "{repeat}", but it was already present in {}"#,
                 path_with_root(root, current),
                 path_with_root(root, previous)
             ),
-            TemplateParsingError::MultiplePlaceholderString(current, previous) => format!(
+            InjectableParsingError::MultiplePlaceholderString(current, previous) => format!(
                 r#"in {}: Found "{placeholder}", but it was already present in {}"#,
                 path_with_root(root, current),
                 path_with_root(root, previous)
             ),
-            TemplateParsingError::MissingPlaceholderString => {
+            InjectableParsingError::MissingPlaceholderString => {
                 format!(r#"in `{root}`: "{placeholder}" not found"#)
             }
-            TemplateParsingError::BothArrayAndSingle {
+            InjectableParsingError::BothArrayAndSingle {
                 single_path,
                 path_to_array,
                 array_to_placeholder,
@@ -140,41 +116,41 @@ impl TemplateParsingError {
 
     fn prepend_path(self, mut prepended_path: ValuePath) -> Self {
         match self {
-            TemplateParsingError::NestedRepeatString(mut path) => {
+            InjectableParsingError::NestedRepeatString(mut path) => {
                 prepended_path.append(&mut path);
-                TemplateParsingError::NestedRepeatString(prepended_path)
+                InjectableParsingError::NestedRepeatString(prepended_path)
             }
-            TemplateParsingError::RepeatStringNotInArray(mut path) => {
+            InjectableParsingError::RepeatStringNotInArray(mut path) => {
                 prepended_path.append(&mut path);
-                TemplateParsingError::RepeatStringNotInArray(prepended_path)
+                InjectableParsingError::RepeatStringNotInArray(prepended_path)
             }
-            TemplateParsingError::BadIndexForRepeatString(mut path, index) => {
+            InjectableParsingError::BadIndexForRepeatString(mut path, index) => {
                 prepended_path.append(&mut path);
-                TemplateParsingError::BadIndexForRepeatString(prepended_path, index)
+                InjectableParsingError::BadIndexForRepeatString(prepended_path, index)
             }
-            TemplateParsingError::MissingPlaceholderInRepeatedValue(mut path) => {
+            InjectableParsingError::MissingPlaceholderInRepeatedValue(mut path) => {
                 prepended_path.append(&mut path);
-                TemplateParsingError::MissingPlaceholderInRepeatedValue(prepended_path)
+                InjectableParsingError::MissingPlaceholderInRepeatedValue(prepended_path)
             }
-            TemplateParsingError::MultipleRepeatString(mut path, older_path) => {
+            InjectableParsingError::MultipleRepeatString(mut path, older_path) => {
                 let older_prepended_path =
                     prepended_path.iter().cloned().chain(older_path).collect();
                 prepended_path.append(&mut path);
-                TemplateParsingError::MultipleRepeatString(prepended_path, older_prepended_path)
+                InjectableParsingError::MultipleRepeatString(prepended_path, older_prepended_path)
             }
-            TemplateParsingError::MultiplePlaceholderString(mut path, older_path) => {
+            InjectableParsingError::MultiplePlaceholderString(mut path, older_path) => {
                 let older_prepended_path =
                     prepended_path.iter().cloned().chain(older_path).collect();
                 prepended_path.append(&mut path);
-                TemplateParsingError::MultiplePlaceholderString(
+                InjectableParsingError::MultiplePlaceholderString(
                     prepended_path,
                     older_prepended_path,
                 )
             }
-            TemplateParsingError::MissingPlaceholderString => {
-                TemplateParsingError::MissingPlaceholderString
+            InjectableParsingError::MissingPlaceholderString => {
+                InjectableParsingError::MissingPlaceholderString
             }
-            TemplateParsingError::BothArrayAndSingle {
+            InjectableParsingError::BothArrayAndSingle {
                 single_path,
                 mut path_to_array,
                 array_to_placeholder,
@@ -184,7 +160,7 @@ impl TemplateParsingError {
                     prepended_path.iter().cloned().chain(single_path).collect();
                 prepended_path.append(&mut path_to_array);
                 // we don't prepend the array_to_placeholder path as it is the array path that is prepended
-                TemplateParsingError::BothArrayAndSingle {
+                InjectableParsingError::BothArrayAndSingle {
                     single_path: single_prepended_path,
                     path_to_array: prepended_path,
                     array_to_placeholder,
@@ -194,7 +170,7 @@ impl TemplateParsingError {
     }
 }
 
-/// Error that occurs when [`ValueTemplate::extract`] fails.
+/// Error that occurs when [`InjectableValue::extract`] fails.
 #[derive(Debug)]
 pub struct ExtractionError {
     /// The cause of the failure
@@ -336,27 +312,6 @@ enum LastNamedObject<'a> {
     NestedArrayInsideObject { object_name: &'a str, index: usize, nesting_level: usize },
 }
 
-/// Builds a string representation of a path, preprending the name of the root value.
-pub fn path_with_root<'a>(
-    root: &str,
-    path: impl IntoIterator<Item = &'a PathComponent> + 'a,
-) -> String {
-    use std::fmt::Write as _;
-    let mut res = format!("`{root}");
-    for component in path.into_iter() {
-        match component {
-            PathComponent::MapKey(key) => {
-                let _ = write!(&mut res, ".{key}");
-            }
-            PathComponent::ArrayIndex(index) => {
-                let _ = write!(&mut res, "[{index}]");
-            }
-        }
-    }
-    res.push('`');
-    res
-}
-
 /// Context where an extraction failure happened
 ///
 /// The operation that failed
@@ -405,7 +360,7 @@ enum ArrayParsingContext<'a> {
     NotNested(&'a mut Option<ArrayPath>),
 }
 
-impl ValueTemplate {
+impl InjectableValue {
     /// Prepare a template for injection or extraction.
     ///
     /// # Parameters
@@ -419,12 +374,12 @@ impl ValueTemplate {
     ///
     /// # Errors
     ///
-    /// - [`TemplateParsingError`]: refer to the documentation of this type
+    /// - [`InjectableParsingError`]: refer to the documentation of this type
     pub fn new(
         template: Value,
         placeholder_string: &str,
         repeat_string: &str,
-    ) -> Result<Self, TemplateParsingError> {
+    ) -> Result<Self, InjectableParsingError> {
         let mut value_path = None;
         let mut array_path = None;
         let mut current_path = Vec::new();
@@ -438,11 +393,11 @@ impl ValueTemplate {
         )?;
 
         let value_kind = match (array_path, value_path) {
-            (None, None) => return Err(TemplateParsingError::MissingPlaceholderString),
+            (None, None) => return Err(InjectableParsingError::MissingPlaceholderString),
             (None, Some(value_path)) => ValueKind::Single(value_path),
             (Some(array_path), None) => ValueKind::Array(array_path),
             (Some(array_path), Some(value_path)) => {
-                return Err(TemplateParsingError::BothArrayAndSingle {
+                return Err(InjectableParsingError::BothArrayAndSingle {
                     single_path: value_path,
                     path_to_array: array_path.path_to_array,
                     array_to_placeholder: array_path.value_path_in_array,
@@ -564,29 +519,29 @@ impl ValueTemplate {
         value_path: &mut Option<ValuePath>,
         mut array_path: &mut ArrayParsingContext,
         current_path: &mut ValuePath,
-    ) -> Result<(), TemplateParsingError> {
+    ) -> Result<(), InjectableParsingError> {
         // two modes for parsing array.
         match array {
             // 1. array contains a repeat string in second position
             [first, second, rest @ ..] if second == repeat_string => {
                 let ArrayParsingContext::NotNested(array_path) = &mut array_path else {
-                    return Err(TemplateParsingError::NestedRepeatString(current_path.clone()));
+                    return Err(InjectableParsingError::NestedRepeatString(current_path.clone()));
                 };
                 if let Some(array_path) = array_path {
-                    return Err(TemplateParsingError::MultipleRepeatString(
+                    return Err(InjectableParsingError::MultipleRepeatString(
                         current_path.clone(),
                         array_path.path_to_array.clone(),
                     ));
                 }
                 if first == repeat_string {
-                    return Err(TemplateParsingError::BadIndexForRepeatString(
+                    return Err(InjectableParsingError::BadIndexForRepeatString(
                         current_path.clone(),
                         0,
                     ));
                 }
                 if let Some(position) = rest.iter().position(|value| value == repeat_string) {
                     let position = position + 2;
-                    return Err(TemplateParsingError::BadIndexForRepeatString(
+                    return Err(InjectableParsingError::BadIndexForRepeatString(
                         current_path.clone(),
                         position,
                     ));
@@ -609,7 +564,9 @@ impl ValueTemplate {
                     value_path.ok_or_else(|| {
                         let mut repeated_value_path = current_path.clone();
                         repeated_value_path.push(PathComponent::ArrayIndex(0));
-                        TemplateParsingError::MissingPlaceholderInRepeatedValue(repeated_value_path)
+                        InjectableParsingError::MissingPlaceholderInRepeatedValue(
+                            repeated_value_path,
+                        )
                     })?
                 };
                 **array_path = Some(ArrayPath {
@@ -621,7 +578,7 @@ impl ValueTemplate {
             // 2. array does not contain a repeat string
             array => {
                 if let Some(position) = array.iter().position(|value| value == repeat_string) {
-                    return Err(TemplateParsingError::BadIndexForRepeatString(
+                    return Err(InjectableParsingError::BadIndexForRepeatString(
                         current_path.clone(),
                         position,
                     ));
@@ -650,7 +607,7 @@ impl ValueTemplate {
         value_path: &mut Option<ValuePath>,
         array_path: &mut ArrayParsingContext,
         current_path: &mut ValuePath,
-    ) -> Result<(), TemplateParsingError> {
+    ) -> Result<(), InjectableParsingError> {
         for (key, value) in object.iter() {
             current_path.push(PathComponent::MapKey(key.to_owned()));
             Self::parse_value(
@@ -673,12 +630,12 @@ impl ValueTemplate {
         value_path: &mut Option<ValuePath>,
         array_path: &mut ArrayParsingContext,
         current_path: &mut ValuePath,
-    ) -> Result<(), TemplateParsingError> {
+    ) -> Result<(), InjectableParsingError> {
         match value {
             Value::String(str) => {
                 if placeholder_string == str {
                     if let Some(value_path) = value_path {
-                        return Err(TemplateParsingError::MultiplePlaceholderString(
+                        return Err(InjectableParsingError::MultiplePlaceholderString(
                             current_path.clone(),
                             value_path.clone(),
                         ));
@@ -687,7 +644,9 @@ impl ValueTemplate {
                     *value_path = Some(current_path.clone());
                 }
                 if repeat_string == str {
-                    return Err(TemplateParsingError::RepeatStringNotInArray(current_path.clone()));
+                    return Err(InjectableParsingError::RepeatStringNotInArray(
+                        current_path.clone(),
+                    ));
                 }
             }
             Value::Null | Value::Bool(_) | Value::Number(_) => {}
@@ -709,27 +668,6 @@ impl ValueTemplate {
             )?,
         }
         Ok(())
-    }
-}
-
-fn inject_value(rendered: &mut Value, injection_path: &Vec<PathComponent>, injected_value: Value) {
-    let mut current_value = rendered;
-    for injection_component in injection_path {
-        current_value = match injection_component {
-            PathComponent::MapKey(key) => current_value.get_mut(key).unwrap(),
-            PathComponent::ArrayIndex(index) => current_value.get_mut(index).unwrap(),
-        }
-    }
-    *current_value = injected_value;
-}
-
-fn format_value(value: &Value) -> String {
-    match value {
-        Value::Array(array) => format!("an array of size {}", array.len()),
-        Value::Object(object) => {
-            format!("an object with {} field(s)", object.len())
-        }
-        value => value.to_string(),
     }
 }
 
@@ -838,10 +776,10 @@ impl<T> ExtractionResultErrorContext<T> for Result<T, ExtractionErrorKind> {
 mod test {
     use serde_json::{json, Value};
 
-    use super::{PathComponent, TemplateParsingError, ValueTemplate};
+    use super::{InjectableParsingError, InjectableValue, PathComponent};
 
-    fn new_template(template: Value) -> Result<ValueTemplate, TemplateParsingError> {
-        ValueTemplate::new(template, "{{text}}", "{{..}}")
+    fn new_template(template: Value) -> Result<InjectableValue, InjectableParsingError> {
+        InjectableValue::new(template, "{{text}}", "{{..}}")
     }
 
     #[test]
@@ -853,7 +791,7 @@ mod test {
         });
 
         let error = new_template(template.clone()).unwrap_err();
-        assert!(matches!(error, TemplateParsingError::MissingPlaceholderString))
+        assert!(matches!(error, InjectableParsingError::MissingPlaceholderString))
     }
 
     #[test]
@@ -887,7 +825,7 @@ mod test {
         });
 
         match new_template(template.clone()) {
-            Err(TemplateParsingError::MultiplePlaceholderString(left, right)) => {
+            Err(InjectableParsingError::MultiplePlaceholderString(left, right)) => {
                 assert_eq!(
                     left,
                     vec![PathComponent::MapKey("titi".into()), PathComponent::ArrayIndex(3)]

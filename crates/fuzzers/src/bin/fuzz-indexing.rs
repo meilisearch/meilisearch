@@ -13,7 +13,7 @@ use milli::heed::EnvOpenOptions;
 use milli::progress::Progress;
 use milli::update::new::indexer;
 use milli::update::IndexerConfig;
-use milli::vector::EmbeddingConfigs;
+use milli::vector::RuntimeEmbedders;
 use milli::Index;
 use serde_json::Value;
 use tempfile::TempDir;
@@ -89,7 +89,7 @@ fn main() {
                             let mut new_fields_ids_map = db_fields_ids_map.clone();
 
                             let indexer_alloc = Bump::new();
-                            let embedders = EmbeddingConfigs::default();
+                            let embedders = RuntimeEmbedders::default();
                             let mut indexer = indexer::DocumentOperation::new();
 
                             let mut operations = Vec::new();

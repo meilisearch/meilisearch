@@ -150,9 +150,6 @@ impl IndexScheduler {
 
             let fields_ids_map = index.fields_ids_map(&index_rtxn)?;
             let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
-            let embedding_configs = index
-                .embedding_configs(&index_rtxn)
-                .map_err(|e| Error::from_milli(e, Some(uid.to_string())))?;
 
             // We don't need to keep this one alive as we will
             // spawn many threads to process the documents
@@ -232,17 +229,12 @@ impl IndexScheduler {
                                 ));
                             };
 
-                            for (embedder_name, embeddings) in embeddings {
-                                let user_provided = embedding_configs
-                                    .iter()
-                                    .find(|conf| conf.name == embedder_name)
-                                    .is_some_and(|conf| conf.user_provided.contains(docid));
-
+                            for (embedder_name, (embeddings, regenerate)) in embeddings {
                                 let embeddings = ExplicitVectors {
                                     embeddings: Some(
                                         VectorOrArrayOfVectors::from_array_of_vectors(embeddings),
                                     ),
-                                    regenerate: !user_provided,
+                                    regenerate,
                                 };
                                 vectors.insert(
                                     embedder_name,

@@ -755,6 +755,14 @@ fn validate_settings(
             if matches!(embedder.indexing_embedder, Setting::Set(_)) {
                 features.check_composite_embedders("setting `indexingEmbedder`")?;
             }
+
+            if matches!(embedder.indexing_fragments, Setting::Set(_)) {
+                features.check_multimodal("setting `indexingFragments`")?;
+            }
+
+            if matches!(embedder.search_fragments, Setting::Set(_)) {
+                features.check_multimodal("setting `searchFragments`")?;
+            }
         }
     }
 

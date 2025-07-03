@@ -201,6 +201,8 @@ impl Embedder {
                     ]
                 }),
                 headers: Default::default(),
+                indexing_fragments: Default::default(),
+                search_fragments: Default::default(),
             },
             cache_cap,
             super::rest::ConfigurationSource::OpenAi,
