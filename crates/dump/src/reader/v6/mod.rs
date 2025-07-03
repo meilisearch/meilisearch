@@ -197,7 +197,11 @@ impl V6Reader {
     pub fn chat_completions_settings(
         &mut self,
     ) -> Result<Box<dyn Iterator<Item = Result<(String, ChatCompletionSettings)>> + '_>> {
-        let entries = fs::read_dir(self.dump.path().join("chat-completions-settings"))?;
+        let entries = match fs::read_dir(self.dump.path().join("chat-completions-settings")) {
+            Ok(entries) => entries,
+            Err(e) if e.kind() == ErrorKind::NotFound => return Ok(Box::new(std::iter::empty())),
+            Err(e) => return Err(e.into()),
+        };
         Ok(Box::new(
             entries
                 .map(|entry| -> Result<Option<_>> {
