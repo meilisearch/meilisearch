@@ -1351,6 +1351,7 @@ async fn multiple_embedders() {
     // Remove rest's basic fragment
 
     settings["embedders"]["rest"]["indexingFragments"]["basic"] = serde_json::Value::Null;
+    //settings["embedders"].as_object_mut().unwrap().remove("rest2");
 
     let (response, code) = index.update_settings(settings).await;
     snapshot!(code, @"202 Accepted");
@@ -1362,6 +1363,56 @@ async fn multiple_embedders() {
         .await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(documents), @r"");
+}
+
+#[actix_rt::test]
+async fn remove_non_existant_embedder() {
+    let (server, uid, mut settings) = init_fragments_index().await;
+    let index = server.index(uid);
+
+    settings["embedders"].as_object_mut().unwrap().insert(String::from("non-existant"), serde_json::Value::Null);
+
+    let (response, code) = index.update_settings(settings).await;
+    snapshot!(code, @"202 Accepted");
+    let task = server.wait_task(response.uid()).await;
+    snapshot!(task, @r"");
+}
+
+#[actix_rt::test]
+async fn double_remove_embedder() {
+    let (server, uid, mut settings) = init_fragments_index().await;
+    let index = server.index(uid);
+
+    settings["embedders"].as_object_mut().unwrap().insert(String::from("rest"), serde_json::Value::Null);
+
+    let (response, code) = index.update_settings(settings.clone()).await;
+    snapshot!(code, @"202 Accepted");
+    let task = server.wait_task(response.uid()).await;
+    snapshot!(task, @r#"
+    {
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "[uuid]",
+      "status": "succeeded",
+      "type": "settingsUpdate",
+      "canceledBy": null,
+      "details": {
+        "embedders": {
+          "rest": null
+        }
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "#);
+
+    let (response, code) = index.update_settings(settings.clone()).await;
+    snapshot!(code, @"202 Accepted");
+    let task = server.wait_task(response.uid()).await;
+    snapshot!(task, @r#""#);
 }
 
 #[actix_rt::test]
