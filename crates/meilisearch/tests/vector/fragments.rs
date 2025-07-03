@@ -757,9 +757,12 @@ async fn fragment_insertion() {
     let (server, uid, mut settings) = init_fragments_index().await;
     let index = server.index(uid);
 
-    settings["embedders"]["rest"]["indexingFragments"].as_object_mut().unwrap().insert(String::from("useless"), serde_json::json!({
-        "value": "This fragment is useless"
-    }));
+    settings["embedders"]["rest"]["indexingFragments"].as_object_mut().unwrap().insert(
+        String::from("useless"),
+        serde_json::json!({
+            "value": "This fragment is useless"
+        }),
+    );
 
     let (response, code) = index.update_settings(settings).await;
     snapshot!(code, @"202 Accepted");
@@ -1215,7 +1218,7 @@ async fn multiple_embedders() {
     snapshot!(code, @"202 Accepted");
     let value = server.wait_task(response.uid()).await.succeeded();
     snapshot!(value["status"], @r###""succeeded""###);
-    
+
     let (documents, code) = index
         .get_all_documents(GetAllDocumentsOptions { retrieve_vectors: true, ..Default::default() })
         .await;
@@ -1354,7 +1357,7 @@ async fn multiple_embedders() {
     snapshot!(code, @"202 Accepted");
     let value = server.wait_task(response.uid()).await.succeeded();
     snapshot!(value["status"], @r###""succeeded""###);
-    
+
     let (documents, code) = index
         .get_all_documents(GetAllDocumentsOptions { retrieve_vectors: true, ..Default::default() })
         .await;

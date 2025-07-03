@@ -3,7 +3,7 @@ pub mod index;
 pub mod server;
 pub mod service;
 
-use std::{fmt::{self, Display}, future::Future};
+use std::fmt::{self, Display};
 
 #[allow(unused)]
 pub use index::GetAllDocumentsOptions;
