@@ -12,11 +12,11 @@ async fn create_mock(indexing_fragments: Value, search_fragments: Value) -> (Moc
     let mock_server = MockServer::start().await;
 
     let text_to_embedding: BTreeMap<_, _> = vec![
-        ("kefir", [0.5, -0.5, 2.0]),
-        ("intel", [1.0, 1.0, 1.0]),
-        ("bulldog", [1.5, -2.5, 0.0]),
-        ("dustin", [-0.5, 0.5, 2.5]),
-        ("labrador", [-3.5, 0.5, -1.0]),
+        ("kefir", [0.5, -0.5, 0.0]),
+        ("intel", [1.0, 1.0, 0.0]),
+        ("dustin", [-0.5, 0.5, 0.0]),
+        ("bulldog", [0.0, 0.0, 1.0]),
+        ("labrador", [0.0, 0.0, -1.0]),
     ]
     .into_iter()
     .collect();
@@ -192,6 +192,165 @@ async fn test_fragment_indexing() {
       "offset": 0,
       "limit": 20,
       "total": 4
+    }
+    "#);
+}
+
+#[actix_rt::test]
+async fn test_search_fragments() {
+    let (_mock, settings) = create_mock(
+        json!({
+            "withBreed": {"value": "{{ doc.name }} is a {{ doc.breed }}"},
+            "basic": {"value": "{{ doc.name }} is a dog"},
+        }),
+        json!({
+            "justBreed": {"value": "It's a {{ media.breed }}"},
+            "justName": {"value": "{{ media.name }} is a dog"},
+            "query": {"value": "Some pre-prompt for query {{ q }}"},
+        })
+    ).await;
+    let server = get_server_vector().await;
+    let index = server.index("doggo");
+
+    // Enable the experimental feature
+    let (_response, code) = server.set_features(json!({"multimodal": true})).await;
+    snapshot!(code, @"200 OK");
+
+    // Configure the index to use our mock embedder
+    let (response, code) = index
+        .update_settings(json!({
+            "embedders": {
+                "rest": settings,
+            },
+        }))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    
+    let task = server.wait_task(response.uid()).await;
+    snapshot!(task["status"], @r###""succeeded""###);
+
+    // Send documents
+    let documents = json!([
+        {"id": 0, "name": "kefir"},
+        {"id": 1, "name": "echo", "_vectors": { "rest": [1, 1, 1] }},
+        {"id": 2, "name": "intel", "breed": "labrador"},
+        {"id": 3, "name": "dustin", "breed": "bulldog"},
+    ]);
+    let (value, code) = index.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+    
+    let task = index.wait_task(value.uid()).await;
+    snapshot!(task["status"], @r###""succeeded""###);
+
+    // Perform a search with a provided vector
+    let (value, code) = index.search_post(
+        json!({"vector": [1.0, 1.0, 1.0], "hybrid": {"semanticRatio": 1.0, "embedder": "rest"}, "limit": 1}
+    )).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(value, @r#"
+    {
+      "hits": [
+        {
+          "id": 1,
+          "name": "echo"
+        }
+      ],
+      "query": "",
+      "processingTimeMs": "[duration]",
+      "limit": 1,
+      "offset": 0,
+      "estimatedTotalHits": 4,
+      "semanticHitCount": 1
+    }
+    "#);
+
+    // Perform a search with some media
+    let (value, code) = index.search_post(
+        json!({
+            "media": { "breed": "labrador" },
+            "hybrid": {"semanticRatio": 1.0, "embedder": "rest"},
+            "limit": 1
+        }
+    )).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(value, @r#"
+    {
+      "hits": [
+        {
+          "id": 2,
+          "name": "intel",
+          "breed": "labrador"
+        }
+      ],
+      "query": "",
+      "processingTimeMs": "[duration]",
+      "limit": 1,
+      "offset": 0,
+      "estimatedTotalHits": 4,
+      "semanticHitCount": 1
+    }
+    "#);
+
+    // Perform a search that matches multiple media
+    let (value, code) = index.search_post(
+        json!({
+            "media": { "name": "dustin", "breed": "labrador" },
+            "hybrid": {"semanticRatio": 1.0, "embedder": "rest"},
+            "limit": 1
+        }
+    )).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r#"
+    {
+      "message": "Error while generating embeddings: user error: Query matches multiple search fragments.\n  - Note: First matched fragment `justBreed`.\n  - Note: Second matched fragment `justName`.\n  - Note: {\"q\":null,\"media\":{\"name\":\"dustin\",\"breed\":\"labrador\"}}",
+      "code": "vector_embedding_error",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+    }
+    "#);
+
+    // Perform a search that matches no media
+    let (value, code) = index.search_post(
+        json!({
+            "media": { "ticker": "GME", "section": "portfolio" },
+            "hybrid": {"semanticRatio": 1.0, "embedder": "rest"},
+            "limit": 1
+        }
+    )).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r#"
+    {
+      "message": "Error while generating embeddings: user error: Query matches no search fragment.\n  - Note: {\"q\":null,\"media\":{\"ticker\":\"GME\",\"section\":\"portfolio\"}}",
+      "code": "vector_embedding_error",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+    }
+    "#);
+
+    // Perform a search with a query media
+    let (value, code) = index.search_post(
+        json!({
+            "q": "bulldog",
+            "hybrid": {"semanticRatio": 1.0, "embedder": "rest"},
+            "limit": 1
+        }
+    )).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(value, @r#"
+    {
+      "hits": [
+        {
+          "id": 3,
+          "name": "dustin",
+          "breed": "bulldog"
+        }
+      ],
+      "query": "bulldog",
+      "processingTimeMs": "[duration]",
+      "limit": 1,
+      "offset": 0,
+      "estimatedTotalHits": 4,
+      "semanticHitCount": 1
     }
     "#);
 }
