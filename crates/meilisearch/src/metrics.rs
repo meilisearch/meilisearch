@@ -21,9 +21,23 @@ lazy_static! {
             "Meilisearch number of search requests performed by the chat route itself"
         ))
         .expect("Can't create a metric");
-    pub static ref MEILISEARCH_CHAT_TOKENS_USAGE: IntCounterVec = register_int_counter_vec!(
-        opts!("meilisearch_chat_tokens_usage", "Meilisearch Chat Tokens Usage"),
-        &["chat", "model", "type"]
+    pub static ref MEILISEARCH_CHAT_PROMPT_TOKENS_USAGE: IntCounterVec = register_int_counter_vec!(
+        opts!("meilisearch_chat_prompt_tokens_usage", "Meilisearch Chat Prompt Tokens Usage"),
+        &["workspace", "model"]
+    )
+    .expect("Can't create a metric");
+    pub static ref MEILISEARCH_CHAT_COMPLETION_TOKENS_USAGE: IntCounterVec =
+        register_int_counter_vec!(
+            opts!(
+                "meilisearch_chat_completion_tokens_usage",
+                "Meilisearch Chat Completion Tokens Usage"
+            ),
+            &["workspace", "model"]
+        )
+        .expect("Can't create a metric");
+    pub static ref MEILISEARCH_CHAT_TOTAL_TOKENS_USAGE: IntCounterVec = register_int_counter_vec!(
+        opts!("meilisearch_chat_total_tokens_usage", "Meilisearch Chat Total Tokens Usage"),
+        &["workspace", "model"]
     )
     .expect("Can't create a metric");
     pub static ref MEILISEARCH_DB_SIZE_BYTES: IntGauge =

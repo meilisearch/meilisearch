@@ -49,7 +49,8 @@ use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::{extract_token_from_request, GuardedData, Policy as _};
 use crate::metrics::{
-    MEILISEARCH_CHAT_INTERNAL_SEARCH_REQUESTS, MEILISEARCH_CHAT_TOKENS_USAGE,
+    MEILISEARCH_CHAT_COMPLETION_TOKENS_USAGE, MEILISEARCH_CHAT_INTERNAL_SEARCH_REQUESTS,
+    MEILISEARCH_CHAT_PROMPT_TOKENS_USAGE, MEILISEARCH_CHAT_TOTAL_TOKENS_USAGE,
     MEILISEARCH_DEGRADED_SEARCH_REQUESTS,
 };
 use crate::routes::chats::utils::SseEventSender;
@@ -563,15 +564,15 @@ async fn run_conversation<C: async_openai::config::Config>(
         match result {
             Ok(resp) => {
                 if let Some(usage) = resp.usage.as_ref() {
-                    for (r#type, value) in &[
-                        ("prompt", usage.prompt_tokens),
-                        ("completion", usage.completion_tokens),
-                        ("total", usage.total_tokens),
-                    ] {
-                        MEILISEARCH_CHAT_TOKENS_USAGE
-                            .with_label_values(&[workspace_uid, &chat_completion.model, r#type])
-                            .inc_by(*value as u64);
-                    }
+                    MEILISEARCH_CHAT_PROMPT_TOKENS_USAGE
+                        .with_label_values(&[workspace_uid, &chat_completion.model])
+                        .inc_by(usage.prompt_tokens as u64);
+                    MEILISEARCH_CHAT_COMPLETION_TOKENS_USAGE
+                        .with_label_values(&[workspace_uid, &chat_completion.model])
+                        .inc_by(usage.completion_tokens as u64);
+                    MEILISEARCH_CHAT_TOTAL_TOKENS_USAGE
+                        .with_label_values(&[workspace_uid, &chat_completion.model])
+                        .inc_by(usage.total_tokens as u64);
                 }
                 let choice = match resp.choices.first() {
                     Some(choice) => choice,
