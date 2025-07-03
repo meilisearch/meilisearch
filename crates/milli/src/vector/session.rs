@@ -30,8 +30,6 @@ pub trait OnEmbed<'doc> {
         unused_vectors_distribution: &Self::ErrorMetadata,
         metadata: &[Metadata<'doc>],
     ) -> crate::Error;
-
-    fn process_embeddings(&mut self, metadata: Metadata<'doc>, embeddings: Vec<Embedding>);
 }
 
 pub struct EmbedSession<'doc, C, I> {

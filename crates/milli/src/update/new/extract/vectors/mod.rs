@@ -452,6 +452,10 @@ impl OnEmbeddingDocumentUpdates<'_, '_> {
     fn clear_vectors(&self, docid: DocumentId) {
         self.sender.set_vectors(docid, self.embedder_id, vec![]).unwrap();
     }
+
+    fn process_embeddings(&mut self, metadata: Metadata<'_>, embeddings: Vec<Embedding>) {
+        self.sender.set_vectors(metadata.docid, self.embedder_id, embeddings).unwrap();
+    }
 }
 
 impl<'doc> OnEmbed<'doc> for OnEmbeddingDocumentUpdates<'doc, '_> {
@@ -469,11 +473,6 @@ impl<'doc> OnEmbed<'doc> for OnEmbeddingDocumentUpdates<'doc, '_> {
             )
             .unwrap();
     }
-
-    fn process_embeddings(&mut self, metadata: Metadata<'doc>, embeddings: Vec<Embedding>) {
-        self.sender.set_vectors(metadata.docid, self.embedder_id, embeddings).unwrap();
-    }
-
     fn process_embedding_error(
         &mut self,
         error: crate::vector::hf::EmbedError,

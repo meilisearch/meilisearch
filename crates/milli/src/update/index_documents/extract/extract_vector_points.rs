@@ -1300,12 +1300,4 @@ impl<'doc> OnEmbed<'doc> for WriteGrenadOnEmbed<'_> {
             crate::Error::UserError(crate::UserError::DocumentEmbeddingError(msg))
         }
     }
-
-    fn process_embeddings(
-        &mut self,
-        _metadata: crate::vector::session::Metadata<'doc>,
-        _embeddings: Vec<Embedding>,
-    ) {
-        unimplemented!("unused")
-    }
 }
