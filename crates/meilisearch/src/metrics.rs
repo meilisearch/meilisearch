@@ -15,6 +15,12 @@ lazy_static! {
         "Meilisearch number of degraded search requests"
     ))
     .expect("Can't create a metric");
+    pub static ref MEILISEARCH_CHAT_INTERNAL_SEARCH_REQUESTS: IntGauge =
+        register_int_gauge!(opts!(
+            "meilisearch_chat_internal_search_requests",
+            "Meilisearch number of search requests performed by the chat route itself"
+        ))
+        .expect("Can't create a metric");
     pub static ref MEILISEARCH_DB_SIZE_BYTES: IntGauge =
         register_int_gauge!(opts!("meilisearch_db_size_bytes", "Meilisearch DB Size In Bytes"))
             .expect("Can't create a metric");

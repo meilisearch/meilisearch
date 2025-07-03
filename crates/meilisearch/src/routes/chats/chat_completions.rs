@@ -48,7 +48,9 @@ use crate::analytics::Analytics;
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::{extract_token_from_request, GuardedData, Policy as _};
-use crate::metrics::MEILISEARCH_DEGRADED_SEARCH_REQUESTS;
+use crate::metrics::{
+    MEILISEARCH_CHAT_INTERNAL_SEARCH_REQUESTS, MEILISEARCH_DEGRADED_SEARCH_REQUESTS,
+};
 use crate::routes::chats::utils::SseEventSender;
 use crate::routes::indexes::search::search_kind;
 use crate::search::{add_search_rules, prepare_search, search_from_kind, SearchQuery};
@@ -286,7 +288,7 @@ async fn process_search_request(
     let output = output?;
     let mut documents = Vec::new();
     if let Ok((ref rtxn, ref search_result)) = output {
-        // aggregate.succeed(search_result);
+        MEILISEARCH_CHAT_INTERNAL_SEARCH_REQUESTS.inc();
         if search_result.degraded {
             MEILISEARCH_DEGRADED_SEARCH_REQUESTS.inc();
         }
