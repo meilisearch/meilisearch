@@ -151,7 +151,7 @@ impl<'doc> serde::de::Visitor<'doc> for RawVectorsVisitor {
                 }
                 Ok(Some("embeddings")) => {
                     let value: &RawValue = match map.next_value::<&RawValue>() {
-                        Ok(value) if value.get() == "null" => continue,
+                        Ok(value) if value.get() == RawValue::NULL.get() => continue,
                         Ok(value) => value,
                         Err(error) => {
                             return Ok(Err(RawVectorsError::DeserializeEmbeddings {
