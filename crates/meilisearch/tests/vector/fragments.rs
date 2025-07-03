@@ -112,8 +112,6 @@ pub async fn init_fragments_index() -> (Server<Owned>, String, crate::common::Va
 
 // TODO: document fragment replaced
 
-// TODO: not setting to null but ommitting settings
-
 #[actix_rt::test]
 async fn indexing_fragments() {
     let index = shared_index_for_fragments().await;
@@ -658,6 +656,96 @@ async fn modifying_fragments_modifies_vectors() {
       "offset": 0,
       "limit": 20,
       "total": 4
+    }
+    "#);
+}
+
+#[actix_rt::test]
+async fn ommitted_fragment_isnt_removed() {
+    let (server, uid, mut settings) = init_fragments_index().await;
+    let index = server.index(uid);
+
+    settings["embedders"]["rest"]["indexingFragments"]["basic"] = serde_json::Value::Null; // basic is removed
+    settings["embedders"]["rest"]["indexingFragments"].as_object_mut().unwrap().remove("withBreed"); // withBreed isn't specified
+
+    let (response, code) = index.update_settings(settings).await;
+    snapshot!(code, @"202 Accepted");
+    let value = server.wait_task(response.uid()).await.succeeded();
+    snapshot!(value, @r#"
+    {
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "[uuid]",
+      "status": "succeeded",
+      "type": "settingsUpdate",
+      "canceledBy": null,
+      "details": {
+        "embedders": {
+          "rest": {
+            "source": "rest",
+            "dimensions": 3,
+            "url": "[url]",
+            "indexingFragments": {
+              "basic": null
+            },
+            "searchFragments": {
+              "justBreed": {
+                "value": "It's a {{ media.breed }}"
+              },
+              "justName": {
+                "value": "{{ media.name }} is a dog"
+              },
+              "query": {
+                "value": "Some pre-prompt for query {{ q }}"
+              }
+            },
+            "request": "{{fragment}}",
+            "response": {
+              "data": "{{embedding}}"
+            }
+          }
+        }
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "#);
+
+    let (value, code) = index.settings().await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value["embedders"], {
+        ".rest.url" => "[url]",
+    }), @r#"
+    {
+      "rest": {
+        "source": "rest",
+        "dimensions": 3,
+        "url": "[url]",
+        "indexingFragments": {
+          "withBreed": {
+            "value": "{{ doc.name }} is a {{ doc.breed }}"
+          }
+        },
+        "searchFragments": {
+          "justBreed": {
+            "value": "It's a {{ media.breed }}"
+          },
+          "justName": {
+            "value": "{{ media.name }} is a dog"
+          },
+          "query": {
+            "value": "Some pre-prompt for query {{ q }}"
+          }
+        },
+        "request": "{{fragment}}",
+        "response": {
+          "data": "{{embedding}}"
+        },
+        "headers": {}
+      }
     }
     "#);
 }
