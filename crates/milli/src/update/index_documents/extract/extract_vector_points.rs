@@ -882,8 +882,7 @@ fn regenerate_all_fragments<'a>(
         let name = &new.name;
         let new = RequestFragmentExtractor::new(new, doc_alloc).ignore_errors();
 
-        let diff =
-            { new.extract(&obkv_document, &()) }.expect("ignoring errors so this cannot fail");
+        let diff = new.extract(&obkv_document, &()).expect("ignoring errors so this cannot fail");
         if let Some(value) = diff {
             fragment_diff.push((name.clone(), value));
         }
