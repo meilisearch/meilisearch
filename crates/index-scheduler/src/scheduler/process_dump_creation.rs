@@ -43,7 +43,16 @@ impl IndexScheduler {
 
         let rtxn = self.env.read_txn()?;
 
-        // 2. dump the tasks
+        // 2. dump the chat completion settings
+        // TODO should I skip the export if the chat completion has been disabled?
+        progress.update_progress(DumpCreationProgress::DumpTheChatCompletionSettings);
+        let mut dump_chat_completion_settings = dump.create_chat_completions_settings()?;
+        for result in self.chat_settings.iter(&rtxn)? {
+            let (name, chat_settings) = result?;
+            dump_chat_completion_settings.push_settings(name, &chat_settings)?;
+        }
+
+        // 3. dump the tasks
         progress.update_progress(DumpCreationProgress::DumpTheTasks);
         let mut dump_tasks = dump.create_tasks_queue()?;
 
@@ -81,7 +90,7 @@ impl IndexScheduler {
 
             let mut dump_content_file = dump_tasks.push_task(&t.into())?;
 
-            // 2.1. Dump the `content_file` associated with the task if there is one and the task is not finished yet.
+            // 3.1. Dump the `content_file` associated with the task if there is one and the task is not finished yet.
             if let Some(content_file) = content_file {
                 if self.scheduler.must_stop_processing.get() {
                     return Err(Error::AbortedTask);
@@ -105,7 +114,7 @@ impl IndexScheduler {
         }
         dump_tasks.flush()?;
 
-        // 3. dump the batches
+        // 4. dump the batches
         progress.update_progress(DumpCreationProgress::DumpTheBatches);
         let mut dump_batches = dump.create_batches_queue()?;
 
@@ -138,7 +147,7 @@ impl IndexScheduler {
         }
         dump_batches.flush()?;
 
-        // 4. Dump the indexes
+        // 5. Dump the indexes
         progress.update_progress(DumpCreationProgress::DumpTheIndexes);
         let nb_indexes = self.index_mapper.index_mapping.len(&rtxn)? as u32;
         let mut count = 0;
@@ -178,7 +187,7 @@ impl IndexScheduler {
             let documents = index
                 .all_documents(&rtxn)
                 .map_err(|e| Error::from_milli(e, Some(uid.to_string())))?;
-            // 4.1. Dump the documents
+            // 5.1. Dump the documents
             for ret in documents {
                 if self.scheduler.must_stop_processing.get() {
                     return Err(Error::AbortedTask);
@@ -240,7 +249,7 @@ impl IndexScheduler {
                 atomic.fetch_add(1, Ordering::Relaxed);
             }
 
-            // 4.2. Dump the settings
+            // 5.2. Dump the settings
             let settings = meilisearch_types::settings::settings(
                 index,
                 &rtxn,
@@ -251,7 +260,7 @@ impl IndexScheduler {
             Ok(())
         })?;
 
-        // 5. Dump experimental feature settings
+        // 6. Dump experimental feature settings
         progress.update_progress(DumpCreationProgress::DumpTheExperimentalFeatures);
         let features = self.features().runtime_features();
         dump.create_experimental_features(features)?;
