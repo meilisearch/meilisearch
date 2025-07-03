@@ -115,8 +115,7 @@ impl JsonTemplate {
         doc_alloc: &'doc Bump,
     ) -> Result<Value, Error> {
         let document = ParseableDocument::new(document, doc_alloc);
-        let v: Vec<u32> = vec![];
-        let context = crate::prompt::Context::new(&document, &v);
+        let context = crate::prompt::Context::without_fields(&document);
         self.render(&context)
     }
 
