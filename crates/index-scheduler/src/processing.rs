@@ -103,6 +103,7 @@ make_enum_progress! {
     pub enum DumpCreationProgress {
         StartTheDumpCreation,
         DumpTheApiKeys,
+        DumpTheChatCompletionSettings,
         DumpTheTasks,
         DumpTheBatches,
         DumpTheIndexes,

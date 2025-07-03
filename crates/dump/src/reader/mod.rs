@@ -116,6 +116,15 @@ impl DumpReader {
         }
     }
 
+    pub fn chat_completions_settings(
+        &mut self,
+    ) -> Result<Box<dyn Iterator<Item = Result<(String, v6::ChatCompletionSettings)>> + '_>> {
+        match self {
+            DumpReader::Current(current) => current.chat_completions_settings(),
+            DumpReader::Compat(_compat) => Ok(Box::new(std::iter::empty())),
+        }
+    }
+
     pub fn features(&self) -> Result<Option<v6::RuntimeTogglableFeatures>> {
         match self {
             DumpReader::Current(current) => Ok(current.features()),
