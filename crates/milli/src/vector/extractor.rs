@@ -12,19 +12,41 @@ use crate::update::new::document::Document;
 use crate::vector::RuntimeFragment;
 use crate::GlobalFieldsIdsMap;
 
+/// Trait for types that extract embedder inputs from a document.
+///
+/// An embedder input can then be sent to an embedder by using an [`super::session::EmbedSession`].
 pub trait Extractor<'doc> {
-    type DocumentMetadata;
+    /// The embedder input that is extracted from documents by this extractor.
+    ///
+    /// The inputs have to be comparable for equality so that diffing is possible.
     type Input: PartialEq;
+
+    /// The error that can happen while extracting from a document.
     type Error;
 
+    /// Metadata associated with a document.
+    type DocumentMetadata;
+
+    /// Extract the embedder input from a document and its metadata.
     fn extract<'a, D: Document<'a> + Debug>(
         &self,
         doc: D,
         meta: &Self::DocumentMetadata,
     ) -> Result<Option<Self::Input>, Self::Error>;
 
+    /// Unique `id` associated with this extractor.
+    ///
+    /// This will serve to decide where to store the vectors in the vector store.
+    /// The id should be stable for a given extractor.
     fn extractor_id(&self) -> u8;
 
+    /// The result of diffing the embedder inputs extracted from two versions of a document.
+    ///
+    /// # Parameters
+    ///
+    /// - `old`: old version of the document
+    /// - `new`: new version of the document
+    /// - `meta`: metadata associated to the document
     fn diff_documents<'a, OD: Document<'a> + Debug, ND: Document<'a> + Debug>(
         &self,
         old: OD,
@@ -39,6 +61,13 @@ pub trait Extractor<'doc> {
         to_diff(old_input, new_input)
     }
 
+    /// The result of diffing the embedder inputs extracted from a document by two versions of this extractor.
+    ///
+    /// # Parameters
+    ///
+    /// - `doc`: the document from which to extract the embedder inputs
+    /// - `meta`: metadata associated to the document
+    /// - `old`: If `Some`, the old version of this extractor. If `None`, this is equivalent to calling `ExtractorDiff::Added(self.extract(_))`.
     fn diff_settings<'a, D: Document<'a> + Debug>(
         &self,
         doc: D,
@@ -51,6 +80,7 @@ pub trait Extractor<'doc> {
         to_diff(old_input, new_input)
     }
 
+    /// Returns an extractor wrapping `self` and set to ignore all errors arising from extracting with this extractor.
     fn ignore_errors(self) -> IgnoreErrorExtractor<Self>
     where
         Self: Sized,
