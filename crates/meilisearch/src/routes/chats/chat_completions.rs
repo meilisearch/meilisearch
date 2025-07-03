@@ -549,33 +549,33 @@ async fn run_conversation<C: async_openai::config::Config>(
     global_tool_calls: &mut HashMap<u32, Call>,
     function_support: FunctionSupport,
 ) -> Result<ControlFlow<Option<FinishReason>, ()>, SendError<Event>> {
+    use DbChatCompletionSource::*;
+
     let mut finish_reason = None;
-    chat_completion.stream_options = Some(ChatCompletionStreamOptions { include_usage: true });
+    chat_completion.stream_options = match source {
+        OpenAi | AzureOpenAi => Some(ChatCompletionStreamOptions { include_usage: true }),
+        Mistral | VLlm => None,
+    };
+
     // safety: unwrap: can only happens if `stream` was set to `false`
     let mut response = client.chat().create_stream(chat_completion.clone()).await.unwrap();
     while let Some(result) = response.next().await {
         match result {
             Ok(resp) => {
-                let choice = match resp.choices.get(0) {
-                    Some(choice) => choice,
-                    None => {
-                        if let Some(usage) = resp.usage.as_ref() {
-                            for (r#type, value) in &[
-                                ("prompt", usage.prompt_tokens),
-                                ("completion", usage.completion_tokens),
-                                ("total", usage.total_tokens),
-                            ] {
-                                MEILISEARCH_CHAT_TOKENS_USAGE
-                                    .with_label_values(&[
-                                        workspace_uid,
-                                        &chat_completion.model,
-                                        r#type,
-                                    ])
-                                    .inc_by(*value as u64);
-                            }
-                        }
-                        break;
+                if let Some(usage) = resp.usage.as_ref() {
+                    for (r#type, value) in &[
+                        ("prompt", usage.prompt_tokens),
+                        ("completion", usage.completion_tokens),
+                        ("total", usage.total_tokens),
+                    ] {
+                        MEILISEARCH_CHAT_TOKENS_USAGE
+                            .with_label_values(&[workspace_uid, &chat_completion.model, r#type])
+                            .inc_by(*value as u64);
                     }
+                }
+                let choice = match resp.choices.first() {
+                    Some(choice) => choice,
+                    None => break,
                 };
                 finish_reason = choice.finish_reason;
 
