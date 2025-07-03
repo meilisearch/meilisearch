@@ -13,9 +13,9 @@ use async_openai::types::{
     ChatCompletionRequestDeveloperMessageContent, ChatCompletionRequestMessage,
     ChatCompletionRequestSystemMessage, ChatCompletionRequestSystemMessageContent,
     ChatCompletionRequestToolMessage, ChatCompletionRequestToolMessageContent,
-    ChatCompletionStreamResponseDelta, ChatCompletionToolArgs, ChatCompletionToolType,
-    CreateChatCompletionRequest, CreateChatCompletionStreamResponse, FinishReason, FunctionCall,
-    FunctionCallStream, FunctionObjectArgs,
+    ChatCompletionStreamOptions, ChatCompletionStreamResponseDelta, ChatCompletionToolArgs,
+    ChatCompletionToolType, CreateChatCompletionRequest, CreateChatCompletionStreamResponse,
+    FinishReason, FunctionCall, FunctionCallStream, FunctionObjectArgs,
 };
 use async_openai::Client;
 use bumpalo::Bump;
@@ -49,7 +49,8 @@ use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::{extract_token_from_request, GuardedData, Policy as _};
 use crate::metrics::{
-    MEILISEARCH_CHAT_INTERNAL_SEARCH_REQUESTS, MEILISEARCH_DEGRADED_SEARCH_REQUESTS,
+    MEILISEARCH_CHAT_INTERNAL_SEARCH_REQUESTS, MEILISEARCH_CHAT_TOKENS_USAGE,
+    MEILISEARCH_DEGRADED_SEARCH_REQUESTS,
 };
 use crate::routes::chats::utils::SseEventSender;
 use crate::routes::indexes::search::search_kind;
@@ -490,6 +491,7 @@ async fn streamed_chat(
 
     let (tx, rx) = tokio::sync::mpsc::channel(10);
     let tx = SseEventSender::new(tx);
+    let workspace_uid = workspace_uid.to_string();
     let _join_handle = Handle::current().spawn(async move {
         let client = Client::with_config(config.clone());
         let mut global_tool_calls = HashMap::<u32, Call>::new();
@@ -499,6 +501,7 @@ async fn streamed_chat(
             let output = run_conversation(
                 &index_scheduler,
                 &auth_ctrl,
+                &workspace_uid,
                 &search_queue,
                 &auth_token,
                 &client,
@@ -536,6 +539,7 @@ async fn run_conversation<C: async_openai::config::Config>(
         Data<IndexScheduler>,
     >,
     auth_ctrl: &web::Data<AuthController>,
+    workspace_uid: &str,
     search_queue: &web::Data<SearchQueue>,
     auth_token: &str,
     client: &Client<C>,
@@ -546,12 +550,33 @@ async fn run_conversation<C: async_openai::config::Config>(
     function_support: FunctionSupport,
 ) -> Result<ControlFlow<Option<FinishReason>, ()>, SendError<Event>> {
     let mut finish_reason = None;
+    chat_completion.stream_options = Some(ChatCompletionStreamOptions { include_usage: true });
     // safety: unwrap: can only happens if `stream` was set to `false`
     let mut response = client.chat().create_stream(chat_completion.clone()).await.unwrap();
     while let Some(result) = response.next().await {
         match result {
             Ok(resp) => {
-                let choice = &resp.choices[0];
+                let choice = match resp.choices.get(0) {
+                    Some(choice) => choice,
+                    None => {
+                        if let Some(usage) = resp.usage.as_ref() {
+                            for (r#type, value) in &[
+                                ("prompt", usage.prompt_tokens),
+                                ("completion", usage.completion_tokens),
+                                ("total", usage.total_tokens),
+                            ] {
+                                MEILISEARCH_CHAT_TOKENS_USAGE
+                                    .with_label_values(&[
+                                        workspace_uid,
+                                        &chat_completion.model,
+                                        r#type,
+                                    ])
+                                    .inc_by(*value as u64);
+                            }
+                        }
+                        break;
+                    }
+                };
                 finish_reason = choice.finish_reason;
 
                 let ChatCompletionStreamResponseDelta { ref tool_calls, .. } = &choice.delta;
