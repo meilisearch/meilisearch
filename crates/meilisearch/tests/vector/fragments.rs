@@ -750,3 +750,171 @@ async fn ommitted_fragment_isnt_removed() {
     "#);
 }
 
+#[actix_rt::test]
+async fn fragment_insertion() {
+    let (server, uid, mut settings) = init_fragments_index().await;
+    let index = server.index(uid);
+
+    settings["embedders"]["rest"]["indexingFragments"].as_object_mut().unwrap().insert(String::from("useless"), serde_json::json!({
+        "value": "This fragment is useless"
+    }));
+
+    let (response, code) = index.update_settings(settings).await;
+    snapshot!(code, @"202 Accepted");
+    let value = server.wait_task(response.uid()).await.succeeded();
+    snapshot!(value, @r#"
+    {
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "[uuid]",
+      "status": "succeeded",
+      "type": "settingsUpdate",
+      "canceledBy": null,
+      "details": {
+        "embedders": {
+          "rest": {
+            "source": "rest",
+            "dimensions": 3,
+            "url": "[url]",
+            "indexingFragments": {
+              "basic": {
+                "value": "{{ doc.name }} is a dog"
+              },
+              "useless": {
+                "value": "This fragment is useless"
+              },
+              "withBreed": {
+                "value": "{{ doc.name }} is a {{ doc.breed }}"
+              }
+            },
+            "searchFragments": {
+              "justBreed": {
+                "value": "It's a {{ media.breed }}"
+              },
+              "justName": {
+                "value": "{{ media.name }} is a dog"
+              },
+              "query": {
+                "value": "Some pre-prompt for query {{ q }}"
+              }
+            },
+            "request": "{{fragment}}",
+            "response": {
+              "data": "{{embedding}}"
+            }
+          }
+        }
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "#);
+
+    let (documents, code) = index
+        .get_all_documents(GetAllDocumentsOptions { retrieve_vectors: true, ..Default::default() })
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(documents), @r#"
+    {
+      "results": [
+        {
+          "id": 0,
+          "name": "kefir",
+          "_vectors": {
+            "rest": {
+              "embeddings": [
+                [
+                  0.5,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.0,
+                  0.0
+                ]
+              ],
+              "regenerate": true
+            }
+          }
+        },
+        {
+          "id": 1,
+          "name": "echo",
+          "_vectors": {
+            "rest": {
+              "embeddings": [
+                [
+                  1.0,
+                  1.0,
+                  1.0
+                ]
+              ],
+              "regenerate": false
+            }
+          }
+        },
+        {
+          "id": 2,
+          "name": "intel",
+          "breed": "labrador",
+          "_vectors": {
+            "rest": {
+              "embeddings": [
+                [
+                  1.0,
+                  1.0,
+                  0.0
+                ],
+                [
+                  1.0,
+                  1.0,
+                  -1.0
+                ],
+                [
+                  0.0,
+                  0.0,
+                  0.0
+                ]
+              ],
+              "regenerate": true
+            }
+          }
+        },
+        {
+          "id": 3,
+          "name": "dustin",
+          "breed": "bulldog",
+          "_vectors": {
+            "rest": {
+              "embeddings": [
+                [
+                  -0.5,
+                  0.5,
+                  0.0
+                ],
+                [
+                  -0.5,
+                  0.5,
+                  1.0
+                ],
+                [
+                  0.0,
+                  0.0,
+                  0.0
+                ]
+              ],
+              "regenerate": true
+            }
+          }
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 4
+    }
+    "#);
+}
