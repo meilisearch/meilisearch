@@ -1,12 +1,72 @@
 use std::collections::BTreeMap;
 
 use meili_snap::{json_string, snapshot};
+use tokio::sync::OnceCell;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
+use crate::common::index::Index;
+use crate::common::Shared;
 use crate::common::Value;
 use crate::json;
+use crate::vector::Server;
 use crate::vector::{get_server_vector, GetAllDocumentsOptions};
+
+async fn shared_index_for_fragments() -> Index<'static, Shared> {
+    static INDEX: OnceCell<(Server<Shared>, String)> = OnceCell::const_new();
+    let (server, uid) = INDEX
+        .get_or_init(|| async {
+            let (_mock, settings) = create_mock(
+                json!({
+                    "withBreed": {"value": "{{ doc.name }} is a {{ doc.breed }}"},
+                    "basic": {"value": "{{ doc.name }} is a dog"},
+                }),
+                json!({
+                    "justBreed": {"value": "It's a {{ media.breed }}"},
+                    "justName": {"value": "{{ media.name }} is a dog"},
+                    "query": {"value": "Some pre-prompt for query {{ q }}"},
+                }),
+            )
+            .await;
+
+            let server = Server::new().await;
+            let index = server.unique_index();
+
+            let (_response, code) = server.set_features(json!({"multimodal": true})).await;
+            snapshot!(code, @"200 OK");
+
+            // Configure the index to use our mock embedder
+            let (response, code) = index
+                .update_settings(json!({
+                    "embedders": {
+                        "rest": settings,
+                    },
+                }))
+                .await;
+            snapshot!(code, @"202 Accepted");
+
+            let task = server.wait_task(response.uid()).await;
+            snapshot!(task["status"], @r###""succeeded""###);
+
+            // Send documents
+            let documents = json!([
+                {"id": 0, "name": "kefir"},
+                {"id": 1, "name": "echo", "_vectors": { "rest": [1, 1, 1] }},
+                {"id": 2, "name": "intel", "breed": "labrador"},
+                {"id": 3, "name": "dustin", "breed": "bulldog"},
+            ]);
+            let (value, code) = index.add_documents(documents, None).await;
+            snapshot!(code, @"202 Accepted");
+
+            let task = index.wait_task(value.uid()).await;
+            snapshot!(task["status"], @r###""succeeded""###);
+
+            let uid = index.uid.clone();
+            (server.into_shared(), uid)
+        })
+        .await;
+    server._index(uid).to_shared()
+}
 
 async fn create_mock(indexing_fragments: Value, search_fragments: Value) -> (MockServer, Value) {
     let mock_server = MockServer::start().await;
@@ -33,9 +93,7 @@ async fn create_mock(indexing_fragments: Value, search_fragments: Value) -> (Moc
                     }
                 }
             }
-            ResponseTemplate::new(200).set_body_json(
-                json!({ "data": data })
-            )
+            ResponseTemplate::new(200).set_body_json(json!({ "data": data }))
         })
         .mount(&mock_server)
         .await;
@@ -57,52 +115,9 @@ async fn create_mock(indexing_fragments: Value, search_fragments: Value) -> (Moc
     (mock_server, embedder_settings)
 }
 
-
 #[actix_rt::test]
-async fn test_fragment_indexing() {
-    let (_mock, settings) = create_mock(
-        json!({
-            "withBreed": {"value": "{{ doc.name }} is a {{ doc.breed }}"},
-            "basic": {"value": "{{ doc.name }} is a dog"},
-        }),
-        json!({
-            "withBreed": {"value": "{{ doc.name }} is a {{ doc.breed }}"},
-            "basic": {"value": "{{ doc.name }} is a dog"},
-        })
-    ).await;
-    let server = get_server_vector().await;
-    let index = server.index("doggo");
-
-    // Enable the experimental feature
-    let (_response, code) = server.set_features(json!({"multimodal": true})).await;
-    snapshot!(code, @"200 OK");
-
-    // Configure the index to use our mock embedder
-    let (response, code) = index
-        .update_settings(json!({
-            "embedders": {
-                "rest": settings,
-            },
-        }))
-        .await;
-    snapshot!(code, @"202 Accepted");
-    
-    let task = server.wait_task(response.uid()).await;
-    println!("[task] {:?}", task);
-    snapshot!(task["status"], @r###""succeeded""###);
-
-    // Send documents
-    let documents = json!([
-        {"id": 0, "name": "kefir"},
-        {"id": 1, "name": "echo", "_vectors": { "rest": [1, 1, 1] }},
-        {"id": 2, "name": "intel", "breed": "labrador"},
-        {"id": 3, "name": "dustin", "breed": "bulldog"},
-    ]);
-    let (value, code) = index.add_documents(documents, None).await;
-    snapshot!(code, @"202 Accepted");
-    
-    let task = index.wait_task(value.uid()).await;
-    snapshot!(task["status"], @r###""succeeded""###);
+async fn indexing_fragments() {
+    let index = shared_index_for_fragments().await;
 
     // Make sure the documents have been indexed and their embeddings retrieved
     let (documents, code) = index
@@ -121,7 +136,7 @@ async fn test_fragment_indexing() {
                 [
                   0.5,
                   -0.5,
-                  2.0
+                  0.0
                 ]
               ],
               "regenerate": true
@@ -154,12 +169,12 @@ async fn test_fragment_indexing() {
                 [
                   1.0,
                   1.0,
-                  1.0
+                  0.0
                 ],
                 [
-                  -2.5,
-                  1.5,
-                  0.0
+                  1.0,
+                  1.0,
+                  -1.0
                 ]
               ],
               "regenerate": true
@@ -176,12 +191,12 @@ async fn test_fragment_indexing() {
                 [
                   -0.5,
                   0.5,
-                  2.5
+                  0.0
                 ],
                 [
-                  1.0,
-                  -2.0,
-                  2.5
+                  -0.5,
+                  0.5,
+                  1.0
                 ]
               ],
               "regenerate": true
@@ -197,52 +212,9 @@ async fn test_fragment_indexing() {
 }
 
 #[actix_rt::test]
-async fn test_search_fragments() {
-    let (_mock, settings) = create_mock(
-        json!({
-            "withBreed": {"value": "{{ doc.name }} is a {{ doc.breed }}"},
-            "basic": {"value": "{{ doc.name }} is a dog"},
-        }),
-        json!({
-            "justBreed": {"value": "It's a {{ media.breed }}"},
-            "justName": {"value": "{{ media.name }} is a dog"},
-            "query": {"value": "Some pre-prompt for query {{ q }}"},
-        })
-    ).await;
-    let server = get_server_vector().await;
-    let index = server.index("doggo");
+async fn search_with_vector() {
+    let index = shared_index_for_fragments().await;
 
-    // Enable the experimental feature
-    let (_response, code) = server.set_features(json!({"multimodal": true})).await;
-    snapshot!(code, @"200 OK");
-
-    // Configure the index to use our mock embedder
-    let (response, code) = index
-        .update_settings(json!({
-            "embedders": {
-                "rest": settings,
-            },
-        }))
-        .await;
-    snapshot!(code, @"202 Accepted");
-    
-    let task = server.wait_task(response.uid()).await;
-    snapshot!(task["status"], @r###""succeeded""###);
-
-    // Send documents
-    let documents = json!([
-        {"id": 0, "name": "kefir"},
-        {"id": 1, "name": "echo", "_vectors": { "rest": [1, 1, 1] }},
-        {"id": 2, "name": "intel", "breed": "labrador"},
-        {"id": 3, "name": "dustin", "breed": "bulldog"},
-    ]);
-    let (value, code) = index.add_documents(documents, None).await;
-    snapshot!(code, @"202 Accepted");
-    
-    let task = index.wait_task(value.uid()).await;
-    snapshot!(task["status"], @r###""succeeded""###);
-
-    // Perform a search with a provided vector
     let (value, code) = index.search_post(
         json!({"vector": [1.0, 1.0, 1.0], "hybrid": {"semanticRatio": 1.0, "embedder": "rest"}, "limit": 1}
     )).await;
@@ -263,15 +235,20 @@ async fn test_search_fragments() {
       "semanticHitCount": 1
     }
     "#);
+}
 
-    // Perform a search with some media
-    let (value, code) = index.search_post(
-        json!({
-            "media": { "breed": "labrador" },
-            "hybrid": {"semanticRatio": 1.0, "embedder": "rest"},
-            "limit": 1
-        }
-    )).await;
+#[actix_rt::test]
+async fn search_with_media() {
+    let index = shared_index_for_fragments().await;
+
+    let (value, code) = index
+        .search_post(json!({
+                "media": { "breed": "labrador" },
+                "hybrid": {"semanticRatio": 1.0, "embedder": "rest"},
+                "limit": 1
+            }
+        ))
+        .await;
     snapshot!(code, @"200 OK");
     snapshot!(value, @r#"
     {
@@ -290,15 +267,20 @@ async fn test_search_fragments() {
       "semanticHitCount": 1
     }
     "#);
+}
 
-    // Perform a search that matches multiple media
-    let (value, code) = index.search_post(
-        json!({
-            "media": { "name": "dustin", "breed": "labrador" },
-            "hybrid": {"semanticRatio": 1.0, "embedder": "rest"},
-            "limit": 1
-        }
-    )).await;
+#[actix_rt::test]
+async fn search_with_media_matching_multiple_fragments() {
+    let index = shared_index_for_fragments().await;
+
+    let (value, code) = index
+        .search_post(json!({
+                "media": { "name": "dustin", "breed": "labrador" },
+                "hybrid": {"semanticRatio": 1.0, "embedder": "rest"},
+                "limit": 1
+            }
+        ))
+        .await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
@@ -308,15 +290,20 @@ async fn test_search_fragments() {
       "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
     }
     "#);
+}
 
-    // Perform a search that matches no media
-    let (value, code) = index.search_post(
-        json!({
-            "media": { "ticker": "GME", "section": "portfolio" },
-            "hybrid": {"semanticRatio": 1.0, "embedder": "rest"},
-            "limit": 1
-        }
-    )).await;
+#[actix_rt::test]
+async fn search_with_media_matching_no_fragment() {
+    let index = shared_index_for_fragments().await;
+
+    let (value, code) = index
+        .search_post(json!({
+                "media": { "ticker": "GME", "section": "portfolio" },
+                "hybrid": {"semanticRatio": 1.0, "embedder": "rest"},
+                "limit": 1
+            }
+        ))
+        .await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
@@ -326,15 +313,20 @@ async fn test_search_fragments() {
       "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
     }
     "#);
+}
 
-    // Perform a search with a query media
-    let (value, code) = index.search_post(
-        json!({
-            "q": "bulldog",
-            "hybrid": {"semanticRatio": 1.0, "embedder": "rest"},
-            "limit": 1
-        }
-    )).await;
+#[actix_rt::test]
+async fn search_with_query() {
+    let index = shared_index_for_fragments().await;
+
+    let (value, code) = index
+        .search_post(json!({
+                "q": "bulldog",
+                "hybrid": {"semanticRatio": 1.0, "embedder": "rest"},
+                "limit": 1
+            }
+        ))
+        .await;
     snapshot!(code, @"200 OK");
     snapshot!(value, @r#"
     {
@@ -354,4 +346,3 @@ async fn test_search_fragments() {
     }
     "#);
 }
-
