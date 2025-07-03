@@ -406,84 +406,39 @@ async fn deleting_fragments_deletes_vectors() {
     "#);
 
     let (value, code) = index.settings().await;
-    snapshot!(value, @r###"
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value["embedders"], {
+        ".rest.url" => "[url]",
+    }), @r#"
     {
-      "displayedAttributes": [
-        "*"
-      ],
-      "searchableAttributes": [
-        "*"
-      ],
-      "filterableAttributes": [],
-      "sortableAttributes": [],
-      "rankingRules": [
-        "words",
-        "typo",
-        "proximity",
-        "attribute",
-        "sort",
-        "exactness"
-      ],
-      "stopWords": [],
-      "nonSeparatorTokens": [],
-      "separatorTokens": [],
-      "dictionary": [],
-      "synonyms": {},
-      "distinctAttribute": null,
-      "proximityPrecision": "byWord",
-      "typoTolerance": {
-        "enabled": true,
-        "minWordSizeForTypos": {
-          "oneTypo": 5,
-          "twoTypos": 9
+      "rest": {
+        "source": "rest",
+        "dimensions": 3,
+        "url": "[url]",
+        "indexingFragments": {
+          "withBreed": {
+            "value": "{{ doc.name }} is a {{ doc.breed }}"
+          }
         },
-        "disableOnWords": [],
-        "disableOnAttributes": [],
-        "disableOnNumbers": false
-      },
-      "faceting": {
-        "maxValuesPerFacet": 100,
-        "sortFacetValuesBy": {
-          "*": "alpha"
-        }
-      },
-      "pagination": {
-        "maxTotalHits": 1000
-      },
-      "embedders": {
-        "rest": {
-          "source": "rest",
-          "dimensions": 3,
-          "url": "http://127.0.0.1:53832",
-          "indexingFragments": {
-            "withBreed": {
-              "value": "{{ doc.name }} is a {{ doc.breed }}"
-            }
+        "searchFragments": {
+          "justBreed": {
+            "value": "It's a {{ media.breed }}"
           },
-          "searchFragments": {
-            "justBreed": {
-              "value": "It's a {{ media.breed }}"
-            },
-            "justName": {
-              "value": "{{ media.name }} is a dog"
-            },
-            "query": {
-              "value": "Some pre-prompt for query {{ q }}"
-            }
+          "justName": {
+            "value": "{{ media.name }} is a dog"
           },
-          "request": "{{fragment}}",
-          "response": {
-            "data": "{{embedding}}"
-          },
-          "headers": {}
-        }
-      },
-      "searchCutoffMs": null,
-      "localizedAttributes": null,
-      "facetSearch": true,
-      "prefixSearch": "indexingTime"
+          "query": {
+            "value": "Some pre-prompt for query {{ q }}"
+          }
+        },
+        "request": "{{fragment}}",
+        "response": {
+          "data": "{{embedding}}"
+        },
+        "headers": {}
+      }
     }
-    "###);
+    "#);
 
     let (documents, code) = index
         .get_all_documents(GetAllDocumentsOptions { retrieve_vectors: true, ..Default::default() })
