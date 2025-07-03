@@ -15,12 +15,14 @@ lazy_static! {
         "Meilisearch number of degraded search requests"
     ))
     .expect("Can't create a metric");
-    pub static ref MEILISEARCH_CHAT_INTERNAL_SEARCH_REQUESTS: IntGauge =
-        register_int_gauge!(opts!(
-            "meilisearch_chat_internal_search_requests",
+    pub static ref MEILISEARCH_CHAT_SEARCH_REQUESTS: IntCounterVec = register_int_counter_vec!(
+        opts!(
+            "meilisearch_chat_search_requests",
             "Meilisearch number of search requests performed by the chat route itself"
-        ))
-        .expect("Can't create a metric");
+        ),
+        &["type"]
+    )
+    .expect("Can't create a metric");
     pub static ref MEILISEARCH_CHAT_PROMPT_TOKENS_USAGE: IntCounterVec = register_int_counter_vec!(
         opts!("meilisearch_chat_prompt_tokens_usage", "Meilisearch Chat Prompt Tokens Usage"),
         &["workspace", "model"]
