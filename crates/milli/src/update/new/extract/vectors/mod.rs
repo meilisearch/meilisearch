@@ -478,7 +478,7 @@ impl<'doc> OnEmbed<'doc> for OnEmbeddingDocumentUpdates<'doc, '_> {
         error: crate::vector::hf::EmbedError,
         embedder_name: &'doc str,
         unused_vectors_distribution: &UnusedVectorsDistributionBump,
-        metadata: &[Metadata<'doc>],
+        metadata: BVec<'doc, Metadata<'doc>>,
     ) -> crate::Error {
         if let FaultSource::Bug = error.fault {
             crate::Error::InternalError(crate::InternalError::VectorEmbeddingError(error.into()))

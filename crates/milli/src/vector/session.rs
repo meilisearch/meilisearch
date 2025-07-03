@@ -28,7 +28,7 @@ pub trait OnEmbed<'doc> {
         error: EmbedError,
         embedder_name: &'doc str,
         unused_vectors_distribution: &Self::ErrorMetadata,
-        metadata: &[Metadata<'doc>],
+        metadata: BVec<'doc, Metadata<'doc>>,
     ) -> crate::Error;
 }
 
@@ -143,12 +143,19 @@ impl<'doc, C: OnEmbed<'doc>, I: Input> EmbedSession<'doc, C, I> {
                 Ok(())
             }
             Err(error) => {
+                // reset metadata and inputs, and send metadata to the error processing.
+                let doc_alloc = self.metadata.bump();
+                let metadata = std::mem::replace(
+                    &mut self.metadata,
+                    BVec::with_capacity_in(self.inputs.capacity(), doc_alloc),
+                );
+                self.inputs.clear();
                 return Err(self.on_embed.process_embedding_error(
                     error,
                     self.embedder_name,
                     unused_vectors_distribution,
-                    &self.metadata,
-                ))
+                    metadata,
+                ));
             }
         };
         self.inputs.clear();

@@ -1259,7 +1259,7 @@ impl<'doc> OnEmbed<'doc> for WriteGrenadOnEmbed<'_> {
         error: crate::vector::error::EmbedError,
         embedder_name: &'doc str,
         unused_vectors_distribution: &crate::vector::error::UnusedVectorsDistribution,
-        _metadata: &[crate::vector::session::Metadata<'doc>],
+        _metadata: bumpalo::collections::Vec<'doc, crate::vector::session::Metadata<'doc>>,
     ) -> crate::Error {
         if let FaultSource::Bug = error.fault {
             crate::Error::InternalError(crate::InternalError::VectorEmbeddingError(error.into()))
