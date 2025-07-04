@@ -370,7 +370,7 @@ async fn it_works() {
     ]);
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let task = index.wait_task(value.uid()).await;
+    let task = server.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
@@ -601,7 +601,7 @@ async fn tokenize_long_text() {
     ]);
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let task = index.wait_task(value.uid()).await;
+    let task = server.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
@@ -657,7 +657,7 @@ async fn bad_api_key() {
     ]);
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let task = index.wait_task(value.uid()).await;
+    let task = server.wait_task(value.uid()).await;
 
     snapshot!(task, @r###"
     {
@@ -805,7 +805,7 @@ async fn bad_model() {
     ]);
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let task = index.wait_task(value.uid()).await;
+    let task = server.wait_task(value.uid()).await;
 
     snapshot!(task, @r###"
     {
@@ -883,7 +883,7 @@ async fn bad_dimensions() {
     ]);
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let task = index.wait_task(value.uid()).await;
+    let task = server.wait_task(value.uid()).await;
 
     snapshot!(task, @r###"
     {
@@ -992,7 +992,7 @@ async fn smaller_dimensions() {
     ]);
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let task = index.wait_task(value.uid()).await;
+    let task = server.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
@@ -1224,7 +1224,7 @@ async fn small_embedding_model() {
     ]);
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let task = index.wait_task(value.uid()).await;
+    let task = server.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
@@ -1455,7 +1455,7 @@ async fn legacy_embedding_model() {
     ]);
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let task = index.wait_task(value.uid()).await;
+    let task = server.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
@@ -1687,7 +1687,7 @@ async fn it_still_works() {
     ]);
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let task = index.wait_task(value.uid()).await;
+    let task = server.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
@@ -1916,7 +1916,7 @@ async fn timeout() {
     ]);
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let task = index.wait_task(value.uid()).await;
+    let task = server.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
