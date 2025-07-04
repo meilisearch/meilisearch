@@ -105,8 +105,6 @@ pub async fn init_fragments_index() -> (Server<Owned>, String, crate::common::Va
     (server, uid, settings)
 }
 
-// TODO: document fragment replaced
-
 #[actix_rt::test]
 async fn experimental_feature_not_enabled() {
     let server = Server::new().await;
@@ -238,6 +236,119 @@ async fn indexing_fragments() {
     }
     "#);
 }
+
+#[actix_rt::test]
+async fn replace_document() {
+    let (server, uid, _settings) = init_fragments_index().await;
+    let index = server.index(uid);
+
+    let documents = json!([
+        { "id": 0, "name": "kefir", "breed": "sorry-I-forgot" },
+    ]);
+    let (value, code) = index.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+
+    let task = index.wait_task(value.uid()).await;
+    snapshot!(task["status"], @r###""succeeded""###);
+
+    // Make sure kefir now has 2 vectors
+    let (documents, code) = index
+        .get_all_documents(GetAllDocumentsOptions { retrieve_vectors: true, ..Default::default() })
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(documents, @r#"
+    {
+      "results": [
+        {
+          "id": 0,
+          "name": "kefir",
+          "breed": "sorry-I-forgot",
+          "_vectors": {
+            "rest": {
+              "embeddings": [
+                [
+                  0.5,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.5,
+                  -0.5,
+                  0.0
+                ]
+              ],
+              "regenerate": true
+            }
+          }
+        },
+        {
+          "id": 1,
+          "name": "echo",
+          "_vectors": {
+            "rest": {
+              "embeddings": [
+                [
+                  1.0,
+                  1.0,
+                  1.0
+                ]
+              ],
+              "regenerate": false
+            }
+          }
+        },
+        {
+          "id": 2,
+          "name": "intel",
+          "breed": "labrador",
+          "_vectors": {
+            "rest": {
+              "embeddings": [
+                [
+                  1.0,
+                  1.0,
+                  0.0
+                ],
+                [
+                  1.0,
+                  1.0,
+                  -1.0
+                ]
+              ],
+              "regenerate": true
+            }
+          }
+        },
+        {
+          "id": 3,
+          "name": "dustin",
+          "breed": "bulldog",
+          "_vectors": {
+            "rest": {
+              "embeddings": [
+                [
+                  -0.5,
+                  0.5,
+                  0.0
+                ],
+                [
+                  -0.5,
+                  0.5,
+                  1.0
+                ]
+              ],
+              "regenerate": true
+            }
+          }
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 4
+    }
+    "#);
+}
+
 
 #[actix_rt::test]
 async fn search_with_vector() {
