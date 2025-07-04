@@ -8,8 +8,8 @@ use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::features::{
     ChatCompletionPrompts as DbChatCompletionPrompts, ChatCompletionSettings,
     ChatCompletionSource as DbChatCompletionSource, DEFAULT_CHAT_SEARCH_DESCRIPTION_PROMPT,
-    DEFAULT_CHAT_SEARCH_INDEX_UID_PARAM_PROMPT, DEFAULT_CHAT_SEARCH_Q_PARAM_PROMPT,
-    DEFAULT_CHAT_SYSTEM_PROMPT,
+    DEFAULT_CHAT_SEARCH_FILTER_PARAM_PROMPT, DEFAULT_CHAT_SEARCH_INDEX_UID_PARAM_PROMPT,
+    DEFAULT_CHAT_SEARCH_Q_PARAM_PROMPT, DEFAULT_CHAT_SYSTEM_PROMPT,
 };
 use meilisearch_types::keys::actions;
 use meilisearch_types::milli::update::Setting;
@@ -83,6 +83,11 @@ async fn patch_settings(
                 Setting::Set(new_description) => new_description,
                 Setting::Reset => DEFAULT_CHAT_SEARCH_Q_PARAM_PROMPT.to_string(),
                 Setting::NotSet => old_settings.prompts.search_q_param,
+            },
+            search_filter_param: match new_prompts.search_filter_param {
+                Setting::Set(new_description) => new_description,
+                Setting::Reset => DEFAULT_CHAT_SEARCH_FILTER_PARAM_PROMPT.to_string(),
+                Setting::NotSet => old_settings.prompts.search_filter_param,
             },
             search_index_uid_param: match new_prompts.search_index_uid_param {
                 Setting::Set(new_description) => new_description,
@@ -251,6 +256,10 @@ pub struct ChatPrompts {
     #[deserr(default, error = DeserrJsonError<InvalidChatCompletionSearchQueryParamPrompt>)]
     #[schema(value_type = Option<String>, example = json!("This is query parameter..."))]
     pub search_q_param: Setting<String>,
+    #[serde(default)]
+    #[deserr(default, error = DeserrJsonError<InvalidChatCompletionSearchFilterParamPrompt>)]
+    #[schema(value_type = Option<String>, example = json!("This is filter parameter..."))]
+    pub search_filter_param: Setting<String>,
     #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidChatCompletionSearchIndexUidParamPrompt>)]
     #[schema(value_type = Option<String>, example = json!("This is index you want to search in..."))]
