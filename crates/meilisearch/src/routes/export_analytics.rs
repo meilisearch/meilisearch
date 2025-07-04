@@ -1,3 +1,5 @@
+use url::Url;
+
 use crate::analytics::Aggregate;
 use crate::routes::export::Export;
 
@@ -5,6 +7,7 @@ use crate::routes::export::Export;
 pub struct ExportAnalytics {
     total_received: usize,
     has_api_key: bool,
+    hosts: Vec<String>,
     sum_index_patterns: usize,
     sum_patterns_with_filter: usize,
     sum_patterns_with_override_settings: usize,
@@ -13,8 +16,10 @@ pub struct ExportAnalytics {
 
 impl ExportAnalytics {
     pub fn from_export(export: &Export) -> Self {
-        let Export { url: _, api_key, payload_size, indexes } = export;
+        let Export { url, api_key, payload_size, indexes } = export;
 
+        let url = Url::parse(url).ok();
+        let host = url.as_ref().and_then(Url::host_str);
         let has_api_key = api_key.is_some();
         let index_patterns_count = indexes.as_ref().map_or(0, |indexes| indexes.len());
         let patterns_with_filter_count = indexes.as_ref().map_or(0, |indexes| {
@@ -33,6 +38,7 @@ impl ExportAnalytics {
         Self {
             total_received: 1,
             has_api_key,
+            hosts: host.map(ToOwned::to_owned).map_or_else(Default::default, |h| vec![h]),
             sum_index_patterns: index_patterns_count,
             sum_patterns_with_filter: patterns_with_filter_count,
             sum_patterns_with_override_settings: patterns_with_override_settings_count,
@@ -49,6 +55,7 @@ impl Aggregate for ExportAnalytics {
     fn aggregate(mut self: Box<Self>, other: Box<Self>) -> Box<Self> {
         self.total_received += other.total_received;
         self.has_api_key |= other.has_api_key;
+        self.hosts.extend(other.hosts);
         self.sum_index_patterns += other.sum_index_patterns;
         self.sum_patterns_with_filter += other.sum_patterns_with_filter;
         self.sum_patterns_with_override_settings += other.sum_patterns_with_override_settings;
@@ -84,6 +91,7 @@ impl Aggregate for ExportAnalytics {
         serde_json::json!({
             "total_received": self.total_received,
             "has_api_key": self.has_api_key,
+            "hosts": self.hosts,
             "avg_index_patterns": avg_index_patterns,
             "avg_patterns_with_filter": avg_patterns_with_filter,
             "avg_patterns_with_override_settings": avg_patterns_with_override_settings,
