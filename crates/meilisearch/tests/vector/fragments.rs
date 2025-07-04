@@ -1375,7 +1375,54 @@ async fn remove_non_existant_embedder() {
     let (response, code) = index.update_settings(settings).await;
     snapshot!(code, @"202 Accepted");
     let task = server.wait_task(response.uid()).await;
-    snapshot!(task, @r"");
+    snapshot!(task, @r#"
+    {
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "[uuid]",
+      "status": "succeeded",
+      "type": "settingsUpdate",
+      "canceledBy": null,
+      "details": {
+        "embedders": {
+          "non-existant": null,
+          "rest": {
+            "source": "rest",
+            "dimensions": 3,
+            "url": "[url]",
+            "indexingFragments": {
+              "basic": {
+                "value": "{{ doc.name }} is a dog"
+              },
+              "withBreed": {
+                "value": "{{ doc.name }} is a {{ doc.breed }}"
+              }
+            },
+            "searchFragments": {
+              "justBreed": {
+                "value": "It's a {{ media.breed }}"
+              },
+              "justName": {
+                "value": "{{ media.name }} is a dog"
+              },
+              "query": {
+                "value": "Some pre-prompt for query {{ q }}"
+              }
+            },
+            "request": "{{fragment}}",
+            "response": {
+              "data": "{{embedding}}"
+            }
+          }
+        }
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "#);
 }
 
 #[actix_rt::test]
@@ -1412,7 +1459,26 @@ async fn double_remove_embedder() {
     let (response, code) = index.update_settings(settings.clone()).await;
     snapshot!(code, @"202 Accepted");
     let task = server.wait_task(response.uid()).await;
-    snapshot!(task, @r#""#);
+    snapshot!(task, @r#"
+    {
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "[uuid]",
+      "status": "succeeded",
+      "type": "settingsUpdate",
+      "canceledBy": null,
+      "details": {
+        "embedders": {
+          "rest": null
+        }
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "#);
 }
 
 #[actix_rt::test]
