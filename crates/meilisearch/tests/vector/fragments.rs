@@ -1812,3 +1812,116 @@ async fn both_fragments_and_document_template() {
     }
     "#);
 }
+
+#[actix_rt::test]
+async fn set_fragments_then_document_template() {
+    let (server, uid, settings) = init_fragments_index().await;
+    let index = server.index(uid);
+
+    let url = settings["embedders"]["rest"]["url"].as_str().unwrap();
+
+    let settings = json!({
+        "embedders": {
+            "rest": {
+                "source": "rest",
+                "url": url,
+                "dimensions": 3,
+                "request": "{{fragment}}",
+                "response": {
+                    "data": "{{embedding}}"
+                },
+                "documentTemplate": "{{ doc.name }} is a dog",
+            },
+        },
+    });
+
+    let (response, code) = index.update_settings(settings.clone()).await;
+    snapshot!(code, @"202 Accepted");
+    let task = server.wait_task(response.uid()).await;
+    snapshot!(task, @r"");
+
+    let (settings, code) = index.settings().await;
+    snapshot!(code, @"200 OK");
+    snapshot!(settings, @r#"
+    {
+      "displayedAttributes": [
+        "*"
+      ],
+      "searchableAttributes": [
+        "*"
+      ],
+      "filterableAttributes": [],
+      "sortableAttributes": [],
+      "rankingRules": [
+        "words",
+        "typo",
+        "proximity",
+        "attribute",
+        "sort",
+        "exactness"
+      ],
+      "stopWords": [],
+      "nonSeparatorTokens": [],
+      "separatorTokens": [],
+      "dictionary": [],
+      "synonyms": {},
+      "distinctAttribute": null,
+      "proximityPrecision": "byWord",
+      "typoTolerance": {
+        "enabled": true,
+        "minWordSizeForTypos": {
+          "oneTypo": 5,
+          "twoTypos": 9
+        },
+        "disableOnWords": [],
+        "disableOnAttributes": [],
+        "disableOnNumbers": false
+      },
+      "faceting": {
+        "maxValuesPerFacet": 100,
+        "sortFacetValuesBy": {
+          "*": "alpha"
+        }
+      },
+      "pagination": {
+        "maxTotalHits": 1000
+      },
+      "embedders": {
+        "rest": {
+          "source": "rest",
+          "dimensions": 3,
+          "url": "http://127.0.0.1:55578",
+          "indexingFragments": {
+            "basic": {
+              "value": "{{ doc.name }} is a dog"
+            },
+            "withBreed": {
+              "value": "{{ doc.name }} is a {{ doc.breed }}"
+            }
+          },
+          "searchFragments": {
+            "justBreed": {
+              "value": "It's a {{ media.breed }}"
+            },
+            "justName": {
+              "value": "{{ media.name }} is a dog"
+            },
+            "query": {
+              "value": "Some pre-prompt for query {{ q }}"
+            }
+          },
+          "request": "{{fragment}}",
+          "response": {
+            "data": "{{embedding}}"
+          },
+          "headers": {}
+        }
+      },
+      "searchCutoffMs": null,
+      "localizedAttributes": null,
+      "facetSearch": true,
+      "prefixSearch": "indexingTime"
+    }
+    "#);
+}
+
