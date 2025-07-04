@@ -30,7 +30,7 @@ pub async fn init_fragments_index() -> (Server<Owned>, String, crate::common::Va
         ("dustin", [-0.5, 0.5, 0.0]),
         ("bulldog", [0.0, 0.0, 1.0]),
         ("labrador", [0.0, 0.0, -1.0]),
-        ("{", [-9999.0, -9999.0, -9999.0]), // That wouldn't be nice
+        ("{{ doc.", [-9999.0, -9999.0, -9999.0]), // If a template didn't render
     ]
     .into_iter()
     .collect();
@@ -68,7 +68,7 @@ pub async fn init_fragments_index() -> (Server<Owned>, String, crate::common::Va
                 "dimensions": 3,
                 "request": "{{fragment}}",
                 "response": {
-                "data": "{{embedding}}"
+                    "data": "{{embedding}}"
                 },
                 "indexingFragments": {
                     "withBreed": {"value": "{{ doc.name }} is a {{ doc.breed }}"},
@@ -1362,7 +1362,115 @@ async fn multiple_embedders() {
         .get_all_documents(GetAllDocumentsOptions { retrieve_vectors: true, ..Default::default() })
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(documents), @r"");
+    snapshot!(json_string!(documents), @r#"
+    {
+      "results": [
+        {
+          "id": 0,
+          "name": "kefir",
+          "_vectors": {
+            "rest": {
+              "embeddings": [],
+              "regenerate": true
+            },
+            "rest3": {
+              "embeddings": [
+                [
+                  0.5,
+                  -0.5,
+                  0.0
+                ]
+              ],
+              "regenerate": true
+            }
+          }
+        },
+        {
+          "id": 1,
+          "name": "echo",
+          "_vectors": {
+            "rest": {
+              "embeddings": [
+                [
+                  1.0,
+                  1.0,
+                  1.0
+                ]
+              ],
+              "regenerate": false
+            },
+            "rest3": {
+              "embeddings": [
+                [
+                  0.0,
+                  0.0,
+                  0.0
+                ]
+              ],
+              "regenerate": true
+            }
+          }
+        },
+        {
+          "id": 2,
+          "name": "intel",
+          "breed": "labrador",
+          "_vectors": {
+            "rest": {
+              "embeddings": [
+                [
+                  1.0,
+                  1.0,
+                  -1.0
+                ]
+              ],
+              "regenerate": true
+            },
+            "rest3": {
+              "embeddings": [
+                [
+                  1.0,
+                  1.0,
+                  0.0
+                ]
+              ],
+              "regenerate": true
+            }
+          }
+        },
+        {
+          "id": 3,
+          "name": "dustin",
+          "breed": "bulldog",
+          "_vectors": {
+            "rest": {
+              "embeddings": [
+                [
+                  -0.5,
+                  0.5,
+                  1.0
+                ]
+              ],
+              "regenerate": true
+            },
+            "rest3": {
+              "embeddings": [
+                [
+                  -0.5,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "regenerate": true
+            }
+          }
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 4
+    }
+    "#);
 }
 
 #[actix_rt::test]
@@ -1660,6 +1768,47 @@ async fn complex_fragment() {
       "offset": 0,
       "limit": 20,
       "total": 4
+    }
+    "#);
+}
+
+#[actix_rt::test]
+async fn both_fragments_and_document_template() {
+    let server = Server::new().await;
+    let index = server.unique_index();
+
+    let (_response, code) = server.set_features(json!({"multimodal": true})).await;
+    snapshot!(code, @"200 OK");
+
+    let settings = json!({
+        "embedders": {
+            "rest": {
+                "source": "rest",
+                "url": "http://localhost:1337",
+                "dimensions": 3,
+                "request": "{{fragment}}",
+                "response": {
+                    "data": "{{embedding}}"
+                },
+                "indexingFragments": {
+                    "basic": {"value": "{{ doc.name }} is a dog"},
+                },
+                "searchFragments": {
+                    "justBreed": {"value": "It's a {{ media.breed }}"},
+                },
+                "documentTemplate": "{{ doc.name }} is a dog",
+            },
+        },
+    });
+
+    let (response, code) = index.update_settings(settings.clone()).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(response, @r#"
+    {
+      "message": "Error while generating embeddings: user error: cannot pass both fragments and a document template.\n  - Note: 1 fragments declared in `indexingFragments` and 1 fragments declared in `search_fragments_len`.\n  - Hint: remove the declared fragments or remove the `documentTemplate`",
+      "code": "vector_embedding_error",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
     }
     "#);
 }
