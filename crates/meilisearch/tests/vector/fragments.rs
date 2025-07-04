@@ -105,13 +105,49 @@ pub async fn init_fragments_index() -> (Server<Owned>, String, crate::common::Va
     (server, uid, settings)
 }
 
-// TODO: Test cannot pass both fragments and document
-
 // TODO: edit fragment
 
 // TODO: document fragment replaced
 
 // TODO: swapping fragments
+
+// TODO: consistency
+
+#[actix_rt::test]
+async fn experimental_feature_not_enabled() {
+    let server = Server::new().await;
+    let index = server.unique_index();
+
+    let settings = json!({
+        "embedders": {
+            "rest": {
+                "source": "rest",
+                "url": "http://localhost:1337",
+                "dimensions": 3,
+                "request": "{{fragment}}",
+                "response": {
+                    "data": "{{embedding}}"
+                },
+                "indexingFragments": {
+                    "basic": {"value": "{{ doc.name }} is a dog"},
+                },
+                "searchFragments": {
+                    "query": {"value": "Some pre-prompt for query {{ q }}"},
+                }
+            },
+        },
+    });
+    let (response, code) = index.update_settings(settings.clone()).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(response, @r#"
+    {
+      "message": "setting `indexingFragments` requires enabling the `multimodal` experimental feature. See https://github.com/orgs/meilisearch/discussions/846",
+      "code": "feature_not_enabled",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+    }
+    "#);
+}
 
 #[actix_rt::test]
 async fn indexing_fragments() {
