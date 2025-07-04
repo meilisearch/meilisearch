@@ -268,6 +268,30 @@ async fn search_with_media() {
 }
 
 #[actix_rt::test]
+async fn search_with_media_and_vector() {
+    let index = shared_index_for_fragments().await;
+
+    let (value, code) = index
+        .search_post(json!({
+                "vector": [1.0, 1.0, 1.0],
+                "media": { "breed": "labrador" },
+                "hybrid": {"semanticRatio": 1.0, "embedder": "rest"},
+                "limit": 1
+            }
+        ))
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r#"
+    {
+      "message": "Invalid request: both `media` and `vector` parameters are present.",
+      "code": "invalid_search_media_and_vector",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_media_and_vector"
+    }
+    "#);
+}
+
+#[actix_rt::test]
 async fn search_with_media_matching_multiple_fragments() {
     let index = shared_index_for_fragments().await;
 
