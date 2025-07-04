@@ -35,7 +35,7 @@ pub struct Server<State = Owned> {
 pub static TEST_TEMP_DIR: Lazy<TempDir> = Lazy::new(|| TempDir::new().unwrap());
 
 impl Server<Owned> {
-    fn into_shared(self) -> Server<Shared> {
+    pub fn into_shared(self) -> Server<Shared> {
         Server { service: self.service, _dir: self._dir, _marker: PhantomData }
     }
 
@@ -327,7 +327,7 @@ impl<State> Server<State> {
         self.service.get(url).await
     }
 
-    pub(super) fn _index(&self, uid: impl AsRef<str>) -> Index<'_> {
+    pub fn _index(&self, uid: impl AsRef<str>) -> Index<'_> {
         Index {
             uid: uid.as_ref().to_string(),
             service: &self.service,
