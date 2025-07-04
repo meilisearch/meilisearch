@@ -349,7 +349,6 @@ async fn replace_document() {
     "#);
 }
 
-
 #[actix_rt::test]
 async fn search_with_vector() {
     let index = shared_index_for_fragments().await;
@@ -891,7 +890,7 @@ async fn swapping_fragments() {
         .get_all_documents(GetAllDocumentsOptions { retrieve_vectors: true, ..Default::default() })
         .await;
     snapshot!(code, @"200 OK");
-        snapshot!(documents, @r#"
+    snapshot!(documents, @r#"
         {
           "results": [
             {
@@ -1795,7 +1794,10 @@ async fn remove_non_existant_embedder() {
     let (server, uid, mut settings) = init_fragments_index().await;
     let index = server.index(uid);
 
-    settings["embedders"].as_object_mut().unwrap().insert(String::from("non-existant"), serde_json::Value::Null);
+    settings["embedders"]
+        .as_object_mut()
+        .unwrap()
+        .insert(String::from("non-existant"), serde_json::Value::Null);
 
     let (response, code) = index.update_settings(settings).await;
     snapshot!(code, @"202 Accepted");
@@ -1855,7 +1857,10 @@ async fn double_remove_embedder() {
     let (server, uid, mut settings) = init_fragments_index().await;
     let index = server.index(uid);
 
-    settings["embedders"].as_object_mut().unwrap().insert(String::from("rest"), serde_json::Value::Null);
+    settings["embedders"]
+        .as_object_mut()
+        .unwrap()
+        .insert(String::from("rest"), serde_json::Value::Null);
 
     let (response, code) = index.update_settings(settings.clone()).await;
     snapshot!(code, @"202 Accepted");
@@ -2241,4 +2246,3 @@ async fn set_fragments_then_document_template() {
     }
     "#);
 }
-
