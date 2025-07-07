@@ -24,6 +24,57 @@ trait UpgradeIndex {
     fn target_version(&self) -> (u32, u32, u32);
 }
 
+const UPGRADE_FUNCTIONS: &[&dyn UpgradeIndex] = &[
+    &V1_12_To_V1_12_3 {},
+    &V1_12_3_To_V1_13_0 {},
+    &V1_13_0_To_V1_13_1 {},
+    &V1_13_1_To_Latest_V1_13 {},
+    &Latest_V1_13_To_Latest_V1_14 {},
+    &Latest_V1_14_To_Latest_V1_15 {},
+    // This is the last upgrade function, it will be called when the index is up to date.
+    // any other upgrade function should be added before this one.
+    &ToCurrentNoOp {},
+];
+
+/// Causes a compile-time error if the argument is not in range of `0..UPGRADE_FUNCTIONS.len()`
+macro_rules! function_index {
+    ($start:expr) => {{
+        const _CHECK_INDEX: () = {
+            if $start >= $crate::update::upgrade::UPGRADE_FUNCTIONS.len() {
+                panic!("upgrade functions out of range")
+            }
+        };
+
+        $start
+    }};
+}
+
+const fn start(from: (u32, u32, u32)) -> Option<usize> {
+    let start = match from {
+        (1, 12, 0..=2) => function_index!(0),
+        (1, 12, 3..) => function_index!(1),
+        (1, 13, 0) => function_index!(2),
+        (1, 13, _) => function_index!(4),
+        (1, 14, _) => function_index!(5),
+        // We must handle the current version in the match because in case of a failure some index may have been upgraded but not other.
+        (1, 15, _) => function_index!(6),
+        // We deliberately don't add a placeholder with (VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH) here to force manually
+        // considering dumpless upgrade.
+        (_major, _minor, _patch) => return None,
+    };
+
+    Some(start)
+}
+
+/// Causes a compile-time error if the latest package cannot be upgraded.
+///
+/// This serves as a reminder to consider the proper dumpless upgrade implementation when changing the package version.
+const _CHECK_PACKAGE_CAN_UPGRADE: () = {
+    if start((VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH)).is_none() {
+        panic!("cannot upgrade from latest package version")
+    }
+};
+
 /// Return true if the cached stats of the index must be regenerated
 pub fn upgrade<MSP>(
     wtxn: &mut RwTxn,
@@ -36,33 +87,12 @@ where
     MSP: Fn() -> bool + Sync,
 {
     let from = index.get_version(wtxn)?.unwrap_or(db_version);
-    let upgrade_functions: &[&dyn UpgradeIndex] = &[
-        &V1_12_To_V1_12_3 {},
-        &V1_12_3_To_V1_13_0 {},
-        &V1_13_0_To_V1_13_1 {},
-        &V1_13_1_To_Latest_V1_13 {},
-        &Latest_V1_13_To_Latest_V1_14 {},
-        &Latest_V1_14_To_Latest_V1_15 {},
-        // This is the last upgrade function, it will be called when the index is up to date.
-        // any other upgrade function should be added before this one.
-        &ToCurrentNoOp {},
-    ];
 
-    let start = match from {
-        (1, 12, 0..=2) => 0,
-        (1, 12, 3..) => 1,
-        (1, 13, 0) => 2,
-        (1, 13, _) => 4,
-        (1, 14, _) => 5,
-        // We must handle the current version in the match because in case of a failure some index may have been upgraded but not other.
-        (1, 15, _) => 6,
-        (major, minor, patch) => {
-            return Err(InternalError::CannotUpgradeToVersion(major, minor, patch).into())
-        }
-    };
+    let start =
+        start(from).ok_or_else(|| InternalError::CannotUpgradeToVersion(from.0, from.1, from.2))?;
 
     enum UpgradeVersion {}
-    let upgrade_path = &upgrade_functions[start..];
+    let upgrade_path = &UPGRADE_FUNCTIONS[start..];
 
     let mut current_version = from;
     let mut regenerate_stats = false;
