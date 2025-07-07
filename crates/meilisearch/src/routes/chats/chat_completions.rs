@@ -182,7 +182,7 @@ fn setup_search_tool(
         let index_description = chat_config.description;
         let _ = writeln!(&mut function_description, "\n\n - {name}: {index_description}\n");
         index_uids.push(name.to_string());
-        let facet_distributions = format_facet_distributions(&index, &rtxn, 10).unwrap(); // TODO do not unwrap
+        let facet_distributions = format_facet_distributions(index, &rtxn, 10).unwrap(); // TODO do not unwrap
         let _ = writeln!(&mut filter_description, "\n## Facet distributions of the {name} index");
         let _ = writeln!(&mut filter_description, "{facet_distributions}");
 
@@ -315,7 +315,7 @@ async fn process_search_request(
     let output = match output? {
         Ok((rtxn, Ok(search_results))) => Ok((rtxn, search_results)),
         Ok((_rtxn, Err(error))) => return Ok((index, Vec::new(), error.to_string())),
-        Err(err) => Err(ResponseError::from(err)),
+        Err(err) => Err(err),
     };
     let mut documents = Vec::new();
     if let Ok((ref rtxn, ref search_result)) = output {
@@ -843,15 +843,15 @@ fn format_facet_distributions(
     rtxn: &RoTxn,
     max_values_per_facet: usize,
 ) -> meilisearch_types::milli::Result<String> {
-    let universe = index.documents_ids(&rtxn)?;
-    let rules = index.filterable_attributes_rules(&rtxn)?;
-    let fields_ids_map = index.fields_ids_map(&rtxn)?;
+    let universe = index.documents_ids(rtxn)?;
+    let rules = index.filterable_attributes_rules(rtxn)?;
+    let fields_ids_map = index.fields_ids_map(rtxn)?;
     let filterable_attributes = fields_ids_map
         .names()
         .filter(|name| rules.iter().any(|rule| rule.match_str(name).matches()))
         .map(|name| (name, OrderBy::Count));
     let facets_distribution = index
-        .facets_distribution(&rtxn)
+        .facets_distribution(rtxn)
         .max_values_per_facet(max_values_per_facet)
         .candidates(universe)
         .facets(filterable_attributes)
