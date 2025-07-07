@@ -445,7 +445,7 @@ checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
 [[package]]
 name = "arroy"
 version = "0.7.0"
-source = "git+https://github.com/meilisearch/arroy.git?rev=a63f0979b216dde10d50fdfa4fadcb2b1dea73c7#a63f0979b216dde10d50fdfa4fadcb2b1dea73c7"
+source = "git+https://github.com/meilisearch/arroy.git?rev=1a21e5c0cbe3e106b05d834076a5b727cf46bca1#1a21e5c0cbe3e106b05d834076a5b727cf46bca1"
 dependencies = [
  "bytemuck",
  "byteorder",
