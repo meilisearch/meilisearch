@@ -51,7 +51,7 @@ pub struct Search<'a> {
     terms_matching_strategy: TermsMatchingStrategy,
     scoring_strategy: ScoringStrategy,
     words_limit: usize,
-    exhaustive_number_hits: bool,
+    is_exhaustive_pagination: bool,
     max_total_hits: Option<usize>,
     rtxn: &'a heed::RoTxn<'a>,
     index: &'a Index,
@@ -74,7 +74,7 @@ impl<'a> Search<'a> {
             geo_param: new::GeoSortParameter::default(),
             terms_matching_strategy: TermsMatchingStrategy::default(),
             scoring_strategy: Default::default(),
-            exhaustive_number_hits: false,
+            is_exhaustive_pagination: false,
             max_total_hits: None,
             words_limit: 10,
             rtxn,
@@ -162,8 +162,8 @@ impl<'a> Search<'a> {
 
     /// Forces the search to exhaustively compute the number of candidates,
     /// this will increase the search time but allows finite pagination.
-    pub fn exhaustive_number_hits(&mut self, exhaustive_number_hits: bool) -> &mut Search<'a> {
-        self.exhaustive_number_hits = exhaustive_number_hits;
+    pub fn is_exhaustive_pagination(&mut self, is_exhaustive_pagination: bool) -> &mut Search<'a> {
+        self.is_exhaustive_pagination = is_exhaustive_pagination;
         self
     }
 
@@ -231,6 +231,13 @@ impl<'a> Search<'a> {
             }
         }
 
+        let mut search_k_div_trees = None;
+        if self.is_exhaustive_pagination {
+            if let Some(max_total_hits) = self.max_total_hits {
+                search_k_div_trees = Some(max_total_hits);
+            }
+        }
+
         let universe = filtered_universe(ctx.index, ctx.txn, &self.filter)?;
         let PartialSearchResult {
             located_query_terms,
@@ -250,7 +257,7 @@ impl<'a> Search<'a> {
                 &mut ctx,
                 vector,
                 self.scoring_strategy,
-                self.exhaustive_number_hits,
+                self.is_exhaustive_pagination,
                 self.max_total_hits,
                 universe,
                 &self.sort_criteria,
@@ -261,6 +268,7 @@ impl<'a> Search<'a> {
                 embedder_name,
                 embedder,
                 *quantized,
+                search_k_div_trees,
                 self.time_budget.clone(),
                 self.ranking_score_threshold,
             )?,
@@ -269,7 +277,7 @@ impl<'a> Search<'a> {
                 self.query.as_deref(),
                 self.terms_matching_strategy,
                 self.scoring_strategy,
-                self.exhaustive_number_hits,
+                self.is_exhaustive_pagination,
                 self.max_total_hits,
                 universe,
                 &self.sort_criteria,
@@ -323,7 +331,7 @@ impl fmt::Debug for Search<'_> {
             terms_matching_strategy,
             scoring_strategy,
             words_limit,
-            exhaustive_number_hits,
+            is_exhaustive_pagination,
             max_total_hits,
             rtxn: _,
             index: _,
@@ -343,7 +351,7 @@ impl fmt::Debug for Search<'_> {
             .field("searchable_attributes", searchable_attributes)
             .field("terms_matching_strategy", terms_matching_strategy)
             .field("scoring_strategy", scoring_strategy)
-            .field("exhaustive_number_hits", exhaustive_number_hits)
+            .field("is_exhaustive_pagination", is_exhaustive_pagination)
             .field("max_total_hits", max_total_hits)
             .field("words_limit", words_limit)
             .field(

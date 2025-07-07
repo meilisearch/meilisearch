@@ -209,7 +209,7 @@ impl Search<'_> {
             terms_matching_strategy: self.terms_matching_strategy,
             scoring_strategy: ScoringStrategy::Detailed,
             words_limit: self.words_limit,
-            exhaustive_number_hits: self.exhaustive_number_hits,
+            is_exhaustive_pagination: self.is_exhaustive_pagination,
             max_total_hits: self.max_total_hits,
             rtxn: self.rtxn,
             index: self.index,

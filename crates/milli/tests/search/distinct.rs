@@ -29,7 +29,7 @@ macro_rules! test_distinct {
             search.query(search::TEST_QUERY);
             search.limit($limit);
             search.offset($offset);
-            search.exhaustive_number_hits($exhaustive);
+            search.is_exhaustive_pagination($exhaustive);
 
             search.terms_matching_strategy(TermsMatchingStrategy::default());
 
