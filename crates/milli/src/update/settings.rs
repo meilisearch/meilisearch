@@ -101,6 +101,10 @@ impl<T> Setting<T> {
         matches!(self, Self::NotSet)
     }
 
+    pub const fn is_reset(&self) -> bool {
+        matches!(self, Self::Reset)
+    }
+
     /// If `Self` is `Reset`, then map self to `Set` with the provided `val`.
     pub fn or_reset(self, val: T) -> Self {
         match self {
@@ -1213,6 +1217,10 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                 // new config
                 EitherOrBoth::Right((name, mut setting)) => {
                     tracing::debug!(embedder = name, "new embedder");
+                    // if we are asked to reset an embedder that doesn't exist, just ignore it
+                    if setting.is_reset() {
+                        continue;
+                    }
                     // apply the default source in case the source was not set so that it gets validated
                     crate::vector::settings::EmbeddingSettings::apply_default_source(&mut setting);
                     crate::vector::settings::EmbeddingSettings::apply_default_openai_model(
