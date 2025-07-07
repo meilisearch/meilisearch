@@ -12,7 +12,7 @@ use self::new::{execute_vector_search, PartialSearchResult, VectorStoreStats};
 use crate::filterable_attributes_rules::{filtered_matching_patterns, matching_features};
 use crate::index::MatchingStrategy;
 use crate::score_details::{ScoreDetails, ScoringStrategy};
-use crate::vector::Embedder;
+use crate::vector::{Embedder, Embedding};
 use crate::{
     execute_search, filtered_universe, AscDesc, DefaultSearchLogger, DocumentId, Error, Index,
     Result, SearchContext, TimeBudget, UserError,
@@ -32,6 +32,7 @@ pub mod similar;
 #[derive(Debug, Clone)]
 pub struct SemanticSearch {
     vector: Option<Vec<f32>>,
+    media: Option<serde_json::Value>,
     embedder_name: String,
     embedder: Arc<Embedder>,
     quantized: bool,
@@ -95,9 +96,10 @@ impl<'a> Search<'a> {
         embedder_name: String,
         embedder: Arc<Embedder>,
         quantized: bool,
-        vector: Option<Vec<f32>>,
+        vector: Option<Embedding>,
+        media: Option<serde_json::Value>,
     ) -> &mut Search<'a> {
-        self.semantic = Some(SemanticSearch { embedder_name, embedder, quantized, vector });
+        self.semantic = Some(SemanticSearch { embedder_name, embedder, quantized, vector, media });
         self
     }
 
@@ -238,26 +240,30 @@ impl<'a> Search<'a> {
             degraded,
             used_negative_operator,
         } = match self.semantic.as_ref() {
-            Some(SemanticSearch { vector: Some(vector), embedder_name, embedder, quantized }) => {
-                execute_vector_search(
-                    &mut ctx,
-                    vector,
-                    self.scoring_strategy,
-                    self.exhaustive_number_hits,
-                    self.max_total_hits,
-                    universe,
-                    &self.sort_criteria,
-                    &self.distinct,
-                    self.geo_param,
-                    self.offset,
-                    self.limit,
-                    embedder_name,
-                    embedder,
-                    *quantized,
-                    self.time_budget.clone(),
-                    self.ranking_score_threshold,
-                )?
-            }
+            Some(SemanticSearch {
+                vector: Some(vector),
+                embedder_name,
+                embedder,
+                quantized,
+                media: _,
+            }) => execute_vector_search(
+                &mut ctx,
+                vector,
+                self.scoring_strategy,
+                self.exhaustive_number_hits,
+                self.max_total_hits,
+                universe,
+                &self.sort_criteria,
+                &self.distinct,
+                self.geo_param,
+                self.offset,
+                self.limit,
+                embedder_name,
+                embedder,
+                *quantized,
+                self.time_budget.clone(),
+                self.ranking_score_threshold,
+            )?,
             _ => execute_search(
                 &mut ctx,
                 self.query.as_deref(),

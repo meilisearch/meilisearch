@@ -12,6 +12,7 @@ use std::sync::Arc;
 
 use crossbeam_channel::{Receiver, Sender};
 use enrich::enrich_documents_batch;
+pub use extract::request_threads;
 use grenad::{Merger, MergerBuilder};
 use hashbrown::HashMap;
 use heed::types::Str;
@@ -37,7 +38,8 @@ pub use crate::update::index_documents::helpers::CursorClonableMmap;
 use crate::update::{
     IndexerConfig, UpdateIndexingStep, WordPrefixDocids, WordPrefixIntegerDocids, WordsPrefixesFst,
 };
-use crate::vector::{ArroyWrapper, EmbeddingConfigs};
+use crate::vector::db::EmbedderInfo;
+use crate::vector::{ArroyWrapper, RuntimeEmbedders};
 use crate::{CboRoaringBitmapCodec, Index, Result, UserError};
 
 static MERGED_DATABASE_COUNT: usize = 7;
@@ -80,7 +82,7 @@ pub struct IndexDocuments<'t, 'i, 'a, FP, FA> {
     should_abort: FA,
     added_documents: u64,
     deleted_documents: u64,
-    embedders: EmbeddingConfigs,
+    embedders: RuntimeEmbedders,
     embedder_stats: &'t Arc<EmbedderStats>,
 }
 
@@ -171,7 +173,7 @@ where
         Ok((self, Ok(indexed_documents)))
     }
 
-    pub fn with_embedders(mut self, embedders: EmbeddingConfigs) -> Self {
+    pub fn with_embedders(mut self, embedders: RuntimeEmbedders) -> Self {
         self.embedders = embedders;
         self
     }
@@ -225,7 +227,13 @@ where
         settings_diff.new.recompute_searchables(self.wtxn, self.index)?;
 
         let settings_diff = Arc::new(settings_diff);
-        let embedders_configs = Arc::new(self.index.embedding_configs(self.wtxn)?);
+        let embedder_infos: heed::Result<Vec<(String, EmbedderInfo)>> = self
+            .index
+            .embedding_configs()
+            .iter_embedder_info(self.wtxn)?
+            .map(|res| res.map(|(name, info)| (name.to_owned(), info)))
+            .collect();
+        let embedder_infos = Arc::new(embedder_infos?);
 
         let possible_embedding_mistakes =
             crate::vector::error::PossibleEmbeddingMistakes::new(&field_distribution);
@@ -327,9 +335,9 @@ where
                             pool_params,
                             lmdb_writer_sx.clone(),
                             primary_key_id,
-                            embedders_configs.clone(),
                             settings_diff_cloned,
                             max_positions_per_attributes,
+                            embedder_infos,
                             Arc::new(possible_embedding_mistakes),
                             &embedder_stats
                         )
@@ -429,21 +437,21 @@ where
                                 TypedChunk::VectorPoints {
                                     expected_dimension,
                                     remove_vectors,
-                                    embeddings,
+                                    embeddings_from_prompts,
+                                    embeddings_from_fragments,
                                     manual_vectors,
                                     embedder_name,
-                                    add_to_user_provided,
-                                    remove_from_user_provided,
+                                    embedding_status_delta,
                                 } => {
                                     dimension.insert(embedder_name.clone(), expected_dimension);
                                     TypedChunk::VectorPoints {
                                         remove_vectors,
-                                        embeddings,
+                                        embeddings_from_prompts,
+                                        embeddings_from_fragments,
                                         expected_dimension,
                                         manual_vectors,
                                         embedder_name,
-                                        add_to_user_provided,
-                                        remove_from_user_provided,
+                                        embedding_status_delta,
                                     }
                                 }
                                 otherwise => otherwise,
@@ -479,7 +487,7 @@ where
         // we should insert it in `dimension`
         for (name, action) in settings_diff.embedding_config_updates.iter() {
             if action.is_being_quantized && !dimension.contains_key(name.as_str()) {
-                let index = self.index.embedder_category_id.get(self.wtxn, name)?.ok_or(
+                let index = self.index.embedding_configs().embedder_id(self.wtxn, name)?.ok_or(
                     InternalError::DatabaseMissingEntry {
                         db_name: "embedder_category_id",
                         key: None,
@@ -487,7 +495,9 @@ where
                 )?;
                 let reader =
                     ArroyWrapper::new(self.index.vector_arroy, index, action.was_quantized);
-                let dim = reader.dimensions(self.wtxn)?;
+                let Some(dim) = reader.dimensions(self.wtxn)? else {
+                    continue;
+                };
                 dimension.insert(name.to_string(), dim);
             }
         }
@@ -497,12 +507,19 @@ where
             let vector_arroy = self.index.vector_arroy;
             let cancel = &self.should_abort;
 
-            let embedder_index = self.index.embedder_category_id.get(wtxn, &embedder_name)?.ok_or(
-                InternalError::DatabaseMissingEntry { db_name: "embedder_category_id", key: None },
-            )?;
+            let embedder_index =
+                self.index.embedding_configs().embedder_id(wtxn, &embedder_name)?.ok_or(
+                    InternalError::DatabaseMissingEntry {
+                        db_name: "embedder_category_id",
+                        key: None,
+                    },
+                )?;
             let embedder_config = settings_diff.embedding_config_updates.get(&embedder_name);
-            let was_quantized =
-                settings_diff.old.embedding_configs.get(&embedder_name).is_some_and(|conf| conf.2);
+            let was_quantized = settings_diff
+                .old
+                .runtime_embedders
+                .get(&embedder_name)
+                .is_some_and(|conf| conf.is_quantized);
             let is_quantizing = embedder_config.is_some_and(|action| action.is_being_quantized);
 
             pool.install(|| {
@@ -772,11 +789,11 @@ mod tests {
     use crate::constants::RESERVED_GEO_FIELD_NAME;
     use crate::documents::mmap_from_objects;
     use crate::index::tests::TempIndex;
-    use crate::index::IndexEmbeddingConfig;
     use crate::progress::Progress;
     use crate::search::TermsMatchingStrategy;
     use crate::update::new::indexer;
     use crate::update::Setting;
+    use crate::vector::db::IndexEmbeddingConfig;
     use crate::{all_obkv_to_json, db_snap, Filter, FilterableAttributesRule, Search, UserError};
 
     #[test]
@@ -2027,7 +2044,7 @@ mod tests {
             new_fields_ids_map,
             primary_key,
             &document_changes,
-            EmbeddingConfigs::default(),
+            RuntimeEmbedders::default(),
             &|| false,
             &Progress::default(),
             &Default::default(),
@@ -2115,7 +2132,7 @@ mod tests {
             new_fields_ids_map,
             primary_key,
             &document_changes,
-            EmbeddingConfigs::default(),
+            RuntimeEmbedders::default(),
             &|| false,
             &Progress::default(),
             &Default::default(),
@@ -2276,7 +2293,7 @@ mod tests {
         ]);
 
         let indexer_alloc = Bump::new();
-        let embedders = EmbeddingConfigs::default();
+        let embedders = RuntimeEmbedders::default();
         let mut indexer = indexer::DocumentOperation::new();
         indexer.replace_documents(&documents).unwrap();
         indexer.delete_documents(&["2"]);
@@ -2342,7 +2359,7 @@ mod tests {
         indexer.delete_documents(&["1", "2"]);
 
         let indexer_alloc = Bump::new();
-        let embedders = EmbeddingConfigs::default();
+        let embedders = RuntimeEmbedders::default();
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(
                 &indexer_alloc,
@@ -2393,7 +2410,7 @@ mod tests {
             { "id": 3, "name": "jean", "age": 25 },
         ]);
         let indexer_alloc = Bump::new();
-        let embedders = EmbeddingConfigs::default();
+        let embedders = RuntimeEmbedders::default();
         let mut indexer = indexer::DocumentOperation::new();
         indexer.update_documents(&documents).unwrap();
 
@@ -2445,7 +2462,7 @@ mod tests {
             { "id": 3, "legs": 4 },
         ]);
         let indexer_alloc = Bump::new();
-        let embedders = EmbeddingConfigs::default();
+        let embedders = RuntimeEmbedders::default();
         let mut indexer = indexer::DocumentOperation::new();
         indexer.update_documents(&documents).unwrap();
         indexer.delete_documents(&["1", "2"]);
@@ -2495,7 +2512,7 @@ mod tests {
         let mut new_fields_ids_map = db_fields_ids_map.clone();
 
         let indexer_alloc = Bump::new();
-        let embedders = EmbeddingConfigs::default();
+        let embedders = RuntimeEmbedders::default();
         let mut indexer = indexer::DocumentOperation::new();
         indexer.delete_documents(&["1", "2"]);
 
@@ -2551,7 +2568,7 @@ mod tests {
         let mut new_fields_ids_map = db_fields_ids_map.clone();
 
         let indexer_alloc = Bump::new();
-        let embedders = EmbeddingConfigs::default();
+        let embedders = RuntimeEmbedders::default();
         let mut indexer = indexer::DocumentOperation::new();
 
         indexer.delete_documents(&["1", "2", "1", "2"]);
@@ -2610,7 +2627,7 @@ mod tests {
         let mut new_fields_ids_map = db_fields_ids_map.clone();
 
         let indexer_alloc = Bump::new();
-        let embedders = EmbeddingConfigs::default();
+        let embedders = RuntimeEmbedders::default();
         let mut indexer = indexer::DocumentOperation::new();
 
         let documents = documents!([
@@ -2660,7 +2677,7 @@ mod tests {
         let mut new_fields_ids_map = db_fields_ids_map.clone();
 
         let indexer_alloc = Bump::new();
-        let embedders = EmbeddingConfigs::default();
+        let embedders = RuntimeEmbedders::default();
         let mut indexer = indexer::DocumentOperation::new();
 
         indexer.delete_documents(&["1"]);
@@ -2774,6 +2791,8 @@ mod tests {
                         document_template: Setting::NotSet,
                         document_template_max_bytes: Setting::NotSet,
                         url: Setting::NotSet,
+                        indexing_fragments: Setting::NotSet,
+                        search_fragments: Setting::NotSet,
                         request: Setting::NotSet,
                         response: Setting::NotSet,
                         distribution: Setting::NotSet,
@@ -2800,17 +2819,27 @@ mod tests {
                .unwrap();
 
         let rtxn = index.read_txn().unwrap();
-        let mut embedding_configs = index.embedding_configs(&rtxn).unwrap();
-        let IndexEmbeddingConfig { name: embedder_name, config: embedder, user_provided } =
+        let embedders = index.embedding_configs();
+        let mut embedding_configs = embedders.embedding_configs(&rtxn).unwrap();
+        let IndexEmbeddingConfig { name: embedder_name, config: embedder, fragments } =
             embedding_configs.pop().unwrap();
+        let info = embedders.embedder_info(&rtxn, &embedder_name).unwrap().unwrap();
+        insta::assert_snapshot!(info.embedder_id, @"0");
+        insta::assert_debug_snapshot!(info.embedding_status.user_provided_docids(), @"RoaringBitmap<[0, 1, 2]>");
+        insta::assert_debug_snapshot!(info.embedding_status.skip_regenerate_docids(), @"RoaringBitmap<[0, 1, 2]>");
         insta::assert_snapshot!(embedder_name, @"manual");
-        insta::assert_debug_snapshot!(user_provided, @"RoaringBitmap<[0, 1, 2]>");
+        insta::assert_debug_snapshot!(fragments, @r###"
+        FragmentConfigs(
+            [],
+        )
+        "###);
+
         let embedder = std::sync::Arc::new(
             crate::vector::Embedder::new(embedder.embedder_options, 0).unwrap(),
         );
         let res = index
             .search(&rtxn)
-            .semantic(embedder_name, embedder, false, Some([0.0, 1.0, 2.0].to_vec()))
+            .semantic(embedder_name, embedder, false, Some([0.0, 1.0, 2.0].to_vec()), None)
             .execute()
             .unwrap();
         assert_eq!(res.documents_ids.len(), 3);
@@ -2859,7 +2888,7 @@ mod tests {
         let mut new_fields_ids_map = db_fields_ids_map.clone();
 
         let indexer_alloc = Bump::new();
-        let embedders = EmbeddingConfigs::default();
+        let embedders = RuntimeEmbedders::default();
         let mut indexer = indexer::DocumentOperation::new();
 
         // OP
@@ -2920,7 +2949,7 @@ mod tests {
         let mut new_fields_ids_map = db_fields_ids_map.clone();
 
         let indexer_alloc = Bump::new();
-        let embedders = EmbeddingConfigs::default();
+        let embedders = RuntimeEmbedders::default();
         let mut indexer = indexer::DocumentOperation::new();
 
         indexer.delete_documents(&["1"]);
@@ -2979,7 +3008,7 @@ mod tests {
         let mut new_fields_ids_map = db_fields_ids_map.clone();
 
         let indexer_alloc = Bump::new();
-        let embedders = EmbeddingConfigs::default();
+        let embedders = RuntimeEmbedders::default();
         let mut indexer = indexer::DocumentOperation::new();
 
         let documents = documents!([

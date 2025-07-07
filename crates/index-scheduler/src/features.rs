@@ -144,6 +144,19 @@ impl RoFeatures {
             .into())
         }
     }
+
+    pub fn check_multimodal(&self, disabled_action: &'static str) -> Result<()> {
+        if self.runtime.multimodal {
+            Ok(())
+        } else {
+            Err(FeatureNotEnabledError {
+                disabled_action,
+                feature: "multimodal",
+                issue_link: "https://github.com/orgs/meilisearch/discussions/846",
+            }
+            .into())
+        }
+    }
 }
 
 impl FeatureData {

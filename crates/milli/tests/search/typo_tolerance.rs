@@ -6,7 +6,7 @@ use milli::documents::mmap_from_objects;
 use milli::progress::Progress;
 use milli::update::new::indexer;
 use milli::update::{IndexerConfig, Settings};
-use milli::vector::EmbeddingConfigs;
+use milli::vector::RuntimeEmbedders;
 use milli::{Criterion, Index, Object, Search, TermsMatchingStrategy};
 use serde_json::from_value;
 use tempfile::tempdir;
@@ -123,7 +123,7 @@ fn test_typo_disabled_on_word() {
 
     let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let mut new_fields_ids_map = db_fields_ids_map.clone();
-    let embedders = EmbeddingConfigs::default();
+    let embedders = RuntimeEmbedders::default();
     let mut indexer = indexer::DocumentOperation::new();
 
     indexer.replace_documents(&documents).unwrap();

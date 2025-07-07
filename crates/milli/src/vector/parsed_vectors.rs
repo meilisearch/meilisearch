@@ -6,9 +6,8 @@ use serde_json::value::RawValue;
 use serde_json::{from_slice, Value};
 
 use super::Embedding;
-use crate::index::IndexEmbeddingConfig;
 use crate::update::del_add::{DelAdd, KvReaderDelAdd};
-use crate::{DocumentId, FieldId, InternalError, UserError};
+use crate::{FieldId, InternalError, UserError};
 
 #[derive(serde::Serialize, Debug)]
 #[serde(untagged)]
@@ -151,7 +150,8 @@ impl<'doc> serde::de::Visitor<'doc> for RawVectorsVisitor {
                     regenerate = Some(value);
                 }
                 Ok(Some("embeddings")) => {
-                    let value: &RawValue = match map.next_value() {
+                    let value: &RawValue = match map.next_value::<&RawValue>() {
+                        Ok(value) if value.get() == RawValue::NULL.get() => continue,
                         Ok(value) => value,
                         Err(error) => {
                             return Ok(Err(RawVectorsError::DeserializeEmbeddings {
@@ -374,8 +374,7 @@ pub struct ParsedVectorsDiff {
 
 impl ParsedVectorsDiff {
     pub fn new(
-        docid: DocumentId,
-        embedders_configs: &[IndexEmbeddingConfig],
+        regenerate_for_embedders: impl Iterator<Item = String>,
         documents_diff: &KvReader<FieldId>,
         old_vectors_fid: Option<FieldId>,
         new_vectors_fid: Option<FieldId>,
@@ -396,10 +395,8 @@ impl ParsedVectorsDiff {
             }
         }
         .flatten().map_or(BTreeMap::default(), |del| del.into_iter().map(|(name, vec)| (name, VectorState::Inline(vec))).collect());
-        for embedding_config in embedders_configs {
-            if embedding_config.user_provided.contains(docid) {
-                old.entry(embedding_config.name.to_string()).or_insert(VectorState::Manual);
-            }
+        for name in regenerate_for_embedders {
+            old.entry(name).or_insert(VectorState::Generated);
         }
 
         let new = 'new: {

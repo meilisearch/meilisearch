@@ -301,6 +301,7 @@ InvalidFacetSearchQuery                        , InvalidRequest       , BAD_REQU
 InvalidFacetSearchName                         , InvalidRequest       , BAD_REQUEST ;
 FacetSearchDisabled                            , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchVector                            , InvalidRequest       , BAD_REQUEST ;
+InvalidSearchMedia                             , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchShowMatchesPosition               , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchShowRankingScore                  , InvalidRequest       , BAD_REQUEST ;
 InvalidSimilarShowRankingScore                 , InvalidRequest       , BAD_REQUEST ;
@@ -308,6 +309,7 @@ InvalidSearchShowRankingScoreDetails           , InvalidRequest       , BAD_REQU
 InvalidSimilarShowRankingScoreDetails          , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchSort                              , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchDistinct                          , InvalidRequest       , BAD_REQUEST ;
+InvalidSearchMediaAndVector                    , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsDisplayedAttributes             , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsDistinctAttribute               , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsProximityPrecision              , InvalidRequest       , BAD_REQUEST ;
@@ -389,6 +391,13 @@ InvalidDocumentEditionContext                  , InvalidRequest       , BAD_REQU
 InvalidDocumentEditionFunctionFilter           , InvalidRequest       , BAD_REQUEST ;
 EditDocumentsByFunctionError                   , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsIndexChat                       , InvalidRequest       , BAD_REQUEST ;
+// Export
+InvalidExportUrl                               , InvalidRequest       , BAD_REQUEST ;
+InvalidExportApiKey                            , InvalidRequest       , BAD_REQUEST ;
+InvalidExportPayloadSize                       , InvalidRequest       , BAD_REQUEST ;
+InvalidExportIndexesPatterns                   , InvalidRequest       , BAD_REQUEST ;
+InvalidExportIndexFilter                       , InvalidRequest       , BAD_REQUEST ;
+InvalidExportIndexOverrideSettings             , InvalidRequest       , BAD_REQUEST ;
 // Experimental features - Chat Completions
 UnimplementedExternalFunctionCalling           , InvalidRequest       , NOT_IMPLEMENTED ;
 UnimplementedNonStreamingChatCompletions       , InvalidRequest       , NOT_IMPLEMENTED ;
@@ -457,6 +466,7 @@ impl ErrorCode for milli::Error {
                     | UserError::MissingSourceForNested { .. }
                     | UserError::InvalidSettingsEmbedder { .. } => Code::InvalidSettingsEmbedders,
                     UserError::TooManyEmbedders(_) => Code::InvalidSettingsEmbedders,
+                    UserError::TooManyFragments(_) => Code::InvalidSettingsEmbedders,
                     UserError::InvalidPromptForEmbeddings(..) => Code::InvalidSettingsEmbedders,
                     UserError::NoPrimaryKeyCandidateFound => Code::IndexPrimaryKeyNoCandidateFound,
                     UserError::MultiplePrimaryKeyCandidatesFound { .. } => {

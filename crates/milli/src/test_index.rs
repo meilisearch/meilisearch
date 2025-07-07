@@ -18,7 +18,7 @@ use crate::update::{
     self, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig, Setting, Settings,
 };
 use crate::vector::settings::{EmbedderSource, EmbeddingSettings};
-use crate::vector::EmbeddingConfigs;
+use crate::vector::RuntimeEmbedders;
 use crate::{db_snap, obkv_to_json, Filter, FilterableAttributesRule, Index, Search, SearchResult};
 
 pub(crate) struct TempIndex {
@@ -66,7 +66,7 @@ impl TempIndex {
         let db_fields_ids_map = self.inner.fields_ids_map(&rtxn)?;
         let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-        let embedders = InnerIndexSettings::from_index(&self.inner, &rtxn, None)?.embedding_configs;
+        let embedders = InnerIndexSettings::from_index(&self.inner, &rtxn, None)?.runtime_embedders;
         let mut indexer = indexer::DocumentOperation::new();
         match self.index_documents_config.update_method {
             IndexDocumentsMethod::ReplaceDocuments => {
@@ -151,7 +151,7 @@ impl TempIndex {
         let db_fields_ids_map = self.inner.fields_ids_map(&rtxn)?;
         let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-        let embedders = InnerIndexSettings::from_index(&self.inner, &rtxn, None)?.embedding_configs;
+        let embedders = InnerIndexSettings::from_index(&self.inner, &rtxn, None)?.runtime_embedders;
 
         let mut indexer = indexer::DocumentOperation::new();
         let external_document_ids: Vec<_> =
@@ -223,7 +223,7 @@ fn aborting_indexation() {
     let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
     let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-    let embedders = EmbeddingConfigs::default();
+    let embedders = RuntimeEmbedders::default();
     let mut indexer = indexer::DocumentOperation::new();
     let payload = documents!([
         { "id": 1, "name": "kevin" },

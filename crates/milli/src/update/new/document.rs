@@ -12,6 +12,7 @@ use super::vector_document::VectorDocument;
 use super::{KvReaderFieldId, KvWriterFieldId};
 use crate::constants::{RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME};
 use crate::documents::FieldIdMapper;
+use crate::update::del_add::KvReaderDelAdd;
 use crate::update::new::thread_local::{FullySend, MostlySend, ThreadLocal};
 use crate::update::new::vector_document::VectorDocumentFromDb;
 use crate::vector::settings::EmbedderAction;
@@ -466,6 +467,110 @@ impl<'doc> Versions<'doc> {
             return None;
         }
         self.data.get(k)
+    }
+}
+
+#[derive(Debug)]
+pub struct KvDelAddDocument<'a, Mapper: FieldIdMapper> {
+    document: &'a obkv::KvReaderU16,
+    side: crate::update::del_add::DelAdd,
+    fields_ids_map: &'a Mapper,
+}
+
+impl<'a, Mapper: FieldIdMapper> KvDelAddDocument<'a, Mapper> {
+    pub fn new(
+        document: &'a obkv::KvReaderU16,
+        side: crate::update::del_add::DelAdd,
+        fields_ids_map: &'a Mapper,
+    ) -> Self {
+        Self { document, side, fields_ids_map }
+    }
+
+    fn get(&self, k: &str) -> Result<Option<&'a RawValue>> {
+        let Some(id) = self.fields_ids_map.id(k) else { return Ok(None) };
+        let Some(value) = self.document.get(id) else { return Ok(None) };
+        let Some(value) = KvReaderDelAdd::from_slice(value).get(self.side) else { return Ok(None) };
+
+        let value = serde_json::from_slice(value).map_err(crate::InternalError::SerdeJson)?;
+
+        Ok(Some(value))
+    }
+}
+
+impl<'a, Mapper: FieldIdMapper> Document<'a> for KvDelAddDocument<'a, Mapper> {
+    fn iter_top_level_fields(&self) -> impl Iterator<Item = Result<(&'a str, &'a RawValue)>> {
+        let mut it = self.document.iter();
+
+        std::iter::from_fn(move || loop {
+            let (fid, value) = it.next()?;
+            let Some(value) = KvReaderDelAdd::from_slice(value).get(self.side) else {
+                continue;
+            };
+            let name = match self.fields_ids_map.name(fid).ok_or(
+                InternalError::FieldIdMapMissingEntry(crate::FieldIdMapMissingEntry::FieldId {
+                    field_id: fid,
+                    process: "getting current document",
+                }),
+            ) {
+                Ok(name) => name,
+                Err(error) => return Some(Err(error.into())),
+            };
+
+            if name == RESERVED_VECTORS_FIELD_NAME || name == RESERVED_GEO_FIELD_NAME {
+                continue;
+            }
+
+            let res = (|| {
+                let value =
+                    serde_json::from_slice(value).map_err(crate::InternalError::SerdeJson)?;
+
+                Ok((name, value))
+            })();
+
+            return Some(res);
+        })
+    }
+
+    fn top_level_fields_count(&self) -> usize {
+        let mut it = self.document.iter();
+
+        std::iter::from_fn(move || loop {
+            let (fid, value) = it.next()?;
+            let Some(_) = KvReaderDelAdd::from_slice(value).get(self.side) else {
+                continue;
+            };
+            let name = match self.fields_ids_map.name(fid).ok_or(
+                InternalError::FieldIdMapMissingEntry(crate::FieldIdMapMissingEntry::FieldId {
+                    field_id: fid,
+                    process: "getting current document",
+                }),
+            ) {
+                Ok(name) => name,
+                Err(_) => return Some(()),
+            };
+
+            if name == RESERVED_VECTORS_FIELD_NAME || name == RESERVED_GEO_FIELD_NAME {
+                continue;
+            }
+
+            return Some(());
+        })
+        .count()
+    }
+
+    fn top_level_field(&self, k: &str) -> Result<Option<&'a RawValue>> {
+        if k == RESERVED_VECTORS_FIELD_NAME || k == RESERVED_GEO_FIELD_NAME {
+            return Ok(None);
+        }
+        self.get(k)
+    }
+
+    fn vectors_field(&self) -> Result<Option<&'a RawValue>> {
+        self.get(RESERVED_VECTORS_FIELD_NAME)
+    }
+
+    fn geo_field(&self) -> Result<Option<&'a RawValue>> {
+        self.get(RESERVED_GEO_FIELD_NAME)
     }
 }
 

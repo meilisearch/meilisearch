@@ -11,7 +11,7 @@ use super::vector_document::{
 use crate::attribute_patterns::PatternMatch;
 use crate::documents::FieldIdMapper;
 use crate::update::new::document::DocumentIdentifiers;
-use crate::vector::EmbeddingConfigs;
+use crate::vector::RuntimeEmbedders;
 use crate::{DocumentId, Index, InternalError, Result};
 
 pub enum DocumentChange<'doc> {
@@ -70,7 +70,7 @@ impl<'doc> Insertion<'doc> {
     pub fn inserted_vectors(
         &self,
         doc_alloc: &'doc Bump,
-        embedders: &'doc EmbeddingConfigs,
+        embedders: &'doc RuntimeEmbedders,
     ) -> Result<Option<VectorDocumentFromVersions<'doc>>> {
         VectorDocumentFromVersions::new(self.external_document_id, &self.new, doc_alloc, embedders)
     }
@@ -241,7 +241,7 @@ impl<'doc> Update<'doc> {
     pub fn only_changed_vectors(
         &self,
         doc_alloc: &'doc Bump,
-        embedders: &'doc EmbeddingConfigs,
+        embedders: &'doc RuntimeEmbedders,
     ) -> Result<Option<VectorDocumentFromVersions<'doc>>> {
         VectorDocumentFromVersions::new(self.external_document_id, &self.new, doc_alloc, embedders)
     }
@@ -252,7 +252,7 @@ impl<'doc> Update<'doc> {
         index: &'doc Index,
         mapper: &'doc Mapper,
         doc_alloc: &'doc Bump,
-        embedders: &'doc EmbeddingConfigs,
+        embedders: &'doc RuntimeEmbedders,
     ) -> Result<Option<MergedVectorDocument<'doc>>> {
         if self.from_scratch {
             MergedVectorDocument::without_db(

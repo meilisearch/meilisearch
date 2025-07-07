@@ -76,8 +76,10 @@ pub enum MeilisearchHttpError {
     DocumentFormat(#[from] DocumentFormatError),
     #[error(transparent)]
     Join(#[from] JoinError),
-    #[error("Invalid request: missing `hybrid` parameter when `vector` is present.")]
+    #[error("Invalid request: missing `hybrid` parameter when `vector` or `media` are present.")]
     MissingSearchHybrid,
+    #[error("Invalid request: both `media` and `vector` parameters are present.")]
+    MediaAndVector,
 }
 
 impl MeilisearchHttpError {
@@ -111,6 +113,7 @@ impl ErrorCode for MeilisearchHttpError {
             MeilisearchHttpError::DocumentFormat(e) => e.error_code(),
             MeilisearchHttpError::Join(_) => Code::Internal,
             MeilisearchHttpError::MissingSearchHybrid => Code::MissingSearchHybrid,
+            MeilisearchHttpError::MediaAndVector => Code::InvalidSearchMediaAndVector,
             MeilisearchHttpError::FederationOptionsInNonFederatedRequest(_) => {
                 Code::InvalidMultiSearchFederationOptions
             }

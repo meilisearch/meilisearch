@@ -151,6 +151,10 @@ pub enum Error {
     CorruptedTaskQueue,
     #[error(transparent)]
     DatabaseUpgrade(Box<Self>),
+    #[error(transparent)]
+    Export(Box<Self>),
+    #[error("Failed to export documents to remote server {code} ({type}): {message} <{link}>")]
+    FromRemoteWhenExporting { message: String, code: String, r#type: String, link: String },
     #[error("Failed to rollback for index `{index}`: {rollback_outcome} ")]
     RollbackFailed { index: String, rollback_outcome: RollbackOutcome },
     #[error(transparent)]
@@ -212,6 +216,7 @@ impl Error {
             | Error::BatchNotFound(_)
             | Error::TaskDeletionWithEmptyQuery
             | Error::TaskCancelationWithEmptyQuery
+            | Error::FromRemoteWhenExporting { .. }
             | Error::AbortedTask
             | Error::Dump(_)
             | Error::Heed(_)
@@ -221,6 +226,7 @@ impl Error {
             | Error::IoError(_)
             | Error::Persist(_)
             | Error::FeatureNotEnabled(_)
+            | Error::Export(_)
             | Error::Anyhow(_) => true,
             Error::CreateBatch(_)
             | Error::CorruptedTaskQueue
@@ -282,6 +288,7 @@ impl ErrorCode for Error {
             Error::Dump(e) => e.error_code(),
             Error::Milli { error, .. } => error.error_code(),
             Error::ProcessBatchPanicked(_) => Code::Internal,
+            Error::FromRemoteWhenExporting { .. } => Code::Internal,
             Error::Heed(e) => e.error_code(),
             Error::HeedTransaction(e) => e.error_code(),
             Error::FileStore(e) => e.error_code(),
@@ -294,6 +301,7 @@ impl ErrorCode for Error {
             Error::CorruptedTaskQueue => Code::Internal,
             Error::CorruptedDump => Code::Internal,
             Error::DatabaseUpgrade(_) => Code::Internal,
+            Error::Export(_) => Code::Internal,
             Error::RollbackFailed { .. } => Code::Internal,
             Error::UnrecoverableError(_) => Code::Internal,
             Error::IndexSchedulerVersionMismatch { .. } => Code::Internal,

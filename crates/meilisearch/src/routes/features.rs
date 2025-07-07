@@ -54,6 +54,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             get_task_documents_route: Some(false),
             composite_embedders: Some(false),
             chat_completions: Some(false),
+            multimodal: Some(false),
         })),
         (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
             {
@@ -100,6 +101,8 @@ pub struct RuntimeTogglableFeatures {
     pub composite_embedders: Option<bool>,
     #[deserr(default)]
     pub chat_completions: Option<bool>,
+    #[deserr(default)]
+    pub multimodal: Option<bool>,
 }
 
 impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogglableFeatures {
@@ -113,6 +116,7 @@ impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogg
             get_task_documents_route,
             composite_embedders,
             chat_completions,
+            multimodal,
         } = value;
 
         Self {
@@ -124,6 +128,7 @@ impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogg
             get_task_documents_route: Some(get_task_documents_route),
             composite_embedders: Some(composite_embedders),
             chat_completions: Some(chat_completions),
+            multimodal: Some(multimodal),
         }
     }
 }
@@ -138,6 +143,7 @@ pub struct PatchExperimentalFeatureAnalytics {
     get_task_documents_route: bool,
     composite_embedders: bool,
     chat_completions: bool,
+    multimodal: bool,
 }
 
 impl Aggregate for PatchExperimentalFeatureAnalytics {
@@ -155,6 +161,7 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
             get_task_documents_route: new.get_task_documents_route,
             composite_embedders: new.composite_embedders,
             chat_completions: new.chat_completions,
+            multimodal: new.multimodal,
         })
     }
 
@@ -181,6 +188,7 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
             get_task_documents_route: Some(false),
             composite_embedders: Some(false),
             chat_completions: Some(false),
+            multimodal: Some(false),
          })),
         (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
             {
@@ -223,6 +231,7 @@ async fn patch_features(
             .composite_embedders
             .unwrap_or(old_features.composite_embedders),
         chat_completions: new_features.0.chat_completions.unwrap_or(old_features.chat_completions),
+        multimodal: new_features.0.multimodal.unwrap_or(old_features.multimodal),
     };
 
     // explicitly destructure for analytics rather than using the `Serialize` implementation, because
@@ -237,6 +246,7 @@ async fn patch_features(
         get_task_documents_route,
         composite_embedders,
         chat_completions,
+        multimodal,
     } = new_features;
 
     analytics.publish(
@@ -249,6 +259,7 @@ async fn patch_features(
             get_task_documents_route,
             composite_embedders,
             chat_completions,
+            multimodal,
         },
         &req,
     );
