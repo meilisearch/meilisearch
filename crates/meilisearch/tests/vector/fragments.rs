@@ -85,8 +85,7 @@ pub async fn init_fragments_index() -> (Server<Owned>, String, crate::common::Va
     let (response, code) = index.update_settings(settings.clone()).await;
     snapshot!(code, @"202 Accepted");
 
-    let task = server.wait_task(response.uid()).await;
-    snapshot!(task["status"], @r###""succeeded""###);
+    server.wait_task(response.uid()).await.succeeded();
 
     // Send documents
     let documents = json!([
@@ -1031,6 +1030,7 @@ async fn ommitted_fragment_isnt_removed() {
     }
     "#);
 
+    // Make sure withBreed is still here because it wasn't specified
     let (value, code) = index.settings().await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(value["embedders"], {
@@ -1283,7 +1283,7 @@ async fn multiple_embedders() {
     });
     let (response, code) = index.update_settings(settings2).await;
     snapshot!(code, @"202 Accepted");
-    let task = server.wait_task(response.uid()).await;
+    let task = server.wait_task(response.uid()).await.succeeded();
     snapshot!(task, @r#"
     {
       "uid": "[uid]",
@@ -1531,8 +1531,7 @@ async fn multiple_embedders() {
 
     let (response, code) = index.update_settings(settings.clone()).await;
     snapshot!(code, @"202 Accepted");
-    let value = server.wait_task(response.uid()).await.succeeded();
-    snapshot!(value["status"], @r###""succeeded""###);
+    server.wait_task(response.uid()).await.succeeded();
 
     let (documents, code) = index
         .get_all_documents(GetAllDocumentsOptions { retrieve_vectors: true, ..Default::default() })
@@ -1671,8 +1670,7 @@ async fn multiple_embedders() {
 
     let (response, code) = index.update_settings(settings).await;
     snapshot!(code, @"202 Accepted");
-    let value = server.wait_task(response.uid()).await.succeeded();
-    snapshot!(value["status"], @r###""succeeded""###);
+    server.wait_task(response.uid()).await.succeeded();
 
     let (documents, code) = index
         .get_all_documents(GetAllDocumentsOptions { retrieve_vectors: true, ..Default::default() })
@@ -1801,7 +1799,7 @@ async fn remove_non_existant_embedder() {
 
     let (response, code) = index.update_settings(settings).await;
     snapshot!(code, @"202 Accepted");
-    let task = server.wait_task(response.uid()).await;
+    let task = server.wait_task(response.uid()).await.succeeded();
     snapshot!(task, @r#"
     {
       "uid": "[uid]",
@@ -1864,7 +1862,7 @@ async fn double_remove_embedder() {
 
     let (response, code) = index.update_settings(settings.clone()).await;
     snapshot!(code, @"202 Accepted");
-    let task = server.wait_task(response.uid()).await;
+    let task = server.wait_task(response.uid()).await.succeeded();
     snapshot!(task, @r#"
     {
       "uid": "[uid]",
@@ -1888,7 +1886,7 @@ async fn double_remove_embedder() {
 
     let (response, code) = index.update_settings(settings.clone()).await;
     snapshot!(code, @"202 Accepted");
-    let task = server.wait_task(response.uid()).await;
+    let task = server.wait_task(response.uid()).await.succeeded();
     snapshot!(task, @r#"
     {
       "uid": "[uid]",
@@ -1933,7 +1931,7 @@ async fn complex_fragment() {
 
     let (response, code) = index.update_settings(settings).await;
     snapshot!(code, @"202 Accepted");
-    let task = server.wait_task(response.uid()).await;
+    let task = server.wait_task(response.uid()).await.succeeded();
     snapshot!(task, @r#"
     {
       "uid": "[uid]",
