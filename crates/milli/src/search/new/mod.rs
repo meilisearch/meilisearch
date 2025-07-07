@@ -377,6 +377,7 @@ fn get_ranking_rules_for_vector<'ctx>(
     embedder_name: &str,
     embedder: &Embedder,
     quantized: bool,
+    search_k_div_trees: Option<usize>,
 ) -> Result<Vec<BoxRankingRule<'ctx, PlaceholderQuery>>> {
     // query graph search
 
@@ -405,6 +406,7 @@ fn get_ranking_rules_for_vector<'ctx>(
                         embedder_name,
                         embedder,
                         quantized,
+                        search_k_div_trees,
                     )?;
                     ranking_rules.push(Box::new(vector_sort));
                     vector = true;
@@ -637,6 +639,7 @@ pub fn execute_vector_search(
     embedder_name: &str,
     embedder: &Embedder,
     quantized: bool,
+    search_k_div_trees: Option<usize>,
     time_budget: TimeBudget,
     ranking_score_threshold: Option<f64>,
 ) -> Result<PartialSearchResult> {
@@ -653,6 +656,7 @@ pub fn execute_vector_search(
         embedder_name,
         embedder,
         quantized,
+        search_k_div_trees,
     )?;
 
     let mut placeholder_search_logger = logger::DefaultSearchLogger;

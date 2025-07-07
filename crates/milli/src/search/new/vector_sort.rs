@@ -18,9 +18,11 @@ pub struct VectorSort<Q: RankingRuleQueryTrait> {
     distribution_shift: Option<DistributionShift>,
     embedder_index: u8,
     quantized: bool,
+    search_k_div_trees: Option<usize>,
 }
 
 impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         ctx: &SearchContext<'_>,
         target: Vec<f32>,
@@ -29,6 +31,7 @@ impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
         embedder_name: &str,
         embedder: &Embedder,
         quantized: bool,
+        search_k_div_trees: Option<usize>,
     ) -> Result<Self> {
         let embedder_index = ctx
             .index
@@ -42,6 +45,7 @@ impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
             vector_candidates,
             cached_sorted_docids: Default::default(),
             limit,
+            search_k_div_trees,
             distribution_shift: embedder.distribution(),
             embedder_index,
             quantized,
@@ -57,7 +61,13 @@ impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
 
         let before = Instant::now();
         let reader = ArroyWrapper::new(ctx.index.vector_arroy, self.embedder_index, self.quantized);
-        let results = reader.nns_by_vector(ctx.txn, target, self.limit, Some(vector_candidates))?;
+        let results = reader.nns_by_vector(
+            ctx.txn,
+            target,
+            self.limit,
+            self.search_k_div_trees,
+            Some(vector_candidates),
+        )?;
         self.cached_sorted_docids = results.into_iter();
         *ctx.vector_store_stats.get_or_insert_default() += VectorStoreStats {
             total_time: before.elapsed(),

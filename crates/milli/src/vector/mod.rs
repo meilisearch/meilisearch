@@ -483,12 +483,20 @@ impl ArroyWrapper {
         rtxn: &RoTxn,
         vector: &[f32],
         limit: usize,
+        search_k_div_trees: Option<usize>,
         filter: Option<&RoaringBitmap>,
     ) -> Result<Vec<(ItemId, f32)>, arroy::Error> {
         if self.quantized {
-            self._nns_by_vector(rtxn, self.quantized_db(), vector, limit, filter)
+            self._nns_by_vector(
+                rtxn,
+                self.quantized_db(),
+                vector,
+                limit,
+                search_k_div_trees,
+                filter,
+            )
         } else {
-            self._nns_by_vector(rtxn, self.angular_db(), vector, limit, filter)
+            self._nns_by_vector(rtxn, self.angular_db(), vector, limit, search_k_div_trees, filter)
         }
     }
 
@@ -498,6 +506,7 @@ impl ArroyWrapper {
         db: arroy::Database<D>,
         vector: &[f32],
         limit: usize,
+        search_k_div_trees: Option<usize>,
         filter: Option<&RoaringBitmap>,
     ) -> Result<Vec<(ItemId, f32)>, arroy::Error> {
         let mut results = Vec::new();
@@ -508,6 +517,12 @@ impl ArroyWrapper {
             if let Some(filter) = filter {
                 if reader.item_ids().is_disjoint(filter) {
                     continue;
+                }
+                if let Some(mut search_k) = search_k_div_trees {
+                    search_k *= reader.n_trees();
+                    if let Ok(search_k) = search_k.try_into() {
+                        searcher.search_k(search_k);
+                    }
                 }
                 searcher.candidates(filter);
             }

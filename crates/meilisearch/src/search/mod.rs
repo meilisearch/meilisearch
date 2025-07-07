@@ -1050,7 +1050,7 @@ pub fn prepare_search<'t>(
         .map(|x| x as usize)
         .unwrap_or(DEFAULT_PAGINATION_MAX_TOTAL_HITS);
 
-    search.exhaustive_number_hits(is_finite_pagination);
+    search.is_exhaustive_pagination(is_finite_pagination);
     search.max_total_hits(Some(max_total_hits));
     search.scoring_strategy(
         if query.show_ranking_score
