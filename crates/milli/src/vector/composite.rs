@@ -59,12 +59,24 @@ pub struct EmbedderOptions {
 
 impl Embedder {
     pub fn new(
-        EmbedderOptions { search, index }: EmbedderOptions,
+        EmbedderOptions { search: search_options, index: index_options }: EmbedderOptions,
         cache_cap: usize,
     ) -> Result<Self, NewEmbedderError> {
-        let search = SubEmbedder::new(search, cache_cap)?;
+        // don't check similarity if one child is a rest embedder with fragments
+        // FIXME: skipping the check isn't ideal but we are unsure how to handle fragments in this context
+        let mut skip_similarity_check = false;
+        for options in [&search_options, &index_options] {
+            if let SubEmbedderOptions::Rest(options) = &options {
+                if !options.search_fragments.is_empty() || !options.indexing_fragments.is_empty() {
+                    skip_similarity_check = true;
+                    break;
+                }
+            }
+        }
+
+        let search = SubEmbedder::new(search_options, cache_cap)?;
         // cache is only used at search
-        let index = SubEmbedder::new(index, 0)?;
+        let index = SubEmbedder::new(index_options, 0)?;
 
         // check dimensions
         if search.dimensions() != index.dimensions() {
@@ -73,7 +85,12 @@ impl Embedder {
                 index.dimensions(),
             ));
         }
+        
         // check similarity
+        if skip_similarity_check {
+            return Ok(Self { search, index });
+        }
+
         let search_embeddings = search
             .embed(
                 vec![
