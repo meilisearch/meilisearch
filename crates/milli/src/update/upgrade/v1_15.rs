@@ -1,4 +1,6 @@
 use heed::RwTxn;
+use roaring::RoaringBitmap;
+use serde::{Deserialize, Serialize};
 
 use super::UpgradeIndex;
 use crate::progress::Progress;
@@ -25,4 +27,15 @@ impl UpgradeIndex for Latest_V1_14_To_Latest_V1_15 {
     fn target_version(&self) -> (u32, u32, u32) {
         (1, 15, 0)
     }
+}
+
+/// Parts of v1.15 `IndexingEmbeddingConfig` that are relevant for upgrade to v1.16
+///
+/// # Warning
+///
+/// This object should not be rewritten to the DB, only read to get the name and `user_provided` roaring.
+#[derive(Debug, Deserialize, Serialize)]
+pub struct IndexEmbeddingConfig {
+    pub name: String,
+    pub user_provided: RoaringBitmap,
 }
