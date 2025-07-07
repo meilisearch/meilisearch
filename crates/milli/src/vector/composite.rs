@@ -85,7 +85,7 @@ impl Embedder {
                 index.dimensions(),
             ));
         }
-        
+
         // check similarity
         if skip_similarity_check {
             return Ok(Self { search, index });

@@ -21,9 +21,7 @@ async fn shared_index_for_fragments() -> Index<'static, Shared> {
     server._index(uid).to_shared()
 }
 
-pub async fn init_fragments_index() -> (Server<Owned>, String, crate::common::Value) {
-    let mock_server = MockServer::start().await;
-
+async fn fragment_mock_server() -> String {
     let text_to_embedding: BTreeMap<_, _> = vec![
         ("kefir", [0.5, -0.5, 0.0]),
         ("intel", [1.0, 1.0, 0.0]),
@@ -35,10 +33,13 @@ pub async fn init_fragments_index() -> (Server<Owned>, String, crate::common::Va
     .into_iter()
     .collect();
 
+    let mock_server = MockServer::start().await;
+
     Mock::given(method("POST"))
         .and(path("/"))
         .respond_with(move |req: &Request| {
             let text = String::from_utf8_lossy(&req.body).to_string();
+
             let mut data = [0.0, 0.0, 0.0];
             for (inner_text, inner_data) in &text_to_embedding {
                 if text.contains(inner_text) {
@@ -51,8 +52,12 @@ pub async fn init_fragments_index() -> (Server<Owned>, String, crate::common::Va
         })
         .mount(&mock_server)
         .await;
-    let url = mock_server.uri();
 
+    mock_server.uri()
+}
+
+pub async fn init_fragments_index() -> (Server<Owned>, String, crate::common::Value) {
+    let url = fragment_mock_server().await;
     let server = Server::new().await;
     let index = server.unique_index();
 
@@ -99,6 +104,72 @@ pub async fn init_fragments_index() -> (Server<Owned>, String, crate::common::Va
 
     let task = index.wait_task(value.uid()).await;
     snapshot!(task["status"], @r###""succeeded""###);
+
+    let uid = index.uid.clone();
+    (server, uid, settings)
+}
+
+pub async fn init_fragments_index_composite() -> (Server<Owned>, String, crate::common::Value) {
+    let url = fragment_mock_server().await;
+    let server = Server::new().await;
+    let index = server.unique_index();
+
+    let (_response, code) = server.set_features(json!({"multimodal": true})).await;
+    snapshot!(code, @"200 OK");
+
+    let (_response, code) = server.set_features(json!({"compositeEmbedders": true})).await;
+    snapshot!(code, @"200 OK");
+
+    // Configure the index to use our mock embedder
+    let settings = json!({
+        "embedders": {
+            "rest": {
+                "source": "composite",
+                "searchEmbedder": {
+                    "source": "rest",
+                    "url": url,
+                    "dimensions": 3,
+                    "request": "{{fragment}}",
+                    "response": {
+                        "data": "{{embedding}}"
+                    },
+                    "searchFragments": {
+                        "query": {"value": "Some pre-prompt for query {{ q }}"},
+                    }
+                },
+                "indexingEmbedder": {
+                    "source": "rest",
+                    "url": url,
+                    "dimensions": 3,
+                    "request": "{{fragment}}",
+                    "response": {
+                        "data": "{{embedding}}"
+                    },
+                    "indexingFragments": {
+                        "withBreed": {"value": "{{ doc.name }} is a {{ doc.breed }}"},
+                        "basic": {"value": "{{ doc.name }} is a dog"},
+                    }
+                },
+            },
+        },
+    });
+    let (response, code) = index.update_settings(settings.clone()).await;
+    println!("Update settings response: {:?}", response);
+    snapshot!(code, @"202 Accepted");
+
+    server.wait_task(response.uid()).await.succeeded();
+
+    // Send documents
+    let documents = json!([
+        {"id": 0, "name": "kefir"},
+        {"id": 1, "name": "echo", "_vectors": { "rest": [1, 1, 1] }},
+        {"id": 2, "name": "intel", "breed": "labrador"},
+        {"id": 3, "name": "dustin", "breed": "bulldog"},
+    ]);
+    let (value, code) = index.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+
+    index.wait_task(value.uid()).await.succeeded();
 
     let uid = index.uid.clone();
     (server, uid, settings)
@@ -247,8 +318,7 @@ async fn replace_document() {
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
 
-    let task = index.wait_task(value.uid()).await;
-    snapshot!(task["status"], @r###""succeeded""###);
+    index.wait_task(value.uid()).await.succeeded();
 
     // Make sure kefir now has 2 vectors
     let (documents, code) = index
@@ -2241,6 +2311,33 @@ async fn set_fragments_then_document_template() {
       "localizedAttributes": null,
       "facetSearch": true,
       "prefixSearch": "indexingTime"
+    }
+    "#);
+}
+
+#[actix_rt::test]
+async fn composite() {
+    let (server, uid, _settings) = init_fragments_index_composite().await;
+    let index = server.index(uid);
+
+    let (value, code) = index.search_post(
+        json!({"vector": [1.0, 1.0, 1.0], "hybrid": {"semanticRatio": 1.0, "embedder": "rest"}, "limit": 1}
+    )).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(value, @r#"
+    {
+      "hits": [
+        {
+          "id": 1,
+          "name": "echo"
+        }
+      ],
+      "query": "",
+      "processingTimeMs": "[duration]",
+      "limit": 1,
+      "offset": 0,
+      "estimatedTotalHits": 4,
+      "semanticHitCount": 1
     }
     "#);
 }
