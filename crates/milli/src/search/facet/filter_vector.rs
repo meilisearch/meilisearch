@@ -25,7 +25,6 @@ impl<'a> VectorFilter<'a> {
     /// - `_vectors.{embedder_name}`
     /// - `_vectors.{embedder_name}.userProvided`
     /// - `_vectors.{embedder_name}.fragments.{fragment_name}`
-    /// - `_vectors.{embedder_name}.fragments.{fragment_name}.userProvided`
     pub(super) fn parse(s: &'a str) -> Result<Self> {
         let mut split = s.split('.').peekable();
 
@@ -52,6 +51,12 @@ impl<'a> VectorFilter<'a> {
         if split.peek() == Some(&"userProvided") || split.peek() == Some(&"user_provided") {
             split.next();
             user_provided = true;
+        }
+
+        if fragment_name.is_some() && user_provided {
+            return Err(Error::UserError(UserError::InvalidFilter(
+                String::from("Vector filter cannot specify both a fragment name and userProvided"),
+            )));
         }
 
         if let Some(next) = split.next() {
