@@ -304,7 +304,7 @@ async fn search_bad_filter() {
     let server = Server::new_shared();
     let index = server.unique_index();
     // Also, to trigger the error message we need to effectively create the index or else it'll throw an
-    // index does not exists error.
+    // index does not exist error.
     let (response, _code) = index.create(None).await;
     server.wait_task(response.uid()).await.succeeded();
 
@@ -1263,7 +1263,7 @@ async fn search_with_contains_without_enabling_the_feature() {
     let server = Server::new_shared();
     let index = server.unique_index();
     // Also, to trigger the error message we need to effectively create the index or else it'll throw an
-    // index does not exists error.
+    // index does not exist error.
     let (task, _code) = index.create(None).await;
     server.wait_task(task.uid()).await.succeeded();
 
