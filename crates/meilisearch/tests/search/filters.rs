@@ -968,3 +968,67 @@ async fn vector_filter_specific_fragment_user_provided() {
     }
     "#);
 }
+
+#[actix_rt::test]
+async fn vector_filter_negation() {
+    let index = crate::vector::shared_index_for_fragments().await;
+
+    let (value, _code) = index
+        .search_post(json!({
+            "filter": "_vectors.rest.userProvided NOT EXISTS",
+            "attributesToRetrieve": ["name"]
+        }))
+        .await;
+    snapshot!(value, @r#"
+    {
+      "hits": [
+        {
+          "name": "kefir"
+        },
+        {
+          "name": "intel"
+        },
+        {
+          "name": "dustin"
+        }
+      ],
+      "query": "",
+      "processingTimeMs": "[duration]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 3
+    }
+    "#);
+}
+
+#[actix_rt::test]
+async fn vector_filter_or_combination() {
+let index = crate::vector::shared_index_for_fragments().await;
+
+    let (value, _code) = index
+        .search_post(json!({
+            "filter": "_vectors.rest.fragments.withBreed EXISTS OR _vectors.rest.userProvided EXISTS",
+            "attributesToRetrieve": ["name"]
+        }))
+        .await;
+    snapshot!(value, @r#"
+    {
+      "hits": [
+        {
+          "name": "echo"
+        },
+        {
+          "name": "intel"
+        },
+        {
+          "name": "dustin"
+        }
+      ],
+      "query": "",
+      "processingTimeMs": "[duration]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 3
+    }
+    "#);
+}
