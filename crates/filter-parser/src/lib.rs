@@ -614,8 +614,6 @@ impl std::fmt::Display for Token<'_> {
 
 #[cfg(test)]
 pub mod tests {
-    use std::fmt::format;
-
     use FilterCondition as Fc;
 
     use super::*;

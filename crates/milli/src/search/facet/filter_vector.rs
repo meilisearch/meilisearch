@@ -212,7 +212,7 @@ impl<'a> VectorFilter<'a> {
                 embedder_config.config.quantized(),
             );
 
-            let mut new_docids = if let Some(fragment_token) = &self.fragment_token {
+            docids |= if let Some(fragment_token) = &self.fragment_token {
                 let fragment_name = fragment_token.value();
                 let Some(fragment_config) = embedder_config
                     .fragments
@@ -261,8 +261,6 @@ impl<'a> VectorFilter<'a> {
                     stats.documents
                 }
             };
-
-            docids |= new_docids;
         }
 
         if let Some(universe) = universe {
