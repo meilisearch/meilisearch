@@ -235,18 +235,32 @@ impl<'a> VectorFilter<'a> {
                     })?;
                 };
 
-                arroy_wrapper.items_in_store(rtxn, fragment_config.id, |bitmap| bitmap.clone())?
+                if let Some(universe) = universe {
+                    arroy_wrapper
+                        .items_in_store(rtxn, fragment_config.id, |bitmap| bitmap & universe)?
+                } else {
+                    arroy_wrapper
+                        .items_in_store(rtxn, fragment_config.id, |bitmap| bitmap.clone())?
+                }
             } else {
+                let mut universe = universe.cloned();
+                if self.user_provided {
+                    let user_provided_docsids =
+                        embedder_info.embedding_status.user_provided_docids();
+                    match &mut universe {
+                        Some(universe) => *universe &= user_provided_docsids,
+                        None => universe = Some(user_provided_docsids.clone()),
+                    }
+                }
+
                 let mut stats = ArroyStats::default();
                 arroy_wrapper.aggregate_stats(rtxn, &mut stats)?;
-                stats.documents
+                if let Some(universe) = &universe {
+                    stats.documents & universe
+                } else {
+                    stats.documents
+                }
             };
-
-            // FIXME: performance
-            if self.user_provided {
-                let user_provided_docsids = embedder_info.embedding_status.user_provided_docids();
-                new_docids &= user_provided_docsids;
-            }
 
             docids |= new_docids;
         }
