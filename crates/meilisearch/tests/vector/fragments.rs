@@ -2261,4 +2261,26 @@ async fn composite() {
       "semanticHitCount": 1
     }
     "#);
+
+    let (value, code) = index.search_post(
+        json!({"q": "bulldog", "hybrid": {"semanticRatio": 1.0, "embedder": "rest"}, "limit": 1}
+    )).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(value, @r#"
+    {
+      "hits": [
+        {
+          "id": 3,
+          "name": "dustin",
+          "breed": "bulldog"
+        }
+      ],
+      "query": "bulldog",
+      "processingTimeMs": "[duration]",
+      "limit": 1,
+      "offset": 0,
+      "estimatedTotalHits": 4,
+      "semanticHitCount": 1
+    }
+    "#);
 }
