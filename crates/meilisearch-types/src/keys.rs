@@ -431,6 +431,7 @@ impl Action {
             DocumentsAdd => false,
             DocumentsGet => true,
             DocumentsDelete => false,
+            Export => true,
             IndexesAdd => false,
             IndexesGet => true,
             IndexesUpdate => false,
