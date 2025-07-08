@@ -33,7 +33,7 @@ async fn fragment_mock_server() -> String {
     .into_iter()
     .collect();
 
-    let mock_server = MockServer::start().await;
+    let mock_server = Box::leak(Box::new(MockServer::start().await));
 
     Mock::given(method("POST"))
         .and(path("/"))
@@ -50,7 +50,7 @@ async fn fragment_mock_server() -> String {
             }
             ResponseTemplate::new(200).set_body_json(json!({ "data": data }))
         })
-        .mount(&mock_server)
+        .mount(mock_server)
         .await;
 
     mock_server.uri()
