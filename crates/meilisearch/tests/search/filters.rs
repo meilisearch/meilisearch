@@ -768,6 +768,26 @@ async fn vector_filter_all_embedders() {
 }
 
 #[actix_rt::test]
+async fn vector_filter_missing_fragment() {
+    let index = crate::vector::shared_index_for_fragments().await;
+
+    let (value, _code) = index
+        .search_post(json!({
+            "filter": "_vectors.rest.fragments EXISTS",
+            "attributesToRetrieve": ["name"]
+        }))
+        .await;
+    snapshot!(value, @r#"
+    {
+      "message": "Index `[uuid]`: Vector filter is inconsistent: either specify a fragment name or remove the `fragments` part.\n15:24 _vectors.rest.fragments EXISTS",
+      "code": "invalid_search_filter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+    }
+    "#);
+}
+
+#[actix_rt::test]
 async fn vector_filter_non_existant_embedder() {
     let index = crate::vector::shared_index_for_fragments().await;
 
