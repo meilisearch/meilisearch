@@ -2262,9 +2262,12 @@ async fn composite() {
     }
     "#);
 
-    let (value, code) = index.search_post(
-        json!({"q": "bulldog", "hybrid": {"semanticRatio": 1.0, "embedder": "rest"}, "limit": 1}
-    )).await;
+    let (value, code) = index
+        .search_post(
+            json!({"q": "bulldog", "hybrid": {"semanticRatio": 1.0, "embedder": "rest"}, "limit": 1}
+            ),
+        )
+        .await;
     snapshot!(code, @"200 OK");
     snapshot!(value, @r#"
     {
