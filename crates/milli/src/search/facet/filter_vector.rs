@@ -1,4 +1,3 @@
-use filter_parser::Condition;
 use roaring::RoaringBitmap;
 
 use crate::error::{Error, UserError};
@@ -13,15 +12,14 @@ pub(super) struct VectorFilter<'a> {
 }
 
 impl<'a> VectorFilter<'a> {
-    pub(super) fn matches(value: &str, op: &Condition) -> bool {
-        matches!(op, Condition::Exists) && (value.starts_with("_vectors.") || value == "_vectors")
+    pub(super) fn matches(value: &str) -> bool {
+        value.starts_with("_vectors.") || value == "_vectors"
     }
 
     /// Parses a vector filter string.
     ///
     /// Valid formats:
     /// - `_vectors`
-    /// - `_vectors.userProvided`
     /// - `_vectors.{embedder_name}`
     /// - `_vectors.{embedder_name}.userProvided`
     /// - `_vectors.{embedder_name}.fragments.{fragment_name}`

@@ -241,7 +241,7 @@ impl<'a> Filter<'a> {
 
             let attribute = fid.value();
             if matching_features(attribute, &filterable_attributes_rules)
-                .is_some_and(|(_, features)| features.is_filterable())
+                .is_some_and(|(_, features)| features.is_filterable()) || VectorFilter::matches(attribute)
             {
                 continue;
             }
@@ -546,7 +546,12 @@ impl<'a> Filter<'a> {
             }
             FilterCondition::Condition { fid, op } => {
                 let value = fid.value();
-                if VectorFilter::matches(value, op) {
+                if VectorFilter::matches(value) {
+                    if !matches!(op, Condition::Exists) {
+                        return Err(Error::UserError(UserError::InvalidFilter(
+                            String::from("Vector filter can only be used with the `exists` operator"),
+                        )));
+                    }
                     let vector_filter = VectorFilter::parse(value)?;
                     return vector_filter.evaluate(rtxn, index, universe);
                 }
