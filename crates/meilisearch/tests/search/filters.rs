@@ -733,29 +733,29 @@ async fn test_filterable_attributes_priority() {
 }
 
 #[actix_rt::test]
-async fn test_vector_filter() {
+async fn vector_filter_all_embedders() {
     let index = crate::vector::shared_index_for_fragments().await;
 
     let (value, _code) = index
         .search_post(json!({
             "filter": "_vectors EXISTS",
-            "attributesToRetrieve": ["id"]
+            "attributesToRetrieve": ["name"]
         }))
         .await;
     snapshot!(value, @r#"
     {
       "hits": [
         {
-          "id": 0
+          "name": "kefir"
         },
         {
-          "id": 1
+          "name": "echo"
         },
         {
-          "id": 2
+          "name": "intel"
         },
         {
-          "id": 3
+          "name": "dustin"
         }
       ],
       "query": "",
@@ -765,11 +765,16 @@ async fn test_vector_filter() {
       "estimatedTotalHits": 4
     }
     "#);
+}
+
+#[actix_rt::test]
+async fn vector_filter_non_existant_embedder() {
+    let index = crate::vector::shared_index_for_fragments().await;
 
     let (value, _code) = index
         .search_post(json!({
             "filter": "_vectors.other EXISTS",
-            "attributesToRetrieve": ["id"]
+            "attributesToRetrieve": ["name"]
         }))
         .await;
     snapshot!(value, @r#"
@@ -780,13 +785,18 @@ async fn test_vector_filter() {
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
     }
     "#);
+}
+
+#[actix_rt::test]
+async fn vector_filter_all_embedders_user_provided() {
+    let index = crate::vector::shared_index_for_fragments().await;
 
     // This one is counterintuitive, but it is the same as the previous one.
     // It's because userProvided is interpreted as an embedder name
     let (value, _code) = index
         .search_post(json!({
             "filter": "_vectors.userProvided EXISTS",
-            "attributesToRetrieve": ["id"]
+            "attributesToRetrieve": ["name"]
         }))
         .await;
     snapshot!(value, @r#"
@@ -797,27 +807,32 @@ async fn test_vector_filter() {
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
     }
     "#);
+}
+
+#[actix_rt::test]
+async fn vector_filter_specific_embedder() {
+    let index = crate::vector::shared_index_for_fragments().await;
 
     let (value, _code) = index
         .search_post(json!({
             "filter": "_vectors.rest EXISTS",
-            "attributesToRetrieve": ["id"]
+            "attributesToRetrieve": ["name"]
         }))
         .await;
     snapshot!(value, @r#"
     {
       "hits": [
         {
-          "id": 0
+          "name": "kefir"
         },
         {
-          "id": 1
+          "name": "echo"
         },
         {
-          "id": 2
+          "name": "intel"
         },
         {
-          "id": 3
+          "name": "dustin"
         }
       ],
       "query": "",
@@ -827,18 +842,23 @@ async fn test_vector_filter() {
       "estimatedTotalHits": 4
     }
     "#);
+}
+
+#[actix_rt::test]
+async fn vector_filter_user_provided() {
+    let index = crate::vector::shared_index_for_fragments().await;
 
     let (value, _code) = index
         .search_post(json!({
             "filter": "_vectors.rest.userProvided EXISTS",
-            "attributesToRetrieve": ["id"]
+            "attributesToRetrieve": ["name"]
         }))
         .await;
     snapshot!(value, @r#"
     {
       "hits": [
         {
-          "id": 1
+          "name": "echo"
         }
       ],
       "query": "",
@@ -848,21 +868,26 @@ async fn test_vector_filter() {
       "estimatedTotalHits": 1
     }
     "#);
+}
+
+#[actix_rt::test]
+async fn vector_filter_specific_fragment() {
+    let index = crate::vector::shared_index_for_fragments().await;
 
     let (value, _code) = index
         .search_post(json!({
             "filter": "_vectors.rest.fragments.withBreed EXISTS",
-            "attributesToRetrieve": ["id"]
+            "attributesToRetrieve": ["name"]
         }))
         .await;
     snapshot!(value, @r#"
     {
       "hits": [
         {
-          "id": 2
+          "name": "intel"
         },
         {
-          "id": 3
+          "name": "dustin"
         }
       ],
       "query": "",
@@ -876,23 +901,23 @@ async fn test_vector_filter() {
     let (value, _code) = index
         .search_post(json!({
             "filter": "_vectors.rest.fragments.basic EXISTS",
-            "attributesToRetrieve": ["id"]
+            "attributesToRetrieve": ["name"]
         }))
         .await;
     snapshot!(value, @r#"
     {
       "hits": [
         {
-          "id": 0
+          "name": "kefir"
         },
         {
-          "id": 1
+          "name": "echo"
         },
         {
-          "id": 2
+          "name": "intel"
         },
         {
-          "id": 3
+          "name": "dustin"
         }
       ],
       "query": "",
@@ -902,16 +927,41 @@ async fn test_vector_filter() {
       "estimatedTotalHits": 4
     }
     "#);
+}
+
+#[actix_rt::test]
+async fn vector_filter_non_existant_fragment() {
+    let index = crate::vector::shared_index_for_fragments().await;
 
     let (value, _code) = index
         .search_post(json!({
             "filter": "_vectors.rest.fragments.other EXISTS",
-            "attributesToRetrieve": ["id"]
+            "attributesToRetrieve": ["name"]
         }))
         .await;
     snapshot!(value, @r#"
     {
       "message": "Index `[uuid]`: The fragment `other` does not exist on embedder `rest`. Available fragments on this embedder are: `basic`, `withBreed`.\n25:30 _vectors.rest.fragments.other EXISTS",
+      "code": "invalid_search_filter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+    }
+    "#);
+}
+
+#[actix_rt::test]
+async fn vector_filter_specific_fragment_user_provided() {
+    let index = crate::vector::shared_index_for_fragments().await;
+
+    let (value, _code) = index
+        .search_post(json!({
+            "filter": "_vectors.rest.fragments.other.userProvided EXISTS",
+            "attributesToRetrieve": ["name"]
+        }))
+        .await;
+    snapshot!(value, @r#"
+    {
+      "message": "Index `[uuid]`: Vector filter cannot specify both a fragment name and userProvided.\n31:43 _vectors.rest.fragments.other.userProvided EXISTS",
       "code": "invalid_search_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
