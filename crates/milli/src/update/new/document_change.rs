@@ -10,18 +10,14 @@ use super::vector_document::{
 };
 use crate::attribute_patterns::PatternMatch;
 use crate::documents::FieldIdMapper;
-use crate::vector::EmbeddingConfigs;
+use crate::update::new::document::DocumentIdentifiers;
+use crate::vector::RuntimeEmbedders;
 use crate::{DocumentId, Index, InternalError, Result};
 
 pub enum DocumentChange<'doc> {
-    Deletion(Deletion<'doc>),
+    Deletion(DocumentIdentifiers<'doc>),
     Update(Update<'doc>),
     Insertion(Insertion<'doc>),
-}
-
-pub struct Deletion<'doc> {
-    docid: DocumentId,
-    external_document_id: &'doc str,
 }
 
 pub struct Update<'doc> {
@@ -55,31 +51,6 @@ impl<'doc> DocumentChange<'doc> {
     }
 }
 
-impl<'doc> Deletion<'doc> {
-    pub fn create(docid: DocumentId, external_document_id: &'doc str) -> Self {
-        Self { docid, external_document_id }
-    }
-
-    pub fn docid(&self) -> DocumentId {
-        self.docid
-    }
-
-    pub fn external_document_id(&self) -> &'doc str {
-        self.external_document_id
-    }
-
-    pub fn current<'a, Mapper: FieldIdMapper>(
-        &self,
-        rtxn: &'a RoTxn,
-        index: &'a Index,
-        mapper: &'a Mapper,
-    ) -> Result<DocumentFromDb<'a, Mapper>> {
-        Ok(DocumentFromDb::new(self.docid, rtxn, index, mapper)?.ok_or(
-            crate::error::UserError::UnknownInternalDocumentId { document_id: self.docid },
-        )?)
-    }
-}
-
 impl<'doc> Insertion<'doc> {
     pub fn create(docid: DocumentId, external_document_id: &'doc str, new: Versions<'doc>) -> Self {
         Insertion { docid, external_document_id, new }
@@ -99,7 +70,7 @@ impl<'doc> Insertion<'doc> {
     pub fn inserted_vectors(
         &self,
         doc_alloc: &'doc Bump,
-        embedders: &'doc EmbeddingConfigs,
+        embedders: &'doc RuntimeEmbedders,
     ) -> Result<Option<VectorDocumentFromVersions<'doc>>> {
         VectorDocumentFromVersions::new(self.external_document_id, &self.new, doc_alloc, embedders)
     }
@@ -270,7 +241,7 @@ impl<'doc> Update<'doc> {
     pub fn only_changed_vectors(
         &self,
         doc_alloc: &'doc Bump,
-        embedders: &'doc EmbeddingConfigs,
+        embedders: &'doc RuntimeEmbedders,
     ) -> Result<Option<VectorDocumentFromVersions<'doc>>> {
         VectorDocumentFromVersions::new(self.external_document_id, &self.new, doc_alloc, embedders)
     }
@@ -281,7 +252,7 @@ impl<'doc> Update<'doc> {
         index: &'doc Index,
         mapper: &'doc Mapper,
         doc_alloc: &'doc Bump,
-        embedders: &'doc EmbeddingConfigs,
+        embedders: &'doc RuntimeEmbedders,
     ) -> Result<Option<MergedVectorDocument<'doc>>> {
         if self.from_scratch {
             MergedVectorDocument::without_db(

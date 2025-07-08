@@ -2188,7 +2188,8 @@ async fn import_dump_v6_containing_experimental_features() {
       "network": false,
       "getTaskDocumentsRoute": false,
       "compositeEmbedders": false,
-      "chatCompletions": false
+      "chatCompletions": false,
+      "multimodal": false
     }
     "###);
 
@@ -2314,7 +2315,8 @@ async fn import_dump_v6_containing_batches_and_enqueued_tasks() {
       "network": false,
       "getTaskDocumentsRoute": false,
       "compositeEmbedders": false,
-      "chatCompletions": false
+      "chatCompletions": false,
+      "multimodal": false
     }
     "###);
 
@@ -2420,7 +2422,8 @@ async fn generate_and_import_dump_containing_vectors() {
       "network": false,
       "getTaskDocumentsRoute": false,
       "compositeEmbedders": false,
-      "chatCompletions": false
+      "chatCompletions": false,
+      "multimodal": false
     }
     "###);
 

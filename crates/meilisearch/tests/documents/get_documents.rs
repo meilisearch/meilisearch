@@ -23,7 +23,7 @@ async fn error_get_unexisting_document() {
     let server = Server::new_shared();
     let index = server.unique_index();
     let (task, _code) = index.create(None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = index.get_document(1, None).await;
 
@@ -43,7 +43,7 @@ async fn get_document() {
     let server = Server::new_shared();
     let index = server.unique_index();
     let (task, _code) = index.create(None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
     let documents = json!([
         {
             "id": 0,
@@ -52,7 +52,7 @@ async fn get_document() {
     ]);
     let (task, code) = index.add_documents(documents, None).await;
     assert_eq!(code, 202);
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
     let (response, code) = index.get_document(0, None).await;
     assert_eq!(code, 200);
     assert_eq!(
@@ -276,7 +276,7 @@ async fn get_document_s_nested_attributes_to_retrieve() {
     let server = Server::new_shared();
     let index = server.unique_index();
     let (task, _code) = index.create(None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let documents = json!([
         {
@@ -293,7 +293,7 @@ async fn get_document_s_nested_attributes_to_retrieve() {
     ]);
     let (task, code) = index.add_documents(documents, None).await;
     assert_eq!(code, 202);
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = index.get_document(0, Some(json!({ "fields": ["content"] }))).await;
     assert_eq!(code, 200);
@@ -369,7 +369,7 @@ async fn get_document_by_filter() {
             Some("id"),
         )
         .await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = index.fetch_documents(json!({})).await;
     let (response2, code2) = index.get_all_documents_raw("").await;
@@ -525,7 +525,7 @@ async fn get_document_by_ids() {
             Some("id"),
         )
         .await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = index
         .fetch_documents(json!({
@@ -651,7 +651,7 @@ async fn get_document_invalid_ids() {
             Some("id"),
         )
         .await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = index.fetch_documents(json!({"ids": ["0", "illegal/docid"] })).await;
     let (response2, code2) = index.get_all_documents_raw("?ids=0,illegal/docid").await;
@@ -683,7 +683,7 @@ async fn get_document_not_found_ids() {
             Some("id"),
         )
         .await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = index.fetch_documents(json!({"ids": ["0", 3, 42] })).await;
     let (response2, code2) = index.get_all_documents_raw("?ids=0,3,42").await;
@@ -726,7 +726,7 @@ async fn get_document_by_ids_and_filter() {
             Some("id"),
         )
         .await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (response, code) =
         index.fetch_documents(json!({"ids": [2], "filter": "color = blue" })).await;
@@ -854,7 +854,7 @@ async fn get_document_with_vectors() {
     ]);
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    index.wait_task(value.uid()).await.succeeded();
+    server.wait_task(value.uid()).await.succeeded();
 
     // by default you shouldn't see the `_vectors` object
     let (documents, _code) = index.get_all_documents(Default::default()).await;

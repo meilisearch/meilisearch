@@ -17,7 +17,7 @@ async fn create_index_no_primary_key() {
 
     assert_eq!(response["status"], "enqueued");
 
-    let response = index.wait_task(response.uid()).await;
+    let response = server.wait_task(response.uid()).await;
 
     assert_eq!(response["status"], "succeeded");
     assert_eq!(response["type"], "indexCreation");
@@ -34,7 +34,7 @@ async fn create_index_with_gzip_encoded_request() {
 
     assert_eq!(response["status"], "enqueued");
 
-    let response = index.wait_task(response.uid()).await;
+    let response = server.wait_task(response.uid()).await;
 
     assert_eq!(response["status"], "succeeded");
     assert_eq!(response["type"], "indexCreation");
@@ -83,7 +83,7 @@ async fn create_index_with_zlib_encoded_request() {
 
     assert_eq!(response["status"], "enqueued");
 
-    let response = index.wait_task(response.uid()).await;
+    let response = server.wait_task(response.uid()).await;
 
     assert_eq!(response["status"], "succeeded");
     assert_eq!(response["type"], "indexCreation");
@@ -100,7 +100,7 @@ async fn create_index_with_brotli_encoded_request() {
 
     assert_eq!(response["status"], "enqueued");
 
-    let response = index.wait_task(response.uid()).await;
+    let response = server.wait_task(response.uid()).await;
 
     assert_eq!(response["status"], "succeeded");
     assert_eq!(response["type"], "indexCreation");
@@ -117,7 +117,7 @@ async fn create_index_with_primary_key() {
 
     assert_eq!(response["status"], "enqueued");
 
-    let response = index.wait_task(response.uid()).await.succeeded();
+    let response = server.wait_task(response.uid()).await.succeeded();
 
     assert_eq!(response["status"], "succeeded");
     assert_eq!(response["type"], "indexCreation");
@@ -132,7 +132,7 @@ async fn create_index_with_invalid_primary_key() {
     let index = server.unique_index();
     let (response, code) = index.add_documents(documents, Some("title")).await;
     assert_eq!(code, 202);
-    index.wait_task(response.uid()).await.failed();
+    server.wait_task(response.uid()).await.failed();
 
     let (response, code) = index.get().await;
     assert_eq!(code, 200);
@@ -142,7 +142,7 @@ async fn create_index_with_invalid_primary_key() {
 
     let (response, code) = index.add_documents(documents, Some("id")).await;
     assert_eq!(code, 202);
-    index.wait_task(response.uid()).await.failed();
+    server.wait_task(response.uid()).await.failed();
 
     let (response, code) = index.get().await;
     assert_eq!(code, 200);
@@ -181,7 +181,7 @@ async fn error_create_existing_index() {
 
     let (task, _) = index.create(Some("primary")).await;
 
-    let response = index.wait_task(task.uid()).await;
+    let response = server.wait_task(task.uid()).await;
     let msg = format!(
         "Index `{}` already exists.",
         task["indexUid"].as_str().expect("indexUid should exist").trim_matches('"')

@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use milli::progress::ProgressView;
+use milli::progress::{EmbedderStats, ProgressView};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use utoipa::ToSchema;
@@ -19,6 +19,8 @@ pub struct Batch {
     pub progress: Option<ProgressView>,
     pub details: DetailsView,
     pub stats: BatchStats,
+    #[serde(skip_serializing_if = "EmbedderStatsView::skip_serializing", default)]
+    pub embedder_stats: EmbedderStatsView,
 
     #[serde(with = "time::serde::rfc3339")]
     pub started_at: OffsetDateTime,
@@ -43,6 +45,7 @@ impl PartialEq for Batch {
             progress,
             details,
             stats,
+            embedder_stats,
             started_at,
             finished_at,
             enqueued_at,
@@ -53,6 +56,7 @@ impl PartialEq for Batch {
             && progress.is_none() == other.progress.is_none()
             && details == &other.details
             && stats == &other.stats
+            && embedder_stats == &other.embedder_stats
             && started_at == &other.started_at
             && finished_at == &other.finished_at
             && enqueued_at == &other.enqueued_at
@@ -82,4 +86,31 @@ pub struct BatchStats {
     pub write_channel_congestion: Option<serde_json::Map<String, serde_json::Value>>,
     #[serde(default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub internal_database_sizes: serde_json::Map<String, serde_json::Value>,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
+pub struct EmbedderStatsView {
+    pub total: usize,
+    pub failed: usize,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub last_error: Option<String>,
+}
+
+impl From<&EmbedderStats> for EmbedderStatsView {
+    fn from(stats: &EmbedderStats) -> Self {
+        let errors = stats.errors.read().unwrap_or_else(|p| p.into_inner());
+        Self {
+            total: stats.total_count.load(std::sync::atomic::Ordering::Relaxed),
+            failed: errors.1 as usize,
+            last_error: errors.0.clone(),
+        }
+    }
+}
+
+impl EmbedderStatsView {
+    pub fn skip_serializing(&self) -> bool {
+        self.total == 0 && self.failed == 0 && self.last_error.is_none()
+    }
 }

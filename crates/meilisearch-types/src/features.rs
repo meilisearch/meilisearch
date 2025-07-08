@@ -21,6 +21,7 @@ pub struct RuntimeTogglableFeatures {
     pub get_task_documents_route: bool,
     pub composite_embedders: bool,
     pub chat_completions: bool,
+    pub multimodal: bool,
 }
 
 #[derive(Default, Debug, Clone, Copy)]
@@ -114,7 +115,6 @@ pub enum ChatCompletionSource {
     OpenAi,
     AzureOpenAi,
     Mistral,
-    Gemini,
     VLlm,
 }
 
@@ -134,7 +134,6 @@ impl ChatCompletionSource {
             AzureOpenAi if Self::old_openai_model(model) => System,
             AzureOpenAi => Developer,
             Mistral => System,
-            Gemini => System,
             VLlm => System,
         }
     }
@@ -154,7 +153,6 @@ impl ChatCompletionSource {
         match self {
             OpenAi => Some("https://api.openai.com/v1/"),
             Mistral => Some("https://api.mistral.ai/v1/"),
-            Gemini => Some("https://generativelanguage.googleapis.com/v1beta/openai/"),
             AzureOpenAi | VLlm => None,
         }
     }

@@ -28,7 +28,6 @@ actix-web = { version = "4.11.0", default-features = false, features = [
     "rustls-0_23",
 ] }
 anyhow = { version = "1.0.98", features = ["backtrace"] }
-async-trait = "0.1.88"
 bstr = "1.12.0"
 byte-unit = { version = "5.1.6", features = ["serde"] }
 bytes = "1.10.1"
@@ -170,5 +169,5 @@ german = ["meilisearch-types/german"]
 turkish = ["meilisearch-types/turkish"]
 
 [package.metadata.mini-dashboard]
-assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.2.19/build.zip"
-sha1 = "7974430d5277c97f67cf6e95eec6faaac2788834"
+assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.2.20/build.zip"
+sha1 = "82a7ddd7bf14bb5323c3d235d2b62892a98b6a59"

@@ -179,6 +179,7 @@ impl BatchQueue {
                 progress: None,
                 details: batch.details,
                 stats: batch.stats,
+                embedder_stats: batch.embedder_stats.as_ref().into(),
                 started_at: batch.started_at,
                 finished_at: batch.finished_at,
                 enqueued_at: batch.enqueued_at,

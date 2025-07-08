@@ -3,11 +3,11 @@ use std::collections::BTreeMap;
 use big_s::S;
 use meili_snap::{json_string, snapshot};
 use meilisearch_auth::AuthFilter;
-use meilisearch_types::milli::index::IndexEmbeddingConfig;
 use meilisearch_types::milli::update::IndexDocumentsMethod::*;
 use meilisearch_types::milli::{self};
 use meilisearch_types::settings::SettingEmbeddingSettings;
 use meilisearch_types::tasks::{IndexSwap, KindWithContent};
+use milli::vector::db::IndexEmbeddingConfig;
 use roaring::RoaringBitmap;
 
 use crate::insta_snapshot::snapshot_index_scheduler;
@@ -690,11 +690,20 @@ fn test_settings_update() {
     let index = index_scheduler.index("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
 
-    let configs = index.embedding_configs(&rtxn).unwrap();
-    let IndexEmbeddingConfig { name, config, user_provided } = configs.first().unwrap();
+    let embedders = index.embedding_configs();
+    let configs = embedders.embedding_configs(&rtxn).unwrap();
+    let IndexEmbeddingConfig { name, config, fragments } = configs.first().unwrap();
+    let info = embedders.embedder_info(&rtxn, name).unwrap().unwrap();
+    insta::assert_snapshot!(info.embedder_id, @"0");
+    insta::assert_debug_snapshot!(info.embedding_status.user_provided_docids(), @"RoaringBitmap<[]>");
+    insta::assert_debug_snapshot!(info.embedding_status.skip_regenerate_docids(), @"RoaringBitmap<[]>");
     insta::assert_snapshot!(name, @"default");
-    insta::assert_debug_snapshot!(user_provided, @"RoaringBitmap<[]>");
     insta::assert_json_snapshot!(config.embedder_options);
+    insta::assert_debug_snapshot!(fragments, @r###"
+    FragmentConfigs(
+        [],
+    )
+    "###);
 }
 
 #[test]
@@ -732,6 +741,7 @@ fn basic_get_stats() {
         "documentDeletion": 0,
         "documentEdition": 0,
         "dumpCreation": 0,
+        "export": 0,
         "indexCreation": 3,
         "indexDeletion": 0,
         "indexSwap": 0,
@@ -765,6 +775,7 @@ fn basic_get_stats() {
         "documentDeletion": 0,
         "documentEdition": 0,
         "dumpCreation": 0,
+        "export": 0,
         "indexCreation": 3,
         "indexDeletion": 0,
         "indexSwap": 0,
@@ -805,6 +816,7 @@ fn basic_get_stats() {
         "documentDeletion": 0,
         "documentEdition": 0,
         "dumpCreation": 0,
+        "export": 0,
         "indexCreation": 3,
         "indexDeletion": 0,
         "indexSwap": 0,
@@ -846,6 +858,7 @@ fn basic_get_stats() {
         "documentDeletion": 0,
         "documentEdition": 0,
         "dumpCreation": 0,
+        "export": 0,
         "indexCreation": 3,
         "indexDeletion": 0,
         "indexSwap": 0,

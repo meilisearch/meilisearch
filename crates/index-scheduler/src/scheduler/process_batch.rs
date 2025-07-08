@@ -162,8 +162,13 @@ impl IndexScheduler {
                     .set_currently_updating_index(Some((index_uid.clone(), index.clone())));
 
                 let pre_commit_dabases_sizes = index.database_sizes(&index_wtxn)?;
-                let (tasks, congestion) =
-                    self.apply_index_operation(&mut index_wtxn, &index, op, &progress)?;
+                let (tasks, congestion) = self.apply_index_operation(
+                    &mut index_wtxn,
+                    &index,
+                    op,
+                    &progress,
+                    current_batch.embedder_stats.clone(),
+                )?;
 
                 {
                     progress.update_progress(FinalizingIndexStep::Committing);
@@ -238,10 +243,12 @@ impl IndexScheduler {
                     );
                     builder.set_primary_key(primary_key);
                     let must_stop_processing = self.scheduler.must_stop_processing.clone();
+
                     builder
                         .execute(
-                            |indexing_step| tracing::debug!(update = ?indexing_step),
-                            || must_stop_processing.get(),
+                            &|| must_stop_processing.get(),
+                            &progress,
+                            current_batch.embedder_stats.clone(),
                         )
                         .map_err(|e| Error::from_milli(e, Some(index_uid.to_string())))?;
                     index_wtxn.commit()?;
@@ -359,6 +366,46 @@ impl IndexScheduler {
                 }
                 wtxn.commit()?;
                 task.status = Status::Succeeded;
+                Ok((vec![task], ProcessBatchInfo::default()))
+            }
+            Batch::Export { mut task } => {
+                let KindWithContent::Export { url, api_key, payload_size, indexes } = &task.kind
+                else {
+                    unreachable!()
+                };
+
+                let ret = catch_unwind(AssertUnwindSafe(|| {
+                    self.process_export(
+                        url,
+                        api_key.as_deref(),
+                        payload_size.as_ref(),
+                        indexes,
+                        progress,
+                    )
+                }));
+
+                let stats = match ret {
+                    Ok(Ok(stats)) => stats,
+                    Ok(Err(Error::AbortedTask)) => return Err(Error::AbortedTask),
+                    Ok(Err(e)) => return Err(Error::Export(Box::new(e))),
+                    Err(e) => {
+                        let msg = match e.downcast_ref::<&'static str>() {
+                            Some(s) => *s,
+                            None => match e.downcast_ref::<String>() {
+                                Some(s) => &s[..],
+                                None => "Box<dyn Any>",
+                            },
+                        };
+                        return Err(Error::Export(Box::new(Error::ProcessBatchPanicked(
+                            msg.to_string(),
+                        ))));
+                    }
+                };
+
+                task.status = Status::Succeeded;
+                if let Some(Details::Export { indexes, .. }) = task.details.as_mut() {
+                    *indexes = stats;
+                }
                 Ok((vec![task], ProcessBatchInfo::default()))
             }
             Batch::UpgradeDatabase { mut tasks } => {
@@ -708,9 +755,11 @@ impl IndexScheduler {
                     from.1,
                     from.2
                 );
-                match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let ret = catch_unwind(std::panic::AssertUnwindSafe(|| {
                     self.process_rollback(from, progress)
-                })) {
+                }));
+
+                match ret {
                     Ok(Ok(())) => {}
                     Ok(Err(err)) => return Err(Error::DatabaseUpgrade(Box::new(err))),
                     Err(e) => {

@@ -197,11 +197,13 @@ struct Infos {
     experimental_max_number_of_batched_tasks: usize,
     experimental_limit_batched_tasks_total_size: u64,
     experimental_network: bool,
+    experimental_multimodal: bool,
     experimental_chat_completions: bool,
     experimental_get_task_documents_route: bool,
     experimental_composite_embedders: bool,
     experimental_embedding_cache_entries: usize,
     experimental_no_snapshot_compaction: bool,
+    experimental_no_edition_2024_for_settings: bool,
     gpu_enabled: bool,
     db_path: bool,
     import_dump: bool,
@@ -286,8 +288,12 @@ impl Infos {
             ScheduleSnapshot::Enabled(interval) => Some(interval),
         };
 
-        let IndexerOpts { max_indexing_memory, max_indexing_threads, skip_index_budget: _ } =
-            indexer_options;
+        let IndexerOpts {
+            max_indexing_memory,
+            max_indexing_threads,
+            skip_index_budget: _,
+            experimental_no_edition_2024_for_settings,
+        } = indexer_options;
 
         let RuntimeTogglableFeatures {
             metrics,
@@ -298,6 +304,7 @@ impl Infos {
             get_task_documents_route,
             composite_embedders,
             chat_completions,
+            multimodal,
         } = features;
 
         // We're going to override every sensible information.
@@ -317,6 +324,7 @@ impl Infos {
             experimental_reduce_indexing_memory_usage,
             experimental_network: network,
             experimental_chat_completions: chat_completions,
+            experimental_multimodal: multimodal,
             experimental_get_task_documents_route: get_task_documents_route,
             experimental_composite_embedders: composite_embedders,
             experimental_embedding_cache_entries,
@@ -350,6 +358,7 @@ impl Infos {
             ssl_require_auth,
             ssl_resumption,
             ssl_tickets,
+            experimental_no_edition_2024_for_settings,
         }
     }
 }
