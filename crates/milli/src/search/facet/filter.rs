@@ -234,11 +234,9 @@ impl<'a> Filter<'a> {
     pub fn evaluate(&self, rtxn: &heed::RoTxn<'_>, index: &Index) -> Result<RoaringBitmap> {
         // to avoid doing this for each recursive call we're going to do it ONCE ahead of time
         let fields_ids_map = index.fields_ids_map(rtxn)?;
-        let filterable_attributes_rules = dbg!(index.filterable_attributes_rules(rtxn)?);
+        let filterable_attributes_rules = index.filterable_attributes_rules(rtxn)?;
 
         for fid in self.condition.fids(MAX_FILTER_DEPTH) {
-            println!("{fid:?}");
-
             let attribute = fid.value();
             if matching_features(attribute, &filterable_attributes_rules)
                 .is_some_and(|(_, features)| features.is_filterable())

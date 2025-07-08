@@ -9,7 +9,6 @@ pub(super) struct VectorFilter<'a> {
     embedder_token: Option<Token<'a>>,
     fragment_token: Option<Token<'a>>,
     user_provided: bool,
-    // TODO: not_user_provided: bool,
 }
 
 #[derive(Debug)]

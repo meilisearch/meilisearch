@@ -1003,7 +1003,7 @@ async fn vector_filter_negation() {
 
 #[actix_rt::test]
 async fn vector_filter_or_combination() {
-let index = crate::vector::shared_index_for_fragments().await;
+    let index = crate::vector::shared_index_for_fragments().await;
 
     let (value, _code) = index
         .search_post(json!({

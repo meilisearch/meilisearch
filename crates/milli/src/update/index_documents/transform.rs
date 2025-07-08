@@ -966,7 +966,7 @@ impl<'a, 'i> Transform<'a, 'i> {
                 // some user provided, remove only the ids that are not user provided
                 let to_delete = arroy.items_in_store(wtxn, *fragment_id, |items| {
                     items - infos.embedding_status.user_provided_docids()
-                })?; // MARKER
+                })?;
 
                 for to_delete in to_delete {
                     arroy.del_item_in_store(wtxn, to_delete, *fragment_id, dimensions)?;

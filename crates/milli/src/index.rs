@@ -1776,7 +1776,7 @@ impl Index {
                 embedder_info.embedder_id,
                 config.config.quantized(),
             );
-            let embeddings = reader.item_vectors(rtxn, docid)?; // MARKER
+            let embeddings = reader.item_vectors(rtxn, docid)?;
             res.insert(
                 config.name.to_owned(),
                 (embeddings, embedder_info.embedding_status.must_regenerate(docid)),
