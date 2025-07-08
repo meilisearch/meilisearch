@@ -1,6 +1,6 @@
 use heed::RwTxn;
 use roaring::RoaringBitmap;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use super::UpgradeIndex;
 use crate::progress::Progress;
@@ -34,7 +34,7 @@ impl UpgradeIndex for Latest_V1_14_To_Latest_V1_15 {
 /// # Warning
 ///
 /// This object should not be rewritten to the DB, only read to get the name and `user_provided` roaring.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize)]
 pub struct IndexEmbeddingConfig {
     pub name: String,
     pub user_provided: RoaringBitmap,
