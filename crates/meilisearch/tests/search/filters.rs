@@ -731,3 +731,165 @@ async fn test_filterable_attributes_priority() {
     )
     .await;
 }
+
+#[actix_rt::test]
+async fn test_vector_filter() {
+    let index = crate::vector::shared_index_for_fragments().await;
+
+    let (value, _code) = index.search_post(json!({
+        "filter": "_vectors EXISTS",
+        "attributesToRetrieve": ["id"]
+    })).await;
+    snapshot!(value, @r#"
+    {
+      "hits": [
+        {
+          "id": 0
+        },
+        {
+          "id": 1
+        },
+        {
+          "id": 2
+        },
+        {
+          "id": 3
+        }
+      ],
+      "query": "",
+      "processingTimeMs": "[duration]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 4
+    }
+    "#);
+
+    let (value, _code) = index.search_post(json!({
+        "filter": "_vectors.other EXISTS",
+        "attributesToRetrieve": ["id"]
+    })).await;
+    snapshot!(value, @r#"
+    {
+      "hits": [],
+      "query": "",
+      "processingTimeMs": "[duration]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 0
+    }
+    "#);
+    
+    // This one is counterintuitive, but it is the same as the previous one.
+    // It's because userProvided is interpreted as an embedder name
+    let (value, _code) = index.search_post(json!({
+        "filter": "_vectors.userProvided EXISTS",
+        "attributesToRetrieve": ["id"]
+    })).await;
+    snapshot!(value, @r#"
+    {
+      "hits": [],
+      "query": "",
+      "processingTimeMs": "[duration]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 0
+    }
+    "#);
+
+    let (value, _code) = index.search_post(json!({
+        "filter": "_vectors.rest EXISTS",
+        "attributesToRetrieve": ["id"]
+    })).await;
+    snapshot!(value, @r#"
+    {
+      "hits": [
+        {
+          "id": 0
+        },
+        {
+          "id": 1
+        },
+        {
+          "id": 2
+        },
+        {
+          "id": 3
+        }
+      ],
+      "query": "",
+      "processingTimeMs": "[duration]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 4
+    }
+    "#);
+
+    let (value, _code) = index.search_post(json!({
+        "filter": "_vectors.rest.userProvided EXISTS",
+        "attributesToRetrieve": ["id"]
+    })).await;
+    snapshot!(value, @r#"
+    {
+      "hits": [
+        {
+          "id": 1
+        }
+      ],
+      "query": "",
+      "processingTimeMs": "[duration]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 1
+    }
+    "#);
+
+    let (value, _code) = index.search_post(json!({
+        "filter": "_vectors.rest.fragments.withBreed EXISTS",
+        "attributesToRetrieve": ["id"]
+    })).await;
+    snapshot!(value, @r#"
+    {
+      "hits": [
+        {
+          "id": 2
+        },
+        {
+          "id": 3
+        }
+      ],
+      "query": "",
+      "processingTimeMs": "[duration]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 2
+    }
+    "#);
+    
+    let (value, _code) = index.search_post(json!({
+        "filter": "_vectors.rest.fragments.basic EXISTS",
+        "attributesToRetrieve": ["id"]
+    })).await;
+    snapshot!(value, @r#"
+    {
+      "hits": [
+        {
+          "id": 0
+        },
+        {
+          "id": 1
+        },
+        {
+          "id": 2
+        },
+        {
+          "id": 3
+        }
+      ],
+      "query": "",
+      "processingTimeMs": "[duration]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 4
+    }
+    "#);
+}
