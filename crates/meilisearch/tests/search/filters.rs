@@ -736,10 +736,12 @@ async fn test_filterable_attributes_priority() {
 async fn test_vector_filter() {
     let index = crate::vector::shared_index_for_fragments().await;
 
-    let (value, _code) = index.search_post(json!({
-        "filter": "_vectors EXISTS",
-        "attributesToRetrieve": ["id"]
-    })).await;
+    let (value, _code) = index
+        .search_post(json!({
+            "filter": "_vectors EXISTS",
+            "attributesToRetrieve": ["id"]
+        }))
+        .await;
     snapshot!(value, @r#"
     {
       "hits": [
@@ -764,42 +766,44 @@ async fn test_vector_filter() {
     }
     "#);
 
-    let (value, _code) = index.search_post(json!({
-        "filter": "_vectors.other EXISTS",
-        "attributesToRetrieve": ["id"]
-    })).await;
+    let (value, _code) = index
+        .search_post(json!({
+            "filter": "_vectors.other EXISTS",
+            "attributesToRetrieve": ["id"]
+        }))
+        .await;
     snapshot!(value, @r#"
     {
-      "hits": [],
-      "query": "",
-      "processingTimeMs": "[duration]",
-      "limit": 20,
-      "offset": 0,
-      "estimatedTotalHits": 0
+      "message": "Index `[uuid]`: The embedder `other` does not exist. Available embedders are: `rest`.\n10:15 _vectors.other EXISTS",
+      "code": "invalid_search_filter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
     }
     "#);
-    
+
     // This one is counterintuitive, but it is the same as the previous one.
     // It's because userProvided is interpreted as an embedder name
-    let (value, _code) = index.search_post(json!({
-        "filter": "_vectors.userProvided EXISTS",
-        "attributesToRetrieve": ["id"]
-    })).await;
+    let (value, _code) = index
+        .search_post(json!({
+            "filter": "_vectors.userProvided EXISTS",
+            "attributesToRetrieve": ["id"]
+        }))
+        .await;
     snapshot!(value, @r#"
     {
-      "hits": [],
-      "query": "",
-      "processingTimeMs": "[duration]",
-      "limit": 20,
-      "offset": 0,
-      "estimatedTotalHits": 0
+      "message": "Index `[uuid]`: The embedder `userProvided` does not exist. Available embedders are: `rest`.\n10:22 _vectors.userProvided EXISTS",
+      "code": "invalid_search_filter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
     }
     "#);
 
-    let (value, _code) = index.search_post(json!({
-        "filter": "_vectors.rest EXISTS",
-        "attributesToRetrieve": ["id"]
-    })).await;
+    let (value, _code) = index
+        .search_post(json!({
+            "filter": "_vectors.rest EXISTS",
+            "attributesToRetrieve": ["id"]
+        }))
+        .await;
     snapshot!(value, @r#"
     {
       "hits": [
@@ -824,10 +828,12 @@ async fn test_vector_filter() {
     }
     "#);
 
-    let (value, _code) = index.search_post(json!({
-        "filter": "_vectors.rest.userProvided EXISTS",
-        "attributesToRetrieve": ["id"]
-    })).await;
+    let (value, _code) = index
+        .search_post(json!({
+            "filter": "_vectors.rest.userProvided EXISTS",
+            "attributesToRetrieve": ["id"]
+        }))
+        .await;
     snapshot!(value, @r#"
     {
       "hits": [
@@ -843,10 +849,12 @@ async fn test_vector_filter() {
     }
     "#);
 
-    let (value, _code) = index.search_post(json!({
-        "filter": "_vectors.rest.fragments.withBreed EXISTS",
-        "attributesToRetrieve": ["id"]
-    })).await;
+    let (value, _code) = index
+        .search_post(json!({
+            "filter": "_vectors.rest.fragments.withBreed EXISTS",
+            "attributesToRetrieve": ["id"]
+        }))
+        .await;
     snapshot!(value, @r#"
     {
       "hits": [
@@ -864,11 +872,13 @@ async fn test_vector_filter() {
       "estimatedTotalHits": 2
     }
     "#);
-    
-    let (value, _code) = index.search_post(json!({
-        "filter": "_vectors.rest.fragments.basic EXISTS",
-        "attributesToRetrieve": ["id"]
-    })).await;
+
+    let (value, _code) = index
+        .search_post(json!({
+            "filter": "_vectors.rest.fragments.basic EXISTS",
+            "attributesToRetrieve": ["id"]
+        }))
+        .await;
     snapshot!(value, @r#"
     {
       "hits": [
@@ -890,6 +900,21 @@ async fn test_vector_filter() {
       "limit": 20,
       "offset": 0,
       "estimatedTotalHits": 4
+    }
+    "#);
+
+    let (value, _code) = index
+        .search_post(json!({
+            "filter": "_vectors.rest.fragments.other EXISTS",
+            "attributesToRetrieve": ["id"]
+        }))
+        .await;
+    snapshot!(value, @r#"
+    {
+      "message": "Index `[uuid]`: The fragment `other` does not exist on embedder `rest`. Available fragments on this embedder are: `basic`, `withBreed`.\n25:30 _vectors.rest.fragments.other EXISTS",
+      "code": "invalid_search_filter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
     }
     "#);
 }
