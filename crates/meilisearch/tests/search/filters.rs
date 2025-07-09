@@ -990,6 +990,85 @@ async fn vector_filter_specific_fragment_user_provided() {
 }
 
 #[actix_rt::test]
+async fn vector_filter_document_template_but_fragments_used() {
+    let index = crate::vector::shared_index_for_fragments().await;
+
+    let (value, _code) = index
+        .search_post(json!({
+            "filter": "_vectors.rest.documentTemplate EXISTS",
+            "attributesToRetrieve": ["name"]
+        }))
+        .await;
+    snapshot!(value, @r#"
+    {
+      "hits": [],
+      "query": "",
+      "processingTimeMs": "[duration]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 0
+    }
+    "#);
+}
+
+#[actix_rt::test]
+async fn vector_filter_document_template() {
+    let (_mock, setting) = crate::vector::create_mock().await;
+    let server = crate::vector::get_server_vector().await;
+    let index = server.index("doggo");
+
+    let (response, code) = index
+        .update_settings(json!({
+          "embedders": {
+              "rest": setting,
+          },
+        }))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(response.uid()).await.succeeded();
+
+    let documents = json!([
+      {"id": 0, "name": "kefir"},
+      {"id": 1, "name": "echo", "_vectors": { "rest": [1, 1, 1] }},
+      {"id": 2, "name": "intel"},
+      {"id": 3, "name": "iko" }
+    ]);
+    let (value, code) = index.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+    index.wait_task(value.uid()).await.succeeded();
+
+    let (value, _code) = index
+        .search_post(json!({
+            "filter": "_vectors.rest.documentTemplate EXISTS",
+            "attributesToRetrieve": ["name"]
+        }))
+        .await;
+    snapshot!(value, @r#"
+    {
+      "hits": [
+        {
+          "name": "kefir"
+        },
+        {
+          "name": "echo"
+        },
+        {
+          "name": "intel"
+        },
+        {
+          "name": "iko"
+        }
+      ],
+      "query": "",
+      "processingTimeMs": "[duration]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 4
+    }
+    "#);
+}
+
+#[actix_rt::test]
 async fn vector_filter_negation() {
     let index = crate::vector::shared_index_for_fragments().await;
 

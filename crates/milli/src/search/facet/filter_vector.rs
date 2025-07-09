@@ -8,6 +8,7 @@ use crate::Index;
 pub(super) struct VectorFilter<'a> {
     embedder_token: Option<Token<'a>>,
     fragment_token: Option<Token<'a>>,
+    document_template: bool,
     user_provided: bool,
 }
 
@@ -17,6 +18,7 @@ pub enum VectorFilterError<'a> {
     InvalidPrefix(Token<'a>),
     MissingFragmentName(Token<'a>),
     UserProvidedWithFragment(Token<'a>),
+    DocumentTemplateWithFragment(Token<'a>),
     LeftoverToken(Token<'a>),
     EmbedderDoesNotExist {
         embedder: &'a Token<'a>,
@@ -51,6 +53,9 @@ impl std::fmt::Display for VectorFilterError<'_> {
             }
             UserProvidedWithFragment(_token) => {
                 write!(f, "Vector filter cannot specify both a fragment name and userProvided.")
+            }
+            DocumentTemplateWithFragment(_token) => {
+                write!(f, "Vector filter cannot specify both a fragment name and documentTemplate.")
             }
             LeftoverToken(token) => {
                 write!(f, "Vector filter has leftover token: `{}`.", token.value())
@@ -105,6 +110,7 @@ impl<'a> From<VectorFilterError<'a>> for Error {
             InvalidPrefix(token)
             | MissingFragmentName(token)
             | UserProvidedWithFragment(token)
+            | DocumentTemplateWithFragment(token)
             | LeftoverToken(token) => token.clone().as_external_error(err).into(),
             EmbedderDoesNotExist { embedder: token, .. }
             | FragmentDoesNotExist { fragment: token, .. } => token.as_external_error(err).into(),
@@ -123,6 +129,8 @@ impl<'a> VectorFilter<'a> {
     /// - `_vectors`
     /// - `_vectors.{embedder_name}`
     /// - `_vectors.{embedder_name}.userProvided`
+    /// - `_vectors.{embedder_name}.documentTemplate`
+    /// - `_vectors.{embedder_name}.documentTemplate.userProvided`
     /// - `_vectors.{embedder_name}.fragments.{fragment_name}`
     pub(super) fn parse(s: &'a Token<'a>) -> Result<Self, VectorFilterError<'a>> {
         let mut split = s.split(".").peekable();
@@ -149,8 +157,20 @@ impl<'a> VectorFilter<'a> {
             user_provided_token = split.next();
         }
 
+        let mut document_template_token = None;
+        if split.peek().map(|t| t.value()) == Some("documentTemplate")
+            || split.peek().map(|t| t.value()) == Some("document_template")
+        {
+            document_template_token = split.next();
+        }
+
         if let (Some(_), Some(user_provided_token)) = (&fragment_name, &user_provided_token) {
             return Err(UserProvidedWithFragment(user_provided_token.clone()))?;
+        }
+
+        if let (Some(_), Some(document_template_token)) = (&fragment_name, &document_template_token)
+        {
+            return Err(DocumentTemplateWithFragment(document_template_token.clone()))?;
         }
 
         if let Some(next) = split.next() {
@@ -161,6 +181,7 @@ impl<'a> VectorFilter<'a> {
             embedder_token: embedder_name,
             fragment_token: fragment_name,
             user_provided: user_provided_token.is_some(),
+            document_template: document_template_token.is_some(),
         })
     }
 
@@ -176,7 +197,8 @@ impl<'a> VectorFilter<'a> {
         let mut embedders = Vec::new();
         if let Some(embedder_token) = &self.embedder_token {
             let embedder_name = embedder_token.value();
-            let Some(embedder_config) =
+
+            let Some(embedding_config) =
                 embedding_configs.iter().find(|config| config.name == embedder_name)
             else {
                 return Err(EmbedderDoesNotExist {
@@ -184,6 +206,7 @@ impl<'a> VectorFilter<'a> {
                     available: embedding_configs.iter().map(|c| c.name.clone()).collect(),
                 })?;
             };
+
             let Some(embedder_info) = index_embedding_configs.embedder_info(rtxn, embedder_name)?
             else {
                 return Err(EmbedderDoesNotExist {
@@ -192,7 +215,11 @@ impl<'a> VectorFilter<'a> {
                 })?;
             };
 
-            embedders.push((embedder_config, embedder_info));
+            if self.document_template && !embedding_config.fragments.as_slice().is_empty() {
+                return Ok(RoaringBitmap::new());
+            }
+
+            embedders.push((embedding_config, embedder_info));
         } else {
             for embedder_config in embedding_configs.iter() {
                 let Some(embedder_info) =
@@ -205,16 +232,16 @@ impl<'a> VectorFilter<'a> {
         };
 
         let mut docids = RoaringBitmap::new();
-        for (embedder_config, embedder_info) in embedders {
+        for (embedding_config, embedder_info) in embedders {
             let arroy_wrapper = ArroyWrapper::new(
                 index.vector_arroy,
                 embedder_info.embedder_id,
-                embedder_config.config.quantized(),
+                embedding_config.config.quantized(),
             );
 
             docids |= if let Some(fragment_token) = &self.fragment_token {
                 let fragment_name = fragment_token.value();
-                let Some(fragment_config) = embedder_config
+                let Some(fragment_config) = embedding_config
                     .fragments
                     .as_slice()
                     .iter()
@@ -226,7 +253,7 @@ impl<'a> VectorFilter<'a> {
                             .as_ref()
                             .expect("there can't be a fragment without an embedder"),
                         fragment: fragment_token,
-                        available: embedder_config
+                        available: embedding_config
                             .fragments
                             .as_slice()
                             .iter()

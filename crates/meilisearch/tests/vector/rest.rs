@@ -12,7 +12,7 @@ use crate::common::Value;
 use crate::json;
 use crate::vector::{get_server_vector, GetAllDocumentsOptions};
 
-async fn create_mock() -> (&'static MockServer, Value) {
+pub async fn create_mock() -> (&'static MockServer, Value) {
     let mock_server = Box::leak(Box::new(MockServer::start().await));
 
     let text_to_embedding: BTreeMap<_, _> = vec![

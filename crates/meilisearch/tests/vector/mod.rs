@@ -14,9 +14,9 @@ use meilisearch::option::MaxThreads;
 use crate::common::index::Index;
 use crate::common::{default_settings, GetAllDocumentsOptions, Server};
 use crate::json;
-pub use fragments::shared_index_for_fragments;
+pub use {fragments::shared_index_for_fragments, rest::create_mock};
 
-async fn get_server_vector() -> Server {
+pub async fn get_server_vector() -> Server {
     Server::new().await
 }
 
