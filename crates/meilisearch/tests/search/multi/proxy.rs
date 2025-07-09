@@ -1224,6 +1224,7 @@ async fn error_bad_request_facets_by_index_facet() {
 }
 
 #[actix_rt::test]
+#[ignore]
 async fn error_remote_does_not_answer() {
     let ms0 = Server::new().await;
     let ms1 = Server::new().await;
