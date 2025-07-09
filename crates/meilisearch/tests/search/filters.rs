@@ -1069,6 +1069,26 @@ async fn vector_filter_document_template() {
 }
 
 #[actix_rt::test]
+async fn vector_filter_feature_gate() {
+    let index = shared_index_with_documents().await;
+
+    let (value, _code) = index
+        .search_post(json!({
+            "filter": "_vectors EXISTS",
+            "attributesToRetrieve": ["name"]
+        }))
+        .await;
+    snapshot!(value, @r#"
+    {
+      "message": "using a vector filter requires enabling the `multimodal` experimental feature. See https://github.com/orgs/meilisearch/discussions/846\n1:9 _vectors EXISTS",
+      "code": "feature_not_enabled",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+    }
+    "#);
+}
+
+#[actix_rt::test]
 async fn vector_filter_negation() {
     let index = crate::vector::shared_index_for_fragments().await;
 

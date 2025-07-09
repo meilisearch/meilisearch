@@ -189,6 +189,25 @@ impl<'a> FilterCondition<'a> {
         }
     }
 
+    pub fn use_vector_filter(&self) -> Option<&Token> {
+        match self {
+            FilterCondition::Condition { fid, op: _ } => {
+                if fid.value().starts_with("_vectors.") || fid.value() == "_vectors" {
+                    Some(fid)
+                } else {
+                    None
+                }
+            }
+            FilterCondition::Not(this) => this.use_vector_filter(),
+            FilterCondition::Or(seq) | FilterCondition::And(seq) => {
+                seq.iter().find_map(|filter| filter.use_vector_filter())
+            }
+            FilterCondition::GeoLowerThan { .. }
+            | FilterCondition::GeoBoundingBox { .. }
+            | FilterCondition::In { .. } => None,
+        }
+    }
+
     pub fn fids(&self, depth: usize) -> Box<dyn Iterator<Item = &Token> + '_> {
         if depth == 0 {
             return Box::new(std::iter::empty());

@@ -228,6 +228,10 @@ impl<'a> Filter<'a> {
     pub fn use_contains_operator(&self) -> Option<&Token> {
         self.condition.use_contains_operator()
     }
+
+    pub fn use_vector_filter(&self) -> Option<&Token> {
+        self.condition.use_vector_filter()
+    }
 }
 
 impl<'a> Filter<'a> {
