@@ -101,14 +101,7 @@ async fn reset_embedder_documents() {
     server.wait_task(response.uid()).await;
 
     // Make sure the documents are still present
-    let (documents, _code) = index
-        .get_all_documents(GetAllDocumentsOptions {
-            limit: None,
-            offset: None,
-            retrieve_vectors: false,
-            fields: None,
-        })
-        .await;
+    let (documents, _code) = index.get_all_documents(GetAllDocumentsOptions::default()).await;
     snapshot!(json_string!(documents), @r###"
     {
       "results": [

@@ -51,3 +51,8 @@ harness = false
 [[bench]]
 name = "indexing"
 harness = false
+
+[[bench]]
+name = "sort"
+harness = false
+
