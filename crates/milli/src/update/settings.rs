@@ -554,10 +554,10 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         match self.searchable_fields {
             Setting::Set(ref fields) => {
                 // Check to see if the searchable fields changed before doing anything else
-                let old_fields = self.index.searchable_fields(self.wtxn)?;
+                let old_fields = self.index.user_defined_searchable_fields(self.wtxn)?;
                 let did_change = {
                     let new_fields = fields.iter().map(String::as_str).collect::<Vec<_>>();
-                    new_fields != old_fields
+                    old_fields.map(|old| new_fields != old).unwrap_or(true)
                 };
                 if !did_change {
                     return Ok(false);
