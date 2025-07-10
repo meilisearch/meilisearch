@@ -1,5 +1,5 @@
 use std::cell::{Cell, RefCell};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::RwLock;
 
 use bumpalo::Bump;
@@ -7,6 +7,7 @@ use bumparaw_collections::RawMap;
 use heed::{RoTxn, WithoutTls};
 use rustc_hash::FxBuildHasher;
 use serde_json::value::RawValue;
+use serde_json::{from_str, Value};
 
 use super::vector_document::VectorDocument;
 use super::{KvReaderFieldId, KvWriterFieldId};
@@ -29,8 +30,14 @@ pub trait Document<'doc> {
     /// Iterate over all **top-level** fields of the document, returning their name and raw JSON value.
     ///
     /// - The returned values *may* contain nested fields.
-    /// - The `_vectors` and `_geo` fields are **ignored** by this method, meaning  they are **not returned** by this method.
+    /// - The `_vectors` and `_geo` fields are **ignored** by this method, meaning they are **not returned** by this method.
     fn iter_top_level_fields(&self) -> impl Iterator<Item = Result<(&'doc str, &'doc RawValue)>>;
+
+    /// Iterate over all fields of the document, returning their `JSON path` and raw JSON value.
+    ///
+    /// - The returned values *will* contain nested fields.
+    /// - The `_vectors` and `_geo` fields are **ignored** by this method, meaning they are **not returned** by this method.
+    fn iter_all_fields(&self) -> impl Iterator<Item = Result<(String, Box<RawValue>)>>;
 
     /// Number of top level fields, **excluding** `_vectors` and `_geo`
     fn top_level_fields_count(&self) -> usize;
@@ -105,6 +112,79 @@ impl<'t, Mapper: FieldIdMapper> Document<'t> for DocumentFromDb<'t, Mapper> {
         })
     }
 
+    fn iter_all_fields(&self) -> impl Iterator<Item = Result<(String, Box<RawValue>)>> {
+        let mut it = self.content.iter();
+        let mut stack = VecDeque::new();
+
+        std::iter::from_fn(move || loop {
+            if let Some(next) = it.next() {
+                let (fid, value) = next;
+                let name = match self.fields_ids_map.name(fid).ok_or(
+                    InternalError::FieldIdMapMissingEntry(crate::FieldIdMapMissingEntry::FieldId {
+                        field_id: fid,
+                        process: "getting current document",
+                    }),
+                ) {
+                    Ok(name) => name,
+                    Err(error) => return Some(Err(error.into())),
+                };
+
+                if name == RESERVED_VECTORS_FIELD_NAME || name == RESERVED_GEO_FIELD_NAME {
+                    continue;
+                }
+
+                let res: Result<(String, Box<RawValue>)> = (|| {
+                    let value =
+                        serde_json::from_slice(value).map_err(crate::InternalError::SerdeJson)?;
+
+                    Ok((name.to_string(), value))
+                })();
+
+                if let Ok((name, value)) = &res {
+                    stack.push_back((value.clone(), name.clone(), true));
+                } else {
+                    return Some(Err(res.err().unwrap().into()));
+                }
+
+                return Some(res);
+            } else {
+                while let Some((raw, path, is_first_level)) = stack.pop_back() {
+                    if let Ok(val) = from_str::<Value>(raw.get()) {
+                        match val {
+                            Value::Object(map) => {
+                                for (child_key, child_val) in map.iter().rev() {
+                                    let child_path = format!("{}.{}", path, child_key);
+                                    if let Ok(child_raw) =
+                                        RawValue::from_string(child_val.to_string())
+                                    {
+                                        stack.push_back((child_raw, child_path, false));
+                                    }
+                                }
+                                continue;
+                            }
+                            Value::Array(array) => {
+                                for ele in array {
+                                    if let Ok(child_raw) = RawValue::from_string(ele.to_string()) {
+                                        stack.push_back((child_raw, path.clone(), false));
+                                    }
+                                }
+                                continue;
+                            }
+                            _ => {
+                                if !is_first_level {
+                                    return Some(Ok((path, raw)));
+                                }
+                                continue;
+                            }
+                        }
+                    } else {
+                        return Some(Ok((path, raw)));
+                    }
+                }
+            }
+        })
+    }
+
     fn vectors_field(&self) -> Result<Option<&'t RawValue>> {
         self.field(RESERVED_VECTORS_FIELD_NAME)
     }
@@ -167,6 +247,10 @@ impl<'a, 'doc> DocumentFromVersions<'a, 'doc> {
 impl<'doc> Document<'doc> for DocumentFromVersions<'_, 'doc> {
     fn iter_top_level_fields(&self) -> impl Iterator<Item = Result<(&'doc str, &'doc RawValue)>> {
         self.versions.iter_top_level_fields().map(Ok)
+    }
+
+    fn iter_all_fields(&self) -> impl Iterator<Item = Result<(String, Box<RawValue>)>> {
+        self.versions.iter_all_fields()
     }
 
     fn vectors_field(&self) -> Result<Option<&'doc RawValue>> {
@@ -245,6 +329,32 @@ impl<'d, 'doc: 'd, 't: 'd, Mapper: FieldIdMapper> Document<'d>
         })
     }
 
+    fn iter_all_fields(&self) -> impl Iterator<Item = Result<(String, Box<RawValue>)>> {
+        let mut seen_fields = BTreeSet::new();
+        let mut new_doc_it = self.new_doc.iter_all_fields();
+        let mut db_it = self.db.iter().flat_map(|db| db.iter_all_fields());
+
+        std::iter::from_fn(move || {
+            if let Some(next) = new_doc_it.next() {
+                if let Ok((name, _)) = &next {
+                    seen_fields.insert(name.clone());
+                }
+                return Some(next);
+            }
+            loop {
+                match db_it.next()? {
+                    Ok((name, value)) => {
+                        if seen_fields.contains(&name) {
+                            continue;
+                        }
+                        return Some(Ok((name, value)));
+                    }
+                    Err(err) => return Some(Err(err)),
+                }
+            }
+        })
+    }
+
     fn vectors_field(&self) -> Result<Option<&'d RawValue>> {
         if let Some(vectors) = self.new_doc.vectors_field()? {
             return Ok(Some(vectors));
@@ -286,6 +396,10 @@ where
 {
     fn iter_top_level_fields(&self) -> impl Iterator<Item = Result<(&'doc str, &'doc RawValue)>> {
         D::iter_top_level_fields(self)
+    }
+
+    fn iter_all_fields(&self) -> impl Iterator<Item = Result<(String, Box<RawValue>)>> {
+        D::iter_all_fields(self)
     }
 
     fn vectors_field(&self) -> Result<Option<&'doc RawValue>> {
@@ -446,6 +560,68 @@ impl<'doc> Versions<'doc> {
             .filter(|(k, _)| *k != RESERVED_VECTORS_FIELD_NAME && *k != RESERVED_GEO_FIELD_NAME)
     }
 
+    pub fn iter_all_fields(
+        &'doc self,
+    ) -> impl Iterator<Item = Result<(String, Box<RawValue>)>> + 'doc {
+        let mut it = self.data.iter();
+        let mut stack = VecDeque::new();
+
+        std::iter::from_fn(move || loop {
+            if let Some((k, v)) = it.next() {
+                if k != RESERVED_VECTORS_FIELD_NAME && k != RESERVED_GEO_FIELD_NAME {
+                    let res: Result<(String, Box<RawValue>)> = (|| {
+                        let value = serde_json::from_slice(v.get().as_bytes())
+                            .map_err(crate::InternalError::SerdeJson)?;
+
+                        Ok((k.to_string(), value))
+                    })();
+                    if let Ok((name, value)) = &res {
+                        stack.push_back((value.clone(), name.clone(), true));
+                    } else {
+                        return Some(Err(res.err().unwrap().into()));
+                    }
+
+                    return Some(res);
+                }
+            } else {
+                if let Some((raw, path, is_first_level)) = stack.pop_back() {
+                    if let Ok(val) = from_str::<Value>(raw.get()) {
+                        match val {
+                            Value::Object(map) => {
+                                for (child_key, child_val) in map.iter().rev() {
+                                    let child_path = format!("{}.{}", path, child_key);
+                                    if let Ok(child_raw) =
+                                        RawValue::from_string(child_val.to_string())
+                                    {
+                                        stack.push_back((child_raw, child_path, false));
+                                    }
+                                }
+                                continue;
+                            }
+                            Value::Array(array) => {
+                                for ele in array {
+                                    if let Ok(child_raw) = RawValue::from_string(ele.to_string()) {
+                                        stack.push_back((child_raw, path.clone(), false));
+                                    }
+                                }
+                                continue;
+                            }
+                            _ => {
+                                if !is_first_level {
+                                    return Some(Ok((path, raw)));
+                                }
+                            }
+                        }
+                    } else {
+                        return Some(Ok((path, raw)));
+                    }
+                } else {
+                    return None;
+                }
+            }
+        })
+    }
+
     pub fn vectors_field(&self) -> Option<&'doc RawValue> {
         self.data.get(RESERVED_VECTORS_FIELD_NAME)
     }
@@ -528,6 +704,81 @@ impl<'a, Mapper: FieldIdMapper> Document<'a> for KvDelAddDocument<'a, Mapper> {
             })();
 
             return Some(res);
+        })
+    }
+
+    fn iter_all_fields(&self) -> impl Iterator<Item = Result<(String, Box<RawValue>)>> {
+        let mut it = self.document.iter();
+        let mut stack = VecDeque::new();
+
+        std::iter::from_fn(move || loop {
+            if let Some(next) = it.next() {
+                let (fid, value) = next;
+                let Some(value) = KvReaderDelAdd::from_slice(value).get(self.side) else {
+                    continue;
+                };
+                let name = match self.fields_ids_map.name(fid).ok_or(
+                    InternalError::FieldIdMapMissingEntry(crate::FieldIdMapMissingEntry::FieldId {
+                        field_id: fid,
+                        process: "getting current document",
+                    }),
+                ) {
+                    Ok(name) => name,
+                    Err(error) => return Some(Err(error.into())),
+                };
+
+                if name == RESERVED_VECTORS_FIELD_NAME || name == RESERVED_GEO_FIELD_NAME {
+                    continue;
+                }
+
+                let res: Result<(String, Box<RawValue>)> = (|| {
+                    let value =
+                        serde_json::from_slice(value).map_err(crate::InternalError::SerdeJson)?;
+
+                    Ok((name.to_string(), value))
+                })();
+
+                if let Ok((name, value)) = &res {
+                    stack.push_back((value.clone(), name.clone(), true));
+                }
+
+                return Some(res);
+            } else {
+                if let Some((raw, path, is_first_level)) = stack.pop_back() {
+                    if let Ok(val) = from_str::<Value>(raw.get()) {
+                        match val {
+                            Value::Object(map) => {
+                                for (child_key, child_val) in map.iter().rev() {
+                                    let child_path = format!("{}.{}", path, child_key);
+                                    if let Ok(child_raw) =
+                                        RawValue::from_string(child_val.to_string())
+                                    {
+                                        stack.push_back((child_raw, child_path, false));
+                                    }
+                                }
+                                continue;
+                            }
+                            Value::Array(array) => {
+                                for ele in array {
+                                    if let Ok(child_raw) = RawValue::from_string(ele.to_string()) {
+                                        stack.push_back((child_raw, path.clone(), false));
+                                    }
+                                }
+                                continue;
+                            }
+                            _ => {
+                                if !is_first_level {
+                                    return Some(Ok((path, raw)));
+                                }
+                            }
+                        }
+                    } else {
+                        return Some(Ok((path, raw)));
+                    }
+                } else {
+                    return None;
+                }
+            }
         })
     }
 

@@ -275,15 +275,20 @@ fn initial_field_distribution() {
     let index = TempIndex::new();
     index
         .add_documents(documents!([
-            { "id": 1, "name": "kevin" },
-            { "id": 2, "name": "bob", "age": 20 },
-            { "id": 2, "name": "bob", "age": 20 },
+            { "id": 1, "name": "kevin", "address": {"addressLine1": "lorem"}, "array": [1, 2] },
+            { "id": 2, "name": "bob", "age": 20, "address": {"addressLine2": "lorem"}, "languages": [{"name": "English", "proficiency": "native"}] },
+            { "id": 1, "name": "bob", "age": 20 },
         ]))
         .unwrap();
 
     db_snap!(index, field_distribution, @r###"
-        age              1      |
+        address          1      |
+        address.addressLine2 1      |
+        age              2      |
         id               2      |
+        languages        1      |
+        languages.name   1      |
+        languages.proficiency 1      |
         name             2      |
         "###);
 
@@ -291,9 +296,11 @@ fn initial_field_distribution() {
     @r###"
         1                [0, ]
         2                [1, ]
-        20               [1, ]
-        bob              [1, ]
-        kevin            [0, ]
+        20               [0, 1, ]
+        bob              [0, 1, ]
+        english          [1, ]
+        lorem            [1, ]
+        native           [1, ]
         "###
     );
 
@@ -301,25 +308,28 @@ fn initial_field_distribution() {
     // field_distribution in the end
     index
         .add_documents(documents!([
-            { "id": 1, "name": "kevin" },
-            { "id": 2, "name": "bob", "age": 20 },
-            { "id": 2, "name": "bob", "age": 20 },
+            { "id": 1, "name": "kevin", "address": {"addressLine1": "lorem"}, "array": [1, 2] },
+            { "id": 2, "name": "bob", "age": 20, "address": {"addressLine2": "lorem"}, "languages": [{"name": "English", "proficiency": "native"}] },
+            { "id": 1, "name": "bob", "age": 20 },
         ]))
         .unwrap();
 
-    db_snap!(index, field_distribution,
-        @r###"
-        age              1      |
+    db_snap!(index, field_distribution, @r###"
+        address          1      |
+        address.addressLine2 1      |
+        age              2      |
         id               2      |
+        languages        1      |
+        languages.name   1      |
+        languages.proficiency 1      |
         name             2      |
-        "###
-    );
+        "###);
 
-    // then we update a document by removing one field and another by adding one field
+    // then we update a document by removing two fields and another by adding one nested field
     index
         .add_documents(documents!([
-            { "id": 1, "name": "kevin", "has_dog": true },
-            { "id": 2, "name": "bob" }
+            { "id": 1, "name": "kevin", "has_dog": true},
+            { "id": 2, "name": "bob", "languages": [{"name": "English", "proficiency": "native"}, {"name": "Telugu", "proficiency": "intermediate"}] },
         ]))
         .unwrap();
 
@@ -327,6 +337,8 @@ fn initial_field_distribution() {
         @r###"
         has_dog          1      |
         id               2      |
+        languages.name   2      |
+        languages.proficiency 2      |
         name             2      |
         "###
     );
