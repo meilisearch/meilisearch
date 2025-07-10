@@ -158,11 +158,11 @@ async fn remote_sharding() {
     let index1 = ms1.index("test");
     let index2 = ms2.index("test");
     let (task, _status_code) = index0.add_documents(json!(documents[0..2]), None).await;
-    index0.wait_task(task.uid()).await.succeeded();
+    ms0.wait_task(task.uid()).await.succeeded();
     let (task, _status_code) = index1.add_documents(json!(documents[2..3]), None).await;
-    index1.wait_task(task.uid()).await.succeeded();
+    ms1.wait_task(task.uid()).await.succeeded();
     let (task, _status_code) = index2.add_documents(json!(documents[3..5]), None).await;
-    index2.wait_task(task.uid()).await.succeeded();
+    ms2.wait_task(task.uid()).await.succeeded();
 
     // wrap servers
     let ms0 = Arc::new(ms0);
@@ -454,9 +454,9 @@ async fn error_unregistered_remote() {
     let index0 = ms0.index("test");
     let index1 = ms1.index("test");
     let (task, _status_code) = index0.add_documents(json!(documents[0..2]), None).await;
-    index0.wait_task(task.uid()).await.succeeded();
+    ms0.wait_task(task.uid()).await.succeeded();
     let (task, _status_code) = index1.add_documents(json!(documents[2..3]), None).await;
-    index1.wait_task(task.uid()).await.succeeded();
+    ms1.wait_task(task.uid()).await.succeeded();
 
     // wrap servers
     let ms0 = Arc::new(ms0);
@@ -572,9 +572,9 @@ async fn error_no_weighted_score() {
     let index0 = ms0.index("test");
     let index1 = ms1.index("test");
     let (task, _status_code) = index0.add_documents(json!(documents[0..2]), None).await;
-    index0.wait_task(task.uid()).await.succeeded();
+    ms0.wait_task(task.uid()).await.succeeded();
     let (task, _status_code) = index1.add_documents(json!(documents[2..3]), None).await;
-    index1.wait_task(task.uid()).await.succeeded();
+    ms1.wait_task(task.uid()).await.succeeded();
 
     // wrap servers
     let ms0 = Arc::new(ms0);
@@ -705,9 +705,9 @@ async fn error_bad_response() {
     let index0 = ms0.index("test");
     let index1 = ms1.index("test");
     let (task, _status_code) = index0.add_documents(json!(documents[0..2]), None).await;
-    index0.wait_task(task.uid()).await.succeeded();
+    ms0.wait_task(task.uid()).await.succeeded();
     let (task, _status_code) = index1.add_documents(json!(documents[2..3]), None).await;
-    index1.wait_task(task.uid()).await.succeeded();
+    ms1.wait_task(task.uid()).await.succeeded();
 
     // wrap servers
     let ms0 = Arc::new(ms0);
@@ -842,9 +842,9 @@ async fn error_bad_request() {
     let index0 = ms0.index("test");
     let index1 = ms1.index("test");
     let (task, _status_code) = index0.add_documents(json!(documents[0..2]), None).await;
-    index0.wait_task(task.uid()).await.succeeded();
+    ms0.wait_task(task.uid()).await.succeeded();
     let (task, _status_code) = index1.add_documents(json!(documents[2..3]), None).await;
-    index1.wait_task(task.uid()).await.succeeded();
+    ms1.wait_task(task.uid()).await.succeeded();
 
     // wrap servers
     let ms0 = Arc::new(ms0);
@@ -972,10 +972,10 @@ async fn error_bad_request_facets_by_index() {
     let index0 = ms0.index("test0");
     let index1 = ms1.index("test1");
     let (task, _status_code) = index0.add_documents(json!(documents[0..2]), None).await;
-    index0.wait_task(task.uid()).await.succeeded();
+    ms0.wait_task(task.uid()).await.succeeded();
 
     let (task, _status_code) = index1.add_documents(json!(documents[2..3]), None).await;
-    index1.wait_task(task.uid()).await.succeeded();
+    ms1.wait_task(task.uid()).await.succeeded();
 
     // wrap servers
     let ms0 = Arc::new(ms0);
@@ -1113,13 +1113,13 @@ async fn error_bad_request_facets_by_index_facet() {
     let index0 = ms0.index("test");
     let index1 = ms1.index("test");
     let (task, _status_code) = index0.add_documents(json!(documents[0..2]), None).await;
-    index0.wait_task(task.uid()).await.succeeded();
+    ms0.wait_task(task.uid()).await.succeeded();
 
     let (task, _status_code) = index0.update_settings_filterable_attributes(json!(["id"])).await;
-    index0.wait_task(task.uid()).await.succeeded();
+    ms0.wait_task(task.uid()).await.succeeded();
 
     let (task, _status_code) = index1.add_documents(json!(documents[2..3]), None).await;
-    index1.wait_task(task.uid()).await.succeeded();
+    ms1.wait_task(task.uid()).await.succeeded();
 
     // wrap servers
     let ms0 = Arc::new(ms0);
@@ -1263,9 +1263,9 @@ async fn error_remote_does_not_answer() {
     let index0 = ms0.index("test");
     let index1 = ms1.index("test");
     let (task, _status_code) = index0.add_documents(json!(documents[0..2]), None).await;
-    index0.wait_task(task.uid()).await.succeeded();
+    ms0.wait_task(task.uid()).await.succeeded();
     let (task, _status_code) = index1.add_documents(json!(documents[2..3]), None).await;
-    index1.wait_task(task.uid()).await.succeeded();
+    ms1.wait_task(task.uid()).await.succeeded();
 
     // wrap servers
     let ms0 = Arc::new(ms0);
@@ -1464,9 +1464,9 @@ async fn error_remote_404() {
     let index0 = ms0.index("test");
     let index1 = ms1.index("test");
     let (task, _status_code) = index0.add_documents(json!(documents[0..2]), None).await;
-    index0.wait_task(task.uid()).await.succeeded();
+    ms0.wait_task(task.uid()).await.succeeded();
     let (task, _status_code) = index1.add_documents(json!(documents[2..3]), None).await;
-    index1.wait_task(task.uid()).await.succeeded();
+    ms1.wait_task(task.uid()).await.succeeded();
 
     // wrap servers
     let ms0 = Arc::new(ms0);
@@ -1659,9 +1659,9 @@ async fn error_remote_sharding_auth() {
     let index0 = ms0.index("test");
     let index1 = ms1.index("test");
     let (task, _status_code) = index0.add_documents(json!(documents[0..2]), None).await;
-    index0.wait_task(task.uid()).await.succeeded();
+    ms0.wait_task(task.uid()).await.succeeded();
     let (task, _status_code) = index1.add_documents(json!(documents[2..3]), None).await;
-    index1.wait_task(task.uid()).await.succeeded();
+    ms1.wait_task(task.uid()).await.succeeded();
 
     // wrap servers
     ms1.clear_api_key();
@@ -1819,9 +1819,9 @@ async fn remote_sharding_auth() {
     let index0 = ms0.index("test");
     let index1 = ms1.index("test");
     let (task, _status_code) = index0.add_documents(json!(documents[0..2]), None).await;
-    index0.wait_task(task.uid()).await.succeeded();
+    ms0.wait_task(task.uid()).await.succeeded();
     let (task, _status_code) = index1.add_documents(json!(documents[2..3]), None).await;
-    index1.wait_task(task.uid()).await.succeeded();
+    ms1.wait_task(task.uid()).await.succeeded();
 
     // wrap servers
     ms1.clear_api_key();
@@ -1974,9 +1974,9 @@ async fn error_remote_500() {
     let index0 = ms0.index("test");
     let index1 = ms1.index("test");
     let (task, _status_code) = index0.add_documents(json!(documents[0..2]), None).await;
-    index0.wait_task(task.uid()).await.succeeded();
+    ms0.wait_task(task.uid()).await.succeeded();
     let (task, _status_code) = index1.add_documents(json!(documents[2..3]), None).await;
-    index1.wait_task(task.uid()).await.succeeded();
+    ms1.wait_task(task.uid()).await.succeeded();
 
     // wrap servers
     let ms0 = Arc::new(ms0);
@@ -2153,9 +2153,9 @@ async fn error_remote_500_once() {
     let index0 = ms0.index("test");
     let index1 = ms1.index("test");
     let (task, _status_code) = index0.add_documents(json!(documents[0..2]), None).await;
-    index0.wait_task(task.uid()).await.succeeded();
+    ms0.wait_task(task.uid()).await.succeeded();
     let (task, _status_code) = index1.add_documents(json!(documents[2..3]), None).await;
-    index1.wait_task(task.uid()).await.succeeded();
+    ms1.wait_task(task.uid()).await.succeeded();
 
     // wrap servers
     let ms0 = Arc::new(ms0);
@@ -2336,9 +2336,9 @@ async fn error_remote_timeout() {
     let index0 = ms0.index("test");
     let index1 = ms1.index("test");
     let (task, _status_code) = index0.add_documents(json!(documents[0..2]), None).await;
-    index0.wait_task(task.uid()).await.succeeded();
+    ms0.wait_task(task.uid()).await.succeeded();
     let (task, _status_code) = index1.add_documents(json!(documents[2..3]), None).await;
-    index1.wait_task(task.uid()).await.succeeded();
+    ms1.wait_task(task.uid()).await.succeeded();
 
     // wrap servers
     let ms0 = Arc::new(ms0);

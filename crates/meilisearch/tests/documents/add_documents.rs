@@ -1318,7 +1318,7 @@ async fn add_no_documents() {
 async fn add_larger_dataset() {
     let server = Server::new_shared();
     let index = server.unique_index();
-    let update_id = index.load_test_set().await;
+    let update_id = index.load_test_set(server).await;
     let (response, code) = index.get_task(update_id).await;
     assert_eq!(code, 200);
     assert_eq!(response["status"], "succeeded");
@@ -1333,7 +1333,7 @@ async fn add_larger_dataset() {
 
     // x-ndjson add large test
     let index = server.unique_index();
-    let update_id = index.load_test_set_ndjson().await;
+    let update_id = index.load_test_set_ndjson(server).await;
     let (response, code) = index.get_task(update_id).await;
     assert_eq!(code, 200);
     assert_eq!(response["status"], "succeeded");

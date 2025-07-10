@@ -7,7 +7,8 @@ use crate::json;
 async fn delete_one_document_unexisting_index() {
     let server = Server::new_shared();
     let index = shared_does_not_exists_index().await;
-    let (task, code) = index.delete_document_by_filter_fail(json!({"filter": "a = b"})).await;
+    let (task, code) =
+        index.delete_document_by_filter_fail(json!({"filter": "a = b"}), server).await;
     assert_eq!(code, 202);
 
     server.wait_task(task.uid()).await.failed();

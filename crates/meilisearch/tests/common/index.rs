@@ -1,15 +1,13 @@
 use std::fmt::Write;
 use std::marker::PhantomData;
 use std::panic::{catch_unwind, resume_unwind, UnwindSafe};
-use std::time::Duration;
 
 use actix_web::http::StatusCode;
-use tokio::time::sleep;
 use urlencoding::encode as urlencode;
 
 use super::encoder::Encoder;
 use super::service::Service;
-use super::{Owned, Shared, Value};
+use super::{Owned, Server, Shared, Value};
 use crate::json;
 
 pub struct Index<'a, State = Owned> {
@@ -33,7 +31,7 @@ impl<'a> Index<'a, Owned> {
         Index { uid: self.uid.clone(), service: self.service, encoder, marker: PhantomData }
     }
 
-    pub async fn load_test_set(&self) -> u64 {
+    pub async fn load_test_set<State>(&self, waiter: &Server<State>) -> u64 {
         let url = format!("/indexes/{}/documents", urlencode(self.uid.as_ref()));
         let (response, code) = self
             .service
@@ -44,12 +42,12 @@ impl<'a> Index<'a, Owned> {
             )
             .await;
         assert_eq!(code, 202);
-        let update_id = response["taskUid"].as_i64().unwrap();
-        self.wait_task(update_id as u64).await;
-        update_id as u64
+        let update_id = response["taskUid"].as_u64().unwrap();
+        waiter.wait_task(update_id).await;
+        update_id
     }
 
-    pub async fn load_test_set_ndjson(&self) -> u64 {
+    pub async fn load_test_set_ndjson<State>(&self, waiter: &Server<State>) -> u64 {
         let url = format!("/indexes/{}/documents", urlencode(self.uid.as_ref()));
         let (response, code) = self
             .service
@@ -60,9 +58,9 @@ impl<'a> Index<'a, Owned> {
             )
             .await;
         assert_eq!(code, 202);
-        let update_id = response["taskUid"].as_i64().unwrap();
-        self.wait_task(update_id as u64).await;
-        update_id as u64
+        let update_id = response["taskUid"].as_u64().unwrap();
+        waiter.wait_task(update_id).await;
+        update_id
     }
 
     pub async fn create(&self, primary_key: Option<&str>) -> (Value, StatusCode) {
@@ -267,10 +265,14 @@ impl Index<'_, Shared> {
     /// You cannot modify the content of a shared index, thus the delete_document_by_filter call
     /// must fail. If the task successfully enqueue itself, we'll wait for the task to finishes,
     /// and if it succeed the function will panic.
-    pub async fn delete_document_by_filter_fail(&self, body: Value) -> (Value, StatusCode) {
+    pub async fn delete_document_by_filter_fail<State>(
+        &self,
+        body: Value,
+        waiter: &Server<State>,
+    ) -> (Value, StatusCode) {
         let (mut task, code) = self._delete_document_by_filter(body).await;
         if code.is_success() {
-            task = self.wait_task(task.uid()).await;
+            task = waiter.wait_task(task.uid()).await;
             if task.is_success() {
                 panic!(
                     "`delete_document_by_filter_fail` succeeded: {}",
@@ -281,10 +283,10 @@ impl Index<'_, Shared> {
         (task, code)
     }
 
-    pub async fn delete_index_fail(&self) -> (Value, StatusCode) {
+    pub async fn delete_index_fail<State>(&self, waiter: &Server<State>) -> (Value, StatusCode) {
         let (mut task, code) = self._delete().await;
         if code.is_success() {
-            task = self.wait_task(task.uid()).await;
+            task = waiter.wait_task(task.uid()).await;
             if task.is_success() {
                 panic!(
                     "`delete_index_fail` succeeded: {}",
@@ -295,10 +297,14 @@ impl Index<'_, Shared> {
         (task, code)
     }
 
-    pub async fn update_index_fail(&self, primary_key: Option<&str>) -> (Value, StatusCode) {
+    pub async fn update_index_fail<State>(
+        &self,
+        primary_key: Option<&str>,
+        waiter: &Server<State>,
+    ) -> (Value, StatusCode) {
         let (mut task, code) = self._update(primary_key).await;
         if code.is_success() {
-            task = self.wait_task(task.uid()).await;
+            task = waiter.wait_task(task.uid()).await;
             if task.is_success() {
                 panic!(
                     "`update_index_fail` succeeded: {}",
@@ -362,23 +368,6 @@ impl<State> Index<'_, State> {
     pub(super) async fn _delete(&self) -> (Value, StatusCode) {
         let url = format!("/indexes/{}", urlencode(self.uid.as_ref()));
         self.service.delete(url).await
-    }
-
-    pub async fn wait_task(&self, update_id: u64) -> Value {
-        // try several times to get status, or panic to not wait forever
-        let url = format!("/tasks/{}", update_id);
-        for _ in 0..100 {
-            let (response, status_code) = self.service.get(&url).await;
-            assert_eq!(200, status_code, "response: {}", response);
-
-            if response["status"] == "succeeded" || response["status"] == "failed" {
-                return response;
-            }
-
-            // wait 0.5 second.
-            sleep(Duration::from_millis(500)).await;
-        }
-        panic!("Timeout waiting for update id");
     }
 
     pub async fn get_task(&self, update_id: u64) -> (Value, StatusCode) {

@@ -304,7 +304,7 @@ async fn access_authorized_stats_restricted_index() {
     let (response, code) = index.create(Some("product_id")).await;
     assert_eq!(202, code, "{:?}", &response);
     let task_id = response["taskUid"].as_u64().unwrap();
-    index.wait_task(task_id).await;
+    server.wait_task(task_id).await;
 
     // create key with access on `products` index only.
     let content = json!({
@@ -344,7 +344,7 @@ async fn access_authorized_stats_no_index_restriction() {
     let (response, code) = index.create(Some("product_id")).await;
     assert_eq!(202, code, "{:?}", &response);
     let task_id = response["taskUid"].as_u64().unwrap();
-    index.wait_task(task_id).await;
+    server.wait_task(task_id).await;
 
     // create key with access on all indexes.
     let content = json!({
@@ -384,7 +384,7 @@ async fn list_authorized_indexes_restricted_index() {
     let (response, code) = index.create(Some("product_id")).await;
     assert_eq!(202, code, "{:?}", &response);
     let task_id = response["taskUid"].as_u64().unwrap();
-    index.wait_task(task_id).await;
+    server.wait_task(task_id).await;
 
     // create key with access on `products` index only.
     let content = json!({
@@ -425,7 +425,7 @@ async fn list_authorized_indexes_no_index_restriction() {
     let (response, code) = index.create(Some("product_id")).await;
     assert_eq!(202, code, "{:?}", &response);
     let task_id = response["taskUid"].as_u64().unwrap();
-    index.wait_task(task_id).await;
+    server.wait_task(task_id).await;
 
     // create key with access on all indexes.
     let content = json!({
@@ -507,10 +507,10 @@ async fn access_authorized_index_patterns() {
 
     server.use_api_key(MASTER_KEY);
 
-    // refer to products_1 with modified api key.
+    // refer to products_1 with a modified api key.
     let index_1 = server.index("products_1");
 
-    index_1.wait_task(task_id).await;
+    server.wait_task(task_id).await;
 
     let (response, code) = index_1.get_task(task_id).await;
     assert_eq!(200, code, "{:?}", &response);
@@ -578,19 +578,19 @@ async fn raise_error_non_authorized_index_patterns() {
     assert_eq!(202, code, "{:?}", &response);
     let task2_id = response["taskUid"].as_u64().unwrap();
 
-    // Adding document to test index. Should Fail with 403 -- invalid_api_key
+    // Adding a document to test index. Should Fail with 403 -- invalid_api_key
     let (response, code) = test_index.add_documents(documents, None).await;
     assert_eq!(403, code, "{:?}", &response);
 
     server.use_api_key(MASTER_KEY);
 
-    // refer to products_1 with modified api key.
+    // refer to products_1 with a modified api key.
     let product_1_index = server.index("products_1");
-    // refer to products_2 with modified api key.
-    let product_2_index = server.index("products_2");
+    // refer to products_2 with a modified api key.
+    // let product_2_index = server.index("products_2");
 
-    product_1_index.wait_task(task1_id).await;
-    product_2_index.wait_task(task2_id).await;
+    server.wait_task(task1_id).await;
+    server.wait_task(task2_id).await;
 
     let (response, code) = product_1_index.get_task(task1_id).await;
     assert_eq!(200, code, "{:?}", &response);
@@ -603,7 +603,7 @@ async fn raise_error_non_authorized_index_patterns() {
 
 #[actix_rt::test]
 async fn pattern_indexes() {
-    // Create server with master key
+    // Create a server with master key
     let mut server = Server::new_auth().await;
     server.use_admin_key(MASTER_KEY).await;
 
@@ -650,7 +650,7 @@ async fn list_authorized_tasks_restricted_index() {
     let (response, code) = index.create(Some("product_id")).await;
     assert_eq!(202, code, "{:?}", &response);
     let task_id = response["taskUid"].as_u64().unwrap();
-    index.wait_task(task_id).await;
+    server.wait_task(task_id).await;
 
     // create key with access on `products` index only.
     let content = json!({
@@ -690,7 +690,7 @@ async fn list_authorized_tasks_no_index_restriction() {
     let (response, code) = index.create(Some("product_id")).await;
     assert_eq!(202, code, "{:?}", &response);
     let task_id = response["taskUid"].as_u64().unwrap();
-    index.wait_task(task_id).await;
+    server.wait_task(task_id).await;
 
     // create key with access on all indexes.
     let content = json!({
@@ -757,7 +757,7 @@ async fn error_creating_index_without_action() {
     assert_eq!(202, code, "{:?}", &response);
     let task_id = response["taskUid"].as_u64().unwrap();
 
-    let response = index.wait_task(task_id).await;
+    let response = server.wait_task(task_id).await;
     assert_eq!(response["status"], "failed");
     assert_eq!(response["error"], expected_error.clone());
 
@@ -768,7 +768,7 @@ async fn error_creating_index_without_action() {
     assert_eq!(202, code, "{:?}", &response);
     let task_id = response["taskUid"].as_u64().unwrap();
 
-    let response = index.wait_task(task_id).await;
+    let response = server.wait_task(task_id).await;
 
     assert_eq!(response["status"], "failed");
     assert_eq!(response["error"], expected_error.clone());
@@ -778,7 +778,7 @@ async fn error_creating_index_without_action() {
     assert_eq!(202, code, "{:?}", &response);
     let task_id = response["taskUid"].as_u64().unwrap();
 
-    let response = index.wait_task(task_id).await;
+    let response = server.wait_task(task_id).await;
 
     assert_eq!(response["status"], "failed");
     assert_eq!(response["error"], expected_error.clone());
@@ -830,7 +830,7 @@ async fn lazy_create_index() {
         assert_eq!(202, code, "{:?}", &response);
         let task_id = response["taskUid"].as_u64().unwrap();
 
-        index.wait_task(task_id).await;
+        server.wait_task(task_id).await;
 
         let (response, code) = index.get_task(task_id).await;
         assert_eq!(200, code, "{:?}", &response);
@@ -844,7 +844,7 @@ async fn lazy_create_index() {
         assert_eq!(202, code, "{:?}", &response);
         let task_id = response["taskUid"].as_u64().unwrap();
 
-        index.wait_task(task_id).await;
+        server.wait_task(task_id).await;
 
         let (response, code) = index.get_task(task_id).await;
         assert_eq!(200, code, "{:?}", &response);
@@ -856,7 +856,7 @@ async fn lazy_create_index() {
         assert_eq!(202, code, "{:?}", &response);
         let task_id = response["taskUid"].as_u64().unwrap();
 
-        index.wait_task(task_id).await;
+        server.wait_task(task_id).await;
 
         let (response, code) = index.get_task(task_id).await;
         assert_eq!(200, code, "{:?}", &response);
@@ -911,7 +911,7 @@ async fn lazy_create_index_from_pattern() {
         assert_eq!(202, code, "{:?}", &response);
         let task_id = response["taskUid"].as_u64().unwrap();
 
-        index.wait_task(task_id).await;
+        server.wait_task(task_id).await;
 
         let (response, code) = index.get_task(task_id).await;
         assert_eq!(200, code, "{:?}", &response);
@@ -929,7 +929,7 @@ async fn lazy_create_index_from_pattern() {
         assert_eq!(202, code, "{:?}", &response);
         let task_id = response["taskUid"].as_u64().unwrap();
 
-        index.wait_task(task_id).await;
+        server.wait_task(task_id).await;
 
         let (response, code) = index.get_task(task_id).await;
         assert_eq!(200, code, "{:?}", &response);
@@ -949,7 +949,7 @@ async fn lazy_create_index_from_pattern() {
         assert_eq!(202, code, "{:?}", &response);
         let task_id = response["taskUid"].as_u64().unwrap();
 
-        index.wait_task(task_id).await;
+        server.wait_task(task_id).await;
 
         let (response, code) = index.get_task(task_id).await;
         assert_eq!(200, code, "{:?}", &response);
