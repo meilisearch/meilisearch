@@ -337,6 +337,7 @@ fn initial_field_distribution() {
         @r###"
         has_dog          1      |
         id               2      |
+        languages        1      |
         languages.name   2      |
         languages.proficiency 2      |
         name             2      |
