@@ -407,19 +407,12 @@ impl<State> Server<State> {
     }
 
     pub async fn wait_task(&self, update_id: u64) -> Value {
-        Server::<Shared>::_wait_task(async |url| self.service.get(url).await, update_id).await
-    }
-
-    pub(super) async fn _wait_task<F>(request_fn: F, update_id: u64) -> Value
-    where
-        F: AsyncFnOnce(String) -> (Value, StatusCode) + Copy,
-    {
         // try several times to get status, or panic to not wait forever
         let url = format!("/tasks/{update_id}");
         let max_attempts = 400; // 200 seconds in total, 0.5secs per attempt
 
         for i in 0..max_attempts {
-            let (response, status_code) = request_fn(url.clone()).await;
+            let (response, status_code) = self.service.get(url.clone()).await;
             assert_eq!(200, status_code, "response: {response}");
 
             if response["status"] == "succeeded" || response["status"] == "failed" {

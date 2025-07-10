@@ -51,7 +51,7 @@ async fn perform_snapshot() {
         }))
         .await;
 
-    index.load_test_set().await;
+    index.load_test_set(&server).await;
 
     let (task, code) = server.index("test1").create(Some("prim")).await;
     meili_snap::snapshot!(code, @"202 Accepted");
@@ -128,7 +128,7 @@ async fn perform_on_demand_snapshot() {
         }))
         .await;
 
-    index.load_test_set().await;
+    index.load_test_set(&server).await;
 
     let (task, _status_code) = server.index("doggo").create(Some("bone")).await;
     server.wait_task(task.uid()).await.succeeded();
