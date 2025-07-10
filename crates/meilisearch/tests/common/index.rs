@@ -265,7 +265,11 @@ impl Index<'_, Shared> {
     /// You cannot modify the content of a shared index, thus the delete_document_by_filter call
     /// must fail. If the task successfully enqueue itself, we'll wait for the task to finishes,
     /// and if it succeed the function will panic.
-    pub async fn delete_document_by_filter_fail<State>(&self, body: Value, waiter: &Server<State>) -> (Value, StatusCode) {
+    pub async fn delete_document_by_filter_fail<State>(
+        &self,
+        body: Value,
+        waiter: &Server<State>,
+    ) -> (Value, StatusCode) {
         let (mut task, code) = self._delete_document_by_filter(body).await;
         if code.is_success() {
             task = waiter.wait_task(task.uid()).await;
@@ -293,7 +297,11 @@ impl Index<'_, Shared> {
         (task, code)
     }
 
-    pub async fn update_index_fail<State>(&self, primary_key: Option<&str>, waiter: &Server<State>) -> (Value, StatusCode) {
+    pub async fn update_index_fail<State>(
+        &self,
+        primary_key: Option<&str>,
+        waiter: &Server<State>,
+    ) -> (Value, StatusCode) {
         let (mut task, code) = self._update(primary_key).await;
         if code.is_success() {
             task = waiter.wait_task(task.uid()).await;
