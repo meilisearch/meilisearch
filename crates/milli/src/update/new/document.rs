@@ -143,7 +143,7 @@ impl<'t, Mapper: FieldIdMapper> Document<'t> for DocumentFromDb<'t, Mapper> {
                 if let Ok((name, value)) = &res {
                     stack.push_back((value.clone(), name.clone(), true));
                 } else {
-                    return Some(Err(res.err().unwrap().into()));
+                    return Some(Err(res.err().unwrap()));
                 }
 
                 return Some(res);
@@ -578,46 +578,43 @@ impl<'doc> Versions<'doc> {
                     if let Ok((name, value)) = &res {
                         stack.push_back((value.clone(), name.clone(), true));
                     } else {
-                        return Some(Err(res.err().unwrap().into()));
+                        return Some(Err(res.err().unwrap()));
                     }
 
                     return Some(res);
                 }
-            } else {
-                if let Some((raw, path, is_first_level)) = stack.pop_back() {
-                    if let Ok(val) = from_str::<Value>(raw.get()) {
-                        match val {
-                            Value::Object(map) => {
-                                for (child_key, child_val) in map.iter().rev() {
-                                    let child_path = format!("{}.{}", path, child_key);
-                                    if let Ok(child_raw) =
-                                        RawValue::from_string(child_val.to_string())
-                                    {
-                                        stack.push_back((child_raw, child_path, false));
-                                    }
+            } else if let Some((raw, path, is_first_level)) = stack.pop_back() {
+                if let Ok(val) = from_str::<Value>(raw.get()) {
+                    match val {
+                        Value::Object(map) => {
+                            for (child_key, child_val) in map.iter().rev() {
+                                let child_path = format!("{}.{}", path, child_key);
+                                if let Ok(child_raw) = RawValue::from_string(child_val.to_string())
+                                {
+                                    stack.push_back((child_raw, child_path, false));
                                 }
-                                continue;
                             }
-                            Value::Array(array) => {
-                                for ele in array {
-                                    if let Ok(child_raw) = RawValue::from_string(ele.to_string()) {
-                                        stack.push_back((child_raw, path.clone(), false));
-                                    }
+                            continue;
+                        }
+                        Value::Array(array) => {
+                            for ele in array {
+                                if let Ok(child_raw) = RawValue::from_string(ele.to_string()) {
+                                    stack.push_back((child_raw, path.clone(), false));
                                 }
-                                continue;
                             }
-                            _ => {
-                                if !is_first_level {
-                                    return Some(Ok((path, raw)));
-                                }
+                            continue;
+                        }
+                        _ => {
+                            if !is_first_level {
+                                return Some(Ok((path, raw)));
                             }
                         }
-                    } else {
-                        return Some(Ok((path, raw)));
                     }
                 } else {
-                    return None;
+                    return Some(Ok((path, raw)));
                 }
+            } else {
+                return None;
             }
         })
     }
@@ -743,41 +740,38 @@ impl<'a, Mapper: FieldIdMapper> Document<'a> for KvDelAddDocument<'a, Mapper> {
                 }
 
                 return Some(res);
-            } else {
-                if let Some((raw, path, is_first_level)) = stack.pop_back() {
-                    if let Ok(val) = from_str::<Value>(raw.get()) {
-                        match val {
-                            Value::Object(map) => {
-                                for (child_key, child_val) in map.iter().rev() {
-                                    let child_path = format!("{}.{}", path, child_key);
-                                    if let Ok(child_raw) =
-                                        RawValue::from_string(child_val.to_string())
-                                    {
-                                        stack.push_back((child_raw, child_path, false));
-                                    }
+            } else if let Some((raw, path, is_first_level)) = stack.pop_back() {
+                if let Ok(val) = from_str::<Value>(raw.get()) {
+                    match val {
+                        Value::Object(map) => {
+                            for (child_key, child_val) in map.iter().rev() {
+                                let child_path = format!("{}.{}", path, child_key);
+                                if let Ok(child_raw) = RawValue::from_string(child_val.to_string())
+                                {
+                                    stack.push_back((child_raw, child_path, false));
                                 }
-                                continue;
                             }
-                            Value::Array(array) => {
-                                for ele in array {
-                                    if let Ok(child_raw) = RawValue::from_string(ele.to_string()) {
-                                        stack.push_back((child_raw, path.clone(), false));
-                                    }
+                            continue;
+                        }
+                        Value::Array(array) => {
+                            for ele in array {
+                                if let Ok(child_raw) = RawValue::from_string(ele.to_string()) {
+                                    stack.push_back((child_raw, path.clone(), false));
                                 }
-                                continue;
                             }
-                            _ => {
-                                if !is_first_level {
-                                    return Some(Ok((path, raw)));
-                                }
+                            continue;
+                        }
+                        _ => {
+                            if !is_first_level {
+                                return Some(Ok((path, raw)));
                             }
                         }
-                    } else {
-                        return Some(Ok((path, raw)));
                     }
                 } else {
-                    return None;
+                    return Some(Ok((path, raw)));
                 }
+            } else {
+                return None;
             }
         })
     }
