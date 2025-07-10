@@ -1017,6 +1017,9 @@ async fn vector_filter_document_template() {
     let server = crate::vector::get_server_vector().await;
     let index = server.index("doggo");
 
+    let (_response, code) = server.set_features(json!({"multimodal": true})).await;
+    snapshot!(code, @"200 OK");
+
     let (response, code) = index
         .update_settings(json!({
           "embedders": {
