@@ -1,6 +1,7 @@
 use super::shared_index_with_documents;
 use crate::common::Server;
 use crate::json;
+use meili_snap::{json_string, snapshot};
 
 #[actix_rt::test]
 async fn default_search_should_return_estimated_total_hit() {
@@ -132,4 +133,62 @@ async fn ensure_placeholder_search_hit_count_valid() {
             })
             .await;
     }
+}
+
+#[actix_rt::test]
+async fn test_issue_5274() {
+    let server = Server::new_shared();
+    let index = server.unique_index();
+
+    let documents = json!([
+        {
+            "id": 1,
+            "title": "Document 1",
+            "content": "This is the first."
+        },
+        {
+            "id": 2,
+            "title": "Document 2",
+            "content": "This is the second doc."
+        }
+    ]);
+    let (task, _code) = index.add_documents(documents, None).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    // Find out the lowest ranking score among the documents
+    let (rep, _status) = index
+        .search_post(json!({"q": "doc", "page": 1, "hitsPerPage": 2, "showRankingScore": true}))
+        .await;
+    let hits = rep["hits"].as_array().expect("Missing hits array");
+    let second_hit = hits.get(1).expect("Missing second hit");
+    let ranking_score = second_hit
+        .get("_rankingScore")
+        .expect("Missing _rankingScore field")
+        .as_f64()
+        .expect("Expected _rankingScore to be a f64");
+
+    // Search with a ranking score threshold just above and expect to be a single hit
+    let (rep, _status) = index
+        .search_post(json!({"q": "doc", "page": 1, "hitsPerPage": 1, "rankingScoreThreshold": ranking_score + 0.0001}))
+        .await;
+
+    snapshot!(json_string!(rep, {
+        ".processingTimeMs" => "[ignored]",
+    }), @r#"
+    {
+      "hits": [
+        {
+          "id": 2,
+          "title": "Document 2",
+          "content": "This is the second doc."
+        }
+      ],
+      "query": "doc",
+      "processingTimeMs": "[ignored]",
+      "hitsPerPage": 1,
+      "page": 1,
+      "totalPages": 1,
+      "totalHits": 1
+    }
+    "#);
 }
