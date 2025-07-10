@@ -485,8 +485,6 @@ impl ArroyWrapper {
         limit: usize,
         filter: Option<&RoaringBitmap>,
     ) -> Result<Vec<(ItemId, f32)>, arroy::Error> {
-        println!("nns_by_vector: quantized={} {:?} limit={} filter={:?}",
-            self.quantized, vector, limit, filter);
         if self.quantized {
             self._nns_by_vector(rtxn, self.quantized_db(), vector, limit, filter)
         } else {
@@ -518,8 +516,6 @@ impl ArroyWrapper {
         }
 
         results.sort_unstable_by_key(|(_, distance)| OrderedFloat(*distance));
-
-        println!("nns_by_vector: results={:?}", results);
 
         Ok(results)
     }
