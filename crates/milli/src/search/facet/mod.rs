@@ -17,6 +17,7 @@ mod facet_range_search;
 mod facet_sort_ascending;
 mod facet_sort_descending;
 mod filter;
+mod filter_vector;
 mod search;
 
 fn facet_extreme_value<'t>(

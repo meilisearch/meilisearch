@@ -736,7 +736,7 @@ fn test_document_addition_mixed_rights_with_index() {
 #[test]
 fn test_document_addition_mixed_right_without_index_starts_with_cant_create() {
     // We're going to autobatch multiple document addition.
-    // - The index does not exists
+    // - The index does not exist
     // - The first document addition don't have the right to create an index
     // - The second do. They should not batch together.
     // - The second should batch with everything else as it's going to create an index.

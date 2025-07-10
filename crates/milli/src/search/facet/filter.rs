@@ -10,7 +10,7 @@ use memchr::memmem::Finder;
 use roaring::{MultiOps, RoaringBitmap};
 use serde_json::Value;
 
-use super::facet_range_search;
+use super::{facet_range_search, filter_vector::VectorFilter};
 use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::error::{Error, UserError};
 use crate::filterable_attributes_rules::{filtered_matching_patterns, matching_features};
@@ -228,6 +228,10 @@ impl<'a> Filter<'a> {
     pub fn use_contains_operator(&self) -> Option<&Token> {
         self.condition.use_contains_operator()
     }
+
+    pub fn use_vector_filter(&self) -> Option<&Token> {
+        self.condition.use_vector_filter()
+    }
 }
 
 impl<'a> Filter<'a> {
@@ -235,10 +239,12 @@ impl<'a> Filter<'a> {
         // to avoid doing this for each recursive call we're going to do it ONCE ahead of time
         let fields_ids_map = index.fields_ids_map(rtxn)?;
         let filterable_attributes_rules = index.filterable_attributes_rules(rtxn)?;
+
         for fid in self.condition.fids(MAX_FILTER_DEPTH) {
             let attribute = fid.value();
             if matching_features(attribute, &filterable_attributes_rules)
                 .is_some_and(|(_, features)| features.is_filterable())
+                || VectorFilter::matches(attribute)
             {
                 continue;
             }
@@ -542,7 +548,18 @@ impl<'a> Filter<'a> {
                     .union()
             }
             FilterCondition::Condition { fid, op } => {
-                let Some(field_id) = field_ids_map.id(fid.value()) else {
+                let value = fid.value();
+                if VectorFilter::matches(value) {
+                    if !matches!(op, Condition::Exists) {
+                        return Err(Error::UserError(UserError::InvalidFilter(String::from(
+                            "Vector filter can only be used with the `exists` operator",
+                        ))));
+                    }
+                    let vector_filter = VectorFilter::parse(fid)?;
+                    return vector_filter.evaluate(rtxn, index, universe);
+                }
+
+                let Some(field_id) = field_ids_map.id(value) else {
                     return Ok(RoaringBitmap::new());
                 };
                 let Some((rule_index, features)) =

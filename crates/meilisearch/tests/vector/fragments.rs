@@ -10,7 +10,7 @@ use crate::common::{Owned, Shared};
 use crate::json;
 use crate::vector::{GetAllDocumentsOptions, Server};
 
-async fn shared_index_for_fragments() -> Index<'static, Shared> {
+pub async fn shared_index_for_fragments() -> Index<'static, Shared> {
     static INDEX: OnceCell<(Server<Shared>, String)> = OnceCell::const_new();
     let (server, uid) = INDEX
         .get_or_init(|| async {
