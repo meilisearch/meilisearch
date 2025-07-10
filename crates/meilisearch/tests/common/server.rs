@@ -429,19 +429,6 @@ impl<State> Server<State> {
         self.service.get(url).await
     }
 
-    // https://www.meilisearch.com/docs/reference/api/batches#get-batches states:
-    // "Batches are always returned in descending order of uid. This means that by default,
-    // the most recently created batch objects appear first."
-    pub async fn get_latest_batch(&self) -> (Option<Value>, StatusCode) {
-        let url = "/batches?limit=1&offset=0";
-        let (value, code) = self.service.get(url).await;
-        value
-            .get("results")
-            .and_then(|results| results.as_array())
-            .and_then(|array| array.first())
-            .map_or((None, code), |latest| (Some(Value(latest.clone())), code))
-    }
-
     pub async fn get_features(&self) -> (Value, StatusCode) {
         self.service.get("/experimental-features").await
     }

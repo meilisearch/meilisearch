@@ -1,10 +1,29 @@
 mod errors;
 
+use insta::internals::{Content, ContentPath};
+use once_cell::sync::Lazy;
+use regex::Regex;
 use meili_snap::insta::assert_json_snapshot;
 use meili_snap::{json_string, snapshot};
 
 use crate::common::Server;
 use crate::json;
+
+
+static TASK_WITH_ID_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"task with id (\d+) of type")
+        .unwrap()
+});
+
+fn task_with_id_redaction(value: Content, _path: ContentPath) -> Content {
+    match value {
+        Content::String(s) => {
+            let replaced = TASK_WITH_ID_RE.replace_all(&s, "task with id X of type");
+            Content::String(replaced.to_string())
+        }
+        _ => value.clone(),
+    }
+}
 
 #[actix_rt::test]
 async fn error_get_unexisting_batch_status() {
@@ -30,7 +49,7 @@ async fn get_batch_status() {
     let server = Server::new_shared();
     let index = server.unique_index();
     let (task, _status_code) = index.create(None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    let task = index.wait_task(task.uid()).await.succeeded();
     let (_response, code) = index.get_batch(task.batch_uid()).await;
     assert_eq!(code, 200);
 }
@@ -272,7 +291,7 @@ async fn test_summarized_document_addition_or_update() {
     let index = server.unique_index();
     let (task, _status_code) =
         index.add_documents(json!({ "id": 42, "content": "doggos & fluff" }), None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    let task = index.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(task.batch_uid()).await;
     assert_json_snapshot!(batch,
         {
@@ -285,7 +304,6 @@ async fn test_summarized_document_addition_or_update() {
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
             ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]",
             ".stats.indexUids" => r#"{"[uuid]": 1}"#,
-            ".batchCreationComplete" => "batched all enqueued tasks for index `[uuid]`"
         },
         @r###"
     {
@@ -311,13 +329,13 @@ async fn test_summarized_document_addition_or_update() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "batched all enqueued tasks for index `[uuid]`"
+      "batchStrategy": "batched all enqueued tasks"
     }
     "###);
 
     let (task, _status_code) =
         index.add_documents(json!({ "id": 42, "content": "doggos & fluff" }), Some("id")).await;
-    index.wait_task(task.uid()).await.succeeded();
+    let task = index.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(task.batch_uid()).await;
     assert_json_snapshot!(batch,
         {
@@ -330,7 +348,6 @@ async fn test_summarized_document_addition_or_update() {
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
             ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]",
             ".stats.indexUids" => r#"{"[uuid]": 1}"#,
-            ".batchCreationComplete" => "batched all enqueued tasks for index `[uuid]`"
         },
         @r###"
     {
@@ -355,7 +372,7 @@ async fn test_summarized_document_addition_or_update() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "batched all enqueued tasks for index `[uuid]`"
+      "batchStrategy": "batched all enqueued tasks"
     }
     "###);
 }
@@ -368,7 +385,7 @@ async fn test_summarized_delete_documents_by_batch() {
     let task_uid_2 = (u32::MAX - 2) as u64;
     let task_uid_3 = (u32::MAX - 3) as u64;
     let (task, _status_code) = index.delete_batch(vec![task_uid_1, task_uid_2, task_uid_3]).await;
-    index.wait_task(task.uid()).await.failed();
+    let task = index.wait_task(task.uid()).await.failed();
     let (batch, _) = index.get_batch(task.batch_uid()).await;
     assert_json_snapshot!(batch,
         {
@@ -380,7 +397,6 @@ async fn test_summarized_delete_documents_by_batch() {
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
             ".stats.indexUids" => r#"{"[uuid]": 1}"#,
-            ".batchCreationComplete" => "batched all enqueued tasks for index `[uuid]`"
         },
         @r###"
     {
@@ -404,13 +420,13 @@ async fn test_summarized_delete_documents_by_batch() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "batched all enqueued tasks for index `[uuid]`"
+      "batchStrategy": "batched all enqueued tasks"
     }
     "###);
 
     index.create(None).await;
     let (task, _status_code) = index.delete_batch(vec![42]).await;
-    index.wait_task(task.uid()).await.succeeded();
+    let task = index.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(task.batch_uid()).await;
     assert_json_snapshot!(batch,
         {
@@ -458,7 +474,7 @@ async fn test_summarized_delete_documents_by_filter() {
 
     let (task, _status_code) =
         index.delete_document_by_filter(json!({ "filter": "doggo = bernese" })).await;
-    index.wait_task(task.uid()).await.failed();
+    let task = index.wait_task(task.uid()).await.failed();
     let (batch, _) = index.get_batch(task.batch_uid()).await;
     assert_json_snapshot!(batch,
         {
@@ -470,7 +486,6 @@ async fn test_summarized_delete_documents_by_filter() {
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
             ".stats.indexUids" => r#"{"[uuid]": 1}"#,
-            ".batchCreationComplete" => "batched all enqueued tasks for index `[uuid]`"
         },
         @r###"
     {
@@ -495,14 +510,14 @@ async fn test_summarized_delete_documents_by_filter() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "batched all enqueued tasks for index `[uuid]`"
+      "batchStrategy": "batched all enqueued tasks"
     }
     "###);
 
     index.create(None).await;
     let (task, _status_code) =
         index.delete_document_by_filter(json!({ "filter": "doggo = bernese" })).await;
-    index.wait_task(task.uid()).await.failed();
+    let task = index.wait_task(task.uid()).await.failed();
     let (batch, _) = index.get_batch(task.batch_uid()).await;
     assert_json_snapshot!(batch,
         {
@@ -515,7 +530,6 @@ async fn test_summarized_delete_documents_by_filter() {
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
             ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]",
             ".stats.indexUids" => r#"{"[uuid]": 1}"#,
-            ".batchCreationComplete" => "batched all enqueued tasks for index `[uuid]`"
         },
         @r###"
     {
@@ -540,14 +554,14 @@ async fn test_summarized_delete_documents_by_filter() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "batched all enqueued tasks for index `[uuid]`"
+      "batchStrategy": "batched all enqueued tasks"
     }
     "###);
 
     index.update_settings(json!({ "filterableAttributes": ["doggo"] })).await;
     let (task, _status_code) =
         index.delete_document_by_filter(json!({ "filter": "doggo = bernese" })).await;
-    index.wait_task(task.uid()).await.succeeded();
+    let task = index.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(task.batch_uid()).await;
     assert_json_snapshot!(batch,
         {
@@ -595,7 +609,7 @@ async fn test_summarized_delete_document_by_id() {
     let server = Server::new_shared();
     let index = server.unique_index();
     let (task, _status_code) = index.delete_document(1).await;
-    index.wait_task(task.uid()).await.failed();
+    let task = index.wait_task(task.uid()).await.failed();
     let (batch, _) = index.get_batch(task.batch_uid()).await;
     assert_json_snapshot!(batch,
         {
@@ -607,7 +621,6 @@ async fn test_summarized_delete_document_by_id() {
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
             ".stats.indexUids" => r#"{"[uuid]": 1}"#,
-            ".batchCreationComplete" => "batched all enqueued tasks for index `[uuid]`"
         },
         @r###"
     {
@@ -631,13 +644,13 @@ async fn test_summarized_delete_document_by_id() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "batched all enqueued tasks for index `[uuid]`"
+      "batchStrategy": "batched all enqueued tasks"
     }
     "###);
 
     index.create(None).await;
     let (task, _status_code) = index.delete_document(42).await;
-    index.wait_task(task.uid()).await.succeeded();
+    let task = index.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(task.batch_uid()).await;
     assert_json_snapshot!(batch,
         {
@@ -650,7 +663,6 @@ async fn test_summarized_delete_document_by_id() {
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
             ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]",
             ".stats.indexUids" => r#"{"[uuid]": 1}"#,
-            ".batchCreationComplete" => "batched all enqueued tasks for index `[uuid]`"
         },
         @r###"
     {
@@ -674,7 +686,7 @@ async fn test_summarized_delete_document_by_id() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "batched all enqueued tasks for index `[uuid]`"
+      "batchStrategy": "batched all enqueued tasks"
     }
     "###);
 }
@@ -696,7 +708,7 @@ async fn test_summarized_settings_update() {
     "###);
 
     let (task,_status_code) = index.update_settings(json!({ "displayedAttributes": ["doggos", "name"], "filterableAttributes": ["age", "nb_paw_pads"], "sortableAttributes": ["iq"] })).await;
-    index.wait_task(task.uid()).await.succeeded();
+    let task = index.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(task.batch_uid()).await;
     assert_json_snapshot!(batch,
         {
@@ -709,8 +721,6 @@ async fn test_summarized_settings_update() {
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
             ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]",
             ".stats.indexUids" => r#"{"[uuid]": 1}"#,
-            ".batchCreationComplete" => "batched all enqueued tasks for index `[uuid]`"
-
         },
         @r###"
     {
@@ -743,7 +753,7 @@ async fn test_summarized_settings_update() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "batched all enqueued tasks for index `[uuid]`"
+      "batchStrategy": "batched all enqueued tasks"
     }
     "###);
 }
@@ -753,7 +763,7 @@ async fn test_summarized_index_creation() {
     let server = Server::new_shared();
     let index = server.unique_index();
     let (task, _status_code) = index.create(None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    let task = index.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(task.batch_uid()).await;
     assert_json_snapshot!(batch,
         {
@@ -765,7 +775,7 @@ async fn test_summarized_index_creation() {
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
             ".stats.indexUids" => r#"{"[uuid]": 1}"#,
-            ".batchCreationComplete" => "task with id X of type `indexCreation` cannot be batched"
+            ".batchStrategy" => insta::dynamic_redaction(task_with_id_redaction),
         },
         @r###"
     {
@@ -786,12 +796,12 @@ async fn test_summarized_index_creation() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "task with id X of type `indexCreation` cannot be batched"
+      "batchStrategy": "created batch containing only task with id X of type `indexCreation` that cannot be batched with any other task."
     }
     "###);
 
     let (task, _status_code) = index.create(Some("doggos")).await;
-    index.wait_task(task.uid()).await.failed();
+    let task = index.wait_task(task.uid()).await.failed();
     let (batch, _) = index.get_batch(task.batch_uid()).await;
     assert_json_snapshot!(batch,
         {
@@ -803,7 +813,7 @@ async fn test_summarized_index_creation() {
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
             ".stats.indexUids" => r#"{"[uuid]": 1}"#,
-            ".batchCreationComplete" => "task with id X of type `indexCreation` cannot be batched"
+            ".batchStrategy" => insta::dynamic_redaction(task_with_id_redaction),
         },
         @r###"
     {
@@ -826,7 +836,7 @@ async fn test_summarized_index_creation() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "task with id X of type `indexCreation` cannot be batched"
+      "batchStrategy": "created batch containing only task with id X of type `indexCreation` that cannot be batched with any other task."
     }
     "###);
 }
@@ -946,7 +956,7 @@ async fn test_summarized_index_update() {
     let index = server.unique_index();
     // If the index doesn't exist yet, we should get errors with or without the primary key.
     let (task, _status_code) = index.update(None).await;
-    index.wait_task(task.uid()).await.failed();
+    let task = index.wait_task(task.uid()).await.failed();
     let (batch, _) = index.get_batch(task.batch_uid()).await;
     assert_json_snapshot!(batch,
         {
@@ -958,7 +968,7 @@ async fn test_summarized_index_update() {
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
             ".stats.indexUids" => r#"{"[uuid]": 1}"#,
-            ".batchCreationComplete" => "task with id X of type `indexUpdate` cannot be batched"
+            ".batchStrategy" => insta::dynamic_redaction(task_with_id_redaction),
         },
         @r###"
     {
@@ -979,12 +989,12 @@ async fn test_summarized_index_update() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "task with id X of type `indexUpdate` cannot be batched"
+      "batchStrategy": "created batch containing only task with id X of type `indexUpdate` that cannot be batched with any other task."
     }
     "###);
 
     let (task, _status_code) = index.update(Some("bones")).await;
-    index.wait_task(task.uid()).await.failed();
+    let task = index.wait_task(task.uid()).await.failed();
     let (batch, _) = index.get_batch(task.batch_uid()).await;
     assert_json_snapshot!(batch,
         {
@@ -996,7 +1006,7 @@ async fn test_summarized_index_update() {
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
             ".stats.indexUids" => r#"{"[uuid]": 1}"#,
-            ".batchCreationComplete" => "task with id X of type `indexUpdate` cannot be batched"
+            ".batchStrategy" => insta::dynamic_redaction(task_with_id_redaction),
         },
         @r###"
     {
@@ -1019,15 +1029,15 @@ async fn test_summarized_index_update() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "task with id X of type `indexUpdate` cannot be batched"
+      "batchStrategy": "created batch containing only task with id X of type `indexUpdate` that cannot be batched with any other task."
     }
     "###);
 
-    // And run the same two tests once the index do exists.
+    // And run the same two tests once the index does exist.
     index.create(None).await;
 
     let (task, _status_code) = index.update(None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    let task = index.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(task.batch_uid()).await;
     assert_json_snapshot!(batch,
         {
@@ -1039,7 +1049,7 @@ async fn test_summarized_index_update() {
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
             ".stats.indexUids" => r#"{"[uuid]": 1}"#,
-            ".batchCreationComplete" => "task with id X of type `indexUpdate` cannot be batched"
+            ".batchStrategy" => insta::dynamic_redaction(task_with_id_redaction),
         },
         @r###"
     {
@@ -1060,12 +1070,12 @@ async fn test_summarized_index_update() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "task with id X of type `indexUpdate` cannot be batched"
+      "batchStrategy": "created batch containing only task with id X of type `indexUpdate` that cannot be batched with any other task."
     }
     "###);
 
     let (task, _status_code) = index.update(Some("bones")).await;
-    index.wait_task(task.uid()).await.succeeded();
+    let task = index.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(task.batch_uid()).await;
     assert_json_snapshot!(batch,
         {
@@ -1077,7 +1087,7 @@ async fn test_summarized_index_update() {
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
             ".stats.indexUids" => r#"{"[uuid]": 1}"#,
-            ".batchCreationComplete" => "task with id X of type `indexUpdate` cannot be batched"
+            ".batchStrategy" => insta::dynamic_redaction(task_with_id_redaction),
         },
         @r###"
     {
@@ -1100,7 +1110,7 @@ async fn test_summarized_index_update() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "task with id X of type `indexUpdate` cannot be batched"
+      "batchStrategy": "created batch containing only task with id X of type `indexUpdate` that cannot be batched with any other task."
     }
     "###);
 }
@@ -1124,7 +1134,7 @@ async fn test_summarized_index_swap() {
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
-            ".batchCreationComplete" => "task with id X of type `indexSwap` cannot be batched"
+            ".batchStrategy" => insta::dynamic_redaction(task_with_id_redaction),
         },
         @r###"
     {
@@ -1154,7 +1164,7 @@ async fn test_summarized_index_swap() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "task with id X of type `indexSwap` cannot be batched"
+      "batchStrategy": "created batch containing only task with id X of type `indexSwap` that cannot be batched with any other task."
     }
     "###);
 
@@ -1179,7 +1189,7 @@ async fn test_summarized_index_swap() {
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
             ".stats.indexUids" => r#"{"[uuid]": 1}"#,
-            ".batchCreationComplete" => "task with id X of type `indexCreation` cannot be batched"
+            ".batchStrategy" => insta::dynamic_redaction(task_with_id_redaction),
         },
         @r###"
     {
@@ -1200,10 +1210,11 @@ async fn test_summarized_index_swap() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "task with id X of type `indexCreation` cannot be batched"
+      "batchStrategy": "created batch containing only task with id X of type `indexCreation` that cannot be batched with any other task."
     }
     "###);
 }
+
 
 #[actix_web::test]
 async fn test_summarized_batch_cancelation() {
@@ -1213,7 +1224,7 @@ async fn test_summarized_batch_cancelation() {
     let (task, _status_code) = index.create(None).await;
     index.wait_task(task.uid()).await.succeeded();
     let (task, _status_code) = server.cancel_tasks(format!("uids={}", task.uid()).as_str()).await;
-    index.wait_task(task.uid()).await.succeeded();
+    let task = index.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(task.batch_uid()).await;
     assert_json_snapshot!(batch,
         {
@@ -1224,8 +1235,8 @@ async fn test_summarized_batch_cancelation() {
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
-            ".batchCreationComplete" => "task with id X of type `taskCancelation` cannot be batched",
             ".details.originalFilter" => "?uids=X",
+            ".batchStrategy" => insta::dynamic_redaction(task_with_id_redaction),
         },
         @r###"
     {
@@ -1250,7 +1261,7 @@ async fn test_summarized_batch_cancelation() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "task with id X of type `taskCancelation` cannot be batched"
+      "batchStrategy": "created batch containing only task with id X of type `taskCancelation` that cannot be batched with any other task."
     }
     "###);
 }
@@ -1263,7 +1274,7 @@ async fn test_summarized_batch_deletion() {
     let (task, _status_code) = index.create(None).await;
     index.wait_task(task.uid()).await.succeeded();
     let (task, _status_code) = server.delete_tasks(format!("uids={}", task.uid()).as_str()).await;
-    index.wait_task(task.uid()).await.succeeded();
+    let task = index.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(task.batch_uid()).await;
     assert_json_snapshot!(batch,
         {
@@ -1308,8 +1319,8 @@ async fn test_summarized_batch_deletion() {
 async fn test_summarized_dump_creation() {
     let server = Server::new_shared();
     let (task, _status_code) = server.create_dump().await;
-    server.wait_task(task.uid()).await.succeeded();
-    let (batch, _) = server.get_latest_batch().await;
+    let task = server.wait_task(task.uid()).await.succeeded();
+    let (batch, _) = server.get_batch(task.batch_uid()).await;
     assert_json_snapshot!(batch,
         {
             ".uid" => "[uid]",
@@ -1320,7 +1331,7 @@ async fn test_summarized_dump_creation() {
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
-            ".batchCreationComplete" => "task with id X of type `dumpCreation` cannot be batched"
+            ".batchStrategy" => insta::dynamic_redaction(task_with_id_redaction),
         },
         @r###"
     {
@@ -1343,7 +1354,7 @@ async fn test_summarized_dump_creation() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "task with id X of type `dumpCreation` cannot be batched"
+      "batchStrategy": "created batch containing only task with id X of type `dumpCreation` that cannot be batched with any other task."
     }
     "###);
 }
