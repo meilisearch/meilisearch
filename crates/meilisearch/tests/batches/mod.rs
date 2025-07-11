@@ -27,7 +27,7 @@ async fn error_get_unexisting_batch_status() {
     let server = Server::new_shared();
     let index = server.unique_index();
     let (task, _coder) = index.create(None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
     let (response, code) = index.get_batch(u32::MAX).await;
 
     let expected_response = json!({
@@ -46,7 +46,7 @@ async fn get_batch_status() {
     let server = Server::new_shared();
     let index = server.unique_index();
     let (task, _status_code) = index.create(None).await;
-    let task = index.wait_task(task.uid()).await.succeeded();
+    let task = server.wait_task(task.uid()).await.succeeded();
     let (_response, code) = index.get_batch(task.batch_uid()).await;
     assert_eq!(code, 200);
 }
@@ -56,9 +56,9 @@ async fn list_batches() {
     let server = Server::new_shared();
     let index = server.unique_index();
     let (task, _status_code) = index.create(None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
     let (task, _status_code) = index.create(None).await;
-    index.wait_task(task.uid()).await.failed();
+    server.wait_task(task.uid()).await.failed();
     let (response, code) = index.list_batches().await;
     assert_eq!(code, 200);
     assert_eq!(
@@ -112,10 +112,10 @@ async fn list_batches_with_star_filters() {
     let server = Server::new().await;
     let index = server.index("test");
     let (task, _code) = index.create(None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
     let index = server.index("test");
     let (task, _code) = index.create(None).await;
-    index.wait_task(task.uid()).await.failed();
+    server.wait_task(task.uid()).await.failed();
 
     let (response, code) = index.service.get("/batches?indexUids=test").await;
     assert_eq!(code, 200);
@@ -158,9 +158,9 @@ async fn list_batches_status_filtered() {
     let server = Server::new_shared();
     let index = server.unique_index();
     let (task, _status_code) = index.create(None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
     let (task, _status_code) = index.create(None).await;
-    index.wait_task(task.uid()).await.failed();
+    server.wait_task(task.uid()).await.failed();
 
     let (response, code) = index.filtered_batches(&[], &["succeeded"], &[]).await;
     assert_eq!(code, 200, "{response}");
@@ -180,9 +180,9 @@ async fn list_batches_type_filtered() {
     let server = Server::new_shared();
     let index = server.unique_index();
     let (task, _) = index.create(None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
     let (task, _) = index.delete().await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
     let (response, code) = index.filtered_batches(&["indexCreation"], &[], &[]).await;
     assert_eq!(code, 200, "{response}");
     assert_eq!(response["results"].as_array().unwrap().len(), 1);
@@ -202,7 +202,7 @@ async fn list_batches_invalid_canceled_by_filter() {
     let server = Server::new_shared();
     let index = server.unique_index();
     let (task, _status_code) = index.create(None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = index.filtered_batches(&[], &[], &["0"]).await;
     assert_eq!(code, 200, "{response}");
@@ -214,9 +214,9 @@ async fn list_batches_status_and_type_filtered() {
     let server = Server::new_shared();
     let index = server.unique_index();
     let (task, _status_code) = index.create(None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
     let (task, _status_code) = index.update(Some("id")).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = index.filtered_batches(&["indexCreation"], &["failed"], &[]).await;
     assert_eq!(code, 200, "{response}");
@@ -288,7 +288,7 @@ async fn test_summarized_document_addition_or_update() {
     let index = server.unique_index();
     let (task, _status_code) =
         index.add_documents(json!({ "id": 42, "content": "doggos & fluff" }), None).await;
-    let task = index.wait_task(task.uid()).await.succeeded();
+    let task = server.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(task.batch_uid()).await;
     assert_json_snapshot!(batch,
         {
@@ -333,7 +333,7 @@ async fn test_summarized_document_addition_or_update() {
 
     let (task, _status_code) =
         index.add_documents(json!({ "id": 42, "content": "doggos & fluff" }), Some("id")).await;
-    let task = index.wait_task(task.uid()).await.succeeded();
+    let task = server.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(task.batch_uid()).await;
     assert_json_snapshot!(batch,
         {
@@ -383,7 +383,7 @@ async fn test_summarized_delete_documents_by_batch() {
     let task_uid_2 = (u32::MAX - 2) as u64;
     let task_uid_3 = (u32::MAX - 3) as u64;
     let (task, _status_code) = index.delete_batch(vec![task_uid_1, task_uid_2, task_uid_3]).await;
-    let task = index.wait_task(task.uid()).await.failed();
+    let task = server.wait_task(task.uid()).await.failed();
     let (batch, _) = index.get_batch(task.batch_uid()).await;
     assert_json_snapshot!(batch,
         {
@@ -425,7 +425,7 @@ async fn test_summarized_delete_documents_by_batch() {
 
     index.create(None).await;
     let (task, _status_code) = index.delete_batch(vec![42]).await;
-    let task = index.wait_task(task.uid()).await.succeeded();
+    let task = server.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(task.batch_uid()).await;
     assert_json_snapshot!(batch,
         {
@@ -473,7 +473,7 @@ async fn test_summarized_delete_documents_by_filter() {
 
     let (task, _status_code) =
         index.delete_document_by_filter(json!({ "filter": "doggo = bernese" })).await;
-    let task = index.wait_task(task.uid()).await.failed();
+    let task = server.wait_task(task.uid()).await.failed();
     let (batch, _) = index.get_batch(task.batch_uid()).await;
     assert_json_snapshot!(batch,
         {
@@ -517,7 +517,7 @@ async fn test_summarized_delete_documents_by_filter() {
     index.create(None).await;
     let (task, _status_code) =
         index.delete_document_by_filter(json!({ "filter": "doggo = bernese" })).await;
-    let task = index.wait_task(task.uid()).await.failed();
+    let task = server.wait_task(task.uid()).await.failed();
     let (batch, _) = index.get_batch(task.batch_uid()).await;
     assert_json_snapshot!(batch,
         {
@@ -562,7 +562,7 @@ async fn test_summarized_delete_documents_by_filter() {
     index.update_settings(json!({ "filterableAttributes": ["doggo"] })).await;
     let (task, _status_code) =
         index.delete_document_by_filter(json!({ "filter": "doggo = bernese" })).await;
-    let task = index.wait_task(task.uid()).await.succeeded();
+    let task = server.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(task.batch_uid()).await;
     assert_json_snapshot!(batch,
         {
@@ -610,7 +610,7 @@ async fn test_summarized_delete_document_by_id() {
     let server = Server::new_shared();
     let index = server.unique_index();
     let (task, _status_code) = index.delete_document(1).await;
-    let task = index.wait_task(task.uid()).await.failed();
+    let task = server.wait_task(task.uid()).await.failed();
     let (batch, _) = index.get_batch(task.batch_uid()).await;
     assert_json_snapshot!(batch,
         {
@@ -652,7 +652,7 @@ async fn test_summarized_delete_document_by_id() {
 
     index.create(None).await;
     let (task, _status_code) = index.delete_document(42).await;
-    let task = index.wait_task(task.uid()).await.succeeded();
+    let task = server.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(task.batch_uid()).await;
     assert_json_snapshot!(batch,
         {
@@ -711,7 +711,7 @@ async fn test_summarized_settings_update() {
     "###);
 
     let (task,_status_code) = index.update_settings(json!({ "displayedAttributes": ["doggos", "name"], "filterableAttributes": ["age", "nb_paw_pads"], "sortableAttributes": ["iq"] })).await;
-    let task = index.wait_task(task.uid()).await.succeeded();
+    let task = server.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(task.batch_uid()).await;
     assert_json_snapshot!(batch,
         {
@@ -767,7 +767,7 @@ async fn test_summarized_index_creation() {
     let server = Server::new_shared();
     let index = server.unique_index();
     let (task, _status_code) = index.create(None).await;
-    let task = index.wait_task(task.uid()).await.succeeded();
+    let task = server.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(task.batch_uid()).await;
     assert_json_snapshot!(batch,
         {
@@ -805,7 +805,7 @@ async fn test_summarized_index_creation() {
     "###);
 
     let (task, _status_code) = index.create(Some("doggos")).await;
-    let task = index.wait_task(task.uid()).await.failed();
+    let task = server.wait_task(task.uid()).await.failed();
     let (batch, _) = index.get_batch(task.batch_uid()).await;
     assert_json_snapshot!(batch,
         {
@@ -850,7 +850,7 @@ async fn test_summarized_index_deletion() {
     let server = Server::new_shared();
     let index = server.unique_index();
     let (ret, _code) = index.delete().await;
-    let batch = index.wait_task(ret.uid()).await.failed();
+    let batch = server.wait_task(ret.uid()).await.failed();
     snapshot!(batch,
         @r###"
     {
@@ -881,7 +881,7 @@ async fn test_summarized_index_deletion() {
     // both batches may get autobatched and the deleted documents count will be wrong.
     let (ret, _code) =
         index.add_documents(json!({ "id": 42, "content": "doggos & fluff" }), Some("id")).await;
-    let batch = index.wait_task(ret.uid()).await.succeeded();
+    let batch = server.wait_task(ret.uid()).await.succeeded();
     snapshot!(batch,
         @r###"
     {
@@ -904,7 +904,7 @@ async fn test_summarized_index_deletion() {
     "###);
 
     let (ret, _code) = index.delete().await;
-    let batch = index.wait_task(ret.uid()).await.succeeded();
+    let batch = server.wait_task(ret.uid()).await.succeeded();
     snapshot!(batch,
         @r###"
     {
@@ -927,7 +927,7 @@ async fn test_summarized_index_deletion() {
 
     // What happens when you delete an index that doesn't exists.
     let (ret, _code) = index.delete().await;
-    let batch = index.wait_task(ret.uid()).await.failed();
+    let batch = server.wait_task(ret.uid()).await.failed();
     snapshot!(batch,
         @r###"
     {
@@ -960,7 +960,7 @@ async fn test_summarized_index_update() {
     let index = server.unique_index();
     // If the index doesn't exist yet, we should get errors with or without the primary key.
     let (task, _status_code) = index.update(None).await;
-    let task = index.wait_task(task.uid()).await.failed();
+    let task = server.wait_task(task.uid()).await.failed();
     let (batch, _) = index.get_batch(task.batch_uid()).await;
     assert_json_snapshot!(batch,
         {
@@ -998,7 +998,7 @@ async fn test_summarized_index_update() {
     "###);
 
     let (task, _status_code) = index.update(Some("bones")).await;
-    let task = index.wait_task(task.uid()).await.failed();
+    let task = server.wait_task(task.uid()).await.failed();
     let (batch, _) = index.get_batch(task.batch_uid()).await;
     assert_json_snapshot!(batch,
         {
@@ -1041,7 +1041,7 @@ async fn test_summarized_index_update() {
     index.create(None).await;
 
     let (task, _status_code) = index.update(None).await;
-    let task = index.wait_task(task.uid()).await.succeeded();
+    let task = server.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(task.batch_uid()).await;
     assert_json_snapshot!(batch,
         {
@@ -1079,7 +1079,7 @@ async fn test_summarized_index_update() {
     "###);
 
     let (task, _status_code) = index.update(Some("bones")).await;
-    let task = index.wait_task(task.uid()).await.succeeded();
+    let task = server.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(task.batch_uid()).await;
     assert_json_snapshot!(batch,
         {
@@ -1225,9 +1225,9 @@ async fn test_summarized_batch_cancelation() {
     let index = server.unique_index();
     // to avoid being flaky we're only going to cancel an already finished batch :(
     let (task, _status_code) = index.create(None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
     let (task, _status_code) = server.cancel_tasks(format!("uids={}", task.uid()).as_str()).await;
-    let task = index.wait_task(task.uid()).await.succeeded();
+    let task = server.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(task.batch_uid()).await;
     assert_json_snapshot!(batch,
         {
@@ -1275,9 +1275,9 @@ async fn test_summarized_batch_deletion() {
     let index = server.unique_index();
     // to avoid being flaky we're only going to delete an already finished batch :(
     let (task, _status_code) = index.create(None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
     let (task, _status_code) = server.delete_tasks(format!("uids={}", task.uid()).as_str()).await;
-    let task = index.wait_task(task.uid()).await.succeeded();
+    let task = server.wait_task(task.uid()).await.succeeded();
     let (batch, _) = index.get_batch(task.batch_uid()).await;
     assert_json_snapshot!(batch,
         {
