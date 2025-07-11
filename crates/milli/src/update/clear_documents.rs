@@ -2,7 +2,7 @@ use heed::RwTxn;
 use roaring::RoaringBitmap;
 use time::OffsetDateTime;
 
-use crate::{FieldDistribution, Index, Result};
+use crate::{database_stats::DatabaseStats, FieldDistribution, Index, Result};
 
 pub struct ClearDocuments<'t, 'i> {
     wtxn: &'t mut RwTxn<'i>,
@@ -91,6 +91,10 @@ impl<'t, 'i> ClearDocuments<'t, 'i> {
         vector_arroy.clear(self.wtxn)?;
 
         documents.clear(self.wtxn)?;
+
+        // Update the stats of the documents database after clearing all documents.
+        let stats = DatabaseStats::new(self.index.documents.remap_data_type(), self.wtxn)?;
+        self.index.put_documents_stats(self.wtxn, stats)?;
 
         Ok(number_of_documents)
     }
