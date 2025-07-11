@@ -3,13 +3,11 @@ use meilisearch::Opt;
 use tempfile::TempDir;
 
 use super::test_settings_documents_indexing_swapping_and_search;
-use crate::{
-    common::{
-        default_settings, shared_index_with_documents, shared_index_with_nested_documents, Server,
-        DOCUMENTS, NESTED_DOCUMENTS,
-    },
-    json,
+use crate::common::{
+    default_settings, shared_index_with_documents, shared_index_with_nested_documents, Server,
+    DOCUMENTS, NESTED_DOCUMENTS,
 };
+use crate::json;
 
 #[actix_rt::test]
 async fn search_with_filter_string_notation() {
@@ -92,7 +90,7 @@ async fn search_with_contains_filter() {
 
     let documents = DOCUMENTS.clone();
     let (request, _code) = index.add_documents(documents, None).await;
-    index.wait_task(request.uid()).await.succeeded();
+    server.wait_task(request.uid()).await.succeeded();
 
     let (response, code) = index
         .search_post(json!({
@@ -259,7 +257,7 @@ async fn search_with_pattern_filter_settings_scenario_1() {
 
     let (task, code) = index.add_documents(NESTED_DOCUMENTS.clone(), None).await;
     assert_eq!(code, 202, "{task}");
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (task, code) = index
         .update_settings(json!({"filterableAttributes": [{
@@ -271,7 +269,7 @@ async fn search_with_pattern_filter_settings_scenario_1() {
         }]}))
         .await;
     assert_eq!(code, 202, "{task}");
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     // Check if the Equality filter works
     index
@@ -336,7 +334,7 @@ async fn search_with_pattern_filter_settings_scenario_1() {
         }]}))
         .await;
     assert_eq!(code, 202, "{task}");
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     // Check if the Equality filter works
     index
@@ -447,7 +445,7 @@ async fn search_with_pattern_filter_settings_scenario_1() {
         }]}))
         .await;
     assert_eq!(code, 202, "{task}");
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     // Check if the Equality filter returns an error
     index
@@ -546,7 +544,7 @@ async fn search_with_pattern_filter_settings_scenario_1() {
         }]}))
         .await;
     assert_eq!(code, 202, "{task}");
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     // Check if the Equality filter works
     index

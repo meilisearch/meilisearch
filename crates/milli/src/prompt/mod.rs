@@ -2,7 +2,6 @@ mod context;
 mod document;
 pub(crate) mod error;
 mod fields;
-mod template_checker;
 
 use std::cell::RefCell;
 use std::convert::TryFrom;
@@ -10,12 +9,11 @@ use std::fmt::Debug;
 use std::num::NonZeroUsize;
 
 use bumpalo::Bump;
-use document::ParseableDocument;
+pub(crate) use document::{Document, ParseableDocument};
 use error::{NewPromptError, RenderPromptError};
-use fields::{BorrowedFields, OwnedFields};
+pub use fields::{BorrowedFields, OwnedFields};
 
-use self::context::Context;
-use self::document::Document;
+pub use self::context::Context;
 use crate::fields_ids_map::metadata::FieldIdMapWithMetadata;
 use crate::update::del_add::DelAdd;
 use crate::GlobalFieldsIdsMap;
@@ -65,7 +63,7 @@ fn default_template() -> liquid::Template {
     new_template(default_template_text()).unwrap()
 }
 
-fn default_template_text() -> &'static str {
+pub fn default_template_text() -> &'static str {
     "{% for field in fields %}\
     {% if field.is_searchable and field.value != nil %}\
     {{ field.name }}: {{ field.value }}\n\
@@ -105,17 +103,12 @@ impl Prompt {
             max_bytes,
         };
 
-        // render template with special object that's OK with `doc.*` and `fields.*`
-        this.template
-            .render(&template_checker::TemplateChecker)
-            .map_err(NewPromptError::invalid_fields_in_template)?;
-
         Ok(this)
     }
 
     pub fn render_document<
-        'a,       // lifetime of the borrow of the document
-        'doc: 'a, // lifetime of the allocator, will live for an entire chunk of documents
+        'a,   // lifetime of the borrow of the document
+        'doc, // lifetime of the allocator, will live for an entire chunk of documents
     >(
         &self,
         external_docid: &str,
@@ -206,6 +199,7 @@ mod test {
     }
 
     #[test]
+    #[ignore] // See <https://github.com/meilisearch/meilisearch/pull/5593> for explanation
     fn template_missing_doc() {
         assert!(matches!(
             Prompt::new("{{title}}: {{overview}}".into(), None),
@@ -236,6 +230,7 @@ mod test {
     }
 
     #[test]
+    #[ignore] // See <https://github.com/meilisearch/meilisearch/pull/5593> for explanation
     fn template_fields_invalid() {
         assert!(matches!(
             // intentionally garbled field

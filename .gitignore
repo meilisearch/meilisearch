@@ -18,5 +18,8 @@
 ##  ... unreviewed
 *.snap.new
 
+# Database snapshot
+crates/meilisearch/db.snapshot
+
 # Fuzzcheck data for the facet indexing fuzz test
 crates/milli/fuzz/update::facet::incremental::fuzz::fuzz/

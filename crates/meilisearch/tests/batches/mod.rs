@@ -327,7 +327,7 @@ async fn test_summarized_document_addition_or_update() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "batched all enqueued tasks"
+      "batchStrategy": "batched all enqueued tasks"
     }
     "###);
 
@@ -371,7 +371,7 @@ async fn test_summarized_document_addition_or_update() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "batched all enqueued tasks"
+      "batchStrategy": "batched all enqueued tasks"
     }
     "###);
 }
@@ -420,7 +420,7 @@ async fn test_summarized_delete_documents_by_batch() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "batched all enqueued tasks"
+      "batchStrategy": "batched all enqueued tasks"
     }
     "###);
 
@@ -463,7 +463,7 @@ async fn test_summarized_delete_documents_by_batch() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "batched all enqueued tasks"
+      "batchStrategy": "batched all enqueued tasks"
     }
     "###);
 }
@@ -512,7 +512,7 @@ async fn test_summarized_delete_documents_by_filter() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "batched all enqueued tasks"
+      "batchStrategy": "batched all enqueued tasks"
     }
     "###);
 
@@ -557,7 +557,7 @@ async fn test_summarized_delete_documents_by_filter() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "batched all enqueued tasks"
+      "batchStrategy": "batched all enqueued tasks"
     }
     "###);
 
@@ -602,7 +602,7 @@ async fn test_summarized_delete_documents_by_filter() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "batched all enqueued tasks"
+      "batchStrategy": "batched all enqueued tasks"
     }
     "###);
 }
@@ -648,7 +648,7 @@ async fn test_summarized_delete_document_by_id() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "batched all enqueued tasks"
+      "batchStrategy": "batched all enqueued tasks"
     }
     "###);
 
@@ -691,7 +691,7 @@ async fn test_summarized_delete_document_by_id() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "batched all enqueued tasks"
+      "batchStrategy": "batched all enqueued tasks"
     }
     "###);
 }
@@ -759,7 +759,7 @@ async fn test_summarized_settings_update() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "batched all enqueued tasks"
+      "batchStrategy": "batched all enqueued tasks"
     }
     "###);
 }
@@ -1315,7 +1315,7 @@ async fn test_summarized_batch_deletion() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "a batch of tasks of type `taskDeletion` cannot be batched with any other type of task"
+      "batchStrategy": "stopped after the last task of type `taskDeletion` because they cannot be batched with tasks of any other type."
     }
     "###);
 }

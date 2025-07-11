@@ -9,7 +9,7 @@ async fn index_with_documents<'a>(server: &'a Server<Shared>, documents: &Value)
     let index = server.unique_index();
 
     let (task, _code) = index.add_documents(documents.clone(), None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
     index
 }
 
@@ -65,7 +65,7 @@ async fn search_no_searchable_attribute_set() {
         .await;
 
     let (task, _status_code) = index.update_settings_searchable_attributes(json!(["*"])).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     index
         .search(
@@ -78,7 +78,7 @@ async fn search_no_searchable_attribute_set() {
         .await;
 
     let (task, _status_code) = index.update_settings_searchable_attributes(json!(["*"])).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     index
         .search(
@@ -109,7 +109,7 @@ async fn search_on_all_attributes_restricted_set() {
     let server = Server::new_shared();
     let index = index_with_documents(server, &SIMPLE_SEARCH_DOCUMENTS).await;
     let (task, _status_code) = index.update_settings_searchable_attributes(json!(["title"])).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     index
         .search(json!({"q": "Captain Marvel", "attributesToSearchOn": ["*"]}), |response, code| {
@@ -194,7 +194,7 @@ async fn word_ranking_rule_order_exact_words() {
     let (task, _status_code) = index
         .update_settings_typo_tolerance(json!({"disableOnWords": ["Captain", "Marvel"]}))
         .await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     // simple search should return 2 documents (ids: 2 and 3).
     index
@@ -360,7 +360,7 @@ async fn search_on_exact_field() {
     let (response, code) =
         index.update_settings_typo_tolerance(json!({ "disableOnAttributes": ["exact"] })).await;
     assert_eq!(202, code, "{response:?}");
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
     // Searching on an exact attribute should only return the document matching without typo.
     index
         .search(json!({"q": "Marvel", "attributesToSearchOn": ["exact"]}), |response, code| {
@@ -557,7 +557,7 @@ async fn nested_search_on_title_restricted_set_with_suffix_wildcard() {
     let index = index_with_documents(server, &NESTED_SEARCH_DOCUMENTS).await;
     let (task, _status_code) =
         index.update_settings_searchable_attributes(json!(["details.title"])).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     index
         .search(
@@ -595,7 +595,7 @@ async fn nested_search_no_searchable_attribute_set_with_any_wildcard() {
         .await;
 
     let (task, _status_code) = index.update_settings_searchable_attributes(json!(["*"])).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     index
         .search(
@@ -608,7 +608,7 @@ async fn nested_search_no_searchable_attribute_set_with_any_wildcard() {
         .await;
 
     let (task, _status_code) = index.update_settings_searchable_attributes(json!(["*"])).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     index
         .search(

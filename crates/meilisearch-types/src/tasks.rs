@@ -1,19 +1,22 @@
 use core::fmt;
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::fmt::{Display, Write};
 use std::str::FromStr;
 
+use byte_unit::Byte;
 use enum_iterator::Sequence;
 use milli::update::IndexDocumentsMethod;
 use milli::Object;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize, Serializer};
+use serde_json::Value;
 use time::{Duration, OffsetDateTime};
-use utoipa::ToSchema;
+use utoipa::{schema, ToSchema};
 use uuid::Uuid;
 
 use crate::batches::BatchId;
 use crate::error::ResponseError;
+use crate::index_uid_pattern::IndexUidPattern;
 use crate::keys::Key;
 use crate::settings::{Settings, Unchecked};
 use crate::{versioning, InstanceUid};
@@ -50,6 +53,7 @@ impl Task {
             | SnapshotCreation
             | TaskCancelation { .. }
             | TaskDeletion { .. }
+            | Export { .. }
             | UpgradeDatabase { .. }
             | IndexSwap { .. } => None,
             DocumentAdditionOrUpdate { index_uid, .. }
@@ -86,6 +90,7 @@ impl Task {
             | KindWithContent::TaskDeletion { .. }
             | KindWithContent::DumpCreation { .. }
             | KindWithContent::SnapshotCreation
+            | KindWithContent::Export { .. }
             | KindWithContent::UpgradeDatabase { .. } => None,
         }
     }
@@ -108,11 +113,11 @@ pub enum KindWithContent {
     },
     DocumentDeletionByFilter {
         index_uid: String,
-        filter_expr: serde_json::Value,
+        filter_expr: Value,
     },
     DocumentEdition {
         index_uid: String,
-        filter_expr: Option<serde_json::Value>,
+        filter_expr: Option<Value>,
         context: Option<milli::Object>,
         function: String,
     },
@@ -152,6 +157,12 @@ pub enum KindWithContent {
         instance_uid: Option<InstanceUid>,
     },
     SnapshotCreation,
+    Export {
+        url: String,
+        api_key: Option<String>,
+        payload_size: Option<Byte>,
+        indexes: BTreeMap<IndexUidPattern, ExportIndexSettings>,
+    },
     UpgradeDatabase {
         from: (u32, u32, u32),
     },
@@ -161,6 +172,13 @@ pub enum KindWithContent {
 #[serde(rename_all = "camelCase")]
 pub struct IndexSwap {
     pub indexes: (String, String),
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportIndexSettings {
+    pub filter: Option<Value>,
+    pub override_settings: bool,
 }
 
 impl KindWithContent {
@@ -180,6 +198,7 @@ impl KindWithContent {
             KindWithContent::TaskDeletion { .. } => Kind::TaskDeletion,
             KindWithContent::DumpCreation { .. } => Kind::DumpCreation,
             KindWithContent::SnapshotCreation => Kind::SnapshotCreation,
+            KindWithContent::Export { .. } => Kind::Export,
             KindWithContent::UpgradeDatabase { .. } => Kind::UpgradeDatabase,
         }
     }
@@ -192,6 +211,7 @@ impl KindWithContent {
             | SnapshotCreation
             | TaskCancelation { .. }
             | TaskDeletion { .. }
+            | Export { .. }
             | UpgradeDatabase { .. } => vec![],
             DocumentAdditionOrUpdate { index_uid, .. }
             | DocumentEdition { index_uid, .. }
@@ -269,6 +289,14 @@ impl KindWithContent {
             }),
             KindWithContent::DumpCreation { .. } => Some(Details::Dump { dump_uid: None }),
             KindWithContent::SnapshotCreation => None,
+            KindWithContent::Export { url, api_key, payload_size, indexes } => {
+                Some(Details::Export {
+                    url: url.clone(),
+                    api_key: api_key.clone(),
+                    payload_size: *payload_size,
+                    indexes: indexes.iter().map(|(p, s)| (p.clone(), s.clone().into())).collect(),
+                })
+            }
             KindWithContent::UpgradeDatabase { from } => Some(Details::UpgradeDatabase {
                 from: (from.0, from.1, from.2),
                 to: (
@@ -335,6 +363,14 @@ impl KindWithContent {
             }),
             KindWithContent::DumpCreation { .. } => Some(Details::Dump { dump_uid: None }),
             KindWithContent::SnapshotCreation => None,
+            KindWithContent::Export { url, api_key, payload_size, indexes } => {
+                Some(Details::Export {
+                    url: url.clone(),
+                    api_key: api_key.clone(),
+                    payload_size: *payload_size,
+                    indexes: indexes.iter().map(|(p, s)| (p.clone(), s.clone().into())).collect(),
+                })
+            }
             KindWithContent::UpgradeDatabase { from } => Some(Details::UpgradeDatabase {
                 from: *from,
                 to: (
@@ -383,6 +419,14 @@ impl From<&KindWithContent> for Option<Details> {
             }),
             KindWithContent::DumpCreation { .. } => Some(Details::Dump { dump_uid: None }),
             KindWithContent::SnapshotCreation => None,
+            KindWithContent::Export { url, api_key, payload_size, indexes } => {
+                Some(Details::Export {
+                    url: url.clone(),
+                    api_key: api_key.clone(),
+                    payload_size: *payload_size,
+                    indexes: indexes.iter().map(|(p, s)| (p.clone(), s.clone().into())).collect(),
+                })
+            }
             KindWithContent::UpgradeDatabase { from } => Some(Details::UpgradeDatabase {
                 from: *from,
                 to: (
@@ -499,6 +543,7 @@ pub enum Kind {
     TaskDeletion,
     DumpCreation,
     SnapshotCreation,
+    Export,
     UpgradeDatabase,
 }
 
@@ -516,6 +561,7 @@ impl Kind {
             | Kind::TaskCancelation
             | Kind::TaskDeletion
             | Kind::DumpCreation
+            | Kind::Export
             | Kind::UpgradeDatabase
             | Kind::SnapshotCreation => false,
         }
@@ -536,6 +582,7 @@ impl Display for Kind {
             Kind::TaskDeletion => write!(f, "taskDeletion"),
             Kind::DumpCreation => write!(f, "dumpCreation"),
             Kind::SnapshotCreation => write!(f, "snapshotCreation"),
+            Kind::Export => write!(f, "export"),
             Kind::UpgradeDatabase => write!(f, "upgradeDatabase"),
         }
     }
@@ -568,6 +615,8 @@ impl FromStr for Kind {
             Ok(Kind::DumpCreation)
         } else if kind.eq_ignore_ascii_case("snapshotCreation") {
             Ok(Kind::SnapshotCreation)
+        } else if kind.eq_ignore_ascii_case("export") {
+            Ok(Kind::Export)
         } else if kind.eq_ignore_ascii_case("upgradeDatabase") {
             Ok(Kind::UpgradeDatabase)
         } else {
@@ -597,7 +646,7 @@ impl fmt::Display for ParseTaskKindError {
 }
 impl std::error::Error for ParseTaskKindError {}
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub enum Details {
     DocumentAdditionOrUpdate {
         received_documents: u64,
@@ -643,10 +692,31 @@ pub enum Details {
     IndexSwap {
         swaps: Vec<IndexSwap>,
     },
+    Export {
+        url: String,
+        api_key: Option<String>,
+        payload_size: Option<Byte>,
+        indexes: BTreeMap<IndexUidPattern, DetailsExportIndexSettings>,
+    },
     UpgradeDatabase {
         from: (u32, u32, u32),
         to: (u32, u32, u32),
     },
+}
+
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, ToSchema)]
+#[schema(rename_all = "camelCase")]
+pub struct DetailsExportIndexSettings {
+    #[serde(flatten)]
+    pub settings: ExportIndexSettings,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub matched_documents: Option<u64>,
+}
+
+impl From<ExportIndexSettings> for DetailsExportIndexSettings {
+    fn from(settings: ExportIndexSettings) -> Self {
+        DetailsExportIndexSettings { settings, matched_documents: None }
+    }
 }
 
 impl Details {
@@ -667,6 +737,7 @@ impl Details {
             Self::SettingsUpdate { .. }
             | Self::IndexInfo { .. }
             | Self::Dump { .. }
+            | Self::Export { .. }
             | Self::UpgradeDatabase { .. }
             | Self::IndexSwap { .. } => (),
         }
@@ -746,70 +817,70 @@ impl Display for BatchStopReason {
         match self {
             BatchStopReason::Unspecified => f.write_str("unspecified"),
             BatchStopReason::TaskKindCannotBeBatched { kind } => {
-                write!(f, "a batch of tasks of type `{kind}` cannot be batched with any other type of task")
+                write!(f, "stopped after the last task of type `{kind}` because they cannot be batched with tasks of any other type.")
             }
             BatchStopReason::TaskCannotBeBatched { kind, id } => {
-                write!(f, "task with id {id} of type `{kind}` cannot be batched")
+                write!(f, "created batch containing only task with id {id} of type `{kind}` that cannot be batched with any other task.")
             }
             BatchStopReason::ExhaustedEnqueuedTasks => f.write_str("batched all enqueued tasks"),
             BatchStopReason::ExhaustedEnqueuedTasksForIndex { index } => {
                 write!(f, "batched all enqueued tasks for index `{index}`")
             }
             BatchStopReason::ReachedTaskLimit { task_limit } => {
-                write!(f, "reached configured batch limit of {task_limit} tasks")
+                write!(f, "batched up to configured batch limit of {task_limit} tasks")
             }
             BatchStopReason::ReachedSizeLimit { size_limit, size } => write!(
                 f,
-                "reached configured batch size limit of {size_limit}B with a total of {size}B"
+                "batched up to configured batch size limit of {size_limit}B with a total of {size}B",
             ),
             BatchStopReason::PrimaryKeyIndexMismatch { id, in_index, in_task } => {
-                write!(f, "primary key `{in_task}` in task with id {id} is different from the primary key of the index `{in_index}`")
+                write!(f, "stopped batching before task with id {id} because its primary key `{in_task}` is different from the primary key of the index `{in_index}`")
             }
             BatchStopReason::IndexCreationMismatch { id } => {
-                write!(f, "task with id {id} has different index creation rules as in the batch")
+                write!(f, "stopped batching before task with id {id} because its index creation rules differ from the ones from the batch")
             }
             BatchStopReason::PrimaryKeyMismatch { reason, id } => match reason {
                 PrimaryKeyMismatchReason::TaskPrimaryKeyDifferFromIndexPrimaryKey {
                     task_pk,
                     index_pk,
                 } => {
-                    write!(f, "primary key `{task_pk}` in task with id {id} is different from the primary key of the index `{index_pk}`")
+                    write!(f, "stopped batching before task with id {id} because its primary key `{task_pk}` is different from the primary key of the index `{index_pk}`")
                 }
                 PrimaryKeyMismatchReason::TaskPrimaryKeyDifferFromCurrentBatchPrimaryKey {
                     task_pk,
                     batch_pk,
                 } => {
-                    write!(f, "primary key `{task_pk}` in task with id {id} is different from the primary key of the batch `{batch_pk}`")
+                    write!(f, "stopped batching before task with id {id} because its primary key `{task_pk}` is different from the primary key of the batch `{batch_pk}`")
                 }
                 PrimaryKeyMismatchReason::CannotInterfereWithPrimaryKeyGuessing { task_pk } => {
-                    write!(f, "task with id {id} is setting the `{task_pk}` primary key but cannot interfere with primary key guessing of the batch")
+                    write!(f, "stopped batching before task with id {id} because it is setting the `{task_pk}` primary key and it would interfere with primary key guessing of the batch")
                 }
             },
             BatchStopReason::IndexDeletion { id } => {
-                write!(f, "task with id {id} deletes the index")
+                write!(f, "stopped after task with id {id} because it deletes the index")
             }
             BatchStopReason::DocumentOperationWithSettings { id } => {
                 write!(
                     f,
-                    "task with id {id} is a settings change in a batch of document operations"
+                    "stopped before task with id {id} because it is a settings change which cannot be batched with document operations"
                 )
             }
             BatchStopReason::DocumentOperationWithDeletionByFilter { id } => {
                 write!(
                     f,
-                    "task with id {id} is a deletion by filter in a batch of document operations"
+                    "stopped before task with id {id} because it is a deletion by filter which cannot be batched with document operations"
                 )
             }
             BatchStopReason::DeletionByFilterWithDocumentOperation { id } => {
                 write!(
                     f,
-                    "task with id {id} is a document operation in a batch of deletions by filter"
+                    "stopped before task with id {id} because it is a document operation which cannot be batched with deletions by filter"
                 )
             }
             BatchStopReason::SettingsWithDocumentOperation { id } => {
                 write!(
                     f,
-                    "task with id {id} is a document operation in a batch of settings changes"
+                    "stopped before task with id {id} because it is a document operation which cannot be batched with settings changes"
                 )
             }
         }

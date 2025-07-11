@@ -1,3 +1,6 @@
+use std::collections::BTreeMap;
+
+use byte_unit::UnitType;
 use milli::Object;
 use serde::{Deserialize, Serialize};
 use time::{Duration, OffsetDateTime};
@@ -6,9 +9,11 @@ use utoipa::ToSchema;
 use crate::batches::BatchId;
 use crate::error::ResponseError;
 use crate::settings::{Settings, Unchecked};
-use crate::tasks::{serialize_duration, Details, IndexSwap, Kind, Status, Task, TaskId};
+use crate::tasks::{
+    serialize_duration, Details, DetailsExportIndexSettings, IndexSwap, Kind, Status, Task, TaskId,
+};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, ToSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct TaskView {
@@ -67,7 +72,7 @@ impl TaskView {
     }
 }
 
-#[derive(Default, Debug, PartialEq, Eq, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Default, Debug, PartialEq, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct DetailsView {
@@ -118,6 +123,15 @@ pub struct DetailsView {
     pub upgrade_from: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub upgrade_to: Option<String>,
+    // exporting
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub payload_size: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub indexes: Option<BTreeMap<String, DetailsExportIndexSettings>>,
 }
 
 impl DetailsView {
@@ -238,6 +252,34 @@ impl DetailsView {
                     Some(left)
                 }
             },
+            url: match (self.url.clone(), other.url.clone()) {
+                (None, None) => None,
+                (None, Some(url)) | (Some(url), None) => Some(url),
+                // We should never be able to batch multiple exports at the same time.
+                // So we return the first one we encounter but that shouldn't be an issue anyway.
+                (Some(left), Some(_right)) => Some(left),
+            },
+            api_key: match (self.api_key.clone(), other.api_key.clone()) {
+                (None, None) => None,
+                (None, Some(key)) | (Some(key), None) => Some(key),
+                // We should never be able to batch multiple exports at the same time.
+                // So we return the first one we encounter but that shouldn't be an issue anyway.
+                (Some(left), Some(_right)) => Some(left),
+            },
+            payload_size: match (self.payload_size.clone(), other.payload_size.clone()) {
+                (None, None) => None,
+                (None, Some(size)) | (Some(size), None) => Some(size),
+                // We should never be able to batch multiple exports at the same time.
+                // So we return the first one we encounter but that shouldn't be an issue anyway.
+                (Some(left), Some(_right)) => Some(left),
+            },
+            indexes: match (self.indexes.clone(), other.indexes.clone()) {
+                (None, None) => None,
+                (None, Some(indexes)) | (Some(indexes), None) => Some(indexes),
+                // We should never be able to batch multiple exports at the same time.
+                // So we return the first one we encounter but that shouldn't be an issue anyway.
+                (Some(left), Some(_right)) => Some(left),
+            },
             // We want the earliest version
             upgrade_from: match (self.upgrade_from.clone(), other.upgrade_from.clone()) {
                 (None, None) => None,
@@ -327,11 +369,45 @@ impl From<Details> for DetailsView {
             Details::IndexSwap { swaps } => {
                 DetailsView { swaps: Some(swaps), ..Default::default() }
             }
+            Details::Export { url, api_key, payload_size, indexes } => DetailsView {
+                url: Some(url),
+                api_key: api_key.map(|mut api_key| {
+                    hide_secret(&mut api_key);
+                    api_key
+                }),
+                payload_size: payload_size
+                    .map(|ps| ps.get_appropriate_unit(UnitType::Both).to_string()),
+                indexes: Some(
+                    indexes
+                        .into_iter()
+                        .map(|(pattern, settings)| (pattern.to_string(), settings))
+                        .collect(),
+                ),
+                ..Default::default()
+            },
             Details::UpgradeDatabase { from, to } => DetailsView {
                 upgrade_from: Some(format!("v{}.{}.{}", from.0, from.1, from.2)),
                 upgrade_to: Some(format!("v{}.{}.{}", to.0, to.1, to.2)),
                 ..Default::default()
             },
+        }
+    }
+}
+
+// We definitely need to factorize the code to hide the secret key
+fn hide_secret(secret: &mut String) {
+    match secret.len() {
+        x if x < 10 => {
+            secret.replace_range(.., "XXX...");
+        }
+        x if x < 20 => {
+            secret.replace_range(2.., "XXXX...");
+        }
+        x if x < 30 => {
+            secret.replace_range(3.., "XXXXX...");
+        }
+        _x => {
+            secret.replace_range(5.., "XXXXXX...");
         }
     }
 }

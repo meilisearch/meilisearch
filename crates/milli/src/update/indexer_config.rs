@@ -15,6 +15,7 @@ pub struct IndexerConfig {
     pub thread_pool: ThreadPoolNoAbort,
     pub max_positions_per_attributes: Option<u32>,
     pub skip_index_budget: bool,
+    pub experimental_no_edition_2024_for_settings: bool,
 }
 
 impl IndexerConfig {
@@ -63,6 +64,7 @@ impl Default for IndexerConfig {
             chunk_compression_level: None,
             max_positions_per_attributes: None,
             skip_index_budget: false,
+            experimental_no_edition_2024_for_settings: false,
         }
     }
 }

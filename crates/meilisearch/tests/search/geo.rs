@@ -1,10 +1,9 @@
 use meili_snap::{json_string, snapshot};
 use meilisearch_types::milli::constants::RESERVED_GEO_FIELD_NAME;
 
+use super::test_settings_documents_indexing_swapping_and_search;
 use crate::common::shared_index_with_geo_documents;
 use crate::json;
-
-use super::test_settings_documents_indexing_swapping_and_search;
 
 #[actix_rt::test]
 async fn geo_sort_with_geo_strings() {

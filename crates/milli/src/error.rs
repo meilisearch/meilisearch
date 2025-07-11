@@ -1,5 +1,4 @@
-use std::collections::BTreeSet;
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::convert::Infallible;
 use std::fmt::Write;
 use std::{io, str};
@@ -289,6 +288,8 @@ and can not be more than 511 bytes.", .document_id.to_string()
     InvalidPromptForEmbeddings(String, crate::prompt::error::NewPromptError),
     #[error("Too many embedders in the configuration. Found {0}, but limited to 256.")]
     TooManyEmbedders(usize),
+    #[error("Too many fragments in the configuration. Found {0}, but limited to 256.")]
+    TooManyFragments(usize),
     #[error("Cannot find embedder with name `{0}`.")]
     InvalidSearchEmbedder(String),
     #[error("Cannot find embedder with name `{0}`.")]
@@ -387,6 +388,8 @@ and can not be more than 511 bytes.", .document_id.to_string()
     DocumentEditionRuntimeError(Box<EvalAltResult>),
     #[error("Document edition runtime error encountered while compiling the function: {0}")]
     DocumentEditionCompilationError(rhai::ParseError),
+    #[error("`.chat.documentTemplateMaxBytes`: `documentTemplateMaxBytes` cannot be zero")]
+    InvalidChatSettingsDocumentTemplateMaxBytes,
     #[error("{0}")]
     DocumentEmbeddingError(String),
 }

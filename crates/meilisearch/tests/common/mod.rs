@@ -278,7 +278,7 @@ pub async fn shared_index_with_score_documents() -> &'static Index<'static, Shar
     static INDEX: OnceCell<Index<'static, Shared>> = OnceCell::const_new();
     INDEX.get_or_init(|| async {
         let server = Server::new_shared();
-        let index = server._index("SCORE_DOCUMENTS").to_shared();
+        let index = server._index("SHARED_SCORE_DOCUMENTS").to_shared();
         let documents = SCORE_DOCUMENTS.clone();
         let (response, _code) = index._add_documents(documents, None).await;
         index.wait_task(response.uid()).await.succeeded();

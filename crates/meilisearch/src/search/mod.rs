@@ -16,6 +16,7 @@ use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::locales::Locale;
+use meilisearch_types::milli::index::{self, SearchParameters};
 use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::vector::Embedder;
@@ -63,6 +64,8 @@ pub struct SearchQuery {
     pub q: Option<String>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchVector>)]
     pub vector: Option<Vec<f32>>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchMedia>)]
+    pub media: Option<serde_json::Value>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchHybridQuery>)]
     pub hybrid: Option<HybridQuery>,
     #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSearchOffset>)]
@@ -119,9 +122,59 @@ pub struct SearchQuery {
     pub locales: Option<Vec<Locale>>,
 }
 
+impl From<SearchParameters> for SearchQuery {
+    fn from(parameters: SearchParameters) -> Self {
+        let SearchParameters {
+            hybrid,
+            limit,
+            sort,
+            distinct,
+            matching_strategy,
+            attributes_to_search_on,
+            ranking_score_threshold,
+        } = parameters;
+
+        SearchQuery {
+            hybrid: hybrid.map(|index::HybridQuery { semantic_ratio, embedder }| HybridQuery {
+                semantic_ratio: SemanticRatio::try_from(semantic_ratio)
+                    .ok()
+                    .unwrap_or_else(DEFAULT_SEMANTIC_RATIO),
+                embedder,
+            }),
+            limit: limit.unwrap_or_else(DEFAULT_SEARCH_LIMIT),
+            sort,
+            distinct,
+            matching_strategy: matching_strategy.map(MatchingStrategy::from).unwrap_or_default(),
+            attributes_to_search_on,
+            ranking_score_threshold: ranking_score_threshold.map(RankingScoreThreshold::from),
+            q: None,
+            vector: None,
+            media: None,
+            offset: DEFAULT_SEARCH_OFFSET(),
+            page: None,
+            hits_per_page: None,
+            attributes_to_retrieve: None,
+            retrieve_vectors: false,
+            attributes_to_crop: None,
+            crop_length: DEFAULT_CROP_LENGTH(),
+            attributes_to_highlight: None,
+            show_matches_position: false,
+            show_ranking_score: false,
+            show_ranking_score_details: false,
+            filter: None,
+            facets: None,
+            highlight_pre_tag: DEFAULT_HIGHLIGHT_PRE_TAG(),
+            highlight_post_tag: DEFAULT_HIGHLIGHT_POST_TAG(),
+            crop_marker: DEFAULT_CROP_MARKER(),
+            locales: None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Deserr, ToSchema, Serialize)]
 #[deserr(try_from(f64) = TryFrom::try_from -> InvalidSearchRankingScoreThreshold)]
 pub struct RankingScoreThreshold(f64);
+
 impl std::convert::TryFrom<f64> for RankingScoreThreshold {
     type Error = InvalidSearchRankingScoreThreshold;
 
@@ -133,6 +186,14 @@ impl std::convert::TryFrom<f64> for RankingScoreThreshold {
         } else {
             Ok(RankingScoreThreshold(f))
         }
+    }
+}
+
+impl From<index::RankingScoreThreshold> for RankingScoreThreshold {
+    fn from(threshold: index::RankingScoreThreshold) -> Self {
+        let threshold = threshold.as_f64();
+        assert!((0.0..=1.0).contains(&threshold));
+        RankingScoreThreshold(threshold)
     }
 }
 
@@ -162,6 +223,7 @@ impl fmt::Debug for SearchQuery {
         let Self {
             q,
             vector,
+            media,
             hybrid,
             offset,
             limit,
@@ -215,6 +277,9 @@ impl fmt::Debug for SearchQuery {
                     &format!("[{}, {}, {}, ... {} dimensions]", v[0], v[1], v[2], v.len()),
                 );
             }
+        }
+        if let Some(media) = media {
+            debug.field("media", media);
         }
         if let Some(hybrid) = hybrid {
             debug.field("hybrid", &hybrid);
@@ -279,8 +344,8 @@ impl fmt::Debug for SearchQuery {
 #[deserr(error = DeserrJsonError<InvalidSearchHybridQuery>, rename_all = camelCase, deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 pub struct HybridQuery {
-    #[deserr(default, error = DeserrJsonError<InvalidSearchSemanticRatio>, default)]
-    #[schema(value_type = f32, default)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchSemanticRatio>)]
+    #[schema(default, value_type = f32)]
     #[serde(default)]
     pub semantic_ratio: SemanticRatio,
     #[deserr(error = DeserrJsonError<InvalidSearchEmbedder>)]
@@ -341,10 +406,10 @@ impl SearchKind {
         route: Route,
     ) -> Result<(String, Arc<Embedder>, bool), ResponseError> {
         let rtxn = index.read_txn()?;
-        let embedder_configs = index.embedding_configs(&rtxn)?;
+        let embedder_configs = index.embedding_configs().embedding_configs(&rtxn)?;
         let embedders = index_scheduler.embedders(index_uid, embedder_configs)?;
 
-        let (embedder, _, quantized) = embedders
+        let (embedder, quantized) = embedders
             .get(embedder_name)
             .ok_or(match route {
                 Route::Search | Route::MultiSearch => {
@@ -354,6 +419,7 @@ impl SearchKind {
                     milli::UserError::InvalidSimilarEmbedder(embedder_name.to_owned())
                 }
             })
+            .map(|runtime| (runtime.embedder.clone(), runtime.is_quantized))
             .map_err(milli::Error::from)?;
 
         if let Some(vector_len) = vector_len {
@@ -423,8 +489,10 @@ pub struct SearchQueryWithIndex {
     pub index_uid: IndexUid,
     #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
     pub q: Option<String>,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchVector>)]
     pub vector: Option<Vec<f32>>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchMedia>)]
+    pub media: Option<serde_json::Value>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchHybridQuery>)]
     pub hybrid: Option<HybridQuery>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchOffset>)]
@@ -505,6 +573,7 @@ impl SearchQueryWithIndex {
         let SearchQuery {
             q,
             vector,
+            media,
             hybrid,
             offset,
             limit,
@@ -535,6 +604,7 @@ impl SearchQueryWithIndex {
             index_uid,
             q,
             vector,
+            media,
             hybrid,
             offset: if offset == DEFAULT_SEARCH_OFFSET() { None } else { Some(offset) },
             limit: if limit == DEFAULT_SEARCH_LIMIT() { None } else { Some(limit) },
@@ -569,6 +639,7 @@ impl SearchQueryWithIndex {
             federation_options,
             q,
             vector,
+            media,
             offset,
             limit,
             page,
@@ -599,6 +670,7 @@ impl SearchQueryWithIndex {
             SearchQuery {
                 q,
                 vector,
+                media,
                 offset: offset.unwrap_or(DEFAULT_SEARCH_OFFSET()),
                 limit: limit.unwrap_or(DEFAULT_SEARCH_LIMIT()),
                 page,
@@ -713,6 +785,16 @@ impl From<MatchingStrategy> for TermsMatchingStrategy {
             MatchingStrategy::Last => Self::Last,
             MatchingStrategy::All => Self::All,
             MatchingStrategy::Frequency => Self::Frequency,
+        }
+    }
+}
+
+impl From<index::MatchingStrategy> for MatchingStrategy {
+    fn from(other: index::MatchingStrategy) -> Self {
+        match other {
+            index::MatchingStrategy::Last => Self::Last,
+            index::MatchingStrategy::All => Self::All,
+            index::MatchingStrategy::Frequency => Self::Frequency,
         }
     }
 }
@@ -882,7 +964,7 @@ pub fn add_search_rules(filter: &mut Option<Value>, rules: IndexSearchRules) {
     }
 }
 
-fn prepare_search<'t>(
+pub fn prepare_search<'t>(
     index: &'t Index,
     rtxn: &'t RoTxn,
     query: &'t SearchQuery,
@@ -890,6 +972,9 @@ fn prepare_search<'t>(
     time_budget: TimeBudget,
     features: RoFeatures,
 ) -> Result<(milli::Search<'t>, bool, usize, usize), ResponseError> {
+    if query.media.is_some() {
+        features.check_multimodal("passing `media` in a search query")?;
+    }
     let mut search = index.search(rtxn);
     search.time_budget(time_budget);
     if let Some(ranking_score_threshold) = query.ranking_score_threshold {
@@ -915,14 +1000,27 @@ fn prepare_search<'t>(
 
                     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
 
+                    let q = query.q.as_deref();
+                    let media = query.media.as_ref();
+
+                    let search_query = match (q, media) {
+                        (Some(text), None) => milli::vector::SearchQuery::Text(text),
+                        (q, media) => milli::vector::SearchQuery::Media { q, media },
+                    };
+
                     embedder
-                        .embed_search(query.q.as_ref().unwrap(), Some(deadline))
+                        .embed_search(search_query, Some(deadline))
                         .map_err(milli::vector::Error::from)
                         .map_err(milli::Error::from)?
                 }
             };
-
-            search.semantic(embedder_name.clone(), embedder.clone(), *quantized, Some(vector));
+            search.semantic(
+                embedder_name.clone(),
+                embedder.clone(),
+                *quantized,
+                Some(vector),
+                query.media.clone(),
+            );
         }
         SearchKind::Hybrid { embedder_name, embedder, quantized, semantic_ratio: _ } => {
             if let Some(q) = &query.q {
@@ -934,6 +1032,7 @@ fn prepare_search<'t>(
                 embedder.clone(),
                 *quantized,
                 query.vector.clone(),
+                query.media.clone(),
             );
         }
     }
@@ -1058,6 +1157,7 @@ pub fn perform_search(
         locales,
         // already used in prepare_search
         vector: _,
+        media: _,
         hybrid: _,
         offset: _,
         ranking_score_threshold: _,
@@ -1260,7 +1360,6 @@ struct HitMaker<'a> {
     vectors_fid: Option<FieldId>,
     retrieve_vectors: RetrieveVectors,
     to_retrieve_ids: BTreeSet<FieldId>,
-    embedding_configs: Vec<milli::index::IndexEmbeddingConfig>,
     formatter_builder: MatcherBuilder<'a>,
     formatted_options: BTreeMap<FieldId, FormatOptions>,
     show_ranking_score: bool,
@@ -1375,8 +1474,6 @@ impl<'a> HitMaker<'a> {
             &displayed_ids,
         );
 
-        let embedding_configs = index.embedding_configs(rtxn)?;
-
         Ok(Self {
             index,
             rtxn,
@@ -1385,7 +1482,6 @@ impl<'a> HitMaker<'a> {
             vectors_fid,
             retrieve_vectors,
             to_retrieve_ids,
-            embedding_configs,
             formatter_builder,
             formatted_options,
             show_ranking_score: format.show_ranking_score,
@@ -1431,14 +1527,8 @@ impl<'a> HitMaker<'a> {
                 Some(Value::Object(map)) => map,
                 _ => Default::default(),
             };
-            for (name, vector) in self.index.embeddings(self.rtxn, id)? {
-                let user_provided = self
-                    .embedding_configs
-                    .iter()
-                    .find(|conf| conf.name == name)
-                    .is_some_and(|conf| conf.user_provided.contains(id));
-                let embeddings =
-                    ExplicitVectors { embeddings: Some(vector.into()), regenerate: !user_provided };
+            for (name, (vector, regenerate)) in self.index.embeddings(self.rtxn, id)? {
+                let embeddings = ExplicitVectors { embeddings: Some(vector.into()), regenerate };
                 vectors.insert(
                     name,
                     serde_json::to_value(embeddings).map_err(InternalError::SerdeJson)?,

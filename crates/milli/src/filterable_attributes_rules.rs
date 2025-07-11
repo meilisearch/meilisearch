@@ -1,13 +1,12 @@
+use std::collections::{BTreeSet, HashSet};
+
 use deserr::{DeserializeError, Deserr, ValuePointerRef};
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeSet, HashSet};
 use utoipa::ToSchema;
 
-use crate::{
-    attribute_patterns::{match_distinct_field, match_field_legacy, PatternMatch},
-    constants::RESERVED_GEO_FIELD_NAME,
-    AttributePatterns,
-};
+use crate::attribute_patterns::{match_distinct_field, match_field_legacy, PatternMatch};
+use crate::constants::RESERVED_GEO_FIELD_NAME;
+use crate::AttributePatterns;
 
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug, ToSchema)]
 #[serde(untagged)]

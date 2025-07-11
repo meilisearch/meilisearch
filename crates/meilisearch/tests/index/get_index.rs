@@ -1,8 +1,8 @@
-use crate::json;
 use meili_snap::{json_string, snapshot};
 use serde_json::Value;
 
 use crate::common::{shared_does_not_exists_index, Server};
+use crate::json;
 
 #[actix_rt::test]
 async fn create_and_get_index() {
@@ -12,7 +12,7 @@ async fn create_and_get_index() {
 
     assert_eq!(code, 202);
 
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index.get().await;
 

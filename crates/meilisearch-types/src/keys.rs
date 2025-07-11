@@ -53,7 +53,7 @@ pub struct CreateApiKey {
     #[schema(example = json!(["documents.add"]))]
     #[deserr(error = DeserrJsonError<InvalidApiKeyActions>, missing_field_error = DeserrJsonError::missing_api_key_actions)]
     pub actions: Vec<Action>,
-    /// A list of accesible indexes permitted for the key. `["*"]` for all indexes. The `*` character can be used as a wildcard when located at the last position. e.g. `products_*` to allow access to all indexes whose names start with `products_`.
+    /// A list of accessible indexes permitted for the key. `["*"]` for all indexes. The `*` character can be used as a wildcard when located at the last position. e.g. `products_*` to allow access to all indexes whose names start with `products_`.
     #[deserr(error = DeserrJsonError<InvalidApiKeyIndexes>, missing_field_error = DeserrJsonError::missing_api_key_indexes)]
     #[schema(value_type = Vec<String>, example = json!(["products"]))]
     pub indexes: Vec<IndexUidPattern>,
@@ -152,6 +152,21 @@ impl Key {
             description: Some("Use it to search from the frontend".to_string()),
             uid,
             actions: vec![Action::Search],
+            indexes: vec![IndexUidPattern::all()],
+            expires_at: None,
+            created_at: now,
+            updated_at: now,
+        }
+    }
+
+    pub fn default_chat() -> Self {
+        let now = OffsetDateTime::now_utc();
+        let uid = Uuid::new_v4();
+        Self {
+            name: Some("Default Chat API Key".to_string()),
+            description: Some("Use it to chat and search from the frontend".to_string()),
+            uid,
+            actions: vec![Action::ChatCompletions, Action::Search],
             indexes: vec![IndexUidPattern::all()],
             expires_at: None,
             created_at: now,
@@ -302,12 +317,36 @@ pub enum Action {
     #[serde(rename = "experimental.update")]
     #[deserr(rename = "experimental.update")]
     ExperimentalFeaturesUpdate,
+    #[serde(rename = "export")]
+    #[deserr(rename = "export")]
+    Export,
     #[serde(rename = "network.get")]
     #[deserr(rename = "network.get")]
     NetworkGet,
     #[serde(rename = "network.update")]
     #[deserr(rename = "network.update")]
     NetworkUpdate,
+    #[serde(rename = "chatCompletions")]
+    #[deserr(rename = "chatCompletions")]
+    ChatCompletions,
+    #[serde(rename = "chats.*")]
+    #[deserr(rename = "chats.*")]
+    ChatsAll,
+    #[serde(rename = "chats.get")]
+    #[deserr(rename = "chats.get")]
+    ChatsGet,
+    #[serde(rename = "chats.delete")]
+    #[deserr(rename = "chats.delete")]
+    ChatsDelete,
+    #[serde(rename = "chatsSettings.*")]
+    #[deserr(rename = "chatsSettings.*")]
+    ChatsSettingsAll,
+    #[serde(rename = "chatsSettings.get")]
+    #[deserr(rename = "chatsSettings.get")]
+    ChatsSettingsGet,
+    #[serde(rename = "chatsSettings.update")]
+    #[deserr(rename = "chatsSettings.update")]
+    ChatsSettingsUpdate,
 }
 
 impl Action {
@@ -333,6 +372,13 @@ impl Action {
             SETTINGS_ALL => Some(Self::SettingsAll),
             SETTINGS_GET => Some(Self::SettingsGet),
             SETTINGS_UPDATE => Some(Self::SettingsUpdate),
+            CHAT_COMPLETIONS => Some(Self::ChatCompletions),
+            CHATS_ALL => Some(Self::ChatsAll),
+            CHATS_GET => Some(Self::ChatsGet),
+            CHATS_DELETE => Some(Self::ChatsDelete),
+            CHATS_SETTINGS_ALL => Some(Self::ChatsSettingsAll),
+            CHATS_SETTINGS_GET => Some(Self::ChatsSettingsGet),
+            CHATS_SETTINGS_UPDATE => Some(Self::ChatsSettingsUpdate),
             STATS_ALL => Some(Self::StatsAll),
             STATS_GET => Some(Self::StatsGet),
             METRICS_ALL => Some(Self::MetricsAll),
@@ -395,6 +441,16 @@ pub mod actions {
     pub const EXPERIMENTAL_FEATURES_GET: u8 = ExperimentalFeaturesGet.repr();
     pub const EXPERIMENTAL_FEATURES_UPDATE: u8 = ExperimentalFeaturesUpdate.repr();
 
+    pub const EXPORT: u8 = Export.repr();
+
     pub const NETWORK_GET: u8 = NetworkGet.repr();
     pub const NETWORK_UPDATE: u8 = NetworkUpdate.repr();
+
+    pub const CHAT_COMPLETIONS: u8 = ChatCompletions.repr();
+    pub const CHATS_ALL: u8 = ChatsAll.repr();
+    pub const CHATS_GET: u8 = ChatsGet.repr();
+    pub const CHATS_DELETE: u8 = ChatsDelete.repr();
+    pub const CHATS_SETTINGS_ALL: u8 = ChatsSettingsAll.repr();
+    pub const CHATS_SETTINGS_GET: u8 = ChatsSettingsGet.repr();
+    pub const CHATS_SETTINGS_UPDATE: u8 = ChatsSettingsUpdate.repr();
 }

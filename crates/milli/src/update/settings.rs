@@ -7,35 +7,43 @@ use std::sync::Arc;
 use charabia::{Normalize, Tokenizer, TokenizerBuilder};
 use deserr::{DeserializeError, Deserr};
 use itertools::{merge_join_by, EitherOrBoth, Itertools};
-use roaring::RoaringBitmap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use time::OffsetDateTime;
 
+use super::chat::ChatSearchParams;
 use super::del_add::{DelAdd, DelAddOperation};
 use super::index_documents::{IndexDocumentsConfig, Transform};
-use super::IndexerConfig;
+use super::{ChatSettings, IndexerConfig};
 use crate::attribute_patterns::PatternMatch;
 use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::criterion::Criterion;
 use crate::disabled_typos_terms::DisabledTyposTerms;
-use crate::error::UserError;
+use crate::error::UserError::{self, InvalidChatSettingsDocumentTemplateMaxBytes};
 use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
 use crate::filterable_attributes_rules::match_faceted_field;
 use crate::index::{
-    IndexEmbeddingConfig, PrefixSearch, DEFAULT_MIN_WORD_LEN_ONE_TYPO,
+    ChatConfig, PrefixSearch, SearchParameters, DEFAULT_MIN_WORD_LEN_ONE_TYPO,
     DEFAULT_MIN_WORD_LEN_TWO_TYPOS,
 };
 use crate::order_by_map::OrderByMap;
-use crate::prompt::default_max_bytes;
+use crate::progress::{EmbedderStats, Progress};
+use crate::prompt::{default_max_bytes, default_template_text, PromptData};
 use crate::proximity::ProximityPrecision;
 use crate::update::index_documents::IndexDocumentsMethod;
+use crate::update::new::indexer::reindex;
 use crate::update::{IndexDocuments, UpdateIndexingStep};
+use crate::vector::db::{FragmentConfigs, IndexEmbeddingConfig};
+use crate::vector::json_template::JsonTemplate;
 use crate::vector::settings::{
-    EmbedderAction, EmbedderSource, EmbeddingSettings, NestingContext, ReindexAction,
-    SubEmbeddingSettings, WriteBackToDocuments,
+    EmbedderAction, EmbedderSource, EmbeddingSettings, EmbeddingValidationContext, NestingContext,
+    ReindexAction, SubEmbeddingSettings, WriteBackToDocuments,
 };
-use crate::vector::{Embedder, EmbeddingConfig, EmbeddingConfigs};
-use crate::{FieldId, FilterableAttributesRule, Index, LocalizedAttributesRule, Result};
+use crate::vector::{
+    Embedder, EmbeddingConfig, RuntimeEmbedder, RuntimeEmbedders, RuntimeFragment,
+};
+use crate::{
+    ChannelCongestion, FieldId, FilterableAttributesRule, Index, LocalizedAttributesRule, Result,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum Setting<T> {
@@ -185,6 +193,7 @@ pub struct Settings<'a, 't, 'i> {
     localized_attributes_rules: Setting<Vec<LocalizedAttributesRule>>,
     prefix_search: Setting<PrefixSearch>,
     facet_search: Setting<bool>,
+    chat: Setting<ChatSettings>,
 }
 
 impl<'a, 't, 'i> Settings<'a, 't, 'i> {
@@ -223,6 +232,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             localized_attributes_rules: Setting::NotSet,
             prefix_search: Setting::NotSet,
             facet_search: Setting::NotSet,
+            chat: Setting::NotSet,
             indexer_config,
         }
     }
@@ -453,9 +463,17 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         self.facet_search = Setting::Reset;
     }
 
+    pub fn set_chat(&mut self, value: ChatSettings) {
+        self.chat = Setting::Set(value);
+    }
+
+    pub fn reset_chat(&mut self) {
+        self.chat = Setting::Reset;
+    }
+
     #[tracing::instrument(
         level = "trace"
-        skip(self, progress_callback, should_abort, settings_diff),
+        skip(self, progress_callback, should_abort, settings_diff, embedder_stats),
         target = "indexing::documents"
     )]
     fn reindex<FP, FA>(
@@ -463,6 +481,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         progress_callback: &FP,
         should_abort: &FA,
         settings_diff: InnerIndexSettingsDiff,
+        embedder_stats: &Arc<EmbedderStats>,
     ) -> Result<()>
     where
         FP: Fn(UpdateIndexingStep) + Sync,
@@ -494,6 +513,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             IndexDocumentsConfig::default(),
             &progress_callback,
             &should_abort,
+            embedder_stats,
         )?;
 
         indexing_builder.execute_raw(output)?;
@@ -884,7 +904,6 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                 disabled_typos_terms.disable_on_numbers = disable_on_numbers;
             }
             Setting::Reset => {
-                self.index.delete_disabled_typos_terms(self.wtxn)?;
                 disabled_typos_terms.disable_on_numbers =
                     DisabledTyposTerms::default().disable_on_numbers;
             }
@@ -1027,22 +1046,27 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         match std::mem::take(&mut self.embedder_settings) {
             Setting::Set(configs) => self.update_embedding_configs_set(configs),
             Setting::Reset => {
+                let embedders = self.index.embedding_configs();
                 // all vectors should be written back to documents
-                let old_configs = self.index.embedding_configs(self.wtxn)?;
+                let old_configs = embedders.embedding_configs(self.wtxn)?;
                 let remove_all: Result<BTreeMap<String, EmbedderAction>> = old_configs
                     .into_iter()
-                    .map(|IndexEmbeddingConfig { name, config, user_provided }| -> Result<_> {
-                        let embedder_id =
-                            self.index.embedder_category_id.get(self.wtxn, &name)?.ok_or(
-                                crate::InternalError::DatabaseMissingEntry {
-                                    db_name: crate::index::db_name::VECTOR_EMBEDDER_CATEGORY_ID,
-                                    key: None,
-                                },
-                            )?;
+                    .map(|IndexEmbeddingConfig { name, config, fragments: _ }| -> Result<_> {
+                        let embedder_info = embedders.embedder_info(self.wtxn, &name)?.ok_or(
+                            crate::InternalError::DatabaseMissingEntry {
+                                db_name: crate::index::db_name::VECTOR_EMBEDDER_CATEGORY_ID,
+                                key: None,
+                            },
+                        )?;
                         Ok((
                             name,
                             EmbedderAction::with_write_back(
-                                WriteBackToDocuments { embedder_id, user_provided },
+                                WriteBackToDocuments {
+                                    embedder_id: embedder_info.embedder_id,
+                                    user_provided: embedder_info
+                                        .embedding_status
+                                        .into_user_provided(),
+                                },
                                 config.quantized(),
                             ),
                         ))
@@ -1052,7 +1076,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                 let remove_all = remove_all?;
 
                 self.index.embedder_category_id.clear(self.wtxn)?;
-                self.index.delete_embedding_configs(self.wtxn)?;
+                embedders.delete_embedding_configs(self.wtxn)?;
                 Ok(remove_all)
             }
             Setting::NotSet => Ok(Default::default()),
@@ -1064,12 +1088,12 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         configs: BTreeMap<String, Setting<EmbeddingSettings>>,
     ) -> Result<BTreeMap<String, EmbedderAction>> {
         use crate::vector::settings::SettingsDiff;
-
-        let old_configs = self.index.embedding_configs(self.wtxn)?;
-        let old_configs: BTreeMap<String, (EmbeddingSettings, RoaringBitmap)> = old_configs
+        let embedders = self.index.embedding_configs();
+        let old_configs = embedders.embedding_configs(self.wtxn)?;
+        let old_configs: BTreeMap<String, (EmbeddingSettings, FragmentConfigs)> = old_configs
             .into_iter()
-            .map(|IndexEmbeddingConfig { name, config, user_provided }| {
-                (name, (config.into(), user_provided))
+            .map(|IndexEmbeddingConfig { name, config, fragments }| {
+                (name, (config.into(), fragments))
             })
             .collect();
         let mut updated_configs = BTreeMap::new();
@@ -1080,71 +1104,111 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         {
             match joined {
                 // updated config
-                EitherOrBoth::Both((name, (old, user_provided)), (_, new)) => {
+                EitherOrBoth::Both((name, (old, mut fragments)), (_, new)) => {
                     let was_quantized = old.binary_quantized.set().unwrap_or_default();
                     let settings_diff = SettingsDiff::from_settings(&name, old, new)?;
                     match settings_diff {
                         SettingsDiff::Remove => {
+                            let info = embedders.remove_embedder(self.wtxn, &name)?.ok_or(
+                                crate::InternalError::DatabaseMissingEntry {
+                                    db_name: crate::index::db_name::VECTOR_EMBEDDER_CATEGORY_ID,
+                                    key: None,
+                                },
+                            )?;
                             tracing::debug!(
                                 embedder = name,
-                                user_provided = user_provided.len(),
+                                user_provided = info.embedding_status.user_provided_docids().len(),
                                 "removing embedder"
                             );
-                            let embedder_id =
-                                self.index.embedder_category_id.get(self.wtxn, &name)?.ok_or(
-                                    crate::InternalError::DatabaseMissingEntry {
-                                        db_name: crate::index::db_name::VECTOR_EMBEDDER_CATEGORY_ID,
-                                        key: None,
-                                    },
-                                )?;
-                            // free id immediately
-                            self.index.embedder_category_id.delete(self.wtxn, &name)?;
                             embedder_actions.insert(
                                 name,
                                 EmbedderAction::with_write_back(
-                                    WriteBackToDocuments { embedder_id, user_provided },
+                                    WriteBackToDocuments {
+                                        embedder_id: info.embedder_id,
+                                        user_provided: info.embedding_status.into_user_provided(),
+                                    },
                                     was_quantized,
                                 ),
                             );
                         }
                         SettingsDiff::Reindex { action, updated_settings, quantize } => {
-                            tracing::debug!(
-                                embedder = name,
-                                user_provided = user_provided.len(),
-                                ?action,
-                                "reindex embedder"
-                            );
-                            embedder_actions.insert(
-                                name.clone(),
+                            let mut remove_fragments = None;
+                            let updated_settings = Setting::Set(updated_settings);
+                            if let ReindexAction::RegenerateFragments(regenerate_fragments) =
+                                &action
+                            {
+                                let it = regenerate_fragments
+                                    .iter()
+                                    .filter(|(_, action)| {
+                                        matches!(
+                                            action,
+                                            crate::vector::settings::RegenerateFragment::Remove
+                                        )
+                                    })
+                                    .map(|(name, _)| name.as_str());
+
+                                remove_fragments = fragments.remove_fragments(it);
+
+                                let it = regenerate_fragments
+                                    .iter()
+                                    .filter(|(_, action)| {
+                                        matches!(
+                                            action,
+                                            crate::vector::settings::RegenerateFragment::Add
+                                        )
+                                    })
+                                    .map(|(name, _)| name.clone());
+                                fragments.add_new_fragments(it)?;
+                            } else {
+                                // needs full reindex of fragments
+                                fragments = FragmentConfigs::new();
+                                fragments.add_new_fragments(
+                                    crate::vector::settings::fragments_from_settings(
+                                        &updated_settings,
+                                    ),
+                                )?;
+                            }
+                            tracing::debug!(embedder = name, ?action, "reindex embedder");
+
+                            let embedder_action =
                                 EmbedderAction::with_reindex(action, was_quantized)
-                                    .with_is_being_quantized(quantize),
-                            );
-                            let new =
-                                validate_embedding_settings(Setting::Set(updated_settings), &name)?;
-                            updated_configs.insert(name, (new, user_provided));
+                                    .with_is_being_quantized(quantize);
+
+                            let embedder_action = if let Some(remove_fragments) = remove_fragments {
+                                embedder_action.with_remove_fragments(remove_fragments)
+                            } else {
+                                embedder_action
+                            };
+
+                            embedder_actions.insert(name.clone(), embedder_action);
+                            let new = validate_embedding_settings(
+                                updated_settings,
+                                &name,
+                                EmbeddingValidationContext::FullSettings,
+                            )?;
+                            updated_configs.insert(name, (new, fragments));
                         }
                         SettingsDiff::UpdateWithoutReindex { updated_settings, quantize } => {
-                            tracing::debug!(
-                                embedder = name,
-                                user_provided = user_provided.len(),
-                                "update without reindex embedder"
-                            );
-                            let new =
-                                validate_embedding_settings(Setting::Set(updated_settings), &name)?;
+                            tracing::debug!(embedder = name, "update without reindex embedder");
+                            let new = validate_embedding_settings(
+                                Setting::Set(updated_settings),
+                                &name,
+                                EmbeddingValidationContext::FullSettings,
+                            )?;
                             if quantize {
                                 embedder_actions.insert(
                                     name.clone(),
                                     EmbedderAction::default().with_is_being_quantized(true),
                                 );
                             }
-                            updated_configs.insert(name, (new, user_provided));
+                            updated_configs.insert(name, (new, fragments));
                         }
                     }
                 }
                 // unchanged config
-                EitherOrBoth::Left((name, (setting, user_provided))) => {
+                EitherOrBoth::Left((name, (setting, fragments))) => {
                     tracing::debug!(embedder = name, "unchanged embedder");
-                    updated_configs.insert(name, (Setting::Set(setting), user_provided));
+                    updated_configs.insert(name, (Setting::Set(setting), fragments));
                 }
                 // new config
                 EitherOrBoth::Right((name, mut setting)) => {
@@ -1154,52 +1218,51 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                     crate::vector::settings::EmbeddingSettings::apply_default_openai_model(
                         &mut setting,
                     );
-                    let setting = validate_embedding_settings(setting, &name)?;
+                    let setting = validate_embedding_settings(
+                        setting,
+                        &name,
+                        EmbeddingValidationContext::FullSettings,
+                    )?;
                     embedder_actions.insert(
                         name.clone(),
                         EmbedderAction::with_reindex(ReindexAction::FullReindex, false),
                     );
-                    updated_configs.insert(name, (setting, RoaringBitmap::new()));
+                    let mut fragments = FragmentConfigs::new();
+                    fragments.add_new_fragments(
+                        crate::vector::settings::fragments_from_settings(&setting),
+                    )?;
+                    updated_configs.insert(name, (setting, fragments));
                 }
             }
         }
-        let mut free_indices: [bool; u8::MAX as usize] = [true; u8::MAX as usize];
-        for res in self.index.embedder_category_id.iter(self.wtxn)? {
-            let (_name, id) = res?;
-            free_indices[id as usize] = false;
-        }
-        let mut free_indices = free_indices.iter_mut().enumerate();
-        let mut find_free_index =
-            move || free_indices.find(|(_, free)| **free).map(|(index, _)| index as u8);
-        for (name, action) in embedder_actions.iter() {
-            // ignore actions that are not possible for a new embedder
-            if matches!(action.reindex(), Some(ReindexAction::FullReindex))
-                && self.index.embedder_category_id.get(self.wtxn, name)?.is_none()
-            {
-                let id =
-                    find_free_index().ok_or(UserError::TooManyEmbedders(updated_configs.len()))?;
-                tracing::debug!(embedder = name, id, "assigning free id to new embedder");
-                self.index.embedder_category_id.put(self.wtxn, name, &id)?;
-            }
-        }
+        embedders.add_new_embedders(
+            self.wtxn,
+            embedder_actions
+                .iter()
+                // ignore actions that are not possible for a new embedder, most critically deleted embedders
+                .filter(|(_, action)| matches!(action.reindex(), Some(ReindexAction::FullReindex)))
+                .map(|(name, _)| name.as_str()),
+            updated_configs.len(),
+        )?;
+
         let updated_configs: Vec<IndexEmbeddingConfig> = updated_configs
             .into_iter()
-            .filter_map(|(name, (config, user_provided))| match config {
+            .filter_map(|(name, (config, fragments))| match config {
                 Setting::Set(config) => {
-                    Some(IndexEmbeddingConfig { name, config: config.into(), user_provided })
+                    Some(IndexEmbeddingConfig { name, config: config.into(), fragments })
                 }
                 Setting::Reset => None,
                 Setting::NotSet => Some(IndexEmbeddingConfig {
                     name,
                     config: EmbeddingSettings::default().into(),
-                    user_provided,
+                    fragments: Default::default(),
                 }),
             })
             .collect();
         if updated_configs.is_empty() {
-            self.index.delete_embedding_configs(self.wtxn)?;
+            embedders.delete_embedding_configs(self.wtxn)?;
         } else {
-            self.index.put_embedding_configs(self.wtxn, updated_configs)?;
+            embedders.put_embedding_configs(self.wtxn, updated_configs)?;
         }
         Ok(embedder_actions)
     }
@@ -1239,7 +1302,118 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         Ok(())
     }
 
-    pub fn execute<FP, FA>(mut self, progress_callback: FP, should_abort: FA) -> Result<()>
+    fn update_chat_config(&mut self) -> Result<bool> {
+        match &mut self.chat {
+            Setting::Set(ChatSettings {
+                description: new_description,
+                document_template: new_document_template,
+                document_template_max_bytes: new_document_template_max_bytes,
+                search_parameters: new_search_parameters,
+            }) => {
+                let ChatConfig { description, prompt, search_parameters } =
+                    self.index.chat_config(self.wtxn)?;
+
+                let description = match new_description {
+                    Setting::Set(new) => new.clone(),
+                    Setting::Reset => Default::default(),
+                    Setting::NotSet => description,
+                };
+
+                let prompt = PromptData {
+                    template: match new_document_template {
+                        Setting::Set(new) => new.clone(),
+                        Setting::Reset => default_template_text().to_string(),
+                        Setting::NotSet => prompt.template.clone(),
+                    },
+                    max_bytes: match new_document_template_max_bytes {
+                        Setting::Set(m) => Some(
+                            NonZeroUsize::new(*m)
+                                .ok_or(InvalidChatSettingsDocumentTemplateMaxBytes)?,
+                        ),
+                        Setting::Reset => Some(default_max_bytes()),
+                        Setting::NotSet => prompt.max_bytes,
+                    },
+                };
+
+                let search_parameters = match new_search_parameters {
+                    Setting::Set(sp) => {
+                        let ChatSearchParams {
+                            hybrid,
+                            limit,
+                            sort,
+                            distinct,
+                            matching_strategy,
+                            attributes_to_search_on,
+                            ranking_score_threshold,
+                        } = sp;
+
+                        SearchParameters {
+                            hybrid: match hybrid {
+                                Setting::Set(hybrid) => Some(crate::index::HybridQuery {
+                                    semantic_ratio: *hybrid.semantic_ratio,
+                                    embedder: hybrid.embedder.clone(),
+                                }),
+                                Setting::Reset => None,
+                                Setting::NotSet => search_parameters.hybrid.clone(),
+                            },
+                            limit: match limit {
+                                Setting::Set(limit) => Some(*limit),
+                                Setting::Reset => None,
+                                Setting::NotSet => search_parameters.limit,
+                            },
+                            sort: match sort {
+                                Setting::Set(sort) => Some(sort.clone()),
+                                Setting::Reset => None,
+                                Setting::NotSet => search_parameters.sort.clone(),
+                            },
+                            distinct: match distinct {
+                                Setting::Set(distinct) => Some(distinct.clone()),
+                                Setting::Reset => None,
+                                Setting::NotSet => search_parameters.distinct.clone(),
+                            },
+                            matching_strategy: match matching_strategy {
+                                Setting::Set(matching_strategy) => Some(*matching_strategy),
+                                Setting::Reset => None,
+                                Setting::NotSet => search_parameters.matching_strategy,
+                            },
+                            attributes_to_search_on: match attributes_to_search_on {
+                                Setting::Set(attributes_to_search_on) => {
+                                    Some(attributes_to_search_on.clone())
+                                }
+                                Setting::Reset => None,
+                                Setting::NotSet => {
+                                    search_parameters.attributes_to_search_on.clone()
+                                }
+                            },
+                            ranking_score_threshold: match ranking_score_threshold {
+                                Setting::Set(rst) => Some(*rst),
+                                Setting::Reset => None,
+                                Setting::NotSet => search_parameters.ranking_score_threshold,
+                            },
+                        }
+                    }
+                    Setting::Reset => Default::default(),
+                    Setting::NotSet => search_parameters,
+                };
+
+                self.index.put_chat_config(
+                    self.wtxn,
+                    &ChatConfig { description, prompt, search_parameters },
+                )?;
+
+                Ok(true)
+            }
+            Setting::Reset => self.index.delete_chat_config(self.wtxn).map_err(Into::into),
+            Setting::NotSet => Ok(false),
+        }
+    }
+
+    pub fn legacy_execute<FP, FA>(
+        mut self,
+        progress_callback: FP,
+        should_abort: FA,
+        embedder_stats: Arc<EmbedderStats>,
+    ) -> Result<()>
     where
         FP: Fn(UpdateIndexingStep) + Sync,
         FA: Fn() -> bool + Sync,
@@ -1276,6 +1450,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         self.update_facet_search()?;
         self.update_localized_attributes_rules()?;
         self.update_disabled_typos_terms()?;
+        self.update_chat_config()?;
 
         let embedding_config_updates = self.update_embedding_configs()?;
 
@@ -1296,10 +1471,112 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         );
 
         if inner_settings_diff.any_reindexing_needed() {
-            self.reindex(&progress_callback, &should_abort, inner_settings_diff)?;
+            self.reindex(&progress_callback, &should_abort, inner_settings_diff, &embedder_stats)?;
         }
 
         Ok(())
+    }
+
+    pub fn execute<'indexer, MSP>(
+        mut self,
+        must_stop_processing: &'indexer MSP,
+        progress: &'indexer Progress,
+        embedder_stats: Arc<EmbedderStats>,
+    ) -> Result<Option<ChannelCongestion>>
+    where
+        MSP: Fn() -> bool + Sync,
+    {
+        // force the old indexer if the environment says so
+        if self.indexer_config.experimental_no_edition_2024_for_settings {
+            return self
+                .legacy_execute(
+                    |indexing_step| tracing::debug!(update = ?indexing_step),
+                    must_stop_processing,
+                    embedder_stats,
+                )
+                .map(|_| None);
+        }
+
+        // only use the new indexer when only the embedder possibly changed
+        if let Self {
+            searchable_fields: Setting::NotSet,
+            displayed_fields: Setting::NotSet,
+            filterable_fields: Setting::NotSet,
+            sortable_fields: Setting::NotSet,
+            criteria: Setting::NotSet,
+            stop_words: Setting::NotSet,
+            non_separator_tokens: Setting::NotSet,
+            separator_tokens: Setting::NotSet,
+            dictionary: Setting::NotSet,
+            distinct_field: Setting::NotSet,
+            synonyms: Setting::NotSet,
+            primary_key: Setting::NotSet,
+            authorize_typos: Setting::NotSet,
+            min_word_len_two_typos: Setting::NotSet,
+            min_word_len_one_typo: Setting::NotSet,
+            exact_words: Setting::NotSet,
+            exact_attributes: Setting::NotSet,
+            max_values_per_facet: Setting::NotSet,
+            sort_facet_values_by: Setting::NotSet,
+            pagination_max_total_hits: Setting::NotSet,
+            proximity_precision: Setting::NotSet,
+            embedder_settings: _,
+            search_cutoff: Setting::NotSet,
+            localized_attributes_rules: Setting::NotSet,
+            prefix_search: Setting::NotSet,
+            facet_search: Setting::NotSet,
+            disable_on_numbers: Setting::NotSet,
+            chat: Setting::NotSet,
+            wtxn: _,
+            index: _,
+            indexer_config: _,
+        } = &self
+        {
+            self.index.set_updated_at(self.wtxn, &OffsetDateTime::now_utc())?;
+
+            let old_inner_settings = InnerIndexSettings::from_index(self.index, self.wtxn, None)?;
+
+            // Update index settings
+            let embedding_config_updates = self.update_embedding_configs()?;
+
+            let new_inner_settings = InnerIndexSettings::from_index(self.index, self.wtxn, None)?;
+
+            let primary_key_id = self
+                .index
+                .primary_key(self.wtxn)?
+                .and_then(|name| new_inner_settings.fields_ids_map.id(name));
+            let settings_update_only = true;
+            let inner_settings_diff = InnerIndexSettingsDiff::new(
+                old_inner_settings,
+                new_inner_settings,
+                primary_key_id,
+                embedding_config_updates,
+                settings_update_only,
+            );
+
+            if self.index.number_of_documents(self.wtxn)? > 0 {
+                reindex(
+                    self.wtxn,
+                    self.index,
+                    &self.indexer_config.thread_pool,
+                    self.indexer_config.grenad_parameters(),
+                    &inner_settings_diff,
+                    must_stop_processing,
+                    progress,
+                    embedder_stats,
+                )
+                .map(Some)
+            } else {
+                Ok(None)
+            }
+        } else {
+            self.legacy_execute(
+                |indexing_step| tracing::debug!(update = ?indexing_step),
+                must_stop_processing,
+                embedder_stats,
+            )
+            .map(|_| None)
+        }
     }
 }
 
@@ -1312,6 +1589,7 @@ pub struct InnerIndexSettingsDiff {
     /// The set of only the additional searchable fields.
     /// If any other searchable field has been modified, is set to None.
     pub(crate) only_additional_fields: Option<HashSet<String>>,
+    fragment_diffs: BTreeMap<String, Vec<(Option<usize>, usize)>>,
 
     // Cache the check to see if all the stop_words, allowed_separators, dictionary,
     // exact_attributes, proximity_precision are different.
@@ -1380,13 +1658,13 @@ impl InnerIndexSettingsDiff {
 
         // if the user-defined searchables changed, then we need to reindex prompts.
         if cache_user_defined_searchables {
-            for (embedder_name, (config, _, _quantized)) in
-                new_settings.embedding_configs.inner_as_ref()
-            {
-                let was_quantized =
-                    old_settings.embedding_configs.get(embedder_name).is_some_and(|conf| conf.2);
+            for (embedder_name, runtime) in new_settings.runtime_embedders.inner_as_ref() {
+                let was_quantized = old_settings
+                    .runtime_embedders
+                    .get(embedder_name)
+                    .is_some_and(|conf| conf.is_quantized);
                 // skip embedders that don't use document templates
-                if !config.uses_document_template() {
+                if !runtime.embedder.uses_document_template() {
                     continue;
                 }
 
@@ -1399,22 +1677,86 @@ impl InnerIndexSettingsDiff {
                             was_quantized,
                         ));
                     }
-                    std::collections::btree_map::Entry::Occupied(entry) => {
+                    std::collections::btree_map::Entry::Occupied(mut entry) => {
+                        // future-proofing, make sure to destructure here so that any new field is taken into account in this case
+                        // case in point: adding `remove_fragments` was detected.
                         let EmbedderAction {
                             was_quantized: _,
                             is_being_quantized: _,
-                            write_back: _, // We are deleting this embedder, so no point in regeneration
-                            reindex: _,    // We are already fully reindexing
-                        } = entry.get();
+                            write_back, // We are deleting this embedder, so no point in regeneration
+                            reindex,
+                            remove_fragments: _,
+                        } = entry.get_mut();
+
+                        // fixup reindex to make sure we regenerate all fragments
+                        *reindex = match reindex.take() {
+                            Some(reindex) => Some(reindex), // We are at least regenerating prompts
+                            None => {
+                                if write_back.is_none() {
+                                    Some(ReindexAction::RegeneratePrompts) // quantization case
+                                } else {
+                                    None
+                                }
+                            }
+                        };
                     }
                 };
             }
+        }
+
+        // build the fragment diffs
+        let mut fragment_diffs = BTreeMap::new();
+        for (embedder_name, embedder_action) in &embedding_config_updates {
+            let Some(new_embedder) = new_settings.runtime_embedders.get(embedder_name) else {
+                continue;
+            };
+            let regenerate_fragments =
+                if let Some(ReindexAction::RegenerateFragments(regenerate_fragments)) =
+                    embedder_action.reindex()
+                {
+                    either::Either::Left(
+                        regenerate_fragments
+                            .iter()
+                            .filter(|(_, action)| {
+                                !matches!(
+                                    action,
+                                    crate::vector::settings::RegenerateFragment::Remove
+                                )
+                            })
+                            .map(|(name, _)| name),
+                    )
+                } else {
+                    either::Either::Right(
+                        new_embedder.fragments().iter().map(|fragment| &fragment.name),
+                    )
+                };
+
+            let old_embedder = old_settings.runtime_embedders.get(embedder_name);
+
+            let mut fragments = Vec::new();
+            for fragment_name in regenerate_fragments {
+                let Ok(new) = new_embedder
+                    .fragments()
+                    .binary_search_by_key(&fragment_name, |fragment| &fragment.name)
+                else {
+                    continue;
+                };
+                let old = old_embedder.as_ref().and_then(|old_embedder| {
+                    old_embedder
+                        .fragments()
+                        .binary_search_by_key(&fragment_name, |fragment| &fragment.name)
+                        .ok()
+                });
+                fragments.push((old, new));
+            }
+            fragment_diffs.insert(embedder_name.clone(), fragments);
         }
 
         InnerIndexSettingsDiff {
             old: old_settings,
             new: new_settings,
             primary_key_id,
+            fragment_diffs,
             embedding_config_updates,
             settings_update_only,
             only_additional_fields,
@@ -1559,7 +1901,8 @@ pub(crate) struct InnerIndexSettings {
     pub exact_attributes: HashSet<FieldId>,
     pub disabled_typos_terms: DisabledTyposTerms,
     pub proximity_precision: ProximityPrecision,
-    pub embedding_configs: EmbeddingConfigs,
+    pub runtime_embedders: RuntimeEmbedders,
+    pub embedder_category_id: HashMap<String, u8>,
     pub geo_fields_ids: Option<(FieldId, FieldId)>,
     pub prefix_search: PrefixSearch,
     pub facet_search: bool,
@@ -1569,7 +1912,7 @@ impl InnerIndexSettings {
     pub fn from_index(
         index: &Index,
         rtxn: &heed::RoTxn<'_>,
-        embedding_configs: Option<EmbeddingConfigs>,
+        runtime_embedders: Option<RuntimeEmbedders>,
     ) -> Result<Self> {
         let stop_words = index.stop_words(rtxn)?;
         let stop_words = stop_words.map(|sw| sw.map_data(Vec::from).unwrap());
@@ -1578,10 +1921,15 @@ impl InnerIndexSettings {
         let mut fields_ids_map = index.fields_ids_map(rtxn)?;
         let exact_attributes = index.exact_attributes_ids(rtxn)?;
         let proximity_precision = index.proximity_precision(rtxn)?.unwrap_or_default();
-        let embedding_configs = match embedding_configs {
+        let runtime_embedders = match runtime_embedders {
             Some(embedding_configs) => embedding_configs,
-            None => embedders(index.embedding_configs(rtxn)?)?,
+            None => embedders(index.embedding_configs().embedding_configs(rtxn)?)?,
         };
+        let embedder_category_id = index
+            .embedding_configs()
+            .iter_embedder_id(rtxn)?
+            .map(|r| r.map(|(k, v)| (k.to_string(), v)))
+            .collect::<heed::Result<_>>()?;
         let prefix_search = index.prefix_search(rtxn)?.unwrap_or_default();
         let facet_search = index.facet_search(rtxn)?;
         let geo_fields_ids = match fields_ids_map.id(RESERVED_GEO_FIELD_NAME) {
@@ -1620,7 +1968,8 @@ impl InnerIndexSettings {
             sortable_fields,
             exact_attributes,
             proximity_precision,
-            embedding_configs,
+            runtime_embedders,
+            embedder_category_id,
             geo_fields_ids,
             prefix_search,
             facet_search,
@@ -1662,28 +2011,49 @@ impl InnerIndexSettings {
     }
 }
 
-fn embedders(embedding_configs: Vec<IndexEmbeddingConfig>) -> Result<EmbeddingConfigs> {
+fn embedders(embedding_configs: Vec<IndexEmbeddingConfig>) -> Result<RuntimeEmbedders> {
     let res: Result<_> = embedding_configs
         .into_iter()
         .map(
             |IndexEmbeddingConfig {
                  name,
                  config: EmbeddingConfig { embedder_options, prompt, quantized },
-                 ..
+                 fragments,
              }| {
-                let prompt = Arc::new(prompt.try_into().map_err(crate::Error::from)?);
+                let document_template = prompt.try_into().map_err(crate::Error::from)?;
 
-                let embedder = Arc::new(
+                let embedder =
                     // cache_cap: no cache needed for indexing purposes
-                    Embedder::new(embedder_options.clone(), 0)
+                    Arc::new(Embedder::new(embedder_options.clone(), 0)
                         .map_err(crate::vector::Error::from)
-                        .map_err(crate::Error::from)?,
-                );
-                Ok((name, (embedder, prompt, quantized.unwrap_or_default())))
+                        .map_err(crate::Error::from)?);
+
+                let fragments = fragments
+                    .into_inner()
+                    .into_iter()
+                    .map(|fragment| {
+                        let template = JsonTemplate::new(
+                            embedder_options.fragment(&fragment.name).unwrap().clone(),
+                        )
+                        .unwrap();
+
+                        RuntimeFragment { name: fragment.name, id: fragment.id, template }
+                    })
+                    .collect();
+
+                Ok((
+                    name,
+                    Arc::new(RuntimeEmbedder::new(
+                        embedder,
+                        document_template,
+                        fragments,
+                        quantized.unwrap_or_default(),
+                    )),
+                ))
             },
         )
         .collect();
-    res.map(EmbeddingConfigs::new)
+    res.map(RuntimeEmbedders::new)
 }
 
 fn validate_prompt(
@@ -1720,6 +2090,7 @@ fn validate_prompt(
 pub fn validate_embedding_settings(
     settings: Setting<EmbeddingSettings>,
     name: &str,
+    context: EmbeddingValidationContext,
 ) -> Result<Setting<EmbeddingSettings>> {
     let Setting::Set(settings) = settings else { return Ok(settings) };
     let EmbeddingSettings {
@@ -1732,6 +2103,8 @@ pub fn validate_embedding_settings(
         document_template,
         document_template_max_bytes,
         url,
+        indexing_fragments,
+        search_fragments,
         request,
         response,
         search_embedder,
@@ -1758,9 +2131,106 @@ pub fn validate_embedding_settings(
         })?;
     }
 
+    // used below
+    enum WithFragments {
+        Yes {
+            indexing_fragments: BTreeMap<String, serde_json::Value>,
+            search_fragments: BTreeMap<String, serde_json::Value>,
+        },
+        No,
+        Maybe,
+    }
+
+    let with_fragments = {
+        let has_reset = matches!(indexing_fragments, Setting::Reset)
+            || matches!(search_fragments, Setting::Reset);
+        let indexing_fragments: BTreeMap<_, _> = indexing_fragments
+            .as_ref()
+            .set()
+            .iter()
+            .flat_map(|map| map.iter())
+            .filter_map(|(name, fragment)| {
+                Some((name.clone(), fragment.as_ref().map(|fragment| fragment.value.clone())?))
+            })
+            .collect();
+        let search_fragments: BTreeMap<_, _> = search_fragments
+            .as_ref()
+            .set()
+            .iter()
+            .flat_map(|map| map.iter())
+            .filter_map(|(name, fragment)| {
+                Some((name.clone(), fragment.as_ref().map(|fragment| fragment.value.clone())?))
+            })
+            .collect();
+
+        let has_fragments = !indexing_fragments.is_empty() || !search_fragments.is_empty();
+
+        if context == EmbeddingValidationContext::FullSettings {
+            let are_fragments_inconsistent =
+                indexing_fragments.is_empty() ^ search_fragments.is_empty();
+            if are_fragments_inconsistent {
+                return Err(crate::vector::error::NewEmbedderError::rest_inconsistent_fragments(
+                    indexing_fragments.is_empty(),
+                    indexing_fragments,
+                    search_fragments,
+                ))
+                .map_err(|error| crate::UserError::VectorEmbeddingError(error.into()).into());
+            }
+        }
+        if has_fragments {
+            if context == EmbeddingValidationContext::SettingsPartialUpdate
+                && matches!(document_template, Setting::Set(_))
+            {
+                return Err(
+                    crate::vector::error::NewEmbedderError::rest_document_template_and_fragments(
+                        indexing_fragments.len(),
+                        search_fragments.len(),
+                    ),
+                )
+                .map_err(|error| crate::UserError::VectorEmbeddingError(error.into()).into());
+            }
+            WithFragments::Yes { indexing_fragments, search_fragments }
+        } else if has_reset || context == EmbeddingValidationContext::FullSettings {
+            WithFragments::No
+        } else {
+            // if we are working with partial settings, the user could have changed only the `request` and not given again the fragments
+            WithFragments::Maybe
+        }
+    };
     if let Some(request) = request.as_ref().set() {
-        let request = crate::vector::rest::Request::new(request.to_owned())
-            .map_err(|error| crate::UserError::VectorEmbeddingError(error.into()))?;
+        let request = match with_fragments {
+            WithFragments::Yes { indexing_fragments, search_fragments } => {
+                crate::vector::rest::RequestData::new(
+                    request.to_owned(),
+                    indexing_fragments,
+                    search_fragments,
+                )
+                .map_err(|error| crate::UserError::VectorEmbeddingError(error.into()))
+            }
+            WithFragments::No => crate::vector::rest::RequestData::new(
+                request.to_owned(),
+                Default::default(),
+                Default::default(),
+            )
+            .map_err(|error| crate::UserError::VectorEmbeddingError(error.into())),
+            WithFragments::Maybe => {
+                let mut indexing_fragments = BTreeMap::new();
+                indexing_fragments.insert("test".to_string(), serde_json::json!("test"));
+                crate::vector::rest::RequestData::new(
+                    request.to_owned(),
+                    indexing_fragments,
+                    Default::default(),
+                )
+                .or_else(|_| {
+                    crate::vector::rest::RequestData::new(
+                        request.to_owned(),
+                        Default::default(),
+                        Default::default(),
+                    )
+                })
+                .map_err(|error| crate::UserError::VectorEmbeddingError(error.into()))
+            }
+        }?;
         if let Some(response) = response.as_ref().set() {
             crate::vector::rest::Response::new(response.to_owned(), &request)
                 .map_err(|error| crate::UserError::VectorEmbeddingError(error.into()))?;
@@ -1779,6 +2249,8 @@ pub fn validate_embedding_settings(
             document_template,
             document_template_max_bytes,
             url,
+            indexing_fragments,
+            search_fragments,
             request,
             response,
             search_embedder,
@@ -1798,6 +2270,8 @@ pub fn validate_embedding_settings(
         &dimensions,
         &api_key,
         &url,
+        &indexing_fragments,
+        &search_fragments,
         &request,
         &response,
         &document_template,
@@ -1876,6 +2350,8 @@ pub fn validate_embedding_settings(
                         &embedder.dimensions,
                         &embedder.api_key,
                         &embedder.url,
+                        &embedder.indexing_fragments,
+                        &embedder.search_fragments,
                         &embedder.request,
                         &embedder.response,
                         &embedder.document_template,
@@ -1931,6 +2407,8 @@ pub fn validate_embedding_settings(
                         &embedder.dimensions,
                         &embedder.api_key,
                         &embedder.url,
+                        &embedder.indexing_fragments,
+                        &embedder.search_fragments,
                         &embedder.request,
                         &embedder.response,
                         &embedder.document_template,
@@ -1963,6 +2441,8 @@ pub fn validate_embedding_settings(
         document_template,
         document_template_max_bytes,
         url,
+        indexing_fragments,
+        search_fragments,
         request,
         response,
         search_embedder,
@@ -1987,6 +2467,81 @@ fn deserialize_sub_embedder(
                 message,
             })
         }
+    }
+}
+
+/// Implement this trait for the settings delta type.
+/// This is used in the new settings update flow and will allow to easily replace the old settings delta type: `InnerIndexSettingsDiff`.
+pub trait SettingsDelta {
+    fn new_embedders(&self) -> &RuntimeEmbedders;
+    fn old_embedders(&self) -> &RuntimeEmbedders;
+    fn new_embedder_category_id(&self) -> &HashMap<String, u8>;
+    fn embedder_actions(&self) -> &BTreeMap<String, EmbedderAction>;
+    fn try_for_each_fragment_diff<F, E>(
+        &self,
+        embedder_name: &str,
+        for_each: F,
+    ) -> std::result::Result<(), E>
+    where
+        F: FnMut(FragmentDiff) -> std::result::Result<(), E>;
+    fn new_fields_ids_map(&self) -> &FieldIdMapWithMetadata;
+}
+
+pub struct FragmentDiff<'a> {
+    pub old: Option<&'a RuntimeFragment>,
+    pub new: &'a RuntimeFragment,
+}
+
+impl SettingsDelta for InnerIndexSettingsDiff {
+    fn new_embedders(&self) -> &RuntimeEmbedders {
+        &self.new.runtime_embedders
+    }
+
+    fn old_embedders(&self) -> &RuntimeEmbedders {
+        &self.old.runtime_embedders
+    }
+
+    fn new_embedder_category_id(&self) -> &HashMap<String, u8> {
+        &self.new.embedder_category_id
+    }
+
+    fn embedder_actions(&self) -> &BTreeMap<String, EmbedderAction> {
+        &self.embedding_config_updates
+    }
+
+    fn new_fields_ids_map(&self) -> &FieldIdMapWithMetadata {
+        &self.new.fields_ids_map
+    }
+
+    fn try_for_each_fragment_diff<F, E>(
+        &self,
+        embedder_name: &str,
+        mut for_each: F,
+    ) -> std::result::Result<(), E>
+    where
+        F: FnMut(FragmentDiff) -> std::result::Result<(), E>,
+    {
+        let Some(fragment_diff) = self.fragment_diffs.get(embedder_name) else { return Ok(()) };
+        for (old, new) in fragment_diff {
+            let Some(new_runtime) = self.new.runtime_embedders.get(embedder_name) else {
+                continue;
+            };
+
+            let new = new_runtime.fragments().get(*new).unwrap();
+
+            match old {
+                Some(old) => {
+                    if let Some(old_runtime) = self.old.runtime_embedders.get(embedder_name) {
+                        let old = &old_runtime.fragments().get(*old).unwrap();
+                        for_each(FragmentDiff { old: Some(old), new })?;
+                    } else {
+                        for_each(FragmentDiff { old: None, new })?;
+                    }
+                }
+                None => for_each(FragmentDiff { old: None, new })?,
+            };
+        }
+        Ok(())
     }
 }
 

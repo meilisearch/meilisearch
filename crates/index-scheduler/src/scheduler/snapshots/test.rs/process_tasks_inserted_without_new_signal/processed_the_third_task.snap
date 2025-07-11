@@ -45,9 +45,9 @@ cattos: { number_of_documents: 0, field_distribution: {} }
 [timestamp] [2,]
 ----------------------------------------------------------------------
 ### All Batches:
-0 {uid: 0, details: {}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"doggos":1}}, stop reason: "task with id 0 of type `indexCreation` cannot be batched", }
-1 {uid: 1, details: {}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"cattos":1}}, stop reason: "task with id 1 of type `indexCreation` cannot be batched", }
-2 {uid: 2, details: {"deletedDocuments":0}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexDeletion":1},"indexUids":{"doggos":1}}, stop reason: "task with id 2 deletes the index", }
+0 {uid: 0, details: {}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"doggos":1}}, stop reason: "created batch containing only task with id 0 of type `indexCreation` that cannot be batched with any other task.", }
+1 {uid: 1, details: {}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"cattos":1}}, stop reason: "created batch containing only task with id 1 of type `indexCreation` that cannot be batched with any other task.", }
+2 {uid: 2, details: {"deletedDocuments":0}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexDeletion":1},"indexUids":{"doggos":1}}, stop reason: "stopped after task with id 2 because it deletes the index", }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:
 0 [0,]

@@ -1,14 +1,18 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::error::Error;
+use std::fmt;
 use std::fs::File;
 use std::path::Path;
 
+use deserr::Deserr;
 use heed::types::*;
 use heed::{CompactionOption, Database, DatabaseStat, RoTxn, RwTxn, Unspecified, WithoutTls};
 use indexmap::IndexMap;
 use roaring::RoaringBitmap;
 use rstar::RTree;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 use crate::constants::{self, RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME};
 use crate::database_stats::DatabaseStats;
@@ -23,8 +27,11 @@ use crate::heed_codec::facet::{
 use crate::heed_codec::version::VersionCodec;
 use crate::heed_codec::{BEU16StrCodec, FstSetCodec, StrBEU16Codec, StrRefCodec};
 use crate::order_by_map::OrderByMap;
+use crate::prompt::PromptData;
 use crate::proximity::ProximityPrecision;
-use crate::vector::{ArroyStats, ArroyWrapper, Embedding, EmbeddingConfig};
+use crate::update::new::StdResult;
+use crate::vector::db::IndexEmbeddingConfigs;
+use crate::vector::{ArroyStats, ArroyWrapper, Embedding};
 use crate::{
     default_criteria, CboRoaringBitmapCodec, Criterion, DocumentId, ExternalDocumentsIds,
     FacetDistribution, FieldDistribution, FieldId, FieldIdMapMissingEntry, FieldIdWordCountCodec,
@@ -79,6 +86,7 @@ pub mod main_key {
     pub const PREFIX_SEARCH: &str = "prefix_search";
     pub const DOCUMENTS_STATS: &str = "documents_stats";
     pub const DISABLED_TYPOS_TERMS: &str = "disabled_typos_terms";
+    pub const CHAT: &str = "chat";
 }
 
 pub mod db_name {
@@ -170,7 +178,7 @@ pub struct Index {
     pub field_id_docid_facet_strings: Database<FieldDocIdFacetStringCodec, Str>,
 
     /// Maps an embedder name to its id in the arroy store.
-    pub embedder_category_id: Database<Str, U8>,
+    pub(crate) embedder_category_id: Database<Unspecified, Unspecified>,
     /// Vector store based on arroy™.
     pub vector_arroy: arroy::Database<Unspecified>,
 
@@ -1691,6 +1699,25 @@ impl Index {
         self.main.remap_key_type::<Str>().delete(txn, main_key::FACET_SEARCH)
     }
 
+    pub fn chat_config(&self, txn: &RoTxn<'_>) -> heed::Result<ChatConfig> {
+        self.main
+            .remap_types::<Str, SerdeJson<_>>()
+            .get(txn, main_key::CHAT)
+            .map(|o| o.unwrap_or_default())
+    }
+
+    pub(crate) fn put_chat_config(
+        &self,
+        txn: &mut RwTxn<'_>,
+        val: &ChatConfig,
+    ) -> heed::Result<()> {
+        self.main.remap_types::<Str, SerdeJson<_>>().put(txn, main_key::CHAT, &val)
+    }
+
+    pub(crate) fn delete_chat_config(&self, txn: &mut RwTxn<'_>) -> heed::Result<bool> {
+        self.main.remap_key_type::<Str>().delete(txn, main_key::CHAT)
+    }
+
     pub fn localized_attributes_rules(
         &self,
         rtxn: &RoTxn<'_>,
@@ -1719,34 +1746,6 @@ impl Index {
         self.main.remap_key_type::<Str>().delete(txn, main_key::LOCALIZED_ATTRIBUTES_RULES)
     }
 
-    /// Put the embedding configs:
-    /// 1. The name of the embedder
-    /// 2. The configuration option for this embedder
-    /// 3. The list of documents with a user provided embedding
-    pub(crate) fn put_embedding_configs(
-        &self,
-        wtxn: &mut RwTxn<'_>,
-        configs: Vec<IndexEmbeddingConfig>,
-    ) -> heed::Result<()> {
-        self.main.remap_types::<Str, SerdeJson<Vec<IndexEmbeddingConfig>>>().put(
-            wtxn,
-            main_key::EMBEDDING_CONFIGS,
-            &configs,
-        )
-    }
-
-    pub(crate) fn delete_embedding_configs(&self, wtxn: &mut RwTxn<'_>) -> heed::Result<bool> {
-        self.main.remap_key_type::<Str>().delete(wtxn, main_key::EMBEDDING_CONFIGS)
-    }
-
-    pub fn embedding_configs(&self, rtxn: &RoTxn<'_>) -> Result<Vec<IndexEmbeddingConfig>> {
-        Ok(self
-            .main
-            .remap_types::<Str, SerdeJson<Vec<IndexEmbeddingConfig>>>()
-            .get(rtxn, main_key::EMBEDDING_CONFIGS)?
-            .unwrap_or_default())
-    }
-
     pub(crate) fn put_search_cutoff(&self, wtxn: &mut RwTxn<'_>, cutoff: u64) -> heed::Result<()> {
         self.main.remap_types::<Str, BEU64>().put(wtxn, main_key::SEARCH_CUTOFF, &cutoff)
     }
@@ -1759,19 +1758,29 @@ impl Index {
         self.main.remap_key_type::<Str>().delete(wtxn, main_key::SEARCH_CUTOFF)
     }
 
+    pub fn embedding_configs(&self) -> IndexEmbeddingConfigs {
+        IndexEmbeddingConfigs::new(self.main, self.embedder_category_id)
+    }
+
     pub fn embeddings(
         &self,
         rtxn: &RoTxn<'_>,
         docid: DocumentId,
-    ) -> Result<BTreeMap<String, Vec<Embedding>>> {
+    ) -> Result<BTreeMap<String, (Vec<Embedding>, bool)>> {
         let mut res = BTreeMap::new();
-        let embedding_configs = self.embedding_configs(rtxn)?;
-        for config in embedding_configs {
-            let embedder_id = self.embedder_category_id.get(rtxn, &config.name)?.unwrap();
-            let reader =
-                ArroyWrapper::new(self.vector_arroy, embedder_id, config.config.quantized());
+        let embedders = self.embedding_configs();
+        for config in embedders.embedding_configs(rtxn)? {
+            let embedder_info = embedders.embedder_info(rtxn, &config.name)?.unwrap();
+            let reader = ArroyWrapper::new(
+                self.vector_arroy,
+                embedder_info.embedder_id,
+                config.config.quantized(),
+            );
             let embeddings = reader.item_vectors(rtxn, docid)?;
-            res.insert(config.name.to_owned(), embeddings);
+            res.insert(
+                config.name.to_owned(),
+                (embeddings, embedder_info.embedding_status.must_regenerate(docid)),
+            );
         }
         Ok(res)
     }
@@ -1783,9 +1792,9 @@ impl Index {
 
     pub fn arroy_stats(&self, rtxn: &RoTxn<'_>) -> Result<ArroyStats> {
         let mut stats = ArroyStats::default();
-        let embedding_configs = self.embedding_configs(rtxn)?;
-        for config in embedding_configs {
-            let embedder_id = self.embedder_category_id.get(rtxn, &config.name)?.unwrap();
+        let embedding_configs = self.embedding_configs();
+        for config in embedding_configs.embedding_configs(rtxn)? {
+            let embedder_id = embedding_configs.embedder_id(rtxn, &config.name)?.unwrap();
             let reader =
                 ArroyWrapper::new(self.vector_arroy, embedder_id, config.config.quantized());
             reader.aggregate_stats(rtxn, &mut stats)?;
@@ -1910,18 +1919,97 @@ impl Index {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct IndexEmbeddingConfig {
-    pub name: String,
-    pub config: EmbeddingConfig,
-    pub user_provided: RoaringBitmap,
+#[derive(Debug, Default, Deserialize, Serialize)]
+pub struct ChatConfig {
+    pub description: String,
+    /// Contains the document template and max template length.
+    pub prompt: PromptData,
+    pub search_parameters: SearchParameters,
+}
+
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchParameters {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hybrid: Option<HybridQuery>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sort: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub distinct: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub matching_strategy: Option<MatchingStrategy>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attributes_to_search_on: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ranking_score_threshold: Option<RankingScoreThreshold>,
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Deserr, ToSchema)]
+#[deserr(try_from(f64) = TryFrom::try_from -> InvalidSettingsRankingScoreThreshold)]
+pub struct RankingScoreThreshold(f64);
+
+impl RankingScoreThreshold {
+    pub fn as_f64(&self) -> f64 {
+        self.0
+    }
+}
+
+impl TryFrom<f64> for RankingScoreThreshold {
+    type Error = InvalidSettingsRankingScoreThreshold;
+
+    fn try_from(value: f64) -> StdResult<Self, Self::Error> {
+        if !(0.0..=1.0).contains(&value) {
+            Err(InvalidSettingsRankingScoreThreshold)
+        } else {
+            Ok(RankingScoreThreshold(value))
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct InvalidSettingsRankingScoreThreshold;
+
+impl Error for InvalidSettingsRankingScoreThreshold {}
+
+impl fmt::Display for InvalidSettingsRankingScoreThreshold {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "the value of `rankingScoreThreshold` is invalid, expected a float between `0.0` and `1.0`."
+        )
+    }
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HybridQuery {
+    pub semantic_ratio: f32,
+    pub embedder: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PrefixSettings {
     pub prefix_count_threshold: usize,
     pub max_prefix_length: usize,
     pub compute_prefixes: PrefixSearch,
+}
+
+/// This is unfortunately a duplication of the struct in <meilisearch/src/search/mod.rs>.
+/// The reason why it is duplicated is because milli cannot depend on meilisearch. It would be cyclic imports.
+#[derive(Default, Debug, Copy, Clone, PartialEq, Eq, Deserr, ToSchema, Serialize, Deserialize)]
+#[deserr(rename_all = camelCase)]
+#[serde(rename_all = "camelCase")]
+pub enum MatchingStrategy {
+    /// Remove query words from last to first
+    #[default]
+    Last,
+    /// All query words are mandatory
+    All,
+    /// Remove query words from the most frequent to the least
+    Frequency,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]

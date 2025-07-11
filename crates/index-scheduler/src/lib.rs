@@ -51,16 +51,21 @@ pub use features::RoFeatures;
 use flate2::bufread::GzEncoder;
 use flate2::Compression;
 use meilisearch_types::batches::Batch;
-use meilisearch_types::features::{InstanceTogglableFeatures, Network, RuntimeTogglableFeatures};
+use meilisearch_types::features::{
+    ChatCompletionSettings, InstanceTogglableFeatures, Network, RuntimeTogglableFeatures,
+};
 use meilisearch_types::heed::byteorder::BE;
-use meilisearch_types::heed::types::I128;
-use meilisearch_types::heed::{self, Env, RoTxn, WithoutTls};
-use meilisearch_types::milli::index::IndexEmbeddingConfig;
+use meilisearch_types::heed::types::{DecodeIgnore, SerdeJson, Str, I128};
+use meilisearch_types::heed::{self, Database, Env, RoTxn, WithoutTls};
 use meilisearch_types::milli::update::IndexerConfig;
-use meilisearch_types::milli::vector::{Embedder, EmbedderOptions, EmbeddingConfigs};
+use meilisearch_types::milli::vector::json_template::JsonTemplate;
+use meilisearch_types::milli::vector::{
+    Embedder, EmbedderOptions, RuntimeEmbedder, RuntimeEmbedders, RuntimeFragment,
+};
 use meilisearch_types::milli::{self, Index};
 use meilisearch_types::task_view::TaskView;
 use meilisearch_types::tasks::{KindWithContent, Task};
+use milli::vector::db::IndexEmbeddingConfig;
 use processing::ProcessingTasks;
 pub use queue::Query;
 use queue::Queue;
@@ -75,6 +80,7 @@ use crate::utils::clamp_to_page_size;
 pub(crate) type BEI128 = I128<BE>;
 
 const TASK_SCHEDULER_SIZE_THRESHOLD_PERCENT_INT: u64 = 40;
+const CHAT_SETTINGS_DB_NAME: &str = "chat-settings";
 
 #[derive(Debug)]
 pub struct IndexSchedulerOptions {
@@ -131,6 +137,8 @@ pub struct IndexSchedulerOptions {
     ///
     /// 0 disables the cache.
     pub embedding_cache_cap: usize,
+    /// Snapshot compaction status.
+    pub experimental_no_snapshot_compaction: bool,
 }
 
 /// Structure which holds meilisearch's indexes and schedules the tasks
@@ -150,6 +158,9 @@ pub struct IndexScheduler {
     pub(crate) index_mapper: IndexMapper,
     /// In charge of fetching and setting the status of experimental features.
     features: features::FeatureData,
+
+    /// Stores the custom chat prompts and other settings of the indexes.
+    pub(crate) chat_settings: Database<Str, SerdeJson<ChatCompletionSettings>>,
 
     /// Everything related to the processing of the tasks
     pub scheduler: scheduler::Scheduler,
@@ -209,11 +220,16 @@ impl IndexScheduler {
             #[cfg(test)]
             run_loop_iteration: self.run_loop_iteration.clone(),
             features: self.features.clone(),
+            chat_settings: self.chat_settings,
         }
     }
 
     pub(crate) const fn nb_db() -> u32 {
-        Versioning::nb_db() + Queue::nb_db() + IndexMapper::nb_db() + features::FeatureData::nb_db()
+        Versioning::nb_db()
+            + Queue::nb_db()
+            + IndexMapper::nb_db()
+            + features::FeatureData::nb_db()
+            + 1 // chat-prompts
     }
 
     /// Create an index scheduler and start its run loop.
@@ -267,6 +283,7 @@ impl IndexScheduler {
         let features = features::FeatureData::new(&env, &mut wtxn, options.instance_features)?;
         let queue = Queue::new(&env, &mut wtxn, &options)?;
         let index_mapper = IndexMapper::new(&env, &mut wtxn, &options, budget)?;
+        let chat_settings = env.create_database(&mut wtxn, Some(CHAT_SETTINGS_DB_NAME))?;
         wtxn.commit()?;
 
         // allow unreachable_code to get rids of the warning in the case of a test build.
@@ -290,10 +307,15 @@ impl IndexScheduler {
             #[cfg(test)]
             run_loop_iteration: Arc::new(RwLock::new(0)),
             features,
+            chat_settings,
         };
 
         this.run();
         Ok(this)
+    }
+
+    fn read_txn(&self) -> Result<RoTxn<WithoutTls>> {
+        self.env.read_txn().map_err(|e| e.into())
     }
 
     /// Return `Ok(())` if the index scheduler is able to access one of its database.
@@ -372,15 +394,16 @@ impl IndexScheduler {
         }
     }
 
-    pub fn read_txn(&self) -> Result<RoTxn<WithoutTls>> {
-        self.env.read_txn().map_err(|e| e.into())
-    }
-
     /// Start the run loop for the given index scheduler.
     ///
     /// This function will execute in a different thread and must be called
     /// only once per index scheduler.
     fn run(&self) {
+        // If the number of batched tasks is 0, we don't need to run the scheduler at all.
+        // It will never be able to process any tasks.
+        if self.scheduler.max_number_of_batched_tasks == 0 {
+            return;
+        }
         let run = self.private_clone();
         std::thread::Builder::new()
             .name(String::from("scheduler"))
@@ -488,7 +511,7 @@ impl IndexScheduler {
 
     /// Returns the total number of indexes available for the specified filter.
     /// And a `Vec` of the index_uid + its stats
-    pub fn get_paginated_indexes_stats(
+    pub fn paginated_indexes_stats(
         &self,
         filters: &meilisearch_auth::AuthFilter,
         from: usize,
@@ -527,6 +550,24 @@ impl IndexScheduler {
         iter.for_each(drop);
 
         ret.map(|ret| (total, ret))
+    }
+
+    /// Returns the total number of chat workspaces available ~~for the specified filter~~.
+    /// And a `Vec` of the workspace_uids
+    pub fn paginated_chat_workspace_uids(
+        &self,
+        from: usize,
+        limit: usize,
+    ) -> Result<(usize, Vec<String>)> {
+        let rtxn = self.read_txn()?;
+        let total = self.chat_settings.len(&rtxn)?;
+        let mut iter = self.chat_settings.iter(&rtxn)?.skip(from);
+        iter.by_ref()
+            .take(limit)
+            .map(|ret| ret.map_err(Error::from))
+            .map(|ret| ret.map(|(uid, _)| uid.to_string()))
+            .collect::<Result<Vec<_>, Error>>()
+            .map(|ret| (total as usize, ret))
     }
 
     /// The returned structure contains:
@@ -813,29 +854,42 @@ impl IndexScheduler {
         &self,
         index_uid: String,
         embedding_configs: Vec<IndexEmbeddingConfig>,
-    ) -> Result<EmbeddingConfigs> {
+    ) -> Result<RuntimeEmbedders> {
         let res: Result<_> = embedding_configs
             .into_iter()
             .map(
                 |IndexEmbeddingConfig {
                      name,
                      config: milli::vector::EmbeddingConfig { embedder_options, prompt, quantized },
-                     ..
-                 }| {
-                    let prompt = Arc::new(
-                        prompt
-                            .try_into()
-                            .map_err(meilisearch_types::milli::Error::from)
-                            .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?,
-                    );
+                     fragments,
+                 }|
+                 -> Result<(String, Arc<RuntimeEmbedder>)> {
+                    let document_template = prompt
+                        .try_into()
+                        .map_err(meilisearch_types::milli::Error::from)
+                        .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?;
+
+                    let fragments = fragments
+                        .into_inner()
+                        .into_iter()
+                        .map(|fragment| {
+                            let value = embedder_options.fragment(&fragment.name).unwrap();
+                            let template = JsonTemplate::new(value.clone()).unwrap();
+                            RuntimeFragment { name: fragment.name, id: fragment.id, template }
+                        })
+                        .collect();
                     // optimistically return existing embedder
                     {
                         let embedders = self.embedders.read().unwrap();
                         if let Some(embedder) = embedders.get(&embedder_options) {
-                            return Ok((
-                                name,
-                                (embedder.clone(), prompt, quantized.unwrap_or_default()),
+                            let runtime = Arc::new(RuntimeEmbedder::new(
+                                embedder.clone(),
+                                document_template,
+                                fragments,
+                                quantized.unwrap_or_default(),
                             ));
+
+                            return Ok((name, runtime));
                         }
                     }
 
@@ -851,11 +905,44 @@ impl IndexScheduler {
                         let mut embedders = self.embedders.write().unwrap();
                         embedders.insert(embedder_options, embedder.clone());
                     }
-                    Ok((name, (embedder, prompt, quantized.unwrap_or_default())))
+
+                    let runtime = Arc::new(RuntimeEmbedder::new(
+                        embedder.clone(),
+                        document_template,
+                        fragments,
+                        quantized.unwrap_or_default(),
+                    ));
+
+                    Ok((name, runtime))
                 },
             )
             .collect();
-        res.map(EmbeddingConfigs::new)
+        res.map(RuntimeEmbedders::new)
+    }
+
+    pub fn chat_settings(&self, uid: &str) -> Result<Option<ChatCompletionSettings>> {
+        let rtxn = self.env.read_txn()?;
+        self.chat_settings.get(&rtxn, uid).map_err(Into::into)
+    }
+
+    /// Return true if chat workspace exists.
+    pub fn chat_workspace_exists(&self, name: &str) -> Result<bool> {
+        let rtxn = self.env.read_txn()?;
+        Ok(self.chat_settings.remap_data_type::<DecodeIgnore>().get(&rtxn, name)?.is_some())
+    }
+
+    pub fn put_chat_settings(&self, uid: &str, settings: &ChatCompletionSettings) -> Result<()> {
+        let mut wtxn = self.env.write_txn()?;
+        self.chat_settings.put(&mut wtxn, uid, settings)?;
+        wtxn.commit()?;
+        Ok(())
+    }
+
+    pub fn delete_chat_settings(&self, uid: &str) -> Result<bool> {
+        let mut wtxn = self.env.write_txn()?;
+        let deleted = self.chat_settings.delete(&mut wtxn, uid)?;
+        wtxn.commit()?;
+        Ok(deleted)
     }
 }
 

@@ -3,11 +3,11 @@ use std::collections::BTreeMap;
 use big_s::S;
 use meili_snap::{json_string, snapshot};
 use meilisearch_auth::AuthFilter;
-use meilisearch_types::milli::index::IndexEmbeddingConfig;
 use meilisearch_types::milli::update::IndexDocumentsMethod::*;
 use meilisearch_types::milli::{self};
 use meilisearch_types::settings::SettingEmbeddingSettings;
 use meilisearch_types::tasks::{IndexSwap, KindWithContent};
+use milli::vector::db::IndexEmbeddingConfig;
 use roaring::RoaringBitmap;
 
 use crate::insta_snapshot::snapshot_index_scheduler;
@@ -690,11 +690,20 @@ fn test_settings_update() {
     let index = index_scheduler.index("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
 
-    let configs = index.embedding_configs(&rtxn).unwrap();
-    let IndexEmbeddingConfig { name, config, user_provided } = configs.first().unwrap();
+    let embedders = index.embedding_configs();
+    let configs = embedders.embedding_configs(&rtxn).unwrap();
+    let IndexEmbeddingConfig { name, config, fragments } = configs.first().unwrap();
+    let info = embedders.embedder_info(&rtxn, name).unwrap().unwrap();
+    insta::assert_snapshot!(info.embedder_id, @"0");
+    insta::assert_debug_snapshot!(info.embedding_status.user_provided_docids(), @"RoaringBitmap<[]>");
+    insta::assert_debug_snapshot!(info.embedding_status.skip_regenerate_docids(), @"RoaringBitmap<[]>");
     insta::assert_snapshot!(name, @"default");
-    insta::assert_debug_snapshot!(user_provided, @"RoaringBitmap<[]>");
     insta::assert_json_snapshot!(config.embedder_options);
+    insta::assert_debug_snapshot!(fragments, @r###"
+    FragmentConfigs(
+        [],
+    )
+    "###);
 }
 
 #[test]
@@ -732,6 +741,7 @@ fn basic_get_stats() {
         "documentDeletion": 0,
         "documentEdition": 0,
         "dumpCreation": 0,
+        "export": 0,
         "indexCreation": 3,
         "indexDeletion": 0,
         "indexSwap": 0,
@@ -765,6 +775,7 @@ fn basic_get_stats() {
         "documentDeletion": 0,
         "documentEdition": 0,
         "dumpCreation": 0,
+        "export": 0,
         "indexCreation": 3,
         "indexDeletion": 0,
         "indexSwap": 0,
@@ -805,6 +816,7 @@ fn basic_get_stats() {
         "documentDeletion": 0,
         "documentEdition": 0,
         "dumpCreation": 0,
+        "export": 0,
         "indexCreation": 3,
         "indexDeletion": 0,
         "indexSwap": 0,
@@ -846,6 +858,7 @@ fn basic_get_stats() {
         "documentDeletion": 0,
         "documentEdition": 0,
         "dumpCreation": 0,
+        "export": 0,
         "indexCreation": 3,
         "indexDeletion": 0,
         "indexSwap": 0,
@@ -894,7 +907,7 @@ fn create_and_list_index() {
 
     let err = index_scheduler.index("kefir").map(|_| ()).unwrap_err();
     snapshot!(err, @"Index `kefir` not found.");
-    let empty = index_scheduler.get_paginated_indexes_stats(&AuthFilter::default(), 0, 20).unwrap();
+    let empty = index_scheduler.paginated_indexes_stats(&AuthFilter::default(), 0, 20).unwrap();
     snapshot!(format!("{empty:?}"), @"(0, [])");
 
     // After advancing just once the index should've been created, the wtxn has been released and commited
@@ -902,7 +915,7 @@ fn create_and_list_index() {
     handle.advance_till([InsideProcessBatch]);
 
     index_scheduler.index("kefir").unwrap();
-    let list = index_scheduler.get_paginated_indexes_stats(&AuthFilter::default(), 0, 20).unwrap();
+    let list = index_scheduler.paginated_indexes_stats(&AuthFilter::default(), 0, 20).unwrap();
     snapshot!(json_string!(list, { "[1][0][1].created_at" => "[date]", "[1][0][1].updated_at" => "[date]", "[1][0][1].used_database_size" => "[bytes]", "[1][0][1].database_size" => "[bytes]" }), @r###"
     [
       1,
@@ -928,4 +941,31 @@ fn create_and_list_index() {
       ]
     ]
     "###);
+}
+
+#[test]
+fn test_scheduler_doesnt_run_with_zero_batched_tasks() {
+    let (index_scheduler, mut handle) = IndexScheduler::test_with_custom_config(vec![], |config| {
+        config.max_number_of_batched_tasks = 0;
+        None
+    });
+
+    handle.scheduler_is_down();
+
+    // Register a task
+    index_scheduler
+        .register(
+            KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None },
+            None,
+            false,
+        )
+        .unwrap();
+    snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_task");
+
+    handle.scheduler_is_down();
+
+    // If we restart the scheduler, it should run properly.
+    let (index_scheduler, mut handle) = handle.restart(index_scheduler, true, vec![], |_| None);
+    handle.advance_n_successful_batches(1);
+    snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_restart");
 }

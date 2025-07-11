@@ -127,7 +127,7 @@ fn query_batches_simple() {
       "startedAt": "1970-01-01T00:00:00Z",
       "finishedAt": null,
       "enqueuedAt": null,
-      "stopReason": "task with id 0 of type `indexCreation` cannot be batched"
+      "stopReason": "created batch containing only task with id 0 of type `indexCreation` that cannot be batched with any other task."
     }
     "###);
 

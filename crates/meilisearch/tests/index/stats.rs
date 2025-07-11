@@ -10,7 +10,7 @@ async fn stats() {
 
     assert_eq!(code, 202);
 
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = index.stats().await;
 
@@ -33,7 +33,7 @@ async fn stats() {
     let (response, code) = index.add_documents(documents, None).await;
     assert_eq!(code, 202);
 
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
 
     let (response, code) = index.stats().await;
 

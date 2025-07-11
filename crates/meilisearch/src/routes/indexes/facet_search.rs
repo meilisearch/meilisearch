@@ -56,6 +56,8 @@ pub struct FacetSearchQuery {
     pub q: Option<String>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchVector>)]
     pub vector: Option<Vec<f32>>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchMedia>)]
+    pub media: Option<Value>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchHybridQuery>)]
     pub hybrid: Option<HybridQuery>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchFilter>)]
@@ -94,6 +96,7 @@ impl FacetSearchAggregator {
             facet_name,
             vector,
             q,
+            media,
             filter,
             matching_strategy,
             attributes_to_search_on,
@@ -108,6 +111,7 @@ impl FacetSearchAggregator {
             facet_names: Some(facet_name.clone()).into_iter().collect(),
             additional_search_parameters_provided: q.is_some()
                 || vector.is_some()
+                || media.is_some()
                 || filter.is_some()
                 || *matching_strategy != MatchingStrategy::default()
                 || attributes_to_search_on.is_some()
@@ -291,6 +295,7 @@ impl From<FacetSearchQuery> for SearchQuery {
             facet_name: _,
             q,
             vector,
+            media,
             filter,
             matching_strategy,
             attributes_to_search_on,
@@ -312,6 +317,7 @@ impl From<FacetSearchQuery> for SearchQuery {
 
         SearchQuery {
             q,
+            media,
             offset: DEFAULT_SEARCH_OFFSET(),
             limit: DEFAULT_SEARCH_LIMIT(),
             page,

@@ -47,8 +47,8 @@ static DOCUMENTS: Lazy<Value> = Lazy::new(|| {
 
 #[actix_rt::test]
 async fn basic() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index_with_prefix("test");
 
     let (response, code) = index
         .update_settings(json!({
@@ -61,12 +61,12 @@ async fn basic() {
         "filterableAttributes": ["title"]}))
         .await;
     snapshot!(code, @"202 Accepted");
-    server.wait_task(response.uid()).await;
+    server.wait_task(response.uid()).await.succeeded();
 
     let documents = DOCUMENTS.clone();
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    index.wait_task(value.uid()).await.succeeded();
+    server.wait_task(value.uid()).await.succeeded();
 
     index
         .similar(
@@ -233,8 +233,8 @@ async fn basic() {
 
 #[actix_rt::test]
 async fn ranking_score_threshold() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index_with_prefix("test");
 
     let (response, code) = index
         .update_settings(json!({
@@ -247,12 +247,12 @@ async fn ranking_score_threshold() {
         "filterableAttributes": ["title"]}))
         .await;
     snapshot!(code, @"202 Accepted");
-    server.wait_task(response.uid()).await;
+    server.wait_task(response.uid()).await.succeeded();
 
     let documents = DOCUMENTS.clone();
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    index.wait_task(value.uid()).await.succeeded();
+    server.wait_task(value.uid()).await.succeeded();
 
     index
         .similar(
@@ -503,8 +503,8 @@ async fn ranking_score_threshold() {
 
 #[actix_rt::test]
 async fn filter() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index_with_prefix("test");
 
     let (response, code) = index
         .update_settings(json!({
@@ -517,12 +517,12 @@ async fn filter() {
         "filterableAttributes": ["title", "release_year"]}))
         .await;
     snapshot!(code, @"202 Accepted");
-    server.wait_task(response.uid()).await;
+    server.wait_task(response.uid()).await.succeeded();
 
     let documents = DOCUMENTS.clone();
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    index.wait_task(value.uid()).await.succeeded();
+    server.wait_task(value.uid()).await.succeeded();
 
     index
         .similar(
@@ -621,8 +621,8 @@ async fn filter() {
 
 #[actix_rt::test]
 async fn limit_and_offset() {
-    let server = Server::new().await;
-    let index = server.index("test");
+    let server = Server::new_shared();
+    let index = server.unique_index_with_prefix("test");
 
     let (response, code) = index
         .update_settings(json!({
@@ -635,12 +635,12 @@ async fn limit_and_offset() {
         "filterableAttributes": ["title"]}))
         .await;
     snapshot!(code, @"202 Accepted");
-    server.wait_task(response.uid()).await;
+    server.wait_task(response.uid()).await.succeeded();
 
     let documents = DOCUMENTS.clone();
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    index.wait_task(value.uid()).await.succeeded();
+    server.wait_task(value.uid()).await.succeeded();
 
     index
         .similar(

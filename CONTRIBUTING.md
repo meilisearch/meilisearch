@@ -57,9 +57,17 @@ This command will be triggered to each PR as a requirement for merging it.
 You can set the `LINDERA_CACHE` environment variable to speed up your successive builds by up to 2 minutes.
 It'll store some built artifacts in the directory of your choice.
 
-We recommend using the standard `$HOME/.cache/lindera` directory:
+We recommend using the `$HOME/.cache/meili/lindera` directory:
 ```sh
-export LINDERA_CACHE=$HOME/.cache/lindera
+export LINDERA_CACHE=$HOME/.cache/meili/lindera
+```
+
+You can set the `MILLI_BENCH_DATASETS_PATH` environment variable to further speed up your builds.
+It'll store some big files used for the benchmarks in the directory of your choice.
+
+We recommend using the `$HOME/.cache/meili/benches` directory:
+```sh
+export MILLI_BENCH_DATASETS_PATH=$HOME/.cache/meili/benches
 ```
 
 Furthermore, you can improve incremental compilation by setting the `MEILI_NO_VERGEN` environment variable.

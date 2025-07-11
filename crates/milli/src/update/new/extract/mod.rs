@@ -12,13 +12,14 @@ pub use documents::*;
 pub use faceted::*;
 pub use geo::*;
 pub use searchable::*;
-pub use vectors::EmbeddingExtractor;
+pub use vectors::{EmbeddingExtractor, SettingsChangeEmbeddingExtractor};
 
 /// TODO move in permissive json pointer
 pub mod perm_json_p {
     use serde_json::{Map, Value};
 
-    use crate::{attribute_patterns::PatternMatch, Result};
+    use crate::attribute_patterns::PatternMatch;
+    use crate::Result;
     const SPLIT_SYMBOL: char = '.';
 
     /// Returns `true` if the `selector` match the `key`.

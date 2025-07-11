@@ -1,11 +1,11 @@
-use enum_iterator::Sequence;
 use std::any::TypeId;
 use std::borrow::Cow;
 use std::marker::PhantomData;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
+use enum_iterator::Sequence;
 use indexmap::IndexMap;
 use itertools::Itertools;
 use serde::Serialize;
@@ -20,6 +20,25 @@ pub trait Step: 'static + Send + Sync {
 #[derive(Clone, Default)]
 pub struct Progress {
     steps: Arc<RwLock<InnerProgress>>,
+}
+
+#[derive(Default)]
+pub struct EmbedderStats {
+    pub errors: Arc<RwLock<(Option<String>, u32)>>,
+    pub total_count: AtomicUsize,
+}
+
+impl std::fmt::Debug for EmbedderStats {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let guard = self.errors.read().unwrap_or_else(|p| p.into_inner());
+        let (error, count) = (guard.0.clone(), guard.1);
+        std::mem::drop(guard);
+        f.debug_struct("EmbedderStats")
+            .field("last_error", &error)
+            .field("total_count", &self.total_count.load(Ordering::Relaxed))
+            .field("error_count", &count)
+            .finish()
+    }
 }
 
 #[derive(Default)]

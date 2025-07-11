@@ -1,9 +1,10 @@
 pub use self::available_ids::AvailableIds;
+pub use self::chat::ChatSettings;
 pub use self::clear_documents::ClearDocuments;
 pub use self::concurrent_available_ids::ConcurrentAvailableIds;
 pub use self::facet::bulk::FacetsUpdateBulk;
 pub use self::facet::incremental::FacetsUpdateIncrementalInner;
-pub use self::index_documents::*;
+pub use self::index_documents::{request_threads, *};
 pub use self::indexer_config::{default_thread_pool_and_threads, IndexerConfig};
 pub use self::new::ChannelCongestion;
 pub use self::settings::{validate_embedding_settings, Setting, Settings};
@@ -13,6 +14,7 @@ pub use self::words_prefix_integer_docids::WordPrefixIntegerDocids;
 pub use self::words_prefixes_fst::WordsPrefixesFst;
 
 mod available_ids;
+mod chat;
 mod clear_documents;
 mod concurrent_available_ids;
 pub(crate) mod del_add;

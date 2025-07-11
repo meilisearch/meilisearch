@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
+use export::Export;
 use index_scheduler::IndexScheduler;
 use meilisearch_auth::AuthController;
 use meilisearch_types::batch_view::BatchView;
@@ -52,7 +53,10 @@ const PAGINATION_DEFAULT_LIMIT_FN: fn() -> usize = || 20;
 
 mod api_key;
 pub mod batches;
+pub mod chats;
 mod dump;
+mod export;
+mod export_analytics;
 pub mod features;
 pub mod indexes;
 mod logs;
@@ -83,6 +87,7 @@ mod tasks_test;
         (path = "/multi-search", api = multi_search::MultiSearchApi),
         (path = "/swap-indexes", api = swap_indexes::SwapIndexesApi),
         (path = "/experimental-features", api = features::ExperimentalFeaturesApi),
+        (path = "/export", api = export::ExportApi),
         (path = "/network", api = network::NetworkApi),
     ),
     paths(get_health, get_version, get_stats),
@@ -94,7 +99,7 @@ mod tasks_test;
         url = "/",
         description = "Local server",
     )),
-    components(schemas(PaginationView<KeyView>, PaginationView<IndexView>, IndexView, DocumentDeletionByFilter, AllBatches, BatchStats, ProgressStepView, ProgressView, BatchView, RuntimeTogglableFeatures, SwapIndexesPayload, DocumentEditionByFunction, MergeFacets, FederationOptions, SearchQueryWithIndex, Federation, FederatedSearch, FederatedSearchResult, SearchResults, SearchResultWithIndex, SimilarQuery, SimilarResult, PaginationView<serde_json::Value>, BrowseQuery, UpdateIndexRequest, IndexUid, IndexCreateRequest, KeyView, Action, CreateApiKey, UpdateStderrLogs, LogMode, GetLogs, IndexStats, Stats, HealthStatus, HealthResponse, VersionResponse, Code, ErrorType, AllTasks, TaskView, Status, DetailsView, ResponseError, Settings<Unchecked>, Settings<Checked>, TypoSettings, MinWordSizeTyposSetting, FacetingSettings, PaginationSettings, SummarizedTaskView, Kind, Network, Remote, FilterableAttributesRule, FilterableAttributesPatterns, AttributePatterns, FilterableAttributesFeatures, FilterFeatures))
+    components(schemas(PaginationView<KeyView>, PaginationView<IndexView>, IndexView, DocumentDeletionByFilter, AllBatches, BatchStats, ProgressStepView, ProgressView, BatchView, RuntimeTogglableFeatures, SwapIndexesPayload, DocumentEditionByFunction, MergeFacets, FederationOptions, SearchQueryWithIndex, Federation, FederatedSearch, FederatedSearchResult, SearchResults, SearchResultWithIndex, SimilarQuery, SimilarResult, PaginationView<serde_json::Value>, BrowseQuery, UpdateIndexRequest, IndexUid, IndexCreateRequest, KeyView, Action, CreateApiKey, UpdateStderrLogs, LogMode, GetLogs, IndexStats, Stats, HealthStatus, HealthResponse, VersionResponse, Code, ErrorType, AllTasks, TaskView, Status, DetailsView, ResponseError, Settings<Unchecked>, Settings<Checked>, TypoSettings, MinWordSizeTyposSetting, FacetingSettings, PaginationSettings, SummarizedTaskView, Kind, Network, Remote, FilterableAttributesRule, FilterableAttributesPatterns, AttributePatterns, FilterableAttributesFeatures, FilterFeatures, Export))
 )]
 pub struct MeilisearchApi;
 
@@ -113,7 +118,9 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(web::scope("/swap-indexes").configure(swap_indexes::configure))
         .service(web::scope("/metrics").configure(metrics::configure))
         .service(web::scope("/experimental-features").configure(features::configure))
-        .service(web::scope("/network").configure(network::configure));
+        .service(web::scope("/network").configure(network::configure))
+        .service(web::scope("/export").configure(export::configure))
+        .service(web::scope("/chats").configure(chats::configure));
 
     #[cfg(feature = "swagger")]
     {

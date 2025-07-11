@@ -4,6 +4,7 @@ mod autobatcher_test;
 mod create_batch;
 mod process_batch;
 mod process_dump_creation;
+mod process_export;
 mod process_index_operation;
 mod process_snapshot_creation;
 mod process_upgrade;
@@ -83,6 +84,9 @@ pub struct Scheduler {
     ///
     /// 0 disables the cache.
     pub(crate) embedding_cache_cap: usize,
+
+    /// Snapshot compaction status.
+    pub(crate) experimental_no_snapshot_compaction: bool,
 }
 
 impl Scheduler {
@@ -98,6 +102,7 @@ impl Scheduler {
             auth_env: self.auth_env.clone(),
             version_file_path: self.version_file_path.clone(),
             embedding_cache_cap: self.embedding_cache_cap,
+            experimental_no_snapshot_compaction: self.experimental_no_snapshot_compaction,
         }
     }
 
@@ -114,6 +119,7 @@ impl Scheduler {
             auth_env,
             version_file_path: options.version_file_path.clone(),
             embedding_cache_cap: options.embedding_cache_cap,
+            experimental_no_snapshot_compaction: options.experimental_no_snapshot_compaction,
         }
     }
 }
@@ -370,8 +376,10 @@ impl IndexScheduler {
                 post_commit_dabases_sizes
                     .get(dbname)
                     .map(|post_size| {
-                        use byte_unit::{Byte, UnitType::Binary};
                         use std::cmp::Ordering::{Equal, Greater, Less};
+
+                        use byte_unit::Byte;
+                        use byte_unit::UnitType::Binary;
 
                         let post = Byte::from_u64(*post_size as u64).get_appropriate_unit(Binary);
                         let diff_size = post_size.abs_diff(*pre_size) as u64;

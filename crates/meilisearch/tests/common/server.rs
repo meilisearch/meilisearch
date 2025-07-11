@@ -347,6 +347,16 @@ impl<State> Server<State> {
         }
     }
 
+    pub fn unique_index_with_prefix(&self, prefix: &str) -> Index<'_> {
+        let uuid = Uuid::new_v4();
+        Index {
+            uid: format!("{prefix}-{}", uuid),
+            service: &self.service,
+            encoder: Encoder::Plain,
+            marker: PhantomData,
+        }
+    }
+
     pub fn unique_index_with_encoder(&self, encoder: Encoder) -> Index<'_> {
         let uuid = Uuid::new_v4();
         Index { uid: uuid.to_string(), service: &self.service, encoder, marker: PhantomData }
@@ -454,6 +464,7 @@ pub fn default_settings(dir: impl AsRef<Path>) -> Opt {
             skip_index_budget: true,
             // Having 2 threads makes the tests way faster
             max_indexing_threads: MaxThreads::from_str("2").unwrap(),
+            experimental_no_edition_2024_for_settings: false,
         },
         experimental_enable_metrics: false,
         ..Parser::parse_from(None as Option<&str>)

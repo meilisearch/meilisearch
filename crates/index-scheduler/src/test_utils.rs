@@ -37,6 +37,7 @@ pub(crate) enum FailureLocation {
     InsideCreateBatch,
     InsideProcessBatch,
     PanicInsideProcessBatch,
+    ProcessExport,
     ProcessUpgrade,
     AcquiringWtxn,
     UpdatingTaskAfterProcessBatchSuccess { task_uid: u32 },
@@ -113,10 +114,14 @@ impl IndexScheduler {
             instance_features: Default::default(),
             auto_upgrade: true, // Don't cost much and will ensure the happy path works
             embedding_cache_cap: 10,
+            experimental_no_snapshot_compaction: false,
         };
         let version = configuration(&mut options).unwrap_or({
             (versioning::VERSION_MAJOR, versioning::VERSION_MINOR, versioning::VERSION_PATCH)
         });
+
+        // If the number of batched tasks is 0, the scheduler will not run and we can't do the init check.
+        let skip_init = options.max_number_of_batched_tasks == 0;
 
         std::fs::create_dir_all(&options.auth_path).unwrap();
         let auth_env = open_auth_store_env(&options.auth_path).unwrap();
@@ -126,7 +131,11 @@ impl IndexScheduler {
         // To be 100% consistent between all test we're going to start the scheduler right now
         // and ensure it's in the expected starting state.
         let breakpoint = match receiver.recv_timeout(std::time::Duration::from_secs(10)) {
+            Ok(b) if skip_init => {
+                panic!("The scheduler was not supposed to start, but it did: {b:?}.")
+            }
             Ok(b) => b,
+            Err(_) if skip_init => (Init, false),
             Err(RecvTimeoutError::Timeout) => {
                 panic!("The scheduler seems to be waiting for a new task while your test is waiting for a breakpoint.")
             }

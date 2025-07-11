@@ -38,11 +38,11 @@ async fn test_settings_documents_indexing_swapping_and_search(
 
     let (task, code) = index.add_documents(documents.clone(), None).await;
     assert_eq!(code, 202, "{task}");
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (task, code) = index.update_settings(settings.clone()).await;
     assert_eq!(code, 202, "{task}");
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     index.search(query.clone(), test.clone()).await;
 
@@ -51,11 +51,11 @@ async fn test_settings_documents_indexing_swapping_and_search(
 
     let (task, code) = index.update_settings(settings.clone()).await;
     assert_eq!(code, 202, "{task}");
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (task, code) = index.add_documents(documents.clone(), None).await;
     assert_eq!(code, 202, "{task}");
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     index.search(query.clone(), test.clone()).await;
 }
@@ -104,7 +104,7 @@ async fn bug_5547() {
     let server = Server::new_shared();
     let index = server.unique_index();
     let (response, _code) = index.create(None).await;
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
 
     let mut documents = Vec::new();
     for i in 0..65_535 {
@@ -112,7 +112,7 @@ async fn bug_5547() {
     }
 
     let (response, _code) = index.add_documents(json!(documents), Some("id")).await;
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
     let (response, code) = index.search_post(json!({"q": "title"})).await;
     assert_eq!(code, 200);
     snapshot!(response["hits"], @r###"[{"id":0,"title":"title0"},{"id":1,"title":"title1"},{"id":10,"title":"title10"},{"id":100,"title":"title100"},{"id":101,"title":"title101"},{"id":102,"title":"title102"},{"id":103,"title":"title103"},{"id":104,"title":"title104"},{"id":105,"title":"title105"},{"id":106,"title":"title106"},{"id":107,"title":"title107"},{"id":108,"title":"title108"},{"id":1000,"title":"title1000"},{"id":1001,"title":"title1001"},{"id":1002,"title":"title1002"},{"id":1003,"title":"title1003"},{"id":1004,"title":"title1004"},{"id":1005,"title":"title1005"},{"id":1006,"title":"title1006"},{"id":1007,"title":"title1007"}]"###);
@@ -131,7 +131,7 @@ async fn search_with_stop_word() {
 
     let documents = DOCUMENTS.clone();
     let (task, _code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     // prefix search
     index
@@ -196,7 +196,7 @@ async fn search_with_typo_settings() {
 
     let documents = DOCUMENTS.clone();
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     index
         .search(json!({"q": "287947" }), |response, code| {
@@ -228,7 +228,7 @@ async fn phrase_search_with_stop_word() {
 
     let documents = DOCUMENTS.clone();
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     index
         .search(json!({"q": "how \"to\" train \"the" }), |response, code| {
@@ -308,11 +308,11 @@ async fn negative_special_cases_search() {
 
     let documents = DOCUMENTS.clone();
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (task, _status_code) =
         index.update_settings(json!({"synonyms": { "escape": ["gläss"] }})).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     // There is a synonym for escape -> glass but we don't want "escape", only the derivates: glass
     index
@@ -338,7 +338,7 @@ async fn test_kanji_language_detection() {
         { "id": 2, "title": "הַשּׁוּעָל הַמָּהִיר (״הַחוּם״) לֹא יָכוֹל לִקְפֹּץ 9.94 מֶטְרִים, נָכוֹן? ברר, 1.5°C- בַּחוּץ!" }
     ]);
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     index
         .search(json!({"q": "東京"}), |response, code| {
@@ -361,10 +361,10 @@ async fn test_thai_language() {
         { "id": 2, "title": "สบู่สมุนไพรฝางแดงผสมว่านหางจรเข้ 100 กรัม จำนวน 6 ก้อน" }
     ]);
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (task, _status_code) = index.update_settings(json!({"rankingRules": ["exactness"]})).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     index
         .search(json!({"q": "สบู"}), |response, code| {
@@ -586,7 +586,7 @@ async fn displayed_attributes() {
 
     let documents = DOCUMENTS.clone();
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (response, code) =
         index.search_post(json!({ "attributesToRetrieve": ["title", "id"] })).await;
@@ -601,7 +601,7 @@ async fn placeholder_search_is_hard_limited() {
 
     let documents: Vec<_> = (0..1200).map(|i| json!({ "id": i, "text": "I am unique!" })).collect();
     let (task, _status_code) = index.add_documents(documents.into(), None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     index
         .search(
@@ -630,7 +630,7 @@ async fn placeholder_search_is_hard_limited() {
 
     let (task, _status_code) =
         index.update_settings(json!({ "pagination": { "maxTotalHits": 10_000 } })).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     index
         .search(
@@ -665,7 +665,7 @@ async fn search_is_hard_limited() {
 
     let documents: Vec<_> = (0..1200).map(|i| json!({ "id": i, "text": "I am unique!" })).collect();
     let (task, _status_code) = index.add_documents(documents.into(), None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     index
         .search(
@@ -696,7 +696,7 @@ async fn search_is_hard_limited() {
 
     let (task, _status_code) =
         index.update_settings(json!({ "pagination": { "maxTotalHits": 10_000 } })).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     index
         .search(
@@ -735,7 +735,7 @@ async fn faceting_max_values_per_facet() {
 
     let documents: Vec<_> = (0..10_000).map(|id| json!({ "id": id, "number": id * 10 })).collect();
     let (task, _status_code) = index.add_documents(json!(documents), None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     index
         .search(
@@ -752,7 +752,7 @@ async fn faceting_max_values_per_facet() {
 
     let (task, _status_code) =
         index.update_settings(json!({ "faceting": { "maxValuesPerFacet": 10_000 } })).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     index
         .search(
@@ -1033,7 +1033,7 @@ async fn test_degraded_score_details() {
     index.add_documents(json!(documents), None).await;
     // We can't really use anything else than 0ms here; otherwise, the test will get flaky.
     let (res, _code) = index.update_settings(json!({ "searchCutoffMs": 0 })).await;
-    index.wait_task(res.uid()).await.succeeded();
+    server.wait_task(res.uid()).await.succeeded();
 
     index
         .search(
@@ -1126,7 +1126,7 @@ async fn camelcased_words() {
         { "id": 4, "title": "testab" },
     ]);
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     index
         .search(json!({"q": "deLonghi"}), |response, code| {
@@ -1345,12 +1345,12 @@ async fn simple_search_with_strange_synonyms() {
 
     let (task, _status_code) =
         index.update_settings(json!({ "synonyms": {"&": ["to"], "to": ["&"]} })).await;
-    let r = index.wait_task(task.uid()).await.succeeded();
+    let r = server.wait_task(task.uid()).await.succeeded();
     snapshot!(r["status"], @r###""succeeded""###);
 
     let documents = DOCUMENTS.clone();
     let (task, _status_code) = index.add_documents(documents, None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     index
         .search(json!({"q": "How to train"}), |response, code| {
@@ -1416,11 +1416,11 @@ async fn change_attributes_settings() {
 
     let documents = NESTED_DOCUMENTS.clone();
     let (task, _status_code) = index.add_documents(json!(documents), None).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (task,_status_code) =
         index.update_settings(json!({ "searchableAttributes": ["father", "mother", "doggos"], "filterableAttributes": ["doggos"] })).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     // search
     index
@@ -1923,7 +1923,7 @@ async fn change_facet_casing() {
         }))
         .await;
     assert_eq!("202", code.as_str(), "{:?}", response);
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
 
     let (response, _code) = index
         .add_documents(
@@ -1936,7 +1936,7 @@ async fn change_facet_casing() {
             None,
         )
         .await;
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
 
     let (response, _code) = index
         .add_documents(
@@ -1949,7 +1949,7 @@ async fn change_facet_casing() {
             None,
         )
         .await;
-    index.wait_task(response.uid()).await.succeeded();
+    server.wait_task(response.uid()).await.succeeded();
 
     index
         .search(json!({ "facets": ["dog"] }), |response, code| {
@@ -2053,4 +2053,77 @@ async fn test_exact_typos_terms() {
         },
     )
     .await;
+}
+
+#[actix_rt::test]
+async fn simple_search_changing_unrelated_settings() {
+    let server = Server::new_shared();
+    let index = server.unique_index();
+
+    let documents = DOCUMENTS.clone();
+    let (task, _status_code) = index.add_documents(documents, None).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    index
+        .search(json!({"q": "Dragon"}), |response, code| {
+            snapshot!(code, @"200 OK");
+            snapshot!(json_string!(response["hits"]), @r###"
+            [
+              {
+                "title": "How to Train Your Dragon: The Hidden World",
+                "id": "166428",
+                "color": [
+                  "green",
+                  "red"
+                ]
+              }
+            ]
+            "###);
+        })
+        .await;
+
+    let (task, _status_code) =
+        index.update_settings(json!({ "filterableAttributes": ["title"] })).await;
+    let r = server.wait_task(task.uid()).await.succeeded();
+    snapshot!(r["status"], @r###""succeeded""###);
+
+    index
+        .search(json!({"q": "Dragon"}), |response, code| {
+            snapshot!(code, @"200 OK");
+            snapshot!(json_string!(response["hits"]), @r###"
+                [
+                  {
+                    "title": "How to Train Your Dragon: The Hidden World",
+                    "id": "166428",
+                    "color": [
+                      "green",
+                      "red"
+                    ]
+                  }
+                ]
+                "###);
+        })
+        .await;
+
+    let (task, _status_code) = index.update_settings(json!({ "filterableAttributes": [] })).await;
+    let r = server.wait_task(task.uid()).await.succeeded();
+    snapshot!(r["status"], @r###""succeeded""###);
+
+    index
+        .search(json!({"q": "Dragon"}), |response, code| {
+            snapshot!(code, @"200 OK");
+            snapshot!(json_string!(response["hits"]), @r###"
+                    [
+                      {
+                        "title": "How to Train Your Dragon: The Hidden World",
+                        "id": "166428",
+                        "color": [
+                          "green",
+                          "red"
+                        ]
+                      }
+                    ]
+                    "###);
+        })
+        .await;
 }

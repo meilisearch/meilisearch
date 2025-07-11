@@ -37,6 +37,7 @@ use index_scheduler::{IndexScheduler, IndexSchedulerOptions};
 use meilisearch_auth::{open_auth_store_env, AuthController};
 use meilisearch_types::milli::constants::VERSION_MAJOR;
 use meilisearch_types::milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
+use meilisearch_types::milli::progress::{EmbedderStats, Progress};
 use meilisearch_types::milli::update::{
     default_thread_pool_and_threads, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig,
 };
@@ -236,6 +237,7 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Arc<
         instance_features: opt.to_instance_features(),
         auto_upgrade: opt.experimental_dumpless_upgrade,
         embedding_cache_cap: opt.experimental_embedding_cache_entries,
+        experimental_no_snapshot_compaction: opt.experimental_no_snapshot_compaction,
     };
     let binary_version = (VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH);
 
@@ -462,6 +464,7 @@ fn import_dump(
     index_scheduler: &mut IndexScheduler,
     auth: &mut AuthController,
 ) -> Result<(), anyhow::Error> {
+    let progress = Progress::default();
     let reader = File::open(dump_path)?;
     let mut dump_reader = dump::DumpReader::open(reader)?;
 
@@ -495,14 +498,20 @@ fn import_dump(
         keys.push(key);
     }
 
-    // 3. Import the runtime features and network
+    // 3. Import the `ChatCompletionSettings`s.
+    for result in dump_reader.chat_completions_settings()? {
+        let (name, settings) = result?;
+        index_scheduler.put_chat_settings(&name, &settings)?;
+    }
+
+    // 4. Import the runtime features and network
     let features = dump_reader.features()?.unwrap_or_default();
     index_scheduler.put_runtime_features(features)?;
 
     let network = dump_reader.network()?.cloned().unwrap_or_default();
     index_scheduler.put_network(network)?;
 
-    // 3.1 Use all cpus to process dump if `max_indexing_threads` not configured
+    // 4.1 Use all cpus to process dump if `max_indexing_threads` not configured
     let backup_config;
     let base_config = index_scheduler.indexer_config();
 
@@ -519,7 +528,7 @@ fn import_dump(
     // /!\ The tasks must be imported AFTER importing the indexes or else the scheduler might
     // try to process tasks while we're trying to import the indexes.
 
-    // 4. Import the indexes.
+    // 5. Import the indexes.
     for index_reader in dump_reader.indexes()? {
         let mut index_reader = index_reader?;
         let metadata = index_reader.metadata();
@@ -532,20 +541,20 @@ fn import_dump(
         let mut wtxn = index.write_txn()?;
 
         let mut builder = milli::update::Settings::new(&mut wtxn, &index, indexer_config);
-        // 4.1 Import the primary key if there is one.
+        // 5.1 Import the primary key if there is one.
         if let Some(ref primary_key) = metadata.primary_key {
             builder.set_primary_key(primary_key.to_string());
         }
 
-        // 4.2 Import the settings.
+        // 5.2 Import the settings.
         tracing::info!("Importing the settings.");
         let settings = index_reader.settings()?;
         apply_settings_to_builder(&settings, &mut builder);
-        builder
-            .execute(|indexing_step| tracing::debug!("update: {:?}", indexing_step), || false)?;
+        let embedder_stats: Arc<EmbedderStats> = Default::default();
+        builder.execute(&|| false, &progress, embedder_stats.clone())?;
 
-        // 4.3 Import the documents.
-        // 4.3.1 We need to recreate the grenad+obkv format accepted by the index.
+        // 5.3 Import the documents.
+        // 5.3.1 We need to recreate the grenad+obkv format accepted by the index.
         tracing::info!("Importing the documents.");
         let file = tempfile::tempfile()?;
         let mut builder = DocumentsBatchBuilder::new(BufWriter::new(file));
@@ -556,11 +565,11 @@ fn import_dump(
         // This flush the content of the batch builder.
         let file = builder.into_inner()?.into_inner()?;
 
-        // 4.3.2 We feed it to the milli index.
+        // 5.3.2 We feed it to the milli index.
         let reader = BufReader::new(file);
         let reader = DocumentsBatchReader::from_reader(reader)?;
 
-        let embedder_configs = index.embedding_configs(&wtxn)?;
+        let embedder_configs = index.embedding_configs().embedding_configs(&wtxn)?;
         let embedders = index_scheduler.embedders(uid.to_string(), embedder_configs)?;
 
         let builder = milli::update::IndexDocuments::new(
@@ -573,6 +582,7 @@ fn import_dump(
             },
             |indexing_step| tracing::trace!("update: {:?}", indexing_step),
             || false,
+            &embedder_stats,
         )?;
 
         let builder = builder.with_embedders(embedders);
@@ -587,15 +597,15 @@ fn import_dump(
         index_scheduler.refresh_index_stats(&uid)?;
     }
 
-    // 5. Import the queue
+    // 6. Import the queue
     let mut index_scheduler_dump = index_scheduler.register_dumped_task()?;
-    // 5.1. Import the batches
+    // 6.1. Import the batches
     for ret in dump_reader.batches()? {
         let batch = ret?;
         index_scheduler_dump.register_dumped_batch(batch)?;
     }
 
-    // 5.2. Import the tasks
+    // 6.2. Import the tasks
     for ret in dump_reader.tasks()? {
         let (task, file) = ret?;
         index_scheduler_dump.register_dumped_task(task, file)?;

@@ -14,7 +14,7 @@ license.workspace = true
 [dependencies]
 nom = "7.1.3"
 nom_locate = "4.2.0"
-unescaper = "0.1.5"
+unescaper = "0.1.6"
 
 [dev-dependencies]
 # fixed version due to format breakages in v1.40

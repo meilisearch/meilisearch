@@ -58,7 +58,7 @@ doggos: { number_of_documents: 10, field_distribution: {"doggo": 10, "id": 10} }
 [timestamp] [1,2,3,4,5,6,7,8,9,10,]
 ----------------------------------------------------------------------
 ### All Batches:
-0 {uid: 0, details: {}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"doggos":1}}, stop reason: "task with id 0 of type `indexCreation` cannot be batched", }
+0 {uid: 0, details: {}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"doggos":1}}, stop reason: "created batch containing only task with id 0 of type `indexCreation` that cannot be batched with any other task.", }
 1 {uid: 1, details: {"receivedDocuments":10,"indexedDocuments":10}, stats: {"totalNbTasks":10,"status":{"succeeded":10},"types":{"documentAdditionOrUpdate":10},"indexUids":{"doggos":10}}, stop reason: "batched all enqueued tasks", }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:

@@ -6,12 +6,18 @@ use liquid::{ObjectView, ValueView};
 #[derive(Debug, Clone)]
 pub struct Context<'a, D: ObjectView, F: ArrayView> {
     document: &'a D,
-    fields: &'a F,
+    fields: Option<&'a F>,
 }
 
 impl<'a, D: ObjectView, F: ArrayView> Context<'a, D, F> {
     pub fn new(document: &'a D, fields: &'a F) -> Self {
-        Self { document, fields }
+        Self { document, fields: Some(fields) }
+    }
+}
+
+impl<'a, D: ObjectView> Context<'a, D, Vec<bool>> {
+    pub fn without_fields(document: &'a D) -> Self {
+        Self { document, fields: None }
     }
 }
 
@@ -21,17 +27,27 @@ impl<D: ObjectView, F: ArrayView> ObjectView for Context<'_, D, F> {
     }
 
     fn size(&self) -> i64 {
-        2
+        if self.fields.is_some() {
+            2
+        } else {
+            1
+        }
     }
 
     fn keys<'k>(&'k self) -> Box<dyn Iterator<Item = KStringCow<'k>> + 'k> {
-        Box::new(["doc", "fields"].iter().map(|s| KStringCow::from_static(s)))
+        let keys = if self.fields.is_some() {
+            either::Either::Left(["doc", "fields"])
+        } else {
+            either::Either::Right(["doc"])
+        };
+
+        Box::new(keys.into_iter().map(KStringCow::from_static))
     }
 
     fn values<'k>(&'k self) -> Box<dyn Iterator<Item = &'k dyn ValueView> + 'k> {
         Box::new(
             std::iter::once(self.document.as_value())
-                .chain(std::iter::once(self.fields.as_value())),
+                .chain(self.fields.iter().map(|fields| fields.as_value())),
         )
     }
 
@@ -40,13 +56,13 @@ impl<D: ObjectView, F: ArrayView> ObjectView for Context<'_, D, F> {
     }
 
     fn contains_key(&self, index: &str) -> bool {
-        index == "doc" || index == "fields"
+        index == "doc" || (index == "fields" && self.fields.is_some())
     }
 
     fn get<'s>(&'s self, index: &str) -> Option<&'s dyn ValueView> {
-        match index {
-            "doc" => Some(self.document.as_value()),
-            "fields" => Some(self.fields.as_value()),
+        match (index, &self.fields) {
+            ("doc", _) => Some(self.document.as_value()),
+            ("fields", Some(fields)) => Some(fields.as_value()),
             _ => None,
         }
     }
