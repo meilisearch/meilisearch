@@ -276,7 +276,7 @@ impl IndexScheduler {
                         }
                         buffer.extend_from_slice(&tmp_buffer);
 
-                        if i % 100 == 0 {
+                        if i > 0 && i % 100 == 0 {
                             step.fetch_add(100, atomic::Ordering::Relaxed);
                         }
                     }
