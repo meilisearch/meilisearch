@@ -125,6 +125,9 @@ mod tests {
         wtxn.commit().unwrap();
 
         let rtxn = index.read_txn().unwrap();
+        
+        // Variables for statistics verification
+        let stats = index.documents_stats(&rtxn).unwrap().unwrap();
 
         // the value is 7 because there is `[id, name, age, country, _geo, _geo.lng, _geo.lat]`
         assert_eq!(index.fields_ids_map(&rtxn).unwrap().len(), 7);
@@ -146,5 +149,9 @@ mod tests {
         assert!(index.field_id_docid_facet_f64s.is_empty(&rtxn).unwrap());
         assert!(index.field_id_docid_facet_strings.is_empty(&rtxn).unwrap());
         assert!(index.documents.is_empty(&rtxn).unwrap());
+
+        // Verify that the statistics are correctly updated after clearing documents
+        assert_eq!(index.number_of_documents(&rtxn).unwrap(), 0);
+        assert_eq!(stats.number_of_entries(), 0);
     }
 }
