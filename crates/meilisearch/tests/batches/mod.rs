@@ -301,7 +301,7 @@ async fn test_summarized_document_addition_or_update() {
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
             ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]",
             ".stats.indexUids" => r#"{"[uuid]": 1}"#,
-            ".batchCreationComplete" => "batched all enqueued tasks",
+            ".batchStrategy" => "batched all enqueued tasks",
         },
         @r###"
     {
@@ -346,7 +346,7 @@ async fn test_summarized_document_addition_or_update() {
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
             ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]",
             ".stats.indexUids" => r#"{"[uuid]": 1}"#,
-            ".batchCreationComplete" => "batched all enqueued tasks",
+            ".batchStrategy" => "batched all enqueued tasks",
         },
         @r###"
     {
@@ -487,7 +487,7 @@ async fn test_summarized_delete_documents_by_filter() {
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
             ".stats.indexUids" => r#"{"[uuid]": 1}"#,
-            ".batchCreationComplete" => "batched all enqueued tasks",
+            ".batchStrategy" => "batched all enqueued tasks",
         },
         @r###"
     {
@@ -577,7 +577,7 @@ async fn test_summarized_delete_documents_by_filter() {
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
             ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]",
             ".stats.indexUids" => r#"{"[uuid]": 1}"#,
-            ".batchCreationComplete" => "batched all enqueued tasks"
+            ".batchStrategy" => "batched all enqueued tasks"
         },
         @r###"
     {
@@ -624,7 +624,7 @@ async fn test_summarized_delete_document_by_id() {
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
             ".stats.indexUids" => r#"{"[uuid]": 1}"#,
-            ".batchCreationComplete" => "batched all enqueued tasks",
+            ".batchStrategy" => "batched all enqueued tasks",
         },
         @r###"
     {
@@ -726,7 +726,7 @@ async fn test_summarized_settings_update() {
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
             ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]",
             ".stats.indexUids" => r#"{"[uuid]": 1}"#,
-            ".batchCreationComplete" => "batched all enqueued tasks"
+            ".batchStrategy" => "batched all enqueued tasks"
         },
         @r###"
     {
