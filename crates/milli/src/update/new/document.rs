@@ -164,8 +164,13 @@ impl<'t, Mapper: FieldIdMapper> Document<'t> for DocumentFromDb<'t, Mapper> {
                             }
                             Value::Array(array) => {
                                 for ele in array {
-                                    if let Ok(child_raw) = RawValue::from_string(ele.to_string()) {
-                                        stack.push_back((child_raw, path.clone(), false));
+                                    if ele.is_object() {
+                                        // We only have to traverse deeper if the array element is of object type
+                                        if let Ok(child_raw) =
+                                            RawValue::from_string(ele.to_string())
+                                        {
+                                            stack.push_back((child_raw, path.clone(), false));
+                                        }
                                     }
                                 }
                                 continue;
@@ -599,8 +604,10 @@ impl<'doc> Versions<'doc> {
                         }
                         Value::Array(array) => {
                             for ele in array {
-                                if let Ok(child_raw) = RawValue::from_string(ele.to_string()) {
-                                    stack.push_back((child_raw, path.clone(), false));
+                                if ele.is_object() {
+                                    if let Ok(child_raw) = RawValue::from_string(ele.to_string()) {
+                                        stack.push_back((child_raw, path.clone(), false));
+                                    }
                                 }
                             }
                             continue;
@@ -756,8 +763,10 @@ impl<'a, Mapper: FieldIdMapper> Document<'a> for KvDelAddDocument<'a, Mapper> {
                         }
                         Value::Array(array) => {
                             for ele in array {
-                                if let Ok(child_raw) = RawValue::from_string(ele.to_string()) {
-                                    stack.push_back((child_raw, path.clone(), false));
+                                if ele.is_object() {
+                                    if let Ok(child_raw) = RawValue::from_string(ele.to_string()) {
+                                        stack.push_back((child_raw, path.clone(), false));
+                                    }
                                 }
                             }
                             continue;
