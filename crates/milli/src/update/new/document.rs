@@ -181,6 +181,7 @@ impl<'t, Mapper: FieldIdMapper> Document<'t> for DocumentFromDb<'t, Mapper> {
                         return Some(Ok((path, raw)));
                     }
                 }
+                return None;
             }
         })
     }
