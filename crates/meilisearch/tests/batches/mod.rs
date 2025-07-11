@@ -1,19 +1,16 @@
 mod errors;
 
 use insta::internals::{Content, ContentPath};
-use once_cell::sync::Lazy;
-use regex::Regex;
 use meili_snap::insta::assert_json_snapshot;
 use meili_snap::{json_string, snapshot};
+use once_cell::sync::Lazy;
+use regex::Regex;
 
 use crate::common::Server;
 use crate::json;
 
-
-static TASK_WITH_ID_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"task with id (\d+) of type")
-        .unwrap()
-});
+static TASK_WITH_ID_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"task with id (\d+) of type").unwrap());
 
 fn task_with_id_redaction(value: Content, _path: ContentPath) -> Content {
     match value {
@@ -304,6 +301,7 @@ async fn test_summarized_document_addition_or_update() {
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
             ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]",
             ".stats.indexUids" => r#"{"[uuid]": 1}"#,
+            ".batchCreationComplete" => "batched all enqueued tasks",
         },
         @r###"
     {
@@ -329,7 +327,7 @@ async fn test_summarized_document_addition_or_update() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchStrategy": "batched all enqueued tasks"
+      "batchCreationComplete": "batched all enqueued tasks"
     }
     "###);
 
@@ -372,7 +370,7 @@ async fn test_summarized_document_addition_or_update() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchStrategy": "batched all enqueued tasks"
+      "batchCreationComplete": "batched all enqueued tasks"
     }
     "###);
 }
@@ -397,6 +395,7 @@ async fn test_summarized_delete_documents_by_batch() {
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
             ".stats.indexUids" => r#"{"[uuid]": 1}"#,
+            ".batchCreationComplete" => "batched all enqueued tasks",
         },
         @r###"
     {
@@ -420,7 +419,7 @@ async fn test_summarized_delete_documents_by_batch() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchStrategy": "batched all enqueued tasks"
+      "batchCreationComplete": "batched all enqueued tasks"
     }
     "###);
 
@@ -486,6 +485,7 @@ async fn test_summarized_delete_documents_by_filter() {
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
             ".stats.indexUids" => r#"{"[uuid]": 1}"#,
+            ".batchCreationComplete" => "batched all enqueued tasks",
         },
         @r###"
     {
@@ -510,7 +510,7 @@ async fn test_summarized_delete_documents_by_filter() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchStrategy": "batched all enqueued tasks"
+      "batchCreationComplete": "batched all enqueued tasks"
     }
     "###);
 
@@ -530,6 +530,7 @@ async fn test_summarized_delete_documents_by_filter() {
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
             ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]",
             ".stats.indexUids" => r#"{"[uuid]": 1}"#,
+            ".batchCreationComplete" => "batched all enqueued tasks",
         },
         @r###"
     {
@@ -554,7 +555,7 @@ async fn test_summarized_delete_documents_by_filter() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchStrategy": "batched all enqueued tasks"
+      "batchCreationComplete": "batched all enqueued tasks"
     }
     "###);
 
@@ -574,7 +575,7 @@ async fn test_summarized_delete_documents_by_filter() {
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
             ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]",
             ".stats.indexUids" => r#"{"[uuid]": 1}"#,
-            ".batchCreationComplete" => "batched all enqueued tasks for index `[uuid]`"
+            ".batchCreationComplete" => "batched all enqueued tasks"
         },
         @r###"
     {
@@ -599,7 +600,7 @@ async fn test_summarized_delete_documents_by_filter() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchCreationComplete": "batched all enqueued tasks for index `[uuid]`"
+      "batchCreationComplete": "batched all enqueued tasks"
     }
     "###);
 }
@@ -621,6 +622,7 @@ async fn test_summarized_delete_document_by_id() {
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
             ".stats.indexUids" => r#"{"[uuid]": 1}"#,
+            ".batchCreationComplete" => "batched all enqueued tasks",
         },
         @r###"
     {
@@ -644,7 +646,7 @@ async fn test_summarized_delete_document_by_id() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchStrategy": "batched all enqueued tasks"
+      "batchCreationComplete": "batched all enqueued tasks"
     }
     "###);
 
@@ -663,6 +665,7 @@ async fn test_summarized_delete_document_by_id() {
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
             ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]",
             ".stats.indexUids" => r#"{"[uuid]": 1}"#,
+            ".batchCreationComplete" => "batched all enqueued tasks",
         },
         @r###"
     {
@@ -686,7 +689,7 @@ async fn test_summarized_delete_document_by_id() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchStrategy": "batched all enqueued tasks"
+      "batchCreationComplete": "batched all enqueued tasks"
     }
     "###);
 }
@@ -721,6 +724,7 @@ async fn test_summarized_settings_update() {
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
             ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]",
             ".stats.indexUids" => r#"{"[uuid]": 1}"#,
+            ".batchCreationComplete" => "batched all enqueued tasks"
         },
         @r###"
     {
@@ -753,7 +757,7 @@ async fn test_summarized_settings_update() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchStrategy": "batched all enqueued tasks"
+      "batchCreationComplete": "batched all enqueued tasks"
     }
     "###);
 }
@@ -775,7 +779,7 @@ async fn test_summarized_index_creation() {
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
             ".stats.indexUids" => r#"{"[uuid]": 1}"#,
-            ".batchStrategy" => insta::dynamic_redaction(task_with_id_redaction),
+            ".batchCreationComplete" => insta::dynamic_redaction(task_with_id_redaction),
         },
         @r###"
     {
@@ -796,7 +800,7 @@ async fn test_summarized_index_creation() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchStrategy": "created batch containing only task with id X of type `indexCreation` that cannot be batched with any other task."
+      "batchCreationComplete": "task with id X of type `indexCreation` cannot be batched"
     }
     "###);
 
@@ -813,7 +817,7 @@ async fn test_summarized_index_creation() {
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
             ".stats.indexUids" => r#"{"[uuid]": 1}"#,
-            ".batchStrategy" => insta::dynamic_redaction(task_with_id_redaction),
+            ".batchCreationComplete" => insta::dynamic_redaction(task_with_id_redaction),
         },
         @r###"
     {
@@ -836,7 +840,7 @@ async fn test_summarized_index_creation() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchStrategy": "created batch containing only task with id X of type `indexCreation` that cannot be batched with any other task."
+      "batchCreationComplete": "task with id X of type `indexCreation` cannot be batched"
     }
     "###);
 }
@@ -968,7 +972,7 @@ async fn test_summarized_index_update() {
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
             ".stats.indexUids" => r#"{"[uuid]": 1}"#,
-            ".batchStrategy" => insta::dynamic_redaction(task_with_id_redaction),
+            ".batchCreationComplete" => insta::dynamic_redaction(task_with_id_redaction),
         },
         @r###"
     {
@@ -989,7 +993,7 @@ async fn test_summarized_index_update() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchStrategy": "created batch containing only task with id X of type `indexUpdate` that cannot be batched with any other task."
+      "batchCreationComplete": "task with id X of type `indexUpdate` cannot be batched"
     }
     "###);
 
@@ -1006,7 +1010,7 @@ async fn test_summarized_index_update() {
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
             ".stats.indexUids" => r#"{"[uuid]": 1}"#,
-            ".batchStrategy" => insta::dynamic_redaction(task_with_id_redaction),
+            ".batchCreationComplete" => insta::dynamic_redaction(task_with_id_redaction),
         },
         @r###"
     {
@@ -1029,7 +1033,7 @@ async fn test_summarized_index_update() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchStrategy": "created batch containing only task with id X of type `indexUpdate` that cannot be batched with any other task."
+      "batchCreationComplete": "task with id X of type `indexUpdate` cannot be batched"
     }
     "###);
 
@@ -1049,7 +1053,7 @@ async fn test_summarized_index_update() {
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
             ".stats.indexUids" => r#"{"[uuid]": 1}"#,
-            ".batchStrategy" => insta::dynamic_redaction(task_with_id_redaction),
+            ".batchCreationComplete" => insta::dynamic_redaction(task_with_id_redaction),
         },
         @r###"
     {
@@ -1070,7 +1074,7 @@ async fn test_summarized_index_update() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchStrategy": "created batch containing only task with id X of type `indexUpdate` that cannot be batched with any other task."
+      "batchCreationComplete": "task with id X of type `indexUpdate` cannot be batched"
     }
     "###);
 
@@ -1087,7 +1091,7 @@ async fn test_summarized_index_update() {
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
             ".stats.indexUids" => r#"{"[uuid]": 1}"#,
-            ".batchStrategy" => insta::dynamic_redaction(task_with_id_redaction),
+            ".batchCreationComplete" => insta::dynamic_redaction(task_with_id_redaction),
         },
         @r###"
     {
@@ -1110,7 +1114,7 @@ async fn test_summarized_index_update() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchStrategy": "created batch containing only task with id X of type `indexUpdate` that cannot be batched with any other task."
+      "batchCreationComplete": "task with id X of type `indexUpdate` cannot be batched"
     }
     "###);
 }
@@ -1134,7 +1138,7 @@ async fn test_summarized_index_swap() {
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
-            ".batchStrategy" => insta::dynamic_redaction(task_with_id_redaction),
+            ".batchCreationComplete" => insta::dynamic_redaction(task_with_id_redaction),
         },
         @r###"
     {
@@ -1164,7 +1168,7 @@ async fn test_summarized_index_swap() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchStrategy": "created batch containing only task with id X of type `indexSwap` that cannot be batched with any other task."
+      "batchCreationComplete": "task with id X of type `indexSwap` cannot be batched"
     }
     "###);
 
@@ -1189,7 +1193,7 @@ async fn test_summarized_index_swap() {
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
             ".stats.indexUids" => r#"{"[uuid]": 1}"#,
-            ".batchStrategy" => insta::dynamic_redaction(task_with_id_redaction),
+            ".batchCreationComplete" => insta::dynamic_redaction(task_with_id_redaction),
         },
         @r###"
     {
@@ -1210,11 +1214,10 @@ async fn test_summarized_index_swap() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchStrategy": "created batch containing only task with id X of type `indexCreation` that cannot be batched with any other task."
+      "batchCreationComplete": "task with id X of type `indexCreation` cannot be batched"
     }
     "###);
 }
-
 
 #[actix_web::test]
 async fn test_summarized_batch_cancelation() {
@@ -1236,7 +1239,7 @@ async fn test_summarized_batch_cancelation() {
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
             ".details.originalFilter" => "?uids=X",
-            ".batchStrategy" => insta::dynamic_redaction(task_with_id_redaction),
+            ".batchCreationComplete" => insta::dynamic_redaction(task_with_id_redaction),
         },
         @r###"
     {
@@ -1261,7 +1264,7 @@ async fn test_summarized_batch_cancelation() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchStrategy": "created batch containing only task with id X of type `taskCancelation` that cannot be batched with any other task."
+      "batchCreationComplete": "task with id X of type `taskCancelation` cannot be batched"
     }
     "###);
 }
@@ -1331,7 +1334,7 @@ async fn test_summarized_dump_creation() {
             ".finishedAt" => "[date]",
             ".stats.progressTrace" => "[progressTrace]",
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
-            ".batchStrategy" => insta::dynamic_redaction(task_with_id_redaction),
+            ".batchCreationComplete" => insta::dynamic_redaction(task_with_id_redaction),
         },
         @r###"
     {
@@ -1354,7 +1357,7 @@ async fn test_summarized_dump_creation() {
       "duration": "[duration]",
       "startedAt": "[date]",
       "finishedAt": "[date]",
-      "batchStrategy": "created batch containing only task with id X of type `dumpCreation` that cannot be batched with any other task."
+      "batchCreationComplete": "task with id X of type `dumpCreation` cannot be batched"
     }
     "###);
 }

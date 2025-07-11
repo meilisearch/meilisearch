@@ -530,12 +530,7 @@ impl Queue {
                             ..task
                         }
                     } else {
-                        dbg!(&task);
-                        if task.status == Status::Succeeded || task.status == Status::Failed {
-                            Task { batch_uid: Some(batch.uid), ..task }
-                        } else {
-                            task
-                        }
+                        task
                     }
                 })
                 .collect(),

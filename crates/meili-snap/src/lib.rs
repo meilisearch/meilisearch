@@ -55,7 +55,7 @@ pub fn default_snapshot_settings_for_test<'a>(
 
     settings.add_dynamic_redaction(".error.message", |content, _content_path| match &content {
         Content::String(s) => {
-            let uuid_replaced = UUID_IN_MESSAGE_RE.replace_all(s, "$before[uuid]$after");
+            let uuid_replaced = UUID_IN_MESSAGE_RE.replace_all(s, "[uuid]");
             Content::String(uuid_replaced.to_string())
         }
         _ => content,
