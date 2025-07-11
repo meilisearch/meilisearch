@@ -346,6 +346,7 @@ async fn test_summarized_document_addition_or_update() {
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
             ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]",
             ".stats.indexUids" => r#"{"[uuid]": 1}"#,
+            ".batchCreationComplete" => "batched all enqueued tasks",
         },
         @r###"
     {
@@ -438,6 +439,7 @@ async fn test_summarized_delete_documents_by_batch() {
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
             ".stats.internalDatabaseSizes" => "[internalDatabaseSizes]",
             ".stats.indexUids" => r#"{"[uuid]": 1}"#,
+            ".batchCreationComplete" => "batched all enqueued tasks",
         },
         @r###"
     {
@@ -1127,8 +1129,8 @@ async fn test_summarized_index_swap() {
             { "indexes": ["doggos", "cattos"] }
         ]))
         .await;
-    server.wait_task(task.uid()).await.failed();
-    let (batch, _) = server.get_batch(task.uid() as u32).await;
+    let task = server.wait_task(task.uid()).await.failed();
+    let (batch, _) = server.get_batch(task.batch_uid()).await;
     assert_json_snapshot!(batch,
         {
             ".uid" => "[uid]",
@@ -1181,8 +1183,8 @@ async fn test_summarized_index_swap() {
             { "indexes": [doggos_index.uid, cattos_index.uid] }
         ]))
         .await;
-    server.wait_task(task.uid()).await.succeeded();
-    let (batch, _) = server.get_batch(task.uid() as u32).await;
+    let task = server.wait_task(task.uid()).await.succeeded();
+    let (batch, _) = server.get_batch(task.batch_uid()).await;
     assert_json_snapshot!(batch,
         {
             ".uid" => "[uid]",
