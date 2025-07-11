@@ -49,7 +49,7 @@ pub enum MeilisearchHttpError {
     TooManySearchRequests(usize),
     #[error("Internal error: Search limiter is down.")]
     SearchLimiterIsDown,
-    #[error("The provided payload reached the size limit. The maximum accepted payload size is {}.",  Byte::from_u64(*.0 as u64).get_appropriate_unit(UnitType::Binary))]
+    #[error("The provided payload reached the size limit. The maximum accepted payload size is {}.", Byte::from_u64(dbg!(*.0 as u64)).get_appropriate_unit(if *.0 % 1024 == 0 { UnitType::Binary } else { UnitType::Decimal }))]
     PayloadTooLarge(usize),
     #[error("Two indexes must be given for each swap. The list `[{}]` contains {} indexes.",
         .0.iter().map(|uid| format!("\"{uid}\"")).collect::<Vec<_>>().join(", "), .0.len()
