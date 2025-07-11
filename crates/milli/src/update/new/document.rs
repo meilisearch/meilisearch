@@ -152,7 +152,7 @@ impl<'t, Mapper: FieldIdMapper> Document<'t> for DocumentFromDb<'t, Mapper> {
                     if let Ok(val) = from_str::<Value>(raw.get()) {
                         match val {
                             Value::Object(map) => {
-                                for (child_key, child_val) in map.iter().rev() {
+                                for (child_key, child_val) in map.iter() {
                                     let child_path = format!("{}.{}", path, child_key);
                                     if let Ok(child_raw) =
                                         RawValue::from_string(child_val.to_string())
@@ -163,15 +163,20 @@ impl<'t, Mapper: FieldIdMapper> Document<'t> for DocumentFromDb<'t, Mapper> {
                                 continue;
                             }
                             Value::Array(array) => {
+                                let mut is_object = false;
                                 for ele in array {
                                     if ele.is_object() {
-                                        // We only have to traverse deeper if the array element is of object type
+                                        is_object = true;
+                                        // We only have to traverse deeper if the array element is of object typeh
                                         if let Ok(child_raw) =
                                             RawValue::from_string(ele.to_string())
                                         {
                                             stack.push_back((child_raw, path.clone(), false));
                                         }
                                     }
+                                }
+                                if !is_object && !is_first_level {
+                                    return Some(Ok((path, raw)));
                                 }
                                 continue;
                             }
@@ -593,7 +598,7 @@ impl<'doc> Versions<'doc> {
                 if let Ok(val) = from_str::<Value>(raw.get()) {
                     match val {
                         Value::Object(map) => {
-                            for (child_key, child_val) in map.iter().rev() {
+                            for (child_key, child_val) in map.iter() {
                                 let child_path = format!("{}.{}", path, child_key);
                                 if let Ok(child_raw) = RawValue::from_string(child_val.to_string())
                                 {
@@ -603,12 +608,17 @@ impl<'doc> Versions<'doc> {
                             continue;
                         }
                         Value::Array(array) => {
+                            let mut is_object = false;
                             for ele in array {
                                 if ele.is_object() {
+                                    is_object = true;
                                     if let Ok(child_raw) = RawValue::from_string(ele.to_string()) {
                                         stack.push_back((child_raw, path.clone(), false));
                                     }
                                 }
+                            }
+                            if !is_object && !is_first_level {
+                                return Some(Ok((path, raw)));
                             }
                             continue;
                         }
@@ -752,7 +762,7 @@ impl<'a, Mapper: FieldIdMapper> Document<'a> for KvDelAddDocument<'a, Mapper> {
                 if let Ok(val) = from_str::<Value>(raw.get()) {
                     match val {
                         Value::Object(map) => {
-                            for (child_key, child_val) in map.iter().rev() {
+                            for (child_key, child_val) in map.iter() {
                                 let child_path = format!("{}.{}", path, child_key);
                                 if let Ok(child_raw) = RawValue::from_string(child_val.to_string())
                                 {
@@ -762,12 +772,17 @@ impl<'a, Mapper: FieldIdMapper> Document<'a> for KvDelAddDocument<'a, Mapper> {
                             continue;
                         }
                         Value::Array(array) => {
+                            let mut is_object = false;
                             for ele in array {
                                 if ele.is_object() {
+                                    is_object = true;
                                     if let Ok(child_raw) = RawValue::from_string(ele.to_string()) {
                                         stack.push_back((child_raw, path.clone(), false));
                                     }
                                 }
+                            }
+                            if !is_object && !is_first_level {
+                                return Some(Ok((path, raw)));
                             }
                             continue;
                         }

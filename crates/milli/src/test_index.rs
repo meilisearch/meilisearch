@@ -346,6 +346,91 @@ fn initial_field_distribution() {
 }
 
 #[test]
+fn test_nested_field_distribution() {
+    let index = TempIndex::new();
+    index
+        .add_documents(documents!([
+            {
+                "id": 1,
+                "name": "kevin",
+                "has_dog": true,
+                "address": { "addressLine1": "lorem" },
+                "array": [1, 2],
+                "height": 1.85,
+                "birthday": null,
+                "metadata": { "verified": false, "score": 0.0 },
+                "tags": ["rust", "search"],
+                "profile": { "emails": ["kevin@gmail.com"], "phone": 1234567890 },
+            },
+            {
+                "id": 2,
+                "name": "bob",
+                "age": 20,
+                "address": { "addressLine2": "lorem" },
+                "languages": [
+                    { "name": "English", "proficiency": "native" },
+                    { "name": "French", "proficiency": "intermediate" }
+                ],
+                "height": 1.75,
+                "birthday": "1990-01-01",
+                "metadata": { "verified": true, "score": 42.5 },
+                "tags": [],
+                "profile": { "emails": ["bob@gmail.com"], "phone": null },
+            },
+            {
+                "id": 3,
+                "name": "bob",
+                "age": 20,
+                "height": 1.80,
+                "birthday": null,
+                "metadata": { "verified": false, "score": 10.0 },
+                "tags": ["duplicate"],
+                "profile": { "emails": [], "phone": "9876543210" },
+            },
+            {
+                "id": 4,
+                "name": "marley",
+                "age": 30,
+                "hobbies": ["coding", "movies"],
+                "profile": { "emails": ["a@gmail.com", "b@gmail.com"], "phone": 5551234 },
+                "height": 1.90,
+                "birthday": "1985-12-12",
+                "metadata": { "verified": true, "score": 100.0 },
+                "tags": ["music", "dog"],
+            }
+        ]))
+        .unwrap();
+
+    let rtxn = index.read_txn().unwrap();
+    let field_distribution = index.field_distribution(&rtxn).unwrap();
+    insta::assert_debug_snapshot!(field_distribution, @r###"
+        {
+            "address": 2,
+            "address.addressLine1": 1,
+            "address.addressLine2": 1,
+            "age": 3,
+            "array": 1,
+            "birthday": 4,
+            "has_dog": 1,
+            "height": 4,
+            "hobbies": 1,
+            "id": 4,
+            "languages": 1,
+            "languages.name": 2,
+            "languages.proficiency": 2,
+            "metadata": 4,
+            "metadata.score": 4,
+            "metadata.verified": 4,
+            "name": 4,
+            "profile": 4,
+            "profile.emails": 4,
+            "profile.phone": 4,
+            "tags": 4,
+        }
+    "###);
+}
+
+#[test]
 fn put_and_retrieve_disable_typo() {
     let index = TempIndex::new();
     let mut txn = index.write_txn().unwrap();
