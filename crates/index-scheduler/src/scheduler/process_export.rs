@@ -170,7 +170,7 @@ impl IndexScheduler {
             let limit = payload_size.map(|ps| ps.as_u64() as usize).unwrap_or(20 * 1024 * 1024); // defaults to 20 MiB
             let documents_url = format!("{base_url}/indexes/{uid}/documents");
 
-            request_threads()
+            let results = request_threads()
                 .broadcast(|ctx| {
                     let index_rtxn = index
                         .read_txn()
@@ -297,6 +297,9 @@ impl IndexScheduler {
                         Some(uid.to_string()),
                     )
                 })?;
+            for result in results {
+                result?;
+            }
 
             step.store(total_documents, atomic::Ordering::Relaxed);
         }
