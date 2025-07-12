@@ -125,7 +125,7 @@ mod tests {
         wtxn.commit().unwrap();
 
         let rtxn = index.read_txn().unwrap();
-        
+
         // Variables for statistics verification
         let stats = index.documents_stats(&rtxn).unwrap().unwrap();
 
