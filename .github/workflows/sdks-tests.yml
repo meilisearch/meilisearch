@@ -348,6 +348,8 @@ jobs:
       RAILS_VERSION: '7.0'
     steps:
       - uses: actions/checkout@v3
+        with:
+          repository: meilisearch/meilisearch-rails
       - name: Install SQLite dependencies
         run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
       - name: Set up Ruby
