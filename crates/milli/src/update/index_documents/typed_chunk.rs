@@ -30,7 +30,7 @@ use crate::vector::db::{EmbeddingStatusDelta, IndexEmbeddingConfig};
 use crate::vector::ArroyWrapper;
 use crate::{
     lat_lng_to_xyz, CboRoaringBitmapCodec, DocumentId, FieldId, GeoPoint, Index, InternalError,
-    Result, SerializationError, U8StrStrCodec,
+    Result, SerializationError, U8StrStrCodec, UserError,
 };
 
 /// This struct accumulates and group the TypedChunks
@@ -85,6 +85,7 @@ pub(crate) enum TypedChunk {
     FieldIdFacetIsNullDocids(grenad::Reader<BufReader<File>>),
     FieldIdFacetIsEmptyDocids(grenad::Reader<BufReader<File>>),
     GeoPoints(grenad::Reader<BufReader<File>>),
+    GeoJson(grenad::Reader<BufReader<File>>),
     VectorPoints {
         remove_vectors: grenad::Reader<BufReader<File>>,
         // docid -> vector
@@ -613,6 +614,44 @@ pub(crate) fn write_typed_chunk_into_index(
             }
             index.put_geo_rtree(wtxn, &rtree)?;
             index.put_geo_faceted_documents_ids(wtxn, &geo_faceted_docids)?;
+        }
+        TypedChunk::GeoJson(_) => {
+            let span = tracing::trace_span!(target: "indexing::write_db", "geo_json");
+            let _entered = span.enter();
+
+            let mut builder = MergerBuilder::new(KeepFirst);
+            for typed_chunk in typed_chunks {
+                let TypedChunk::GeoJson(chunk) = typed_chunk else {
+                    unreachable!();
+                };
+
+                builder.push(chunk.into_cursor()?);
+            }
+            let merger = builder.build();
+
+            let cellulite = index.cellulite;
+
+            let mut iter = merger.into_stream_merger_iter()?;
+            while let Some((key, value)) = iter.next()? {
+                // convert the key back to a u32 (4 bytes)
+                let docid = key.try_into().map(DocumentId::from_be_bytes).unwrap();
+
+                let deladd_obkv = KvReaderDelAdd::from_slice(value);
+                if let Some(_value) = deladd_obkv.get(DelAdd::Deletion) {
+                    todo!("handle deletion");
+                    // cellulite.remove(&docid);
+                }
+                if let Some(value) = deladd_obkv.get(DelAdd::Addition) {
+                    tracing::info!("Adding one geojson to cellulite");
+
+                    let geojson =
+                        geojson::GeoJson::from_reader(value).map_err(UserError::SerdeJson)?;
+                    let writer = cellulite::Writer::new(index.cellulite);
+                    writer
+                        .add_item(wtxn, docid, &geojson)
+                        .map_err(InternalError::CelluliteError)?;
+                }
+            }
         }
         TypedChunk::VectorPoints { .. } => {
             let span = tracing::trace_span!(target: "indexing::write_db", "vector_points");
