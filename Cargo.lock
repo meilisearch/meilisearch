@@ -1065,7 +1065,6 @@ dependencies = [
 [[package]]
 name = "cellulite"
 version = "0.1.0"
-source = "git+https://github.com/irevoire/cellulite?branch=main#3654348942bdc67393e9a7b3c655f7e9a98dee50"
 dependencies = [
  "geo",
  "geo-types",

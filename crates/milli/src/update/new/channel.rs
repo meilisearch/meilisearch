@@ -140,7 +140,7 @@ pub enum ReceiverAction {
     LargeEntry(LargeEntry),
     LargeVectors(LargeVectors),
     LargeVector(LargeVector),
-    GeoJson(GeoJson),
+    GeoJson(DocumentId, GeoJson),
 }
 
 /// An entry that cannot fit in the BBQueue buffers has been
@@ -1155,10 +1155,10 @@ impl GeoSender<'_, '_> {
 pub struct GeoJsonSender<'a, 'b>(&'a ExtractorBbqueueSender<'b>);
 
 impl GeoJsonSender<'_, '_> {
-    pub fn send_geojson(&self, value: GeoJson) -> StdResult<(), SendError<()>> {
+    pub fn send_geojson(&self, docid: DocumentId, value: GeoJson) -> StdResult<(), SendError<()>> {
         self.0
             .sender
-            .send(ReceiverAction::GeoJson(value))
+            .send(ReceiverAction::GeoJson(docid, value))
             .map_err(|_| SendError(()))
     }
 }
