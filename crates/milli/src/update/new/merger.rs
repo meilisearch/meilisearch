@@ -13,6 +13,7 @@ use super::extract::{
     FacetKind, GeoExtractorData,
 };
 use crate::update::facet::new_incremental::FacetFieldIdChange;
+use crate::update::new::extract::cellulite::GeoJsonExtractorData;
 use crate::{CboRoaringBitmapCodec, FieldId, GeoPoint, Index, InternalError, Result};
 
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::merge")]
@@ -58,6 +59,43 @@ where
     let rtree_mmap = unsafe { Mmap::map(&file)? };
     geo_sender.set_rtree(rtree_mmap).unwrap();
     geo_sender.set_geo_faceted(&faceted)?;
+
+    Ok(())
+}
+
+
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::merge")]
+pub fn merge_and_send_cellulite<'extractor, MSP>(
+    datastore: impl IntoIterator<Item = RefCell<GeoJsonExtractorData<'extractor>>>,
+    rtxn: &RoTxn,
+    index: &Index,
+    geojson_sender: GeoJsonSender<'_, '_>,
+    must_stop_processing: &MSP,
+) -> Result<()>
+where
+    MSP: Fn() -> bool + Sync,
+{
+    let cellulite = cellulite::Writer::new(index.cellulite);
+
+    for data in datastore {
+        if must_stop_processing() {
+            return Err(InternalError::AbortedIndexation.into());
+        }
+
+        let mut frozen = data.into_inner().freeze()?;
+        for result in frozen.iter_and_clear_removed()? {
+            let extracted_geo_point = result.map_err(InternalError::SerdeJson)?;
+            todo!("We must send the docid instead of the geojson");
+            /*
+            let removed = cellulite.remove(&GeoJsonPoint::from(extracted_geo_point));
+            debug_assert!(removed.is_some());
+            */
+        }
+
+        for result in frozen.iter_and_clear_inserted()? {
+            geojson_sender.send_geojson(result.map_err(InternalError::SerdeJson)?).unwrap();
+        }
+    }
 
     Ok(())
 }

@@ -72,6 +72,10 @@ pub fn write_to_db(
                 let embedding = large_vector.read_embedding(*dimensions);
                 writer.add_item_in_store(wtxn, docid, extractor_id, embedding)?;
             }
+            ReceiverAction::GeoJson(geojson) => {
+                let cellulite = cellulite::Writer::new(index.cellulite);
+                cellulite.add_item(wtxn, doc_id, &geojson)?;
+            }
         }
 
         // Every time the is a message in the channel we search
