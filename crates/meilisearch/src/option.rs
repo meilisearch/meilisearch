@@ -468,6 +468,11 @@ pub struct Opt {
     #[serde(default)]
     pub experimental_no_snapshot_compaction: bool,
 
+    /// Enables the chat completions functionality.
+    #[serde(default)]
+    #[clap(long, env = MEILI_EXPERIMENTAL_CHAT_COMPLETIONS, default_value_t = false)]
+    pub experimental_chat_completions: bool,
+
     #[serde(flatten)]
     #[clap(flatten)]
     pub indexer_options: IndexerOpts,
@@ -476,11 +481,6 @@ pub struct Opt {
     /// Format must be TOML.
     #[clap(long)]
     pub config_file_path: Option<PathBuf>,
-
-    /// Enables the chat completions functionality.
-    #[serde(default)]
-    #[clap(long, env = MEILI_EXPERIMENTAL_CHAT_COMPLETIONS, default_value_t = false)]
-    pub experimental_chat_completions: bool,
 }
 
 impl Opt {
