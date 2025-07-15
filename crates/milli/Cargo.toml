@@ -19,7 +19,8 @@ bstr = "1.12.0"
 bytemuck = { version = "1.23.1", features = ["extern_crate_alloc"] }
 byteorder = "1.5.0"
 charabia = { version = "0.9.7", default-features = false }
-cellulite = { git = "https://github.com/irevoire/cellulite", branch = "main"}
+# cellulite = { git = "https://github.com/irevoire/cellulite", branch = "main"}
+cellulite = { path = "../../../cellulite" }
 concat-arrays = "0.1.2"
 convert_case = "0.8.0"
 crossbeam-channel = "0.5.15"

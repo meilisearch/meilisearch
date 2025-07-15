@@ -75,8 +75,6 @@ pub fn merge_and_send_cellulite<'extractor, MSP>(
 where
     MSP: Fn() -> bool + Sync,
 {
-    let cellulite = cellulite::Writer::new(index.cellulite);
-
     for data in datastore {
         if must_stop_processing() {
             return Err(InternalError::AbortedIndexation.into());
@@ -93,7 +91,8 @@ where
         }
 
         for result in frozen.iter_and_clear_inserted()? {
-            geojson_sender.send_geojson(result.map_err(InternalError::SerdeJson)?).unwrap();
+            let (docid, geojson) = result.map_err(InternalError::SerdeJson)?;
+            geojson_sender.send_geojson(docid, geojson).unwrap();
         }
     }
 
