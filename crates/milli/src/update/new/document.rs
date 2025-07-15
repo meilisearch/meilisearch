@@ -10,7 +10,9 @@ use serde_json::value::RawValue;
 
 use super::vector_document::VectorDocument;
 use super::{KvReaderFieldId, KvWriterFieldId};
-use crate::constants::{RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME};
+use crate::constants::{
+    RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME,
+};
 use crate::documents::FieldIdMapper;
 use crate::update::del_add::KvReaderDelAdd;
 use crate::update::new::thread_local::{FullySend, MostlySend, ThreadLocal};
@@ -26,6 +28,7 @@ use crate::{
 ///
 /// The 'doc lifetime is meant to live sufficiently for the document to be handled by the extractors.
 pub trait Document<'doc> {
+    fn geojson_field(&self) -> Result<Option<&'doc RawValue>>;
     /// Iterate over all **top-level** fields of the document, returning their name and raw JSON value.
     ///
     /// - The returned values *may* contain nested fields.
@@ -113,6 +116,10 @@ impl<'t, Mapper: FieldIdMapper> Document<'t> for DocumentFromDb<'t, Mapper> {
         self.field(RESERVED_GEO_FIELD_NAME)
     }
 
+    fn geojson_field(&self) -> Result<Option<&'t RawValue>> {
+        self.field(RESERVED_GEOJSON_FIELD_NAME)
+    }
+
     fn top_level_fields_count(&self) -> usize {
         let has_vectors_field = self.vectors_field().unwrap_or(None).is_some();
         let has_geo_field = self.geo_field().unwrap_or(None).is_some();
@@ -175,6 +182,10 @@ impl<'doc> Document<'doc> for DocumentFromVersions<'_, 'doc> {
 
     fn geo_field(&self) -> Result<Option<&'doc RawValue>> {
         Ok(self.versions.geo_field())
+    }
+
+    fn geojson_field(&self) -> Result<Option<&'doc RawValue>> {
+        Ok(self.versions.geojson_field())
     }
 
     fn top_level_fields_count(&self) -> usize {
@@ -265,6 +276,16 @@ impl<'d, 'doc: 'd, 't: 'd, Mapper: FieldIdMapper> Document<'d>
         db.geo_field()
     }
 
+    fn geojson_field(&self) -> Result<Option<&'d RawValue>> {
+        if let Some(geojson) = self.new_doc.geojson_field()? {
+            return Ok(Some(geojson));
+        }
+
+        let Some(db) = self.db else { return Ok(None) };
+
+        db.geojson_field()
+    }
+
     fn top_level_fields_count(&self) -> usize {
         self.iter_top_level_fields().count()
     }
@@ -294,6 +315,10 @@ where
 
     fn geo_field(&self) -> Result<Option<&'doc RawValue>> {
         D::geo_field(self)
+    }
+
+    fn geojson_field(&self) -> Result<Option<&'doc RawValue>> {
+        D::geojson_field(self)
     }
 
     fn top_level_fields_count(&self) -> usize {
@@ -454,6 +479,10 @@ impl<'doc> Versions<'doc> {
         self.data.get(RESERVED_GEO_FIELD_NAME)
     }
 
+    pub fn geojson_field(&self) -> Option<&'doc RawValue> {
+        self.data.get(RESERVED_GEOJSON_FIELD_NAME)
+    }
+
     pub fn len(&self) -> usize {
         self.data.len()
     }
@@ -571,6 +600,10 @@ impl<'a, Mapper: FieldIdMapper> Document<'a> for KvDelAddDocument<'a, Mapper> {
 
     fn geo_field(&self) -> Result<Option<&'a RawValue>> {
         self.get(RESERVED_GEO_FIELD_NAME)
+    }
+
+    fn geojson_field(&self) -> Result<Option<&'a RawValue>> {
+        self.get(RESERVED_GEOJSON_FIELD_NAME)
     }
 }
 

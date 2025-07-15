@@ -193,7 +193,7 @@ impl WordPrefixIntegerDocids {
         // We access this HashMap in parallel to compute the *union* of all
         // of them and *serialize* them into files. There is one file by CPU.
         let local_entries = ThreadLocal::with_capacity(rayon::current_num_threads());
-        prefixes.into_par_iter().map(AsRef::as_ref).try_for_each(|prefix| {
+        prefixes.into_par_iter().map(AsRef::as_ref).try_for_each(|prefix| -> Result<()> {
             let refcell = local_entries.get_or(|| {
                 let file = BufWriter::new(spooled_tempfile(
                     self.max_memory_by_thread.unwrap_or(usize::MAX),
