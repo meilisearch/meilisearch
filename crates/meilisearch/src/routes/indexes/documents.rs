@@ -156,52 +156,6 @@ pub struct DocumentsFetchAggregator<Method: AggregateMethod> {
     marker: std::marker::PhantomData<Method>,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum DocumentFetchKind {
-    PerDocumentId {
-        retrieve_vectors: bool,
-        sort: bool,
-    },
-    Normal {
-        with_filter: bool,
-        limit: usize,
-        offset: usize,
-        retrieve_vectors: bool,
-        sort: bool,
-        ids: usize,
-    },
-}
-
-impl<Method: AggregateMethod> DocumentsFetchAggregator<Method> {
-    pub fn from_query(query: &DocumentFetchKind) -> Self {
-        let (limit, offset, retrieve_vectors, sort) = match query {
-            DocumentFetchKind::PerDocumentId { retrieve_vectors, sort } => {
-                (1, 0, *retrieve_vectors, *sort)
-            }
-            DocumentFetchKind::Normal { limit, offset, retrieve_vectors, sort, .. } => {
-                (*limit, *offset, *retrieve_vectors, *sort)
-            }
-        };
-
-        let ids = match query {
-            DocumentFetchKind::Normal { ids, .. } => *ids,
-            DocumentFetchKind::PerDocumentId { .. } => 0,
-        };
-
-        Self {
-            per_document_id: matches!(query, DocumentFetchKind::PerDocumentId { .. }),
-            per_filter: matches!(query, DocumentFetchKind::Normal { with_filter, .. } if *with_filter),
-            max_limit: limit,
-            max_offset: offset,
-            sort,
-            retrieve_vectors,
-            max_document_ids: ids,
-
-            marker: PhantomData,
-        }
-    }
-}
-
 impl<Method: AggregateMethod> Aggregate for DocumentsFetchAggregator<Method> {
     fn event_name(&self) -> &'static str {
         Method::event_name()
@@ -1573,16 +1527,19 @@ fn retrieve_documents<S: AsRef<str>>(
         })?
     }
 
-    let facet_sort;
     let (it, number_of_documents) = if let Some(sort) = sort_criteria {
         let number_of_documents = candidates.len();
-        facet_sort = recursive_sort(index, &rtxn, sort, &candidates)?;
+        let facet_sort = recursive_sort(index, &rtxn, sort, &candidates)?;
         let iter = facet_sort.iter()?;
+        let mut documents = Vec::with_capacity(limit);
+        for result in iter.skip(offset).take(limit) {
+            documents.push(result?);
+        }
         (
             itertools::Either::Left(some_documents(
                 index,
                 &rtxn,
-                iter.map(|d| d.unwrap()).skip(offset).take(limit),
+                documents.into_iter(),
                 retrieve_vectors,
             )?),
             number_of_documents,

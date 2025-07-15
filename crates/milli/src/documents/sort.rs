@@ -72,6 +72,10 @@ impl Iterator for SortedDocumentsIterator<'_> {
     /// The default implementation of `nth` would iterate over all children, which is inefficient for large datasets.
     /// This implementation will jump over whole chunks of children until it gets close.
     fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        if n == 0 {
+            return self.next();
+        }
+
         // If it's at the leaf level, just forward the call to the values iterator
         let (current_child, next_children, next_children_size) = match self {
             SortedDocumentsIterator::Leaf { values, size } => {
@@ -189,41 +193,54 @@ impl<'ctx> SortedDocumentsIteratorBuilder<'ctx> {
     fn build(self) -> crate::Result<SortedDocumentsIterator<'ctx>> {
         let size = self.candidates.len() as usize;
 
-        // There is no point sorting a 1-element array
-        if size <= 1 {
-            return Ok(SortedDocumentsIterator::Leaf {
-                size,
-                values: Box::new(self.candidates.into_iter()),
-            });
-        }
-
-        match self.fields.first().copied() {
-            Some(AscDescId::Facet { field_id, ascending }) => self.build_facet(field_id, ascending),
-            Some(AscDescId::Geo { field_ids, target_point, ascending }) => {
-                self.build_geo(field_ids, target_point, ascending)
-            }
-            None => Ok(SortedDocumentsIterator::Leaf {
+        match self.fields {
+            [] => Ok(SortedDocumentsIterator::Leaf {
                 size,
                 values: Box::new(self.candidates.into_iter()),
             }),
+            [AscDescId::Facet { field_id, ascending }, next_fields @ ..] => {
+                SortedDocumentsIteratorBuilder::build_facet(
+                    self.index,
+                    self.rtxn,
+                    self.number_db,
+                    self.string_db,
+                    next_fields,
+                    self.candidates,
+                    self.geo_candidates,
+                    *field_id,
+                    *ascending,
+                )
+            }
+            [AscDescId::Geo { field_ids, target_point, ascending }, next_fields @ ..] => {
+                SortedDocumentsIteratorBuilder::build_geo(
+                    self.index,
+                    self.rtxn,
+                    self.number_db,
+                    self.string_db,
+                    next_fields,
+                    self.candidates,
+                    self.geo_candidates,
+                    *field_ids,
+                    *target_point,
+                    *ascending,
+                )
+            }
         }
     }
 
     /// Builds a [`SortedDocumentsIterator`] based on the results of a facet sort.
+    #[allow(clippy::too_many_arguments)]
     fn build_facet(
-        self,
+        index: &'ctx crate::Index,
+        rtxn: &'ctx heed::RoTxn<'ctx>,
+        number_db: Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
+        string_db: Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
+        next_fields: &'ctx [AscDescId],
+        candidates: RoaringBitmap,
+        geo_candidates: &'ctx RoaringBitmap,
         field_id: u16,
         ascending: bool,
     ) -> crate::Result<SortedDocumentsIterator<'ctx>> {
-        let SortedDocumentsIteratorBuilder {
-            index,
-            rtxn,
-            number_db,
-            string_db,
-            fields,
-            candidates,
-            geo_candidates,
-        } = self;
         let size = candidates.len() as usize;
 
         // Perform the sort on the first field
@@ -248,7 +265,7 @@ impl<'ctx> SortedDocumentsIteratorBuilder<'ctx> {
                 rtxn,
                 number_db,
                 string_db,
-                fields: &fields[1..],
+                fields: next_fields,
                 candidates: r?,
                 geo_candidates,
             })
@@ -262,22 +279,19 @@ impl<'ctx> SortedDocumentsIteratorBuilder<'ctx> {
     }
 
     /// Builds a [`SortedDocumentsIterator`] based on the (lazy) results of a geo sort.
+    #[allow(clippy::too_many_arguments)]
     fn build_geo(
-        self,
+        index: &'ctx crate::Index,
+        rtxn: &'ctx heed::RoTxn<'ctx>,
+        number_db: Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
+        string_db: Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
+        next_fields: &'ctx [AscDescId],
+        candidates: RoaringBitmap,
+        geo_candidates: &'ctx RoaringBitmap,
         field_ids: [u16; 2],
         target_point: [f64; 2],
         ascending: bool,
     ) -> crate::Result<SortedDocumentsIterator<'ctx>> {
-        let SortedDocumentsIteratorBuilder {
-            index,
-            rtxn,
-            number_db,
-            string_db,
-            fields,
-            candidates,
-            geo_candidates,
-        } = self;
-
         let mut cache = VecDeque::new();
         let mut rtree = None;
         let size = candidates.len() as usize;
@@ -307,7 +321,7 @@ impl<'ctx> SortedDocumentsIteratorBuilder<'ctx> {
                         rtxn,
                         number_db,
                         string_db,
-                        fields: &fields[1..],
+                        fields: next_fields,
                         candidates: docids,
                         geo_candidates,
                     }));
@@ -322,7 +336,7 @@ impl<'ctx> SortedDocumentsIteratorBuilder<'ctx> {
                         rtxn,
                         number_db,
                         string_db,
-                        fields: &fields[1..],
+                        fields: next_fields,
                         candidates: not_geo_candidates,
                         geo_candidates,
                     }));
