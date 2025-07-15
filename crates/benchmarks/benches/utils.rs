@@ -160,11 +160,9 @@ pub fn run_benches(c: &mut criterion::Criterion, confs: &[Conf]) {
 
         for &query in conf.queries {
             for offset in conf.offsets {
-                let parameter = match (query.is_empty(), offset) {
-                    (true, None) => String::from("placeholder"),
-                    (true, Some((offset, limit))) => format!("placeholder[{offset}:{limit}]"),
-                    (false, None) => query.to_string(),
-                    (false, Some((offset, limit))) => format!("{query}[{offset}:{limit}]"),
+                let parameter = match offset {
+                    None => query.to_string(),
+                    Some((offset, limit)) => format!("{query}[{offset}:{limit}]"),
                 };
                 group.bench_with_input(
                     BenchmarkId::from_parameter(parameter),
