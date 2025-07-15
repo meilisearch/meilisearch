@@ -114,13 +114,13 @@ async fn check_the_index_scheduler(server: &Server) {
 
     // All the indexes are still present
     let (indexes, _) = server.list_indexes(None, None).await;
-    snapshot!(indexes, @r#"
+    snapshot!(indexes, @r###"
     {
       "results": [
         {
           "uid": "kefir",
           "createdAt": "2025-01-16T16:45:16.020663157Z",
-          "updatedAt": "2025-01-23T11:36:22.634859166Z",
+          "updatedAt": "2025-07-07T13:43:08.835381Z",
           "primaryKey": "id"
         }
       ],
@@ -128,7 +128,7 @@ async fn check_the_index_scheduler(server: &Server) {
       "limit": 20,
       "total": 1
     }
-    "#);
+    "###);
     // And their metadata are still right
     let (stats, _) = server.stats().await;
     assert_json_snapshot!(stats, {
@@ -141,21 +141,21 @@ async fn check_the_index_scheduler(server: &Server) {
     {
       "databaseSize": "[bytes]",
       "usedDatabaseSize": "[bytes]",
-      "lastUpdate": "2025-01-23T11:36:22.634859166Z",
+      "lastUpdate": "2025-07-07T13:43:08.835381Z",
       "indexes": {
         "kefir": {
-          "numberOfDocuments": 1,
+          "numberOfDocuments": 2,
           "rawDocumentDbSize": "[bytes]",
           "avgDocumentSize": "[bytes]",
           "isIndexing": false,
-          "numberOfEmbeddings": 0,
-          "numberOfEmbeddedDocuments": 0,
+          "numberOfEmbeddings": 2,
+          "numberOfEmbeddedDocuments": 2,
           "fieldDistribution": {
-            "age": 1,
-            "description": 1,
-            "id": 1,
-            "name": 1,
-            "surname": 1
+            "age": 2,
+            "description": 2,
+            "id": 2,
+            "name": 2,
+            "surname": 2
           }
         }
       }
@@ -227,21 +227,21 @@ async fn check_the_index_scheduler(server: &Server) {
     {
       "databaseSize": "[bytes]",
       "usedDatabaseSize": "[bytes]",
-      "lastUpdate": "2025-01-23T11:36:22.634859166Z",
+      "lastUpdate": "2025-07-07T13:43:08.835381Z",
       "indexes": {
         "kefir": {
-          "numberOfDocuments": 1,
+          "numberOfDocuments": 2,
           "rawDocumentDbSize": "[bytes]",
           "avgDocumentSize": "[bytes]",
           "isIndexing": false,
-          "numberOfEmbeddings": 0,
-          "numberOfEmbeddedDocuments": 0,
+          "numberOfEmbeddings": 2,
+          "numberOfEmbeddedDocuments": 2,
           "fieldDistribution": {
-            "age": 1,
-            "description": 1,
-            "id": 1,
-            "name": 1,
-            "surname": 1
+            "age": 2,
+            "description": 2,
+            "id": 2,
+            "name": 2,
+            "surname": 2
           }
         }
       }
@@ -254,18 +254,18 @@ async fn check_the_index_scheduler(server: &Server) {
         ".avgDocumentSize" => "[bytes]",
     }), @r###"
     {
-      "numberOfDocuments": 1,
+      "numberOfDocuments": 2,
       "rawDocumentDbSize": "[bytes]",
       "avgDocumentSize": "[bytes]",
       "isIndexing": false,
-      "numberOfEmbeddings": 0,
-      "numberOfEmbeddedDocuments": 0,
+      "numberOfEmbeddings": 2,
+      "numberOfEmbeddedDocuments": 2,
       "fieldDistribution": {
-        "age": 1,
-        "description": 1,
-        "id": 1,
-        "name": 1,
-        "surname": 1
+        "age": 2,
+        "description": 2,
+        "id": 2,
+        "name": 2,
+        "surname": 2
       }
     }
     "###);
@@ -295,4 +295,8 @@ async fn check_the_index_features(server: &Server) {
     let (results, _status) =
         kefir.search_post(json!({ "sort": ["age:asc"], "filter": "surname = kefirounet" })).await;
     snapshot!(results, name: "search_with_sort_and_filter");
+
+    // ensuring we can get the vectors and their `regenerate` is still good.
+    let (results, _status) = kefir.search_post(json!({"retrieveVectors": true})).await;
+    snapshot!(json_string!(results["hits"], {"[]._vectors.doggo_embedder.embeddings" => "[vector]"}), name: "search_with_retrieve_vectors");
 }
