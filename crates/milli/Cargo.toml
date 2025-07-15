@@ -112,6 +112,7 @@ utoipa = { version = "5.4.0", features = [
     "openapi_extensions",
 ] }
 lru = "0.14.0"
+geo-types = "0.7.16"
 
 [dev-dependencies]
 mimalloc = { version = "0.1.47", default-features = false }
