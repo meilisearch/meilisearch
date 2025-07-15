@@ -253,6 +253,7 @@ impl Infos {
             experimental_limit_batched_tasks_total_size,
             experimental_embedding_cache_entries,
             experimental_no_snapshot_compaction,
+            experimental_chat_completions,
             http_addr,
             master_key: _,
             env,
@@ -281,7 +282,6 @@ impl Infos {
             indexer_options,
             config_file_path,
             no_analytics: _,
-            experimental_chat_completions: _,
         } = options;
 
         let schedule_snapshot = match schedule_snapshot {
@@ -324,7 +324,7 @@ impl Infos {
             experimental_enable_logs_route: experimental_enable_logs_route | logs_route,
             experimental_reduce_indexing_memory_usage,
             experimental_network: network,
-            experimental_chat_completions: chat_completions,
+            experimental_chat_completions: chat_completions | experimental_chat_completions,
             experimental_multimodal: multimodal,
             experimental_get_task_documents_route: get_task_documents_route,
             experimental_composite_embedders: composite_embedders,
