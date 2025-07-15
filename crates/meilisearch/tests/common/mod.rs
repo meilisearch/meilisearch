@@ -190,7 +190,7 @@ pub async fn shared_empty_index() -> &'static Index<'static, Shared> {
             let server = Server::new_shared();
             let index = server._index("EMPTY_INDEX").to_shared();
             let (response, _code) = index._create(None).await;
-            index.wait_task(response.uid()).await.succeeded();
+            server.wait_task(response.uid()).await.succeeded();
             index
         })
         .await
@@ -238,13 +238,13 @@ pub async fn shared_index_with_documents() -> &'static Index<'static, Shared> {
         let index = server._index("SHARED_DOCUMENTS").to_shared();
         let documents = DOCUMENTS.clone();
         let (response, _code) = index._add_documents(documents, None).await;
-        index.wait_task(response.uid()).await.succeeded();
+        server.wait_task(response.uid()).await.succeeded();
         let (response, _code) = index
             ._update_settings(
                 json!({"filterableAttributes": ["id", "title"], "sortableAttributes": ["id", "title"]}),
             )
             .await;
-        index.wait_task(response.uid()).await.succeeded();
+        server.wait_task(response.uid()).await.succeeded();
         index
     }).await
 }
@@ -281,13 +281,13 @@ pub async fn shared_index_with_score_documents() -> &'static Index<'static, Shar
         let index = server._index("SHARED_SCORE_DOCUMENTS").to_shared();
         let documents = SCORE_DOCUMENTS.clone();
         let (response, _code) = index._add_documents(documents, None).await;
-        index.wait_task(response.uid()).await.succeeded();
+        server.wait_task(response.uid()).await.succeeded();
         let (response, _code) = index
             ._update_settings(
                 json!({"filterableAttributes": ["id", "title"], "sortableAttributes": ["id", "title"]}),
             )
             .await;
-        index.wait_task(response.uid()).await.succeeded();
+        server.wait_task(response.uid()).await.succeeded();
         index
     }).await
 }
@@ -358,13 +358,13 @@ pub async fn shared_index_with_nested_documents() -> &'static Index<'static, Sha
         let index = server._index("SHARED_NESTED_DOCUMENTS").to_shared();
         let documents = NESTED_DOCUMENTS.clone();
         let (response, _code) = index._add_documents(documents, None).await;
-        index.wait_task(response.uid()).await.succeeded();
+        server.wait_task(response.uid()).await.succeeded();
         let (response, _code) = index
             ._update_settings(
                 json!({"filterableAttributes": ["father", "doggos", "cattos"], "sortableAttributes": ["doggos"]}),
             )
             .await;
-        index.wait_task(response.uid()).await.succeeded();
+        server.wait_task(response.uid()).await.succeeded();
         index
     }).await
 }
@@ -458,7 +458,7 @@ pub async fn shared_index_with_test_set() -> &'static Index<'static, Shared> {
                 )
                 .await;
             assert_eq!(code, 202);
-            index.wait_task(response.uid()).await.succeeded();
+            server.wait_task(response.uid()).await.succeeded();
             index
         })
         .await
@@ -505,14 +505,14 @@ pub async fn shared_index_with_geo_documents() -> &'static Index<'static, Shared
             let server = Server::new_shared();
             let index = server._index("SHARED_GEO_DOCUMENTS").to_shared();
             let (response, _code) = index._add_documents(GEO_DOCUMENTS.clone(), None).await;
-            index.wait_task(response.uid()).await.succeeded();
+            server.wait_task(response.uid()).await.succeeded();
 
             let (response, _code) = index
                 ._update_settings(
                     json!({"filterableAttributes": ["_geo"], "sortableAttributes": ["_geo"]}),
                 )
                 .await;
-            index.wait_task(response.uid()).await.succeeded();
+            server.wait_task(response.uid()).await.succeeded();
             index
         })
         .await
