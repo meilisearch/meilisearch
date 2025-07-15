@@ -30,7 +30,7 @@ use meilisearch_types::features::{
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::keys::actions;
 use meilisearch_types::milli::index::ChatConfig;
-use meilisearch_types::milli::{all_obkv_to_json, obkv_to_json, OrderBy, TimeBudget};
+use meilisearch_types::milli::{all_obkv_to_json, obkv_to_json, OrderBy, PatternMatch, TimeBudget};
 use meilisearch_types::{Document, Index};
 use serde::Deserialize;
 use serde_json::json;
@@ -848,7 +848,7 @@ fn format_facet_distributions(
     let fields_ids_map = index.fields_ids_map(rtxn)?;
     let filterable_attributes = fields_ids_map
         .names()
-        .filter(|name| rules.iter().any(|rule| rule.match_str(name).matches()))
+        .filter(|name| rules.iter().any(|rule| matches!(rule.match_str(name), PatternMatch::Match)))
         .map(|name| (name, OrderBy::Count));
     let facets_distribution = index
         .facets_distribution(rtxn)
@@ -861,11 +861,11 @@ fn format_facet_distributions(
     for (facet_name, entries) in facets_distribution {
         let _ = write!(&mut output, "{}: ", facet_name);
         let total_entries = entries.len();
-        for (i, (value, count)) in entries.into_iter().enumerate() {
+        for (i, (value, _count)) in entries.into_iter().enumerate() {
             let _ = if total_entries.saturating_sub(1) == i {
-                write!(&mut output, "{} ({}).", value, count)
+                write!(&mut output, "{value}.")
             } else {
-                write!(&mut output, "{} ({}), ", value, count)
+                write!(&mut output, "{value}, ")
             };
         }
         let _ = writeln!(&mut output);
