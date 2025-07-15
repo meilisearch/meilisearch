@@ -1150,15 +1150,11 @@ impl GeoSender<'_, '_> {
     }
 }
 
-
 #[derive(Clone, Copy)]
 pub struct GeoJsonSender<'a, 'b>(&'a ExtractorBbqueueSender<'b>);
 
 impl GeoJsonSender<'_, '_> {
     pub fn send_geojson(&self, docid: DocumentId, value: GeoJson) -> StdResult<(), SendError<()>> {
-        self.0
-            .sender
-            .send(ReceiverAction::GeoJson(docid, value))
-            .map_err(|_| SendError(()))
+        self.0.sender.send(ReceiverAction::GeoJson(docid, value)).map_err(|_| SendError(()))
     }
 }

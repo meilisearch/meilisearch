@@ -320,9 +320,9 @@ where
         )?;
     }
 
-
     'cellulite: {
-        let Some(extractor) = GeoJsonExtractor::new(&rtxn, index, *indexing_context.grenad_parameters)?
+        let Some(extractor) =
+            GeoJsonExtractor::new(&rtxn, index, *indexing_context.grenad_parameters)?
         else {
             break 'cellulite;
         };
