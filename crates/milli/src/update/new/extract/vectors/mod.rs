@@ -653,7 +653,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
 
                 settings_delta.try_for_each_fragment_diff(
                     session.embedder_name(),
-                    |fragment_diff| {
+                    |fragment_diff| -> Result<()> {
                         let extractor = RequestFragmentExtractor::new(fragment_diff.new, doc_alloc)
                             .ignore_errors();
                         let old = if full_reindex {

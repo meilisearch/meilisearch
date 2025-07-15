@@ -1,10 +1,12 @@
 use std::cell::RefCell;
 use std::fs::File;
 use std::io::{self, BufReader, BufWriter, ErrorKind, Read, Seek as _, Write as _};
+use std::str::FromStr;
 use std::{iter, mem, result};
 
 use bumpalo::Bump;
 use bytemuck::{bytes_of, pod_read_unaligned, Pod, Zeroable};
+use geojson::GeoJson;
 use heed::RoTxn;
 use serde_json::value::RawValue;
 use serde_json::Value;
@@ -16,28 +18,27 @@ use crate::update::new::ref_cell_ext::RefCellExt as _;
 use crate::update::new::thread_local::MostlySend;
 use crate::update::new::DocumentChange;
 use crate::update::GrenadParameters;
-use crate::{lat_lng_to_xyz, DocumentId, GeoPoint, Index, InternalError, Result};
+use crate::{lat_lng_to_xyz, DocumentId, GeoPoint, Index, InternalError, Result, UserError};
 
-mod cellulite;
-
-pub struct GeoExtractor {
+pub struct GeoJsonExtractor {
     grenad_parameters: GrenadParameters,
 }
 
-impl GeoExtractor {
+impl GeoJsonExtractor {
     pub fn new(
         rtxn: &RoTxn,
         index: &Index,
         grenad_parameters: GrenadParameters,
     ) -> Result<Option<Self>> {
-        if index.is_geo_enabled(rtxn)? {
-            Ok(Some(GeoExtractor { grenad_parameters }))
+        if index.is_geojson_enabled(rtxn)? {
+            Ok(Some(GeoJsonExtractor { grenad_parameters }))
         } else {
             Ok(None)
         }
     }
 }
 
+/*
 #[derive(Pod, Zeroable, Copy, Clone)]
 #[repr(C, packed)]
 pub struct ExtractedGeoPoint {
@@ -54,12 +55,13 @@ impl From<ExtractedGeoPoint> for GeoPoint {
         GeoPoint::new(xyz_point, (value.docid, point))
     }
 }
+*/
 
-pub struct GeoExtractorData<'extractor> {
+pub struct GeoJsonExtractorData<'extractor> {
     /// The set of documents ids that were removed. If a document sees its geo
     /// point being updated, we first put it in the deleted and then in the inserted.
-    removed: bumpalo::collections::Vec<'extractor, ExtractedGeoPoint>,
-    inserted: bumpalo::collections::Vec<'extractor, ExtractedGeoPoint>,
+    removed: bumpalo::collections::Vec<'extractor, GeoJson>,
+    inserted: bumpalo::collections::Vec<'extractor, GeoJson>,
     /// Contains a packed list of `ExtractedGeoPoint` of the inserted geo points
     /// data structures if we have spilled to disk.
     spilled_removed: Option<BufWriter<File>>,
@@ -68,11 +70,11 @@ pub struct GeoExtractorData<'extractor> {
     spilled_inserted: Option<BufWriter<File>>,
 }
 
-impl<'extractor> GeoExtractorData<'extractor> {
-    pub fn freeze(self) -> Result<FrozenGeoExtractorData<'extractor>> {
-        let GeoExtractorData { removed, inserted, spilled_removed, spilled_inserted } = self;
+impl<'extractor> GeoJsonExtractorData<'extractor> {
+    pub fn freeze(self) -> Result<FrozenGeoJsonExtractorData<'extractor>> {
+        let GeoJsonExtractorData { removed, inserted, spilled_removed, spilled_inserted } = self;
 
-        Ok(FrozenGeoExtractorData {
+        Ok(FrozenGeoJsonExtractorData {
             removed: removed.into_bump_slice(),
             inserted: inserted.into_bump_slice(),
             spilled_removed: spilled_removed
@@ -85,40 +87,40 @@ impl<'extractor> GeoExtractorData<'extractor> {
     }
 }
 
-unsafe impl MostlySend for GeoExtractorData<'_> {}
+unsafe impl MostlySend for GeoJsonExtractorData<'_> {}
 
-pub struct FrozenGeoExtractorData<'extractor> {
-    pub removed: &'extractor [ExtractedGeoPoint],
-    pub inserted: &'extractor [ExtractedGeoPoint],
+pub struct FrozenGeoJsonExtractorData<'extractor> {
+    pub removed: &'extractor [GeoJson],
+    pub inserted: &'extractor [GeoJson],
     pub spilled_removed: Option<BufReader<File>>,
     pub spilled_inserted: Option<BufReader<File>>,
 }
 
-impl FrozenGeoExtractorData<'_> {
+impl FrozenGeoJsonExtractorData<'_> {
     pub fn iter_and_clear_removed(
         &mut self,
-    ) -> io::Result<impl IntoIterator<Item = io::Result<ExtractedGeoPoint>> + '_> {
+    ) -> io::Result<impl IntoIterator<Item = Result<GeoJson, serde_json::Error>> + '_> {
         Ok(mem::take(&mut self.removed)
             .iter()
-            .copied()
+            .cloned()
             .map(Ok)
-            .chain(iterator_over_spilled_geopoints(&mut self.spilled_removed)?))
+            .chain(iterator_over_spilled_geojsons(&mut self.spilled_removed)?))
     }
 
     pub fn iter_and_clear_inserted(
         &mut self,
-    ) -> io::Result<impl IntoIterator<Item = io::Result<ExtractedGeoPoint>> + '_> {
+    ) -> io::Result<impl IntoIterator<Item = Result<GeoJson, serde_json::Error>> + '_> {
         Ok(mem::take(&mut self.inserted)
             .iter()
-            .copied()
+            .cloned()
             .map(Ok)
-            .chain(iterator_over_spilled_geopoints(&mut self.spilled_inserted)?))
+            .chain(iterator_over_spilled_geojsons(&mut self.spilled_inserted)?))
     }
 }
 
-fn iterator_over_spilled_geopoints(
+fn iterator_over_spilled_geojsons(
     spilled: &mut Option<BufReader<File>>,
-) -> io::Result<impl IntoIterator<Item = io::Result<ExtractedGeoPoint>> + '_> {
+) -> io::Result<impl IntoIterator<Item = Result<GeoJson, serde_json::Error>> + '_> {
     let mut spilled = spilled.take();
     if let Some(spilled) = &mut spilled {
         spilled.rewind()?;
@@ -126,10 +128,9 @@ fn iterator_over_spilled_geopoints(
 
     Ok(iter::from_fn(move || match &mut spilled {
         Some(file) => {
-            let geopoint_bytes = &mut [0u8; mem::size_of::<ExtractedGeoPoint>()];
-            match file.read_exact(geopoint_bytes) {
-                Ok(()) => Some(Ok(pod_read_unaligned(geopoint_bytes))),
-                Err(e) if e.kind() == ErrorKind::UnexpectedEof => None,
+            match GeoJson::from_reader(file) {
+                Ok(geojson) => Some(Ok(geojson)),
+                Err(e) if e.is_eof() => None,
                 Err(e) => Some(Err(e)),
             }
         }
@@ -137,11 +138,11 @@ fn iterator_over_spilled_geopoints(
     }))
 }
 
-impl<'extractor> Extractor<'extractor> for GeoExtractor {
-    type Data = RefCell<GeoExtractorData<'extractor>>;
+impl<'extractor> Extractor<'extractor> for GeoJsonExtractor {
+    type Data = RefCell<GeoJsonExtractorData<'extractor>>;
 
     fn init_data<'doc>(&'doc self, extractor_alloc: &'extractor Bump) -> Result<Self::Data> {
-        Ok(RefCell::new(GeoExtractorData {
+        Ok(RefCell::new(GeoJsonExtractorData {
             removed: bumpalo::collections::Vec::new_in(extractor_alloc),
             inserted: bumpalo::collections::Vec::new_in(extractor_alloc),
             spilled_inserted: None,
@@ -174,16 +175,14 @@ impl<'extractor> Extractor<'extractor> for GeoExtractor {
                     let docid = deletion.docid();
                     let external_id = deletion.external_document_id();
                     let current = deletion.current(rtxn, index, db_fields_ids_map)?;
-                    let current_geo = current
-                        .geo_field()?
-                        .map(|geo| extract_geo_coordinates(external_id, geo))
-                        .transpose()?;
 
-                    if let Some(lat_lng) = current_geo.flatten() {
-                        let geopoint = ExtractedGeoPoint { docid, lat_lng };
+                    if let Some(geojson) = current.geojson_field()? {
                         match &mut data_ref.spilled_removed {
-                            Some(file) => file.write_all(bytes_of(&geopoint))?,
-                            None => data_ref.removed.push(geopoint),
+                            Some(file) => file.write_all(geojson.get().as_bytes())?,
+                            None => data_ref.removed.push(
+                                // TODO: The error type is wrong here. It should be an internal error.
+                                GeoJson::from_str(geojson.get()).map_err(UserError::from)?,
+                            ),
                         }
                     }
                 }
@@ -192,34 +191,32 @@ impl<'extractor> Extractor<'extractor> for GeoExtractor {
                     let external_id = update.external_document_id();
                     let docid = update.docid();
 
-                    let current_geo = current
-                        .geo_field()?
-                        .map(|geo| extract_geo_coordinates(external_id, geo))
-                        .transpose()?;
+                    let current_geo = current.geojson_field()?;
 
-                    let updated_geo = update
-                        .merged(rtxn, index, db_fields_ids_map)?
-                        .geo_field()?
-                        .map(|geo| extract_geo_coordinates(external_id, geo))
-                        .transpose()?;
+                    let updated_geo =
+                        update.merged(rtxn, index, db_fields_ids_map)?.geojson_field()?;
 
-                    if current_geo != updated_geo {
+                    if current_geo.map(|c| c.get()) != updated_geo.map(|u| u.get()) {
                         // If the current and new geo points are different it means that
                         // we need to replace the current by the new point and therefore
-                        // delete the current point from the RTree.
-                        if let Some(lat_lng) = current_geo.flatten() {
-                            let geopoint = ExtractedGeoPoint { docid, lat_lng };
+                        // delete the current point from cellulite.
+                        if let Some(geojson) = current_geo {
                             match &mut data_ref.spilled_removed {
-                                Some(file) => file.write_all(bytes_of(&geopoint))?,
-                                None => data_ref.removed.push(geopoint),
+                                Some(file) => file.write_all(geojson.get().as_bytes())?,
+                                // TODO: Should be an internal error
+                                None => data_ref.removed.push(
+                                    GeoJson::from_str(geojson.get()).map_err(UserError::from)?,
+                                ),
                             }
                         }
 
-                        if let Some(lat_lng) = updated_geo.flatten() {
-                            let geopoint = ExtractedGeoPoint { docid, lat_lng };
+                        if let Some(geojson) = updated_geo {
                             match &mut data_ref.spilled_inserted {
-                                Some(file) => file.write_all(bytes_of(&geopoint))?,
-                                None => data_ref.inserted.push(geopoint),
+                                Some(file) => file.write_all(geojson.get().as_bytes())?,
+                                // TODO: Is the error type correct here? Shouldn't it be an internal error?
+                                None => data_ref.inserted.push(
+                                    GeoJson::from_str(geojson.get()).map_err(UserError::from)?,
+                                ),
                             }
                         }
                     }
@@ -228,17 +225,15 @@ impl<'extractor> Extractor<'extractor> for GeoExtractor {
                     let external_id = insertion.external_document_id();
                     let docid = insertion.docid();
 
-                    let inserted_geo = insertion
-                        .inserted()
-                        .geo_field()?
-                        .map(|geo| extract_geo_coordinates(external_id, geo))
-                        .transpose()?;
+                    let inserted_geo = insertion.inserted().geojson_field()?;
 
-                    if let Some(lat_lng) = inserted_geo.flatten() {
-                        let geopoint = ExtractedGeoPoint { docid, lat_lng };
+                    if let Some(geojson) = inserted_geo {
                         match &mut data_ref.spilled_inserted {
-                            Some(file) => file.write_all(bytes_of(&geopoint))?,
-                            None => data_ref.inserted.push(geopoint),
+                            Some(file) => file.write_all(geojson.get().as_bytes())?,
+                            // TODO: Is the error type correct here? Shouldn't it be an internal error?
+                            None => data_ref.inserted.push(
+                                GeoJson::from_str(geojson.get()).map_err(UserError::from)?,
+                            ),
                         }
                     }
                 }
