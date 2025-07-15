@@ -2,6 +2,7 @@ use std::fs::File;
 use std::io::{self, BufReader};
 
 use concat_arrays::concat_arrays;
+use geojson::GeoJson;
 use serde_json::Value;
 
 use super::helpers::{create_writer, writer_into_reader, GrenadParameters};
@@ -103,6 +104,80 @@ fn extract_lat_lng(
             .map_err(|lng| GeoError::BadLongitude { document_id: document_id(), value: lng })
             .map_err(Box::new)?;
             Ok(Some([lat, lng]))
+        }
+        None => Ok(None),
+    }
+}
+
+/// Extracts the geographical coordinates contained in each document under the `_geo` field.
+///
+/// Returns the generated grenad reader containing the docid as key associated to the (latitude, longitude)
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::extract")]
+pub fn extract_geojson<R: io::Read + io::Seek>(
+    obkv_documents: grenad::Reader<R>,
+    indexer: GrenadParameters,
+    primary_key_id: FieldId,
+    settings_diff: &InnerIndexSettingsDiff,
+) -> Result<grenad::Reader<BufReader<File>>> {
+    let mut writer = create_writer(
+        indexer.chunk_compression_type,
+        indexer.chunk_compression_level,
+        tempfile::tempfile()?,
+    );
+
+    tracing::info!("Extracting one geojson");
+
+    let mut cursor = obkv_documents.into_cursor()?;
+    while let Some((docid_bytes, value)) = cursor.move_on_next()? {
+        let obkv = obkv::KvReader::from_slice(value);
+        // since we only need the primary key when we throw an error
+        // we create this getter to lazily get it when needed
+        let document_id = || -> Value {
+            let reader = KvReaderDelAdd::from_slice(obkv.get(primary_key_id).unwrap());
+            let document_id =
+                reader.get(DelAdd::Deletion).or(reader.get(DelAdd::Addition)).unwrap();
+            serde_json::from_slice(document_id).unwrap()
+        };
+
+        // extract old version
+        let del_geojson =
+            extract_geojson_field(obkv, &settings_diff.old, DelAdd::Deletion, document_id)?;
+        // extract new version
+        let add_geojson =
+            extract_geojson_field(obkv, &settings_diff.new, DelAdd::Addition, document_id)?;
+
+        if del_geojson != add_geojson {
+            let mut obkv = KvWriterDelAdd::memory();
+            if del_geojson.is_some() {
+                #[allow(clippy::drop_non_drop)]
+                // We don't need to store the geojson, we'll just delete it by id
+                obkv.insert(DelAdd::Deletion, [])?;
+            }
+            if let Some(geojson) = add_geojson {
+                #[allow(clippy::drop_non_drop)]
+                obkv.insert(DelAdd::Addition, geojson.to_string().as_bytes())?;
+            }
+            let bytes = obkv.into_inner()?;
+            writer.insert(docid_bytes, bytes)?;
+        }
+    }
+
+    writer_into_reader(writer)
+}
+
+fn extract_geojson_field(
+    obkv: &obkv::KvReader<FieldId>,
+    settings: &InnerIndexSettings,
+    deladd: DelAdd,
+    document_id: impl Fn() -> Value,
+) -> Result<Option<GeoJson>> {
+    match settings.geojson_fid {
+        Some(fid) => {
+            let value = obkv.get(fid).map(KvReaderDelAdd::from_slice).and_then(|r| r.get(deladd));
+            // TODO: That's a user error, not an internal error
+            Ok(value
+                .map(|v| serde_json::from_slice(v).map_err(InternalError::SerdeJson))
+                .transpose()?)
         }
         None => Ok(None),
     }

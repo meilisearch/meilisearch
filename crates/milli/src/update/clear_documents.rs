@@ -48,6 +48,7 @@ impl<'t, 'i> ClearDocuments<'t, 'i> {
             field_id_docid_facet_strings,
             vector_store,
             embedder_category_id: _,
+            cellulite,
             documents,
         } = self.index;
 
@@ -90,6 +91,7 @@ impl<'t, 'i> ClearDocuments<'t, 'i> {
         field_id_docid_facet_strings.clear(self.wtxn)?;
         // vector
         vector_store.clear(self.wtxn)?;
+        cellulite.clear(self.wtxn)?;
 
         documents.clear(self.wtxn)?;
 

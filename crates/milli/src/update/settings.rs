@@ -15,7 +15,7 @@ use super::del_add::{DelAdd, DelAddOperation};
 use super::index_documents::{IndexDocumentsConfig, Transform};
 use super::{ChatSettings, IndexerConfig};
 use crate::attribute_patterns::PatternMatch;
-use crate::constants::RESERVED_GEO_FIELD_NAME;
+use crate::constants::{RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME};
 use crate::criterion::Criterion;
 use crate::disabled_typos_terms::DisabledTyposTerms;
 use crate::error::UserError::{self, InvalidChatSettingsDocumentTemplateMaxBytes};
@@ -1979,6 +1979,13 @@ impl InnerIndexSettingsDiff {
         self.old.geo_fields_ids != self.new.geo_fields_ids
             || (!self.settings_update_only && self.new.geo_fields_ids.is_some())
     }
+
+    pub fn run_geojson_indexing(&self) -> bool {
+        tracing::info!("old.geojson_fid: {:?}", self.old.geojson_fid);
+        tracing::info!("new.geojson_fid: {:?}", self.new.geojson_fid);
+        self.old.geojson_fid != self.new.geojson_fid
+            || (!self.settings_update_only && self.new.geojson_fid.is_some())
+    }
 }
 
 #[derive(Clone)]
@@ -1999,6 +2006,7 @@ pub(crate) struct InnerIndexSettings {
     pub runtime_embedders: RuntimeEmbedders,
     pub embedder_category_id: HashMap<String, u8>,
     pub geo_fields_ids: Option<(FieldId, FieldId)>,
+    pub geojson_fid: Option<FieldId>,
     pub prefix_search: PrefixSearch,
     pub facet_search: bool,
 }
@@ -2038,6 +2046,7 @@ impl InnerIndexSettings {
             }
             _ => None,
         };
+        let geo_json_fid = fields_ids_map.id(RESERVED_GEOJSON_FIELD_NAME);
         let localized_attributes_rules =
             index.localized_attributes_rules(rtxn)?.unwrap_or_default();
         let filterable_attributes_rules = index.filterable_attributes_rules(rtxn)?;
@@ -2066,6 +2075,7 @@ impl InnerIndexSettings {
             runtime_embedders,
             embedder_category_id,
             geo_fields_ids,
+            geojson_fid: geo_json_fid,
             prefix_search,
             facet_search,
             disabled_typos_terms,
