@@ -99,7 +99,8 @@ pub struct FrozenGeoJsonExtractorData<'extractor> {
 impl FrozenGeoJsonExtractorData<'_> {
     pub fn iter_and_clear_removed(
         &mut self,
-    ) -> io::Result<impl IntoIterator<Item = Result<(DocumentId, GeoJson), serde_json::Error>> + '_> {
+    ) -> io::Result<impl IntoIterator<Item = Result<(DocumentId, GeoJson), serde_json::Error>> + '_>
+    {
         Ok(mem::take(&mut self.removed)
             .iter()
             .cloned()
@@ -109,7 +110,8 @@ impl FrozenGeoJsonExtractorData<'_> {
 
     pub fn iter_and_clear_inserted(
         &mut self,
-    ) -> io::Result<impl IntoIterator<Item = Result<(DocumentId, GeoJson), serde_json::Error>> + '_> {
+    ) -> io::Result<impl IntoIterator<Item = Result<(DocumentId, GeoJson), serde_json::Error>> + '_>
+    {
         Ok(mem::take(&mut self.inserted)
             .iter()
             .cloned()
@@ -215,9 +217,10 @@ impl<'extractor> Extractor<'extractor> for GeoJsonExtractor {
                                     file.write_all(geojson.get().as_bytes())?;
                                 }
                                 // TODO: Should be an internal error
-                                None => data_ref.removed.push(
-                                    (docid, GeoJson::from_str(geojson.get()).map_err(UserError::from)?),
-                                ),
+                                None => data_ref.removed.push((
+                                    docid,
+                                    GeoJson::from_str(geojson.get()).map_err(UserError::from)?,
+                                )),
                             }
                         }
 
@@ -228,9 +231,10 @@ impl<'extractor> Extractor<'extractor> for GeoJsonExtractor {
                                     file.write_all(geojson.get().as_bytes())?;
                                 }
                                 // TODO: Is the error type correct here? Shouldn't it be an internal error?
-                                None => data_ref.inserted.push(
-                                    (docid, GeoJson::from_str(geojson.get()).map_err(UserError::from)?),
-                                ),
+                                None => data_ref.inserted.push((
+                                    docid,
+                                    GeoJson::from_str(geojson.get()).map_err(UserError::from)?,
+                                )),
                             }
                         }
                     }
@@ -248,9 +252,10 @@ impl<'extractor> Extractor<'extractor> for GeoJsonExtractor {
                                 file.write_all(geojson.get().as_bytes())?;
                             }
                             // TODO: Is the error type correct here? Shouldn't it be an internal error?
-                            None => data_ref.inserted.push(
-                                (docid, GeoJson::from_str(geojson.get()).map_err(UserError::from)?),
-                            ),
+                            None => data_ref.inserted.push((
+                                docid,
+                                GeoJson::from_str(geojson.get()).map_err(UserError::from)?,
+                            )),
                         }
                     }
                 }
