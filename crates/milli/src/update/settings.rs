@@ -557,7 +557,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                 let old_fields = self.index.user_defined_searchable_fields(self.wtxn)?;
                 let did_change = {
                     let new_fields = fields.iter().map(String::as_str).collect::<Vec<_>>();
-                    old_fields.map(|old| new_fields != old).unwrap_or(true)
+                    old_fields.is_none_or(|old| new_fields != old)
                 };
                 if !did_change {
                     return Ok(false);
