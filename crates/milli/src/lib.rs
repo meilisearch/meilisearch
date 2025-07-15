@@ -87,7 +87,7 @@ pub use self::search::{
 };
 pub use self::update::ChannelCongestion;
 
-pub type Result<T> = std::result::Result<T, error::Error>;
+pub type Result<T, E = error::Error> = std::result::Result<T, E>;
 
 pub type Attribute = u32;
 pub type BEU16 = heed::types::U16<heed::byteorder::BE>;
