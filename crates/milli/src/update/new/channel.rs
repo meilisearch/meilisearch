@@ -13,6 +13,7 @@ use bbqueue::framed::{FrameGrantR, FrameProducer};
 use bbqueue::BBBuffer;
 use bytemuck::{checked, CheckedBitPattern, NoUninit};
 use flume::{RecvTimeoutError, SendError};
+use geojson::GeoJson;
 use heed::types::Bytes;
 use heed::{BytesDecode, MdbError};
 use memmap2::{Mmap, MmapMut};
@@ -139,6 +140,7 @@ pub enum ReceiverAction {
     LargeEntry(LargeEntry),
     LargeVectors(LargeVectors),
     LargeVector(LargeVector),
+    GeoJson(GeoJson),
 }
 
 /// An entry that cannot fit in the BBQueue buffers has been
@@ -463,6 +465,7 @@ pub enum Database {
     FieldIdDocidFacetStrings,
     FieldIdDocidFacetF64s,
     VectorEmbedderCategoryId,
+    Cellulite,
 }
 
 impl Database {
@@ -485,6 +488,7 @@ impl Database {
             Database::FieldIdDocidFacetStrings => index.field_id_docid_facet_strings.remap_types(),
             Database::FieldIdDocidFacetF64s => index.field_id_docid_facet_f64s.remap_types(),
             Database::VectorEmbedderCategoryId => index.embedder_category_id.remap_types(),
+            Database::Cellulite => index.cellulite.remap_types(),
         }
     }
 
@@ -507,6 +511,7 @@ impl Database {
             Database::FieldIdDocidFacetStrings => db_name::FIELD_ID_DOCID_FACET_STRINGS,
             Database::FieldIdDocidFacetF64s => db_name::FIELD_ID_DOCID_FACET_F64S,
             Database::VectorEmbedderCategoryId => db_name::VECTOR_EMBEDDER_CATEGORY_ID,
+            Database::Cellulite => db_name::CELLULITE,
         }
     }
 }
@@ -546,6 +551,10 @@ impl<'b> ExtractorBbqueueSender<'b> {
 
     pub fn geo<'a>(&'a self) -> GeoSender<'a, 'b> {
         GeoSender(self)
+    }
+
+    pub fn geojson<'a>(&'a self) -> GeoJsonSender<'a, 'b> {
+        GeoJsonSender(self)
     }
 
     fn delete_vector(&self, docid: DocumentId) -> crate::Result<()> {
@@ -1137,5 +1146,18 @@ impl GeoSender<'_, '_> {
                 Ok(())
             },
         )
+    }
+}
+
+
+#[derive(Clone, Copy)]
+pub struct GeoJsonSender<'a, 'b>(&'a ExtractorBbqueueSender<'b>);
+
+impl GeoJsonSender<'_, '_> {
+    pub fn send_geojson(&self, value: GeoJson) -> StdResult<(), SendError<()>> {
+        self.0
+            .sender
+            .send(ReceiverAction::GeoJson(value))
+            .map_err(|_| SendError(()))
     }
 }
