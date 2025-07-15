@@ -72,7 +72,7 @@ async fn error_update_existing_primary_key() {
     let server = Server::new_shared();
     let index = shared_index_with_documents().await;
 
-    let (update_task, code) = index.update_index_fail(Some("primary")).await;
+    let (update_task, code) = index.update_index_fail(Some("primary"), server).await;
 
     assert_eq!(code, 202);
     let response = server.wait_task(update_task.uid()).await.failed();
@@ -91,7 +91,7 @@ async fn error_update_existing_primary_key() {
 async fn error_update_unexisting_index() {
     let server = Server::new_shared();
     let index = shared_does_not_exists_index().await;
-    let (task, code) = index.update_index_fail(Some("my-primary-key")).await;
+    let (task, code) = index.update_index_fail(Some("my-primary-key"), server).await;
 
     assert_eq!(code, 202);
 
