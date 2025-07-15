@@ -302,6 +302,8 @@ and can not be more than 511 bytes.", .document_id.to_string()
     InvalidPromptForEmbeddings(String, crate::prompt::error::NewPromptError),
     #[error("Too many embedders in the configuration. Found {0}, but limited to 256.")]
     TooManyEmbedders(usize),
+    #[error("Too many fragments in the configuration. Found {0}, but limited to 256.")]
+    TooManyFragments(usize),
     #[error("Cannot find embedder with name `{0}`.")]
     InvalidSearchEmbedder(String),
     #[error("Cannot find embedder with name `{0}`.")]

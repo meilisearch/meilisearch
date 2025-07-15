@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 use bumpalo::Bump;
 use hf_hub::api::sync::ApiError;
+use itertools::Itertools as _;
 
 use super::parsed_vectors::ParsedVectorsDiff;
 use super::rest::ConfigurationSource;
@@ -101,6 +102,32 @@ pub enum EmbedErrorKind {
     MissingEmbedding,
     #[error(transparent)]
     PanicInThreadPool(#[from] PanicCatched),
+    #[error("`media` requested but the configuration doesn't have source `rest`")]
+    RestMediaNotARest,
+    #[error("`media` requested, and the configuration has source `rest`, but the configuration doesn't have `searchFragments`.")]
+    RestMediaNotAFragment,
+
+    #[error("Query matches multiple search fragments.\n  - Note: First matched fragment `{name}`.\n  - Note: Second matched fragment `{second_name}`.\n  - Note: {}",
+    {
+        serde_json::json!({
+            "q": q,
+            "media": media
+        })
+    })]
+    RestSearchMatchesMultipleFragments {
+        name: String,
+        second_name: String,
+        q: Option<String>,
+        media: Option<serde_json::Value>,
+    },
+    #[error("Query matches no search fragment.\n  - Note: {}",
+    {
+        serde_json::json!({
+            "q": q,
+            "media": media
+        })
+    })]
+    RestSearchMatchesNoFragment { q: Option<String>, media: Option<serde_json::Value> },
 }
 
 fn option_info(info: Option<&str>, prefix: &str) -> String {
@@ -209,6 +236,44 @@ impl EmbedError {
 
     pub(crate) fn rest_extraction_error(error: String) -> EmbedError {
         Self { kind: EmbedErrorKind::RestExtractionError(error), fault: FaultSource::Runtime }
+    }
+
+    pub(crate) fn rest_media_not_a_rest() -> EmbedError {
+        Self { kind: EmbedErrorKind::RestMediaNotARest, fault: FaultSource::User }
+    }
+
+    pub(crate) fn rest_media_not_a_fragment() -> EmbedError {
+        Self { kind: EmbedErrorKind::RestMediaNotAFragment, fault: FaultSource::User }
+    }
+
+    pub(crate) fn rest_search_matches_multiple_fragments(
+        name: &str,
+        second_name: &str,
+        q: Option<&str>,
+        media: Option<&serde_json::Value>,
+    ) -> EmbedError {
+        Self {
+            kind: EmbedErrorKind::RestSearchMatchesMultipleFragments {
+                name: name.to_string(),
+                second_name: second_name.to_string(),
+                q: q.map(String::from),
+                media: media.cloned(),
+            },
+            fault: FaultSource::User,
+        }
+    }
+
+    pub(crate) fn rest_search_matches_no_fragment(
+        q: Option<&str>,
+        media: Option<&serde_json::Value>,
+    ) -> EmbedError {
+        Self {
+            kind: EmbedErrorKind::RestSearchMatchesNoFragment {
+                q: q.map(String::from),
+                media: media.cloned(),
+            },
+            fault: FaultSource::User,
+        }
     }
 }
 
@@ -382,6 +447,49 @@ impl NewEmbedderError {
             fault: FaultSource::User,
         }
     }
+
+    pub(crate) fn rest_cannot_infer_dimensions_for_fragment() -> NewEmbedderError {
+        Self {
+            kind: NewEmbedderErrorKind::RestCannotInferDimensionsForFragment,
+            fault: FaultSource::User,
+        }
+    }
+
+    pub(crate) fn rest_inconsistent_fragments(
+        indexing_fragments_is_empty: bool,
+        indexing_fragments: BTreeMap<String, serde_json::Value>,
+        search_fragments: BTreeMap<String, serde_json::Value>,
+    ) -> NewEmbedderError {
+        let message = if indexing_fragments_is_empty {
+            format!("`indexingFragments` is empty, but `searchFragments` declares {} fragments: {}{}\n  - Hint: declare at least one fragment in `indexingFragments` or remove fragments from `searchFragments` by setting them to `null`",
+                search_fragments.len(),
+                search_fragments.keys().take(3).join(", "), if search_fragments.len() > 3 { ", ..." } else { "" }
+        )
+        } else {
+            format!("`searchFragments` is empty, but `indexingFragments` declares {} fragments: {}{}\n - Hint: declare at least one fragment in `searchFragments` or remove fragments from `indexingFragments` by setting them to `null`",
+                indexing_fragments.len(),
+                indexing_fragments.keys().take(3).join(", "), if indexing_fragments.len() > 3 { ", ..." } else { "" }
+        )
+        };
+
+        Self {
+            kind: NewEmbedderErrorKind::RestInconsistentFragments { message },
+            fault: FaultSource::User,
+        }
+    }
+
+    pub(crate) fn rest_document_template_and_fragments(
+        indexing_fragments_len: usize,
+        search_fragments_len: usize,
+    ) -> Self {
+        Self {
+            kind: NewEmbedderErrorKind::RestDocumentTemplateAndFragments {
+                indexing_fragments_len,
+                search_fragments_len,
+            },
+            fault: FaultSource::User,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -499,6 +607,12 @@ pub enum NewEmbedderErrorKind {
     CompositeEmbeddingCountMismatch { search_count: usize, index_count: usize },
     #[error("error while generating test embeddings.\n  - the embeddings produced at search time and indexing time are not similar enough.\n  - angular distance {distance:.2}\n  - Meilisearch requires a maximum distance of {MAX_COMPOSITE_DISTANCE}.\n  - Note: check that both embedders produce similar embeddings.{hint}")]
     CompositeEmbeddingValueMismatch { distance: f32, hint: CompositeEmbedderContainsHuggingFace },
+    #[error("cannot infer `dimensions` for an embedder using `indexingFragments`.\n  - Note: Specify `dimensions` explicitly or don't use `indexingFragments`.")]
+    RestCannotInferDimensionsForFragment,
+    #[error("inconsistent fragments: {message}")]
+    RestInconsistentFragments { message: String },
+    #[error("cannot pass both fragments and a document template.\n  - Note: {indexing_fragments_len} fragments declared in `indexingFragments` and {search_fragments_len} fragments declared in `search_fragments_len`.\n  - Hint: remove the declared fragments or remove the `documentTemplate`")]
+    RestDocumentTemplateAndFragments { indexing_fragments_len: usize, search_fragments_len: usize },
 }
 
 pub struct PossibleEmbeddingMistakes {

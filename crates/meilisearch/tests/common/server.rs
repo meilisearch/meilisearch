@@ -97,6 +97,7 @@ impl Server<Owned> {
         self.use_api_key(master_key);
         let (response, code) = self.list_api_keys("").await;
         assert_eq!(200, code, "{:?}", response);
+        // TODO: relying on the order of keys is not ideal, we should use the name instead
         let admin_key = &response["results"][1]["key"];
         self.use_api_key(admin_key.as_str().unwrap());
     }
@@ -464,6 +465,7 @@ pub fn default_settings(dir: impl AsRef<Path>) -> Opt {
             skip_index_budget: true,
             // Having 2 threads makes the tests way faster
             max_indexing_threads: MaxThreads::from_str("2").unwrap(),
+            experimental_no_edition_2024_for_settings: false,
         },
         experimental_enable_metrics: false,
         ..Parser::parse_from(None as Option<&str>)

@@ -9,12 +9,11 @@ use std::fmt::Debug;
 use std::num::NonZeroUsize;
 
 use bumpalo::Bump;
-use document::ParseableDocument;
+pub(crate) use document::{Document, ParseableDocument};
 use error::{NewPromptError, RenderPromptError};
-use fields::{BorrowedFields, OwnedFields};
+pub use fields::{BorrowedFields, OwnedFields};
 
-use self::context::Context;
-use self::document::Document;
+pub use self::context::Context;
 use crate::fields_ids_map::metadata::FieldIdMapWithMetadata;
 use crate::update::del_add::DelAdd;
 use crate::GlobalFieldsIdsMap;
@@ -108,8 +107,8 @@ impl Prompt {
     }
 
     pub fn render_document<
-        'a,       // lifetime of the borrow of the document
-        'doc: 'a, // lifetime of the allocator, will live for an entire chunk of documents
+        'a,   // lifetime of the borrow of the document
+        'doc, // lifetime of the allocator, will live for an entire chunk of documents
     >(
         &self,
         external_docid: &str,

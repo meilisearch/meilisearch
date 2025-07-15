@@ -144,6 +144,21 @@ impl Key {
         }
     }
 
+    pub fn default_read_only_admin() -> Self {
+        let now = OffsetDateTime::now_utc();
+        let uid = Uuid::new_v4();
+        Self {
+            name: Some("Default Read-Only Admin API Key".to_string()),
+            description: Some("Use it to read information across the whole database. Caution! Do not expose this key on a public frontend".to_string()),
+            uid,
+            actions: vec![Action::AllGet, Action::KeysGet],
+            indexes: vec![IndexUidPattern::all()],
+            expires_at: None,
+            created_at: now,
+            updated_at: now,
+        }
+    }
+
     pub fn default_search() -> Self {
         let now = OffsetDateTime::now_utc();
         let uid = Uuid::new_v4();
@@ -218,6 +233,9 @@ pub enum Action {
     #[serde(rename = "*")]
     #[deserr(rename = "*")]
     All = 0,
+    #[serde(rename = "*.get")]
+    #[deserr(rename = "*.get")]
+    AllGet,
     #[serde(rename = "search")]
     #[deserr(rename = "search")]
     Search,
@@ -317,6 +335,9 @@ pub enum Action {
     #[serde(rename = "experimental.update")]
     #[deserr(rename = "experimental.update")]
     ExperimentalFeaturesUpdate,
+    #[serde(rename = "export")]
+    #[deserr(rename = "export")]
+    Export,
     #[serde(rename = "network.get")]
     #[deserr(rename = "network.get")]
     NetworkGet,
@@ -396,6 +417,52 @@ impl Action {
         }
     }
 
+    /// Whether the action should be included in [Action::AllRead].
+    pub fn is_read(&self) -> bool {
+        use Action::*;
+
+        // It's using an exhaustive match to force the addition of new actions.
+        match self {
+            // Any action that expands to others must return false, as it wouldn't be able to expand recursively.
+            All | AllGet | DocumentsAll | IndexesAll | ChatsAll | TasksAll | SettingsAll
+            | StatsAll | MetricsAll | DumpsAll | SnapshotsAll | ChatsSettingsAll => false,
+
+            Search => true,
+            DocumentsAdd => false,
+            DocumentsGet => true,
+            DocumentsDelete => false,
+            Export => true,
+            IndexesAdd => false,
+            IndexesGet => true,
+            IndexesUpdate => false,
+            IndexesDelete => false,
+            IndexesSwap => false,
+            TasksCancel => false,
+            TasksDelete => false,
+            TasksGet => true,
+            SettingsGet => true,
+            SettingsUpdate => false,
+            StatsGet => true,
+            MetricsGet => true,
+            DumpsCreate => false,
+            SnapshotsCreate => false,
+            Version => true,
+            KeysAdd => false,
+            KeysGet => false, // Disabled in order to prevent privilege escalation
+            KeysUpdate => false,
+            KeysDelete => false,
+            ExperimentalFeaturesGet => true,
+            ExperimentalFeaturesUpdate => false,
+            NetworkGet => true,
+            NetworkUpdate => false,
+            ChatCompletions => false, // Disabled because it might trigger generation of new chats
+            ChatsGet => true,
+            ChatsDelete => false,
+            ChatsSettingsGet => true,
+            ChatsSettingsUpdate => false,
+        }
+    }
+
     pub const fn repr(&self) -> u8 {
         *self as u8
     }
@@ -405,6 +472,7 @@ pub mod actions {
     use super::Action::*;
 
     pub(crate) const ALL: u8 = All.repr();
+    pub const ALL_GET: u8 = AllGet.repr();
     pub const SEARCH: u8 = Search.repr();
     pub const DOCUMENTS_ALL: u8 = DocumentsAll.repr();
     pub const DOCUMENTS_ADD: u8 = DocumentsAdd.repr();
@@ -437,6 +505,8 @@ pub mod actions {
     pub const KEYS_DELETE: u8 = KeysDelete.repr();
     pub const EXPERIMENTAL_FEATURES_GET: u8 = ExperimentalFeaturesGet.repr();
     pub const EXPERIMENTAL_FEATURES_UPDATE: u8 = ExperimentalFeaturesUpdate.repr();
+
+    pub const EXPORT: u8 = Export.repr();
 
     pub const NETWORK_GET: u8 = NetworkGet.repr();
     pub const NETWORK_UPDATE: u8 = NetworkUpdate.repr();

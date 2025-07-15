@@ -5,15 +5,14 @@ use rhai::{Dynamic, Engine, OptimizationLevel, Scope, AST};
 use roaring::RoaringBitmap;
 use rustc_hash::FxBuildHasher;
 
-use super::document_changes::DocumentChangeContext;
 use super::DocumentChanges;
 use crate::documents::Error::InvalidDocumentFormat;
 use crate::documents::PrimaryKey;
 use crate::error::{FieldIdMapMissingEntry, InternalError};
-use crate::update::new::document::Versions;
+use crate::update::new::document::{DocumentContext, Versions};
 use crate::update::new::ref_cell_ext::RefCellExt as _;
 use crate::update::new::thread_local::MostlySend;
-use crate::update::new::{Deletion, DocumentChange, KvReaderFieldId, Update};
+use crate::update::new::{DocumentChange, DocumentIdentifiers, KvReaderFieldId, Update};
 use crate::{all_obkv_to_json, Error, FieldsIdsMap, Object, Result, UserError};
 
 pub struct UpdateByFunction {
@@ -86,13 +85,13 @@ impl<'index> DocumentChanges<'index> for UpdateByFunctionChanges<'index> {
 
     fn item_to_document_change<'doc, T: MostlySend + 'doc>(
         &self,
-        context: &'doc DocumentChangeContext<T>,
+        context: &'doc DocumentContext<T>,
         docid: &'doc Self::Item,
     ) -> Result<Option<DocumentChange<'doc>>>
     where
         'index: 'doc,
     {
-        let DocumentChangeContext {
+        let DocumentContext {
             index,
             db_fields_ids_map,
             rtxn: txn,
@@ -128,10 +127,9 @@ impl<'index> DocumentChanges<'index> for UpdateByFunctionChanges<'index> {
 
         match scope.remove::<Dynamic>("doc") {
             // If the "doc" variable has been set to (), we effectively delete the document.
-            Some(doc) if doc.is_unit() => Ok(Some(DocumentChange::Deletion(Deletion::create(
-                docid,
-                doc_alloc.alloc_str(&document_id),
-            )))),
+            Some(doc) if doc.is_unit() => Ok(Some(DocumentChange::Deletion(
+                DocumentIdentifiers::create(docid, doc_alloc.alloc_str(&document_id)),
+            ))),
             None => unreachable!("missing doc variable from the Rhai scope"),
             Some(new_document) => match new_document.try_cast() {
                 Some(new_rhai_document) => {

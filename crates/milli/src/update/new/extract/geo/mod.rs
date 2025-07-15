@@ -10,8 +10,8 @@ use serde_json::value::RawValue;
 use serde_json::Value;
 
 use crate::error::GeoError;
-use crate::update::new::document::Document;
-use crate::update::new::indexer::document_changes::{DocumentChangeContext, Extractor};
+use crate::update::new::document::{Document, DocumentContext};
+use crate::update::new::indexer::document_changes::Extractor;
 use crate::update::new::ref_cell_ext::RefCellExt as _;
 use crate::update::new::thread_local::MostlySend;
 use crate::update::new::DocumentChange;
@@ -150,7 +150,7 @@ impl<'extractor> Extractor<'extractor> for GeoExtractor {
     fn process<'doc>(
         &'doc self,
         changes: impl Iterator<Item = Result<DocumentChange<'doc>>>,
-        context: &'doc DocumentChangeContext<Self::Data>,
+        context: &'doc DocumentContext<Self::Data>,
     ) -> Result<()> {
         let rtxn = &context.rtxn;
         let index = context.index;

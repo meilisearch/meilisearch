@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::sync::atomic::AtomicBool;
 
 use bstr::ByteSlice as _;
@@ -10,10 +11,11 @@ use super::super::channel::*;
 use crate::database_stats::DatabaseStats;
 use crate::documents::PrimaryKey;
 use crate::fields_ids_map::metadata::FieldIdMapWithMetadata;
-use crate::index::IndexEmbeddingConfig;
 use crate::progress::Progress;
 use crate::update::settings::InnerIndexSettings;
-use crate::vector::{ArroyWrapper, Embedder, EmbeddingConfigs, Embeddings};
+use crate::vector::db::IndexEmbeddingConfig;
+use crate::vector::settings::EmbedderAction;
+use crate::vector::{ArroyWrapper, Embedder, Embeddings, RuntimeEmbedders};
 use crate::{Error, Index, InternalError, Result, UserError};
 
 pub fn write_to_db(
@@ -62,6 +64,14 @@ pub fn write_to_db(
                 writer.del_items(wtxn, *dimensions, docid)?;
                 writer.add_items(wtxn, docid, &embeddings)?;
             }
+            ReceiverAction::LargeVector(
+                large_vector @ LargeVector { docid, embedder_id, extractor_id, .. },
+            ) => {
+                let (_, _, writer, dimensions) =
+                    arroy_writers.get(&embedder_id).expect("requested a missing embedder");
+                let embedding = large_vector.read_embedding(*dimensions);
+                writer.add_item_in_store(wtxn, docid, extractor_id, embedding)?;
+            }
         }
 
         // Every time the is a message in the channel we search
@@ -99,6 +109,7 @@ impl ChannelCongestion {
 }
 
 #[tracing::instrument(level = "debug", skip_all, target = "indexing::vectors")]
+#[allow(clippy::too_many_arguments)]
 pub fn build_vectors<MSP>(
     index: &Index,
     wtxn: &mut RwTxn<'_>,
@@ -106,6 +117,7 @@ pub fn build_vectors<MSP>(
     index_embeddings: Vec<IndexEmbeddingConfig>,
     arroy_memory: Option<usize>,
     arroy_writers: &mut HashMap<u8, (&str, &Embedder, ArroyWrapper, usize)>,
+    embeder_actions: Option<&BTreeMap<String, EmbedderAction>>,
     must_stop_processing: &MSP,
 ) -> Result<()>
 where
@@ -117,20 +129,23 @@ where
 
     let seed = rand::random();
     let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
-    for (_index, (_embedder_name, _embedder, writer, dimensions)) in arroy_writers {
+    for (_index, (embedder_name, _embedder, writer, dimensions)) in arroy_writers {
         let dimensions = *dimensions;
+        let is_being_quantized = embeder_actions
+            .and_then(|actions| actions.get(*embedder_name).map(|action| action.is_being_quantized))
+            .unwrap_or(false);
         writer.build_and_quantize(
             wtxn,
             progress,
             &mut rng,
             dimensions,
-            false,
+            is_being_quantized,
             arroy_memory,
             must_stop_processing,
         )?;
     }
 
-    index.put_embedding_configs(wtxn, index_embeddings)?;
+    index.embedding_configs().put_embedding_configs(wtxn, index_embeddings)?;
     Ok(())
 }
 
@@ -140,7 +155,7 @@ pub(super) fn update_index(
     wtxn: &mut RwTxn<'_>,
     new_fields_ids_map: FieldIdMapWithMetadata,
     new_primary_key: Option<PrimaryKey<'_>>,
-    embedders: EmbeddingConfigs,
+    embedders: RuntimeEmbedders,
     field_distribution: std::collections::BTreeMap<String, u64>,
     document_ids: roaring::RoaringBitmap,
 ) -> Result<()> {
@@ -219,14 +234,36 @@ pub fn write_from_bbqueue(
                     arroy_writers.get(&embedder_id).expect("requested a missing embedder");
                 let mut embeddings = Embeddings::new(*dimensions);
                 let all_embeddings = asvs.read_all_embeddings_into_vec(frame, aligned_embedding);
-                if embeddings.append(all_embeddings.to_vec()).is_err() {
-                    return Err(Error::UserError(UserError::InvalidVectorDimensions {
-                        expected: *dimensions,
-                        found: all_embeddings.len(),
-                    }));
-                }
                 writer.del_items(wtxn, *dimensions, docid)?;
-                writer.add_items(wtxn, docid, &embeddings)?;
+                if !all_embeddings.is_empty() {
+                    if embeddings.append(all_embeddings.to_vec()).is_err() {
+                        return Err(Error::UserError(UserError::InvalidVectorDimensions {
+                            expected: *dimensions,
+                            found: all_embeddings.len(),
+                        }));
+                    }
+                    writer.add_items(wtxn, docid, &embeddings)?;
+                }
+            }
+            EntryHeader::ArroySetVector(
+                asv @ ArroySetVector { docid, embedder_id, extractor_id, .. },
+            ) => {
+                let frame = frame_with_header.frame();
+                let (_, _, writer, dimensions) =
+                    arroy_writers.get(&embedder_id).expect("requested a missing embedder");
+                let embedding = asv.read_all_embeddings_into_vec(frame, aligned_embedding);
+
+                if embedding.is_empty() {
+                    writer.del_item_in_store(wtxn, docid, extractor_id, *dimensions)?;
+                } else {
+                    if embedding.len() != *dimensions {
+                        return Err(Error::UserError(UserError::InvalidVectorDimensions {
+                            expected: *dimensions,
+                            found: embedding.len(),
+                        }));
+                    }
+                    writer.add_item_in_store(wtxn, docid, extractor_id, embedding)?;
+                }
             }
         }
     }

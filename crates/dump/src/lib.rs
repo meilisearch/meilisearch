@@ -1,12 +1,17 @@
 #![allow(clippy::type_complexity)]
 #![allow(clippy::wrong_self_convention)]
 
+use std::collections::BTreeMap;
+
 use meilisearch_types::batches::BatchId;
+use meilisearch_types::byte_unit::Byte;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::keys::Key;
 use meilisearch_types::milli::update::IndexDocumentsMethod;
 use meilisearch_types::settings::Unchecked;
-use meilisearch_types::tasks::{Details, IndexSwap, KindWithContent, Status, Task, TaskId};
+use meilisearch_types::tasks::{
+    Details, ExportIndexSettings, IndexSwap, KindWithContent, Status, Task, TaskId,
+};
 use meilisearch_types::InstanceUid;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
@@ -141,6 +146,12 @@ pub enum KindDump {
         instance_uid: Option<InstanceUid>,
     },
     SnapshotCreation,
+    Export {
+        url: String,
+        api_key: Option<String>,
+        payload_size: Option<Byte>,
+        indexes: BTreeMap<String, ExportIndexSettings>,
+    },
     UpgradeDatabase {
         from: (u32, u32, u32),
     },
@@ -213,6 +224,15 @@ impl From<KindWithContent> for KindDump {
                 KindDump::DumpCreation { keys, instance_uid }
             }
             KindWithContent::SnapshotCreation => KindDump::SnapshotCreation,
+            KindWithContent::Export { url, api_key, payload_size, indexes } => KindDump::Export {
+                url,
+                api_key,
+                payload_size,
+                indexes: indexes
+                    .into_iter()
+                    .map(|(pattern, settings)| (pattern.to_string(), settings))
+                    .collect(),
+            },
             KindWithContent::UpgradeDatabase { from: version } => {
                 KindDump::UpgradeDatabase { from: version }
             }
@@ -329,6 +349,7 @@ pub(crate) mod test {
                 write_channel_congestion: None,
                 internal_database_sizes: Default::default(),
             },
+            embedder_stats: Default::default(),
             enqueued_at: Some(BatchEnqueuedAt {
                 earliest: datetime!(2022-11-11 0:00 UTC),
                 oldest: datetime!(2022-11-11 0:00 UTC),

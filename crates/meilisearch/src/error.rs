@@ -49,7 +49,7 @@ pub enum MeilisearchHttpError {
     TooManySearchRequests(usize),
     #[error("Internal error: Search limiter is down.")]
     SearchLimiterIsDown,
-    #[error("The provided payload reached the size limit. The maximum accepted payload size is {}.",  Byte::from_u64(*.0 as u64).get_appropriate_unit(UnitType::Binary))]
+    #[error("The provided payload reached the size limit. The maximum accepted payload size is {}.", Byte::from_u64(*.0 as u64).get_appropriate_unit(if *.0 % 1024 == 0 { UnitType::Binary } else { UnitType::Decimal }))]
     PayloadTooLarge(usize),
     #[error("Two indexes must be given for each swap. The list `[{}]` contains {} indexes.",
         .0.iter().map(|uid| format!("\"{uid}\"")).collect::<Vec<_>>().join(", "), .0.len()
@@ -76,8 +76,10 @@ pub enum MeilisearchHttpError {
     DocumentFormat(#[from] DocumentFormatError),
     #[error(transparent)]
     Join(#[from] JoinError),
-    #[error("Invalid request: missing `hybrid` parameter when `vector` is present.")]
+    #[error("Invalid request: missing `hybrid` parameter when `vector` or `media` are present.")]
     MissingSearchHybrid,
+    #[error("Invalid request: both `media` and `vector` parameters are present.")]
+    MediaAndVector,
 }
 
 impl MeilisearchHttpError {
@@ -111,6 +113,7 @@ impl ErrorCode for MeilisearchHttpError {
             MeilisearchHttpError::DocumentFormat(e) => e.error_code(),
             MeilisearchHttpError::Join(_) => Code::Internal,
             MeilisearchHttpError::MissingSearchHybrid => Code::MissingSearchHybrid,
+            MeilisearchHttpError::MediaAndVector => Code::InvalidSearchMediaAndVector,
             MeilisearchHttpError::FederationOptionsInNonFederatedRequest(_) => {
                 Code::InvalidMultiSearchFederationOptions
             }

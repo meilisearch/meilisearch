@@ -247,6 +247,20 @@ async fn get_settings() {
     assert_eq!(settings["prefixSearch"], json!("indexingTime"));
     assert_eq!(settings["facetSearch"], json!(true));
     assert_eq!(settings["embedders"], json!({}));
+    assert_eq!(settings["synonyms"], json!({}));
+    assert_eq!(
+        settings["typoTolerance"],
+        json!({
+            "enabled": true,
+            "minWordSizeForTypos": {
+                "oneTypo": 5,
+                "twoTypos": 9
+            },
+            "disableOnWords": [],
+            "disableOnAttributes": [],
+            "disableOnNumbers": false
+        })
+    );
 }
 
 #[actix_rt::test]
@@ -426,8 +440,15 @@ async fn reset_all_settings() {
     assert_eq!(code, 202);
     server.wait_task(response.uid()).await.succeeded();
 
-    let (update_task,_status_code) = index
-        .update_settings(json!({"displayedAttributes": ["name", "age"], "searchableAttributes": ["name"], "stopWords": ["the"], "filterableAttributes": ["age"], "synonyms": {"puppy": ["dog", "doggo", "potat"] }}))
+    let (update_task, _status_code) = index
+        .update_settings(json!({
+            "displayedAttributes": ["name", "age"],
+            "searchableAttributes": ["name"],
+            "stopWords": ["the"],
+            "filterableAttributes": ["age"],
+            "synonyms": {"puppy": ["dog", "doggo", "potat"] },
+            "typoTolerance": {"disableOnNumbers": true}
+        }))
         .await;
     server.wait_task(update_task.uid()).await.succeeded();
     let (response, code) = index.settings().await;
@@ -437,6 +458,19 @@ async fn reset_all_settings() {
     assert_eq!(response["stopWords"], json!(["the"]));
     assert_eq!(response["synonyms"], json!({"puppy": ["dog", "doggo", "potat"] }));
     assert_eq!(response["filterableAttributes"], json!(["age"]));
+    assert_eq!(
+        response["typoTolerance"],
+        json!({
+            "enabled": true,
+            "minWordSizeForTypos": {
+                "oneTypo": 5,
+                "twoTypos": 9
+            },
+            "disableOnWords": [],
+            "disableOnAttributes": [],
+            "disableOnNumbers": true
+        })
+    );
 
     let (delete_task, _status_code) = index.delete_settings().await;
     server.wait_task(delete_task.uid()).await.succeeded();
@@ -448,6 +482,19 @@ async fn reset_all_settings() {
     assert_eq!(response["stopWords"], json!([]));
     assert_eq!(response["filterableAttributes"], json!([]));
     assert_eq!(response["synonyms"], json!({}));
+    assert_eq!(
+        response["typoTolerance"],
+        json!({
+            "enabled": true,
+            "minWordSizeForTypos": {
+                "oneTypo": 5,
+                "twoTypos": 9
+            },
+            "disableOnWords": [],
+            "disableOnAttributes": [],
+            "disableOnNumbers": false
+        })
+    );
 
     let (response, code) = index.get_document(1, None).await;
     assert_eq!(code, 200);
@@ -644,4 +691,69 @@ async fn granular_filterable_attributes() {
       }
     ]
     "###);
+}
+
+#[actix_rt::test]
+async fn test_searchable_attributes_order() {
+    let server = Server::new_shared();
+    let index = server.unique_index();
+
+    // 1) Create an index with settings "searchableAttributes": ["title", "overview"]
+    let (response, code) = index.create(None).await;
+    assert_eq!(code, 202, "{response}");
+    server.wait_task(response.uid()).await.succeeded();
+
+    let (task, code) = index
+        .update_settings(json!({
+            "searchableAttributes": ["title", "overview"]
+        }))
+        .await;
+    assert_eq!(code, 202, "{task}");
+    server.wait_task(task.uid()).await.succeeded();
+
+    // 2) Add documents in the index
+    let documents = json!([
+        {
+            "id": 1,
+            "title": "The Matrix",
+            "overview": "A computer hacker learns from mysterious rebels about the true nature of his reality."
+        },
+        {
+            "id": 2,
+            "title": "Inception",
+            "overview": "A thief who steals corporate secrets through dream-sharing technology."
+        }
+    ]);
+
+    let (response, code) = index.add_documents(documents, None).await;
+    assert_eq!(code, 202, "{response}");
+    server.wait_task(response.uid()).await.succeeded();
+
+    // 3) Modify the settings "searchableAttributes": ["overview", "title"] (overview is put first)
+    let (task, code) = index
+        .update_settings(json!({
+            "searchableAttributes": ["overview", "title"]
+        }))
+        .await;
+    assert_eq!(code, 202, "{task}");
+    server.wait_task(task.uid()).await.succeeded();
+
+    // 4) Check if it has been applied
+    let (response, code) = index.settings().await;
+    assert_eq!(code, 200, "{response}");
+    assert_eq!(response["searchableAttributes"], json!(["overview", "title"]));
+
+    // 5) Re-modify the settings "searchableAttributes": ["title", "overview"] (title is put first)
+    let (task, code) = index
+        .update_settings(json!({
+            "searchableAttributes": ["title", "overview"]
+        }))
+        .await;
+    assert_eq!(code, 202, "{task}");
+    server.wait_task(task.uid()).await.succeeded();
+
+    // 6) Check if it has been applied
+    let (response, code) = index.settings().await;
+    assert_eq!(code, 200, "{response}");
+    assert_eq!(response["searchableAttributes"], json!(["title", "overview"]));
 }
