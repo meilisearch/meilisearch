@@ -63,7 +63,6 @@ where
     Ok(())
 }
 
-
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::merge")]
 pub fn merge_and_send_cellulite<'extractor, MSP>(
     datastore: impl IntoIterator<Item = RefCell<GeoJsonExtractorData<'extractor>>>,
