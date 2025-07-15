@@ -80,6 +80,8 @@ pub enum InternalError {
     #[error(transparent)]
     HannoyError(#[from] hannoy::Error),
     #[error(transparent)]
+    CelluliteError(#[from] cellulite::Error),
+    #[error(transparent)]
     VectorEmbeddingError(#[from] crate::vector::Error),
 }
 
@@ -153,6 +155,8 @@ and can not be more than 511 bytes.", .document_id.to_string()
     },
     #[error(transparent)]
     InvalidGeoField(#[from] Box<GeoError>),
+    #[error(transparent)]
+    GeoJsonError(#[from] geojson::Error),
     #[error("Invalid vector dimensions: expected: `{}`, found: `{}`.", .expected, .found)]
     InvalidVectorDimensions { expected: usize, found: usize },
     #[error("Invalid vector dimensions in document with id `{document_id}` in `._vectors.{embedder_name}`.\n  - note: embedding #{embedding_index} has dimensions {found}\n  - note: embedder `{embedder_name}` requires {expected}")]

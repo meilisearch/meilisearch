@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 use crate::attribute_patterns::{match_distinct_field, match_field_legacy, PatternMatch};
-use crate::constants::RESERVED_GEO_FIELD_NAME;
+use crate::constants::{RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME};
 use crate::AttributePatterns;
 
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug, ToSchema)]
@@ -32,6 +32,10 @@ impl FilterableAttributesRule {
     /// to check if the geo feature is enabled.
     pub fn has_geo(&self) -> bool {
         matches!(self, FilterableAttributesRule::Field(field_name) if field_name == RESERVED_GEO_FIELD_NAME)
+    }
+
+    pub fn has_geojson(&self) -> bool {
+        matches!(self, FilterableAttributesRule::Field(field_name) if field_name == RESERVED_GEOJSON_FIELD_NAME)
     }
 
     /// Get the features of the rule.
