@@ -161,12 +161,13 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
         };
     }
 
-    let max_total_hits = max_total_hits.unwrap_or(usize::MAX);
-    while valid_docids.len() < length
-        || (exhaustive_number_hits
-            && ranking_score_threshold.is_some()
-            && valid_docids.len() < max_total_hits)
-    {
+    let max_len_to_evaluate =
+        match (max_total_hits, exhaustive_number_hits && ranking_score_threshold.is_some()) {
+            (Some(max_total_hits), true) => max_total_hits,
+            _ => length,
+        };
+
+    while valid_docids.len() < max_len_to_evaluate {
         if time_budget.exceeded() {
             loop {
                 let bucket = std::mem::take(&mut ranking_rule_universes[cur_ranking_rule_index]);
