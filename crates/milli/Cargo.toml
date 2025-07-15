@@ -119,6 +119,7 @@ twox-hash = { version = "2.1.1", default-features = false, features = [
     "xxhash3_64",
     "xxhash64",
 ] }
+geo-types = "0.7.16"
 
 [dev-dependencies]
 mimalloc = { version = "0.1.47", default-features = false }

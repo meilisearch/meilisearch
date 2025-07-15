@@ -12,7 +12,9 @@ use roaring::{MultiOps, RoaringBitmap};
 use serde_json::Value;
 
 use super::facet_range_search;
-use crate::constants::{RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME};
+use crate::constants::{
+    RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME,
+};
 use crate::error::{Error, UserError};
 use crate::filterable_attributes_rules::{filtered_matching_patterns, matching_features};
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec, FacetGroupValueCodec};
@@ -822,6 +824,37 @@ impl<'a> Filter<'a> {
                             ),
                         },
                     ))?
+                }
+            }
+            FilterCondition::GeoPolygon { points } => {
+                if index.is_geojson_enabled(rtxn)? {
+                    let polygon = geo_types::Polygon::new(
+                        geo_types::LineString(
+                            points
+                                .iter()
+                                .map(|p| {
+                                    Ok(geo_types::Coord {
+                                        x: p[0].parse_finite_float()?,
+                                        y: p[1].parse_finite_float()?,
+                                    })
+                                })
+                                .collect::<Result<_, filter_parser::Error>>()?,
+                        ),
+                        Vec::new(),
+                    );
+                    let cellulite = cellulite::Writer::new(index.cellulite);
+                    let result = cellulite
+                        .in_shape(rtxn, &polygon.into(), &mut |_| ())
+                        .map_err(InternalError::CelluliteError)?;
+                    Ok(result)
+                } else {
+                    Err(points[0][0].as_external_error(FilterError::AttributeNotFilterable {
+                        attribute: RESERVED_GEOJSON_FIELD_NAME,
+                        filterable_patterns: filtered_matching_patterns(
+                            filterable_attribute_rules,
+                            &|features| features.is_filterable(),
+                        ),
+                    }))?
                 }
             }
         }

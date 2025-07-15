@@ -4174,6 +4174,7 @@ dependencies = [
  "flume",
  "fst",
  "fxhash",
+ "geo-types",
  "geojson",
  "geoutils",
  "grenad",
