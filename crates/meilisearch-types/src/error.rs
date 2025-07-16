@@ -237,6 +237,7 @@ InvalidDocumentRetrieveVectors                 , InvalidRequest       , BAD_REQU
 MissingDocumentFilter                          , InvalidRequest       , BAD_REQUEST ;
 MissingDocumentEditionFunction                 , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentFilter                          , InvalidRequest       , BAD_REQUEST ;
+InvalidDocumentSort                            , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentGeoField                        , InvalidRequest       , BAD_REQUEST ;
 InvalidVectorDimensions                        , InvalidRequest       , BAD_REQUEST ;
 InvalidVectorsType                             , InvalidRequest       , BAD_REQUEST ;
@@ -477,7 +478,8 @@ impl ErrorCode for milli::Error {
                     UserError::InvalidDistinctAttribute { .. } => Code::InvalidSearchDistinct,
                     UserError::SortRankingRuleMissing => Code::InvalidSearchSort,
                     UserError::InvalidFacetsDistribution { .. } => Code::InvalidSearchFacets,
-                    UserError::InvalidSortableAttribute { .. } => Code::InvalidSearchSort,
+                    UserError::InvalidSearchSortableAttribute { .. } => Code::InvalidSearchSort,
+                    UserError::InvalidDocumentSortableAttribute { .. } => Code::InvalidDocumentSort,
                     UserError::InvalidSearchableAttribute { .. } => {
                         Code::InvalidSearchAttributesToSearchOn
                     }
@@ -493,7 +495,8 @@ impl ErrorCode for milli::Error {
                     UserError::InvalidVectorsMapType { .. }
                     | UserError::InvalidVectorsEmbedderConf { .. } => Code::InvalidVectorsType,
                     UserError::TooManyVectors(_, _) => Code::TooManyVectors,
-                    UserError::SortError(_) => Code::InvalidSearchSort,
+                    UserError::SortError { search: true, .. } => Code::InvalidSearchSort,
+                    UserError::SortError { search: false, .. } => Code::InvalidDocumentSort,
                     UserError::InvalidMinTypoWordLenSetting(_, _) => {
                         Code::InvalidSettingsTypoTolerance
                     }

@@ -9,6 +9,7 @@ use roaring::bitmap::RoaringBitmap;
 pub use self::facet::{FacetDistribution, Filter, OrderBy, DEFAULT_VALUES_PER_FACET};
 pub use self::new::matches::{FormatOptions, MatchBounds, MatcherBuilder, MatchingWords};
 use self::new::{execute_vector_search, PartialSearchResult, VectorStoreStats};
+use crate::documents::GeoSortParameter;
 use crate::filterable_attributes_rules::{filtered_matching_patterns, matching_features};
 use crate::index::MatchingStrategy;
 use crate::score_details::{ScoreDetails, ScoringStrategy};
@@ -47,7 +48,7 @@ pub struct Search<'a> {
     sort_criteria: Option<Vec<AscDesc>>,
     distinct: Option<String>,
     searchable_attributes: Option<&'a [String]>,
-    geo_param: new::GeoSortParameter,
+    geo_param: GeoSortParameter,
     terms_matching_strategy: TermsMatchingStrategy,
     scoring_strategy: ScoringStrategy,
     words_limit: usize,
@@ -71,7 +72,7 @@ impl<'a> Search<'a> {
             sort_criteria: None,
             distinct: None,
             searchable_attributes: None,
-            geo_param: new::GeoSortParameter::default(),
+            geo_param: GeoSortParameter::default(),
             terms_matching_strategy: TermsMatchingStrategy::default(),
             scoring_strategy: Default::default(),
             exhaustive_number_hits: false,
@@ -149,7 +150,7 @@ impl<'a> Search<'a> {
     }
 
     #[cfg(test)]
-    pub fn geo_sort_strategy(&mut self, strategy: new::GeoSortStrategy) -> &mut Search<'a> {
+    pub fn geo_sort_strategy(&mut self, strategy: crate::GeoSortStrategy) -> &mut Search<'a> {
         self.geo_param.strategy = strategy;
         self
     }

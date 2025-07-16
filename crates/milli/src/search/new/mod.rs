@@ -1,7 +1,7 @@
 mod bucket_sort;
 mod db_cache;
 mod distinct;
-mod geo_sort;
+pub(crate) mod geo_sort;
 mod graph_based_ranking_rule;
 mod interner;
 mod limits;
@@ -46,14 +46,14 @@ use resolve_query_graph::{compute_query_graph_docids, PhraseDocIdsCache};
 use roaring::RoaringBitmap;
 use sort::Sort;
 
-use self::distinct::facet_string_values;
+pub(crate) use self::distinct::{facet_string_values, facet_values_prefix_key};
 use self::geo_sort::GeoSort;
-pub use self::geo_sort::{Parameter as GeoSortParameter, Strategy as GeoSortStrategy};
 use self::graph_based_ranking_rule::Words;
 use self::interner::Interned;
 use self::vector_sort::VectorSort;
 use crate::attribute_patterns::{match_pattern, PatternMatch};
 use crate::constants::RESERVED_GEO_FIELD_NAME;
+use crate::documents::GeoSortParameter;
 use crate::index::PrefixSearch;
 use crate::localized_attributes_rules::LocalizedFieldIds;
 use crate::score_details::{ScoreDetails, ScoringStrategy};
@@ -319,7 +319,7 @@ fn resolve_negative_phrases(
 fn get_ranking_rules_for_placeholder_search<'ctx>(
     ctx: &SearchContext<'ctx>,
     sort_criteria: &Option<Vec<AscDesc>>,
-    geo_param: geo_sort::Parameter,
+    geo_param: GeoSortParameter,
 ) -> Result<Vec<BoxRankingRule<'ctx, PlaceholderQuery>>> {
     let mut sort = false;
     let mut sorted_fields = HashSet::new();
@@ -371,7 +371,7 @@ fn get_ranking_rules_for_placeholder_search<'ctx>(
 fn get_ranking_rules_for_vector<'ctx>(
     ctx: &SearchContext<'ctx>,
     sort_criteria: &Option<Vec<AscDesc>>,
-    geo_param: geo_sort::Parameter,
+    geo_param: GeoSortParameter,
     limit_plus_offset: usize,
     target: &[f32],
     embedder_name: &str,
@@ -448,7 +448,7 @@ fn get_ranking_rules_for_vector<'ctx>(
 fn get_ranking_rules_for_query_graph_search<'ctx>(
     ctx: &SearchContext<'ctx>,
     sort_criteria: &Option<Vec<AscDesc>>,
-    geo_param: geo_sort::Parameter,
+    geo_param: GeoSortParameter,
     terms_matching_strategy: TermsMatchingStrategy,
 ) -> Result<Vec<BoxRankingRule<'ctx, QueryGraph>>> {
     // query graph search
@@ -559,7 +559,7 @@ fn resolve_sort_criteria<'ctx, Query: RankingRuleQueryTrait>(
     ranking_rules: &mut Vec<BoxRankingRule<'ctx, Query>>,
     sorted_fields: &mut HashSet<String>,
     geo_sorted: &mut bool,
-    geo_param: geo_sort::Parameter,
+    geo_param: GeoSortParameter,
 ) -> Result<()> {
     let sort_criteria = sort_criteria.clone().unwrap_or_default();
     ranking_rules.reserve(sort_criteria.len());
@@ -631,7 +631,7 @@ pub fn execute_vector_search(
     universe: RoaringBitmap,
     sort_criteria: &Option<Vec<AscDesc>>,
     distinct: &Option<String>,
-    geo_param: geo_sort::Parameter,
+    geo_param: GeoSortParameter,
     from: usize,
     length: usize,
     embedder_name: &str,
@@ -697,7 +697,7 @@ pub fn execute_search(
     mut universe: RoaringBitmap,
     sort_criteria: &Option<Vec<AscDesc>>,
     distinct: &Option<String>,
-    geo_param: geo_sort::Parameter,
+    geo_param: GeoSortParameter,
     from: usize,
     length: usize,
     words_limit: Option<usize>,
@@ -881,7 +881,7 @@ pub fn execute_search(
     })
 }
 
-fn check_sort_criteria(
+pub(crate) fn check_sort_criteria(
     ctx: &SearchContext<'_>,
     sort_criteria: Option<&Vec<AscDesc>>,
 ) -> Result<()> {
@@ -911,7 +911,7 @@ fn check_sort_criteria(
                 let (valid_fields, hidden_fields) =
                     ctx.index.remove_hidden_fields(ctx.txn, sortable_fields)?;
 
-                return Err(UserError::InvalidSortableAttribute {
+                return Err(UserError::InvalidSearchSortableAttribute {
                     field: field.to_string(),
                     valid_fields,
                     hidden_fields,
@@ -922,7 +922,7 @@ fn check_sort_criteria(
                 let (valid_fields, hidden_fields) =
                     ctx.index.remove_hidden_fields(ctx.txn, sortable_fields)?;
 
-                return Err(UserError::InvalidSortableAttribute {
+                return Err(UserError::InvalidSearchSortableAttribute {
                     field: RESERVED_GEO_FIELD_NAME.to_string(),
                     valid_fields,
                     hidden_fields,
