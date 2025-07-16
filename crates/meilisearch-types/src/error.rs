@@ -417,6 +417,7 @@ InvalidChatCompletionSearchDescriptionPrompt   , InvalidRequest       , BAD_REQU
 InvalidChatCompletionSearchQueryParamPrompt    , InvalidRequest       , BAD_REQUEST ;
 InvalidChatCompletionSearchIndexUidParamPrompt , InvalidRequest       , BAD_REQUEST ;
 InvalidChatCompletionPreQueryPrompt            , InvalidRequest       , BAD_REQUEST ;
+// Render
 InvalidRenderTemplate                          , InvalidRequest       , BAD_REQUEST ;
 InvalidRenderTemplateId                        , InvalidRequest       , BAD_REQUEST ;
 InvalidRenderTemplateInline                    , InvalidRequest       , BAD_REQUEST ;

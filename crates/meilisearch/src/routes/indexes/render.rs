@@ -6,7 +6,7 @@ use index_scheduler::IndexScheduler;
 use itertools::structs;
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
-use meilisearch_types::error::deserr_codes::*;
+use meilisearch_types::error::{deserr_codes::*, Code};
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::keys::actions;
@@ -28,21 +28,19 @@ use crate::search::{
 
 #[derive(OpenApi)]
 #[openapi(
-    paths(render),
-    tags(
-        (
-            name = "Render templates",
-            description = "The /render route allows rendering templates used by Meilisearch.",
-            external_docs(url = "https://www.meilisearch.com/docs/reference/api/render"),
-        ),
-    ),
+    paths(render_post),
+    tags((
+        name = "Render templates",
+        description = "The /render route allows rendering templates used by Meilisearch.",
+        external_docs(url = "https://www.meilisearch.com/docs/reference/api/render"),   
+    )),
 )]
 pub struct RenderApi;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::resource("")
-            .route(web::post().to(SeqHandler(render)))
+            .route(web::post().to(SeqHandler(render_post)))
     );
 }
 
@@ -51,7 +49,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     post,
     path = "{indexUid}/render",
     tag = "Render templates",
-    security(("Bearer" = ["templates.render", "*.get", "*"])),
+    security(("Bearer" = ["settings.get", "settings.*", "*.get", "*"])),
     params(("indexUid" = String, Path, example = "movies", description = "Index Unique Identifier", nullable = false)),
     request_body = RenderQuery,
     responses(
@@ -78,8 +76,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         )),
     )
 )]
-pub async fn render(
-    index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
+pub async fn render_post(
+    index_scheduler: GuardedData<ActionPolicy<{ actions::SETTINGS_GET }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
     params: AwebJson<RenderQuery, DeserrJsonError>,
     req: HttpRequest,
@@ -92,17 +90,43 @@ pub async fn render(
 
     //let mut aggregate = SimilarAggregator::<SimilarPOST>::from_query(&query);
 
-    let rendered = RenderResult {
-        rendered: String::from("TODO")
-    };
+    let result = render(query).await?;
 
     // if let Ok(similar) = &similar {
     //     aggregate.succeed(similar);
     // }
     // analytics.publish(aggregate, &req);
 
-    debug!(returns = ?rendered, "Render template");
-    Ok(HttpResponse::Ok().json(rendered))
+    debug!(returns = ?result, "Render template");
+    Ok(HttpResponse::Ok().json(result))
+}
+
+
+enum RenderError {
+    TemplateBothInlineAndId,
+}
+
+use RenderError::*;
+
+impl From<RenderError> for ResponseError {
+    fn from(error: RenderError) -> Self {
+        match error {
+            TemplateBothInlineAndId => ResponseError::from_msg(
+                "Cannot provide both an inline template and a template ID.".to_string(),
+                Code::InvalidRenderTemplate,
+            )
+        }
+    }
+}
+
+async fn render(query: RenderQuery) -> Result<RenderResult, RenderError> {
+    if query.template.inline.is_some() && query.template.id.is_some() {
+        return Err(TemplateBothInlineAndId);
+    }
+
+    Ok(RenderResult {
+        rendered: String::from("TODO: Implement render logic here")
+    })
 }
 
 #[derive(Debug, Clone, PartialEq, Deserr, ToSchema)]
