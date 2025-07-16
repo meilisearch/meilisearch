@@ -1051,6 +1051,7 @@ pub fn prepare_search<'t>(
         .unwrap_or(DEFAULT_PAGINATION_MAX_TOTAL_HITS);
 
     search.exhaustive_number_hits(is_finite_pagination);
+    search.max_total_hits(Some(max_total_hits));
     search.scoring_strategy(
         if query.show_ranking_score
             || query.show_ranking_score_details
