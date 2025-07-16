@@ -45,6 +45,8 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
+use crate::index_mapper::IndexMapper;
+use crate::utils::clamp_to_page_size;
 use dump::Dump;
 pub use error::Error;
 pub use features::RoFeatures;
@@ -73,9 +75,6 @@ use roaring::RoaringBitmap;
 use scheduler::Scheduler;
 use time::OffsetDateTime;
 use versioning::Versioning;
-
-use crate::index_mapper::IndexMapper;
-use crate::utils::clamp_to_page_size;
 
 pub(crate) type BEI128 = I128<BE>;
 
@@ -276,7 +275,7 @@ impl IndexScheduler {
                 .open(&options.tasks_path)
         }?;
 
-        // We **must** starts by upgrading the version because it'll also upgrade the required database before we can open them
+        // We **must** start by upgrading the version because it'll also upgrade the required database before we can open them
         let version = versioning::Versioning::new(&env, from_db_version)?;
 
         let mut wtxn = env.write_txn()?;
