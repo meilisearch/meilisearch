@@ -30,6 +30,8 @@ use crate::Opt;
 
 pub mod documents;
 pub mod facet_search;
+pub mod render;
+mod render_analytics;
 pub mod search;
 mod search_analytics;
 #[cfg(test)]
