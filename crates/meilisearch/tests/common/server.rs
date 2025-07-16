@@ -35,7 +35,7 @@ pub struct Server<State = Owned> {
 pub static TEST_TEMP_DIR: Lazy<TempDir> = Lazy::new(|| TempDir::new().unwrap());
 
 impl Server<Owned> {
-    fn into_shared(self) -> Server<Shared> {
+    pub(super) fn into_shared(self) -> Server<Shared> {
         Server { service: self.service, _dir: self._dir, _marker: PhantomData }
     }
 

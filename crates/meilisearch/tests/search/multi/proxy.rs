@@ -2499,7 +2499,7 @@ pub struct LocalMeiliParams {
 
 /// A server that exploits [`MockServer`] to provide an URL for testing network and the network.
 pub struct LocalMeili {
-    mock_server: MockServer,
+    mock_server: &'static MockServer,
 }
 
 impl LocalMeili {
@@ -2508,7 +2508,7 @@ impl LocalMeili {
     }
 
     pub async fn with_params(server: Arc<Server>, params: LocalMeiliParams) -> Self {
-        let mock_server = MockServer::start().await;
+        let mock_server = Box::leak(Box::new(MockServer::start().await));
 
         // tokio won't let us execute asynchronous code from a sync function inside of an async test,
         // so instead we spawn another thread that will call the service on a brand new tokio runtime
@@ -2572,7 +2572,7 @@ impl LocalMeili {
                     response.set_body_json(value)
                 }
             })
-            .mount(&mock_server)
+            .mount(mock_server)
             .await;
         Self { mock_server }
     }
