@@ -3,8 +3,12 @@ pub mod index;
 pub mod server;
 pub mod service;
 
-use std::fmt::{self, Display};
+use std::{
+    collections::BTreeMap,
+    fmt::{self, Display},
+};
 
+use actix_http::StatusCode;
 #[allow(unused)]
 pub use index::GetAllDocumentsOptions;
 use meili_snap::json_string;
@@ -13,6 +17,10 @@ use serde::{Deserialize, Serialize};
 #[allow(unused)]
 pub use server::{default_settings, Server};
 use tokio::sync::OnceCell;
+use wiremock::{
+    matchers::{method, path},
+    Mock, MockServer, Request, ResponseTemplate,
+};
 
 use crate::common::index::Index;
 
@@ -507,4 +515,167 @@ pub async fn shared_index_with_geo_documents() -> &'static Index<'static, Shared
             index
         })
         .await
+}
+
+pub async fn shared_index_for_fragments() -> Index<'static, Shared> {
+    static INDEX: OnceCell<(Server<Shared>, String)> = OnceCell::const_new();
+    let (server, uid) = INDEX
+        .get_or_init(|| async {
+            let (server, uid, _) = init_fragments_index().await;
+            (server.into_shared(), uid)
+        })
+        .await;
+    server._index(uid).to_shared()
+}
+
+async fn fragment_mock_server() -> String {
+    let text_to_embedding: BTreeMap<_, _> = vec![
+        ("kefir", [0.5, -0.5, 0.0]),
+        ("intel", [1.0, 1.0, 0.0]),
+        ("dustin", [-0.5, 0.5, 0.0]),
+        ("bulldog", [0.0, 0.0, 1.0]),
+        ("labrador", [0.0, 0.0, -1.0]),
+        ("{{ doc.", [-9999.0, -9999.0, -9999.0]), // If a template didn't render
+    ]
+    .into_iter()
+    .collect();
+
+    let mock_server = Box::leak(Box::new(MockServer::start().await));
+
+    Mock::given(method("POST"))
+        .and(path("/"))
+        .respond_with(move |req: &Request| {
+            let text = String::from_utf8_lossy(&req.body).to_string();
+
+            let mut data = [0.0, 0.0, 0.0];
+            for (inner_text, inner_data) in &text_to_embedding {
+                if text.contains(inner_text) {
+                    for (i, &value) in inner_data.iter().enumerate() {
+                        data[i] += value;
+                    }
+                }
+            }
+            ResponseTemplate::new(200).set_body_json(json!({ "data": data }))
+        })
+        .mount(mock_server)
+        .await;
+
+    mock_server.uri()
+}
+
+pub async fn init_fragments_index() -> (Server<Owned>, String, crate::common::Value) {
+    let url = fragment_mock_server().await;
+    let server = Server::new().await;
+    let index = server.unique_index();
+
+    let (_response, code) = server.set_features(json!({"multimodal": true})).await;
+    assert_eq!(code, StatusCode::OK);
+
+    // Configure the index to use our mock embedder
+    let settings = json!({
+        "embedders": {
+            "rest": {
+                "source": "rest",
+                "url": url,
+                "dimensions": 3,
+                "request": "{{fragment}}",
+                "response": {
+                    "data": "{{embedding}}"
+                },
+                "indexingFragments": {
+                    "withBreed": {"value": "{{ doc.name }} is a {{ doc.breed }}"},
+                    "basic": {"value": "{{ doc.name }} is a dog"},
+                },
+                "searchFragments": {
+                    "justBreed": {"value": "It's a {{ media.breed }}"},
+                    "justName": {"value": "{{ media.name }} is a dog"},
+                    "query": {"value": "Some pre-prompt for query {{ q }}"},
+                }
+            },
+        },
+    });
+    let (response, code) = index.update_settings(settings.clone()).await;
+    assert_eq!(code, StatusCode::ACCEPTED);
+
+    server.wait_task(response.uid()).await.succeeded();
+
+    // Send documents
+    let documents = json!([
+        {"id": 0, "name": "kefir"},
+        {"id": 1, "name": "echo", "_vectors": { "rest": [1, 1, 1] }},
+        {"id": 2, "name": "intel", "breed": "labrador"},
+        {"id": 3, "name": "dustin", "breed": "bulldog"},
+    ]);
+    let (value, code) = index.add_documents(documents, None).await;
+    assert_eq!(code, StatusCode::ACCEPTED);
+
+    let _task = index.wait_task(value.uid()).await.succeeded();
+
+    let uid = index.uid.clone();
+    (server, uid, settings)
+}
+
+pub async fn init_fragments_index_composite() -> (Server<Owned>, String, crate::common::Value) {
+    let url = fragment_mock_server().await;
+    let server = Server::new().await;
+    let index = server.unique_index();
+
+    let (_response, code) = server.set_features(json!({"multimodal": true})).await;
+    assert_eq!(code, StatusCode::OK);
+
+    let (_response, code) = server.set_features(json!({"compositeEmbedders": true})).await;
+    assert_eq!(code, StatusCode::OK);
+
+    // Configure the index to use our mock embedder
+    let settings = json!({
+        "embedders": {
+            "rest": {
+                "source": "composite",
+                "searchEmbedder": {
+                    "source": "rest",
+                    "url": url,
+                    "dimensions": 3,
+                    "request": "{{fragment}}",
+                    "response": {
+                        "data": "{{embedding}}"
+                    },
+                    "searchFragments": {
+                        "query": {"value": "Some pre-prompt for query {{ q }}"},
+                    }
+                },
+                "indexingEmbedder": {
+                    "source": "rest",
+                    "url": url,
+                    "dimensions": 3,
+                    "request": "{{fragment}}",
+                    "response": {
+                        "data": "{{embedding}}"
+                    },
+                    "indexingFragments": {
+                        "withBreed": {"value": "{{ doc.name }} is a {{ doc.breed }}"},
+                        "basic": {"value": "{{ doc.name }} is a dog"},
+                    }
+                },
+            },
+        },
+    });
+    let (response, code) = index.update_settings(settings.clone()).await;
+    assert_eq!(code, StatusCode::ACCEPTED);
+
+    server.wait_task(response.uid()).await.succeeded();
+
+    // Send documents
+    let documents = json!([
+        {"id": 0, "name": "kefir"},
+        {"id": 1, "name": "echo", "_vectors": { "rest": [1, 1, 1] }},
+        {"id": 2, "name": "intel", "breed": "labrador"},
+        {"id": 3, "name": "dustin", "breed": "bulldog"},
+    ]);
+    let (value, code) = index.add_documents(documents, None).await;
+    assert_eq!(code, StatusCode::ACCEPTED);
+
+    index.wait_task(value.uid()).await.succeeded();
+
+    let uid = index.uid.clone();
+    (server, uid, settings)
 }
