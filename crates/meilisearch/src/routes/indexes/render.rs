@@ -6,11 +6,12 @@ use index_scheduler::IndexScheduler;
 use itertools::structs;
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
-use meilisearch_types::error::{deserr_codes::*, Code};
 use meilisearch_types::error::ResponseError;
+use meilisearch_types::error::{deserr_codes::*, Code};
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::keys::actions;
 use meilisearch_types::serde_cs::vec::CS;
+use meilisearch_types::{heed, Index};
 use serde::Serialize;
 use serde_json::Value;
 use tracing::debug;
@@ -38,10 +39,7 @@ use crate::search::{
 pub struct RenderApi;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.service(
-        web::resource("")
-            .route(web::post().to(SeqHandler(render_post)))
-    );
+    cfg.service(web::resource("").route(web::post().to(SeqHandler(render_post))));
 }
 
 /// Render templates with POST
@@ -84,13 +82,14 @@ pub async fn render_post(
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
+    let index = index_scheduler.index(&index_uid)?;
 
     let query = params.into_inner();
     debug!(parameters = ?query, "Render template");
 
     //let mut aggregate = SimilarAggregator::<SimilarPOST>::from_query(&query);
 
-    let result = render(query).await?;
+    let result = render(index, query).await?;
 
     // if let Ok(similar) = &similar {
     //     aggregate.succeed(similar);
@@ -101,9 +100,69 @@ pub async fn render_post(
     Ok(HttpResponse::Ok().json(result))
 }
 
+enum FragmentKind {
+    Indexing,
+    Search,
+}
+
+impl FragmentKind {
+    fn adjective(&self) -> &'static str {
+        match self {
+            FragmentKind::Indexing => "indexing",
+            FragmentKind::Search => "search",
+        }
+    }
+
+    fn adjective_capitalized(&self) -> &'static str {
+        match self {
+            FragmentKind::Indexing => "Indexing",
+            FragmentKind::Search => "Search",
+        }
+    }
+}
 
 enum RenderError {
-    TemplateBothInlineAndId,
+    MultipleTemplates,
+    MissingTemplate,
+    EmptyTemplateId,
+    UnknownTemplateRoot(String),
+    MissingEmbedderName {
+        available: Vec<String>,
+    },
+    EmbedderDoesNotExist {
+        embedder_name: String,
+        available: Vec<String>,
+    },
+    EmbedderUsesFragments {
+        embedder_name: String,
+    },
+    MissingTemplateAfterEmbedder {
+        embedder_name: String,
+        available_indexing_fragments: Vec<String>,
+        available_search_fragments: Vec<String>,
+    },
+    UnknownTemplatePrefix(String),
+    ReponseError(ResponseError),
+    MissingFragment {
+        embedder_name: String,
+        kind: FragmentKind,
+        available: Vec<String>,
+    },
+    FragmentDoesNotExist {
+        embedder_name: String,
+        fragment_name: String,
+        kind: FragmentKind,
+        available: Vec<String>,
+    },
+    LeftOverToken(String),
+    MissingChatCompletionTemplate,
+    UnknownChatCompletionTemplate(String),
+}
+
+impl From<heed::Error> for RenderError {
+    fn from(error: heed::Error) -> Self {
+        RenderError::ReponseError(error.into())
+    }
 }
 
 use RenderError::*;
@@ -111,22 +170,233 @@ use RenderError::*;
 impl From<RenderError> for ResponseError {
     fn from(error: RenderError) -> Self {
         match error {
-            TemplateBothInlineAndId => ResponseError::from_msg(
-                "Cannot provide both an inline template and a template ID.".to_string(),
+            MultipleTemplates => ResponseError::from_msg(
+                String::from("Cannot provide both an inline template and a template ID."),
                 Code::InvalidRenderTemplate,
-            )
+            ),
+            MissingTemplate => ResponseError::from_msg(
+                String::from("No template provided. Please provide either an inline template or a template ID."),
+                Code::InvalidRenderTemplate,
+            ),
+            EmptyTemplateId => ResponseError::from_msg(
+                String::from("The template ID is empty.\n  Hint: Valid prefixes are `embedders` or `chatCompletions`."),
+                Code::InvalidRenderTemplateId,
+            ),
+            UnknownTemplateRoot(root) => ResponseError::from_msg(
+                format!("Template ID must start with `embedders` or `chatCompletions`, but found `{root}`."),
+                Code::InvalidRenderTemplateId,
+            ),
+            MissingEmbedderName { mut available } => {
+                available.sort_unstable();
+                ResponseError::from_msg(
+                    format!("Template ID configured with `embedders` but no embedder name provided.\n  Hint: Available embedders are {}.", 
+                        available.iter().map(|s| format!("`{s}`")).collect::<Vec<_>>().join(", ")),
+                    Code::InvalidRenderTemplateId,
+                )
+            },
+            EmbedderDoesNotExist { embedder_name, mut available } => {
+                available.sort_unstable();
+                ResponseError::from_msg(
+                    format!("Embedder `{embedder_name}` does not exist.\n  Hint: Available embedders are {}.",
+                        available.iter().map(|s| format!("`{s}`")).collect::<Vec<_>>().join(", ")),
+                    Code::InvalidRenderTemplateId,
+                )
+            },
+            EmbedderUsesFragments { embedder_name } => ResponseError::from_msg(
+                format!("Requested document template for embedder `{embedder_name}` but it uses fragments.\n  Hint: Use `indexingFragments` or `searchFragments` instead."),
+                Code::InvalidRenderTemplateId,
+            ),
+            MissingTemplateAfterEmbedder { embedder_name, mut available_indexing_fragments, mut available_search_fragments } => {
+                if available_indexing_fragments.is_empty() && available_search_fragments.is_empty() {
+                    ResponseError::from_msg(
+                        format!("Missing template id after embedder `{embedder_name}`.\n  Hint: Available fragments: `documentTemplate`."),
+                        Code::InvalidRenderTemplateId,
+                    )
+                } else {
+                    available_indexing_fragments.sort_unstable();
+                    available_search_fragments.sort_unstable();
+                    ResponseError::from_msg(
+                        format!("Template ID configured with `embedders.{embedder_name}` but no template kind provided.\n  Hint: Available fragments are {}.",
+                            available_indexing_fragments.iter().map(|s| format!("`indexingFragments.{s}`")).chain(
+                            available_search_fragments.iter().map(|s| format!("`searchFragments.{s}`"))).collect::<Vec<_>>().join(", ")),
+                        Code::InvalidRenderTemplateId,
+                    )
+                }
+            },
+            UnknownTemplatePrefix(prefix) => ResponseError::from_msg(
+                format!("Template ID must start with `embedders` or `chatCompletions`, but found `{prefix}`."),
+                Code::InvalidRenderTemplateId,
+            ),
+            ReponseError(response_error) => response_error,
+            MissingFragment { embedder_name, kind, mut available } => {
+                available.sort_unstable();
+                ResponseError::from_msg(
+                    format!("{} fragment name was not provided.\n  Hint: Available {} fragments for embedder `{embedder_name}` are {}.",
+                        kind.adjective_capitalized(),
+                        kind.adjective(),
+                        available.iter().map(|s| format!("`{s}`")).collect::<Vec<_>>().join(", ")),
+                    Code::InvalidRenderTemplateId,
+                )
+            },
+            FragmentDoesNotExist { embedder_name, fragment_name, kind, mut available } => {
+                available.sort_unstable();
+                ResponseError::from_msg(
+                    format!("{} fragment `{fragment_name}` does not exist for embedder `{embedder_name}`.\n  Hint: Available {} fragments are {}.",
+                        kind.adjective_capitalized(),
+                        kind.adjective(),
+                        available.iter().map(|s| format!("`{s}`")).collect::<Vec<_>>().join(", ")),
+                    Code::InvalidRenderTemplateId,
+                )
+            },
+            LeftOverToken(token) => ResponseError::from_msg(
+                format!("Leftover token `{token}` after parsing template ID"),
+                Code::InvalidRenderTemplateId,
+            ),
+            MissingChatCompletionTemplate => ResponseError::from_msg(
+                String::from("Missing chat completion template ID. The only available template is `documentTemplate`."),
+                Code::InvalidRenderTemplateId,
+            ),
+            UnknownChatCompletionTemplate(id) => ResponseError::from_msg(
+                format!("Unknown chat completion template ID `{id}`. The only available template is `documentTemplate`."),
+                Code::InvalidRenderTemplateId,
+            ),
         }
     }
 }
 
-async fn render(query: RenderQuery) -> Result<RenderResult, RenderError> {
-    if query.template.inline.is_some() && query.template.id.is_some() {
-        return Err(TemplateBothInlineAndId);
-    }
+async fn render(index: Index, query: RenderQuery) -> Result<RenderResult, RenderError> {
+    let rtxn = index.read_txn()?;
 
-    Ok(RenderResult {
-        rendered: String::from("TODO: Implement render logic here")
-    })
+    let template = match (query.template.inline, query.template.id) {
+        (Some(inline), None) => inline,
+        (None, Some(id)) => {
+            let mut parts = id.split('.');
+
+            let root = parts.next().ok_or(EmptyTemplateId)?;
+
+            let template = match root {
+                "embedders" => {
+                    let index_embedding_configs = index.embedding_configs();
+                    let embedding_configs = index_embedding_configs.embedding_configs(&rtxn)?;
+
+                    let embedder_name = parts.next().ok_or_else(|| MissingEmbedderName {
+                        available: embedding_configs.iter().map(|c| c.name.clone()).collect(),
+                    })?;
+
+                    let embedding_config = embedding_configs
+                        .iter()
+                        .find(|config| config.name == embedder_name)
+                        .ok_or_else(|| EmbedderDoesNotExist {
+                            embedder_name: embedder_name.to_string(),
+                            available: embedding_configs.iter().map(|c| c.name.clone()).collect(),
+                        })?;
+
+                    let template_kind =
+                        parts.next().ok_or_else(|| MissingTemplateAfterEmbedder {
+                            embedder_name: embedder_name.to_string(),
+                            available_indexing_fragments: embedding_config
+                                .config
+                                .embedder_options
+                                .indexing_fragments(),
+                            available_search_fragments: embedding_config
+                                .config
+                                .embedder_options
+                                .search_fragments(),
+                        })?;
+                    match template_kind {
+                        "documentTemplate" | "documenttemplate" => {
+                            if !embedding_config.fragments.as_slice().is_empty() {
+                                return Err(EmbedderUsesFragments {
+                                    embedder_name: embedder_name.to_string(),
+                                });
+                            }
+
+                            serde_json::Value::String(
+                                embedding_config.config.prompt.template.clone(),
+                            )
+                        }
+                        "indexingFragments" | "indexingfragments" => {
+                            let fragment_name = parts.next().ok_or_else(|| MissingFragment {
+                                embedder_name: embedder_name.to_string(),
+                                kind: FragmentKind::Indexing,
+                                available: embedding_config
+                                    .config
+                                    .embedder_options
+                                    .indexing_fragments(),
+                            })?;
+
+                            let fragment = embedding_config
+                                .config
+                                .embedder_options
+                                .indexing_fragment(fragment_name)
+                                .ok_or_else(|| FragmentDoesNotExist {
+                                    embedder_name: embedder_name.to_string(),
+                                    fragment_name: fragment_name.to_string(),
+                                    kind: FragmentKind::Indexing,
+                                    available: embedding_config
+                                        .config
+                                        .embedder_options
+                                        .indexing_fragments(),
+                                })?;
+
+                            fragment.clone()
+                        }
+                        "searchFragments" | "searchfragments" => {
+                            let fragment_name = parts.next().ok_or_else(|| MissingFragment {
+                                embedder_name: embedder_name.to_string(),
+                                kind: FragmentKind::Search,
+                                available: embedding_config
+                                    .config
+                                    .embedder_options
+                                    .search_fragments(),
+                            })?;
+
+                            let fragment = embedding_config
+                                .config
+                                .embedder_options
+                                .search_fragment(fragment_name)
+                                .ok_or_else(|| FragmentDoesNotExist {
+                                    embedder_name: embedder_name.to_string(),
+                                    fragment_name: fragment_name.to_string(),
+                                    kind: FragmentKind::Search,
+                                    available: embedding_config
+                                        .config
+                                        .embedder_options
+                                        .search_fragments(),
+                                })?;
+
+                            fragment.clone()
+                        }
+                        _ => return Err(UnknownTemplateRoot(root.to_owned())),
+                    }
+                }
+                "chatCompletions" | "chatcompletions" => {
+                    let template_name = parts.next().ok_or(MissingChatCompletionTemplate)?;
+
+                    if template_name != "documentTemplate" {
+                        return Err(UnknownChatCompletionTemplate(template_name.to_string()));
+                    }
+
+                    let chat_config = index.chat_config(&rtxn)?;
+
+                    serde_json::Value::String(chat_config.prompt.template.clone())
+                }
+                unknown => {
+                    return Err(UnknownTemplatePrefix(unknown.to_string()));
+                }
+            };
+
+            if let Some(next) = parts.next() {
+                return Err(LeftOverToken(next.to_string()));
+            }
+
+            template
+        }
+        (Some(_), Some(_)) => return Err(MultipleTemplates),
+        (None, None) => return Err(MissingTemplate),
+    };
+
+    Ok(RenderResult { template, rendered: String::from("TODO: Implement render logic here") })
 }
 
 #[derive(Debug, Clone, PartialEq, Deserr, ToSchema)]
@@ -158,5 +428,6 @@ pub struct RenderQueryInput {
 
 #[derive(Debug, Clone, Serialize, PartialEq, ToSchema)]
 pub struct RenderResult {
+    template: serde_json::Value,
     rendered: String,
 }
