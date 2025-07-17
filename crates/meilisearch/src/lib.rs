@@ -605,7 +605,7 @@ fn import_dump(
             let mut new_fields_ids_map = db_fields_ids_map.clone();
 
             let mut indexer = indexer::DocumentOperation::new();
-            let embedders = index.embedding_configs().embedding_configs(&mut wtxn)?;
+            let embedders = index.embedding_configs().embedding_configs(&rtxn)?;
             let embedders = index_scheduler.embedders(uid.clone(), embedders)?;
 
             let mmap = unsafe { memmap2::Mmap::map(index_reader.documents_file())? };
