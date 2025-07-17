@@ -21,8 +21,10 @@ use super::thread_local::ThreadLocal;
 use crate::documents::PrimaryKey;
 use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
 use crate::progress::{EmbedderStats, Progress};
+use crate::update::new::indexer::vector::Visitable;
 use crate::update::settings::SettingsDelta;
 use crate::update::GrenadParameters;
+use crate::vector::db::EmbeddingStatus;
 use crate::vector::settings::{EmbedderAction, RemoveFragments, WriteBackToDocuments};
 use crate::vector::{ArroyWrapper, Embedder, RuntimeEmbedders};
 use crate::{FieldsIdsMap, GlobalFieldsIdsMap, Index, InternalError, Result, ThreadPoolNoAbort};
@@ -37,6 +39,7 @@ mod partial_dump;
 mod post_processing;
 pub mod settings_changes;
 mod update_by_function;
+mod vector;
 mod write;
 
 static LOG_MEMORY_METRICS_ONCE: Once = Once::new();
@@ -332,6 +335,115 @@ where
         field_distribution,
         document_ids,
     )?;
+
+    Ok(congestion)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn import_vectors<'indexer, DC, MSP, V>(
+    visitables: &[V],
+    statuses: HashMap<String, EmbeddingStatus>,
+    wtxn: &mut RwTxn,
+    index: &Index,
+    pool: &ThreadPoolNoAbort,
+    grenad_parameters: GrenadParameters,
+    embedders: RuntimeEmbedders,
+    must_stop_processing: &'indexer MSP,
+    progress: &'indexer Progress,
+) -> Result<ChannelCongestion>
+where
+    MSP: Fn() -> bool + Sync,
+    V: Visitable + Sync,
+{
+    let mut bbbuffers = Vec::new();
+    let finished_extraction = AtomicBool::new(false);
+
+    let arroy_memory = grenad_parameters.max_memory;
+
+    let (_, total_bbbuffer_capacity) =
+        indexer_memory_settings(pool.current_num_threads(), grenad_parameters);
+
+    let (extractor_sender, writer_receiver) = pool
+        .install(|| extractor_writer_bbqueue(&mut bbbuffers, total_bbbuffer_capacity, 1000))
+        .unwrap();
+
+    let index_embeddings = index.embedding_configs().embedding_configs(wtxn)?;
+
+    let congestion = thread::scope(|s| -> Result<ChannelCongestion> {
+        let indexer_span = tracing::Span::current();
+        let embedders = &embedders;
+        let finished_extraction = &finished_extraction;
+
+        let extractor_handle =
+            Builder::new().name(S("indexer-extractors")).spawn_scoped(s, move || {
+                pool.install(move || {
+                    vector::import_vectors(
+                        visitables,
+                        statuses,
+                        must_stop_processing,
+                        progress,
+                        indexer_span,
+                        extractor_sender,
+                        finished_extraction,
+                        index,
+                        embedders,
+                    )
+                })
+                .unwrap()
+            })?;
+
+        let vector_arroy = index.vector_arroy;
+        let arroy_writers: Result<HashMap<_, _>> = embedders
+            .inner_as_ref()
+            .iter()
+            .map(|(embedder_name, runtime)| {
+                let embedder_index = index
+                    .embedding_configs()
+                    .embedder_id(wtxn, embedder_name)?
+                    .ok_or(InternalError::DatabaseMissingEntry {
+                        db_name: "embedder_category_id",
+                        key: None,
+                    })?;
+
+                let dimensions = runtime.embedder.dimensions();
+                let writer = ArroyWrapper::new(vector_arroy, embedder_index, runtime.is_quantized);
+
+                Ok((
+                    embedder_index,
+                    (embedder_name.as_str(), &*runtime.embedder, writer, dimensions),
+                ))
+            })
+            .collect();
+
+        let mut arroy_writers = arroy_writers?;
+
+        let congestion =
+            write_to_db(writer_receiver, finished_extraction, index, wtxn, &arroy_writers)?;
+
+        progress.update_progress(IndexingStep::WaitingForExtractors);
+
+        let () = extractor_handle.join().unwrap()?;
+
+        progress.update_progress(IndexingStep::WritingEmbeddingsToDatabase);
+
+        pool.install(|| {
+            build_vectors(
+                index,
+                wtxn,
+                progress,
+                index_embeddings,
+                arroy_memory,
+                &mut arroy_writers,
+                None,
+                &must_stop_processing,
+            )
+        })
+        .unwrap()?;
+
+        progress.update_progress(IndexingStep::Finalizing);
+
+        Ok(congestion) as Result<_>
+    })?;
 
     Ok(congestion)
 }

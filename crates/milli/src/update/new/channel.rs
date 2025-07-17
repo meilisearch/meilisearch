@@ -575,6 +575,63 @@ impl<'b> ExtractorBbqueueSender<'b> {
         Ok(())
     }
 
+    fn set_vectors_flat(
+        &self,
+        docid: u32,
+        embedder_id: u8,
+        dimensions: usize,
+        flat_embeddings: &[f32],
+    ) -> crate::Result<()> {
+        let max_grant = self.max_grant;
+        let refcell = self.producers.get().unwrap();
+        let mut producer = refcell.0.borrow_mut_or_yield();
+
+        let arroy_set_vector = ArroySetVectors { docid, embedder_id, _padding: [0; 3] };
+        let payload_header = EntryHeader::ArroySetVectors(arroy_set_vector);
+        // we are taking the number of floats in the flat embeddings so we mustn't use the dimensions here
+        let total_length = EntryHeader::total_set_vectors_size(flat_embeddings.len(), 1);
+        if total_length > max_grant {
+            let mut value_file = tempfile::tempfile().map(BufWriter::new)?;
+
+            let mut embedding_bytes = bytemuck::cast_slice(flat_embeddings);
+            io::copy(&mut embedding_bytes, &mut value_file)?;
+
+            let value_file = value_file.into_inner().map_err(|ie| ie.into_error())?;
+            let embeddings = unsafe { Mmap::map(&value_file)? };
+
+            let large_vectors = LargeVectors { docid, embedder_id, embeddings };
+            self.sender.send(ReceiverAction::LargeVectors(large_vectors)).unwrap();
+
+            return Ok(());
+        }
+
+        // Spin loop to have a frame the size we requested.
+        reserve_and_write_grant(
+            &mut producer,
+            total_length,
+            &self.sender,
+            &self.sent_messages_attempts,
+            &self.blocking_sent_messages_attempts,
+            |grant| {
+                let header_size = payload_header.header_size();
+                let (header_bytes, remaining) = grant.split_at_mut(header_size);
+                payload_header.serialize_into(header_bytes);
+
+                if dimensions != 0 {
+                    let output_iter =
+                        remaining.chunks_exact_mut(dimensions * mem::size_of::<f32>());
+                    for (embedding, output) in flat_embeddings.chunks(dimensions).zip(output_iter) {
+                        output.copy_from_slice(bytemuck::cast_slice(embedding));
+                    }
+                }
+
+                Ok(())
+            },
+        )?;
+
+        Ok(())
+    }
+
     fn set_vectors(
         &self,
         docid: u32,
@@ -640,7 +697,7 @@ impl<'b> ExtractorBbqueueSender<'b> {
         docid: u32,
         embedder_id: u8,
         extractor_id: u8,
-        embedding: Option<Embedding>,
+        embedding: Option<&[f32]>,
     ) -> crate::Result<()> {
         let max_grant = self.max_grant;
         let refcell = self.producers.get().unwrap();
@@ -648,7 +705,7 @@ impl<'b> ExtractorBbqueueSender<'b> {
 
         // If there are no vectors we specify the dimensions
         // to zero to allocate no extra space at all
-        let dimensions = embedding.as_ref().map_or(0, |emb| emb.len());
+        let dimensions = embedding.map_or(0, |emb| emb.len());
 
         let arroy_set_vector =
             ArroySetVector { docid, embedder_id, extractor_id, _padding: [0; 2] };
@@ -1081,12 +1138,22 @@ impl EmbeddingSender<'_, '_> {
         self.0.set_vectors(docid, embedder_id, &embeddings[..])
     }
 
+    pub fn set_vectors_flat(
+        &self,
+        docid: DocumentId,
+        embedder_id: u8,
+        dimensions: usize,
+        flat_embeddings: &[f32],
+    ) -> crate::Result<()> {
+        self.0.set_vectors_flat(docid, embedder_id, dimensions, flat_embeddings)
+    }
+
     pub fn set_vector(
         &self,
         docid: DocumentId,
         embedder_id: u8,
         extractor_id: u8,
-        embedding: Option<Embedding>,
+        embedding: Option<&[f32]>,
     ) -> crate::Result<()> {
         self.0.set_vector_for_extractor(docid, embedder_id, extractor_id, embedding)
     }

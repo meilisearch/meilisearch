@@ -50,6 +50,8 @@ pub type RankingRuleView = meilisearch_types::settings::RankingRuleView;
 
 pub type FilterableAttributesRule = meilisearch_types::milli::FilterableAttributesRule;
 
+pub mod vector;
+
 pub struct V6Reader {
     dump: TempDir,
     instance_uid: Option<Uuid>,

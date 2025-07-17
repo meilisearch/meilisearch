@@ -469,7 +469,7 @@ impl<'doc> OnEmbed<'doc> for OnEmbeddingDocumentUpdates<'doc, '_> {
                 response.metadata.docid,
                 self.embedder_id,
                 response.metadata.extractor_id,
-                response.embedding,
+                response.embedding.as_deref(),
             )
             .unwrap();
     }
