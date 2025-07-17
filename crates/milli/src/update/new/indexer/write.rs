@@ -32,6 +32,7 @@ pub fn write_to_db(
     let _entered = span.enter();
     let span = tracing::trace_span!(target: "indexing::write_db", "post_merge");
     let mut _entered_post_merge = None;
+    let cellulite = cellulite::Cellulite::new(index.cellulite);
     while let Some(action) = writer_receiver.recv_action() {
         if _entered_post_merge.is_none()
             && finished_extraction.load(std::sync::atomic::Ordering::Relaxed)
@@ -71,6 +72,16 @@ pub fn write_to_db(
                     arroy_writers.get(&embedder_id).expect("requested a missing embedder");
                 let embedding = large_vector.read_embedding(*dimensions);
                 writer.add_item_in_store(wtxn, docid, extractor_id, embedding)?;
+            }
+            ReceiverAction::GeoJson(docid, geojson) => {
+                match geojson {
+                    Some(geojson) => {
+                        cellulite.add(wtxn, docid, &geojson).map_err(InternalError::CelluliteError)?;
+                    }
+                    None => {
+                        cellulite.delete(wtxn, docid).map_err(InternalError::CelluliteError)?;
+                    }
+                }
             }
         }
 

@@ -163,6 +163,10 @@ where
 
         indexing_context.progress.update_progress(IndexingStep::WritingEmbeddingsToDatabase);
 
+
+        let cellulite = cellulite::Cellulite::new(index.cellulite);
+        cellulite.build(wtxn, indexing_context.progress)?;
+
         pool.install(|| {
             build_vectors(
                 index,
