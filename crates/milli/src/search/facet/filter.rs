@@ -842,10 +842,12 @@ impl<'a> Filter<'a> {
                         ),
                         Vec::new(),
                     );
-                    let cellulite = cellulite::Writer::new(index.cellulite);
+                    let cellulite = cellulite::Cellulite::new(index.cellulite);
                     let result = cellulite
                         .in_shape(rtxn, &polygon.into(), &mut |_| ())
                         .map_err(InternalError::CelluliteError)?;
+                    // TODO: Remove once we update roaring
+                    let result = roaring::RoaringBitmap::from_iter(result.into_iter());
                     Ok(result)
                 } else {
                     Err(points[0][0].as_external_error(FilterError::AttributeNotFilterable {

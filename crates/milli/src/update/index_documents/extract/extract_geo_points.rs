@@ -10,7 +10,7 @@ use crate::error::GeoError;
 use crate::update::del_add::{DelAdd, KvReaderDelAdd, KvWriterDelAdd};
 use crate::update::index_documents::extract_finite_float_from_value;
 use crate::update::settings::{InnerIndexSettings, InnerIndexSettingsDiff};
-use crate::{FieldId, InternalError, Result};
+use crate::{DocumentId, FieldId, InternalError, Result};
 
 /// Extracts the geographical coordinates contained in each document under the `_geo` field.
 ///
@@ -158,7 +158,7 @@ pub fn extract_geojson<R: io::Read + io::Seek>(
                 obkv.insert(DelAdd::Addition, geojson.to_string().as_bytes())?;
             }
             let bytes = obkv.into_inner()?;
-            writer.insert(docid_bytes, bytes)?;
+            writer.insert(&docid_bytes[0..std::mem::size_of::<DocumentId>()], bytes)?;
         }
     }
 
@@ -172,13 +172,15 @@ fn extract_geojson_field(
     document_id: impl Fn() -> Value,
 ) -> Result<Option<GeoJson>> {
     match settings.geojson_fid {
-        Some(fid) => {
+        Some(fid) if settings.filterable_attributes_rules.iter().any(|rule| rule.has_geojson()) => {
             let value = obkv.get(fid).map(KvReaderDelAdd::from_slice).and_then(|r| r.get(deladd));
             // TODO: That's a user error, not an internal error
             Ok(value
                 .map(|v| serde_json::from_slice(v).map_err(InternalError::SerdeJson))
                 .transpose()?)
         }
-        None => Ok(None),
+        _ => {
+            Ok(None)
+        }
     }
 }

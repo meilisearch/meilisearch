@@ -73,8 +73,8 @@ pub fn write_to_db(
                 writer.add_item_in_store(wtxn, docid, extractor_id, embedding)?;
             }
             ReceiverAction::GeoJson(docid, geojson) => {
-                let cellulite = cellulite::Writer::new(index.cellulite);
-                cellulite.add_item(wtxn, docid, &geojson).map_err(InternalError::CelluliteError)?;
+                let cellulite = cellulite::Cellulite::new(index.cellulite);
+                cellulite.add(wtxn, docid, &geojson).map_err(InternalError::CelluliteError)?;
             }
         }
 

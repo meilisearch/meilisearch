@@ -6,7 +6,7 @@ use heed::RoTxn;
 
 use super::FieldsIdsMap;
 use crate::attribute_patterns::{match_field_legacy, PatternMatch};
-use crate::constants::{RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME};
+use crate::constants::{RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME};
 use crate::{
     is_faceted_by, FieldId, FilterableAttributesFeatures, FilterableAttributesRule, Index,
     LocalizedAttributesRule, Result, Weight,
@@ -24,6 +24,8 @@ pub struct Metadata {
     pub asc_desc: bool,
     /// The field is a geo field (`_geo`, `_geo.lat`, `_geo.lng`).
     pub geo: bool,
+    /// The field is a geo json field (`_geojson`).
+    pub geo_json: bool,
     /// The id of the localized attributes rule if the field is localized.
     pub localized_attributes_rule_id: Option<NonZeroU16>,
     /// The id of the filterable attributes rule if the field is filterable.
@@ -269,6 +271,7 @@ impl MetadataBuilder {
                 distinct: false,
                 asc_desc: false,
                 geo: false,
+                geo_json: false,
                 localized_attributes_rule_id: None,
                 filterable_attributes_rule_id: None,
             };
@@ -295,6 +298,20 @@ impl MetadataBuilder {
                 distinct: false,
                 asc_desc: false,
                 geo: true,
+                geo_json: false,
+                localized_attributes_rule_id: None,
+                filterable_attributes_rule_id,
+            };
+        }
+        if match_field_legacy(RESERVED_GEOJSON_FIELD_NAME, field) == PatternMatch::Match {
+            debug_assert!(!sortable, "geojson fields should not be sortable");
+            return Metadata {
+                searchable: None,
+                sortable,
+                distinct: false,
+                asc_desc: false,
+                geo: false,
+                geo_json: true,
                 localized_attributes_rule_id: None,
                 filterable_attributes_rule_id,
             };
@@ -328,6 +345,7 @@ impl MetadataBuilder {
             distinct,
             asc_desc,
             geo: false,
+            geo_json: false,
             localized_attributes_rule_id,
             filterable_attributes_rule_id,
         }
