@@ -22,8 +22,8 @@ impl IndexScheduler {
             }
             progress.update_progress(VariableNameStep::<UpgradeIndex>::new(
                 format!("Upgrading index `{uid}`"),
-                i as u32,
-                indexes.len() as u32,
+                i as u64,
+                indexes.len() as u64,
             ));
             let index = self.index(uid)?;
             let mut index_wtxn = index.write_txn()?;
@@ -65,8 +65,8 @@ impl IndexScheduler {
         for (i, uid) in indexes.iter().enumerate() {
             progress.update_progress(VariableNameStep::<UpgradeIndex>::new(
                 format!("Rollbacking index `{uid}`"),
-                i as u32,
-                indexes.len() as u32,
+                i as u64,
+                indexes.len() as u64,
             ));
             let index_schd_rtxn = self.env.read_txn()?;
 

@@ -162,8 +162,8 @@ fn rebuild_field_distribution(db_path: &Path) -> anyhow::Result<()> {
             let (uid, uuid) = result?;
             progress.update_progress(VariableNameStep::new(
                 &uid,
-                index_index as u32,
-                index_count as u32,
+                index_index as u64,
+                index_count as u64,
             ));
             let index_path = db_path.join("indexes").join(uuid.to_string());
 
@@ -220,12 +220,12 @@ fn rebuild_field_distribution(db_path: &Path) -> anyhow::Result<()> {
 
 pub struct VariableNameStep {
     name: String,
-    current: u32,
-    total: u32,
+    current: u64,
+    total: u64,
 }
 
 impl VariableNameStep {
-    pub fn new(name: impl Into<String>, current: u32, total: u32) -> Self {
+    pub fn new(name: impl Into<String>, current: u64, total: u64) -> Self {
         Self { name: name.into(), current, total }
     }
 }
@@ -235,11 +235,11 @@ impl Step for VariableNameStep {
         self.name.clone().into()
     }
 
-    fn current(&self) -> u32 {
+    fn current(&self) -> u64 {
         self.current
     }
 
-    fn total(&self) -> u32 {
+    fn total(&self) -> u64 {
         self.total
     }
 }
