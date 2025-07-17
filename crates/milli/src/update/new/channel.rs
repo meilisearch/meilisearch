@@ -140,7 +140,11 @@ pub enum ReceiverAction {
     LargeEntry(LargeEntry),
     LargeVectors(LargeVectors),
     LargeVector(LargeVector),
-    GeoJson(DocumentId, GeoJson),
+    // TODO: I don't understand all the buffer stuff so I'm going to send all geojson one by one stored in RAM.
+    //       The geojson for france made of 63k points takes 594KiB which means with a capacity of 1000,
+    //       the absolute maximum amounts of memory we could consume is about 580MiB which is acceptable for this POC.
+    // If the geojson is None, it means that the document is being deleted.
+    GeoJson(DocumentId, Option<GeoJson>),
 }
 
 /// An entry that cannot fit in the BBQueue buffers has been
@@ -1155,6 +1159,9 @@ pub struct GeoJsonSender<'a, 'b>(&'a ExtractorBbqueueSender<'b>);
 
 impl GeoJsonSender<'_, '_> {
     pub fn send_geojson(&self, docid: DocumentId, value: GeoJson) -> StdResult<(), SendError<()>> {
-        self.0.sender.send(ReceiverAction::GeoJson(docid, value)).map_err(|_| SendError(()))
+        self.0.sender.send(ReceiverAction::GeoJson(docid, Some(value))).map_err(|_| SendError(()))
+    }
+    pub fn delete_geojson(&self, docid: DocumentId) -> StdResult<(), SendError<()>> {
+        self.0.sender.send(ReceiverAction::GeoJson(docid, None)).map_err(|_| SendError(()))
     }
 }
