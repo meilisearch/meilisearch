@@ -423,7 +423,8 @@ InvalidRenderTemplateId                        , InvalidRequest       , BAD_REQU
 InvalidRenderTemplateInline                    , InvalidRequest       , BAD_REQUEST ;
 InvalidRenderInput                             , InvalidRequest       , BAD_REQUEST ;
 InvalidRenderInputDocumentId                   , InvalidRequest       , BAD_REQUEST ;
-InvalidRenderInputInline                       , InvalidRequest       , BAD_REQUEST
+InvalidRenderInputInline                       , InvalidRequest       , BAD_REQUEST ;
+RenderDocumentNotFound                         , InvalidRequest       , NOT_FOUND
 }
 
 impl ErrorCode for JoinError {

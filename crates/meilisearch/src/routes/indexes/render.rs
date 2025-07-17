@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use actix_web::web::{self, Data};
 use actix_web::{HttpRequest, HttpResponse};
 use deserr::actix_web::{AwebJson, AwebQueryParameter};
@@ -6,12 +8,13 @@ use index_scheduler::IndexScheduler;
 use itertools::structs;
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
+use meilisearch_types::error::deserr_codes::{InvalidRenderInput, InvalidRenderInputDocumentId, InvalidRenderInputInline, InvalidRenderTemplate, InvalidRenderTemplateId, InvalidRenderTemplateInline};
 use meilisearch_types::error::ResponseError;
-use meilisearch_types::error::{deserr_codes::*, Code};
+use meilisearch_types::error::{Code};
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::keys::actions;
 use meilisearch_types::serde_cs::vec::CS;
-use meilisearch_types::{heed, Index};
+use meilisearch_types::{heed, milli, Index};
 use serde::Serialize;
 use serde_json::Value;
 use tracing::debug;
@@ -19,6 +22,7 @@ use utoipa::{IntoParams, OpenApi, ToSchema};
 
 use super::ActionPolicy;
 use crate::analytics::Analytics;
+use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::routes::indexes::similar_analytics::{SimilarAggregator, SimilarGET, SimilarPOST};
@@ -157,10 +161,19 @@ enum RenderError {
     LeftOverToken(String),
     MissingChatCompletionTemplate,
     UnknownChatCompletionTemplate(String),
+
+    DocumentNotFound(String),
+    BothInlineDocAndDocId,
 }
 
 impl From<heed::Error> for RenderError {
     fn from(error: heed::Error) -> Self {
+        RenderError::ReponseError(error.into())
+    }
+}
+
+impl From<milli::Error> for RenderError {
+    fn from(error: milli::Error) -> Self {
         RenderError::ReponseError(error.into())
     }
 }
@@ -259,6 +272,14 @@ impl From<RenderError> for ResponseError {
             UnknownChatCompletionTemplate(id) => ResponseError::from_msg(
                 format!("Unknown chat completion template ID `{id}`. The only available template is `documentTemplate`."),
                 Code::InvalidRenderTemplateId,
+            ),
+            DocumentNotFound(doc_id) => ResponseError::from_msg(
+                format!("Document with ID `{doc_id}` not found."),
+                Code::RenderDocumentNotFound,
+            ),
+            BothInlineDocAndDocId => ResponseError::from_msg(
+                String::from("A document id was provided but adding it to the input would overwrite the `doc` field that you already defined inline."),
+                Code::InvalidRenderInput,
             ),
         }
     }
@@ -396,6 +417,26 @@ async fn render(index: Index, query: RenderQuery) -> Result<RenderResult, Render
         (None, None) => return Err(MissingTemplate),
     };
 
+    let mut media = query.input.inline.unwrap_or_default();
+    
+    if let Some(document_id) = query.input.document_id {
+        let internal_id = index
+            .external_documents_ids()
+            .get(&rtxn, &document_id)?
+            .ok_or_else(|| DocumentNotFound(document_id.to_string()))?;
+
+        let document = index.document(&rtxn, internal_id)?;
+
+        let fields_ids_map = index.fields_ids_map(&rtxn)?;
+        let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
+        let document = milli::obkv_to_json(&all_fields, &fields_ids_map, document)?;
+        let document = Value::Object(document);
+
+        if media.insert(String::from("doc"), document).is_some() {
+            return Err(BothInlineDocAndDocId);
+        }
+    }
+
     Ok(RenderResult { template, rendered: String::from("TODO: Implement render logic here") })
 }
 
@@ -420,10 +461,10 @@ pub struct RenderQueryTemplate {
 #[derive(Debug, Clone, PartialEq, Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError<InvalidRenderInput>, rename_all = camelCase, deny_unknown_fields)]
 pub struct RenderQueryInput {
-    #[deserr(default, error = DeserrJsonError<InvalidRenderTemplateId>)]
+    #[deserr(default, error = DeserrJsonError<InvalidRenderInputDocumentId>)]
     document_id: Option<String>,
-    #[deserr(default, error = DeserrJsonError<InvalidRenderTemplateId>)]
-    inline: Option<serde_json::Value>,
+    #[deserr(default, error = DeserrJsonError<InvalidRenderInputInline>)]
+    inline: Option<BTreeMap<String, serde_json::Value>>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, ToSchema)]
