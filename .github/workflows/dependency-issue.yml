@@ -13,7 +13,7 @@ jobs:
       ISSUE_TEMPLATE: issue-template.md
       GH_TOKEN: ${{ secrets.MEILI_BOT_GH_PAT }}
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Download the issue template
       run: curl -s https://raw.githubusercontent.com/meilisearch/engine-team/main/issue-templates/dependency-issue.md > $ISSUE_TEMPLATE
     - name: Create issue
