@@ -1767,7 +1767,7 @@ impl InnerIndexSettingsDiff {
     }
 
     pub fn any_reindexing_needed(&self) -> bool {
-        self.reindex_searchable() || self.reindex_facets() || self.reindex_vectors()
+        self.reindex_searchable() || self.reindex_facets() || self.reindex_vectors() || self.reindex_geojson()
     }
 
     pub fn reindex_searchable(&self) -> bool {
@@ -1876,6 +1876,11 @@ impl InnerIndexSettingsDiff {
         !self.embedding_config_updates.is_empty()
     }
 
+    pub fn reindex_geojson(&self) -> bool {
+        self.old.filterable_attributes_rules.iter().any(|rule| rule.has_geojson())
+            != self.new.filterable_attributes_rules.iter().any(|rule| rule.has_geojson())
+    }
+
     pub fn settings_update_only(&self) -> bool {
         self.settings_update_only
     }
@@ -1886,8 +1891,6 @@ impl InnerIndexSettingsDiff {
     }
 
     pub fn run_geojson_indexing(&self) -> bool {
-        tracing::info!("old.geojson_fid: {:?}", self.old.geojson_fid);
-        tracing::info!("new.geojson_fid: {:?}", self.new.geojson_fid);
         self.old.geojson_fid != self.new.geojson_fid
             || (!self.settings_update_only && self.new.geojson_fid.is_some())
     }

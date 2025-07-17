@@ -509,6 +509,7 @@ impl ErrorCode for milli::Error {
                     | UserError::DocumentEditionCompilationError(_) => {
                         Code::EditDocumentsByFunctionError
                     }
+                    UserError::CelluliteError(_) => Code::Internal,
                 }
             }
         }

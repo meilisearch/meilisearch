@@ -467,7 +467,7 @@ dependencies = [
  "page_size",
  "rand 0.8.5",
  "rayon",
- "roaring",
+ "roaring 0.10.12",
  "tempfile",
  "thiserror 2.0.12",
  "tracing",
@@ -604,7 +604,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "reqwest",
- "roaring",
+ "roaring 0.10.12",
  "serde_json",
  "tempfile",
 ]
@@ -1072,7 +1072,8 @@ dependencies = [
  "h3o",
  "heed",
  "ordered-float 5.0.0",
- "roaring",
+ "roaring 0.11.1",
+ "steppe",
  "thiserror 2.0.12",
 ]
 
@@ -1808,7 +1809,7 @@ dependencies = [
  "meilisearch-types",
  "once_cell",
  "regex",
- "roaring",
+ "roaring 0.10.12",
  "serde",
  "serde_json",
  "tar",
@@ -3183,7 +3184,7 @@ dependencies = [
  "memmap2",
  "page_size",
  "rayon",
- "roaring",
+ "roaring 0.10.12",
  "serde",
  "serde_json",
  "synchronoise",
@@ -3197,9 +3198,9 @@ dependencies = [
 
 [[package]]
 name = "indexmap"
-version = "2.9.0"
+version = "2.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cea70ddb795996207ad57735b50c5982d8844f38ba9ee5f1aedcfb708a2aa11e"
+checksum = "fe4cd85333e22411419a0bcae1297d25e58c9443848b11dc6a86fefe8c78a661"
 dependencies = [
  "equivalent",
  "hashbrown 0.15.4",
@@ -3954,7 +3955,7 @@ dependencies = [
  "rayon",
  "regex",
  "reqwest",
- "roaring",
+ "roaring 0.10.12",
  "rustls",
  "rustls-pemfile",
  "rustls-pki-types",
@@ -4001,7 +4002,7 @@ dependencies = [
  "maplit",
  "meilisearch-types",
  "rand 0.8.5",
- "roaring",
+ "roaring 0.10.12",
  "serde",
  "serde_json",
  "sha2",
@@ -4031,7 +4032,7 @@ dependencies = [
  "meili-snap",
  "memmap2",
  "milli",
- "roaring",
+ "roaring 0.10.12",
  "rustc-hash 2.1.1",
  "serde",
  "serde-cs",
@@ -4137,7 +4138,7 @@ dependencies = [
  "rand 0.8.5",
  "rayon",
  "rhai",
- "roaring",
+ "roaring 0.10.12",
  "rstar",
  "rustc-hash 2.1.1",
  "serde",
@@ -4146,6 +4147,7 @@ dependencies = [
  "smallstr",
  "smallvec",
  "smartstring",
+ "steppe",
  "tempfile",
  "thiserror 2.0.12",
  "thread_local",
@@ -5388,6 +5390,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "roaring"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "18f79304aff09c245934bb9558a215e53a4cfbbe6aa8ac2a79847be551264979"
+dependencies = [
+ "bytemuck",
+ "byteorder",
+]
+
+[[package]]
 name = "robust"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5986,6 +5998,17 @@ name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
+
+[[package]]
+name = "steppe"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c4eff5a5a26ccdbe5122027ce9bd395cf7e7d7e6297a40fa0ba64eaf115db4fb"
+dependencies = [
+ "convert_case 0.8.0",
+ "indexmap",
+ "serde",
+]
 
 [[package]]
 name = "strsim"
