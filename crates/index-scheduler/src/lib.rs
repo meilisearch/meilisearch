@@ -139,7 +139,7 @@ pub struct IndexSchedulerOptions {
     pub embedding_cache_cap: usize,
     /// Snapshot compaction status.
     pub experimental_no_snapshot_compaction: bool,
-    /// Whether dump import use the old document indexer or the new one.
+    /// Whether dump import uses the old document indexer or the new one.
     pub experimental_no_edition_2024_for_dumps: bool,
 }
 
