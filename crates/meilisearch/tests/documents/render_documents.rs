@@ -207,6 +207,19 @@ async fn leftover_tokens() {
       "link": "https://docs.meilisearch.com/errors#invalid_render_template_id"
     }
     "#);
+
+    let (value, code) = index
+        .render(json! {{"template": { "id": "chatCompletions.documentTemplate.leftover" }}})
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r#"
+    {
+      "message": "Leftover token `leftover` after parsing template ID",
+      "code": "invalid_render_template_id",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_render_template_id"
+    }
+    "#);
 }
 
 #[actix_rt::test]
@@ -236,4 +249,50 @@ async fn fragment_retrieval() {
     "#);
 }
 
-// TODO chat completions
+#[actix_rt::test]
+async fn missing_chat_completions_template() {
+    let index = shared_index_for_fragments().await;
+
+    let (value, code) = index.render(json! {{ "template": { "id": "chatCompletions" }}}).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r#"
+    {
+      "message": "Missing chat completion template ID. The only available template is `documentTemplate`.",
+      "code": "invalid_render_template_id",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_render_template_id"
+    }
+    "#);
+}
+
+#[actix_rt::test]
+async fn wrong_chat_completions_template() {
+    let index = shared_index_for_fragments().await;
+
+    let (value, code) =
+        index.render(json! {{ "template": { "id": "chatCompletions.wrong" }}}).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r#"
+    {
+      "message": "Unknown chat completion template ID `wrong`. The only available template is `documentTemplate`.",
+      "code": "invalid_render_template_id",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_render_template_id"
+    }
+    "#);
+}
+
+#[actix_rt::test]
+async fn chat_completions_template_retrieval() {
+    let index = shared_index_for_fragments().await;
+
+    let (value, code) =
+        index.render(json! {{ "template": { "id": "chatCompletions.documentTemplate" }}}).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(value, @r#"
+    {
+      "template": "{% for field in fields %}{% if field.is_searchable and field.value != nil %}{{ field.name }}: {{ field.value }}\n{% endif %}{% endfor %}",
+      "rendered": null
+    }
+    "#);
+}
