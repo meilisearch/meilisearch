@@ -1,3 +1,4 @@
+use std::fs::File;
 use std::num::NonZeroUsize;
 use std::str::FromStr;
 
@@ -240,6 +241,13 @@ impl CompatIndexV5ToV6 {
             CompatIndexV5ToV6::Compat(compat) => compat
                 .documents()
                 .map(|iter| Box::new(iter) as Box<dyn Iterator<Item = Result<Document>> + '_>),
+        }
+    }
+
+    pub fn documents_file(&self) -> &File {
+        match self {
+            CompatIndexV5ToV6::V5(v5) => v5.documents_file(),
+            CompatIndexV5ToV6::Compat(compat) => compat.documents_file(),
         }
     }
 

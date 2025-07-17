@@ -284,6 +284,10 @@ impl V6IndexReader {
             .map(|line| -> Result<_> { Ok(serde_json::from_str(&line?)?) }))
     }
 
+    pub fn documents_file(&self) -> &File {
+        self.documents.get_ref()
+    }
+
     pub fn settings(&mut self) -> Result<Settings<Checked>> {
         let mut settings: Settings<Unchecked> = serde_json::from_reader(&mut self.settings)?;
         patch_embedders(&mut settings);

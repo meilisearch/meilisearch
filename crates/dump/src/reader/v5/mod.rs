@@ -247,6 +247,10 @@ impl V5IndexReader {
             .map(|line| -> Result<_> { Ok(serde_json::from_str(&line?)?) }))
     }
 
+    pub fn documents_file(&self) -> &File {
+        self.documents.get_ref()
+    }
+
     pub fn settings(&mut self) -> Result<Settings<Checked>> {
         Ok(self.settings.clone())
     }

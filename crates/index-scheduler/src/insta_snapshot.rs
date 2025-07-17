@@ -20,6 +20,7 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
 
     let IndexScheduler {
         cleanup_enabled: _,
+        experimental_no_edition_2024_for_dumps: _,
         processing_tasks,
         env,
         version,

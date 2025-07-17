@@ -72,6 +72,10 @@ impl V1IndexReader {
             .map(|line| -> Result<_> { Ok(serde_json::from_str(&line?)?) }))
     }
 
+    pub fn documents_file(&self) -> &File {
+        self.documents.get_ref()
+    }
+
     pub fn settings(&mut self) -> Result<self::settings::Settings> {
         Ok(serde_json::from_reader(&mut self.settings)?)
     }

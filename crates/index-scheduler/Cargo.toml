@@ -26,7 +26,7 @@ flate2 = "1.1.2"
 indexmap = "2.9.0"
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
-memmap2 = "0.9.5"
+memmap2 = "0.9.7"
 page_size = "0.6.0"
 rayon = "1.10.0"
 roaring = { version = "0.10.12", features = ["serde"] }

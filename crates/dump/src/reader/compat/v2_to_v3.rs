@@ -1,3 +1,4 @@
+use std::fs::File;
 use std::str::FromStr;
 
 use time::OffsetDateTime;
@@ -119,6 +120,13 @@ impl CompatIndexV2ToV3 {
                 .documents()
                 .map(|iter| Box::new(iter) as Box<dyn Iterator<Item = Result<Document>> + '_>),
             CompatIndexV2ToV3::Compat(compat) => compat.documents(),
+        }
+    }
+
+    pub fn documents_file(&self) -> &File {
+        match self {
+            CompatIndexV2ToV3::V2(v2) => v2.documents_file(),
+            CompatIndexV2ToV3::Compat(compat) => compat.documents_file(),
         }
     }
 
