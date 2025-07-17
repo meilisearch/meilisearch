@@ -1,4 +1,4 @@
-use crate::common::shared_index_for_fragments;
+use crate::common::{shared_index_for_fragments, Server};
 use crate::json;
 use meili_snap::snapshot;
 
@@ -292,6 +292,40 @@ async fn chat_completions_template_retrieval() {
     snapshot!(value, @r#"
     {
       "template": "{% for field in fields %}{% if field.is_searchable and field.value != nil %}{{ field.name }}: {{ field.value }}\n{% endif %}{% endfor %}",
+      "rendered": null
+    }
+    "#);
+}
+
+#[actix_rt::test]
+async fn retrieve_document_template() {
+    let server = Server::new_shared();
+    let index = server.unique_index();
+
+    let (response, code) = index
+        .update_settings(json!(
+        {
+            "embedders": {
+                "doggo_embedder": {
+                    "source": "huggingFace",
+                    "model": "sentence-transformers/all-MiniLM-L6-v2",
+                    "revision": "e4ce9877abf3edfe10b0d82785e83bdcb973e22e",
+                    "documentTemplate": "This is a document template {{doc.doggo}}",
+                }
+            }
+        }
+        ))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(response["taskUid"].as_u64().unwrap()).await;
+
+    let (value, code) = index
+        .render(json! {{ "template": { "id": "embedders.doggo_embedder.documentTemplate" }}})
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(value, @r#"
+    {
+      "template": "This is a document template {{doc.doggo}}",
       "rendered": null
     }
     "#);
