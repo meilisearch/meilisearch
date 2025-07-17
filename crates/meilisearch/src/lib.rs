@@ -238,6 +238,7 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Arc<
         auto_upgrade: opt.experimental_dumpless_upgrade,
         embedding_cache_cap: opt.experimental_embedding_cache_entries,
         experimental_no_snapshot_compaction: opt.experimental_no_snapshot_compaction,
+        experimental_no_edition_2024_for_dumps: opt.experimental_no_edition_2024_for_dumps,
     };
     let binary_version = (VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH);
 
@@ -553,47 +554,51 @@ fn import_dump(
         let embedder_stats: Arc<EmbedderStats> = Default::default();
         builder.execute(&|| false, &progress, embedder_stats.clone())?;
 
-        // 5.3 Import the documents.
-        // 5.3.1 We need to recreate the grenad+obkv format accepted by the index.
-        tracing::info!("Importing the documents.");
-        let file = tempfile::tempfile()?;
-        let mut builder = DocumentsBatchBuilder::new(BufWriter::new(file));
-        for document in index_reader.documents()? {
-            builder.append_json_object(&document?)?;
+        if index_scheduler.no_edition_2024_for_dumps() {
+            // 5.3 Import the documents.
+            // 5.3.1 We need to recreate the grenad+obkv format accepted by the index.
+            tracing::info!("Importing the documents.");
+            let file = tempfile::tempfile()?;
+            let mut builder = DocumentsBatchBuilder::new(BufWriter::new(file));
+            for document in index_reader.documents()? {
+                builder.append_json_object(&document?)?;
+            }
+
+            // This flush the content of the batch builder.
+            let file = builder.into_inner()?.into_inner()?;
+
+            // 5.3.2 We feed it to the milli index.
+            let reader = BufReader::new(file);
+            let reader = DocumentsBatchReader::from_reader(reader)?;
+
+            let embedder_configs = index.embedding_configs().embedding_configs(&wtxn)?;
+            let embedders = index_scheduler.embedders(uid.to_string(), embedder_configs)?;
+
+            let builder = milli::update::IndexDocuments::new(
+                &mut wtxn,
+                &index,
+                indexer_config,
+                IndexDocumentsConfig {
+                    update_method: IndexDocumentsMethod::ReplaceDocuments,
+                    ..Default::default()
+                },
+                |indexing_step| tracing::trace!("update: {:?}", indexing_step),
+                || false,
+                &embedder_stats,
+            )?;
+
+            let builder = builder.with_embedders(embedders);
+
+            let (builder, user_result) = builder.add_documents(reader)?;
+            let user_result = user_result?;
+            tracing::info!(documents_found = user_result, "{} documents found.", user_result);
+            builder.execute()?;
+        } else {
+            unimplemented!("new document indexer when importing dumps");
         }
 
-        // This flush the content of the batch builder.
-        let file = builder.into_inner()?.into_inner()?;
-
-        // 5.3.2 We feed it to the milli index.
-        let reader = BufReader::new(file);
-        let reader = DocumentsBatchReader::from_reader(reader)?;
-
-        let embedder_configs = index.embedding_configs().embedding_configs(&wtxn)?;
-        let embedders = index_scheduler.embedders(uid.to_string(), embedder_configs)?;
-
-        let builder = milli::update::IndexDocuments::new(
-            &mut wtxn,
-            &index,
-            indexer_config,
-            IndexDocumentsConfig {
-                update_method: IndexDocumentsMethod::ReplaceDocuments,
-                ..Default::default()
-            },
-            |indexing_step| tracing::trace!("update: {:?}", indexing_step),
-            || false,
-            &embedder_stats,
-        )?;
-
-        let builder = builder.with_embedders(embedders);
-
-        let (builder, user_result) = builder.add_documents(reader)?;
-        let user_result = user_result?;
-        tracing::info!(documents_found = user_result, "{} documents found.", user_result);
-        builder.execute()?;
         wtxn.commit()?;
         tracing::info!("All documents successfully imported.");
-
         index_scheduler.refresh_index_stats(&uid)?;
     }
 

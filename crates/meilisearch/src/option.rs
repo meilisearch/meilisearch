@@ -68,6 +68,8 @@ const MEILI_EXPERIMENTAL_LIMIT_BATCHED_TASKS_TOTAL_SIZE: &str =
 const MEILI_EXPERIMENTAL_EMBEDDING_CACHE_ENTRIES: &str =
     "MEILI_EXPERIMENTAL_EMBEDDING_CACHE_ENTRIES";
 const MEILI_EXPERIMENTAL_NO_SNAPSHOT_COMPACTION: &str = "MEILI_EXPERIMENTAL_NO_SNAPSHOT_COMPACTION";
+const MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_DUMPS: &str =
+    "MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_DUMPS";
 const DEFAULT_CONFIG_FILE_PATH: &str = "./config.toml";
 const DEFAULT_DB_PATH: &str = "./data.ms";
 const DEFAULT_HTTP_ADDR: &str = "localhost:7700";
@@ -467,6 +469,15 @@ pub struct Opt {
     #[serde(default)]
     pub experimental_no_snapshot_compaction: bool,
 
+    /// Experimental make dump imports use the old document indexer.
+    ///
+    /// When enabled, Meilisearch will use the old document indexer when importing dumps.
+    ///
+    /// For more information, see <https://github.com/orgs/meilisearch/discussions/851>.
+    #[clap(long, env = MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_DUMPS)]
+    #[serde(default)]
+    pub experimental_no_edition_2024_for_dumps: bool,
+
     #[serde(flatten)]
     #[clap(flatten)]
     pub indexer_options: IndexerOpts,
@@ -572,6 +583,7 @@ impl Opt {
             experimental_limit_batched_tasks_total_size,
             experimental_embedding_cache_entries,
             experimental_no_snapshot_compaction,
+            experimental_no_edition_2024_for_dumps,
         } = self;
         export_to_env_if_not_present(MEILI_DB_PATH, db_path);
         export_to_env_if_not_present(MEILI_HTTP_ADDR, http_addr);
@@ -671,6 +683,10 @@ impl Opt {
         export_to_env_if_not_present(
             MEILI_EXPERIMENTAL_NO_SNAPSHOT_COMPACTION,
             experimental_no_snapshot_compaction.to_string(),
+        );
+        export_to_env_if_not_present(
+            MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_DUMPS,
+            experimental_no_edition_2024_for_dumps.to_string(),
         );
         indexer_options.export_to_env();
     }

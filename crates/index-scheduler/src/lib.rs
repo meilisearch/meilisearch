@@ -139,6 +139,8 @@ pub struct IndexSchedulerOptions {
     pub embedding_cache_cap: usize,
     /// Snapshot compaction status.
     pub experimental_no_snapshot_compaction: bool,
+    /// Whether dump import use the old document indexer or the new one.
+    pub experimental_no_edition_2024_for_dumps: bool,
 }
 
 /// Structure which holds meilisearch's indexes and schedules the tasks
@@ -167,6 +169,9 @@ pub struct IndexScheduler {
 
     /// Whether we should automatically cleanup the task queue or not.
     pub(crate) cleanup_enabled: bool,
+
+    /// Whether we should use the old document indexer or the new one.
+    pub(crate) experimental_no_edition_2024_for_dumps: bool,
 
     /// The webhook url we should send tasks to after processing every batches.
     pub(crate) webhook_url: Option<String>,
@@ -210,6 +215,7 @@ impl IndexScheduler {
 
             index_mapper: self.index_mapper.clone(),
             cleanup_enabled: self.cleanup_enabled,
+            experimental_no_edition_2024_for_dumps: self.experimental_no_edition_2024_for_dumps,
             webhook_url: self.webhook_url.clone(),
             webhook_authorization_header: self.webhook_authorization_header.clone(),
             embedders: self.embedders.clone(),
@@ -296,6 +302,7 @@ impl IndexScheduler {
             index_mapper,
             env,
             cleanup_enabled: options.cleanup_enabled,
+            experimental_no_edition_2024_for_dumps: options.experimental_no_edition_2024_for_dumps,
             webhook_url: options.webhook_url,
             webhook_authorization_header: options.webhook_authorization_header,
             embedders: Default::default(),
@@ -592,6 +599,11 @@ impl IndexScheduler {
         let index_tasks = self.queue.tasks.index_tasks(&rtxn, index)?;
         let nbr_index_processing_tasks = processing_tasks.intersection_len(&index_tasks);
         Ok(nbr_index_processing_tasks > 0)
+    }
+
+    /// Whether the index should use the old document indexer.
+    pub fn no_edition_2024_for_dumps(&self) -> bool {
+        self.experimental_no_edition_2024_for_dumps
     }
 
     /// Return the tasks matching the query from the user's point of view along
