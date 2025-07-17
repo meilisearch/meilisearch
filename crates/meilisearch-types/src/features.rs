@@ -162,11 +162,22 @@ impl ChatCompletionSource {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ChatCompletionPrompts {
+    #[serde(default)]
     pub system: String,
+    #[serde(default)]
     pub search_description: String,
+    #[serde(default)]
     pub search_q_param: String,
+    #[serde(default = "default_search_filter_param")]
     pub search_filter_param: String,
+    #[serde(default)]
     pub search_index_uid_param: String,
+}
+
+/// This function is used for when the search_filter_param is
+/// not provided and this can happen when the database is in v1.15.
+fn default_search_filter_param() -> String {
+    DEFAULT_CHAT_SEARCH_FILTER_PARAM_PROMPT.to_string()
 }
 
 impl Default for ChatCompletionPrompts {
