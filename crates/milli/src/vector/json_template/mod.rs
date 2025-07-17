@@ -63,10 +63,7 @@ impl Error {
     /// Produces an error message when the error happened at rendering time.
     pub fn rendering_error(&self, root: &str) -> String {
         if self.path.is_empty() {
-            format!(
-                "error while rendering template: {}",
-                &self.template_error
-            )
+            format!("error while rendering template: {}", &self.template_error)
         } else {
             format!(
                 "in `{}`, error while rendering template: {}",
@@ -79,10 +76,7 @@ impl Error {
     /// Produces an error message when the error happened at parsing time.
     pub fn parsing_error(&self, root: &str) -> String {
         if self.path.is_empty() {
-            format!(
-                "error while parsing template: {}",
-                &self.template_error
-            )
+            format!("error while parsing template: {}", &self.template_error)
         } else {
             format!(
                 "in `{}`, error while parsing template: {}",
@@ -153,10 +147,7 @@ impl JsonTemplate {
     /// If its a map, values inside can be accessed directly by their keys.
     pub fn render_serializable<T: Serialize>(&self, object: &T) -> Result<Value, Error> {
         let object = liquid::to_object(object)
-            .map_err(|err| Error {
-                template_error: err,
-                path: ValuePath::new(),
-            })?;
+            .map_err(|err| Error { template_error: err, path: ValuePath::new() })?;
         self.render(&object)
     }
 

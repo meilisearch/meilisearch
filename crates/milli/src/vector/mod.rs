@@ -886,9 +886,7 @@ impl EmbedderOptions {
             | EmbedderOptions::OpenAi(_)
             | EmbedderOptions::Ollama(_)
             | EmbedderOptions::UserProvided(_) => None,
-            EmbedderOptions::Rest(embedder_options) => {
-                embedder_options.search_fragments.get(name)
-            }
+            EmbedderOptions::Rest(embedder_options) => embedder_options.search_fragments.get(name),
             EmbedderOptions::Composite(embedder_options) => {
                 if let SubEmbedderOptions::Rest(embedder_options) = &embedder_options.search {
                     embedder_options.search_fragments.get(name)

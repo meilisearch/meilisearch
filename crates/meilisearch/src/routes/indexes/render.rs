@@ -424,18 +424,20 @@ async fn render(index: Index, query: RenderQuery) -> Result<RenderResult, Render
 
                             fragment.clone()
                         }
-                        found => return Err(UnknownTemplatePrefix {
-                            embedder_name: embedder_name.to_string(),
-                            found: found.to_string(),
-                            available_indexing_fragments: embedding_config
-                                .config
-                                .embedder_options
-                                .indexing_fragments(),
-                            available_search_fragments: embedding_config
-                                .config
-                                .embedder_options
-                                .search_fragments(),
-                        }),
+                        found => {
+                            return Err(UnknownTemplatePrefix {
+                                embedder_name: embedder_name.to_string(),
+                                found: found.to_string(),
+                                available_indexing_fragments: embedding_config
+                                    .config
+                                    .embedder_options
+                                    .indexing_fragments(),
+                                available_search_fragments: embedding_config
+                                    .config
+                                    .embedder_options
+                                    .search_fragments(),
+                            })
+                        }
                     }
                 }
                 "chatCompletions" | "chatcompletions" => {

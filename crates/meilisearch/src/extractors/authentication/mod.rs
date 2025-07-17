@@ -138,7 +138,9 @@ pub trait Policy {
         auth: Data<AuthController>,
         token: &str,
         index: Option<&str>,
-    ) -> Result<AuthFilter, policies::AuthError> where Self: Sized;
+    ) -> Result<AuthFilter, policies::AuthError>
+    where
+        Self: Sized;
 }
 
 pub mod policies {

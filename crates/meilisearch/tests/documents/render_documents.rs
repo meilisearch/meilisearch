@@ -6,13 +6,7 @@ use meili_snap::snapshot;
 async fn empty_id() {
     let index = shared_index_for_fragments().await;
 
-    let (value, code) = index
-        .render(json! {{
-            "template": {
-                "id": ""
-            }
-        }})
-        .await;
+    let (value, code) = index.render(json! {{ "template": { "id": "" }}}).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
@@ -28,13 +22,7 @@ async fn empty_id() {
 async fn wrong_id_prefix() {
     let index = shared_index_for_fragments().await;
 
-    let (value, code) = index
-        .render(json! {{
-            "template": {
-                "id": "wrong.disregarded"
-            }
-        }})
-        .await;
+    let (value, code) = index.render(json! {{ "template": { "id": "wrong.disregarded" }}}).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
@@ -50,13 +38,7 @@ async fn wrong_id_prefix() {
 async fn missing_embedder() {
     let index = shared_index_for_fragments().await;
 
-    let (value, code) = index
-        .render(json! {{
-            "template": {
-                "id": "embedders"
-            }
-        }})
-        .await;
+    let (value, code) = index.render(json! {{ "template": { "id": "embedders" }}}).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
@@ -72,13 +54,8 @@ async fn missing_embedder() {
 async fn wrong_embedder() {
     let index = shared_index_for_fragments().await;
 
-    let (value, code) = index
-        .render(json! {{
-            "template": {
-                "id": "embedders.wrong.disregarded"
-            }
-        }})
-        .await;
+    let (value, code) =
+        index.render(json! {{ "template": { "id": "embedders.wrong.disregarded" }}}).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
@@ -94,13 +71,7 @@ async fn wrong_embedder() {
 async fn missing_template_kind() {
     let index = shared_index_for_fragments().await;
 
-    let (value, code) = index
-        .render(json! {{
-            "template": {
-                "id": "embedders.rest"
-            }
-        }})
-        .await;
+    let (value, code) = index.render(json! {{ "template": { "id": "embedders.rest" }}}).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
@@ -116,13 +87,8 @@ async fn missing_template_kind() {
 async fn wrong_template_kind() {
     let index = shared_index_for_fragments().await;
 
-    let (value, code) = index
-        .render(json! {{
-            "template": {
-                "id": "embedders.rest.wrong.disregarded"
-            }
-        }})
-        .await;
+    let (value, code) =
+        index.render(json! {{ "template": { "id": "embedders.rest.wrong.disregarded" }}}).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
@@ -138,13 +104,8 @@ async fn wrong_template_kind() {
 async fn document_template_on_fragmented_index() {
     let index = shared_index_for_fragments().await;
 
-    let (value, code) = index
-        .render(json! {{
-            "template": {
-                "id": "embedders.rest.documentTemplate"
-            }
-        }})
-        .await;
+    let (value, code) =
+        index.render(json! {{ "template": { "id": "embedders.rest.documentTemplate" }}}).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
@@ -160,13 +121,8 @@ async fn document_template_on_fragmented_index() {
 async fn missing_fragment_name() {
     let index = shared_index_for_fragments().await;
 
-    let (value, code) = index
-        .render(json! {{
-            "template": {
-                "id": "embedders.rest.indexingFragments"
-            }
-        }})
-        .await;
+    let (value, code) =
+        index.render(json! {{ "template": { "id": "embedders.rest.indexingFragments" }}}).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
@@ -177,13 +133,8 @@ async fn missing_fragment_name() {
     }
     "#);
 
-    let (value, code) = index
-        .render(json! {{
-            "template": {
-                "id": "embedders.rest.searchFragments"
-            }
-        }})
-        .await;
+    let (value, code) =
+        index.render(json! {{ "template": { "id": "embedders.rest.searchFragments" }}}).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
@@ -200,11 +151,7 @@ async fn wrong_fragment_name() {
     let index = shared_index_for_fragments().await;
 
     let (value, code) = index
-        .render(json! {{
-            "template": {
-                "id": "embedders.rest.indexingFragments.wrong"
-            }
-        }})
+        .render(json! {{ "template": { "id": "embedders.rest.indexingFragments.wrong" }}})
         .await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
@@ -216,13 +163,8 @@ async fn wrong_fragment_name() {
     }
     "#);
 
-    let (value, code) = index
-        .render(json! {{
-            "template": {
-                "id": "embedders.rest.searchFragments.wrong"
-            }
-        }})
-        .await;
+    let (value, code) =
+        index.render(json! {{ "template": { "id": "embedders.rest.searchFragments.wrong" }}}).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
@@ -239,11 +181,9 @@ async fn leftover_tokens() {
     let index = shared_index_for_fragments().await;
 
     let (value, code) = index
-        .render(json! {{
-            "template": {
-                "id": "embedders.rest.indexingFragments.withBreed.leftover"
-            }
-        }})
+        .render(
+            json! {{ "template": { "id": "embedders.rest.indexingFragments.withBreed.leftover" }}},
+        )
         .await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
@@ -256,11 +196,7 @@ async fn leftover_tokens() {
     "#);
 
     let (value, code) = index
-        .render(json! {{
-            "template": {
-                "id": "embedders.rest.searchFragments.justBreed.leftover"
-            }
-        }})
+        .render(json! {{"template": { "id": "embedders.rest.searchFragments.justBreed.leftover" }}})
         .await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
@@ -278,11 +214,7 @@ async fn fragment_retrieval() {
     let index = shared_index_for_fragments().await;
 
     let (value, code) = index
-        .render(json! {{
-            "template": {
-                "id": "embedders.rest.indexingFragments.withBreed"
-            }
-        }})
+        .render(json! {{ "template": { "id": "embedders.rest.indexingFragments.withBreed" }}})
         .await;
     snapshot!(code, @"200 OK");
     snapshot!(value, @r#"
@@ -293,11 +225,7 @@ async fn fragment_retrieval() {
     "#);
 
     let (value, code) = index
-        .render(json! {{
-            "template": {
-                "id": "embedders.rest.searchFragments.justBreed"
-            }
-        }})
+        .render(json! {{ "template": { "id": "embedders.rest.searchFragments.justBreed" }}})
         .await;
     snapshot!(code, @"200 OK");
     snapshot!(value, @r#"
