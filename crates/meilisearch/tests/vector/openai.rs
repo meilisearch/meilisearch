@@ -345,6 +345,129 @@ async fn create_slow_mock() -> (&'static MockServer, Value) {
     create_mock_with_template(DOGGO_TEMPLATE, ModelDimensions::Large, true, true).await
 }
 
+#[actix_rt::test]
+async fn update_from_user_provided() {
+    let (_mock, setting) = create_mock().await;
+    let server = get_server_vector().await;
+    let index = server.index("doggo");
+
+    let (response, code) = index
+        .update_settings(json!({
+          "embedders": {
+              "default": setting,
+          },
+        }))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    let task = server.wait_task(response.uid()).await;
+    snapshot!(task["status"], @r###""succeeded""###);
+    let documents = json!([
+      {"id": 0, "name": "kefir", "gender": "M", "birthyear": 2023, "breed": "Patou",
+    "_vectors": {
+      "default": {
+        "regenerate": true,
+        "embeddings": vec![0.5; 3072]
+      }
+    }},
+    ]);
+
+    let (value, code) = index.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+    let task = index.wait_task(value.uid()).await;
+    snapshot!(task, @r###"
+    {
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "doggo",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    let (documents, _code) = index
+        .get_all_documents(GetAllDocumentsOptions { retrieve_vectors: true, ..Default::default() })
+        .await;
+    snapshot!(json_string!(documents, {".results.*._vectors.default.embeddings" => "[vector]"}), @r###"
+    {
+      "results": [
+        {
+          "id": 0,
+          "name": "kefir",
+          "gender": "M",
+          "birthyear": 2023,
+          "breed": "Patou",
+          "_vectors": {
+            "default": {
+              "embeddings": "[vector]",
+              "regenerate": true
+            }
+          }
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 1
+    }
+    "###);
+
+    let (response, code) = index
+        .search_post(json!({
+            "q": "chien de chasse",
+            "hybrid": {"semanticRatio": 1.0, "embedder": "default"},
+            "showRankingScore": true,
+        }))
+        .await;
+    snapshot!(code, @"200 OK");
+    // cannot check precise similarity value due to differences in float implementations
+    // => check a range
+    assert!(response["hits"][0]["_rankingScore"].as_f64().unwrap() < 0.00000012);
+
+    // --- update using new indexer
+
+    let doggo_template_that_doesnt_affect_kefir = r#"{%- if doc.gender == "F" -%}Une chienne nommée {{doc.name}}, CHANGEMENT ICI née en {{doc.birthyear}}
+        {%- else -%}
+        Un chien nommé {{doc.name}}, né en {{doc.birthyear}}
+        {%- endif %}, de race {{doc.breed}}."#;
+
+    let (response, code) = index
+        .update_settings(json!({
+          "embedders": {
+              "default": {
+                "documentTemplate": doggo_template_that_doesnt_affect_kefir
+              },
+          },
+        }))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    let task = server.wait_task(response.uid()).await;
+    snapshot!(task["status"], @r###""succeeded""###);
+
+    // similarity should have changed
+
+    let (response, code) = index
+        .search_post(json!({
+            "q": "chien de chasse",
+            "hybrid": {"semanticRatio": 1.0, "embedder": "default"},
+            "showRankingScore": true,
+        }))
+        .await;
+    snapshot!(code, @"200 OK");
+    assert!(
+        response["hits"][0]["_rankingScore"].as_f64().unwrap() < 0.4
+            && response["hits"][0]["_rankingScore"].as_f64().unwrap() > 0.3
+    );
+}
+
 // basic test "it works"
 #[actix_rt::test]
 async fn it_works() {
