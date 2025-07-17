@@ -23,6 +23,7 @@ use utoipa::{IntoParams, OpenApi, ToSchema};
 use super::ActionPolicy;
 use crate::analytics::Analytics;
 use crate::error::MeilisearchHttpError;
+use crate::extractors::authentication::policies::DoubleActionPolicy;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::routes::indexes::similar_analytics::{SimilarAggregator, SimilarGET, SimilarPOST};
@@ -79,7 +80,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     )
 )]
 pub async fn render_post(
-    index_scheduler: GuardedData<ActionPolicy<{ actions::SETTINGS_GET }>, Data<IndexScheduler>>,
+    index_scheduler: GuardedData<DoubleActionPolicy<{ actions::SETTINGS_GET }, { actions::DOCUMENTS_GET }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
     params: AwebJson<RenderQuery, DeserrJsonError>,
     req: HttpRequest,

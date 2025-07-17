@@ -3,6 +3,7 @@ pub mod error;
 mod store;
 
 use std::collections::{HashMap, HashSet};
+use std::ops::BitAnd;
 
 use error::{AuthControllerError, Result};
 use maplit::hashset;

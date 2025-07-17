@@ -138,7 +138,7 @@ pub trait Policy {
         auth: Data<AuthController>,
         token: &str,
         index: Option<&str>,
-    ) -> Result<AuthFilter, policies::AuthError>;
+    ) -> Result<AuthFilter, policies::AuthError> where Self: Sized;
 }
 
 pub mod policies {
@@ -337,6 +337,24 @@ pub mod policies {
             }
 
             Ok(TenantTokenOutcome::Valid(uid, data.claims.search_rules))
+        }
+    }
+
+    pub struct DoubleActionPolicy<const A: u8, const B: u8> {
+        policy_a: ActionPolicy<A>,
+        policy_b: ActionPolicy<B>,
+    }
+
+    impl<const A: u8, const B: u8> Policy for DoubleActionPolicy<A, B> {
+        fn authenticate(
+            auth: Data<AuthController>,
+            token: &str,
+            index: Option<&str>,
+        ) -> Result<AuthFilter, AuthError> {
+            let filter_a = ActionPolicy::<A>::authenticate(auth.clone(), token, index)?;
+            let _filter_b = ActionPolicy::<B>::authenticate(auth, token, index)?;
+
+            Ok(filter_a)
         }
     }
 
