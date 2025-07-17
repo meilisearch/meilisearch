@@ -541,6 +541,10 @@ where
             .map_err(InternalError::from)??;
         }
 
+        tracing::warn!("Building cellulite");
+        let cellulite = cellulite::Cellulite::new(self.index.cellulite);
+        cellulite.build(self.wtxn, &Progress::default())?;
+
         self.execute_prefix_databases(
             word_docids.map(MergerBuilder::build),
             exact_word_docids.map(MergerBuilder::build),

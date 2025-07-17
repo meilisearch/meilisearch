@@ -343,3 +343,27 @@ impl Step for arroy::SubStep {
         self.max
     }
 }
+
+// Integration with steppe
+
+impl steppe::Progress for Progress {
+    fn update(&self, sub_progress: impl steppe::Step) {
+        self.update_progress(Compat(sub_progress));
+    }
+}
+
+struct Compat<T: steppe::Step>(T);
+
+impl<T: steppe::Step> Step for Compat<T> {
+    fn name(&self) -> Cow<'static, str> {
+        self.0.name().into()
+    }
+
+    fn current(&self) -> u32 {
+        self.0.current().try_into().unwrap_or(u32::MAX)
+    }
+
+    fn total(&self) -> u32 {
+        self.0.total().try_into().unwrap_or(u32::MAX)
+    }
+}

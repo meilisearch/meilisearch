@@ -820,7 +820,7 @@ impl<'a, 'i> Transform<'a, 'i> {
         let documents_count = documents_ids.len() as usize;
 
         // We initialize the sorter with the user indexing settings.
-        let mut original_sorter = if settings_diff.reindex_vectors() {
+        let mut original_sorter = if settings_diff.reindex_vectors() || settings_diff.reindex_geojson() {
             Some(create_sorter(
                 grenad::SortAlgorithm::Stable,
                 KeepFirst,

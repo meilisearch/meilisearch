@@ -101,6 +101,12 @@ pub enum SerializationError {
     InvalidNumberSerialization,
 }
 
+impl From<cellulite::Error> for Error {
+    fn from(error: cellulite::Error) -> Self {
+        Self::UserError(UserError::CelluliteError(error))
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum FieldIdMapMissingEntry {
     #[error("unknown field id {field_id} coming from the {process} process")]
@@ -111,6 +117,8 @@ pub enum FieldIdMapMissingEntry {
 
 #[derive(Error, Debug)]
 pub enum UserError {
+    #[error(transparent)]
+    CelluliteError(#[from] cellulite::Error),
     #[error("A document cannot contain more than 65,535 fields.")]
     AttributeLimitReached,
     #[error(transparent)]
