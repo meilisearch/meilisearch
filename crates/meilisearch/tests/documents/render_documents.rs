@@ -330,3 +330,80 @@ async fn retrieve_document_template() {
     }
     "#);
 }
+
+#[actix_rt::test]
+async fn render_document_kefir() {
+    let index = shared_index_for_fragments().await;
+
+    let (value, code) =
+        index.render(json! {{
+            "template": { "id": "embedders.rest.indexingFragments.basic" },
+            "input": { "documentId": "0" },
+        }}).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(value, @r#"
+    {
+      "template": "{{ doc.name }} is a dog",
+      "rendered": "kefir is a dog"
+    }
+    "#);
+
+    let (value, code) =
+        index.render(json! {{
+            "template": { "id": "embedders.rest.indexingFragments.withBreed" },
+            "input": { "documentId": "0" },
+        }}).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r#"
+    {
+      "message": "Error rendering template: error while rendering template: liquid: Unknown index\n  with:\n    variable=doc\n    requested index=breed\n    available indexes=id, name\n",
+      "code": "template_rendering_error",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#template_rendering_error"
+    }
+    "#);
+}
+
+#[actix_rt::test]
+async fn render_inline_document_iko() {
+    let index = shared_index_for_fragments().await;
+
+    let (value, code) =
+        index.render(json! {{
+            "template": { "id": "embedders.rest.indexingFragments.basic" },
+            "input": { "inline": { "doc": { "name": "iko", "breed": "jack russell" } } },
+        }}).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(value, @r#"
+    {
+      "template": "{{ doc.name }} is a dog",
+      "rendered": "iko is a dog"
+    }
+    "#);
+
+    let (value, code) =
+        index.render(json! {{
+            "template": { "id": "embedders.rest.indexingFragments.withBreed" },
+            "input": { "inline": { "doc": { "name": "iko", "breed": "jack russell" } } },
+        }}).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(value, @r#"
+    {
+      "template": "{{ doc.name }} is a {{ doc.breed }}",
+      "rendered": "iko is a jack russell"
+    }
+    "#);
+
+    let (value, code) =
+        index.render(json! {{
+            "template": { "id": "embedders.rest.searchFragments.justBreed" },
+            "input": { "inline": { "media": { "name": "iko", "breed": "jack russell" } } },
+        }}).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(value, @r#"
+    {
+      "template": "It's a {{ media.breed }}",
+      "rendered": "It's a jack russell"
+    }
+    "#);
+}

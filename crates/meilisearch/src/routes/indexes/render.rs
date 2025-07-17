@@ -311,11 +311,11 @@ impl From<RenderError> for ResponseError {
             ),
             TemplateParsing(err) => ResponseError::from_msg(
                 format!("Error parsing template: {}", err.parsing_error("input")),
-                Code::InvalidRenderTemplate,
+                Code::TemplateParsingError,
             ),
             TemplateRendering(err) => ResponseError::from_msg(
                 format!("Error rendering template: {}", err.rendering_error("input")),
-                Code::InvalidRenderTemplate,
+                Code::TemplateRenderingError,
             ),
         }
     }
