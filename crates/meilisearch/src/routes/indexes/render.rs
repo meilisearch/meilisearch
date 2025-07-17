@@ -13,6 +13,7 @@ use meilisearch_types::error::ResponseError;
 use meilisearch_types::error::{Code};
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::keys::actions;
+use meilisearch_types::milli::vector::json_template::{self, JsonTemplate};
 use meilisearch_types::serde_cs::vec::CS;
 use meilisearch_types::{heed, milli, Index};
 use serde::Serialize;
@@ -165,6 +166,8 @@ enum RenderError {
 
     DocumentNotFound(String),
     BothInlineDocAndDocId,
+    TemplateParsing(json_template::Error),
+    TemplateRendering(json_template::Error),
 }
 
 impl From<heed::Error> for RenderError {
@@ -281,6 +284,14 @@ impl From<RenderError> for ResponseError {
             BothInlineDocAndDocId => ResponseError::from_msg(
                 String::from("A document id was provided but adding it to the input would overwrite the `doc` field that you already defined inline."),
                 Code::InvalidRenderInput,
+            ),
+            TemplateParsing(err) => ResponseError::from_msg(
+                format!("Error parsing template: {}", err.parsing_error("input")),
+                Code::InvalidRenderTemplate,
+            ),
+            TemplateRendering(err) => ResponseError::from_msg(
+                format!("Error rendering template: {}", err.rendering_error("input")),
+                Code::InvalidRenderTemplate,
             ),
         }
     }
@@ -438,7 +449,14 @@ async fn render(index: Index, query: RenderQuery) -> Result<RenderResult, Render
         }
     }
 
-    Ok(RenderResult { template, rendered: String::from("TODO: Implement render logic here") })
+    let json_template = JsonTemplate::new(template.clone())
+        .map_err(TemplateParsing)?;
+    
+    let rendered = json_template
+        .render_serializable(&media)
+        .map_err(TemplateRendering)?;
+
+    Ok(RenderResult { template, rendered })
 }
 
 #[derive(Debug, Clone, PartialEq, Deserr, ToSchema)]
@@ -471,5 +489,5 @@ pub struct RenderQueryInput {
 #[derive(Debug, Clone, Serialize, PartialEq, ToSchema)]
 pub struct RenderResult {
     template: serde_json::Value,
-    rendered: String,
+    rendered: serde_json::Value,
 }

@@ -113,7 +113,7 @@ impl RequestData {
             for (name, value) in indexing_fragments {
                 JsonTemplate::new(value).map_err(|error| {
                     NewEmbedderError::rest_could_not_parse_template(
-                        error.parsing(&format!(".indexingFragments.{name}")),
+                        error.parsing_error(&format!(".indexingFragments.{name}")),
                     )
                 })?;
             }
@@ -623,7 +623,7 @@ impl RequestFromFragments {
             .map(|(name, value)| {
                 let json_template = JsonTemplate::new(value).map_err(|error| {
                     NewEmbedderError::rest_could_not_parse_template(
-                        error.parsing(&format!(".searchFragments.{name}")),
+                        error.parsing_error(&format!(".searchFragments.{name}")),
                     )
                 })?;
                 Ok((name, json_template))

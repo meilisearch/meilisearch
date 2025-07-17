@@ -14,7 +14,8 @@
 #![warn(missing_docs)]
 
 use bumpalo::Bump;
-use liquid::{Parser, Template};
+use liquid::{Object, Parser, Template};
+use serde::Serialize;
 use serde_json::{Map, Value};
 
 use crate::prompt::ParseableDocument;
@@ -61,20 +62,34 @@ pub struct Error {
 impl Error {
     /// Produces an error message when the error happened at rendering time.
     pub fn rendering_error(&self, root: &str) -> String {
-        format!(
-            "in `{}`, error while rendering template: {}",
-            path_with_root(root, self.path.iter()),
-            &self.template_error
-        )
+        if self.path.is_empty() {
+            format!(
+                "error while rendering template: {}",
+                &self.template_error
+            )
+        } else {
+            format!(
+                "in `{}`, error while rendering template: {}",
+                path_with_root(root, self.path.iter()),
+                &self.template_error
+            )
+        }
     }
 
     /// Produces an error message when the error happened at parsing time.
-    pub fn parsing(&self, root: &str) -> String {
-        format!(
-            "in `{}`, error while parsing template: {}",
-            path_with_root(root, self.path.iter()),
-            &self.template_error
-        )
+    pub fn parsing_error(&self, root: &str) -> String {
+        if self.path.is_empty() {
+            format!(
+                "error while parsing template: {}",
+                &self.template_error
+            )
+        } else {
+            format!(
+                "in `{}`, error while parsing template: {}",
+                path_with_root(root, self.path.iter()),
+                &self.template_error
+            )
+        }
     }
 }
 
@@ -132,6 +147,17 @@ impl JsonTemplate {
             (Some(q), Some(media)) => liquid::object!({"q": q, "media": media}),
         };
         self.render(&search_data)
+    }
+
+    /// Renders any serializable value by converting it to a liquid object and rendering it with the template.
+    /// If its a map, values inside can be accessed directly by their keys.
+    pub fn render_serializable<T: Serialize>(&self, object: &T) -> Result<Value, Error> {
+        let object = liquid::to_object(object)
+            .map_err(|err| Error {
+                template_error: err,
+                path: ValuePath::new(),
+            })?;
+        self.render(&object)
     }
 
     /// The JSON value representing the underlying template
