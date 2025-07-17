@@ -162,10 +162,14 @@ impl ChatCompletionSource {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ChatCompletionPrompts {
+    #[serde(default)]
     pub system: String,
+    #[serde(default)]
     pub search_description: String,
+    #[serde(default)]
     pub search_q_param: String,
     pub search_filter_param: String,
+    #[serde(default)]
     pub search_index_uid_param: String,
 }
 
