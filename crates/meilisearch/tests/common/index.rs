@@ -457,6 +457,14 @@ impl<State> Index<'_, State> {
         self.service.get(url).await
     }
 
+    pub async fn render(
+        &self,
+        query: Value
+    ) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/render", urlencode(self.uid.as_ref()));
+        self.service.post_encoded(url, query, self.encoder).await
+    }
+
     pub async fn settings(&self) -> (Value, StatusCode) {
         let url = format!("/indexes/{}/settings", urlencode(self.uid.as_ref()));
         self.service.get(url).await

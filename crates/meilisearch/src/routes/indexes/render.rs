@@ -8,9 +8,12 @@ use index_scheduler::IndexScheduler;
 use itertools::structs;
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
-use meilisearch_types::error::deserr_codes::{InvalidRenderInput, InvalidRenderInputDocumentId, InvalidRenderInputInline, InvalidRenderTemplate, InvalidRenderTemplateId, InvalidRenderTemplateInline};
+use meilisearch_types::error::deserr_codes::{
+    InvalidRenderInput, InvalidRenderInputDocumentId, InvalidRenderInputInline,
+    InvalidRenderTemplate, InvalidRenderTemplateId, InvalidRenderTemplateInline,
+};
+use meilisearch_types::error::Code;
 use meilisearch_types::error::ResponseError;
-use meilisearch_types::error::{Code};
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::keys::actions;
 use meilisearch_types::milli::vector::json_template::{self, JsonTemplate};
@@ -81,7 +84,10 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     )
 )]
 pub async fn render_post(
-    index_scheduler: GuardedData<DoubleActionPolicy<{ actions::SETTINGS_GET }, { actions::DOCUMENTS_GET }>, Data<IndexScheduler>>,
+    index_scheduler: GuardedData<
+        DoubleActionPolicy<{ actions::SETTINGS_GET }, { actions::DOCUMENTS_GET }>,
+        Data<IndexScheduler>,
+    >,
     index_uid: web::Path<String>,
     params: AwebJson<RenderQuery, DeserrJsonError>,
     req: HttpRequest,
@@ -147,7 +153,12 @@ enum RenderError {
         available_indexing_fragments: Vec<String>,
         available_search_fragments: Vec<String>,
     },
-    UnknownTemplatePrefix(String),
+    UnknownTemplatePrefix {
+        embedder_name: String,
+        found: String,
+        available_indexing_fragments: Vec<String>,
+        available_search_fragments: Vec<String>,
+    },
     ReponseError(ResponseError),
     MissingFragment {
         embedder_name: String,
@@ -240,10 +251,23 @@ impl From<RenderError> for ResponseError {
                     )
                 }
             },
-            UnknownTemplatePrefix(prefix) => ResponseError::from_msg(
-                format!("Template ID must start with `embedders` or `chatCompletions`, but found `{prefix}`."),
-                Code::InvalidRenderTemplateId,
-            ),
+            UnknownTemplatePrefix { embedder_name, found, mut available_indexing_fragments, mut available_search_fragments } => {
+                if available_indexing_fragments.is_empty() && available_search_fragments.is_empty() {
+                    ResponseError::from_msg(
+                        format!("Wrong template `{found}` after embedder `{embedder_name}`.\n  Hint: Available fragments: `documentTemplate`."),
+                        Code::InvalidRenderTemplateId,
+                    )
+                } else {
+                    available_indexing_fragments.sort_unstable();
+                    available_search_fragments.sort_unstable();
+                    ResponseError::from_msg(
+                        format!("Wrong template `{found}` after embedder `{embedder_name}`.\n  Hint: Available fragments are {}.",
+                            available_indexing_fragments.iter().map(|s| format!("`indexingFragments.{s}`")).chain(
+                            available_search_fragments.iter().map(|s| format!("`searchFragments.{s}`"))).collect::<Vec<_>>().join(", ")),
+                        Code::InvalidRenderTemplateId,
+                    )
+                }
+            },
             ReponseError(response_error) => response_error,
             MissingFragment { embedder_name, kind, mut available } => {
                 available.sort_unstable();
@@ -400,7 +424,18 @@ async fn render(index: Index, query: RenderQuery) -> Result<RenderResult, Render
 
                             fragment.clone()
                         }
-                        _ => return Err(UnknownTemplateRoot(root.to_owned())),
+                        found => return Err(UnknownTemplatePrefix {
+                            embedder_name: embedder_name.to_string(),
+                            found: found.to_string(),
+                            available_indexing_fragments: embedding_config
+                                .config
+                                .embedder_options
+                                .indexing_fragments(),
+                            available_search_fragments: embedding_config
+                                .config
+                                .embedder_options
+                                .search_fragments(),
+                        }),
                     }
                 }
                 "chatCompletions" | "chatcompletions" => {
@@ -414,8 +449,9 @@ async fn render(index: Index, query: RenderQuery) -> Result<RenderResult, Render
 
                     serde_json::Value::String(chat_config.prompt.template.clone())
                 }
+                "" => return Err(EmptyTemplateId),
                 unknown => {
-                    return Err(UnknownTemplatePrefix(unknown.to_string()));
+                    return Err(UnknownTemplateRoot(unknown.to_string()));
                 }
             };
 
@@ -429,32 +465,31 @@ async fn render(index: Index, query: RenderQuery) -> Result<RenderResult, Render
         (None, None) => return Err(MissingTemplate),
     };
 
-    let mut media = query.input.inline.unwrap_or_default();
-    
-    if let Some(document_id) = query.input.document_id {
-        let internal_id = index
-            .external_documents_ids()
-            .get(&rtxn, &document_id)?
-            .ok_or_else(|| DocumentNotFound(document_id.to_string()))?;
+    let mut rendered = Value::Null;
+    if let Some(input) = query.input {
+        let mut media = input.inline.unwrap_or_default();
+        if let Some(document_id) = input.document_id {
+            let internal_id = index
+                .external_documents_ids()
+                .get(&rtxn, &document_id)?
+                .ok_or_else(|| DocumentNotFound(document_id.to_string()))?;
 
-        let document = index.document(&rtxn, internal_id)?;
+            let document = index.document(&rtxn, internal_id)?;
 
-        let fields_ids_map = index.fields_ids_map(&rtxn)?;
-        let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
-        let document = milli::obkv_to_json(&all_fields, &fields_ids_map, document)?;
-        let document = Value::Object(document);
+            let fields_ids_map = index.fields_ids_map(&rtxn)?;
+            let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
+            let document = milli::obkv_to_json(&all_fields, &fields_ids_map, document)?;
+            let document = Value::Object(document);
 
-        if media.insert(String::from("doc"), document).is_some() {
-            return Err(BothInlineDocAndDocId);
+            if media.insert(String::from("doc"), document).is_some() {
+                return Err(BothInlineDocAndDocId);
+            }
         }
-    }
 
-    let json_template = JsonTemplate::new(template.clone())
-        .map_err(TemplateParsing)?;
-    
-    let rendered = json_template
-        .render_serializable(&media)
-        .map_err(TemplateRendering)?;
+        let json_template = JsonTemplate::new(template.clone()).map_err(TemplateParsing)?;
+
+        rendered = json_template.render_serializable(&media).map_err(TemplateRendering)?;
+    }
 
     Ok(RenderResult { template, rendered })
 }
@@ -464,8 +499,8 @@ async fn render(index: Index, query: RenderQuery) -> Result<RenderResult, Render
 pub struct RenderQuery {
     #[deserr(error = DeserrJsonError<InvalidRenderTemplate>)]
     pub template: RenderQueryTemplate,
-    #[deserr(error = DeserrJsonError<InvalidRenderInput>)]
-    pub input: RenderQueryInput,
+    #[deserr(default, error = DeserrJsonError<InvalidRenderInput>)]
+    pub input: Option<RenderQueryInput>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserr, ToSchema)]
@@ -477,7 +512,7 @@ pub struct RenderQueryTemplate {
     inline: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Clone, PartialEq, Deserr, ToSchema)]
+#[derive(Debug, Clone, Default, PartialEq, Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError<InvalidRenderInput>, rename_all = camelCase, deny_unknown_fields)]
 pub struct RenderQueryInput {
     #[deserr(default, error = DeserrJsonError<InvalidRenderInputDocumentId>)]
