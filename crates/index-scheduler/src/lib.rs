@@ -873,7 +873,7 @@ impl IndexScheduler {
                         .into_inner()
                         .into_iter()
                         .map(|fragment| {
-                            let value = embedder_options.fragment(&fragment.name).unwrap();
+                            let value = embedder_options.indexing_fragment(&fragment.name).unwrap();
                             let template = JsonTemplate::new(value.clone()).unwrap();
                             RuntimeFragment { name: fragment.name, id: fragment.id, template }
                         })

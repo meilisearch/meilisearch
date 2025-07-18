@@ -418,7 +418,18 @@ InvalidChatCompletionSearchDescriptionPrompt   , InvalidRequest       , BAD_REQU
 InvalidChatCompletionSearchQueryParamPrompt    , InvalidRequest       , BAD_REQUEST ;
 InvalidChatCompletionSearchFilterParamPrompt   , InvalidRequest       , BAD_REQUEST ;
 InvalidChatCompletionSearchIndexUidParamPrompt , InvalidRequest       , BAD_REQUEST ;
-InvalidChatCompletionPreQueryPrompt            , InvalidRequest       , BAD_REQUEST
+InvalidChatCompletionPreQueryPrompt            , InvalidRequest       , BAD_REQUEST ;
+// Render
+InvalidRenderTemplate                          , InvalidRequest       , BAD_REQUEST ;
+InvalidRenderTemplateId                        , InvalidRequest       , BAD_REQUEST ;
+InvalidRenderTemplateInline                    , InvalidRequest       , BAD_REQUEST ;
+InvalidRenderInput                             , InvalidRequest       , BAD_REQUEST ;
+InvalidRenderInputDocumentId                   , InvalidRequest       , BAD_REQUEST ;
+InvalidRenderInputFields                       , InvalidRequest       , BAD_REQUEST ;
+InvalidRenderInputInline                       , InvalidRequest       , BAD_REQUEST ;
+RenderDocumentNotFound                         , InvalidRequest       , NOT_FOUND ;
+TemplateParsingError                           , InvalidRequest       , BAD_REQUEST ;
+TemplateRenderingError                         , InvalidRequest       , BAD_REQUEST
 }
 
 impl ErrorCode for JoinError {
@@ -645,6 +656,24 @@ impl fmt::Display for deserr_codes::InvalidNetworkUrl {
 }
 
 impl fmt::Display for deserr_codes::InvalidNetworkSearchApiKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "the value of `searchApiKey` is invalid, expected a string.")
+    }
+}
+
+impl fmt::Display for deserr_codes::InvalidRenderTemplate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "the value of `searchApiKey` is invalid, expected a string.")
+    }
+}
+
+impl fmt::Display for deserr_codes::InvalidRenderTemplateId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "the value of `searchApiKey` is invalid, expected a string.")
+    }
+}
+
+impl fmt::Display for deserr_codes::InvalidRenderTemplateInline {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "the value of `searchApiKey` is invalid, expected a string.")
     }
