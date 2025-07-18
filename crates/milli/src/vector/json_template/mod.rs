@@ -143,14 +143,6 @@ impl JsonTemplate {
         self.render(&search_data)
     }
 
-    /// Renders any serializable value by converting it to a liquid object and rendering it with the template.
-    /// If its a map, values inside can be accessed directly by their keys.
-    pub fn render_serializable<T: Serialize>(&self, object: &T) -> Result<Value, Error> {
-        let object = liquid::to_object(object)
-            .map_err(|err| Error { template_error: err, path: ValuePath::new() })?;
-        self.render(&object)
-    }
-
     /// The JSON value representing the underlying template
     pub fn template(&self) -> &Value {
         &self.value

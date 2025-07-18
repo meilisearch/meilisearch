@@ -12,11 +12,16 @@ use bumpalo::Bump;
 pub(crate) use document::{Document, ParseableDocument};
 use error::{NewPromptError, RenderPromptError};
 pub use fields::{BorrowedFields, OwnedFields};
+use heed::RoTxn;
+use liquid::model::Value as LiquidValue;
+use liquid::ValueView;
 
 pub use self::context::Context;
 use crate::fields_ids_map::metadata::FieldIdMapWithMetadata;
+use crate::prompt::document::JsonDocument;
 use crate::update::del_add::DelAdd;
-use crate::GlobalFieldsIdsMap;
+use crate::update::new::document::DocumentFromDb;
+use crate::{GlobalFieldsIdsMap, Index, MetadataBuilder};
 
 pub struct Prompt {
     template: liquid::Template,
@@ -161,6 +166,47 @@ fn truncate(s: &mut String, max_bytes: usize) {
             s.truncate(i);
             break;
         }
+    }
+}
+
+pub fn get_inline_document_fields(
+    index: &Index,
+    rtxn: &RoTxn<'_>,
+    inline_doc: &serde_json::Value,
+) -> Result<LiquidValue, crate::Error> {
+    let fid_map_with_meta = index.fields_ids_map_with_metadata(rtxn)?;
+    let inline_doc = JsonDocument::new(inline_doc);
+    let fields = OwnedFields::new(&inline_doc, &fid_map_with_meta);
+
+    Ok(fields.to_value())
+}
+
+pub fn get_document(
+    index: &Index,
+    rtxn: &RoTxn<'_>,
+    external_id: &str,
+    with_fields: bool,
+) -> Result<Option<(LiquidValue, Option<LiquidValue>)>, crate::Error> {
+    let Some(internal_id) = index.external_documents_ids().get(rtxn, external_id)? else {
+        return Ok(None);
+    };
+
+    let fid_map = index.fields_ids_map(rtxn)?;
+    let Some(document_from_db) = DocumentFromDb::new(internal_id, rtxn, index, &fid_map)? else {
+        return Ok(None);
+    };
+
+    let doc_alloc = Bump::new();
+    let parseable_document = ParseableDocument::new(document_from_db, &doc_alloc);
+
+    if with_fields {
+        let metadata_builder = MetadataBuilder::from_index(index, rtxn)?;
+        let fid_map_with_meta = FieldIdMapWithMetadata::new(fid_map.clone(), metadata_builder);
+        let fields = OwnedFields::new(&parseable_document, &fid_map_with_meta);
+
+        Ok(Some((parseable_document.to_value(), Some(fields.to_value()))))
+    } else {
+        Ok(Some((parseable_document.to_value(), None)))
     }
 }
 

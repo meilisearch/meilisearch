@@ -3770,6 +3770,7 @@ dependencies = [
  "itertools 0.14.0",
  "jsonwebtoken",
  "lazy_static",
+ "liquid",
  "manifest-dir-macros",
  "maplit",
  "meili-snap",

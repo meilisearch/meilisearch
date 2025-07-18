@@ -2,39 +2,32 @@ use std::collections::BTreeMap;
 
 use actix_web::web::{self, Data};
 use actix_web::{HttpRequest, HttpResponse};
-use deserr::actix_web::{AwebJson, AwebQueryParameter};
+use deserr::actix_web::AwebJson;
 use deserr::Deserr;
 use index_scheduler::IndexScheduler;
-use itertools::structs;
-use meilisearch_types::deserr::query_params::Param;
-use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
+use liquid::ValueView;
+use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::{
-    InvalidRenderInput, InvalidRenderInputDocumentId, InvalidRenderInputInline,
-    InvalidRenderTemplate, InvalidRenderTemplateId, InvalidRenderTemplateInline,
+    InvalidRenderInput, InvalidRenderInputDocumentId, InvalidRenderInputFields,
+    InvalidRenderInputInline, InvalidRenderTemplate, InvalidRenderTemplateId,
+    InvalidRenderTemplateInline,
 };
 use meilisearch_types::error::Code;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::keys::actions;
+use meilisearch_types::milli::prompt::{get_document, get_inline_document_fields};
 use meilisearch_types::milli::vector::json_template::{self, JsonTemplate};
-use meilisearch_types::serde_cs::vec::CS;
 use meilisearch_types::{heed, milli, Index};
 use serde::Serialize;
 use serde_json::Value;
 use tracing::debug;
-use utoipa::{IntoParams, OpenApi, ToSchema};
+use utoipa::{OpenApi, ToSchema};
 
-use super::ActionPolicy;
 use crate::analytics::Analytics;
-use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::DoubleActionPolicy;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
-use crate::routes::indexes::similar_analytics::{SimilarAggregator, SimilarGET, SimilarPOST};
-use crate::search::{
-    add_search_rules, perform_similar, RankingScoreThresholdSimilar, RetrieveVectors, Route,
-    SearchKind, SimilarQuery, SimilarResult, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET,
-};
 
 #[derive(OpenApi)]
 #[openapi(
@@ -179,6 +172,10 @@ enum RenderError {
     BothInlineDocAndDocId,
     TemplateParsing(json_template::Error),
     TemplateRendering(json_template::Error),
+
+    FieldsUnavailable,
+    FieldsAlreadyPresent,
+    FieldsWithoutDocument,
 }
 
 impl From<heed::Error> for RenderError {
@@ -317,6 +314,18 @@ impl From<RenderError> for ResponseError {
                 format!("Error rendering template: {}", err.rendering_error("input")),
                 Code::TemplateRenderingError,
             ),
+            FieldsUnavailable => ResponseError::from_msg(
+                String::from("Fields are not available on fragments.\n  Hint: Remove the `insertFields` parameter or set it to `false`."),
+                Code::InvalidRenderInputFields,
+            ),
+            FieldsAlreadyPresent => ResponseError::from_msg(
+                String::from("Fields were provided in the inline input but `insertFields` is set to `true`.\n  Hint: Remove the `insertFields` parameter or set it to `false`."),
+                Code::InvalidRenderInputFields,
+            ),
+            FieldsWithoutDocument => ResponseError::from_msg(
+                String::from("Fields were requested but no document was provided.\n  Hint: Provide a document ID or inline document."),
+                Code::InvalidRenderInputFields,
+            ),
         }
     }
 }
@@ -324,8 +333,8 @@ impl From<RenderError> for ResponseError {
 async fn render(index: Index, query: RenderQuery) -> Result<RenderResult, RenderError> {
     let rtxn = index.read_txn()?;
 
-    let template = match (query.template.inline, query.template.id) {
-        (Some(inline), None) => inline,
+    let (template, fields_available) = match (query.template.inline, query.template.id) {
+        (Some(inline), None) => (inline, true),
         (None, Some(id)) => {
             let mut parts = id.split('.');
 
@@ -368,8 +377,11 @@ async fn render(index: Index, query: RenderQuery) -> Result<RenderResult, Render
                                 });
                             }
 
-                            serde_json::Value::String(
-                                embedding_config.config.prompt.template.clone(),
+                            (
+                                serde_json::Value::String(
+                                    embedding_config.config.prompt.template.clone(),
+                                ),
+                                true,
                             )
                         }
                         "indexingFragments" | "indexingfragments" => {
@@ -396,7 +408,7 @@ async fn render(index: Index, query: RenderQuery) -> Result<RenderResult, Render
                                         .indexing_fragments(),
                                 })?;
 
-                            fragment.clone()
+                            (fragment.clone(), false)
                         }
                         "searchFragments" | "searchfragments" => {
                             let fragment_name = parts.next().ok_or_else(|| MissingFragment {
@@ -422,7 +434,7 @@ async fn render(index: Index, query: RenderQuery) -> Result<RenderResult, Render
                                         .search_fragments(),
                                 })?;
 
-                            fragment.clone()
+                            (fragment.clone(), false)
                         }
                         found => {
                             return Err(UnknownTemplatePrefix {
@@ -449,7 +461,7 @@ async fn render(index: Index, query: RenderQuery) -> Result<RenderResult, Render
 
                     let chat_config = index.chat_config(&rtxn)?;
 
-                    serde_json::Value::String(chat_config.prompt.template.clone())
+                    (serde_json::Value::String(chat_config.prompt.template.clone()), true)
                 }
                 "" => return Err(EmptyTemplateId),
                 unknown => {
@@ -467,30 +479,60 @@ async fn render(index: Index, query: RenderQuery) -> Result<RenderResult, Render
         (None, None) => return Err(MissingTemplate),
     };
 
+    let fields_required = query.input.as_ref().and_then(|i| i.insert_fields);
+    let fields_already_present = query
+        .input
+        .as_ref()
+        .is_some_and(|i| i.inline.as_ref().is_some_and(|i| i.get("fields").is_some()));
+    let fields_probably_used = template.as_str().is_none_or(|s| s.contains("fields"));
+    let has_inline_doc = query
+        .input
+        .as_ref()
+        .is_some_and(|i| i.inline.as_ref().is_some_and(|i| i.get("doc").is_some()));
+    let has_document_id = query.input.as_ref().is_some_and(|i| i.document_id.is_some());
+    let has_doc = has_inline_doc || has_document_id;
+    let insert_fields = match fields_required {
+        Some(insert_fields) => insert_fields,
+        None => fields_available && has_doc && fields_probably_used && !fields_already_present,
+    };
+    if insert_fields && !fields_available {
+        return Err(FieldsUnavailable);
+    }
+    if insert_fields && fields_already_present {
+        return Err(FieldsAlreadyPresent);
+    }
+    if insert_fields && !has_doc {
+        return Err(FieldsWithoutDocument);
+    }
+    if has_inline_doc && has_document_id {
+        return Err(BothInlineDocAndDocId);
+    }
+
     let mut rendered = Value::Null;
     if let Some(input) = query.input {
-        let mut media = input.inline.unwrap_or_default();
+        let media = input.inline.unwrap_or_default();
+        let mut object = liquid::to_object(&media).unwrap();
+
+        if let Some(doc) = media.get("doc") {
+            if insert_fields {
+                let fields = get_inline_document_fields(&index, &rtxn, doc)?;
+                object.insert("fields".into(), fields.to_value());
+            }
+        }
+
         if let Some(document_id) = input.document_id {
-            let internal_id = index
-                .external_documents_ids()
-                .get(&rtxn, &document_id)?
-                .ok_or_else(|| DocumentNotFound(document_id.to_string()))?;
+            let (document, fields) = get_document(&index, &rtxn, &document_id, insert_fields)?
+                .ok_or_else(|| DocumentNotFound(document_id))?;
 
-            let document = index.document(&rtxn, internal_id)?;
-
-            let fields_ids_map = index.fields_ids_map(&rtxn)?;
-            let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
-            let document = milli::obkv_to_json(&all_fields, &fields_ids_map, document)?;
-            let document = Value::Object(document);
-
-            if media.insert(String::from("doc"), document).is_some() {
-                return Err(BothInlineDocAndDocId);
+            object.insert("doc".into(), document);
+            if let Some(fields) = fields {
+                object.insert("fields".into(), fields);
             }
         }
 
         let json_template = JsonTemplate::new(template.clone()).map_err(TemplateParsing)?;
 
-        rendered = json_template.render_serializable(&media).map_err(TemplateRendering)?;
+        rendered = json_template.render(&object).map_err(TemplateRendering)?;
     }
 
     Ok(RenderResult { template, rendered })
@@ -519,6 +561,8 @@ pub struct RenderQueryTemplate {
 pub struct RenderQueryInput {
     #[deserr(default, error = DeserrJsonError<InvalidRenderInputDocumentId>)]
     document_id: Option<String>,
+    #[deserr(default, error = DeserrJsonError<InvalidRenderInputFields>)]
+    insert_fields: Option<bool>,
     #[deserr(default, error = DeserrJsonError<InvalidRenderInputInline>)]
     inline: Option<BTreeMap<String, serde_json::Value>>,
 }
