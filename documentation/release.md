@@ -4,9 +4,9 @@ This guide is to describe how to make releases for the current repository.
 
 ## 📅 Weekly Meilisearch release
 
-1. A weekly meeting is done every Monday to define the release and check the following information
+1. A weekly meeting is done every Monday to define the release and to ensure minimal checks before the release.
 <details>
-<summary>👇👇👇</summary>
+<summary>Check out the TODO 👇👇👇</summary>
 - [ ] Define the version of the release (`vX.Y.Z`)
 - [ ] Manually test `--experimental-dumpless-upgrade` on a DB of the previous Meilisearch minor version</br>
 - [ ] Check recent <a href="https://github.com/meilisearch/meilisearch/actions">automated tests</a> on `main`</br>
@@ -19,9 +19,9 @@ This guide is to describe how to make releases for the current repository.
 - [ ] <a href="https://github.com/meilisearch/meilisearch/actions/workflows/update-cargo-toml-version.yml">Create the PR updating the version</a>and merge it.
 </details>
 
-1. Go to the GitHub interface, in the [`Release` section](https://github.com/meilisearch/meilisearch/releases).
+2. Go to the GitHub interface, in the [`Release` section](https://github.com/meilisearch/meilisearch/releases).
 
-2. Select the already drafted release or click on the `Draft a new release` button if you want to start a blank one, and fill the form with the appropriate information.
+3. Select the already drafted release or click on the `Draft a new release` button if you want to start a blank one, and fill the form with the appropriate information.
 ⚠️ Publish on `main`
 
 ⚙️ The CIs will be triggered to:
