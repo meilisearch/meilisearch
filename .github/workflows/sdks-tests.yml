@@ -10,10 +10,6 @@ on:
         default: nightly
   schedule:
     - cron: '0 6 * * *' # Every day at 6:00am
-  pull_request:
-  push:
-    branches:
-      - main
 
 env:
   MEILI_MASTER_KEY: 'masterKey'
