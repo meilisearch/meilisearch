@@ -1,28 +1,26 @@
 ---
-name: New sprint issue
-about: ⚠️ Should only be used by the engine team ⚠️
+name: New feature issue
+about: ⚠️ Should only be used by the internal Meili team ⚠️
 title: ''
-labels: 'missing usage in PRD, impacts docs'
+labels: 'impacts docs, impacts integrations'
 assignees: ''
 
 ---
 
 Related product team resources: [PRD]() (_internal only_)
-Related product discussion:
-
-## Motivation
-
-<!---Copy/paste the information in PRD or briefly detail the product motivation. Ask product team if any hesitation.-->
 
 ## Usage
 
 <!---Link to the public part of the PRD, or to the related product discussion for experimental features-->
+
+TBD
 
 ## TODO
 
 <!---If necessary, create a list with technical/product steps-->
 
 ### Are you modifying a database?
+
 - [ ] If not, add the `no db change` label to your PR, and you're good to merge.
 - [ ] If yes, add the `db change` label to your PR. You'll receive a message explaining you what to do.
 
@@ -54,5 +52,5 @@ Related product discussion:
 
 ## Impacted teams
 
-<!---Ping the related teams. Ask for the engine manager if any hesitation-->
-<!---@meilisearch/docs-team when there is any API change, e.g. settings addition-->
+<!---Ping the related teams. Ask on Slack if any hesitation-->
+<!---@meilisearch/docs-team and @meilisearch/integration-team when there is any API change, e.g. settings addition-->
