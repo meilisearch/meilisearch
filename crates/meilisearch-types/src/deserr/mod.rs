@@ -213,6 +213,3 @@ merge_with_error_impl_take_error_message!(InvalidSearchSemanticRatio);
 merge_with_error_impl_take_error_message!(InvalidSearchRankingScoreThreshold);
 merge_with_error_impl_take_error_message!(InvalidSimilarRankingScoreThreshold);
 merge_with_error_impl_take_error_message!(InvalidSimilarId);
-// merge_with_error_impl_take_error_message!(InvalidRenderTemplate);
-// merge_with_error_impl_take_error_message!(InvalidRenderTemplateId);
-// merge_with_error_impl_take_error_message!(InvalidRenderTemplateInline);

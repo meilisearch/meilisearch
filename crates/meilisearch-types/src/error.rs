@@ -657,24 +657,6 @@ impl fmt::Display for deserr_codes::InvalidNetworkSearchApiKey {
     }
 }
 
-impl fmt::Display for deserr_codes::InvalidRenderTemplate {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "the value of `searchApiKey` is invalid, expected a string.")
-    }
-}
-
-impl fmt::Display for deserr_codes::InvalidRenderTemplateId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "the value of `searchApiKey` is invalid, expected a string.")
-    }
-}
-
-impl fmt::Display for deserr_codes::InvalidRenderTemplateInline {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "the value of `searchApiKey` is invalid, expected a string.")
-    }
-}
-
 #[macro_export]
 macro_rules! internal_error {
     ($target:ty : $($other:path), *) => {

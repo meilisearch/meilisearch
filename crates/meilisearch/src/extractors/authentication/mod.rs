@@ -133,14 +133,12 @@ pub fn extract_token_from_request(
     }
 }
 
-pub trait Policy {
+pub trait Policy: Sized {
     fn authenticate(
         auth: Data<AuthController>,
         token: &str,
         index: Option<&str>,
-    ) -> Result<AuthFilter, policies::AuthError>
-    where
-        Self: Sized;
+    ) -> Result<AuthFilter, policies::AuthError>;
 }
 
 pub mod policies {
@@ -352,7 +350,8 @@ pub mod policies {
         ) -> Result<AuthFilter, AuthError> {
             let filter_a = ActionPolicy::<A>::authenticate(auth.clone(), token, index)?;
             let _filter_b = ActionPolicy::<B>::authenticate(auth, token, index)?;
-
+            // There is no point merging the filters here.
+            // Since they originate from the same API key, they will hold the same information.
             Ok(filter_a)
         }
     }

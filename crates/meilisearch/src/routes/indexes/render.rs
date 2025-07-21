@@ -34,7 +34,7 @@ use crate::routes::indexes::render_analytics::RenderAggregator;
 #[openapi(
     paths(render_post),
     tags((
-        name = "Render templates",
+        name = "Render documents",
         description = "The /render route allows rendering templates used by Meilisearch.",
         external_docs(url = "https://www.meilisearch.com/docs/reference/api/render"),   
     )),
@@ -45,34 +45,35 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::resource("").route(web::post().to(SeqHandler(render_post))));
 }
 
-/// Render templates with POST
+/// Render documents with POST
 #[utoipa::path(
     post,
     path = "{indexUid}/render",
-    tag = "Render templates",
-    security(("Bearer" = ["settings.get", "settings.*", "*.get", "*"])),
+    tag = "Render documents",
+    security(("Bearer" = ["settings.get,documents.get", "*.get", "*"])),
     params(("indexUid" = String, Path, example = "movies", description = "Index Unique Identifier", nullable = false)),
     request_body = RenderQuery,
     responses(
-        (status = 200, description = "The rendered result is returned", body = RenderResult, content_type = "application/json", example = json!(
+        (status = 200, description = "The rendered result is returned along with the template", body = RenderResult, content_type = "application/json", example = json!(
             {
+                "template": "{{ doc.breed }} called {{ doc.name }}",
                 "rendered": "A Jack Russell called Iko"
             }
         )),
         (status = 404, description = "Template or document not found", body = ResponseError, content_type = "application/json", example = json!(
             {
-                "message": "Index `movies` not found.", // TODO
-                "code": "index_not_found",
+                "message": "Document with ID `9999` not found.",
+                "code": "render_document_not_found",
                 "type": "invalid_request",
-                "link": "https://docs.meilisearch.com/errors#index_not_found"
+                "link": "https://docs.meilisearch.com/errors#render_document_not_found"
             }
         )),
-        (status = 400, description = "Template couldn't be rendered", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 400, description = "Parameters are incorrect", body = ResponseError, content_type = "application/json", example = json!(
             {
-                "message": "The Authorization header is missing. It must use the bearer authorization method.", // TODO
-                "code": "missing_authorization_header",
-                "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+                "message": "Indexing fragment `mistake` does not exist for embedder `rest`.\n  Hint: Available indexing fragments are `basic`, `withBreed`.",
+                "code": "invalid_render_template_id",
+                "type": "invalid_request",
+                "link": "https://docs.meilisearch.com/errors#invalid_render_template_id"
             }
         )),
     )
@@ -91,7 +92,7 @@ pub async fn render_post(
     let index = index_scheduler.index(&index_uid)?;
 
     let query = params.into_inner();
-    debug!(parameters = ?query, "Render template");
+    debug!(parameters = ?query, "Render document");
 
     let mut aggregate = RenderAggregator::from_query(&query);
 
@@ -104,7 +105,7 @@ pub async fn render_post(
 
     let result = result?;
 
-    debug!(returns = ?result, "Render template");
+    debug!(returns = ?result, "Render document");
     Ok(HttpResponse::Ok().json(result))
 }
 
