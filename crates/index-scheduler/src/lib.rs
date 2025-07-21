@@ -139,8 +139,6 @@ pub struct IndexSchedulerOptions {
     pub embedding_cache_cap: usize,
     /// Snapshot compaction status.
     pub experimental_no_snapshot_compaction: bool,
-    /// Whether dump import uses the old document indexer or the new one.
-    pub experimental_no_edition_2024_for_dumps: bool,
 }
 
 /// Structure which holds meilisearch's indexes and schedules the tasks
@@ -302,7 +300,9 @@ impl IndexScheduler {
             index_mapper,
             env,
             cleanup_enabled: options.cleanup_enabled,
-            experimental_no_edition_2024_for_dumps: options.experimental_no_edition_2024_for_dumps,
+            experimental_no_edition_2024_for_dumps: options
+                .indexer_config
+                .experimental_no_edition_2024_for_dumps,
             webhook_url: options.webhook_url,
             webhook_authorization_header: options.webhook_authorization_header,
             embedders: Default::default(),

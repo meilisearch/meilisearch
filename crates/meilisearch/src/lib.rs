@@ -240,7 +240,6 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Arc<
         auto_upgrade: opt.experimental_dumpless_upgrade,
         embedding_cache_cap: opt.experimental_embedding_cache_entries,
         experimental_no_snapshot_compaction: opt.experimental_no_snapshot_compaction,
-        experimental_no_edition_2024_for_dumps: opt.experimental_no_edition_2024_for_dumps,
     };
     let binary_version = (VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH);
 

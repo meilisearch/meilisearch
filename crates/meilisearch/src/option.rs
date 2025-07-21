@@ -469,15 +469,6 @@ pub struct Opt {
     #[serde(default)]
     pub experimental_no_snapshot_compaction: bool,
 
-    /// Experimental make dump imports use the old document indexer.
-    ///
-    /// When enabled, Meilisearch will use the old document indexer when importing dumps.
-    ///
-    /// For more information, see <https://github.com/orgs/meilisearch/discussions/851>.
-    #[clap(long, env = MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_DUMPS)]
-    #[serde(default)]
-    pub experimental_no_edition_2024_for_dumps: bool,
-
     #[serde(flatten)]
     #[clap(flatten)]
     pub indexer_options: IndexerOpts,
@@ -583,7 +574,6 @@ impl Opt {
             experimental_limit_batched_tasks_total_size,
             experimental_embedding_cache_entries,
             experimental_no_snapshot_compaction,
-            experimental_no_edition_2024_for_dumps,
         } = self;
         export_to_env_if_not_present(MEILI_DB_PATH, db_path);
         export_to_env_if_not_present(MEILI_HTTP_ADDR, http_addr);
@@ -684,10 +674,6 @@ impl Opt {
             MEILI_EXPERIMENTAL_NO_SNAPSHOT_COMPACTION,
             experimental_no_snapshot_compaction.to_string(),
         );
-        export_to_env_if_not_present(
-            MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_DUMPS,
-            experimental_no_edition_2024_for_dumps.to_string(),
-        );
         indexer_options.export_to_env();
     }
 
@@ -775,6 +761,15 @@ pub struct IndexerOpts {
     #[clap(long, env = MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_SETTINGS)]
     #[serde(default)]
     pub experimental_no_edition_2024_for_settings: bool,
+
+    /// Experimental make dump imports use the old document indexer.
+    ///
+    /// When enabled, Meilisearch will use the old document indexer when importing dumps.
+    ///
+    /// For more information, see <https://github.com/orgs/meilisearch/discussions/851>.
+    #[clap(long, env = MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_DUMPS)]
+    #[serde(default)]
+    pub experimental_no_edition_2024_for_dumps: bool,
 }
 
 impl IndexerOpts {
@@ -785,6 +780,7 @@ impl IndexerOpts {
             max_indexing_threads,
             skip_index_budget: _,
             experimental_no_edition_2024_for_settings,
+            experimental_no_edition_2024_for_dumps,
         } = self;
         if let Some(max_indexing_memory) = max_indexing_memory.0 {
             export_to_env_if_not_present(
@@ -802,6 +798,12 @@ impl IndexerOpts {
             export_to_env_if_not_present(
                 MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_SETTINGS,
                 experimental_no_edition_2024_for_settings.to_string(),
+            );
+        }
+        if experimental_no_edition_2024_for_dumps {
+            export_to_env_if_not_present(
+                MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_DUMPS,
+                experimental_no_edition_2024_for_dumps.to_string(),
             );
         }
     }
@@ -824,6 +826,7 @@ impl TryFrom<&IndexerOpts> for IndexerConfig {
             skip_index_budget: other.skip_index_budget,
             experimental_no_edition_2024_for_settings: other
                 .experimental_no_edition_2024_for_settings,
+            experimental_no_edition_2024_for_dumps: other.experimental_no_edition_2024_for_dumps,
             chunk_compression_type: Default::default(),
             chunk_compression_level: Default::default(),
             documents_chunk_size: Default::default(),

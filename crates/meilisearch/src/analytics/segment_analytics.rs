@@ -254,7 +254,6 @@ impl Infos {
             experimental_limit_batched_tasks_total_size,
             experimental_embedding_cache_entries,
             experimental_no_snapshot_compaction,
-            experimental_no_edition_2024_for_dumps,
             http_addr,
             master_key: _,
             env,
@@ -295,6 +294,7 @@ impl Infos {
             max_indexing_threads,
             skip_index_budget: _,
             experimental_no_edition_2024_for_settings,
+            experimental_no_edition_2024_for_dumps,
         } = indexer_options;
 
         let RuntimeTogglableFeatures {
