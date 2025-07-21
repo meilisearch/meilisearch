@@ -351,20 +351,6 @@ async fn render_document_kefir() {
 
     let (value, code) = index
         .render(json! {{
-            "template": { "id": "chatCompletions.documentTemplate" },
-            "input": { "documentId": "0" },
-        }})
-        .await;
-    snapshot!(code, @"200 OK");
-    snapshot!(value, @r#"
-    {
-      "template": "{% for field in fields %}{% if field.is_searchable and field.value != nil %}{{ field.name }}: {{ field.value }}\n{% endif %}{% endfor %}",
-      "rendered": "id: 0\nname: kefir\n"
-    }
-    "#);
-
-    let (value, code) = index
-        .render(json! {{
             "template": { "id": "embedders.rest.indexingFragments.withBreed" },
             "input": { "documentId": "0" },
         }})
@@ -423,6 +409,39 @@ async fn render_inline_document_iko() {
     {
       "template": "It's a {{ media.breed }}",
       "rendered": "It's a jack russell"
+    }
+    "#);
+}
+
+#[actix_rt::test]
+async fn chat_completions() {
+    let index = shared_index_for_fragments().await;
+
+    let (value, code) = index
+        .render(json! {{
+            "template": { "id": "chatCompletions.documentTemplate" },
+            "input": { "documentId": "0" },
+        }})
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(value, @r#"
+    {
+      "template": "{% for field in fields %}{% if field.is_searchable and field.value != nil %}{{ field.name }}: {{ field.value }}\n{% endif %}{% endfor %}",
+      "rendered": "id: 0\nname: kefir\n"
+    }
+    "#);
+
+    let (value, code) = index
+        .render(json! {{
+            "template": { "id": "chatCompletions.documentTemplate" },
+            "input": { "inline": { "doc": { "name": "iko", "breed": "jack russell" } } },
+        }})
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(value, @r#"
+    {
+      "template": "{% for field in fields %}{% if field.is_searchable and field.value != nil %}{{ field.name }}: {{ field.value }}\n{% endif %}{% endfor %}",
+      "rendered": "name: iko\nbreed: jack russell\n"
     }
     "#);
 }
