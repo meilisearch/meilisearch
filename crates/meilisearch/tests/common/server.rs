@@ -35,7 +35,7 @@ pub struct Server<State = Owned> {
 pub static TEST_TEMP_DIR: Lazy<TempDir> = Lazy::new(|| TempDir::new().unwrap());
 
 impl Server<Owned> {
-    pub fn into_shared(self) -> Server<Shared> {
+    pub(super) fn into_shared(self) -> Server<Shared> {
         Server { service: self.service, _dir: self._dir, _marker: PhantomData }
     }
 
@@ -97,6 +97,7 @@ impl Server<Owned> {
         self.use_api_key(master_key);
         let (response, code) = self.list_api_keys("").await;
         assert_eq!(200, code, "{:?}", response);
+        // TODO: relying on the order of keys is not ideal, we should use the name instead
         let admin_key = &response["results"][1]["key"];
         self.use_api_key(admin_key.as_str().unwrap());
     }
@@ -327,7 +328,7 @@ impl<State> Server<State> {
         self.service.get(url).await
     }
 
-    pub fn _index(&self, uid: impl AsRef<str>) -> Index<'_> {
+    pub(super) fn _index(&self, uid: impl AsRef<str>) -> Index<'_> {
         Index {
             uid: uid.as_ref().to_string(),
             service: &self.service,

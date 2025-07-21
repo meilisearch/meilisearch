@@ -88,7 +88,13 @@ impl HeedAuthStore {
         let mut actions = HashSet::new();
         for action in &key.actions {
             match action {
-                Action::All => actions.extend(enum_iterator::all::<Action>()),
+                Action::All => {
+                    actions.extend(enum_iterator::all::<Action>());
+                    actions.remove(&Action::AllGet);
+                }
+                Action::AllGet => {
+                    actions.extend(enum_iterator::all::<Action>().filter(|a| a.is_read()))
+                }
                 Action::DocumentsAll => {
                     actions.extend(
                         [Action::DocumentsGet, Action::DocumentsDelete, Action::DocumentsAdd]

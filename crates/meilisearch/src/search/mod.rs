@@ -1051,6 +1051,7 @@ pub fn prepare_search<'t>(
         .unwrap_or(DEFAULT_PAGINATION_MAX_TOTAL_HITS);
 
     search.exhaustive_number_hits(is_finite_pagination);
+    search.max_total_hits(Some(max_total_hits));
     search.scoring_strategy(
         if query.show_ranking_score
             || query.show_ranking_score_details
@@ -1091,7 +1092,7 @@ pub fn prepare_search<'t>(
         let sort = match sort.iter().map(|s| AscDesc::from_str(s)).collect() {
             Ok(sorts) => sorts,
             Err(asc_desc_error) => {
-                return Err(milli::Error::from(SortError::from(asc_desc_error)).into())
+                return Err(SortError::from(asc_desc_error).into_search_error().into())
             }
         };
 
