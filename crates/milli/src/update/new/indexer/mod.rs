@@ -24,7 +24,7 @@ use crate::progress::{EmbedderStats, Progress};
 use crate::update::settings::SettingsDelta;
 use crate::update::GrenadParameters;
 use crate::vector::settings::{EmbedderAction, RemoveFragments, WriteBackToDocuments};
-use crate::vector::{ArroyWrapper, Embedder, RuntimeEmbedders};
+use crate::vector::{Embedder, HannoyWrapper, RuntimeEmbedders};
 use crate::{FieldsIdsMap, GlobalFieldsIdsMap, Index, InternalError, Result, ThreadPoolNoAbort};
 
 pub(crate) mod de;
@@ -66,7 +66,7 @@ where
     let mut bbbuffers = Vec::new();
     let finished_extraction = AtomicBool::new(false);
 
-    let arroy_memory = grenad_parameters.max_memory;
+    let hannoy_memory = grenad_parameters.max_memory;
 
     let (grenad_parameters, total_bbbuffer_capacity) =
         indexer_memory_settings(pool.current_num_threads(), grenad_parameters);
@@ -129,8 +129,8 @@ where
 
         let global_fields_ids_map = GlobalFieldsIdsMap::new(&new_fields_ids_map);
 
-        let vector_arroy = index.vector_arroy;
-        let arroy_writers: Result<HashMap<_, _>> = embedders
+        let vector_arroy = index.vector_hannoy;
+        let hannoy_writers: Result<HashMap<_, _>> = embedders
             .inner_as_ref()
             .iter()
             .map(|(embedder_name, runtime)| {
@@ -143,7 +143,7 @@ where
                     })?;
 
                 let dimensions = runtime.embedder.dimensions();
-                let writer = ArroyWrapper::new(vector_arroy, embedder_index, runtime.is_quantized);
+                let writer = HannoyWrapper::new(vector_arroy, embedder_index, runtime.is_quantized);
 
                 Ok((
                     embedder_index,
@@ -152,10 +152,10 @@ where
             })
             .collect();
 
-        let mut arroy_writers = arroy_writers?;
+        let mut hannoy_writers = hannoy_writers?;
 
         let congestion =
-            write_to_db(writer_receiver, finished_extraction, index, wtxn, &arroy_writers)?;
+            write_to_db(writer_receiver, finished_extraction, index, wtxn, &hannoy_writers)?;
 
         indexing_context.progress.update_progress(IndexingStep::WaitingForExtractors);
 
@@ -169,8 +169,8 @@ where
                 wtxn,
                 indexing_context.progress,
                 index_embeddings,
-                arroy_memory,
-                &mut arroy_writers,
+                hannoy_memory,
+                &mut hannoy_writers,
                 None,
                 &indexing_context.must_stop_processing,
             )
@@ -226,7 +226,7 @@ where
     let mut bbbuffers = Vec::new();
     let finished_extraction = AtomicBool::new(false);
 
-    let arroy_memory = grenad_parameters.max_memory;
+    let hannoy_memory = grenad_parameters.max_memory;
 
     let (grenad_parameters, total_bbbuffer_capacity) =
         indexer_memory_settings(pool.current_num_threads(), grenad_parameters);
@@ -283,7 +283,7 @@ where
         let new_embedders = settings_delta.new_embedders();
         let embedder_actions = settings_delta.embedder_actions();
         let index_embedder_category_ids = settings_delta.new_embedder_category_id();
-        let mut arroy_writers = arroy_writers_from_embedder_actions(
+        let mut hannoy_writers = hannoy_writers_from_embedder_actions(
             index,
             embedder_actions,
             new_embedders,
@@ -291,7 +291,7 @@ where
         )?;
 
         let congestion =
-            write_to_db(writer_receiver, finished_extraction, index, wtxn, &arroy_writers)?;
+            write_to_db(writer_receiver, finished_extraction, index, wtxn, &hannoy_writers)?;
 
         indexing_context.progress.update_progress(IndexingStep::WaitingForExtractors);
 
@@ -305,8 +305,8 @@ where
                 wtxn,
                 indexing_context.progress,
                 index_embeddings,
-                arroy_memory,
-                &mut arroy_writers,
+                hannoy_memory,
+                &mut hannoy_writers,
                 Some(embedder_actions),
                 &indexing_context.must_stop_processing,
             )
@@ -336,13 +336,13 @@ where
     Ok(congestion)
 }
 
-fn arroy_writers_from_embedder_actions<'indexer>(
+fn hannoy_writers_from_embedder_actions<'indexer>(
     index: &Index,
     embedder_actions: &'indexer BTreeMap<String, EmbedderAction>,
     embedders: &'indexer RuntimeEmbedders,
     index_embedder_category_ids: &'indexer std::collections::HashMap<String, u8>,
-) -> Result<HashMap<u8, (&'indexer str, &'indexer Embedder, ArroyWrapper, usize)>> {
-    let vector_arroy = index.vector_arroy;
+) -> Result<HashMap<u8, (&'indexer str, &'indexer Embedder, HannoyWrapper, usize)>> {
+    let vector_arroy = index.vector_hannoy;
 
     embedders
         .inner_as_ref()
@@ -361,7 +361,7 @@ fn arroy_writers_from_embedder_actions<'indexer>(
                     )));
                 };
                 let writer =
-                    ArroyWrapper::new(vector_arroy, embedder_category_id, action.was_quantized);
+                    HannoyWrapper::new(vector_arroy, embedder_category_id, action.was_quantized);
                 let dimensions = runtime.embedder.dimensions();
                 Some(Ok((
                     embedder_category_id,
@@ -384,7 +384,7 @@ where
         let Some(WriteBackToDocuments { embedder_id, .. }) = action.write_back() else {
             continue;
         };
-        let reader = ArroyWrapper::new(index.vector_arroy, *embedder_id, action.was_quantized);
+        let reader = HannoyWrapper::new(index.vector_hannoy, *embedder_id, action.was_quantized);
         let Some(dimensions) = reader.dimensions(wtxn)? else {
             continue;
         };
@@ -400,7 +400,7 @@ where
         let Some(infos) = index.embedding_configs().embedder_info(wtxn, embedder_name)? else {
             continue;
         };
-        let arroy = ArroyWrapper::new(index.vector_arroy, infos.embedder_id, was_quantized);
+        let arroy = HannoyWrapper::new(index.vector_hannoy, infos.embedder_id, was_quantized);
         let Some(dimensions) = arroy.dimensions(wtxn)? else {
             continue;
         };
