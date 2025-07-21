@@ -1,6 +1,6 @@
 use crate::common::{shared_index_for_fragments, Server};
 use crate::json;
-use meili_snap::{snapshot, json_string};
+use meili_snap::{json_string, snapshot};
 
 #[actix_rt::test]
 async fn empty_id() {
@@ -464,7 +464,6 @@ async fn both_document_id_and_inline() {
     }
     "#);
 }
-
 
 #[actix_rt::test]
 async fn multiple_templates_or_docs() {

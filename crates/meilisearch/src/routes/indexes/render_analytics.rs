@@ -22,10 +22,7 @@ pub struct RenderAggregator {
 impl RenderAggregator {
     #[allow(clippy::field_reassign_with_default)]
     pub fn from_query(query: &RenderQuery) -> Self {
-        let RenderQuery {
-            template,
-            input,
-        } = query;
+        let RenderQuery { template, input } = query;
 
         let mut ret = Self::default();
 
