@@ -14,10 +14,13 @@ use meilisearch_types::error::deserr_codes::{
 };
 use meilisearch_types::error::Code;
 use meilisearch_types::error::ResponseError;
+use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::keys::actions;
 use meilisearch_types::milli::prompt::{get_document, get_inline_document_fields};
+use meilisearch_types::milli::vector::db::IndexEmbeddingConfig;
 use meilisearch_types::milli::vector::json_template::{self, JsonTemplate};
+use meilisearch_types::milli::vector::EmbedderOptions;
 use meilisearch_types::{heed, milli, Index};
 use serde::Serialize;
 use serde_json::Value;
@@ -109,20 +112,21 @@ pub async fn render_post(
     Ok(HttpResponse::Ok().json(result))
 }
 
+#[derive(Clone, Copy)]
 enum FragmentKind {
     Indexing,
     Search,
 }
 
 impl FragmentKind {
-    fn adjective(&self) -> &'static str {
+    fn as_str(&self) -> &'static str {
         match self {
             FragmentKind::Indexing => "indexing",
             FragmentKind::Search => "search",
         }
     }
 
-    fn adjective_capitalized(&self) -> &'static str {
+    fn capitalized(&self) -> &'static str {
         match self {
             FragmentKind::Indexing => "Indexing",
             FragmentKind::Search => "Search",
@@ -139,32 +143,32 @@ enum RenderError {
         available: Vec<String>,
     },
     EmbedderDoesNotExist {
-        embedder_name: String,
+        embedder: String,
         available: Vec<String>,
     },
     EmbedderUsesFragments {
-        embedder_name: String,
+        embedder: String,
     },
     MissingTemplateAfterEmbedder {
-        embedder_name: String,
-        available_indexing_fragments: Vec<String>,
-        available_search_fragments: Vec<String>,
+        embedder: String,
+        indexing: Vec<String>,
+        search: Vec<String>,
     },
     UnknownTemplatePrefix {
-        embedder_name: String,
+        embedder: String,
         found: String,
-        available_indexing_fragments: Vec<String>,
-        available_search_fragments: Vec<String>,
+        indexing: Vec<String>,
+        search: Vec<String>,
     },
     ReponseError(ResponseError),
     MissingFragment {
-        embedder_name: String,
+        embedder: String,
         kind: FragmentKind,
         available: Vec<String>,
     },
     FragmentDoesNotExist {
-        embedder_name: String,
-        fragment_name: String,
+        embedder: String,
+        fragment: String,
         kind: FragmentKind,
         available: Vec<String>,
     },
@@ -225,69 +229,69 @@ impl From<RenderError> for ResponseError {
                     Code::InvalidRenderTemplateId,
                 )
             },
-            EmbedderDoesNotExist { embedder_name, mut available } => {
+            EmbedderDoesNotExist { embedder, mut available } => {
                 available.sort_unstable();
                 ResponseError::from_msg(
-                    format!("Embedder `{embedder_name}` does not exist.\n  Hint: Available embedders are {}.",
+                    format!("Embedder `{embedder}` does not exist.\n  Hint: Available embedders are {}.",
                         available.iter().map(|s| format!("`{s}`")).collect::<Vec<_>>().join(", ")),
                     Code::InvalidRenderTemplateId,
                 )
             },
-            EmbedderUsesFragments { embedder_name } => ResponseError::from_msg(
-                format!("Requested document template for embedder `{embedder_name}` but it uses fragments.\n  Hint: Use `indexingFragments` or `searchFragments` instead."),
+            EmbedderUsesFragments { embedder } => ResponseError::from_msg(
+                format!("Requested document template for embedder `{embedder}` but it uses fragments.\n  Hint: Use `indexingFragments` or `searchFragments` instead."),
                 Code::InvalidRenderTemplateId,
             ),
-            MissingTemplateAfterEmbedder { embedder_name, mut available_indexing_fragments, mut available_search_fragments } => {
-                if available_indexing_fragments.is_empty() && available_search_fragments.is_empty() {
+            MissingTemplateAfterEmbedder { embedder, mut indexing, mut search } => {
+                if indexing.is_empty() && search.is_empty() {
                     ResponseError::from_msg(
-                        format!("Missing template id after embedder `{embedder_name}`.\n  Hint: Available fragments: `documentTemplate`."),
+                        format!("Missing template id after embedder `{embedder}`.\n  Hint: Available fragments: `documentTemplate`."),
                         Code::InvalidRenderTemplateId,
                     )
                 } else {
-                    available_indexing_fragments.sort_unstable();
-                    available_search_fragments.sort_unstable();
+                    indexing.sort_unstable();
+                    search.sort_unstable();
                     ResponseError::from_msg(
-                        format!("Template ID configured with `embedders.{embedder_name}` but no template kind provided.\n  Hint: Available fragments are {}.",
-                            available_indexing_fragments.iter().map(|s| format!("`indexingFragments.{s}`")).chain(
-                            available_search_fragments.iter().map(|s| format!("`searchFragments.{s}`"))).collect::<Vec<_>>().join(", ")),
+                        format!("Template ID configured with `embedders.{embedder}` but no template kind provided.\n  Hint: Available fragments are {}.",
+                            indexing.iter().map(|s| format!("`indexingFragments.{s}`")).chain(
+                            search.iter().map(|s| format!("`searchFragments.{s}`"))).collect::<Vec<_>>().join(", ")),
                         Code::InvalidRenderTemplateId,
                     )
                 }
             },
-            UnknownTemplatePrefix { embedder_name, found, mut available_indexing_fragments, mut available_search_fragments } => {
-                if available_indexing_fragments.is_empty() && available_search_fragments.is_empty() {
+            UnknownTemplatePrefix { embedder, found, mut indexing, mut search } => {
+                if indexing.is_empty() && search.is_empty() {
                     ResponseError::from_msg(
-                        format!("Wrong template `{found}` after embedder `{embedder_name}`.\n  Hint: Available fragments: `documentTemplate`."),
+                        format!("Wrong template `{found}` after embedder `{embedder}`.\n  Hint: Available fragments: `documentTemplate`."),
                         Code::InvalidRenderTemplateId,
                     )
                 } else {
-                    available_indexing_fragments.sort_unstable();
-                    available_search_fragments.sort_unstable();
+                    indexing.sort_unstable();
+                    search.sort_unstable();
                     ResponseError::from_msg(
-                        format!("Wrong template `{found}` after embedder `{embedder_name}`.\n  Hint: Available fragments are {}.",
-                            available_indexing_fragments.iter().map(|s| format!("`indexingFragments.{s}`")).chain(
-                            available_search_fragments.iter().map(|s| format!("`searchFragments.{s}`"))).collect::<Vec<_>>().join(", ")),
+                        format!("Wrong template `{found}` after embedder `{embedder}`.\n  Hint: Available fragments are {}.",
+                            indexing.iter().map(|s| format!("`indexingFragments.{s}`")).chain(
+                            search.iter().map(|s| format!("`searchFragments.{s}`"))).collect::<Vec<_>>().join(", ")),
                         Code::InvalidRenderTemplateId,
                     )
                 }
             },
             ReponseError(response_error) => response_error,
-            MissingFragment { embedder_name, kind, mut available } => {
+            MissingFragment { embedder, kind, mut available } => {
                 available.sort_unstable();
                 ResponseError::from_msg(
-                    format!("{} fragment name was not provided.\n  Hint: Available {} fragments for embedder `{embedder_name}` are {}.",
-                        kind.adjective_capitalized(),
-                        kind.adjective(),
+                    format!("{} fragment name was not provided.\n  Hint: Available {} fragments for embedder `{embedder}` are {}.",
+                        kind.capitalized(),
+                        kind.as_str(),
                         available.iter().map(|s| format!("`{s}`")).collect::<Vec<_>>().join(", ")),
                     Code::InvalidRenderTemplateId,
                 )
             },
-            FragmentDoesNotExist { embedder_name, fragment_name, kind, mut available } => {
+            FragmentDoesNotExist { embedder, fragment, kind, mut available } => {
                 available.sort_unstable();
                 ResponseError::from_msg(
-                    format!("{} fragment `{fragment_name}` does not exist for embedder `{embedder_name}`.\n  Hint: Available {} fragments are {}.",
-                        kind.adjective_capitalized(),
-                        kind.adjective(),
+                    format!("{} fragment `{fragment}` does not exist for embedder `{embedder}`.\n  Hint: Available {} fragments are {}.",
+                        kind.capitalized(),
+                        kind.as_str(),
                         available.iter().map(|s| format!("`{s}`")).collect::<Vec<_>>().join(", ")),
                     Code::InvalidRenderTemplateId,
                 )
@@ -340,151 +344,136 @@ impl From<RenderError> for ResponseError {
     }
 }
 
+fn parse_template_id_fragment(
+    name: Option<&str>,
+    kind: FragmentKind,
+    embedding_config: &IndexEmbeddingConfig,
+    embedder_name: &str,
+) -> Result<serde_json::Value, RenderError> {
+    let get_available =
+        [EmbedderOptions::indexing_fragments, EmbedderOptions::search_fragments][kind as usize];
+    let get_specific =
+        [EmbedderOptions::indexing_fragment, EmbedderOptions::search_fragment][kind as usize];
+
+    let fragment_name = name.ok_or_else(|| MissingFragment {
+        embedder: embedder_name.to_string(),
+        kind,
+        available: get_available(&embedding_config.config.embedder_options),
+    })?;
+
+    let fragment = get_specific(&embedding_config.config.embedder_options, fragment_name)
+        .ok_or_else(|| FragmentDoesNotExist {
+            embedder: embedder_name.to_string(),
+            fragment: fragment_name.to_string(),
+            kind,
+            available: get_available(&embedding_config.config.embedder_options),
+        })?;
+
+    Ok(fragment.clone())
+}
+
+fn parse_template_id(
+    index: &Index,
+    rtxn: &RoTxn<'_>,
+    id: &str,
+) -> Result<(serde_json::Value, bool), RenderError> {
+    let mut parts = id.split('.');
+
+    let root = parts.next().ok_or(EmptyTemplateId)?;
+
+    let template = match root {
+        "embedders" => {
+            let index_embedding_configs = index.embedding_configs();
+            let embedding_configs = index_embedding_configs.embedding_configs(rtxn)?;
+            let get_embedders = || embedding_configs.iter().map(|c| c.name.clone()).collect();
+
+            let embedder =
+                parts.next().ok_or_else(|| MissingEmbedderName { available: get_embedders() })?;
+
+            let embedding_config = embedding_configs
+                .iter()
+                .find(|config| config.name == embedder)
+                .ok_or_else(|| EmbedderDoesNotExist {
+                    embedder: embedder.to_string(),
+                    available: get_embedders(),
+                })?;
+
+            let get_indexing = || embedding_config.config.embedder_options.indexing_fragments();
+            let get_search = || embedding_config.config.embedder_options.search_fragments();
+
+            let template_kind = parts.next().ok_or_else(|| MissingTemplateAfterEmbedder {
+                embedder: embedder.to_string(),
+                indexing: get_indexing(),
+                search: get_search(),
+            })?;
+            match template_kind {
+                "documentTemplate" | "documenttemplate"
+                    if !embedding_config.fragments.as_slice().is_empty() =>
+                {
+                    return Err(EmbedderUsesFragments { embedder: embedder.to_string() });
+                }
+                "documentTemplate" | "documenttemplate" => (
+                    serde_json::Value::String(embedding_config.config.prompt.template.clone()),
+                    true,
+                ),
+                "indexingFragments" | "indexingfragments" => (
+                    parse_template_id_fragment(
+                        parts.next(),
+                        FragmentKind::Indexing,
+                        embedding_config,
+                        embedder,
+                    )?,
+                    false,
+                ),
+                "searchFragments" | "searchfragments" => (
+                    parse_template_id_fragment(
+                        parts.next(),
+                        FragmentKind::Search,
+                        embedding_config,
+                        embedder,
+                    )?,
+                    false,
+                ),
+                found => {
+                    return Err(UnknownTemplatePrefix {
+                        embedder: embedder.to_string(),
+                        found: found.to_string(),
+                        indexing: get_indexing(),
+                        search: get_search(),
+                    })
+                }
+            }
+        }
+        "chatCompletions" | "chatcompletions" => {
+            let template_name = parts.next().ok_or(MissingChatCompletionTemplate)?;
+
+            if template_name != "documentTemplate" {
+                return Err(UnknownChatCompletionTemplate(template_name.to_string()));
+            }
+
+            let chat_config = index.chat_config(rtxn)?;
+
+            (serde_json::Value::String(chat_config.prompt.template.clone()), true)
+        }
+        "" => return Err(EmptyTemplateId),
+        unknown => {
+            return Err(UnknownTemplateRoot(unknown.to_string()));
+        }
+    };
+
+    if let Some(next) = parts.next() {
+        return Err(LeftOverToken(next.to_string()));
+    }
+
+    Ok(template)
+}
+
 async fn render(index: Index, query: RenderQuery) -> Result<RenderResult, RenderError> {
     let rtxn = index.read_txn()?;
 
     let (template, fields_available) = match (query.template.inline, query.template.id) {
         (Some(inline), None) => (inline, true),
-        (None, Some(id)) => {
-            let mut parts = id.split('.');
-
-            let root = parts.next().ok_or(EmptyTemplateId)?;
-
-            let template = match root {
-                "embedders" => {
-                    let index_embedding_configs = index.embedding_configs();
-                    let embedding_configs = index_embedding_configs.embedding_configs(&rtxn)?;
-
-                    let embedder_name = parts.next().ok_or_else(|| MissingEmbedderName {
-                        available: embedding_configs.iter().map(|c| c.name.clone()).collect(),
-                    })?;
-
-                    let embedding_config = embedding_configs
-                        .iter()
-                        .find(|config| config.name == embedder_name)
-                        .ok_or_else(|| EmbedderDoesNotExist {
-                            embedder_name: embedder_name.to_string(),
-                            available: embedding_configs.iter().map(|c| c.name.clone()).collect(),
-                        })?;
-
-                    let template_kind =
-                        parts.next().ok_or_else(|| MissingTemplateAfterEmbedder {
-                            embedder_name: embedder_name.to_string(),
-                            available_indexing_fragments: embedding_config
-                                .config
-                                .embedder_options
-                                .indexing_fragments(),
-                            available_search_fragments: embedding_config
-                                .config
-                                .embedder_options
-                                .search_fragments(),
-                        })?;
-                    match template_kind {
-                        "documentTemplate" | "documenttemplate" => {
-                            if !embedding_config.fragments.as_slice().is_empty() {
-                                return Err(EmbedderUsesFragments {
-                                    embedder_name: embedder_name.to_string(),
-                                });
-                            }
-
-                            (
-                                serde_json::Value::String(
-                                    embedding_config.config.prompt.template.clone(),
-                                ),
-                                true,
-                            )
-                        }
-                        "indexingFragments" | "indexingfragments" => {
-                            let fragment_name = parts.next().ok_or_else(|| MissingFragment {
-                                embedder_name: embedder_name.to_string(),
-                                kind: FragmentKind::Indexing,
-                                available: embedding_config
-                                    .config
-                                    .embedder_options
-                                    .indexing_fragments(),
-                            })?;
-
-                            let fragment = embedding_config
-                                .config
-                                .embedder_options
-                                .indexing_fragment(fragment_name)
-                                .ok_or_else(|| FragmentDoesNotExist {
-                                    embedder_name: embedder_name.to_string(),
-                                    fragment_name: fragment_name.to_string(),
-                                    kind: FragmentKind::Indexing,
-                                    available: embedding_config
-                                        .config
-                                        .embedder_options
-                                        .indexing_fragments(),
-                                })?;
-
-                            (fragment.clone(), false)
-                        }
-                        "searchFragments" | "searchfragments" => {
-                            let fragment_name = parts.next().ok_or_else(|| MissingFragment {
-                                embedder_name: embedder_name.to_string(),
-                                kind: FragmentKind::Search,
-                                available: embedding_config
-                                    .config
-                                    .embedder_options
-                                    .search_fragments(),
-                            })?;
-
-                            let fragment = embedding_config
-                                .config
-                                .embedder_options
-                                .search_fragment(fragment_name)
-                                .ok_or_else(|| FragmentDoesNotExist {
-                                    embedder_name: embedder_name.to_string(),
-                                    fragment_name: fragment_name.to_string(),
-                                    kind: FragmentKind::Search,
-                                    available: embedding_config
-                                        .config
-                                        .embedder_options
-                                        .search_fragments(),
-                                })?;
-
-                            (fragment.clone(), false)
-                        }
-                        found => {
-                            return Err(UnknownTemplatePrefix {
-                                embedder_name: embedder_name.to_string(),
-                                found: found.to_string(),
-                                available_indexing_fragments: embedding_config
-                                    .config
-                                    .embedder_options
-                                    .indexing_fragments(),
-                                available_search_fragments: embedding_config
-                                    .config
-                                    .embedder_options
-                                    .search_fragments(),
-                            })
-                        }
-                    }
-                }
-                "chatCompletions" | "chatcompletions" => {
-                    let template_name = parts.next().ok_or(MissingChatCompletionTemplate)?;
-
-                    if template_name != "documentTemplate" {
-                        return Err(UnknownChatCompletionTemplate(template_name.to_string()));
-                    }
-
-                    let chat_config = index.chat_config(&rtxn)?;
-
-                    (serde_json::Value::String(chat_config.prompt.template.clone()), true)
-                }
-                "" => return Err(EmptyTemplateId),
-                unknown => {
-                    return Err(UnknownTemplateRoot(unknown.to_string()));
-                }
-            };
-
-            if let Some(next) = parts.next() {
-                return Err(LeftOverToken(next.to_string()));
-            }
-
-            template
-        }
+        (None, Some(id)) => parse_template_id(&index, &rtxn, &id)?,
         (Some(_), Some(_)) => return Err(MultipleTemplates),
         (None, None) => return Err(MissingTemplate),
     };
