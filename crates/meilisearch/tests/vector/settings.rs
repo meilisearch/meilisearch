@@ -258,7 +258,7 @@ async fn reset_embedder_documents() {
 
 #[actix_rt::test]
 async fn ollama_url_checks() {
-    let server = super::get_server_vector().await;
+    let server = Server::new().await;
     let index = server.index("doggo");
 
     let (response, code) = index

@@ -554,3 +554,101 @@ async fn fields() {
     }
     "#);
 }
+
+#[actix_rt::test]
+async fn document_not_found() {
+    let index = shared_index_for_fragments().await;
+
+    let (value, code) = index
+        .render(json! {{
+            "template": { "id": "embedders.rest.indexingFragments.basic" },
+            "input": { "documentId": "9999" }
+        }})
+        .await;
+    snapshot!(code, @"404 Not Found");
+    snapshot!(value, @r#"
+    {
+      "message": "Document with ID `9999` not found.",
+      "code": "render_document_not_found",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#render_document_not_found"
+    }
+    "#);
+}
+
+#[actix_rt::test]
+async fn bad_template() {
+    let index = shared_index_for_fragments().await;
+
+    let (value, code) = index
+        .render(json! {{
+            "template": { "inline": "{{ doc.name" },
+            "input": { "documentId": "0" }
+        }})
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r#"
+    {
+      "message": "Error parsing template: error while parsing template: liquid:  --> 1:4\n  |\n1 | {{ doc.name\n  |    ^---\n  |\n  = expected Literal\n",
+      "code": "template_parsing_error",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#template_parsing_error"
+    }
+    "#);
+}
+
+#[actix_rt::test]
+async fn inline_nested() {
+    let index = shared_index_for_fragments().await;
+
+    let (value, code) = index
+        .render(json! {{
+            "template": { "inline": "{{ doc.name }} is a {{ doc.breed.name }} ({{ doc.breed.kind }})" },
+            "input": { "inline": { "doc": { "name": "iko", "breed": { "name": "jack russell", "kind": "terrier" } } } }
+        }})
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(value, @r#"
+    {
+      "template": "{{ doc.name }} is a {{ doc.breed.name }} ({{ doc.breed.kind }})",
+      "rendered": "iko is a jack russell (terrier)"
+    }
+    "#);
+}
+
+#[actix_rt::test]
+async fn embedder_document_template() {
+    let (_mock, setting) = crate::vector::rest::create_mock().await;
+    let server = Server::new().await;
+    let index = server.index("doggo");
+
+    let (response, code) = index
+        .update_settings(json!({
+            "embedders": {
+                "rest": setting,
+            },
+        }))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(response.uid()).await.succeeded();
+    let documents = json!([
+      {"id": 0, "name": "kefir"},
+    ]);
+    let (value, code) = index.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+    index.wait_task(value.uid()).await.succeeded();
+
+    let (value, code) = index
+        .render(json! {{
+            "template": { "id": "embedders.rest.documentTemplate" },
+            "input": { "documentId": "0" }
+        }})
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(value, @r#"
+    {
+      "template": "{{doc.name}}",
+      "rendered": "kefir"
+    }
+    "#);
+}
