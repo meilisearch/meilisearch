@@ -15,8 +15,6 @@ pub struct RenderAggregator {
     input_inline: bool,
     input_id: bool,
     input_omitted: bool,
-    fields_forced: bool,
-    fields_disabled: bool,
 }
 
 impl RenderAggregator {
@@ -33,8 +31,6 @@ impl RenderAggregator {
         ret.input_inline = input.as_ref().is_some_and(|i| i.inline.is_some());
         ret.input_id = input.as_ref().is_some_and(|i| i.document_id.is_some());
         ret.input_omitted = input.as_ref().is_none();
-        ret.fields_forced = input.as_ref().is_some_and(|i| i.insert_fields.is_some());
-        ret.fields_disabled = input.as_ref().is_some_and(|i| i.insert_fields.is_none());
 
         ret
     }
@@ -58,8 +54,6 @@ impl Aggregate for RenderAggregator {
         self.input_inline |= new.input_inline;
         self.input_id |= new.input_id;
         self.input_omitted |= new.input_omitted;
-        self.fields_forced |= new.fields_forced;
-        self.fields_disabled |= new.fields_disabled;
 
         self
     }
@@ -73,8 +67,6 @@ impl Aggregate for RenderAggregator {
             input_inline,
             input_id,
             input_omitted,
-            fields_forced,
-            fields_disabled,
         } = *self;
 
         json!({
@@ -90,9 +82,7 @@ impl Aggregate for RenderAggregator {
             "input": {
                 "inline": input_inline,
                 "id": input_id,
-                "omitted": input_omitted,
-                "fields_forced": fields_forced,
-                "fields_disabled": fields_disabled,
+                "omitted": input_omitted
             },
         })
     }

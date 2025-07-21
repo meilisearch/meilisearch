@@ -8,9 +8,8 @@ use index_scheduler::IndexScheduler;
 use liquid::ValueView;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::{
-    InvalidRenderInput, InvalidRenderInputDocumentId, InvalidRenderInputFields,
-    InvalidRenderInputInline, InvalidRenderTemplate, InvalidRenderTemplateId,
-    InvalidRenderTemplateInline,
+    InvalidRenderInput, InvalidRenderInputDocumentId, InvalidRenderInputInline,
+    InvalidRenderTemplate, InvalidRenderTemplateId, InvalidRenderTemplateInline,
 };
 use meilisearch_types::error::Code;
 use meilisearch_types::error::ResponseError;
@@ -180,11 +179,6 @@ enum RenderError {
     BothInlineDocAndDocId,
     TemplateParsing(json_template::Error),
     TemplateRendering(json_template::Error),
-
-    FieldsUnavailable,
-    FieldsAlreadyPresent,
-    FieldsWithoutDocument,
-
     CouldNotHandleInput,
 }
 
@@ -323,18 +317,6 @@ impl From<RenderError> for ResponseError {
             TemplateRendering(err) => ResponseError::from_msg(
                 format!("Error rendering template: {}", err.rendering_error("input")),
                 Code::TemplateRenderingError,
-            ),
-            FieldsUnavailable => ResponseError::from_msg(
-                String::from("Fields are not available on fragments.\n  Hint: Remove the `insertFields` parameter or set it to `false`."),
-                Code::InvalidRenderInputFields,
-            ),
-            FieldsAlreadyPresent => ResponseError::from_msg(
-                String::from("Fields were provided in the inline input but `insertFields` is set to `true`.\n  Hint: Remove the `insertFields` parameter or set it to `false`."),
-                Code::InvalidRenderInputFields,
-            ),
-            FieldsWithoutDocument => ResponseError::from_msg(
-                String::from("Fields were requested but no document was provided.\n  Hint: Provide a document ID or inline document."),
-                Code::InvalidRenderInputFields,
             ),
             CouldNotHandleInput => ResponseError::from_msg(
                 String::from("Could not handle the input provided."),
@@ -478,7 +460,6 @@ async fn render(index: Index, query: RenderQuery) -> Result<RenderResult, Render
         (None, None) => return Err(MissingTemplate),
     };
 
-    let fields_required = query.input.as_ref().and_then(|i| i.insert_fields);
     let fields_already_present = query
         .input
         .as_ref()
@@ -490,19 +471,8 @@ async fn render(index: Index, query: RenderQuery) -> Result<RenderResult, Render
         .is_some_and(|i| i.inline.as_ref().is_some_and(|i| i.get("doc").is_some()));
     let has_document_id = query.input.as_ref().is_some_and(|i| i.document_id.is_some());
     let has_doc = has_inline_doc || has_document_id;
-    let insert_fields = match fields_required {
-        Some(insert_fields) => insert_fields,
-        None => fields_available && has_doc && fields_probably_used && !fields_already_present,
-    };
-    if insert_fields && !fields_available {
-        return Err(FieldsUnavailable);
-    }
-    if insert_fields && fields_already_present {
-        return Err(FieldsAlreadyPresent);
-    }
-    if insert_fields && !has_doc {
-        return Err(FieldsWithoutDocument);
-    }
+    let insert_fields =
+        fields_available && has_doc && fields_probably_used && !fields_already_present;
     if has_inline_doc && has_document_id {
         return Err(BothInlineDocAndDocId);
     }
@@ -561,8 +531,6 @@ pub struct RenderQueryTemplate {
 pub struct RenderQueryInput {
     #[deserr(default, error = DeserrJsonError<InvalidRenderInputDocumentId>)]
     pub document_id: Option<String>,
-    #[deserr(default, error = DeserrJsonError<InvalidRenderInputFields>)]
-    pub insert_fields: Option<bool>,
     #[deserr(default, error = DeserrJsonError<InvalidRenderInputInline>)]
     pub inline: Option<BTreeMap<String, serde_json::Value>>,
 }
