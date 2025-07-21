@@ -32,7 +32,7 @@ use crate::update::settings::{InnerIndexSettings, InnerIndexSettingsDiff};
 use crate::update::{AvailableIds, UpdateIndexingStep};
 use crate::vector::parsed_vectors::{ExplicitVectors, VectorOrArrayOfVectors};
 use crate::vector::settings::{RemoveFragments, WriteBackToDocuments};
-use crate::vector::ArroyWrapper;
+use crate::vector::HannoyWrapper;
 use crate::{FieldDistribution, FieldId, FieldIdMapMissingEntry, Index, Result};
 
 pub struct TransformOutput {
@@ -834,15 +834,15 @@ impl<'a, 'i> Transform<'a, 'i> {
             None
         };
 
-        let readers: BTreeMap<&str, (ArroyWrapper, &RoaringBitmap)> = settings_diff
+        let readers: BTreeMap<&str, (HannoyWrapper, &RoaringBitmap)> = settings_diff
             .embedding_config_updates
             .iter()
             .filter_map(|(name, action)| {
                 if let Some(WriteBackToDocuments { embedder_id, user_provided }) =
                     action.write_back()
                 {
-                    let reader = ArroyWrapper::new(
-                        self.index.vector_arroy,
+                    let reader = HannoyWrapper::new(
+                        self.index.vector_hannoy,
                         *embedder_id,
                         action.was_quantized,
                     );
@@ -884,7 +884,7 @@ impl<'a, 'i> Transform<'a, 'i> {
 
                 let injected_vectors: std::result::Result<
                     serde_json::Map<String, serde_json::Value>,
-                    arroy::Error,
+                    hannoy::Error,
                 > = readers
                     .iter()
                     .filter_map(|(name, (reader, user_provided))| {
@@ -949,9 +949,9 @@ impl<'a, 'i> Transform<'a, 'i> {
             else {
                 continue;
             };
-            let arroy =
-                ArroyWrapper::new(self.index.vector_arroy, infos.embedder_id, was_quantized);
-            let Some(dimensions) = arroy.dimensions(wtxn)? else {
+            let hannoy =
+                HannoyWrapper::new(self.index.vector_hannoy, infos.embedder_id, was_quantized);
+            let Some(dimensions) = hannoy.dimensions(wtxn)? else {
                 continue;
             };
             for fragment_id in fragment_ids {
@@ -959,17 +959,17 @@ impl<'a, 'i> Transform<'a, 'i> {
 
                 if infos.embedding_status.user_provided_docids().is_empty() {
                     // no user provided: clear store
-                    arroy.clear_store(wtxn, *fragment_id, dimensions)?;
+                    hannoy.clear_store(wtxn, *fragment_id, dimensions)?;
                     continue;
                 }
 
                 // some user provided, remove only the ids that are not user provided
-                let to_delete = arroy.items_in_store(wtxn, *fragment_id, |items| {
+                let to_delete = hannoy.items_in_store(wtxn, *fragment_id, |items| {
                     items - infos.embedding_status.user_provided_docids()
                 })?;
 
                 for to_delete in to_delete {
-                    arroy.del_item_in_store(wtxn, to_delete, *fragment_id, dimensions)?;
+                    hannoy.del_item_in_store(wtxn, to_delete, *fragment_id, dimensions)?;
                 }
             }
         }
