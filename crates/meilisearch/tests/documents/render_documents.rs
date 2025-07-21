@@ -445,3 +445,59 @@ async fn chat_completions() {
     }
     "#);
 }
+
+#[actix_rt::test]
+async fn both_document_id_and_inline() {
+    let index = shared_index_for_fragments().await;
+
+    let (value, code) = index
+        .render(json! {{
+            "template": { "inline": "{{ doc.name }} compared to {{ media.name }}" },
+            "input": { "documentId": "0", "inline": { "media": { "name": "iko" } } },
+        }})
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(value, @r#"
+    {
+      "template": "{{ doc.name }} compared to {{ media.name }}",
+      "rendered": "kefir compared to iko"
+    }
+    "#);
+}
+
+
+#[actix_rt::test]
+async fn multiple_templates_or_docs() {
+    let index = shared_index_for_fragments().await;
+
+    let (value, code) = index
+        .render(json! {{
+            "template": { "id": "whatever", "inline": "whatever" }
+        }})
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r#"
+    {
+      "message": "Cannot provide both an inline template and a template ID.",
+      "code": "invalid_render_template",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_render_template"
+    }
+    "#);
+
+    let (value, code) = index
+        .render(json! {{
+            "template": { "inline": "whatever" },
+            "input": { "documentId": "0", "inline": { "doc": { "name": "iko" } } }
+        }})
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r#"
+    {
+      "message": "A document id was provided but adding it to the input would overwrite the `doc` field that you already defined inline.",
+      "code": "invalid_render_input",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_render_input"
+    }
+    "#);
+}
