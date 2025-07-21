@@ -139,7 +139,7 @@ pub struct DocumentsFetchAggregator<Method: AggregateMethod> {
     // if a filter was used
     per_filter: bool,
     with_vector_filter: bool,
-    
+
     // if documents were sorted
     sort: bool,
 

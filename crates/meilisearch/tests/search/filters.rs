@@ -4,8 +4,8 @@ use tempfile::TempDir;
 
 use super::test_settings_documents_indexing_swapping_and_search;
 use crate::common::{
-    default_settings, shared_index_with_documents, shared_index_with_nested_documents, Server,
-    DOCUMENTS, NESTED_DOCUMENTS,
+    default_settings, shared_index_for_fragments, shared_index_with_documents,
+    shared_index_with_nested_documents, Server, DOCUMENTS, NESTED_DOCUMENTS,
 };
 use crate::json;
 
@@ -734,7 +734,7 @@ async fn test_filterable_attributes_priority() {
 
 #[actix_rt::test]
 async fn vector_filter_all_embedders() {
-    let index = crate::vector::shared_index_for_fragments().await;
+    let index = shared_index_for_fragments().await;
 
     let (value, _code) = index
         .search_post(json!({
@@ -769,7 +769,7 @@ async fn vector_filter_all_embedders() {
 
 #[actix_rt::test]
 async fn vector_filter_missing_fragment() {
-    let index = crate::vector::shared_index_for_fragments().await;
+    let index = shared_index_for_fragments().await;
 
     let (value, _code) = index
         .search_post(json!({
@@ -789,7 +789,7 @@ async fn vector_filter_missing_fragment() {
 
 #[actix_rt::test]
 async fn vector_filter_non_existant_embedder() {
-    let index = crate::vector::shared_index_for_fragments().await;
+    let index = shared_index_for_fragments().await;
 
     let (value, _code) = index
         .search_post(json!({
@@ -809,7 +809,7 @@ async fn vector_filter_non_existant_embedder() {
 
 #[actix_rt::test]
 async fn vector_filter_all_embedders_user_provided() {
-    let index = crate::vector::shared_index_for_fragments().await;
+    let index = shared_index_for_fragments().await;
 
     // This one is counterintuitive, but it is the same as the previous one.
     // It's because userProvided is interpreted as an embedder name
@@ -831,7 +831,7 @@ async fn vector_filter_all_embedders_user_provided() {
 
 #[actix_rt::test]
 async fn vector_filter_specific_embedder() {
-    let index = crate::vector::shared_index_for_fragments().await;
+    let index = shared_index_for_fragments().await;
 
     let (value, _code) = index
         .search_post(json!({
@@ -866,7 +866,7 @@ async fn vector_filter_specific_embedder() {
 
 #[actix_rt::test]
 async fn vector_filter_user_provided() {
-    let index = crate::vector::shared_index_for_fragments().await;
+    let index = shared_index_for_fragments().await;
 
     let (value, _code) = index
         .search_post(json!({
@@ -892,7 +892,7 @@ async fn vector_filter_user_provided() {
 
 #[actix_rt::test]
 async fn vector_filter_specific_fragment() {
-    let index = crate::vector::shared_index_for_fragments().await;
+    let index = shared_index_for_fragments().await;
 
     let (value, _code) = index
         .search_post(json!({
@@ -951,7 +951,7 @@ async fn vector_filter_specific_fragment() {
 
 #[actix_rt::test]
 async fn vector_filter_non_existant_fragment() {
-    let index = crate::vector::shared_index_for_fragments().await;
+    let index = shared_index_for_fragments().await;
 
     let (value, _code) = index
         .search_post(json!({
@@ -971,7 +971,7 @@ async fn vector_filter_non_existant_fragment() {
 
 #[actix_rt::test]
 async fn vector_filter_specific_fragment_user_provided() {
-    let index = crate::vector::shared_index_for_fragments().await;
+    let index = shared_index_for_fragments().await;
 
     let (value, _code) = index
         .search_post(json!({
@@ -991,7 +991,7 @@ async fn vector_filter_specific_fragment_user_provided() {
 
 #[actix_rt::test]
 async fn vector_filter_document_template_but_fragments_used() {
-    let index = crate::vector::shared_index_for_fragments().await;
+    let index = shared_index_for_fragments().await;
 
     let (value, _code) = index
         .search_post(json!({
@@ -1093,7 +1093,7 @@ async fn vector_filter_feature_gate() {
 
 #[actix_rt::test]
 async fn vector_filter_negation() {
-    let index = crate::vector::shared_index_for_fragments().await;
+    let index = shared_index_for_fragments().await;
 
     let (value, _code) = index
         .search_post(json!({
@@ -1125,7 +1125,7 @@ async fn vector_filter_negation() {
 
 #[actix_rt::test]
 async fn vector_filter_or_combination() {
-    let index = crate::vector::shared_index_for_fragments().await;
+    let index = shared_index_for_fragments().await;
 
     let (value, _code) = index
         .search_post(json!({
