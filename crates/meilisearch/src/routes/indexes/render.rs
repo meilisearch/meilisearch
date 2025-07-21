@@ -28,6 +28,7 @@ use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::DoubleActionPolicy;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
+use crate::routes::indexes::render_analytics::RenderAggregator;
 
 #[derive(OpenApi)]
 #[openapi(
@@ -92,14 +93,16 @@ pub async fn render_post(
     let query = params.into_inner();
     debug!(parameters = ?query, "Render template");
 
-    //let mut aggregate = SimilarAggregator::<SimilarPOST>::from_query(&query);
+    let mut aggregate = RenderAggregator::from_query(&query);
 
-    let result = render(index, query).await?;
+    let result = render(index, query).await;
 
-    // if let Ok(similar) = &similar {
-    //     aggregate.succeed(similar);
-    // }
-    // analytics.publish(aggregate, &req);
+    if result.is_ok() {
+        aggregate.succeed();
+    }
+    analytics.publish(aggregate, &req);
+
+    let result = result?;
 
     debug!(returns = ?result, "Render template");
     Ok(HttpResponse::Ok().json(result))
@@ -551,20 +554,20 @@ pub struct RenderQuery {
 #[deserr(error = DeserrJsonError<InvalidRenderTemplate>, rename_all = camelCase, deny_unknown_fields)]
 pub struct RenderQueryTemplate {
     #[deserr(default, error = DeserrJsonError<InvalidRenderTemplateId>)]
-    id: Option<String>,
+    pub id: Option<String>,
     #[deserr(default, error = DeserrJsonError<InvalidRenderTemplateInline>)]
-    inline: Option<serde_json::Value>,
+    pub inline: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError<InvalidRenderInput>, rename_all = camelCase, deny_unknown_fields)]
 pub struct RenderQueryInput {
     #[deserr(default, error = DeserrJsonError<InvalidRenderInputDocumentId>)]
-    document_id: Option<String>,
+    pub document_id: Option<String>,
     #[deserr(default, error = DeserrJsonError<InvalidRenderInputFields>)]
-    insert_fields: Option<bool>,
+    pub insert_fields: Option<bool>,
     #[deserr(default, error = DeserrJsonError<InvalidRenderInputInline>)]
-    inline: Option<BTreeMap<String, serde_json::Value>>,
+    pub inline: Option<BTreeMap<String, serde_json::Value>>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, ToSchema)]
