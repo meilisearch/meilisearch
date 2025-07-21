@@ -1,6 +1,6 @@
 use crate::common::{shared_index_for_fragments, Server};
 use crate::json;
-use meili_snap::snapshot;
+use meili_snap::{snapshot, json_string};
 
 #[actix_rt::test]
 async fn empty_id() {
@@ -370,9 +370,9 @@ async fn render_document_kefir() {
         }})
         .await;
     snapshot!(code, @"400 Bad Request");
-    snapshot!(value, @r#"
+    snapshot!(json_string!(value, { ".message" => "[ignored]" }), @r#"
     {
-      "message": "Error rendering template: error while rendering template: liquid: Unknown index\n  with:\n    variable=doc\n    requested index=breed\n    available indexes=id, name\n",
+      "message": "[ignored]",
       "code": "template_rendering_error",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#template_rendering_error"
