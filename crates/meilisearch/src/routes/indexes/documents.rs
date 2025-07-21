@@ -19,6 +19,7 @@ use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::documents::sort::recursive_sort;
+use meilisearch_types::milli::index::EmbeddingsWithMetadata;
 use meilisearch_types::milli::update::IndexDocumentsMethod;
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::{AscDesc, DocumentId};
@@ -1460,9 +1461,13 @@ fn some_documents<'a, 't: 'a>(
                         Some(Value::Object(map)) => map,
                         _ => Default::default(),
                     };
-                    for (name, (vector, regenerate)) in index.embeddings(rtxn, key)? {
+                    for (
+                        name,
+                        EmbeddingsWithMetadata { embeddings, regenerate, has_fragments: _ },
+                    ) in index.embeddings(rtxn, key)?
+                    {
                         let embeddings =
-                            ExplicitVectors { embeddings: Some(vector.into()), regenerate };
+                            ExplicitVectors { embeddings: Some(embeddings.into()), regenerate };
                         vectors.insert(
                             name,
                             serde_json::to_value(embeddings).map_err(MeilisearchHttpError::from)?,
