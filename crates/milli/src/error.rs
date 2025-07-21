@@ -76,7 +76,7 @@ pub enum InternalError {
     #[error("Cannot upgrade to the following version: v{0}.{1}.{2}.")]
     CannotUpgradeToVersion(u32, u32, u32),
     #[error(transparent)]
-    ArroyError(#[from] arroy::Error),
+    HannoyError(#[from] hannoy::Error),
     #[error(transparent)]
     VectorEmbeddingError(#[from] crate::vector::Error),
 }
@@ -419,23 +419,24 @@ impl From<crate::vector::Error> for Error {
     }
 }
 
-impl From<arroy::Error> for Error {
-    fn from(value: arroy::Error) -> Self {
+impl From<hannoy::Error> for Error {
+    fn from(value: hannoy::Error) -> Self {
         match value {
-            arroy::Error::Heed(heed) => heed.into(),
-            arroy::Error::Io(io) => io.into(),
-            arroy::Error::InvalidVecDimension { expected, received } => {
+            hannoy::Error::Heed(heed) => heed.into(),
+            hannoy::Error::Io(io) => io.into(),
+            hannoy::Error::InvalidVecDimension { expected, received } => {
                 Error::UserError(UserError::InvalidVectorDimensions { expected, found: received })
             }
-            arroy::Error::BuildCancelled => Error::InternalError(InternalError::AbortedIndexation),
-            arroy::Error::DatabaseFull
-            | arroy::Error::InvalidItemAppend
-            | arroy::Error::UnmatchingDistance { .. }
-            | arroy::Error::NeedBuild(_)
-            | arroy::Error::MissingKey { .. }
-            | arroy::Error::MissingMetadata(_)
-            | arroy::Error::CannotDecodeKeyMode { .. } => {
-                Error::InternalError(InternalError::ArroyError(value))
+            hannoy::Error::BuildCancelled => Error::InternalError(InternalError::AbortedIndexation),
+            hannoy::Error::DatabaseFull
+            | hannoy::Error::InvalidItemAppend
+            | hannoy::Error::UnmatchingDistance { .. }
+            | hannoy::Error::NeedBuild(_)
+            | hannoy::Error::MissingKey { .. }
+            | hannoy::Error::MissingMetadata(_)
+            | hannoy::Error::UnknownVersion { .. }
+            | hannoy::Error::CannotDecodeKeyMode { .. } => {
+                Error::InternalError(InternalError::HannoyError(value))
             }
         }
     }

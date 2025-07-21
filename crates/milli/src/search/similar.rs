@@ -3,7 +3,7 @@ use std::sync::Arc;
 use roaring::RoaringBitmap;
 
 use crate::score_details::{self, ScoreDetails};
-use crate::vector::{ArroyWrapper, Embedder};
+use crate::vector::{Embedder, HannoyWrapper};
 use crate::{filtered_universe, DocumentId, Filter, Index, Result, SearchResult};
 
 pub struct Similar<'a> {
@@ -72,7 +72,7 @@ impl<'a> Similar<'a> {
                 crate::UserError::InvalidSimilarEmbedder(self.embedder_name.to_owned())
             })?;
 
-        let reader = ArroyWrapper::new(self.index.vector_arroy, embedder_index, self.quantized);
+        let reader = HannoyWrapper::new(self.index.vector_hannoy, embedder_index, self.quantized);
         let results = reader.nns_by_item(
             self.rtxn,
             self.id,
