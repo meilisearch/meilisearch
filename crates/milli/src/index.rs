@@ -31,7 +31,7 @@ use crate::prompt::PromptData;
 use crate::proximity::ProximityPrecision;
 use crate::update::new::StdResult;
 use crate::vector::db::IndexEmbeddingConfigs;
-use crate::vector::{ArroyStats, ArroyWrapper, Embedding};
+use crate::vector::{Embedding, HannoyStats, HannoyWrapper};
 use crate::{
     default_criteria, CboRoaringBitmapCodec, Criterion, DocumentId, ExternalDocumentsIds,
     FacetDistribution, FieldDistribution, FieldId, FieldIdMapMissingEntry, FieldIdWordCountCodec,
@@ -113,7 +113,7 @@ pub mod db_name {
     pub const FIELD_ID_DOCID_FACET_F64S: &str = "field-id-docid-facet-f64s";
     pub const FIELD_ID_DOCID_FACET_STRINGS: &str = "field-id-docid-facet-strings";
     pub const VECTOR_EMBEDDER_CATEGORY_ID: &str = "vector-embedder-category-id";
-    pub const VECTOR_ARROY: &str = "vector-arroy";
+    pub const VECTOR_HANNOY: &str = "vector-hannoy";
     pub const DOCUMENTS: &str = "documents";
 }
 const NUMBER_OF_DBS: u32 = 25;
@@ -177,10 +177,10 @@ pub struct Index {
     /// Maps the document id, the facet field id and the strings.
     pub field_id_docid_facet_strings: Database<FieldDocIdFacetStringCodec, Str>,
 
-    /// Maps an embedder name to its id in the arroy store.
+    /// Maps an embedder name to its id in the hannoy store.
     pub(crate) embedder_category_id: Database<Unspecified, Unspecified>,
-    /// Vector store based on arroy™.
-    pub vector_arroy: arroy::Database<Unspecified>,
+    /// Vector store based on hannoy™.
+    pub vector_hannoy: hannoy::Database<Unspecified>,
 
     /// Maps the document id to the document as an obkv store.
     pub(crate) documents: Database<BEU32, ObkvCodec>,
@@ -237,7 +237,7 @@ impl Index {
         // vector stuff
         let embedder_category_id =
             env.create_database(&mut wtxn, Some(VECTOR_EMBEDDER_CATEGORY_ID))?;
-        let vector_arroy = env.create_database(&mut wtxn, Some(VECTOR_ARROY))?;
+        let vector_hannoy = env.create_database(&mut wtxn, Some(VECTOR_HANNOY))?;
 
         let documents = env.create_database(&mut wtxn, Some(DOCUMENTS))?;
 
@@ -264,7 +264,7 @@ impl Index {
             facet_id_is_empty_docids,
             field_id_docid_facet_f64s,
             field_id_docid_facet_strings,
-            vector_arroy,
+            vector_hannoy,
             embedder_category_id,
             documents,
         };
@@ -1772,8 +1772,8 @@ impl Index {
         for config in embedders.embedding_configs(rtxn)? {
             let embedder_info = embedders.embedder_info(rtxn, &config.name)?.unwrap();
             let has_fragments = config.config.embedder_options.has_fragments();
-            let reader = ArroyWrapper::new(
-                self.vector_arroy,
+            let reader = HannoyWrapper::new(
+                self.vector_hannoy,
                 embedder_info.embedder_id,
                 config.config.quantized(),
             );
@@ -1792,13 +1792,13 @@ impl Index {
         Ok(PrefixSettings { compute_prefixes, max_prefix_length: 4, prefix_count_threshold: 100 })
     }
 
-    pub fn arroy_stats(&self, rtxn: &RoTxn<'_>) -> Result<ArroyStats> {
-        let mut stats = ArroyStats::default();
+    pub fn hannoy_stats(&self, rtxn: &RoTxn<'_>) -> Result<HannoyStats> {
+        let mut stats = HannoyStats::default();
         let embedding_configs = self.embedding_configs();
         for config in embedding_configs.embedding_configs(rtxn)? {
             let embedder_id = embedding_configs.embedder_id(rtxn, &config.name)?.unwrap();
             let reader =
-                ArroyWrapper::new(self.vector_arroy, embedder_id, config.config.quantized());
+                HannoyWrapper::new(self.vector_hannoy, embedder_id, config.config.quantized());
             reader.aggregate_stats(rtxn, &mut stats)?;
         }
         Ok(stats)
@@ -1842,7 +1842,7 @@ impl Index {
             facet_id_is_empty_docids,
             field_id_docid_facet_f64s,
             field_id_docid_facet_strings,
-            vector_arroy,
+            vector_hannoy,
             embedder_category_id,
             documents,
         } = self;
@@ -1913,7 +1913,7 @@ impl Index {
             "field_id_docid_facet_strings",
             field_id_docid_facet_strings.stat(rtxn).map(compute_size)?,
         );
-        sizes.insert("vector_arroy", vector_arroy.stat(rtxn).map(compute_size)?);
+        sizes.insert("vector_hannoy", vector_hannoy.stat(rtxn).map(compute_size)?);
         sizes.insert("embedder_category_id", embedder_category_id.stat(rtxn).map(compute_size)?);
         sizes.insert("documents", documents.stat(rtxn).map(compute_size)?);
 

@@ -14,7 +14,7 @@ use crate::constants::RESERVED_VECTORS_FIELD_NAME;
 use crate::documents::FieldIdMapper;
 use crate::vector::db::{EmbeddingStatus, IndexEmbeddingConfig};
 use crate::vector::parsed_vectors::{RawVectors, RawVectorsError, VectorOrArrayOfVectors};
-use crate::vector::{ArroyWrapper, Embedding, RuntimeEmbedders};
+use crate::vector::{Embedding, HannoyWrapper, RuntimeEmbedders};
 use crate::{DocumentId, Index, InternalError, Result, UserError};
 
 #[derive(Serialize)]
@@ -121,7 +121,7 @@ impl<'t> VectorDocumentFromDb<'t> {
         status: &EmbeddingStatus,
     ) -> Result<VectorEntry<'t>> {
         let reader =
-            ArroyWrapper::new(self.index.vector_arroy, embedder_id, config.config.quantized());
+            HannoyWrapper::new(self.index.vector_hannoy, embedder_id, config.config.quantized());
         let vectors = reader.item_vectors(self.rtxn, self.docid)?;
 
         Ok(VectorEntry {
@@ -149,7 +149,7 @@ impl<'t> VectorDocument<'t> for VectorDocumentFromDb<'t> {
                     name,
                     entry_from_raw_value(value, false).map_err(|_| {
                         InternalError::Serialization(crate::SerializationError::Decoding {
-                            db_name: Some(crate::index::db_name::VECTOR_ARROY),
+                            db_name: Some(crate::index::db_name::VECTOR_HANNOY),
                         })
                     })?,
                 ))
@@ -167,7 +167,7 @@ impl<'t> VectorDocument<'t> for VectorDocumentFromDb<'t> {
                 Some(embedding_from_doc) => {
                     Some(entry_from_raw_value(embedding_from_doc, false).map_err(|_| {
                         InternalError::Serialization(crate::SerializationError::Decoding {
-                            db_name: Some(crate::index::db_name::VECTOR_ARROY),
+                            db_name: Some(crate::index::db_name::VECTOR_HANNOY),
                         })
                     })?)
                 }
