@@ -443,28 +443,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
 
 [[package]]
-name = "arroy"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08e6111f351d004bd13e95ab540721272136fd3218b39d3ec95a2ea1c4e6a0a6"
-dependencies = [
- "bytemuck",
- "byteorder",
- "enum-iterator",
- "heed",
- "memmap2",
- "nohash",
- "ordered-float 4.6.0",
- "page_size",
- "rand 0.8.5",
- "rayon",
- "roaring",
- "tempfile",
- "thiserror 2.0.12",
- "tracing",
-]
-
-[[package]]
 name = "assert-json-diff"
 version = "2.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2601,6 +2579,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "hannoy"
+version = "0.0.1"
+source = "git+https://github.com/nnethercott/hannoy?tag=v0.0.1#d51750cd5612b6875375f5f4ad3928c87d55ee38"
+dependencies = [
+ "bytemuck",
+ "byteorder",
+ "enum-iterator",
+ "hashbrown 0.15.4",
+ "heed",
+ "memmap2",
+ "min-max-heap",
+ "nohash",
+ "ordered-float 5.0.0",
+ "page_size",
+ "papaya",
+ "rand 0.8.5",
+ "rayon",
+ "roaring",
+ "tempfile",
+ "thiserror 2.0.12",
+ "tinyvec",
+ "tracing",
+]
+
+[[package]]
 name = "hash32"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3922,7 +3925,6 @@ name = "milli"
 version = "1.16.0"
 dependencies = [
  "allocator-api2 0.3.0",
- "arroy",
  "bbqueue",
  "big_s",
  "bimap",
@@ -3950,6 +3952,7 @@ dependencies = [
  "fxhash",
  "geoutils",
  "grenad",
+ "hannoy",
  "hashbrown 0.15.4",
  "heed",
  "hf-hub",
@@ -4018,6 +4021,12 @@ dependencies = [
  "mime",
  "unicase",
 ]
+
+[[package]]
+name = "min-max-heap"
+version = "1.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2687e6cf9c00f48e9284cf9fd15f2ef341d03cc7743abf9df4c5f07fdee50b18"
 
 [[package]]
 name = "minimal-lexical"
@@ -4361,15 +4370,6 @@ dependencies = [
 
 [[package]]
 name = "ordered-float"
-version = "4.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7bb71e1b3fa6ca1c61f383464aaf2bb0e2f8e772a1f01d486832464de363b951"
-dependencies = [
- "num-traits",
-]
-
-[[package]]
-name = "ordered-float"
 version = "5.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2c1f9f56e534ac6a9b8a4600bdf0f530fb393b5f393e7b4d03489c3cf0c3f01"
@@ -4397,6 +4397,16 @@ checksum = "30d5b2194ed13191c1999ae0704b7839fb18384fa22e49b57eeaa97d79ce40da"
 dependencies = [
  "libc",
  "winapi",
+]
+
+[[package]]
+name = "papaya"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f92dd0b07c53a0a0c764db2ace8c541dc47320dad97c2200c2a637ab9dd2328f"
+dependencies = [
+ "equivalent",
+ "seize",
 ]
 
 [[package]]
@@ -5448,6 +5458,16 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.12",
  "time",
+]
+
+[[package]]
+name = "seize"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e4b8d813387d566f627f3ea1b914c068aac94c40ae27ec43f5f33bde65abefe7"
+dependencies = [
+ "libc",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
