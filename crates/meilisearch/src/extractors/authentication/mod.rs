@@ -342,11 +342,8 @@ pub mod policies {
         }
     }
 
-    pub struct DoubleActionPolicy<const A: u8, const B: u8> {
-        policy_a: ActionPolicy<A>,
-        policy_b: ActionPolicy<B>,
-    }
-
+    pub struct DoubleActionPolicy<const A: u8, const B: u8>;
+    
     impl<const A: u8, const B: u8> Policy for DoubleActionPolicy<A, B> {
         fn authenticate(
             auth: Data<AuthController>,

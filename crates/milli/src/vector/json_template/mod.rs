@@ -14,8 +14,7 @@
 #![warn(missing_docs)]
 
 use bumpalo::Bump;
-use liquid::{Object, Parser, Template};
-use serde::Serialize;
+use liquid::{Parser, Template};
 use serde_json::{Map, Value};
 
 use crate::prompt::ParseableDocument;
