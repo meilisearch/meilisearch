@@ -335,11 +335,12 @@ async fn retrieve_document_template() {
 async fn render_document_kefir() {
     let index = shared_index_for_fragments().await;
 
-    let (value, code) =
-        index.render(json! {{
+    let (value, code) = index
+        .render(json! {{
             "template": { "id": "embedders.rest.indexingFragments.basic" },
             "input": { "documentId": "0" },
-        }}).await;
+        }})
+        .await;
     snapshot!(code, @"200 OK");
     snapshot!(value, @r#"
     {
@@ -348,11 +349,26 @@ async fn render_document_kefir() {
     }
     "#);
 
-    let (value, code) =
-        index.render(json! {{
+    let (value, code) = index
+        .render(json! {{
+            "template": { "id": "chatCompletions.documentTemplate" },
+            "input": { "documentId": "0" },
+        }})
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(value, @r#"
+    {
+      "template": "{% for field in fields %}{% if field.is_searchable and field.value != nil %}{{ field.name }}: {{ field.value }}\n{% endif %}{% endfor %}",
+      "rendered": "id: 0\nname: kefir\n"
+    }
+    "#);
+
+    let (value, code) = index
+        .render(json! {{
             "template": { "id": "embedders.rest.indexingFragments.withBreed" },
             "input": { "documentId": "0" },
-        }}).await;
+        }})
+        .await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
@@ -368,11 +384,12 @@ async fn render_document_kefir() {
 async fn render_inline_document_iko() {
     let index = shared_index_for_fragments().await;
 
-    let (value, code) =
-        index.render(json! {{
+    let (value, code) = index
+        .render(json! {{
             "template": { "id": "embedders.rest.indexingFragments.basic" },
             "input": { "inline": { "doc": { "name": "iko", "breed": "jack russell" } } },
-        }}).await;
+        }})
+        .await;
     snapshot!(code, @"200 OK");
     snapshot!(value, @r#"
     {
@@ -381,11 +398,12 @@ async fn render_inline_document_iko() {
     }
     "#);
 
-    let (value, code) =
-        index.render(json! {{
+    let (value, code) = index
+        .render(json! {{
             "template": { "id": "embedders.rest.indexingFragments.withBreed" },
             "input": { "inline": { "doc": { "name": "iko", "breed": "jack russell" } } },
-        }}).await;
+        }})
+        .await;
     snapshot!(code, @"200 OK");
     snapshot!(value, @r#"
     {
@@ -394,11 +412,12 @@ async fn render_inline_document_iko() {
     }
     "#);
 
-    let (value, code) =
-        index.render(json! {{
+    let (value, code) = index
+        .render(json! {{
             "template": { "id": "embedders.rest.searchFragments.justBreed" },
             "input": { "inline": { "media": { "name": "iko", "breed": "jack russell" } } },
-        }}).await;
+        }})
+        .await;
     snapshot!(code, @"200 OK");
     snapshot!(value, @r#"
     {
