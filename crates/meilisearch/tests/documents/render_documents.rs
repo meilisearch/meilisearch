@@ -501,3 +501,56 @@ async fn multiple_templates_or_docs() {
     }
     "#);
 }
+
+#[actix_rt::test]
+async fn fields() {
+    let index = shared_index_for_fragments().await;
+
+    let (value, code) = index
+        .render(json! {{
+            "template": { "inline": "whatever" },
+            "input": { "insertFields": true }
+        }})
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r#"
+    {
+      "message": "Fields were requested but no document was provided.\n  Hint: Provide a document ID or inline document.",
+      "code": "invalid_render_input_fields",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_render_input_fields"
+    }
+    "#);
+
+    let (value, code) = index
+        .render(json! {{
+            "template": { "id": "embedders.rest.indexingFragments.basic" },
+            "input": { "documentId": "0", "insertFields": true }
+        }})
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r#"
+    {
+      "message": "Fields are not available on fragments.\n  Hint: Remove the `insertFields` parameter or set it to `false`.",
+      "code": "invalid_render_input_fields",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_render_input_fields"
+    }
+    "#);
+
+    let (value, code) = index
+        .render(json! {{
+            "template": { "inline": "whatever" },
+            "input": { "documentId": "0", "inline": { "fields": {} }, "insertFields": true }
+        }})
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r#"
+    {
+      "message": "Fields were provided in the inline input but `insertFields` is set to `true`.\n  Hint: Remove the `insertFields` parameter or set it to `false`.",
+      "code": "invalid_render_input_fields",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_render_input_fields"
+    }
+    "#);
+}
