@@ -24,7 +24,7 @@ enum-iterator = "2.1.0"
 file-store = { path = "../file-store" }
 flate2 = "1.1.2"
 fst = "0.4.7"
-memmap2 = "0.9.5"
+memmap2 = "0.9.7"
 milli = { path = "../milli" }
 roaring = { version = "0.10.12", features = ["serde"] }
 rustc-hash = "2.1.1"
