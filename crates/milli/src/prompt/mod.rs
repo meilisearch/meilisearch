@@ -173,12 +173,14 @@ pub fn get_inline_document_fields(
     index: &Index,
     rtxn: &RoTxn<'_>,
     inline_doc: &serde_json::Value,
-) -> Result<LiquidValue, crate::Error> {
+) -> Result<Result<LiquidValue, ()>, crate::Error> {
     let fid_map_with_meta = index.fields_ids_map_with_metadata(rtxn)?;
-    let inline_doc = JsonDocument::new(inline_doc);
+    let Ok(inline_doc) = JsonDocument::new(inline_doc) else {
+        return Ok(Err(()));
+    };
     let fields = OwnedFields::new(&inline_doc, &fid_map_with_meta);
 
-    Ok(fields.to_value())
+    Ok(Ok(fields.to_value()))
 }
 
 pub fn get_document(

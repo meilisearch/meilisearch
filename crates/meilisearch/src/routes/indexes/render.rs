@@ -180,6 +180,8 @@ enum RenderError {
     FieldsUnavailable,
     FieldsAlreadyPresent,
     FieldsWithoutDocument,
+
+    CouldNotHandleInput,
 }
 
 impl From<heed::Error> for RenderError {
@@ -329,6 +331,10 @@ impl From<RenderError> for ResponseError {
             FieldsWithoutDocument => ResponseError::from_msg(
                 String::from("Fields were requested but no document was provided.\n  Hint: Provide a document ID or inline document."),
                 Code::InvalidRenderInputFields,
+            ),
+            CouldNotHandleInput => ResponseError::from_msg(
+                String::from("Could not handle the input provided."),
+                Code::InvalidRenderInput,
             ),
         }
     }
@@ -519,7 +525,8 @@ async fn render(index: Index, query: RenderQuery) -> Result<RenderResult, Render
 
         if let Some(doc) = media.get("doc") {
             if insert_fields {
-                let fields = get_inline_document_fields(&index, &rtxn, doc)?;
+                let fields = get_inline_document_fields(&index, &rtxn, doc)?
+                    .map_err(|_| CouldNotHandleInput)?;
                 object.insert("fields".into(), fields.to_value());
             }
         }

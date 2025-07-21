@@ -150,14 +150,12 @@ pub struct JsonDocument {
 }
 
 impl JsonDocument {
-    pub fn new(value: &serde_json::Value) -> Self {
-        let to_string = serde_json::to_string(&value)
-            .expect("JsonDocument should only be created with valid JSON"); // TODO: Remove panic
-        let back_to_value: BTreeMap<String, Box<RawValue>> = serde_json::from_str(&to_string)
-            .expect("JsonDocument should only be created with valid JSON");
-        let object =
-            liquid::to_object(&value).expect("JsonDocument should only be created with valid JSON");
-        Self { object, cached: back_to_value }
+    pub fn new(value: &serde_json::Value) -> Result<Self, ()> {
+        let to_string = serde_json::to_string(&value).map_err(|_| ())?;
+        let back_to_value: BTreeMap<String, Box<RawValue>> =
+            serde_json::from_str(&to_string).map_err(|_| ())?;
+        let object = liquid::to_object(&value).map_err(|_| ())?;
+        Ok(Self { object, cached: back_to_value })
     }
 }
 
