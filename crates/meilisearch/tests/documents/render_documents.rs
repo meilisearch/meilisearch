@@ -597,4 +597,16 @@ async fn embedder_document_template() {
       "rendered": "kefir"
     }
     "#);
+
+    let (value, code) =
+        index.render(json! {{ "template": { "id": "embedders.rest.wrong.disregarded" }}}).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r#"
+    {
+      "message": "Wrong template `wrong` after embedder `rest`.\n  Hint: Available template: `documentTemplate`.",
+      "code": "invalid_render_template_id",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_render_template_id"
+    }
+    "#);
 }

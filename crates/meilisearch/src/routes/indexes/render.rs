@@ -238,7 +238,7 @@ impl From<RenderError> for ResponseError {
             MissingTemplateAfterEmbedder { embedder, mut indexing, mut search } => {
                 if indexing.is_empty() && search.is_empty() {
                     ResponseError::from_msg(
-                        format!("Missing template id after embedder `{embedder}`.\n  Hint: Available fragments: `documentTemplate`."),
+                        format!("Missing template id after embedder `{embedder}`.\n  Hint: Available template: `documentTemplate`."),
                         Code::InvalidRenderTemplateId,
                     )
                 } else {
@@ -255,7 +255,7 @@ impl From<RenderError> for ResponseError {
             UnknownTemplatePrefix { embedder, found, mut indexing, mut search } => {
                 if indexing.is_empty() && search.is_empty() {
                     ResponseError::from_msg(
-                        format!("Wrong template `{found}` after embedder `{embedder}`.\n  Hint: Available fragments: `documentTemplate`."),
+                        format!("Wrong template `{found}` after embedder `{embedder}`.\n  Hint: Available template: `documentTemplate`."),
                         Code::InvalidRenderTemplateId,
                     )
                 } else {
