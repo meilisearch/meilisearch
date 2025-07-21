@@ -2581,7 +2581,7 @@ dependencies = [
 [[package]]
 name = "hannoy"
 version = "0.7.0"
-source = "git+https://github.com/nnethercott/hannoy?branch=incremental-indexing#364f611b10642ad34a3466b80dc687d1114bda4f"
+source = "git+https://github.com/kerollmops/hannoy?branch=expose-private-types#98c7adda0d96a9f98203797d24c26a4de06cab3e"
 dependencies = [
  "bytemuck",
  "byteorder",
