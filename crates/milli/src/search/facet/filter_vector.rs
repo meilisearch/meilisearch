@@ -167,7 +167,7 @@ impl<'a> VectorFilter<'a> {
         let index_embedding_configs = index.embedding_configs();
         let embedding_configs = index_embedding_configs.embedding_configs(rtxn)?;
 
-        let inners = dbg!(match self.inner {
+        let inners = match self.inner {
             Some(inner) => vec![inner],
             None => embedding_configs
                 .iter()
@@ -175,7 +175,7 @@ impl<'a> VectorFilter<'a> {
                     embedder_token: Token::from(config.name.as_str()),
                 })
                 .collect(),
-        });
+        };
 
         let mut docids = RoaringBitmap::new();
         for inner in inners.iter() {
