@@ -228,7 +228,7 @@ async fn snapshotception_issue_4653() {
 
     let options = Opt { import_snapshot: Some(snapshot_path), ..default_settings(temp.path()) };
     let snapshot_server = Server::new_with_options(options).await.unwrap();
-    
+
     // The snapshot creation task should NOT be spawned again => task is succeeded
     let (task, code) = snapshot_server.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
