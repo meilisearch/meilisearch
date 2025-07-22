@@ -74,6 +74,8 @@ const MEILI_EXPERIMENTAL_EMBEDDING_CACHE_ENTRIES: &str =
 const MEILI_EXPERIMENTAL_NO_SNAPSHOT_COMPACTION: &str = "MEILI_EXPERIMENTAL_NO_SNAPSHOT_COMPACTION";
 const MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_DUMPS: &str =
     "MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_DUMPS";
+const MEILI_EXPERIMENTAL_PERSONALIZATION_API_KEY: &str =
+    "MEILI_EXPERIMENTAL_PERSONALIZATION_API_KEY";
 const DEFAULT_CONFIG_FILE_PATH: &str = "./config.toml";
 const DEFAULT_DB_PATH: &str = "./data.ms";
 const DEFAULT_HTTP_ADDR: &str = "localhost:7700";
@@ -475,6 +477,12 @@ pub struct Opt {
     #[serde(default)]
     pub experimental_no_snapshot_compaction: bool,
 
+    /// Experimental personalization API key feature.
+    ///
+    /// Sets the API key for personalization features.
+    #[clap(long, env = MEILI_EXPERIMENTAL_PERSONALIZATION_API_KEY)]
+    pub experimental_personalization_api_key: Option<String>,
+
     #[serde(flatten)]
     #[clap(flatten)]
     pub indexer_options: IndexerOpts,
@@ -580,6 +588,7 @@ impl Opt {
             experimental_limit_batched_tasks_total_size,
             experimental_embedding_cache_entries,
             experimental_no_snapshot_compaction,
+            experimental_personalization_api_key,
         } = self;
         export_to_env_if_not_present(MEILI_DB_PATH, db_path);
         export_to_env_if_not_present(MEILI_HTTP_ADDR, http_addr);
@@ -680,6 +689,12 @@ impl Opt {
             MEILI_EXPERIMENTAL_NO_SNAPSHOT_COMPACTION,
             experimental_no_snapshot_compaction.to_string(),
         );
+        if let Some(experimental_personalization_api_key) = experimental_personalization_api_key {
+            export_to_env_if_not_present(
+                MEILI_EXPERIMENTAL_PERSONALIZATION_API_KEY,
+                experimental_personalization_api_key,
+            );
+        }
         indexer_options.export_to_env();
     }
 
@@ -732,6 +747,7 @@ impl Opt {
             metrics: self.experimental_enable_metrics,
             logs_route: self.experimental_enable_logs_route,
             contains_filter: self.experimental_contains_filter,
+            experimental_personalization_api_key: self.experimental_personalization_api_key.clone(),
         }
     }
 }
