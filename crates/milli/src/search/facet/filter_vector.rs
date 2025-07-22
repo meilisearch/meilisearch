@@ -1,5 +1,5 @@
 use filter_parser::Token;
-use roaring::RoaringBitmap;
+use roaring::{MultiOps, RoaringBitmap};
 
 use crate::error::{Error, UserError};
 use crate::vector::db::IndexEmbeddingConfig;
@@ -177,10 +177,10 @@ impl<'a> VectorFilter<'a> {
                 .collect(),
         };
 
-        let mut docids = RoaringBitmap::new();
-        for inner in inners.iter() {
-            docids |= inner.evaluate_inner(rtxn, index, &embedding_configs, self.regenerate)?;
-        }
+        let mut docids = inners
+            .iter()
+            .map(|i| i.evaluate_inner(rtxn, index, &embedding_configs, self.regenerate))
+            .union()?;
 
         if let Some(universe) = universe {
             docids &= universe;
