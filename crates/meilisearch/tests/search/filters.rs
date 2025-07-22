@@ -981,7 +981,7 @@ async fn vector_filter_specific_fragment_user_provided() {
         .await;
     snapshot!(value, @r#"
     {
-      "message": "Index `[uuid]`: Vector filter cannot specify both a fragment name and userProvided.\n31:43 _vectors.rest.fragments.other.userProvided EXISTS",
+      "message": "Index `[uuid]`: Vector filter cannot have both `other` and `userProvided`.\n31:43 _vectors.rest.fragments.other.userProvided EXISTS",
       "code": "invalid_search_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -1022,19 +1022,19 @@ async fn vector_filter_document_template() {
 
     let (response, code) = index
         .update_settings(json!({
-          "embedders": {
-              "rest": setting,
-          },
+            "embedders": {
+                "rest": setting,
+            },
         }))
         .await;
     snapshot!(code, @"202 Accepted");
     server.wait_task(response.uid()).await.succeeded();
 
     let documents = json!([
-      {"id": 0, "name": "kefir"},
-      {"id": 1, "name": "echo", "_vectors": { "rest": [1, 1, 1] }},
-      {"id": 2, "name": "intel"},
-      {"id": 3, "name": "iko" }
+        {"id": 0, "name": "kefir"},
+        {"id": 1, "name": "echo", "_vectors": { "rest": [1, 1, 1] }},
+        {"id": 2, "name": "intel"},
+        {"id": 3, "name": "iko" }
     ]);
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
@@ -1053,9 +1053,6 @@ async fn vector_filter_document_template() {
           "name": "kefir"
         },
         {
-          "name": "echo"
-        },
-        {
           "name": "intel"
         },
         {
@@ -1066,7 +1063,7 @@ async fn vector_filter_document_template() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 4
+      "estimatedTotalHits": 3
     }
     "#);
 }

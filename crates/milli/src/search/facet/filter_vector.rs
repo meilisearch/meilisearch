@@ -2,14 +2,107 @@ use filter_parser::Token;
 use roaring::RoaringBitmap;
 
 use crate::error::{Error, UserError};
+use crate::vector::db::IndexEmbeddingConfig;
 use crate::vector::{ArroyStats, ArroyWrapper};
 use crate::Index;
 
+#[derive(Debug)]
+enum VectorFilterInner<'a> {
+    Fragment { embedder_token: Token<'a>, fragment_token: Token<'a> },
+    DocumentTemplate { embedder_token: Token<'a> },
+    UserProvided { embedder_token: Token<'a> },
+    FullEmbedder { embedder_token: Token<'a> },
+}
+
+impl VectorFilterInner<'_> {
+    fn evaluate_inner(
+        &self,
+        rtxn: &heed::RoTxn<'_>,
+        index: &Index,
+        embedding_configs: &[IndexEmbeddingConfig],
+        regenerate: bool,
+    ) -> crate::Result<RoaringBitmap> {
+        let embedder = match self {
+            VectorFilterInner::Fragment { embedder_token, .. } => embedder_token,
+            VectorFilterInner::DocumentTemplate { embedder_token } => embedder_token,
+            VectorFilterInner::UserProvided { embedder_token } => embedder_token,
+            VectorFilterInner::FullEmbedder { embedder_token } => embedder_token,
+        };
+        let embedder_name = embedder.value();
+        let available_embedders =
+            || embedding_configs.iter().map(|c| c.name.clone()).collect::<Vec<_>>();
+
+        let embedding_config = embedding_configs
+            .iter()
+            .find(|config| config.name == embedder_name)
+            .ok_or_else(|| EmbedderDoesNotExist { embedder, available: available_embedders() })?;
+
+        let embedder_info = index
+            .embedding_configs()
+            .embedder_info(rtxn, embedder_name)?
+            .ok_or_else(|| EmbedderDoesNotExist { embedder, available: available_embedders() })?;
+
+        let arroy_wrapper = ArroyWrapper::new(
+            index.vector_arroy,
+            embedder_info.embedder_id,
+            embedding_config.config.quantized(),
+        );
+
+        let mut docids = match self {
+            VectorFilterInner::Fragment { embedder_token: embedder, fragment_token: fragment } => {
+                let fragment_name = fragment.value();
+                let fragment_config = embedding_config
+                    .fragments
+                    .as_slice()
+                    .iter()
+                    .find(|fragment| fragment.name == fragment_name)
+                    .ok_or_else(|| FragmentDoesNotExist {
+                        embedder,
+                        fragment,
+                        available: embedding_config
+                            .fragments
+                            .as_slice()
+                            .iter()
+                            .map(|f| f.name.clone())
+                            .collect(),
+                    })?;
+
+                arroy_wrapper.items_in_store(rtxn, fragment_config.id, |bitmap| bitmap.clone())?
+            }
+            VectorFilterInner::DocumentTemplate { .. } => {
+                if !embedding_config.fragments.as_slice().is_empty() {
+                    return Ok(RoaringBitmap::new());
+                }
+
+                let user_provided_docsids = embedder_info.embedding_status.user_provided_docids();
+                let mut stats = ArroyStats::default();
+                arroy_wrapper.aggregate_stats(rtxn, &mut stats)?;
+                stats.documents - user_provided_docsids.clone()
+            }
+            VectorFilterInner::UserProvided { .. } => {
+                let user_provided_docsids = embedder_info.embedding_status.user_provided_docids();
+                user_provided_docsids.clone()
+            }
+            VectorFilterInner::FullEmbedder { .. } => {
+                let mut stats = ArroyStats::default();
+                arroy_wrapper.aggregate_stats(rtxn, &mut stats)?;
+                stats.documents
+            }
+        };
+
+        if regenerate {
+            let skip_regenerate = embedder_info.embedding_status.skip_regenerate_docids();
+            docids &= skip_regenerate;
+        }
+
+        Ok(docids)
+    }
+}
+
+#[derive(Debug)]
 pub(super) struct VectorFilter<'a> {
-    embedder_token: Option<Token<'a>>,
-    fragment_token: Option<Token<'a>>,
-    document_template: bool,
-    user_provided: bool,
+    inner: Option<VectorFilterInner<'a>>,
+    regenerate: bool,
 }
 
 #[derive(Debug)]
@@ -17,8 +110,7 @@ pub enum VectorFilterError<'a> {
     EmptyFilter,
     InvalidPrefix(Token<'a>),
     MissingFragmentName(Token<'a>),
-    UserProvidedWithFragment(Token<'a>),
-    DocumentTemplateWithFragment(Token<'a>),
+    ExclusiveOptions(Box<(Token<'a>, Token<'a>)>),
     LeftoverToken(Token<'a>),
     EmbedderDoesNotExist {
         embedder: &'a Token<'a>,
@@ -51,11 +143,13 @@ impl std::fmt::Display for VectorFilterError<'_> {
             MissingFragmentName(_token) => {
                 write!(f, "Vector filter is inconsistent: either specify a fragment name or remove the `fragments` part.")
             }
-            UserProvidedWithFragment(_token) => {
-                write!(f, "Vector filter cannot specify both a fragment name and userProvided.")
-            }
-            DocumentTemplateWithFragment(_token) => {
-                write!(f, "Vector filter cannot specify both a fragment name and documentTemplate.")
+            ExclusiveOptions(tokens) => {
+                write!(
+                    f,
+                    "Vector filter cannot have both `{}` and `{}`.",
+                    tokens.0.value(),
+                    tokens.1.value()
+                )
             }
             LeftoverToken(token) => {
                 write!(f, "Vector filter has leftover token: `{}`.", token.value())
@@ -107,11 +201,10 @@ impl<'a> From<VectorFilterError<'a>> for Error {
     fn from(err: VectorFilterError<'a>) -> Self {
         match &err {
             EmptyFilter => Error::UserError(UserError::InvalidFilter(err.to_string())),
-            InvalidPrefix(token)
-            | MissingFragmentName(token)
-            | UserProvidedWithFragment(token)
-            | DocumentTemplateWithFragment(token)
-            | LeftoverToken(token) => token.clone().as_external_error(err).into(),
+            InvalidPrefix(token) | MissingFragmentName(token) | LeftoverToken(token) => {
+                token.clone().as_external_error(err).into()
+            }
+            ExclusiveOptions(tokens) => tokens.1.clone().as_external_error(err).into(),
             EmbedderDoesNotExist { embedder: token, .. }
             | FragmentDoesNotExist { fragment: token, .. } => token.as_external_error(err).into(),
         }
@@ -127,11 +220,15 @@ impl<'a> VectorFilter<'a> {
     ///
     /// Valid formats:
     /// - `_vectors`
+    /// - `_vectors.mustRegenerate`
     /// - `_vectors.{embedder_name}`
+    /// - `_vectors.{embedder_name}.mustRegenerate`
     /// - `_vectors.{embedder_name}.userProvided`
+    /// - `_vectors.{embedder_name}.userProvided.mustRegenerate`
     /// - `_vectors.{embedder_name}.documentTemplate`
-    /// - `_vectors.{embedder_name}.documentTemplate.userProvided`
+    /// - `_vectors.{embedder_name}.documentTemplate.mustRegenerate`
     /// - `_vectors.{embedder_name}.fragments.{fragment_name}`
+    /// - `_vectors.{embedder_name}.fragments.{fragment_name}.mustRegenerate`
     pub(super) fn parse(s: &'a Token<'a>) -> Result<Self, VectorFilterError<'a>> {
         let mut split = s.split(".").peekable();
 
@@ -151,38 +248,46 @@ impl<'a> VectorFilter<'a> {
         }
 
         let mut user_provided_token = None;
-        if split.peek().map(|t| t.value()) == Some("userProvided")
-            || split.peek().map(|t| t.value()) == Some("user_provided")
-        {
+        if split.peek().map(|t| t.value()) == Some("userProvided") {
             user_provided_token = split.next();
         }
 
         let mut document_template_token = None;
-        if split.peek().map(|t| t.value()) == Some("documentTemplate")
-            || split.peek().map(|t| t.value()) == Some("document_template")
-        {
+        if split.peek().map(|t| t.value()) == Some("documentTemplate") {
             document_template_token = split.next();
         }
 
-        if let (Some(_), Some(user_provided_token)) = (&fragment_name, &user_provided_token) {
-            return Err(UserProvidedWithFragment(user_provided_token.clone()))?;
+        let mut regenerate_token = None;
+        if split.peek().map(|t| t.value()) == Some("regenerate") {
+            regenerate_token = split.next();
         }
 
-        if let (Some(_), Some(document_template_token)) = (&fragment_name, &document_template_token)
-        {
-            return Err(DocumentTemplateWithFragment(document_template_token.clone()))?;
-        }
+        let inner = match (fragment_name, user_provided_token, document_template_token) {
+            (Some(fragment_name), None, None) => Some(VectorFilterInner::Fragment {
+                embedder_token: embedder_name
+                    .expect("embedder name comes before fragment so it's always Some"),
+                fragment_token: fragment_name,
+            }),
+            (None, Some(_), None) => Some(VectorFilterInner::UserProvided {
+                embedder_token: embedder_name
+                    .expect("embedder name comes before userProvided so it's always Some"),
+            }),
+            (None, None, Some(_)) => Some(VectorFilterInner::DocumentTemplate {
+                embedder_token: embedder_name
+                    .expect("embedder name comes before documentTemplate so it's always Some"),
+            }),
+            (Some(a), Some(b), _) | (_, Some(a), Some(b)) | (Some(a), None, Some(b)) => {
+                return Err(ExclusiveOptions(Box::new((a, b))));
+            }
+            (None, None, None) => embedder_name
+                .map(|embedder_token| VectorFilterInner::FullEmbedder { embedder_token }),
+        };
 
         if let Some(next) = split.next() {
             return Err(LeftoverToken(next))?;
         }
 
-        Ok(Self {
-            embedder_token: embedder_name,
-            fragment_token: fragment_name,
-            user_provided: user_provided_token.is_some(),
-            document_template: document_template_token.is_some(),
-        })
+        Ok(Self { inner, regenerate: regenerate_token.is_some() })
     }
 
     pub(super) fn evaluate(
@@ -194,100 +299,19 @@ impl<'a> VectorFilter<'a> {
         let index_embedding_configs = index.embedding_configs();
         let embedding_configs = index_embedding_configs.embedding_configs(rtxn)?;
 
-        let mut embedders = Vec::new();
-        if let Some(embedder_token) = &self.embedder_token {
-            let embedder_name = embedder_token.value();
-
-            let Some(embedding_config) =
-                embedding_configs.iter().find(|config| config.name == embedder_name)
-            else {
-                return Err(EmbedderDoesNotExist {
-                    embedder: embedder_token,
-                    available: embedding_configs.iter().map(|c| c.name.clone()).collect(),
-                })?;
-            };
-
-            let Some(embedder_info) = index_embedding_configs.embedder_info(rtxn, embedder_name)?
-            else {
-                return Err(EmbedderDoesNotExist {
-                    embedder: embedder_token,
-                    available: embedding_configs.iter().map(|c| c.name.clone()).collect(),
-                })?;
-            };
-
-            if self.document_template && !embedding_config.fragments.as_slice().is_empty() {
-                return Ok(RoaringBitmap::new());
-            }
-
-            embedders.push((embedding_config, embedder_info));
-        } else {
-            for embedder_config in embedding_configs.iter() {
-                let Some(embedder_info) =
-                    index_embedding_configs.embedder_info(rtxn, &embedder_config.name)?
-                else {
-                    continue;
-                };
-                embedders.push((embedder_config, embedder_info));
-            }
-        };
+        let inners = dbg!(match self.inner {
+            Some(inner) => vec![inner],
+            None => embedding_configs
+                .iter()
+                .map(|config| VectorFilterInner::FullEmbedder {
+                    embedder_token: Token::from(config.name.as_str()),
+                })
+                .collect(),
+        });
 
         let mut docids = RoaringBitmap::new();
-        for (embedding_config, embedder_info) in embedders {
-            let arroy_wrapper = ArroyWrapper::new(
-                index.vector_arroy,
-                embedder_info.embedder_id,
-                embedding_config.config.quantized(),
-            );
-
-            docids |= if let Some(fragment_token) = &self.fragment_token {
-                let fragment_name = fragment_token.value();
-                let Some(fragment_config) = embedding_config
-                    .fragments
-                    .as_slice()
-                    .iter()
-                    .find(|fragment| fragment.name == fragment_name)
-                else {
-                    return Err(FragmentDoesNotExist {
-                        embedder: self
-                            .embedder_token
-                            .as_ref()
-                            .expect("there can't be a fragment without an embedder"),
-                        fragment: fragment_token,
-                        available: embedding_config
-                            .fragments
-                            .as_slice()
-                            .iter()
-                            .map(|f| f.name.clone())
-                            .collect(),
-                    })?;
-                };
-
-                if let Some(universe) = universe {
-                    arroy_wrapper
-                        .items_in_store(rtxn, fragment_config.id, |bitmap| bitmap & universe)?
-                } else {
-                    arroy_wrapper
-                        .items_in_store(rtxn, fragment_config.id, |bitmap| bitmap.clone())?
-                }
-            } else {
-                let mut universe = universe.cloned();
-                if self.user_provided {
-                    let user_provided_docsids =
-                        embedder_info.embedding_status.user_provided_docids();
-                    match &mut universe {
-                        Some(universe) => *universe &= user_provided_docsids,
-                        None => universe = Some(user_provided_docsids.clone()),
-                    }
-                }
-
-                let mut stats = ArroyStats::default();
-                arroy_wrapper.aggregate_stats(rtxn, &mut stats)?;
-                if let Some(universe) = &universe {
-                    stats.documents & universe
-                } else {
-                    stats.documents
-                }
-            };
+        for inner in inners.iter() {
+            docids |= inner.evaluate_inner(rtxn, index, &embedding_configs, self.regenerate)?;
         }
 
         if let Some(universe) = universe {
