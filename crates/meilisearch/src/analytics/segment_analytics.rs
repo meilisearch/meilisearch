@@ -283,6 +283,7 @@ impl Infos {
             indexer_options,
             config_file_path,
             no_analytics: _,
+            experimental_personalization_api_key: _,
         } = options;
 
         let schedule_snapshot = match schedule_snapshot {
