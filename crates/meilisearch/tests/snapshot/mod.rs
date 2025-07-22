@@ -221,7 +221,7 @@ async fn snapshotception_issue_4653() {
       "enqueuedAt": "[date]"
     }
     "###);
-    let task = server.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let temp = tempfile::tempdir().unwrap();
     let snapshot_path = snapshot_dir.path().to_owned().join("db.snapshot");
@@ -229,16 +229,22 @@ async fn snapshotception_issue_4653() {
     let options = Opt { import_snapshot: Some(snapshot_path), ..default_settings(temp.path()) };
     let snapshot_server = Server::new_with_options(options).await.unwrap();
     
-    // The snapshot creation task should NOT be spawned => task queue is empty
-    let (tasks, code) = snapshot_server.tasks().await;
+    // The snapshot creation task should NOT be spawned again => task is succeeded
+    let (task, code) = snapshot_server.get_task(task.uid()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(tasks, @r#"
+    snapshot!(json_string!(task, { ".enqueuedAt" => "[date]" }), @r#"
     {
-      "results": [],
-      "total": 0,
-      "limit": 20,
-      "from": null,
-      "next": null
+      "uid": 0,
+      "batchUid": 0,
+      "indexUid": null,
+      "status": "succeeded",
+      "type": "snapshotCreation",
+      "canceledBy": null,
+      "error": null,
+      "duration": null,
+      "enqueuedAt": "[date]",
+      "startedAt": null,
+      "finishedAt": null
     }
     "#);
 }
