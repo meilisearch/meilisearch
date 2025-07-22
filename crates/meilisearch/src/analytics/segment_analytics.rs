@@ -287,6 +287,7 @@ impl Infos {
             config_file_path,
             no_analytics: _,
             s3_snapshot_options,
+            experimental_personalization_api_key: _,
         } = options;
 
         let schedule_snapshot = match schedule_snapshot {
