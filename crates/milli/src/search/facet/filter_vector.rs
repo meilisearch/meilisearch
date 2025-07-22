@@ -92,7 +92,7 @@ impl VectorFilterInner<'_> {
 
         if regenerate {
             let skip_regenerate = embedder_info.embedding_status.skip_regenerate_docids();
-            docids &= skip_regenerate;
+            docids -= skip_regenerate;
         }
 
         Ok(docids)
@@ -220,15 +220,14 @@ impl<'a> VectorFilter<'a> {
     ///
     /// Valid formats:
     /// - `_vectors`
-    /// - `_vectors.mustRegenerate`
     /// - `_vectors.{embedder_name}`
-    /// - `_vectors.{embedder_name}.mustRegenerate`
+    /// - `_vectors.{embedder_name}.regenerate`
     /// - `_vectors.{embedder_name}.userProvided`
-    /// - `_vectors.{embedder_name}.userProvided.mustRegenerate`
+    /// - `_vectors.{embedder_name}.userProvided.regenerate`
     /// - `_vectors.{embedder_name}.documentTemplate`
-    /// - `_vectors.{embedder_name}.documentTemplate.mustRegenerate`
+    /// - `_vectors.{embedder_name}.documentTemplate.regenerate`
     /// - `_vectors.{embedder_name}.fragments.{fragment_name}`
-    /// - `_vectors.{embedder_name}.fragments.{fragment_name}.mustRegenerate`
+    /// - `_vectors.{embedder_name}.fragments.{fragment_name}.regenerate`
     pub(super) fn parse(s: &'a Token<'a>) -> Result<Self, VectorFilterError<'a>> {
         let mut split = s.split(".").peekable();
 
