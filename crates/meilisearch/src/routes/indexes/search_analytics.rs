@@ -125,6 +125,7 @@ impl<Method: AggregateMethod> SearchAggregator<Method> {
             hybrid,
             ranking_score_threshold,
             locales,
+            personalization: _,
         } = query;
 
         let mut ret = Self::default();
