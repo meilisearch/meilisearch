@@ -82,6 +82,7 @@ where
         let mut frozen = data.into_inner().freeze()?;
         for result in frozen.iter_and_clear_removed()? {
             let extracted_geo_point = result.map_err(InternalError::SerdeJson)?;
+            /// Fix that
             todo!("We must send the docid instead of the geojson");
             /*
             let removed = cellulite.remove(&GeoJsonPoint::from(extracted_geo_point));
