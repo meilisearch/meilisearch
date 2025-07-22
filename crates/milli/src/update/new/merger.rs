@@ -66,8 +66,8 @@ where
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::merge")]
 pub fn merge_and_send_cellulite<'extractor, MSP>(
     datastore: impl IntoIterator<Item = RefCell<GeoJsonExtractorData<'extractor>>>,
-    rtxn: &RoTxn,
-    index: &Index,
+    _rtxn: &RoTxn,
+    _index: &Index,
     geojson_sender: GeoJsonSender<'_, '_>,
     must_stop_processing: &MSP,
 ) -> Result<()>
@@ -81,13 +81,8 @@ where
 
         let mut frozen = data.into_inner().freeze()?;
         for result in frozen.iter_and_clear_removed()? {
-            let extracted_geo_point = result.map_err(InternalError::SerdeJson)?;
-            /// Fix that
-            todo!("We must send the docid instead of the geojson");
-            /*
-            let removed = cellulite.remove(&GeoJsonPoint::from(extracted_geo_point));
-            debug_assert!(removed.is_some());
-            */
+            let (docid, _) = result.map_err(InternalError::SerdeJson)?;
+            geojson_sender.delete_geojson(docid).unwrap();
         }
 
         for result in frozen.iter_and_clear_inserted()? {

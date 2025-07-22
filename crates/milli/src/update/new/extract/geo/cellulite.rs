@@ -158,7 +158,6 @@ impl<'extractor> Extractor<'extractor> for GeoJsonExtractor {
             match change? {
                 DocumentChange::Deletion(deletion) => {
                     let docid = deletion.docid();
-                    let external_id = deletion.external_document_id();
                     let current = deletion.current(rtxn, index, db_fields_ids_map)?;
 
                     if let Some(geojson) = current.geojson_field()? {
@@ -176,7 +175,6 @@ impl<'extractor> Extractor<'extractor> for GeoJsonExtractor {
                 }
                 DocumentChange::Update(update) => {
                     let current = update.current(rtxn, index, db_fields_ids_map)?;
-                    let external_id = update.external_document_id();
                     let docid = update.docid();
 
                     let current_geo = current.geojson_field()?;
@@ -218,7 +216,6 @@ impl<'extractor> Extractor<'extractor> for GeoJsonExtractor {
                     }
                 }
                 DocumentChange::Insertion(insertion) => {
-                    let external_id = insertion.external_document_id();
                     let docid = insertion.docid();
 
                     let inserted_geo = insertion.inserted().geojson_field()?;
