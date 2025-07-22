@@ -122,11 +122,7 @@ async fn perform_on_demand_snapshot() {
     let server = Server::new_with_options(options).await.unwrap();
 
     let index = server.index("catto");
-    index
-        .update_settings(json! ({
-        "searchableAttributes": [],
-        }))
-        .await;
+    index.update_settings(json! ({ "searchableAttributes": [] })).await;
 
     index.load_test_set(&server).await;
 
@@ -202,4 +198,47 @@ async fn perform_on_demand_snapshot() {
         server.index("doggo").get_all_documents(GetAllDocumentsOptions::default()),
         server.index("doggo").settings(),
     );
+}
+
+#[actix_rt::test]
+#[cfg_attr(target_os = "windows", ignore)]
+async fn snapshotception_issue_4653() {
+    let temp = tempfile::tempdir().unwrap();
+    let snapshot_dir = tempfile::tempdir().unwrap();
+    let options =
+        Opt { snapshot_dir: snapshot_dir.path().to_owned(), ..default_settings(temp.path()) };
+
+    let server = Server::new_with_options(options).await.unwrap();
+
+    let (task, code) = server.create_snapshot().await;
+    snapshot!(code, @"202 Accepted");
+    snapshot!(json_string!(task, { ".enqueuedAt" => "[date]" }), @r###"
+    {
+      "taskUid": 0,
+      "indexUid": null,
+      "status": "enqueued",
+      "type": "snapshotCreation",
+      "enqueuedAt": "[date]"
+    }
+    "###);
+    let task = server.wait_task(task.uid()).await.succeeded();
+
+    let temp = tempfile::tempdir().unwrap();
+    let snapshot_path = snapshot_dir.path().to_owned().join("db.snapshot");
+
+    let options = Opt { import_snapshot: Some(snapshot_path), ..default_settings(temp.path()) };
+    let snapshot_server = Server::new_with_options(options).await.unwrap();
+    
+    // The snapshot creation task should NOT be spawned => task queue is empty
+    let (tasks, code) = snapshot_server.tasks().await;
+    snapshot!(code, @"200 OK");
+    snapshot!(tasks, @r#"
+    {
+      "results": [],
+      "total": 0,
+      "limit": 20,
+      "from": null,
+      "next": null
+    }
+    "#);
 }
