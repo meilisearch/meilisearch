@@ -1,24 +1,21 @@
 use std::cell::RefCell;
 use std::fs::File;
-use std::io::{self, BufReader, BufWriter, ErrorKind, Read, Seek as _, Write as _};
+use std::io::{self, BufReader, BufWriter, ErrorKind, Seek as _, Write as _};
 use std::str::FromStr;
-use std::{iter, mem, result};
+use std::{iter, mem};
 
 use bumpalo::Bump;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use geojson::GeoJson;
 use heed::RoTxn;
-use serde_json::value::RawValue;
-use serde_json::Value;
 
-use crate::error::GeoError;
 use crate::update::new::document::{Document, DocumentContext};
 use crate::update::new::indexer::document_changes::Extractor;
 use crate::update::new::ref_cell_ext::RefCellExt as _;
 use crate::update::new::thread_local::MostlySend;
 use crate::update::new::DocumentChange;
 use crate::update::GrenadParameters;
-use crate::{lat_lng_to_xyz, DocumentId, GeoPoint, Index, InternalError, Result, UserError};
+use crate::{DocumentId, Index, Result, UserError};
 
 pub struct GeoJsonExtractor {
     grenad_parameters: GrenadParameters,
@@ -37,25 +34,6 @@ impl GeoJsonExtractor {
         }
     }
 }
-
-/*
-#[derive(Pod, Zeroable, Copy, Clone)]
-#[repr(C, packed)]
-pub struct ExtractedGeoPoint {
-    pub docid: DocumentId,
-    pub lat_lng: [f64; 2],
-}
-
-impl From<ExtractedGeoPoint> for GeoPoint {
-    /// Converts the latitude and longitude back to an xyz GeoPoint.
-    fn from(value: ExtractedGeoPoint) -> Self {
-        let [lat, lng] = value.lat_lng;
-        let point = [lat, lng];
-        let xyz_point = lat_lng_to_xyz(&point);
-        GeoPoint::new(xyz_point, (value.docid, point))
-    }
-}
-*/
 
 pub struct GeoJsonExtractorData<'extractor> {
     /// The set of documents ids that were removed. If a document sees its geo
@@ -263,96 +241,5 @@ impl<'extractor> Extractor<'extractor> for GeoJsonExtractor {
         }
 
         Ok(())
-    }
-}
-
-/// Extracts and validates the latitude and latitude from a document geo field.
-///
-/// It can be of the form `{ "lat": 0.0, "lng": "1.0" }`.
-pub fn extract_geo_coordinates(
-    external_id: &str,
-    raw_value: &RawValue,
-) -> Result<Option<[f64; 2]>> {
-    let mut geo = match serde_json::from_str(raw_value.get()).map_err(InternalError::SerdeJson)? {
-        Value::Null => return Ok(None),
-        Value::Object(map) => map,
-        value => {
-            return Err(Box::new(GeoError::NotAnObject {
-                document_id: Value::from(external_id),
-                value,
-            })
-            .into())
-        }
-    };
-
-    let [lat, lng] = match (geo.remove("lat"), geo.remove("lng")) {
-        (Some(lat), Some(lng)) => {
-            if geo.is_empty() {
-                [lat, lng]
-            } else {
-                return Err(Box::new(GeoError::UnexpectedExtraFields {
-                    document_id: Value::from(external_id),
-                    value: Value::from(geo),
-                })
-                .into());
-            }
-        }
-        (Some(_), None) => {
-            return Err(Box::new(GeoError::MissingLongitude {
-                document_id: Value::from(external_id),
-            })
-            .into())
-        }
-        (None, Some(_)) => {
-            return Err(Box::new(GeoError::MissingLatitude {
-                document_id: Value::from(external_id),
-            })
-            .into())
-        }
-        (None, None) => {
-            return Err(Box::new(GeoError::MissingLatitudeAndLongitude {
-                document_id: Value::from(external_id),
-            })
-            .into())
-        }
-    };
-
-    match (extract_finite_float_from_value(lat), extract_finite_float_from_value(lng)) {
-        (Ok(lat), Ok(lng)) => Ok(Some([lat, lng])),
-        (Ok(_), Err(value)) => {
-            Err(Box::new(GeoError::BadLongitude { document_id: Value::from(external_id), value })
-                .into())
-        }
-        (Err(value), Ok(_)) => {
-            Err(Box::new(GeoError::BadLatitude { document_id: Value::from(external_id), value })
-                .into())
-        }
-        (Err(lat), Err(lng)) => Err(Box::new(GeoError::BadLatitudeAndLongitude {
-            document_id: Value::from(external_id),
-            lat,
-            lng,
-        })
-        .into()),
-    }
-}
-
-/// Extracts and validate that a serde JSON Value is actually a finite f64.
-pub fn extract_finite_float_from_value(value: Value) -> result::Result<f64, Value> {
-    let number = match value {
-        Value::Number(ref n) => match n.as_f64() {
-            Some(number) => number,
-            None => return Err(value),
-        },
-        Value::String(ref s) => match s.parse::<f64>() {
-            Ok(number) => number,
-            Err(_) => return Err(value),
-        },
-        value => return Err(value),
-    };
-
-    if number.is_finite() {
-        Ok(number)
-    } else {
-        Err(value)
     }
 }
