@@ -133,7 +133,7 @@ pub fn extract_token_from_request(
     }
 }
 
-pub trait Policy {
+pub trait Policy: Sized {
     fn authenticate(
         auth: Data<AuthController>,
         token: &str,
@@ -337,6 +337,22 @@ pub mod policies {
             }
 
             Ok(TenantTokenOutcome::Valid(uid, data.claims.search_rules))
+        }
+    }
+
+    pub struct DoubleActionPolicy<const A: u8, const B: u8>;
+
+    impl<const A: u8, const B: u8> Policy for DoubleActionPolicy<A, B> {
+        fn authenticate(
+            auth: Data<AuthController>,
+            token: &str,
+            index: Option<&str>,
+        ) -> Result<AuthFilter, AuthError> {
+            let filter_a = ActionPolicy::<A>::authenticate(auth.clone(), token, index)?;
+            let _filter_b = ActionPolicy::<B>::authenticate(auth, token, index)?;
+            // There is no point merging the filters here.
+            // Since they originate from the same API key, they will hold the same information.
+            Ok(filter_a)
         }
     }
 

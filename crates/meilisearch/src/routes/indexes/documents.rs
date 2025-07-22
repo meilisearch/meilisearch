@@ -1454,8 +1454,6 @@ fn some_documents<'a, 't: 'a>(
                     document.remove("_vectors");
                 }
                 RetrieveVectors::Retrieve => {
-                    // Clippy is simply wrong
-                    #[allow(clippy::manual_unwrap_or_default)]
                     let mut vectors = match document.remove("_vectors") {
                         Some(Value::Object(map)) => map,
                         _ => Default::default(),
