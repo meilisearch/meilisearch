@@ -169,7 +169,7 @@ fn extract_geojson_field(
     obkv: &obkv::KvReader<FieldId>,
     settings: &InnerIndexSettings,
     deladd: DelAdd,
-    document_id: impl Fn() -> Value,
+    _document_id: impl Fn() -> Value,
 ) -> Result<Option<GeoJson>> {
     match settings.geojson_fid {
         Some(fid) if settings.filterable_attributes_rules.iter().any(|rule| rule.has_geojson()) => {
