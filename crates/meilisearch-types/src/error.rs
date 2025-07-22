@@ -315,6 +315,9 @@ InvalidSearchShowRankingScoreDetails           , InvalidRequest       , BAD_REQU
 InvalidSimilarShowRankingScoreDetails          , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchSort                              , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchDistinct                          , InvalidRequest       , BAD_REQUEST ;
+InvalidSearchPersonalization                   , InvalidRequest       , BAD_REQUEST ;
+InvalidSearchPersonalizationPersonalized       , InvalidRequest       , BAD_REQUEST ;
+InvalidSearchPersonalizationUserProfile        , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchMediaAndVector                    , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsDisplayedAttributes             , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsDistinctAttribute               , InvalidRequest       , BAD_REQUEST ;
@@ -679,6 +682,24 @@ impl fmt::Display for deserr_codes::InvalidNetworkUrl {
 impl fmt::Display for deserr_codes::InvalidNetworkSearchApiKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "the value of `searchApiKey` is invalid, expected a string.")
+    }
+}
+
+impl fmt::Display for deserr_codes::InvalidSearchPersonalization {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "the value of `personalization` is invalid, expected a JSON object with `personalized` boolean and optional `userProfile` string.")
+    }
+}
+
+impl fmt::Display for deserr_codes::InvalidSearchPersonalizationPersonalized {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "the value of `personalized` is invalid, expected a boolean.")
+    }
+}
+
+impl fmt::Display for deserr_codes::InvalidSearchPersonalizationUserProfile {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "the value of `userProfile` is invalid, expected a string.")
     }
 }
 

@@ -308,7 +308,8 @@ impl IndexScheduler {
 
         let mut wtxn = env.write_txn()?;
 
-        let features = features::FeatureData::new(&env, &mut wtxn, options.instance_features)?;
+        let features =
+            features::FeatureData::new(&env, &mut wtxn, options.instance_features.clone())?;
         let queue = Queue::new(&env, &mut wtxn, &options)?;
         let index_mapper = IndexMapper::new(&env, &mut wtxn, &options, budget)?;
         let chat_settings = env.create_database(&mut wtxn, Some(db_name::CHAT_SETTINGS))?;
