@@ -280,7 +280,8 @@ impl IndexScheduler {
         let version = versioning::Versioning::new(&env, from_db_version)?;
 
         let mut wtxn = env.write_txn()?;
-        let features = features::FeatureData::new(&env, &mut wtxn, options.instance_features)?;
+        let features =
+            features::FeatureData::new(&env, &mut wtxn, options.instance_features.clone())?;
         let queue = Queue::new(&env, &mut wtxn, &options)?;
         let index_mapper = IndexMapper::new(&env, &mut wtxn, &options, budget)?;
         let chat_settings = env.create_database(&mut wtxn, Some(CHAT_SETTINGS_DB_NAME))?;
@@ -832,6 +833,10 @@ impl IndexScheduler {
 
     pub fn features(&self) -> RoFeatures {
         self.features.features()
+    }
+
+    pub fn experimental_personalization_api_key(&self) -> Option<&String> {
+        self.features.experimental_personalization_api_key()
     }
 
     pub fn put_runtime_features(&self, features: RuntimeTogglableFeatures) -> Result<()> {

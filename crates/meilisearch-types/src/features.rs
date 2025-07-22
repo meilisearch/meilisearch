@@ -25,11 +25,12 @@ pub struct RuntimeTogglableFeatures {
     pub multimodal: bool,
 }
 
-#[derive(Default, Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone)]
 pub struct InstanceTogglableFeatures {
     pub metrics: bool,
     pub logs_route: bool,
     pub contains_filter: bool,
+    pub experimental_personalization_api_key: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
