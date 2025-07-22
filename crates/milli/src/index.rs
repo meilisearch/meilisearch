@@ -184,7 +184,7 @@ pub struct Index {
     pub vector_arroy: arroy::Database<Unspecified>,
 
     /// Geo store based on cellulite™.
-    pub cellulite: cellulite::Database,
+    pub cellulite: cellulite::Cellulite,
 
     /// Maps the document id to the document as an obkv store.
     pub(crate) documents: Database<BEU32, ObkvCodec>,
@@ -242,7 +242,7 @@ impl Index {
         let embedder_category_id =
             env.create_database(&mut wtxn, Some(VECTOR_EMBEDDER_CATEGORY_ID))?;
         let vector_arroy = env.create_database(&mut wtxn, Some(VECTOR_ARROY))?;
-        let cellulite = env.create_database(&mut wtxn, Some(CELLULITE))?;
+        let cellulite = cellulite::Cellulite::create_from_env(&env, &mut wtxn)?;
 
         let documents = env.create_database(&mut wtxn, Some(DOCUMENTS))?;
 
