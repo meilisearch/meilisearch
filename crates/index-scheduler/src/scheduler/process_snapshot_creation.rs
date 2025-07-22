@@ -6,6 +6,7 @@ use meilisearch_types::heed::CompactionOption;
 use meilisearch_types::milli::progress::{Progress, VariableNameStep};
 use meilisearch_types::tasks::{Status, Task};
 use meilisearch_types::{compression, VERSION_FILE_NAME};
+use roaring::RoaringBitmap;
 
 use crate::processing::{AtomicUpdateFileStep, SnapshotCreationProgress};
 use crate::{Error, IndexScheduler, Result};
@@ -38,6 +39,10 @@ impl IndexScheduler {
         // two read operations as the task processing is synchronous.
 
         // 2.1 First copy the LMDB env of the index-scheduler
+        // 
+        // Note that just before we copy it, we set the status of the current tasks to Succeeded.
+        // This is because when the snapshot is loaded in the future, we don't want these tasks to rerun.
+        // In any case, if the snapshot can be loaded, it means that the tasks did succeed.
         progress.update_progress(SnapshotCreationProgress::SnapshotTheIndexScheduler);
         let dst = temp_snapshot_dir.path().join("tasks");
         fs::create_dir_all(&dst)?;
@@ -46,7 +51,20 @@ impl IndexScheduler {
         } else {
             CompactionOption::Enabled
         };
+
+        let mut wtxn = self.env.write_txn()?;
+        for task in &mut tasks {
+            task.status = Status::Succeeded;
+            self.queue.tasks.update_task(&mut wtxn, task)?;
+        }
+        wtxn.commit()?;
         self.env.copy_to_path(dst.join("data.mdb"), compaction_option)?;
+        let mut wtxn = self.scheduler.auth_env.write_txn()?;
+        for task in &mut tasks {
+            task.status = Status::Enqueued;
+            self.queue.tasks.update_task(&mut wtxn, task)?;
+        }
+        wtxn.commit()?;
 
         // 2.2 Create a read transaction on the index-scheduler
         let rtxn = self.env.read_txn()?;
