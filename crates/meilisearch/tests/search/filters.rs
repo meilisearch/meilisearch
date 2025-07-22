@@ -1152,19 +1152,18 @@ async fn vector_filter_or_combination() {
     "#);
 }
 
-
 #[actix_rt::test]
 async fn vector_filter_regenerate() {
     let index = shared_index_for_fragments().await;
 
     for selector in ["_vectors.rest.regenerate", "_vectors.rest.fragments.basic.regenerate"] {
         let (value, _code) = index
-                .search_post(json!({
-                    "filter": format!("{selector} EXISTS"),
-                    "attributesToRetrieve": ["name"]
-                }))
-                .await;
-            snapshot!(value, @r#"
+            .search_post(json!({
+                "filter": format!("{selector} EXISTS"),
+                "attributesToRetrieve": ["name"]
+            }))
+            .await;
+        snapshot!(value, @r#"
             {
               "hits": [
                 {
@@ -1186,4 +1185,3 @@ async fn vector_filter_regenerate() {
             "#);
     }
 }
-
