@@ -22,10 +22,10 @@ use crate::extractors::sequential_extractor::SeqHandler;
 use crate::metrics::MEILISEARCH_DEGRADED_SEARCH_REQUESTS;
 use crate::routes::indexes::search_analytics::{SearchAggregator, SearchGET, SearchPOST};
 use crate::search::{
-    add_search_rules, perform_search, HybridQuery, MatchingStrategy, RankingScoreThreshold,
-    RetrieveVectors, SearchKind, SearchQuery, SearchResult, SemanticRatio, DEFAULT_CROP_LENGTH,
-    DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG,
-    DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
+    add_search_rules, perform_search, HybridQuery, MatchingStrategy, Personalization,
+    RankingScoreThreshold, RetrieveVectors, SearchKind, SearchQuery, SearchResult, SemanticRatio,
+    DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
+    DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
 };
 use crate::search_queue::SearchQueue;
 
@@ -132,6 +132,11 @@ pub struct SearchQueryGet {
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchLocales>)]
     #[param(value_type = Vec<Locale>, explode = false)]
     pub locales: Option<CS<Locale>>,
+    #[deserr(default, error = DeserrQueryParamError<InvalidSearchPersonalizationPersonalized>)]
+    #[param(value_type = bool)]
+    pub personalization_personalized: Option<bool>,
+    #[deserr(default, error = DeserrQueryParamError<InvalidSearchPersonalizationUserProfile>)]
+    pub personalization_user_profile: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, deserr::Deserr)]
@@ -203,6 +208,22 @@ impl TryFrom<SearchQueryGet> for SearchQuery {
             ));
         }
 
+        let personalization = match (
+            other.personalization_personalized,
+            other.personalization_user_profile,
+        ) {
+            (None, None) => None,
+            (Some(personalized), user_profile) => {
+                Some(Personalization { personalized, user_profile })
+            }
+            (None, Some(_)) => {
+                return Err(ResponseError::from_msg(
+                    "`personalizationPersonalized` is mandatory when `personalizationUserProfile` is present".into(),
+                    meilisearch_types::error::Code::InvalidSearchPersonalization,
+                ));
+            }
+        };
+
         Ok(Self {
             q: other.q,
             // `media` not supported for `GET`
@@ -232,6 +253,7 @@ impl TryFrom<SearchQueryGet> for SearchQuery {
             hybrid,
             ranking_score_threshold: other.ranking_score_threshold.map(|o| o.0),
             locales: other.locales.map(|o| o.into_iter().collect()),
+            personalization,
         })
     }
 }

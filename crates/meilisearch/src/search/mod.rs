@@ -57,6 +57,15 @@ pub const DEFAULT_HIGHLIGHT_PRE_TAG: fn() -> String = || "<em>".to_string();
 pub const DEFAULT_HIGHLIGHT_POST_TAG: fn() -> String = || "</em>".to_string();
 pub const DEFAULT_SEMANTIC_RATIO: fn() -> SemanticRatio = || SemanticRatio(0.5);
 
+#[derive(Clone, Default, PartialEq, Deserr, ToSchema, Debug)]
+#[deserr(error = DeserrJsonError<InvalidSearchPersonalization>, rename_all = camelCase, deny_unknown_fields)]
+pub struct Personalization {
+    #[deserr(default, error = DeserrJsonError<InvalidSearchPersonalizationPersonalized>)]
+    pub personalized: bool,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchPersonalizationUserProfile>)]
+    pub user_profile: Option<String>,
+}
+
 #[derive(Clone, Default, PartialEq, Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct SearchQuery {
@@ -120,6 +129,8 @@ pub struct SearchQuery {
     pub ranking_score_threshold: Option<RankingScoreThreshold>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchLocales>)]
     pub locales: Option<Vec<Locale>>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchPersonalization>, default)]
+    pub personalization: Option<Personalization>,
 }
 
 impl From<SearchParameters> for SearchQuery {
@@ -167,6 +178,7 @@ impl From<SearchParameters> for SearchQuery {
             highlight_post_tag: DEFAULT_HIGHLIGHT_POST_TAG(),
             crop_marker: DEFAULT_CROP_MARKER(),
             locales: None,
+            personalization: None,
         }
     }
 }
@@ -248,6 +260,7 @@ impl fmt::Debug for SearchQuery {
             attributes_to_search_on,
             ranking_score_threshold,
             locales,
+            personalization,
         } = self;
 
         let mut debug = f.debug_struct("SearchQuery");
@@ -334,6 +347,10 @@ impl fmt::Debug for SearchQuery {
 
         if let Some(locales) = locales {
             debug.field("locales", &locales);
+        }
+
+        if let Some(personalization) = personalization {
+            debug.field("personalization", &personalization);
         }
 
         debug.finish()
@@ -541,6 +558,9 @@ pub struct SearchQueryWithIndex {
     pub ranking_score_threshold: Option<RankingScoreThreshold>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchLocales>, default)]
     pub locales: Option<Vec<Locale>>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchPersonalization>, default)]
+    #[serde(skip)]
+    pub personalization: Option<Personalization>,
 
     #[deserr(default)]
     pub federation_options: Option<FederationOptions>,
@@ -598,6 +618,7 @@ impl SearchQueryWithIndex {
             attributes_to_search_on,
             ranking_score_threshold,
             locales,
+            personalization,
         } = query;
 
         SearchQueryWithIndex {
@@ -629,6 +650,7 @@ impl SearchQueryWithIndex {
             attributes_to_search_on,
             ranking_score_threshold,
             locales,
+            personalization,
             federation_options,
         }
     }
@@ -664,6 +686,7 @@ impl SearchQueryWithIndex {
             hybrid,
             ranking_score_threshold,
             locales,
+            personalization,
         } = self;
         (
             index_uid,
@@ -695,6 +718,7 @@ impl SearchQueryWithIndex {
                 hybrid,
                 ranking_score_threshold,
                 locales,
+                personalization,
                 // do not use ..Default::default() here,
                 // rather add any missing field from `SearchQuery` to `SearchQueryWithIndex`
             },
@@ -925,7 +949,7 @@ pub struct SearchResultWithIndex {
     pub result: SearchResult,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, ToSchema)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ToSchema)]
 #[serde(untagged)]
 pub enum HitsInfo {
     #[serde(rename_all = "camelCase")]
@@ -1174,6 +1198,7 @@ pub fn perform_search(
         attributes_to_search_on: _,
         filter: _,
         distinct: _,
+        personalization: _,
     } = query;
 
     let format = AttributesFormat {
