@@ -16,7 +16,7 @@ use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::locales::Locale;
-use meilisearch_types::milli::index::{self, SearchParameters};
+use meilisearch_types::milli::index::{self, EmbeddingsWithMetadata, SearchParameters};
 use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::vector::Embedder;
@@ -1528,8 +1528,11 @@ impl<'a> HitMaker<'a> {
                 Some(Value::Object(map)) => map,
                 _ => Default::default(),
             };
-            for (name, (vector, regenerate)) in self.index.embeddings(self.rtxn, id)? {
-                let embeddings = ExplicitVectors { embeddings: Some(vector.into()), regenerate };
+            for (name, EmbeddingsWithMetadata { embeddings, regenerate, has_fragments: _ }) in
+                self.index.embeddings(self.rtxn, id)?
+            {
+                let embeddings =
+                    ExplicitVectors { embeddings: Some(embeddings.into()), regenerate };
                 vectors.insert(
                     name,
                     serde_json::to_value(embeddings).map_err(InternalError::SerdeJson)?,

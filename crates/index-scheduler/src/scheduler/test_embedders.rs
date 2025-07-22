@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use big_s::S;
 use insta::assert_json_snapshot;
 use meili_snap::{json_string, snapshot};
+use meilisearch_types::milli::index::EmbeddingsWithMetadata;
 use meilisearch_types::milli::update::Setting;
 use meilisearch_types::milli::vector::settings::EmbeddingSettings;
 use meilisearch_types::milli::vector::SearchQuery;
@@ -220,8 +221,8 @@ fn import_vectors() {
 
         let embeddings = index.embeddings(&rtxn, 0).unwrap();
 
-        assert_json_snapshot!(embeddings[&simple_hf_name].0[0] == lab_embed, @"true");
-        assert_json_snapshot!(embeddings[&fakerest_name].0[0] == beagle_embed, @"true");
+        assert_json_snapshot!(embeddings[&simple_hf_name].embeddings[0] == lab_embed, @"true");
+        assert_json_snapshot!(embeddings[&fakerest_name].embeddings[0] == beagle_embed, @"true");
 
         let doc = index.documents(&rtxn, std::iter::once(0)).unwrap()[0].1;
         let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
@@ -311,9 +312,9 @@ fn import_vectors() {
             let embeddings = index.embeddings(&rtxn, 0).unwrap();
 
             // automatically changed to patou because set to regenerate
-            assert_json_snapshot!(embeddings[&simple_hf_name].0[0] == patou_embed, @"true");
+            assert_json_snapshot!(embeddings[&simple_hf_name].embeddings[0] == patou_embed, @"true");
             // remained beagle
-            assert_json_snapshot!(embeddings[&fakerest_name].0[0] == beagle_embed, @"true");
+            assert_json_snapshot!(embeddings[&fakerest_name].embeddings[0] == beagle_embed, @"true");
 
             let doc = index.documents(&rtxn, std::iter::once(0)).unwrap()[0].1;
             let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
@@ -497,13 +498,13 @@ fn import_vectors_first_and_embedder_later() {
 
     let docid = index.external_documents_ids.get(&rtxn, "0").unwrap().unwrap();
     let embeddings = index.embeddings(&rtxn, docid).unwrap();
-    let (embedding, _) = &embeddings["my_doggo_embedder"];
-    assert!(!embedding.is_empty(), "{embedding:?}");
+    let EmbeddingsWithMetadata { embeddings, .. } = &embeddings["my_doggo_embedder"];
+    assert!(!embeddings.is_empty(), "{embeddings:?}");
 
     // the document with the id 3 should keep its original embedding
     let docid = index.external_documents_ids.get(&rtxn, "3").unwrap().unwrap();
     let embeddings = index.embeddings(&rtxn, docid).unwrap();
-    let (embeddings, _) = &embeddings["my_doggo_embedder"];
+    let EmbeddingsWithMetadata { embeddings, .. } = &embeddings["my_doggo_embedder"];
 
     snapshot!(embeddings.len(), @"1");
     assert!(embeddings[0].iter().all(|i| *i == 3.0), "{:?}", embeddings[0]);
@@ -558,7 +559,7 @@ fn import_vectors_first_and_embedder_later() {
         "###);
 
     let embeddings = index.embeddings(&rtxn, docid).unwrap();
-    let (embedding, _) = &embeddings["my_doggo_embedder"];
+    let EmbeddingsWithMetadata { embeddings: embedding, .. } = &embeddings["my_doggo_embedder"];
 
     assert!(!embedding.is_empty());
     assert!(!embedding[0].iter().all(|i| *i == 3.0), "{:?}", embedding[0]);
@@ -566,7 +567,7 @@ fn import_vectors_first_and_embedder_later() {
     // the document with the id 4 should generate an embedding
     let docid = index.external_documents_ids.get(&rtxn, "4").unwrap().unwrap();
     let embeddings = index.embeddings(&rtxn, docid).unwrap();
-    let (embedding, _) = &embeddings["my_doggo_embedder"];
+    let EmbeddingsWithMetadata { embeddings: embedding, .. } = &embeddings["my_doggo_embedder"];
 
     assert!(!embedding.is_empty());
 }
@@ -696,7 +697,7 @@ fn delete_document_containing_vector() {
     "###);
     let docid = index.external_documents_ids.get(&rtxn, "0").unwrap().unwrap();
     let embeddings = index.embeddings(&rtxn, docid).unwrap();
-    let (embedding, _) = &embeddings["manual"];
+    let EmbeddingsWithMetadata { embeddings: embedding, .. } = &embeddings["manual"];
     assert!(!embedding.is_empty(), "{embedding:?}");
 
     index_scheduler
