@@ -15,7 +15,7 @@ use crate::{Error, IndexScheduler, Result};
 /// # Safety
 ///
 /// See [`EnvOpenOptions::open`].
-unsafe fn mark_tasks_as_succeeded(
+unsafe fn remove_tasks(
     tasks: &[Task],
     dst: &std::path::Path,
     index_base_map_size: usize,
@@ -112,7 +112,7 @@ impl IndexScheduler {
         };
         self.env.copy_to_path(dst.join("data.mdb"), compaction_option)?;
 
-        // 2.2 Mark the current snapshot tasks as succeeded in the newly created env
+        // 2.2 Remove the current snapshot tasks
         //
         // This is done to ensure that the tasks are not processed again when the snapshot is imported
         //
@@ -121,7 +121,7 @@ impl IndexScheduler {
         // This is safe because we open the env file we just created in a temporary directory.
         // We are sure it's not being used by any other process nor thread.
         unsafe {
-            mark_tasks_as_succeeded(&tasks, &dst, self.index_mapper.index_base_map_size)?;
+            remove_tasks(&tasks, &dst, self.index_mapper.index_base_map_size)?;
         }
 
         // 2.3 Create a read transaction on the index-scheduler
