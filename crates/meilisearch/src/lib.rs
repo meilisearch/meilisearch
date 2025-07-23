@@ -686,9 +686,11 @@ pub fn configure_data(
     analytics: Data<Analytics>,
 ) {
     // Create personalization service with API key from options
-    let personalization_service = personalization::PersonalizationService::new(
-        index_scheduler.experimental_personalization_api_key().cloned(),
-    );
+    let personalization_service = index_scheduler
+        .experimental_personalization_api_key()
+        .cloned()
+        .map(personalization::PersonalizationService::cohere)
+        .unwrap_or_else(personalization::PersonalizationService::uninitialized);
     let http_payload_size_limit = opt.http_payload_size_limit.as_u64() as usize;
     config
         .app_data(index_scheduler)
