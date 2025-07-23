@@ -18,12 +18,11 @@ use crate::{Error, IndexScheduler, Result};
 unsafe fn mark_tasks_as_succeeded(
     tasks: &[Task],
     dst: &std::path::Path,
-    nb_db: u32,
     index_base_map_size: usize,
 ) -> Result<()> {
     let env_options = EnvOpenOptions::new();
     let mut env_options = env_options.read_txn_without_tls();
-    let env = env_options.max_dbs(nb_db).map_size(index_base_map_size).open(dst)?;
+    let env = env_options.max_dbs(TaskQueue::nb_db()).map_size(index_base_map_size).open(dst)?;
     let mut wtxn = env.write_txn()?;
     let task_queue = TaskQueue::new(&env, &mut wtxn)?;
     for mut task in tasks.iter().cloned() {
@@ -84,7 +83,6 @@ impl IndexScheduler {
             mark_tasks_as_succeeded(
                 &tasks,
                 &dst,
-                Self::nb_db(),
                 self.index_mapper.index_base_map_size,
             )?;
         }
