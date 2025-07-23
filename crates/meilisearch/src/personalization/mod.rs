@@ -1,4 +1,4 @@
-use crate::search::{Personalization, SearchResult};
+use crate::search::{Personalize, SearchResult};
 use cohere_rust::{
     api::rerank::{ReRankModel, ReRankRequest},
     Cohere,
@@ -26,15 +26,13 @@ impl PersonalizationService {
     pub async fn rerank_search_results(
         &self,
         search_result: SearchResult,
-        personalization: &Personalization,
-        query: &str,
+        personalize: Option<&Personalize>,
+        query: Option<&str>,
     ) -> Result<SearchResult, ResponseError> {
-        // If personalization is not enabled or no API key, return original results
-        if !personalization.personalized || self.cohere.is_none() {
-            return Ok(search_result);
-        }
-
-        let cohere = self.cohere.as_ref().unwrap();
+        // If personalization is not requested, no API key, or no query, return original results
+        let Some(_personalize) = personalize else { return Ok(search_result) };
+        let Some(cohere) = &self.cohere else { return Ok(search_result) };
+        let Some(query) = query else { return Ok(search_result) };
 
         // Extract documents for reranking
         let documents: Vec<String> = search_result
@@ -95,8 +93,7 @@ mod tests {
     #[tokio::test]
     async fn test_personalization_service_without_api_key() {
         let service = PersonalizationService::new(None);
-        let personalization =
-            Personalization { personalized: true, user_profile: Some("test user".to_string()) };
+        let personalize = Personalize { user_context: Some("test user".to_string()) };
 
         let search_result = SearchResult {
             hits: vec![SearchHit {
@@ -116,8 +113,9 @@ mod tests {
             used_negative_operator: false,
         };
 
-        let result =
-            service.rerank_search_results(search_result.clone(), &personalization, "test").await;
+        let result = service
+            .rerank_search_results(search_result.clone(), Some(&personalize), Some("test"))
+            .await;
         assert!(result.is_ok());
 
         // Should return original results when no API key is provided
@@ -128,10 +126,7 @@ mod tests {
     #[tokio::test]
     async fn test_personalization_service_disabled() {
         let service = PersonalizationService::new(Some("fake_key".to_string()));
-        let personalization = Personalization {
-            personalized: false, // Personalization disabled
-            user_profile: Some("test user".to_string()),
-        };
+        let personalize = Personalize { user_context: Some("test user".to_string()) };
 
         let search_result = SearchResult {
             hits: vec![SearchHit {
@@ -151,8 +146,9 @@ mod tests {
             used_negative_operator: false,
         };
 
-        let result =
-            service.rerank_search_results(search_result.clone(), &personalization, "test").await;
+        let result = service
+            .rerank_search_results(search_result.clone(), Some(&personalize), Some("test"))
+            .await;
         assert!(result.is_ok());
 
         // Should return original results when personalization is disabled
