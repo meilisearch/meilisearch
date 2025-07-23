@@ -62,13 +62,14 @@ impl IndexScheduler {
             let ExportIndexSettings { filter, override_settings } = export_settings;
             let index = self.index(uid)?;
             let index_rtxn = index.read_txn()?;
+            let bearer = api_key.map(|api_key| format!("Bearer {api_key}"));
 
             // First, check if the index already exists
             let url = format!("{base_url}/indexes/{uid}");
             let response = retry(&must_stop_processing, || {
                 let mut request = agent.get(&url);
-                if let Some(api_key) = api_key {
-                    request = request.set("Authorization", &format!("Bearer {api_key}"));
+                if let Some(bearer) = &bearer {
+                    request = request.set("Authorization", bearer);
                 }
 
                 request.send_bytes(Default::default()).map_err(into_backoff_error)
@@ -90,8 +91,8 @@ impl IndexScheduler {
                 let url = format!("{base_url}/indexes");
                 retry(&must_stop_processing, || {
                     let mut request = agent.post(&url);
-                    if let Some(api_key) = api_key {
-                        request = request.set("Authorization", &format!("Bearer {api_key}"));
+                    if let Some(bearer) = &bearer {
+                        request = request.set("Authorization", bearer);
                     }
                     let index_param = json!({ "uid": uid, "primaryKey": primary_key });
                     request.send_json(&index_param).map_err(into_backoff_error)
@@ -103,8 +104,8 @@ impl IndexScheduler {
                 let url = format!("{base_url}/indexes/{uid}");
                 retry(&must_stop_processing, || {
                     let mut request = agent.patch(&url);
-                    if let Some(api_key) = api_key {
-                        request = request.set("Authorization", &format!("Bearer {api_key}"));
+                    if let Some(bearer) = &bearer {
+                        request = request.set("Authorization", bearer);
                     }
                     let index_param = json!({ "primaryKey": primary_key });
                     request.send_json(&index_param).map_err(into_backoff_error)
@@ -122,7 +123,6 @@ impl IndexScheduler {
                 }
                 // Retry logic for sending settings
                 let url = format!("{base_url}/indexes/{uid}/settings");
-                let bearer = api_key.map(|api_key| format!("Bearer {api_key}"));
                 retry(&must_stop_processing, || {
                     let mut request = agent.patch(&url);
                     if let Some(bearer) = bearer.as_ref() {
@@ -167,10 +167,10 @@ impl IndexScheduler {
                 },
             );
 
-            let limit = payload_size.map(|ps| ps.as_u64() as usize).unwrap_or(50 * 1024 * 1024); // defaults to 50 MiB
+            let limit = payload_size.map(|ps| ps.as_u64() as usize).unwrap_or(20 * 1024 * 1024); // defaults to 20 MiB
             let documents_url = format!("{base_url}/indexes/{uid}/documents");
 
-            request_threads()
+            let results = request_threads()
                 .broadcast(|ctx| {
                     let index_rtxn = index
                         .read_txn()
@@ -265,9 +265,8 @@ impl IndexScheduler {
                                 let mut request = agent.post(&documents_url);
                                 request = request.set("Content-Type", "application/x-ndjson");
                                 request = request.set("Content-Encoding", "gzip");
-                                if let Some(api_key) = api_key {
-                                    request = request
-                                        .set("Authorization", &(format!("Bearer {api_key}")));
+                                if let Some(bearer) = &bearer {
+                                    request = request.set("Authorization", bearer);
                                 }
                                 request.send_bytes(&compressed_buffer).map_err(into_backoff_error)
                             })?;
@@ -276,7 +275,7 @@ impl IndexScheduler {
                         }
                         buffer.extend_from_slice(&tmp_buffer);
 
-                        if i % 100 == 0 {
+                        if i > 0 && i % 100 == 0 {
                             step.fetch_add(100, atomic::Ordering::Relaxed);
                         }
                     }
@@ -284,8 +283,8 @@ impl IndexScheduler {
                     retry(&must_stop_processing, || {
                         let mut request = agent.post(&documents_url);
                         request = request.set("Content-Type", "application/x-ndjson");
-                        if let Some(api_key) = api_key {
-                            request = request.set("Authorization", &(format!("Bearer {api_key}")));
+                        if let Some(bearer) = &bearer {
+                            request = request.set("Authorization", bearer);
                         }
                         request.send_bytes(&buffer).map_err(into_backoff_error)
                     })?;
@@ -298,6 +297,9 @@ impl IndexScheduler {
                         Some(uid.to_string()),
                     )
                 })?;
+            for result in results {
+                result?;
+            }
 
             step.store(total_documents, atomic::Ordering::Relaxed);
         }

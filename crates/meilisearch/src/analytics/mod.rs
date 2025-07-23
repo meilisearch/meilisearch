@@ -73,12 +73,6 @@ pub enum DocumentDeletionKind {
     PerFilter,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum DocumentFetchKind {
-    PerDocumentId { retrieve_vectors: bool },
-    Normal { with_filter: bool, limit: usize, offset: usize, retrieve_vectors: bool },
-}
-
 /// To send an event to segment, your event must be able to aggregate itself with another event of the same type.
 pub trait Aggregate: 'static + mopa::Any + Send {
     /// The name of the event that will be sent to segment.

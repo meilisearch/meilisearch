@@ -551,5 +551,7 @@ pub struct GetAllDocumentsOptions {
     pub offset: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fields: Option<Vec<&'static str>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sort: Option<Vec<&'static str>>,
     pub retrieve_vectors: bool,
 }

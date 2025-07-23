@@ -104,6 +104,4 @@ impl Analytics for MockAnalytics {
         _request: &HttpRequest,
     ) {
     }
-    fn get_fetch_documents(&self, _documents_query: &DocumentFetchKind, _request: &HttpRequest) {}
-    fn post_fetch_documents(&self, _documents_query: &DocumentFetchKind, _request: &HttpRequest) {}
 }

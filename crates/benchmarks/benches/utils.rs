@@ -9,6 +9,7 @@ use anyhow::Context;
 use bumpalo::Bump;
 use criterion::BenchmarkId;
 use memmap2::Mmap;
+use milli::documents::sort::recursive_sort;
 use milli::heed::EnvOpenOptions;
 use milli::progress::Progress;
 use milli::update::new::indexer;
@@ -35,6 +36,12 @@ pub struct Conf<'a> {
     pub configure: fn(&mut Settings),
     pub filter: Option<&'a str>,
     pub sort: Option<Vec<&'a str>>,
+    /// set to skip documents (offset, limit)
+    pub offsets: &'a [Option<(usize, usize)>],
+    /// enable if you want to bench getting documents without querying
+    pub get_documents: bool,
+    /// configure the benchmark sample size
+    pub sample_size: Option<usize>,
     /// enable or disable the optional words on the query
     pub optional_words: bool,
     /// primary key, if there is None we'll auto-generate docids for every documents
@@ -52,6 +59,9 @@ impl Conf<'_> {
         configure: |_| (),
         filter: None,
         sort: None,
+        offsets: &[None],
+        get_documents: false,
+        sample_size: None,
         optional_words: true,
         primary_key: None,
     };
@@ -145,25 +155,79 @@ pub fn run_benches(c: &mut criterion::Criterion, confs: &[Conf]) {
         let file_name = Path::new(conf.dataset).file_name().and_then(|f| f.to_str()).unwrap();
         let name = format!("{}: {}", file_name, conf.group_name);
         let mut group = c.benchmark_group(&name);
+        if let Some(sample_size) = conf.sample_size {
+            group.sample_size(sample_size);
+        }
 
         for &query in conf.queries {
-            group.bench_with_input(BenchmarkId::from_parameter(query), &query, |b, &query| {
-                b.iter(|| {
-                    let rtxn = index.read_txn().unwrap();
-                    let mut search = index.search(&rtxn);
-                    search.query(query).terms_matching_strategy(TermsMatchingStrategy::default());
-                    if let Some(filter) = conf.filter {
-                        let filter = Filter::from_str(filter).unwrap().unwrap();
-                        search.filter(filter);
-                    }
-                    if let Some(sort) = &conf.sort {
-                        let sort = sort.iter().map(|sort| sort.parse().unwrap()).collect();
-                        search.sort_criteria(sort);
-                    }
-                    let _ids = search.execute().unwrap();
-                });
-            });
+            for offset in conf.offsets {
+                let parameter = match offset {
+                    None => query.to_string(),
+                    Some((offset, limit)) => format!("{query}[{offset}:{limit}]"),
+                };
+                group.bench_with_input(
+                    BenchmarkId::from_parameter(parameter),
+                    &query,
+                    |b, &query| {
+                        b.iter(|| {
+                            let rtxn = index.read_txn().unwrap();
+                            let mut search = index.search(&rtxn);
+                            search
+                                .query(query)
+                                .terms_matching_strategy(TermsMatchingStrategy::default());
+                            if let Some(filter) = conf.filter {
+                                let filter = Filter::from_str(filter).unwrap().unwrap();
+                                search.filter(filter);
+                            }
+                            if let Some(sort) = &conf.sort {
+                                let sort = sort.iter().map(|sort| sort.parse().unwrap()).collect();
+                                search.sort_criteria(sort);
+                            }
+                            if let Some((offset, limit)) = offset {
+                                search.offset(*offset).limit(*limit);
+                            }
+
+                            let _ids = search.execute().unwrap();
+                        });
+                    },
+                );
+            }
         }
+
+        if conf.get_documents {
+            for offset in conf.offsets {
+                let parameter = match offset {
+                    None => String::from("get_documents"),
+                    Some((offset, limit)) => format!("get_documents[{offset}:{limit}]"),
+                };
+                group.bench_with_input(BenchmarkId::from_parameter(parameter), &(), |b, &()| {
+                    b.iter(|| {
+                        let rtxn = index.read_txn().unwrap();
+                        if let Some(sort) = &conf.sort {
+                            let sort = sort.iter().map(|sort| sort.parse().unwrap()).collect();
+                            let all_docs = index.documents_ids(&rtxn).unwrap();
+                            let facet_sort =
+                                recursive_sort(&index, &rtxn, sort, &all_docs).unwrap();
+                            let iter = facet_sort.iter().unwrap();
+                            if let Some((offset, limit)) = offset {
+                                let _results = iter.skip(*offset).take(*limit).collect::<Vec<_>>();
+                            } else {
+                                let _results = iter.collect::<Vec<_>>();
+                            }
+                        } else {
+                            let all_docs = index.documents_ids(&rtxn).unwrap();
+                            if let Some((offset, limit)) = offset {
+                                let _results =
+                                    all_docs.iter().skip(*offset).take(*limit).collect::<Vec<_>>();
+                            } else {
+                                let _results = all_docs.iter().collect::<Vec<_>>();
+                            }
+                        }
+                    });
+                });
+            }
+        }
+
         group.finish();
 
         index.prepare_for_closing().wait();

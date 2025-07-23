@@ -61,7 +61,16 @@ source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
   "pagination": {
     "maxTotalHits": 15
   },
-  "embedders": {},
+  "embedders": {
+    "doggo_embedder": {
+      "source": "huggingFace",
+      "model": "sentence-transformers/all-MiniLM-L6-v2",
+      "revision": "e4ce9877abf3edfe10b0d82785e83bdcb973e22e",
+      "pooling": "forceMean",
+      "documentTemplate": "{{doc.description}}",
+      "documentTemplateMaxBytes": 400
+    }
+  },
   "searchCutoffMs": 8000,
   "localizedAttributes": [
     {

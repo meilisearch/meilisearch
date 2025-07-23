@@ -692,3 +692,68 @@ async fn granular_filterable_attributes() {
     ]
     "###);
 }
+
+#[actix_rt::test]
+async fn test_searchable_attributes_order() {
+    let server = Server::new_shared();
+    let index = server.unique_index();
+
+    // 1) Create an index with settings "searchableAttributes": ["title", "overview"]
+    let (response, code) = index.create(None).await;
+    assert_eq!(code, 202, "{response}");
+    server.wait_task(response.uid()).await.succeeded();
+
+    let (task, code) = index
+        .update_settings(json!({
+            "searchableAttributes": ["title", "overview"]
+        }))
+        .await;
+    assert_eq!(code, 202, "{task}");
+    server.wait_task(task.uid()).await.succeeded();
+
+    // 2) Add documents in the index
+    let documents = json!([
+        {
+            "id": 1,
+            "title": "The Matrix",
+            "overview": "A computer hacker learns from mysterious rebels about the true nature of his reality."
+        },
+        {
+            "id": 2,
+            "title": "Inception",
+            "overview": "A thief who steals corporate secrets through dream-sharing technology."
+        }
+    ]);
+
+    let (response, code) = index.add_documents(documents, None).await;
+    assert_eq!(code, 202, "{response}");
+    server.wait_task(response.uid()).await.succeeded();
+
+    // 3) Modify the settings "searchableAttributes": ["overview", "title"] (overview is put first)
+    let (task, code) = index
+        .update_settings(json!({
+            "searchableAttributes": ["overview", "title"]
+        }))
+        .await;
+    assert_eq!(code, 202, "{task}");
+    server.wait_task(task.uid()).await.succeeded();
+
+    // 4) Check if it has been applied
+    let (response, code) = index.settings().await;
+    assert_eq!(code, 200, "{response}");
+    assert_eq!(response["searchableAttributes"], json!(["overview", "title"]));
+
+    // 5) Re-modify the settings "searchableAttributes": ["title", "overview"] (title is put first)
+    let (task, code) = index
+        .update_settings(json!({
+            "searchableAttributes": ["title", "overview"]
+        }))
+        .await;
+    assert_eq!(code, 202, "{task}");
+    server.wait_task(task.uid()).await.succeeded();
+
+    // 6) Check if it has been applied
+    let (response, code) = index.settings().await;
+    assert_eq!(code, 200, "{response}");
+    assert_eq!(response["searchableAttributes"], json!(["title", "overview"]));
+}

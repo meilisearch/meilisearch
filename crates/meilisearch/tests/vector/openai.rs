@@ -136,7 +136,7 @@ fn long_text() -> &'static str {
     })
 }
 
-async fn create_mock_tokenized() -> (MockServer, Value) {
+async fn create_mock_tokenized() -> (&'static MockServer, Value) {
     create_mock_with_template("{{doc.text}}", ModelDimensions::Large, false, false).await
 }
 
@@ -145,8 +145,8 @@ async fn create_mock_with_template(
     model_dimensions: ModelDimensions,
     fallible: bool,
     slow: bool,
-) -> (MockServer, Value) {
-    let mock_server = MockServer::start().await;
+) -> (&'static MockServer, Value) {
+    let mock_server = Box::leak(Box::new(MockServer::start().await));
     const API_KEY: &str = "my-api-key";
     const API_KEY_BEARER: &str = "Bearer my-api-key";
 
@@ -299,7 +299,7 @@ async fn create_mock_with_template(
                 }
             }))
         })
-        .mount(&mock_server)
+        .mount(mock_server)
         .await;
     let url = mock_server.uri();
 
@@ -321,27 +321,27 @@ const DOGGO_TEMPLATE: &str = r#"{%- if doc.gender == "F" -%}Une chienne nommée 
         Un chien nommé {{doc.name}}, né en {{doc.birthyear}}
         {%- endif %}, de race {{doc.breed}}."#;
 
-async fn create_mock() -> (MockServer, Value) {
+async fn create_mock() -> (&'static MockServer, Value) {
     create_mock_with_template(DOGGO_TEMPLATE, ModelDimensions::Large, false, false).await
 }
 
-async fn create_mock_dimensions() -> (MockServer, Value) {
+async fn create_mock_dimensions() -> (&'static MockServer, Value) {
     create_mock_with_template(DOGGO_TEMPLATE, ModelDimensions::Large512, false, false).await
 }
 
-async fn create_mock_small_embedding_model() -> (MockServer, Value) {
+async fn create_mock_small_embedding_model() -> (&'static MockServer, Value) {
     create_mock_with_template(DOGGO_TEMPLATE, ModelDimensions::Small, false, false).await
 }
 
-async fn create_mock_legacy_embedding_model() -> (MockServer, Value) {
+async fn create_mock_legacy_embedding_model() -> (&'static MockServer, Value) {
     create_mock_with_template(DOGGO_TEMPLATE, ModelDimensions::Ada, false, false).await
 }
 
-async fn create_fallible_mock() -> (MockServer, Value) {
+async fn create_fallible_mock() -> (&'static MockServer, Value) {
     create_mock_with_template(DOGGO_TEMPLATE, ModelDimensions::Large, true, false).await
 }
 
-async fn create_slow_mock() -> (MockServer, Value) {
+async fn create_slow_mock() -> (&'static MockServer, Value) {
     create_mock_with_template(DOGGO_TEMPLATE, ModelDimensions::Large, true, true).await
 }
 

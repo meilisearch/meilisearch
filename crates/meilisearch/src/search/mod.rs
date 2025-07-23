@@ -57,6 +57,13 @@ pub const DEFAULT_HIGHLIGHT_PRE_TAG: fn() -> String = || "<em>".to_string();
 pub const DEFAULT_HIGHLIGHT_POST_TAG: fn() -> String = || "</em>".to_string();
 pub const DEFAULT_SEMANTIC_RATIO: fn() -> SemanticRatio = || SemanticRatio(0.5);
 
+#[derive(Clone, Default, PartialEq, Deserr, ToSchema, Debug)]
+#[deserr(error = DeserrJsonError<InvalidSearchPersonalize>, rename_all = camelCase, deny_unknown_fields)]
+pub struct Personalize {
+    #[deserr(default, error = DeserrJsonError<InvalidSearchPersonalizeUserContext>)]
+    pub user_context: Option<String>,
+}
+
 #[derive(Clone, Default, PartialEq, Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct SearchQuery {
@@ -120,6 +127,8 @@ pub struct SearchQuery {
     pub ranking_score_threshold: Option<RankingScoreThreshold>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchLocales>)]
     pub locales: Option<Vec<Locale>>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchPersonalize>, default)]
+    pub personalize: Option<Personalize>,
 }
 
 impl From<SearchParameters> for SearchQuery {
@@ -167,6 +176,7 @@ impl From<SearchParameters> for SearchQuery {
             highlight_post_tag: DEFAULT_HIGHLIGHT_POST_TAG(),
             crop_marker: DEFAULT_CROP_MARKER(),
             locales: None,
+            personalize: None,
         }
     }
 }
@@ -248,6 +258,7 @@ impl fmt::Debug for SearchQuery {
             attributes_to_search_on,
             ranking_score_threshold,
             locales,
+            personalize,
         } = self;
 
         let mut debug = f.debug_struct("SearchQuery");
@@ -334,6 +345,10 @@ impl fmt::Debug for SearchQuery {
 
         if let Some(locales) = locales {
             debug.field("locales", &locales);
+        }
+
+        if let Some(personalize) = personalize {
+            debug.field("personalize", &personalize);
         }
 
         debug.finish()
@@ -541,6 +556,9 @@ pub struct SearchQueryWithIndex {
     pub ranking_score_threshold: Option<RankingScoreThreshold>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchLocales>, default)]
     pub locales: Option<Vec<Locale>>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchPersonalize>, default)]
+    #[serde(skip)]
+    pub personalize: Option<Personalize>,
 
     #[deserr(default)]
     pub federation_options: Option<FederationOptions>,
@@ -598,6 +616,7 @@ impl SearchQueryWithIndex {
             attributes_to_search_on,
             ranking_score_threshold,
             locales,
+            personalize,
         } = query;
 
         SearchQueryWithIndex {
@@ -629,6 +648,7 @@ impl SearchQueryWithIndex {
             attributes_to_search_on,
             ranking_score_threshold,
             locales,
+            personalize,
             federation_options,
         }
     }
@@ -664,6 +684,7 @@ impl SearchQueryWithIndex {
             hybrid,
             ranking_score_threshold,
             locales,
+            personalize,
         } = self;
         (
             index_uid,
@@ -695,6 +716,7 @@ impl SearchQueryWithIndex {
                 hybrid,
                 ranking_score_threshold,
                 locales,
+                personalize,
                 // do not use ..Default::default() here,
                 // rather add any missing field from `SearchQuery` to `SearchQueryWithIndex`
             },
@@ -919,7 +941,7 @@ pub struct SearchResultWithIndex {
     pub result: SearchResult,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, ToSchema)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ToSchema)]
 #[serde(untagged)]
 pub enum HitsInfo {
     #[serde(rename_all = "camelCase")]
@@ -1051,6 +1073,7 @@ pub fn prepare_search<'t>(
         .unwrap_or(DEFAULT_PAGINATION_MAX_TOTAL_HITS);
 
     search.exhaustive_number_hits(is_finite_pagination);
+    search.max_total_hits(Some(max_total_hits));
     search.scoring_strategy(
         if query.show_ranking_score
             || query.show_ranking_score_details
@@ -1091,7 +1114,7 @@ pub fn prepare_search<'t>(
         let sort = match sort.iter().map(|s| AscDesc::from_str(s)).collect() {
             Ok(sorts) => sorts,
             Err(asc_desc_error) => {
-                return Err(milli::Error::from(SortError::from(asc_desc_error)).into())
+                return Err(SortError::from(asc_desc_error).into_search_error().into())
             }
         };
 
@@ -1165,6 +1188,7 @@ pub fn perform_search(
         attributes_to_search_on: _,
         filter: _,
         distinct: _,
+        personalize: _,
     } = query;
 
     let format = AttributesFormat {
