@@ -1065,6 +1065,8 @@ dependencies = [
 [[package]]
 name = "cellulite"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "377e81073db1dd0b0f0f297da35717fd799a77117668f2a6c48a3cabe0ef717e"
 dependencies = [
  "geo",
  "geo-types",
@@ -3396,7 +3398,7 @@ dependencies = [
  "portable-atomic",
  "portable-atomic-util",
  "serde",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -6064,6 +6066,8 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 [[package]]
 name = "steppe"
 version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dead99cdf718f37bcd1d22dda9b498f35c5aa22894b755bfd94bf8c2daec9427"
 dependencies = [
  "colored_json",
  "convert_case 0.8.0",
@@ -7684,6 +7688,8 @@ dependencies = [
 [[package]]
 name = "zerometry"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "681f08f3f4ef27d3021a128eb6d8df1cd781e4c9c797c3971c1f85316374f977"
 dependencies = [
  "bytemuck",
  "byteorder",
