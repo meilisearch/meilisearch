@@ -5,6 +5,7 @@ use std::fmt;
 use std::fs::File;
 use std::path::Path;
 
+use cellulite::Cellulite;
 use deserr::Deserr;
 use heed::types::*;
 use heed::{CompactionOption, Database, DatabaseStat, RoTxn, RwTxn, Unspecified, WithoutTls};
@@ -117,7 +118,7 @@ pub mod db_name {
     pub const CELLULITE: &str = "cellulite";
     pub const DOCUMENTS: &str = "documents";
 }
-const NUMBER_OF_DBS: u32 = 25;
+const NUMBER_OF_DBS: u32 = 25 + Cellulite::nb_dbs();
 
 #[derive(Clone)]
 pub struct Index {
@@ -184,7 +185,7 @@ pub struct Index {
     pub vector_arroy: arroy::Database<Unspecified>,
 
     /// Geo store based on cellulite™.
-    pub cellulite: cellulite::Cellulite,
+    pub cellulite: Cellulite,
 
     /// Maps the document id to the document as an obkv store.
     pub(crate) documents: Database<BEU32, ObkvCodec>,

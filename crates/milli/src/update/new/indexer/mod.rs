@@ -163,8 +163,6 @@ where
 
         indexing_context.progress.update_progress(IndexingStep::WritingEmbeddingsToDatabase);
 
-        index.cellulite.build(wtxn, indexing_context.progress)?;
-
         pool.install(|| {
             build_vectors(
                 index,
@@ -185,6 +183,10 @@ where
             global_fields_ids_map,
             facet_field_ids_delta,
         )?;
+
+        println!("Building geojson");
+        indexing_context.progress.update_progress(IndexingStep::BuildingGeoJson);
+        index.cellulite.build(wtxn, indexing_context.progress)?;
 
         indexing_context.progress.update_progress(IndexingStep::Finalizing);
 
@@ -314,6 +316,9 @@ where
             )
         })
         .unwrap()?;
+
+        indexing_context.progress.update_progress(IndexingStep::BuildingGeoJson);
+        index.cellulite.build(wtxn, indexing_context.progress)?;
 
         indexing_context.progress.update_progress(IndexingStep::Finalizing);
 
