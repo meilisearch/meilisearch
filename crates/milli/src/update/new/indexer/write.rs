@@ -75,9 +75,11 @@ pub fn write_to_db(
             ReceiverAction::GeoJson(docid, geojson) => {
                 match geojson {
                     Some(geojson) => {
+                        println!("Adding geojson {docid}");
                         index.cellulite.add(wtxn, docid, &geojson).map_err(InternalError::CelluliteError)?;
                     }
                     None => {
+                        println!("Deleting geojson {docid}");
                         index.cellulite.delete(wtxn, docid).map_err(InternalError::CelluliteError)?;
                     }
                 }

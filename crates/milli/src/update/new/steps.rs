@@ -18,6 +18,7 @@ make_enum_progress! {
         WritingEmbeddingsToDatabase,
         PostProcessingFacets,
         PostProcessingWords,
+        BuildingGeoJson,
         Finalizing,
     }
 }
