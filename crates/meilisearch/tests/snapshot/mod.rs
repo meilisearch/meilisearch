@@ -229,22 +229,40 @@ async fn snapshotception_issue_4653() {
     let options = Opt { import_snapshot: Some(snapshot_path), ..default_settings(temp.path()) };
     let snapshot_server = Server::new_with_options(options).await.unwrap();
 
-    // The snapshot creation task should NOT be spawned again => task is succeeded
-    let (task, code) = snapshot_server.get_task(task.uid()).await;
+    // The snapshot should have been taken without the snapshot creation task
+    let (tasks, code) = snapshot_server.tasks().await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(task, { ".enqueuedAt" => "[date]" }), @r#"
+    snapshot!(tasks, @r#"
     {
-      "uid": 0,
-      "batchUid": 0,
-      "indexUid": null,
-      "status": "succeeded",
-      "type": "snapshotCreation",
-      "canceledBy": null,
-      "error": null,
-      "duration": null,
-      "enqueuedAt": "[date]",
-      "startedAt": null,
-      "finishedAt": null
+      "results": [],
+      "total": 0,
+      "limit": 20,
+      "from": null,
+      "next": null
+    }
+    "#);
+
+    // Ensure the task is not present in the snapshot
+    let (task, code) = snapshot_server.get_task(0).await;
+    snapshot!(code, @"404 Not Found");
+    snapshot!(task, @r#"
+    {
+      "message": "Task `0` not found.",
+      "code": "task_not_found",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#task_not_found"
+    }
+    "#);
+
+    // Ensure the batch is also not present
+    let (batch, code) = snapshot_server.get_batch(0).await;
+    snapshot!(code, @"404 Not Found");
+    snapshot!(batch, @r#"
+    {
+      "message": "Batch `0` not found.",
+      "code": "batch_not_found",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#batch_not_found"
     }
     "#);
 }
