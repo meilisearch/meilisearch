@@ -98,8 +98,8 @@ pub struct IndexSchedulerOptions {
     pub snapshots_path: PathBuf,
     /// The path to the folder containing the dumps.
     pub dumps_path: PathBuf,
-    /// The URL on which we must send the tasks statuses
-    pub webhook_url: Option<String>,
+    /// The URLs on which we must send the tasks statuses
+    pub webhook_urls: Vec<String>,
     /// The value we will send into the Authorization HTTP header on the webhook URL
     pub webhook_authorization_header: Option<String>,
     /// The maximum size, in bytes, of the task index.
@@ -168,8 +168,8 @@ pub struct IndexScheduler {
     /// Whether we should automatically cleanup the task queue or not.
     pub(crate) cleanup_enabled: bool,
 
-    /// The webhook url we should send tasks to after processing every batches.
-    pub(crate) webhook_url: Option<String>,
+    /// The webhook urls we should send tasks to after processing every batches.
+    pub(crate) webhook_urls: Vec<String>,
     /// The Authorization header to send to the webhook URL.
     pub(crate) webhook_authorization_header: Option<String>,
 
@@ -210,7 +210,7 @@ impl IndexScheduler {
 
             index_mapper: self.index_mapper.clone(),
             cleanup_enabled: self.cleanup_enabled,
-            webhook_url: self.webhook_url.clone(),
+            webhook_urls: self.webhook_urls.clone(),
             webhook_authorization_header: self.webhook_authorization_header.clone(),
             embedders: self.embedders.clone(),
             #[cfg(test)]
@@ -296,7 +296,7 @@ impl IndexScheduler {
             index_mapper,
             env,
             cleanup_enabled: options.cleanup_enabled,
-            webhook_url: options.webhook_url,
+            webhook_urls: options.webhook_urls,
             webhook_authorization_header: options.webhook_authorization_header,
             embedders: Default::default(),
 
@@ -742,16 +742,16 @@ impl IndexScheduler {
 
     /// Once the tasks changes have been committed we must send all the tasks that were updated to our webhook if there is one.
     fn notify_webhook(&self, updated: &RoaringBitmap) -> Result<()> {
-        if let Some(ref url) = self.webhook_url {
-            struct TaskReader<'a, 'b> {
+        if !self.webhook_urls.is_empty() {
+            struct TaskReader<'a> {
                 rtxn: &'a RoTxn<'a>,
                 index_scheduler: &'a IndexScheduler,
-                tasks: &'b mut roaring::bitmap::Iter<'b>,
+                tasks: roaring::bitmap::Iter<'a>,
                 buffer: Vec<u8>,
                 written: usize,
             }
 
-            impl Read for TaskReader<'_, '_> {
+            impl Read for TaskReader<'_> {
                 fn read(&mut self, mut buf: &mut [u8]) -> std::io::Result<usize> {
                     if self.buffer.is_empty() {
                         match self.tasks.next() {
@@ -795,27 +795,29 @@ impl IndexScheduler {
 
             let rtxn = self.env.read_txn()?;
 
-            let task_reader = TaskReader {
-                rtxn: &rtxn,
-                index_scheduler: self,
-                tasks: &mut updated.into_iter(),
-                buffer: Vec::with_capacity(50), // on average a task is around ~100 bytes
-                written: 0,
-            };
+            for url in &self.webhook_urls {
+                let mut task_reader = TaskReader {
+                    rtxn: &rtxn,
+                    index_scheduler: self,
+                    tasks: updated.iter(),
+                    buffer: Vec::with_capacity(50), // on average a task is around ~100 bytes
+                    written: 0,
+                };
 
-            // let reader = GzEncoder::new(BufReader::new(task_reader), Compression::default());
-            let reader = GzEncoder::new(BufReader::new(task_reader), Compression::default());
-            let request = ureq::post(url)
-                .timeout(Duration::from_secs(30))
-                .set("Content-Encoding", "gzip")
-                .set("Content-Type", "application/x-ndjson");
-            let request = match &self.webhook_authorization_header {
-                Some(header) => request.set("Authorization", header),
-                None => request,
-            };
+                let reader =
+                    GzEncoder::new(BufReader::new(&mut task_reader), Compression::default());
+                let request = ureq::post(url)
+                    .timeout(Duration::from_secs(30))
+                    .set("Content-Encoding", "gzip")
+                    .set("Content-Type", "application/x-ndjson");
+                let request = match &self.webhook_authorization_header {
+                    Some(header) => request.set("Authorization", header),
+                    None => request,
+                };
 
-            if let Err(e) = request.send(reader) {
-                tracing::error!("While sending data to the webhook: {e}");
+                if let Err(e) = request.send(reader) {
+                    tracing::error!("While sending data to the webhook: {e}");
+                }
             }
         }
 

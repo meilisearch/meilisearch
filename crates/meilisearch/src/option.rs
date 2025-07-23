@@ -204,8 +204,9 @@ pub struct Opt {
     pub env: String,
 
     /// Called whenever a task finishes so a third party can be notified.
-    #[clap(long, env = MEILI_TASK_WEBHOOK_URL)]
-    pub task_webhook_url: Option<Url>,
+    /// Multiple URLs can be specified separated by a space or by repeating the option.
+    #[clap(long, env = MEILI_TASK_WEBHOOK_URL, value_delimiter = ' ')]
+    pub task_webhook_url: Vec<Url>,
 
     /// The Authorization header to send on the webhook URL whenever
     /// a task finishes so a third party can be notified.
@@ -579,8 +580,10 @@ impl Opt {
             export_to_env_if_not_present(MEILI_MASTER_KEY, master_key);
         }
         export_to_env_if_not_present(MEILI_ENV, env);
-        if let Some(task_webhook_url) = task_webhook_url {
-            export_to_env_if_not_present(MEILI_TASK_WEBHOOK_URL, task_webhook_url.to_string());
+        if !task_webhook_url.is_empty() {
+            let urls =
+                task_webhook_url.into_iter().map(|u| u.to_string()).collect::<Vec<_>>().join(" ");
+            export_to_env_if_not_present(MEILI_TASK_WEBHOOK_URL, urls);
         }
         if let Some(task_webhook_authorization_header) = task_webhook_authorization_header {
             export_to_env_if_not_present(

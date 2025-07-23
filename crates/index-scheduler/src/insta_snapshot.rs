@@ -28,7 +28,7 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
 
         index_mapper,
         features: _,
-        webhook_url: _,
+        webhook_urls: _,
         webhook_authorization_header: _,
         test_breakpoint_sdr: _,
         planned_failures: _,

@@ -221,7 +221,7 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Arc<
         indexes_path: opt.db_path.join("indexes"),
         snapshots_path: opt.snapshot_dir.clone(),
         dumps_path: opt.dump_dir.clone(),
-        webhook_url: opt.task_webhook_url.as_ref().map(|url| url.to_string()),
+        webhook_urls: opt.task_webhook_url.iter().map(|url| url.to_string()).collect(),
         webhook_authorization_header: opt.task_webhook_authorization_header.clone(),
         task_db_size: opt.max_task_db_size.as_u64() as usize,
         index_base_map_size: opt.max_index_size.as_u64() as usize,

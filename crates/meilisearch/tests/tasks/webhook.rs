@@ -73,7 +73,7 @@ async fn test_basic_webhook() {
 
     let db_path = tempfile::tempdir().unwrap();
     let server = Server::new_with_options(Opt {
-        task_webhook_url: Some(Url::parse(&url).unwrap()),
+        task_webhook_url: vec![Url::parse(&url).unwrap()],
         ..default_settings(db_path.path())
     })
     .await
@@ -126,4 +126,38 @@ async fn test_basic_webhook() {
     assert!(nb_tasks == 5, "We should have received the 5 tasks but only received {nb_tasks}");
 
     server_handle.abort();
+}
+
+#[actix_web::test]
+async fn test_multiple_webhooks() {
+    let WebhookHandle { server_handle: handle1, url: url1, receiver: mut receiver1 } =
+        create_webhook_server().await;
+    let WebhookHandle { server_handle: handle2, url: url2, receiver: mut receiver2 } =
+        create_webhook_server().await;
+
+    let db_path = tempfile::tempdir().unwrap();
+    let server = Server::new_with_options(Opt {
+        task_webhook_url: vec![Url::parse(&url1).unwrap(), Url::parse(&url2).unwrap()],
+        ..default_settings(db_path.path())
+    })
+    .await
+    .unwrap();
+
+    let index = server.index("multi");
+    index.add_documents(json!({ "id": 1 }), None).await;
+
+    let mut count1 = 0;
+    let mut count2 = 0;
+    while count1 == 0 || count2 == 0 {
+        tokio::select! {
+            msg = receiver1.recv() => { if msg.is_some() { count1 += 1; } },
+            msg = receiver2.recv() => { if msg.is_some() { count2 += 1; } },
+        }
+    }
+
+    assert_eq!(count1, 1);
+    assert_eq!(count2, 1);
+
+    handle1.abort();
+    handle2.abort();
 }
