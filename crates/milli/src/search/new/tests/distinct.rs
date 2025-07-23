@@ -572,7 +572,7 @@ fn test_distinct_all_candidates() {
     let mut s = Search::new(&txn, &index);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.sort_criteria(vec![AscDesc::Desc(Member::Field(S("rank1")))]);
-    s.exhaustive_number_hits(true);
+    s.is_exhaustive_pagination(true);
 
     let SearchResult { documents_ids, candidates, .. } = s.execute().unwrap();
     let candidates = candidates.iter().collect::<Vec<_>>();
