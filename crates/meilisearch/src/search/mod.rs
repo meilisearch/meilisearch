@@ -60,12 +60,10 @@ pub const DEFAULT_SEMANTIC_RATIO: fn() -> SemanticRatio = || SemanticRatio(0.5);
 pub const INCLUDE_METADATA_HEADER: &str = "Meili-Include-Metadata";
 
 #[derive(Clone, Default, PartialEq, Deserr, ToSchema, Debug)]
-#[deserr(error = DeserrJsonError<InvalidSearchPersonalization>, rename_all = camelCase, deny_unknown_fields)]
-pub struct Personalization {
-    #[deserr(default, error = DeserrJsonError<InvalidSearchPersonalizationPersonalized>)]
-    pub personalized: bool,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchPersonalizationUserProfile>)]
-    pub user_profile: Option<String>,
+#[deserr(error = DeserrJsonError<InvalidSearchPersonalize>, rename_all = camelCase, deny_unknown_fields)]
+pub struct Personalize {
+    #[deserr(default, error = DeserrJsonError<InvalidSearchPersonalizeUserContext>)]
+    pub user_context: Option<String>,
 }
 
 #[derive(Clone, Default, PartialEq, Deserr, ToSchema)]
@@ -131,8 +129,8 @@ pub struct SearchQuery {
     pub ranking_score_threshold: Option<RankingScoreThreshold>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchLocales>)]
     pub locales: Option<Vec<Locale>>,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchPersonalization>, default)]
-    pub personalization: Option<Personalization>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchPersonalize>, default)]
+    pub personalize: Option<Personalize>,
 }
 
 impl From<SearchParameters> for SearchQuery {
@@ -180,7 +178,7 @@ impl From<SearchParameters> for SearchQuery {
             highlight_post_tag: DEFAULT_HIGHLIGHT_POST_TAG(),
             crop_marker: DEFAULT_CROP_MARKER(),
             locales: None,
-            personalization: None,
+            personalize: None,
         }
     }
 }
@@ -262,7 +260,7 @@ impl fmt::Debug for SearchQuery {
             attributes_to_search_on,
             ranking_score_threshold,
             locales,
-            personalization,
+            personalize,
         } = self;
 
         let mut debug = f.debug_struct("SearchQuery");
@@ -351,8 +349,8 @@ impl fmt::Debug for SearchQuery {
             debug.field("locales", &locales);
         }
 
-        if let Some(personalization) = personalization {
-            debug.field("personalization", &personalization);
+        if let Some(personalize) = personalize {
+            debug.field("personalize", &personalize);
         }
 
         debug.finish()
@@ -560,9 +558,9 @@ pub struct SearchQueryWithIndex {
     pub ranking_score_threshold: Option<RankingScoreThreshold>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchLocales>, default)]
     pub locales: Option<Vec<Locale>>,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchPersonalization>, default)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchPersonalize>, default)]
     #[serde(skip)]
-    pub personalization: Option<Personalization>,
+    pub personalize: Option<Personalize>,
 
     #[deserr(default)]
     pub federation_options: Option<FederationOptions>,
@@ -620,7 +618,7 @@ impl SearchQueryWithIndex {
             attributes_to_search_on,
             ranking_score_threshold,
             locales,
-            personalization,
+            personalize,
         } = query;
 
         SearchQueryWithIndex {
@@ -652,7 +650,7 @@ impl SearchQueryWithIndex {
             attributes_to_search_on,
             ranking_score_threshold,
             locales,
-            personalization,
+            personalize,
             federation_options,
         }
     }
@@ -688,7 +686,7 @@ impl SearchQueryWithIndex {
             hybrid,
             ranking_score_threshold,
             locales,
-            personalization,
+            personalize,
         } = self;
         (
             index_uid,
@@ -720,7 +718,7 @@ impl SearchQueryWithIndex {
                 hybrid,
                 ranking_score_threshold,
                 locales,
-                personalization,
+                personalize,
                 // do not use ..Default::default() here,
                 // rather add any missing field from `SearchQuery` to `SearchQueryWithIndex`
             },
@@ -1250,7 +1248,7 @@ pub fn perform_search(params: SearchParams, index: &Index) -> Result<SearchResul
         attributes_to_search_on: _,
         filter: _,
         distinct: _,
-        personalization: _,
+        personalize: _,
     } = query;
 
     let format = AttributesFormat {
