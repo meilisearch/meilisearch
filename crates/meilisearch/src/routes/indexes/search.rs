@@ -344,6 +344,7 @@ pub fn fix_sort_query_parameters(sort_query: &str) -> Vec<String> {
 pub async fn search_with_url_query(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
     search_queue: web::Data<SearchQueue>,
+    personalization_service: web::Data<crate::personalization::PersonalizationService>,
     index_uid: web::Path<String>,
     params: AwebQueryParameter<SearchQueryGet, DeserrQueryParamError>,
     req: HttpRequest,
@@ -367,6 +368,11 @@ pub async fn search_with_url_query(
     let search_kind =
         search_kind(&query, index_scheduler.get_ref(), index_uid.to_string(), &index)?;
     let retrieve_vector = RetrieveVectors::new(query.retrieve_vectors);
+
+    // Extract personalization and query string before moving query
+    let personalization = query.personalization.clone();
+    let query_str = query.q.clone();
+
     let permit = search_queue.try_get_search_permit().await?;
     let include_metadata = parse_include_metadata_header(&req);
 
@@ -392,7 +398,16 @@ pub async fn search_with_url_query(
     }
     analytics.publish(aggregate, &req);
 
-    let search_result = search_result?;
+    let mut search_result = search_result?;
+
+    // Apply personalization if requested
+    if let Some(personalization) = &personalization {
+        if let Some(query_str) = &query_str {
+            search_result = personalization_service
+                .rerank_search_results(search_result, personalization, query_str)
+                .await?;
+        }
+    }
 
     debug!(request_uid = ?request_uid, returns = ?search_result, "Search get");
     Ok(HttpResponse::Ok().json(search_result))
@@ -457,6 +472,7 @@ pub async fn search_with_url_query(
 pub async fn search_with_post(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
     search_queue: web::Data<SearchQueue>,
+    personalization_service: web::Data<crate::personalization::PersonalizationService>,
     index_uid: web::Path<String>,
     params: AwebJson<SearchQuery, DeserrJsonError>,
     req: HttpRequest,
@@ -482,6 +498,10 @@ pub async fn search_with_post(
     let retrieve_vectors = RetrieveVectors::new(query.retrieve_vectors);
 
     let include_metadata = parse_include_metadata_header(&req);
+
+    // Extract personalization and query string before moving query
+    let personalization = query.personalization.clone();
+    let query_str = query.q.clone();
 
     let permit = search_queue.try_get_search_permit().await?;
     let search_result = tokio::task::spawn_blocking(move || {
@@ -509,7 +529,16 @@ pub async fn search_with_post(
     }
     analytics.publish(aggregate, &req);
 
-    let search_result = search_result?;
+    let mut search_result = search_result?;
+
+    // Apply personalization if requested
+    if let Some(personalization) = &personalization {
+        if let Some(query_str) = &query_str {
+            search_result = personalization_service
+                .rerank_search_results(search_result, personalization, query_str)
+                .await?;
+        }
+    }
 
     debug!(request_uid = ?request_uid, returns = ?search_result, "Search post");
     Ok(HttpResponse::Ok().json(search_result))
