@@ -9,6 +9,7 @@ pub mod middleware;
 pub mod option;
 #[cfg(test)]
 mod option_test;
+pub mod personalization;
 pub mod routes;
 pub mod search;
 pub mod search_queue;
@@ -676,12 +677,17 @@ pub fn configure_data(
     (logs_route, logs_stderr): (LogRouteHandle, LogStderrHandle),
     analytics: Data<Analytics>,
 ) {
+    // Create personalization service with API key from options
+    let personalization_service = personalization::PersonalizationService::new(
+        index_scheduler.experimental_personalization_api_key().cloned(),
+    );
     let http_payload_size_limit = opt.http_payload_size_limit.as_u64() as usize;
     config
         .app_data(index_scheduler)
         .app_data(auth)
         .app_data(search_queue)
         .app_data(analytics)
+        .app_data(web::Data::new(personalization_service))
         .app_data(web::Data::new(logs_route))
         .app_data(web::Data::new(logs_stderr))
         .app_data(web::Data::new(opt.clone()))
