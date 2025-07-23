@@ -95,6 +95,7 @@ uuid = { version = "1.18.0", features = ["serde", "v4", "v7"] }
 serde_urlencoded = "0.7.1"
 termcolor = "1.4.1"
 url = { version = "2.5.4", features = ["serde"] }
+cohere-rust = "0.6.0"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.20", features = ["json"] }
 tracing-trace = { version = "0.1.0", path = "../tracing-trace" }
