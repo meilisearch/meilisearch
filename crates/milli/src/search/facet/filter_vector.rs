@@ -8,16 +8,17 @@ use crate::Index;
 
 #[derive(Debug)]
 enum VectorFilterInner<'a> {
-    Fragment { embedder_token: Token<'a>, fragment_token: Token<'a> },
-    DocumentTemplate { embedder_token: Token<'a> },
-    UserProvided { embedder_token: Token<'a> },
-    FullEmbedder { embedder_token: Token<'a> },
+    Fragment(Token<'a>),
+    DocumentTemplate,
+    UserProvided,
+    Regenerate,
+    None,
 }
 
 #[derive(Debug)]
 pub(super) struct VectorFilter<'a> {
-    inner: Option<VectorFilterInner<'a>>,
-    regenerate: bool,
+    embedder: Option<Token<'a>>,
+    inner: VectorFilterInner<'a>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -31,8 +32,10 @@ pub enum VectorFilterError<'a> {
     #[error("Vector filter is inconsistent: either specify a fragment name or remove the `fragments` part.")]
     MissingFragmentName(Token<'a>),
 
-    #[error("Vector filter cannot have both `{}` and `{}`.", _0.0.value(), _0.1.value())]
-    ExclusiveOptions(Box<(Token<'a>, Token<'a>)>),
+    #[error("Vector filter cannot have both {}.", {
+        _0.iter().map(|t| format!("`{}`", t.value())).collect::<Vec<_>>().join(" and ")
+    })]
+    ExclusiveOptions(Vec<Token<'a>>),
 
     #[error("Vector filter has leftover token: `{}`.", _0.value())]
     LeftoverToken(Token<'a>),
@@ -73,7 +76,12 @@ impl<'a> From<VectorFilterError<'a>> for Error {
             InvalidPrefix(token) | MissingFragmentName(token) | LeftoverToken(token) => {
                 token.clone().as_external_error(err).into()
             }
-            ExclusiveOptions(tokens) => tokens.1.clone().as_external_error(err).into(),
+            ExclusiveOptions(tokens) => tokens
+                .first()
+                .cloned()
+                .unwrap_or_else(|| Token::from("")) // Should never happen: tokens is never created empty
+                .as_external_error(err)
+                .into(),
             EmbedderDoesNotExist { embedder: token, .. }
             | FragmentDoesNotExist { fragment: token, .. } => token.as_external_error(err).into(),
         }
@@ -92,11 +100,8 @@ impl<'a> VectorFilter<'a> {
     /// - `_vectors.{embedder_name}`
     /// - `_vectors.{embedder_name}.regenerate`
     /// - `_vectors.{embedder_name}.userProvided`
-    /// - `_vectors.{embedder_name}.userProvided.regenerate`
     /// - `_vectors.{embedder_name}.documentTemplate`
-    /// - `_vectors.{embedder_name}.documentTemplate.regenerate`
     /// - `_vectors.{embedder_name}.fragments.{fragment_name}`
-    /// - `_vectors.{embedder_name}.fragments.{fragment_name}.regenerate`
     pub(super) fn parse(s: &'a Token<'a>) -> Result<Self, VectorFilterError<'a>> {
         let mut split = s.split(".").peekable();
 
@@ -108,54 +113,53 @@ impl<'a> VectorFilter<'a> {
 
         let embedder_name = split.next();
 
-        let mut fragment_name = None;
+        let mut fragment_tokens = None;
         if split.peek().map(|t| t.value()) == Some("fragments") {
             let token = split.next().expect("it was peeked before");
+            let name = split.next().ok_or_else(|| MissingFragmentName(token.clone()))?;
 
-            fragment_name = Some(split.next().ok_or(MissingFragmentName(token))?);
+            fragment_tokens = Some((token, name));
         }
 
+        let mut remaining_tokens = split.collect::<Vec<_>>();
+
         let mut user_provided_token = None;
-        if split.peek().map(|t| t.value()) == Some("userProvided") {
-            user_provided_token = split.next();
+        if let Some(position) = remaining_tokens.iter().position(|t| t.value() == "userProvided") {
+            user_provided_token = Some(remaining_tokens.remove(position));
         }
 
         let mut document_template_token = None;
-        if split.peek().map(|t| t.value()) == Some("documentTemplate") {
-            document_template_token = split.next();
+        if let Some(position) =
+            remaining_tokens.iter().position(|t| t.value() == "documentTemplate")
+        {
+            document_template_token = Some(remaining_tokens.remove(position));
         }
 
         let mut regenerate_token = None;
-        if split.peek().map(|t| t.value()) == Some("regenerate") {
-            regenerate_token = split.next();
+        if let Some(position) = remaining_tokens.iter().position(|t| t.value() == "regenerate") {
+            regenerate_token = Some(remaining_tokens.remove(position));
         }
 
-        let inner = match (fragment_name, user_provided_token, document_template_token) {
-            (Some(fragment_name), None, None) => Some(VectorFilterInner::Fragment {
-                embedder_token: embedder_name
-                    .expect("embedder name comes before fragment so it's always Some"),
-                fragment_token: fragment_name,
-            }),
-            (None, Some(_), None) => Some(VectorFilterInner::UserProvided {
-                embedder_token: embedder_name
-                    .expect("embedder name comes before userProvided so it's always Some"),
-            }),
-            (None, None, Some(_)) => Some(VectorFilterInner::DocumentTemplate {
-                embedder_token: embedder_name
-                    .expect("embedder name comes before documentTemplate so it's always Some"),
-            }),
-            (Some(a), Some(b), _) | (_, Some(a), Some(b)) | (Some(a), None, Some(b)) => {
-                return Err(ExclusiveOptions(Box::new((a, b))));
-            }
-            (None, None, None) => embedder_name
-                .map(|embedder_token| VectorFilterInner::FullEmbedder { embedder_token }),
-        };
-
-        if let Some(next) = split.next() {
-            return Err(LeftoverToken(next))?;
+        if !remaining_tokens.is_empty() {
+            return Err(LeftoverToken(remaining_tokens.remove(0)));
         }
 
-        Ok(Self { inner, regenerate: regenerate_token.is_some() })
+        let inner =
+            match (fragment_tokens, user_provided_token, document_template_token, regenerate_token)
+            {
+                (Some((_token, name)), None, None, None) => VectorFilterInner::Fragment(name),
+                (None, Some(_), None, None) => VectorFilterInner::UserProvided,
+                (None, None, Some(_), None) => VectorFilterInner::DocumentTemplate,
+                (None, None, None, Some(_)) => VectorFilterInner::Regenerate,
+                (None, None, None, None) => VectorFilterInner::None,
+                (a, b, c, d) => {
+                    let a = a.map(|(token, _)| token);
+                    let present = [a, b, c, d].into_iter().flatten().collect();
+                    return Err(ExclusiveOptions(present));
+                }
+            };
+
+        Ok(Self { inner, embedder: embedder_name })
     }
 
     pub(super) fn evaluate(
@@ -167,19 +171,16 @@ impl<'a> VectorFilter<'a> {
         let index_embedding_configs = index.embedding_configs();
         let embedding_configs = index_embedding_configs.embedding_configs(rtxn)?;
 
-        let inners = match self.inner {
-            Some(inner) => vec![inner],
-            None => embedding_configs
-                .iter()
-                .map(|config| VectorFilterInner::FullEmbedder {
-                    embedder_token: Token::from(config.name.as_str()),
-                })
-                .collect(),
+        let embedders = match self.embedder {
+            Some(embedder) => vec![embedder],
+            None => {
+                embedding_configs.iter().map(|config| Token::from(config.name.as_str())).collect()
+            }
         };
 
-        let mut docids = inners
+        let mut docids = embedders
             .iter()
-            .map(|i| i.evaluate_inner(rtxn, index, &embedding_configs, self.regenerate))
+            .map(|e| self.inner.evaluate(rtxn, index, e, &embedding_configs))
             .union()?;
 
         if let Some(universe) = universe {
@@ -191,19 +192,13 @@ impl<'a> VectorFilter<'a> {
 }
 
 impl VectorFilterInner<'_> {
-    fn evaluate_inner(
+    fn evaluate(
         &self,
         rtxn: &heed::RoTxn<'_>,
         index: &Index,
+        embedder: &Token<'_>,
         embedding_configs: &[IndexEmbeddingConfig],
-        regenerate: bool,
     ) -> crate::Result<RoaringBitmap> {
-        let embedder = match self {
-            VectorFilterInner::Fragment { embedder_token, .. } => embedder_token,
-            VectorFilterInner::DocumentTemplate { embedder_token } => embedder_token,
-            VectorFilterInner::UserProvided { embedder_token } => embedder_token,
-            VectorFilterInner::FullEmbedder { embedder_token } => embedder_token,
-        };
         let embedder_name = embedder.value();
         let available_embedders =
             || embedding_configs.iter().map(|c| c.name.clone()).collect::<Vec<_>>();
@@ -224,8 +219,8 @@ impl VectorFilterInner<'_> {
             embedding_config.config.quantized(),
         );
 
-        let mut docids = match self {
-            VectorFilterInner::Fragment { embedder_token: embedder, fragment_token: fragment } => {
+        let docids = match self {
+            VectorFilterInner::Fragment(fragment) => {
                 let fragment_name = fragment.value();
                 let fragment_config = embedding_config
                     .fragments
@@ -245,7 +240,7 @@ impl VectorFilterInner<'_> {
 
                 arroy_wrapper.items_in_store(rtxn, fragment_config.id, |bitmap| bitmap.clone())?
             }
-            VectorFilterInner::DocumentTemplate { .. } => {
+            VectorFilterInner::DocumentTemplate => {
                 if !embedding_config.fragments.as_slice().is_empty() {
                     return Ok(RoaringBitmap::new());
                 }
@@ -255,21 +250,22 @@ impl VectorFilterInner<'_> {
                 arroy_wrapper.aggregate_stats(rtxn, &mut stats)?;
                 stats.documents - user_provided_docsids.clone()
             }
-            VectorFilterInner::UserProvided { .. } => {
+            VectorFilterInner::UserProvided => {
                 let user_provided_docsids = embedder_info.embedding_status.user_provided_docids();
                 user_provided_docsids.clone()
             }
-            VectorFilterInner::FullEmbedder { .. } => {
+            VectorFilterInner::Regenerate => {
+                let mut stats = ArroyStats::default();
+                arroy_wrapper.aggregate_stats(rtxn, &mut stats)?;
+                let skip_regenerate = embedder_info.embedding_status.skip_regenerate_docids();
+                stats.documents - skip_regenerate
+            }
+            VectorFilterInner::None => {
                 let mut stats = ArroyStats::default();
                 arroy_wrapper.aggregate_stats(rtxn, &mut stats)?;
                 stats.documents
             }
         };
-
-        if regenerate {
-            let skip_regenerate = embedder_info.embedding_status.skip_regenerate_docids();
-            docids -= skip_regenerate;
-        }
 
         Ok(docids)
     }
