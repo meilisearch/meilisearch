@@ -174,6 +174,15 @@ impl<'a> Index<'a, Owned> {
         self._update_settings(settings).await
     }
 
+    pub async fn update_settings_chat(
+        &self,
+        settings: Value,
+    ) -> (Value, StatusCode) {
+        let url =
+            format!("/indexes/{}/settings/chat", urlencode(self.uid.as_ref()));
+        self.service.patch_encoded(url, settings, self.encoder).await
+    }
+
     pub async fn update_settings_displayed_attributes(
         &self,
         settings: Value,
