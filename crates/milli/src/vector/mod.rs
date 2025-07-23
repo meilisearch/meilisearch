@@ -466,7 +466,7 @@ impl HannoyWrapper {
                 if reader.item_ids().is_disjoint(filter) {
                     continue;
                 }
-                unimplemented!("Hannoy doesn't support filtering");
+                tracing::error!("Hannoy doesn't support filtering");
                 // searcher.candidates(filter);
             }
 
@@ -509,7 +509,7 @@ impl HannoyWrapper {
                 if reader.item_ids().is_disjoint(filter) {
                     continue;
                 }
-                unimplemented!("Hannoy doesn't support filteting");
+                tracing::error!("Hannoy doesn't support filtering");
                 // searcher.candidates(filter);
             }
 
