@@ -23,15 +23,14 @@ impl CohereService {
         query: Option<&str>,
     ) -> Result<SearchResult, ResponseError> {
         // Extract user context from personalization
-        let Some(personalize) = personalize else { return Ok(search_result) };
-        let user_context = personalize.user_context.as_deref();
+        let Some(user_context) = personalize.and_then(|p| p.user_context.as_deref()) else {
+            return Ok(search_result);
+        };
 
         // Build the prompt by merging query and user context
-        let prompt = match (query, user_context) {
-            (Some(q), Some(uc)) => format!("User Context: {}\nQuery: {}", uc, q),
-            (Some(q), None) => q.to_string(),
-            (None, Some(uc)) => format!("User Context: {}", uc),
-            (None, None) => return Ok(search_result),
+        let prompt = match query {
+            Some(q) => format!("User Context: {user_context}\nQuery: {q}"),
+            None => format!("User Context: {user_context}"),
         };
 
         // Extract documents for reranking
@@ -65,7 +64,6 @@ impl CohereService {
                 // Create a mapping from original index to new rank
                 let reranked_indices: Vec<usize> =
                     rerank_response.iter().map(|result| result.index as usize).collect();
-                debug!("Reranked indices: {:?}", reranked_indices);
 
                 // Reorder the hits based on Cohere's reranking
                 let mut reranked_hits = Vec::new();
