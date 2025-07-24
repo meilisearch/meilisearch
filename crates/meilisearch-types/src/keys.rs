@@ -11,6 +11,7 @@ use time::macros::{format_description, time};
 use time::{Date, OffsetDateTime, PrimitiveDateTime};
 use utoipa::ToSchema;
 use uuid::Uuid;
+use ipnet;
 
 use crate::deserr::{immutable_field_error, DeserrError, DeserrJsonError};
 use crate::error::deserr_codes::*;
@@ -60,11 +61,19 @@ pub struct CreateApiKey {
     /// Represent the expiration date and time as RFC 3339 format. `null` equals to no expiration time.
     #[deserr(error = DeserrJsonError<InvalidApiKeyExpiresAt>, try_from(Option<String>) = parse_expiration_date -> ParseOffsetDateTimeError, missing_field_error = DeserrJsonError::missing_api_key_expires_at)]
     pub expires_at: Option<OffsetDateTime>,
+    /// Optional list of allowed referrers. Wildcards can be used.
+    #[serde(default)]
+    #[deserr(default, error = DeserrJsonError<InvalidApiKey>)]
+    pub allowed_referrers: Option<Vec<String>>,
+    /// Optional list of allowed IP addresses or subnets.
+    #[serde(default)]
+    #[deserr(default, error = DeserrJsonError<InvalidApiKey>)]
+    pub allowed_ips: Option<Vec<String>>,
 }
 
 impl CreateApiKey {
     pub fn to_key(self) -> Key {
-        let CreateApiKey { description, name, uid, actions, indexes, expires_at } = self;
+        let CreateApiKey { description, name, uid, actions, indexes, expires_at, allowed_referrers, allowed_ips } = self;
         let now = OffsetDateTime::now_utc();
         Key {
             description,
@@ -73,6 +82,8 @@ impl CreateApiKey {
             actions,
             indexes,
             expires_at,
+            allowed_referrers,
+            allowed_ips,
             created_at: now,
             updated_at: now,
         }
@@ -122,6 +133,10 @@ pub struct Key {
     pub indexes: Vec<IndexUidPattern>,
     #[serde(with = "time::serde::rfc3339::option")]
     pub expires_at: Option<OffsetDateTime>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub allowed_referrers: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub allowed_ips: Option<Vec<String>>,
     #[serde(with = "time::serde::rfc3339")]
     pub created_at: OffsetDateTime,
     #[serde(with = "time::serde::rfc3339")]
@@ -139,6 +154,8 @@ impl Key {
             actions: vec![Action::All],
             indexes: vec![IndexUidPattern::all()],
             expires_at: None,
+            allowed_referrers: None,
+            allowed_ips: None,
             created_at: now,
             updated_at: now,
         }
@@ -154,6 +171,8 @@ impl Key {
             actions: vec![Action::Search],
             indexes: vec![IndexUidPattern::all()],
             expires_at: None,
+            allowed_referrers: None,
+            allowed_ips: None,
             created_at: now,
             updated_at: now,
         }
@@ -169,10 +188,69 @@ impl Key {
             actions: vec![Action::ChatCompletions, Action::Search],
             indexes: vec![IndexUidPattern::all()],
             expires_at: None,
+            allowed_referrers: None,
+            allowed_ips: None,
             created_at: now,
             updated_at: now,
         }
     }
+
+    /// Check if the request is allowed by this key given an IP and a referrer.
+    pub fn is_request_allowed(&self, ip: Option<std::net::IpAddr>, referrer: Option<&str>) -> bool {
+        if let Some(list) = &self.allowed_ips {
+            let ip = match ip {
+                Some(i) => i,
+                None => return false,
+            };
+            if !list.iter().any(|net| ip_in(net, ip)) {
+                return false;
+            }
+        }
+
+        if let Some(list) = &self.allowed_referrers {
+            let referer = match referrer {
+                Some(r) => r,
+                None => return false,
+            };
+            if !list.iter().any(|p| wildcard_match(p, referer)) {
+                return false;
+            }
+        }
+
+        true
+    }
+}
+
+fn wildcard_match(pattern: &str, value: &str) -> bool {
+    if pattern == "*" {
+        return true;
+    }
+    let mut rest = value;
+    let mut first = true;
+    for part in pattern.split('*') {
+        if part.is_empty() {
+            continue;
+        }
+        if let Some(pos) = rest.find(part) {
+            if first && !pattern.starts_with('*') && pos != 0 {
+                return false;
+            }
+            rest = &rest[pos + part.len()..];
+            first = false;
+        } else {
+            return false;
+        }
+    }
+    if !pattern.ends_with('*') && !rest.is_empty() {
+        return false;
+    }
+    true
+}
+
+fn ip_in(pattern: &str, ip: std::net::IpAddr) -> bool {
+    pattern.parse::<ipnet::IpNet>()
+        .map(|net| net.contains(&ip))
+        .unwrap_or(false)
 }
 
 fn parse_expiration_date(

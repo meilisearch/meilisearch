@@ -30,6 +30,8 @@ impl<P, D> GuardedData<P, D> {
         auth: Data<AuthController>,
         token: String,
         index: Option<String>,
+        ip: Option<std::net::IpAddr>,
+        referrer: Option<String>,
         data: Option<D>,
     ) -> Result<Self, ResponseError>
     where
@@ -37,7 +39,7 @@ impl<P, D> GuardedData<P, D> {
     {
         let missing_master_key = auth.get_master_key().is_none();
 
-        match Self::authenticate(auth, token, index).await? {
+        match Self::authenticate(auth, token, index, ip, referrer.as_deref()).await? {
             Ok(filters) => match data {
                 Some(data) => Ok(Self { data, filters, _marker: PhantomData }),
                 None => Err(AuthenticationError::IrretrievableState.into()),
@@ -47,13 +49,18 @@ impl<P, D> GuardedData<P, D> {
         }
     }
 
-    async fn auth_token(auth: Data<AuthController>, data: Option<D>) -> Result<Self, ResponseError>
+    async fn auth_token(
+        auth: Data<AuthController>,
+        ip: Option<std::net::IpAddr>,
+        referrer: Option<String>,
+        data: Option<D>,
+    ) -> Result<Self, ResponseError>
     where
         P: Policy + 'static,
     {
         let missing_master_key = auth.get_master_key().is_none();
 
-        match Self::authenticate(auth, String::new(), None).await? {
+        match Self::authenticate(auth, String::new(), None, ip, referrer.as_deref()).await? {
             Ok(filters) => match data {
                 Some(data) => Ok(Self { data, filters, _marker: PhantomData }),
                 None => Err(AuthenticationError::IrretrievableState.into()),
@@ -67,11 +74,13 @@ impl<P, D> GuardedData<P, D> {
         auth: Data<AuthController>,
         token: String,
         index: Option<String>,
+        ip: Option<std::net::IpAddr>,
+        referrer: Option<&str>,
     ) -> Result<Result<AuthFilter, AuthError>, ResponseError>
     where
         P: Policy + 'static,
     {
-        tokio::task::spawn_blocking(move || P::authenticate(auth, token.as_ref(), index.as_deref()))
+        tokio::task::spawn_blocking(move || P::authenticate(auth, token.as_ref(), index.as_deref(), ip, referrer))
             .await
             .map_err(|e| ResponseError::from_msg(e.to_string(), Code::Internal))
     }
@@ -103,10 +112,25 @@ impl<P: Policy + 'static, D: 'static + Clone> FromRequest for GuardedData<P, D> 
                         auth,
                         token.to_string(),
                         index.map(String::from),
+                        req.peer_addr().map(|a| a.ip()),
+                        req.headers()
+                            .get("referer")
+                            .or_else(|| req.headers().get("origin"))
+                            .and_then(|v| v.to_str().ok())
+                            .map(String::from),
                         req.app_data::<D>().cloned(),
                     ))
                 }
-                Ok(None) => Box::pin(Self::auth_token(auth, req.app_data::<D>().cloned())),
+                Ok(None) => Box::pin(Self::auth_token(
+                    auth,
+                    req.peer_addr().map(|a| a.ip()),
+                    req.headers()
+                        .get("referer")
+                        .or_else(|| req.headers().get("origin"))
+                        .and_then(|v| v.to_str().ok())
+                        .map(String::from),
+                    req.app_data::<D>().cloned(),
+                )),
                 Err(e) => Box::pin(err(e.into())),
             },
             None => Box::pin(err(AuthenticationError::IrretrievableState.into())),
@@ -138,6 +162,8 @@ pub trait Policy {
         auth: Data<AuthController>,
         token: &str,
         index: Option<&str>,
+        ip: Option<std::net::IpAddr>,
+        referrer: Option<&str>,
     ) -> Result<AuthFilter, policies::AuthError>;
 }
 
@@ -241,6 +267,8 @@ pub mod policies {
             auth: Data<AuthController>,
             token: &str,
             index: Option<&str>,
+            ip: Option<std::net::IpAddr>,
+            referrer: Option<&str>,
         ) -> Result<AuthFilter, AuthError> {
             // authenticate if token is the master key.
             // Without a master key, all routes are accessible except the key-related routes.
@@ -265,6 +293,10 @@ pub mod policies {
 
             // check that the indexes are allowed
             let action = Action::from_repr(A).ok_or(AuthError::InternalInvalidAction(A))?;
+            let key = auth.get_key(key_uuid).map_err(|_e| AuthError::InvalidApiKey)?;
+            if !key.is_request_allowed(ip, referrer) {
+                return Err(AuthError::InvalidApiKey);
+            }
             let auth_filter = auth
                 .get_key_filters(key_uuid, search_rules)
                 .map_err(|_e| AuthError::InvalidApiKey)?;

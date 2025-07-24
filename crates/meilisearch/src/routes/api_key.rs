@@ -394,6 +394,12 @@ pub(super) struct KeyView {
     actions: Vec<Action>,
     /// The indexes accessible with this key.
     indexes: Vec<String>,
+    /// Restrict access to these referrers if any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    allowed_referrers: Option<Vec<String>>,
+    /// Restrict access to these IPs if any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    allowed_ips: Option<Vec<String>>,
     /// The expiration date of the key. Once this timestamp is exceeded the key is not deleted but cannot be used anymore.
     #[serde(serialize_with = "time::serde::rfc3339::option::serialize")]
     expires_at: Option<OffsetDateTime>,
@@ -418,6 +424,8 @@ impl KeyView {
             uid: key.uid,
             actions: key.actions,
             indexes: key.indexes.into_iter().map(|x| x.to_string()).collect(),
+            allowed_referrers: key.allowed_referrers,
+            allowed_ips: key.allowed_ips,
             expires_at: key.expires_at,
             created_at: key.created_at,
             updated_at: key.updated_at,
