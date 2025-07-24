@@ -135,7 +135,8 @@ fn parse_vectors(input: Span) -> IResult<(Token, Option<Token>, VectorFilter<'_>
     // From this point, we are certain this is a vector filter, so our errors must be final.
     // We could use nom's `cut`` but it's better to be explicit about the errors
 
-    let (input, embedder_name) = parse_vector_value(input).map_cut(ErrorKind::VectorFilterInvalidEmbedder)?;
+    let (input, embedder_name) =
+        parse_vector_value(input).map_cut(ErrorKind::VectorFilterInvalidEmbedder)?;
 
     let (input, filter) = alt((
         map(
