@@ -461,13 +461,12 @@ impl HannoyWrapper {
 
         for reader in self.readers(rtxn, db) {
             let reader = reader?;
-            let searcher = reader.nns(limit, limit * 2); // TODO find better ef
+            let mut searcher = reader.nns(limit, limit * 2); // TODO find better ef
             if let Some(filter) = filter {
                 if reader.item_ids().is_disjoint(filter) {
                     continue;
                 }
-                tracing::error!("Hannoy doesn't support filtering");
-                // searcher.candidates(filter);
+                searcher.candidates(filter);
             }
 
             if let Some(mut ret) = searcher.by_item(rtxn, item)? {
@@ -504,13 +503,12 @@ impl HannoyWrapper {
 
         for reader in self.readers(rtxn, db) {
             let reader = reader?;
-            let searcher = reader.nns(limit, limit * 2); // TODO find better ef
+            let mut searcher = reader.nns(limit, limit * 2); // TODO find better ef
             if let Some(filter) = filter {
                 if reader.item_ids().is_disjoint(filter) {
                     continue;
                 }
-                tracing::error!("Hannoy doesn't support filtering");
-                // searcher.candidates(filter);
+                searcher.candidates(filter);
             }
 
             results.append(&mut searcher.by_vector(rtxn, vector)?);

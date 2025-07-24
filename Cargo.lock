@@ -2581,7 +2581,7 @@ dependencies = [
 [[package]]
 name = "hannoy"
 version = "0.7.0"
-source = "git+https://github.com/kerollmops/hannoy?branch=expose-private-types#98c7adda0d96a9f98203797d24c26a4de06cab3e"
+source = "git+https://github.com/kerollmops/hannoy?branch=basic-and-ugly-filtering#c8c9d8bf58642df8cf7e994d5cd8018b91c42369"
 dependencies = [
  "bytemuck",
  "byteorder",
@@ -3344,7 +3344,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "07033963ba89ebaf1584d767badaa2e8fcec21aedea6b8c0346d487d49c28667"
 dependencies = [
  "cfg-if",
- "windows-targets 0.52.6",
+ "windows-targets 0.48.5",
 ]
 
 [[package]]
@@ -6942,7 +6942,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]

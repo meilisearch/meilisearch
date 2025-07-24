@@ -87,7 +87,7 @@ rhai = { version = "1.22.2", features = [
     "no_time",
     "sync",
 ] }
-hannoy = { git = "https://github.com/kerollmops/hannoy", branch = "expose-private-types" }
+hannoy = { git = "https://github.com/kerollmops/hannoy", branch = "basic-and-ugly-filtering" }
 rand = "0.8.5"
 tracing = "0.1.41"
 ureq = { version = "2.12.1", features = ["json"] }
