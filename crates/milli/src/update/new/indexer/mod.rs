@@ -184,6 +184,10 @@ where
             facet_field_ids_delta,
         )?;
 
+        println!("Building geojson");
+        indexing_context.progress.update_progress(IndexingStep::BuildingGeoJson);
+        index.cellulite.build(wtxn, indexing_context.progress)?;
+
         indexing_context.progress.update_progress(IndexingStep::Finalizing);
 
         Ok(congestion) as Result<_>
@@ -312,6 +316,9 @@ where
             )
         })
         .unwrap()?;
+
+        indexing_context.progress.update_progress(IndexingStep::BuildingGeoJson);
+        index.cellulite.build(wtxn, indexing_context.progress)?;
 
         indexing_context.progress.update_progress(IndexingStep::Finalizing);
 

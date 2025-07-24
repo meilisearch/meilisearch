@@ -484,7 +484,9 @@ impl ErrorCode for milli::Error {
                         Code::InvalidFacetSearchFacetName
                     }
                     UserError::CriterionError(_) => Code::InvalidSettingsRankingRules,
-                    UserError::InvalidGeoField { .. } => Code::InvalidDocumentGeoField,
+                    UserError::InvalidGeoField { .. } | UserError::GeoJsonError(_) => {
+                        Code::InvalidDocumentGeoField
+                    }
                     UserError::InvalidVectorDimensions { .. }
                     | UserError::InvalidIndexingVectorDimensions { .. } => {
                         Code::InvalidVectorDimensions
@@ -507,6 +509,7 @@ impl ErrorCode for milli::Error {
                     | UserError::DocumentEditionCompilationError(_) => {
                         Code::EditDocumentsByFunctionError
                     }
+                    UserError::CelluliteError(_) => Code::Internal,
                 }
             }
         }
