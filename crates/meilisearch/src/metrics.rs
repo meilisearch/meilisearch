@@ -114,4 +114,9 @@ lazy_static! {
             "Meilisearch Task Queue Size Until Stop Registering",
         ))
         .expect("Can't create a metric");
+    pub static ref MEILISEARCH_PERSONALIZED_SEARCH_REQUESTS: IntGauge = register_int_gauge!(opts!(
+        "meilisearch_personalized_search_requests",
+        "Meilisearch number of search requests with personalization"
+    ))
+    .expect("Can't create a metric");
 }
