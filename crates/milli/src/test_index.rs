@@ -19,7 +19,9 @@ use crate::update::{
 };
 use crate::vector::settings::{EmbedderSource, EmbeddingSettings};
 use crate::vector::RuntimeEmbedders;
-use crate::{db_snap, obkv_to_json, Filter, FilterableAttributesRule, Index, Search, SearchResult};
+use crate::{
+    db_snap, obkv_to_json, Filter, FilterableAttributesRule, Index, Search, SearchResult, UserError,
+};
 
 pub(crate) struct TempIndex {
     pub inner: Index,
@@ -1341,8 +1343,8 @@ fn vectors_are_never_indexed_as_searchable_or_filterable() {
     let results = search
         .filter(Filter::from_str("_vectors.doggo = 6789").unwrap().unwrap())
         .execute()
-        .unwrap();
-    assert!(results.candidates.is_empty());
+        .unwrap_err();
+    assert!(matches!(results, Error::UserError(UserError::InvalidFilter(_))));
 
     index
         .update_settings(|settings| {
@@ -1373,6 +1375,6 @@ fn vectors_are_never_indexed_as_searchable_or_filterable() {
     let results = search
         .filter(Filter::from_str("_vectors.doggo = 6789").unwrap().unwrap())
         .execute()
-        .unwrap();
-    assert!(results.candidates.is_empty());
+        .unwrap_err();
+    assert!(matches!(results, Error::UserError(UserError::InvalidFilter(_))));
 }

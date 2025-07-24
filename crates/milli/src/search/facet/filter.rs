@@ -11,7 +11,7 @@ use roaring::{MultiOps, RoaringBitmap};
 use serde_json::Value;
 
 use super::facet_range_search;
-use crate::constants::RESERVED_GEO_FIELD_NAME;
+use crate::constants::{RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME};
 use crate::error::{Error, UserError};
 use crate::filterable_attributes_rules::{filtered_matching_patterns, matching_features};
 use crate::heed_codec::facet::{
@@ -228,6 +228,10 @@ impl<'a> Filter<'a> {
     pub fn use_contains_operator(&self) -> Option<&Token> {
         self.condition.use_contains_operator()
     }
+
+    pub fn use_vector_filter(&self) -> Option<&Token> {
+        self.condition.use_vector_filter()
+    }
 }
 
 impl<'a> Filter<'a> {
@@ -235,10 +239,12 @@ impl<'a> Filter<'a> {
         // to avoid doing this for each recursive call we're going to do it ONCE ahead of time
         let fields_ids_map = index.fields_ids_map(rtxn)?;
         let filterable_attributes_rules = index.filterable_attributes_rules(rtxn)?;
+
         for fid in self.condition.fids(MAX_FILTER_DEPTH) {
             let attribute = fid.value();
             if matching_features(attribute, &filterable_attributes_rules)
                 .is_some_and(|(_, features)| features.is_filterable())
+                || attribute == RESERVED_VECTORS_FIELD_NAME
             {
                 continue;
             }
@@ -542,7 +548,8 @@ impl<'a> Filter<'a> {
                     .union()
             }
             FilterCondition::Condition { fid, op } => {
-                let Some(field_id) = field_ids_map.id(fid.value()) else {
+                let value = fid.value();
+                let Some(field_id) = field_ids_map.id(value) else {
                     return Ok(RoaringBitmap::new());
                 };
                 let Some((rule_index, features)) =
@@ -598,6 +605,9 @@ impl<'a> Filter<'a> {
                 } else {
                     Ok(RoaringBitmap::new())
                 }
+            }
+            FilterCondition::VectorExists { fid: _, embedder, filter } => {
+                super::filter_vector::evaluate(rtxn, index, universe, embedder.clone(), filter)
             }
             FilterCondition::GeoLowerThan { point, radius } => {
                 if index.is_geo_filtering_enabled(rtxn)? {

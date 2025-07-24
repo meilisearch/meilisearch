@@ -111,7 +111,7 @@ impl FilterableAttributesFeatures {
         self.filter.is_filterable_null()
     }
 
-    /// Check if `IS EXISTS` is allowed
+    /// Check if `EXISTS` is allowed
     pub fn is_filterable_exists(&self) -> bool {
         self.filter.is_filterable_exists()
     }
