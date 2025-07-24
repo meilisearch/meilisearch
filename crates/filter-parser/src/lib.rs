@@ -60,7 +60,7 @@ use nom::combinator::{cut, eof, map, opt};
 use nom::multi::{many0, separated_list1};
 use nom::number::complete::recognize_float;
 use nom::sequence::{delimited, preceded, terminated, tuple};
-use nom::{Finish, Slice};
+use nom::Finish;
 use nom_locate::LocatedSpan;
 pub(crate) use value::parse_value;
 use value::word_exact;
