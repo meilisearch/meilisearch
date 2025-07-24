@@ -594,15 +594,18 @@ impl std::fmt::Display for FilterCondition<'_> {
             FilterCondition::VectorExists { fid: _, embedder, filter: inner } => {
                 write!(f, "_vectors")?;
                 if let Some(embedder) = embedder {
-                    write!(f, ".{embedder:?}")?;
+                    write!(f, ".{:?}", embedder.value())?;
                 }
                 match inner {
-                    VectorFilter::Fragment(fragment) => write!(f, ".fragments.{fragment:?}"),
-                    VectorFilter::DocumentTemplate => write!(f, ".documentTemplate"),
-                    VectorFilter::UserProvided => write!(f, ".userProvided"),
-                    VectorFilter::Regenerate => write!(f, ".regenerate"),
-                    VectorFilter::None => Ok(()),
+                    VectorFilter::Fragment(fragment) => {
+                        write!(f, ".fragments.{:?}", fragment.value())?
+                    }
+                    VectorFilter::DocumentTemplate => write!(f, ".documentTemplate")?,
+                    VectorFilter::UserProvided => write!(f, ".userProvided")?,
+                    VectorFilter::Regenerate => write!(f, ".regenerate")?,
+                    VectorFilter::None => (),
                 }
+                write!(f, " EXISTS")
             }
             FilterCondition::GeoLowerThan { point, radius } => {
                 write!(f, "_geoRadius({}, {}, {})", point[0], point[1], radius)
@@ -677,6 +680,9 @@ pub mod tests {
         insta::assert_snapshot!(p(r"title = 'foo\\\\\\\\'"), @r#"{title} = {foo\\\\}"#);
         // but it also works with other sequences
         insta::assert_snapshot!(p(r#"title = 'foo\x20\n\t\"\'"'"#), @"{title} = {foo \n\t\"\'\"}");
+
+        insta::assert_snapshot!(p(r#"_vectors." valid.name  ".fragments."also.. valid! " EXISTS"#), @r#"_vectors." valid.name  ".fragments."also.. valid! " EXISTS"#);
+        insta::assert_snapshot!(p("_vectors.\"\n\t\r\\\"\" EXISTS"), @r#"_vectors."\n\t\r\"" EXISTS"#);
     }
 
     #[test]
@@ -738,6 +744,18 @@ pub mod tests {
         insta::assert_snapshot!(p("subscribers IS NOT EMPTY"), @"NOT ({subscribers} IS EMPTY)");
         insta::assert_snapshot!(p("NOT subscribers IS NOT EMPTY"), @"{subscribers} IS EMPTY");
         insta::assert_snapshot!(p("subscribers  IS   NOT   EMPTY"), @"NOT ({subscribers} IS EMPTY)");
+
+        // Test _vectors EXISTS + _vectors NOT EXITS
+        insta::assert_snapshot!(p("_vectors EXISTS"), @"_vectors EXISTS");
+        insta::assert_snapshot!(p("_vectors.embedderName EXISTS"), @r#"_vectors."embedderName" EXISTS"#);
+        insta::assert_snapshot!(p("_vectors.embedderName.documentTemplate EXISTS"), @r#"_vectors."embedderName".documentTemplate EXISTS"#);
+        insta::assert_snapshot!(p("_vectors.embedderName.regenerate EXISTS"), @r#"_vectors."embedderName".regenerate EXISTS"#);
+        insta::assert_snapshot!(p("_vectors.embedderName.regenerate EXISTS"), @r#"_vectors."embedderName".regenerate EXISTS"#);
+        insta::assert_snapshot!(p("_vectors.embedderName.fragments.fragmentName EXISTS"), @r#"_vectors."embedderName".fragments."fragmentName" EXISTS"#);
+        insta::assert_snapshot!(p("  _vectors.embedderName.fragments.fragmentName   EXISTS"), @r#"_vectors."embedderName".fragments."fragmentName" EXISTS"#);
+        insta::assert_snapshot!(p("NOT _vectors EXISTS"), @"NOT (_vectors EXISTS)");
+        insta::assert_snapshot!(p(" NOT  _vectors   EXISTS"), @"NOT (_vectors EXISTS)");
+        insta::assert_snapshot!(p("  _vectors  NOT  EXISTS"), @"NOT (_vectors EXISTS)");
 
         // Test EXISTS + NOT EXITS
         insta::assert_snapshot!(p("subscribers EXISTS"), @"{subscribers} EXISTS");
@@ -992,6 +1010,59 @@ pub mod tests {
         797:802 NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT x = 1
         "###
         );
+
+        insta::assert_snapshot!(p(r#"_vectors _vectors EXISTS"#), @r"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `_vectors _vectors EXISTS`.
+        1:25 _vectors _vectors EXISTS
+        ");
+        insta::assert_snapshot!(p(r#"_vectors. embedderName EXISTS"#), @r"
+        The vector filter's embedder is invalid.
+        10:30 _vectors. embedderName EXISTS
+        ");
+        insta::assert_snapshot!(p(r#"_vectors .embedderName EXISTS"#), @r"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `_vectors .embedderName EXISTS`.
+        1:30 _vectors .embedderName EXISTS
+        ");
+        insta::assert_snapshot!(p(r#"_vectors.embedderName. EXISTS"#), @r"
+        The vector filter has leftover tokens.
+        22:30 _vectors.embedderName. EXISTS
+        ");
+        insta::assert_snapshot!(p(r#"_vectors."embedderName EXISTS"#), @r#"
+        The vector filter's embedder is invalid.
+        30:30 _vectors."embedderName EXISTS
+        "#);
+        insta::assert_snapshot!(p(r#"_vectors."embedderNam"e EXISTS"#), @r#"
+        The vector filter has leftover tokens.
+        23:31 _vectors."embedderNam"e EXISTS
+        "#);
+        insta::assert_snapshot!(p(r#"_vectors.embedderName.documentTemplate. EXISTS"#), @r"
+        The vector filter has leftover tokens.
+        39:47 _vectors.embedderName.documentTemplate. EXISTS
+        ");
+        insta::assert_snapshot!(p(r#"_vectors.embedderName.fragments EXISTS"#), @r"
+        The vector filter is missing a fragment name.
+        32:39 _vectors.embedderName.fragments EXISTS
+        ");
+        insta::assert_snapshot!(p(r#"_vectors.embedderName.fragments. EXISTS"#), @r"
+        The vector filter's fragment is invalid.
+        33:40 _vectors.embedderName.fragments. EXISTS
+        ");
+        insta::assert_snapshot!(p(r#"_vectors.embedderName.fragments.test test EXISTS"#), @r"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `_vectors.embedderName.fragments.test test EXISTS`.
+        1:49 _vectors.embedderName.fragments.test test EXISTS
+        ");
+        insta::assert_snapshot!(p(r#"_vectors.embedderName.fragments. test EXISTS"#), @r"
+        The vector filter's fragment is invalid.
+        33:45 _vectors.embedderName.fragments. test EXISTS
+        ");
+        insta::assert_snapshot!(p(r#"_vectors.embedderName .fragments. test EXISTS"#), @r"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `_vectors.embedderName .fragments. test EXISTS`.
+        1:46 _vectors.embedderName .fragments. test EXISTS
+        ");
+        insta::assert_snapshot!(p(r#"_vectors.embedderName .fragments.test EXISTS"#), @r"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `_vectors.embedderName .fragments.test EXISTS`.
+        1:45 _vectors.embedderName .fragments.test EXISTS
+        ");
 
         insta::assert_snapshot!(p(r#"NOT OR EXISTS AND EXISTS NOT EXISTS"#), @r###"
         Was expecting a value but instead got `OR`, which is a reserved keyword. To use `OR` as a field name or a value, surround it by quotes.
