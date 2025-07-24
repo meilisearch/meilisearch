@@ -644,7 +644,8 @@ pub(crate) fn write_typed_chunk_into_index(
 
                     let geojson =
                         geojson::GeoJson::from_reader(value).map_err(UserError::SerdeJson)?;
-                    index.cellulite
+                    index
+                        .cellulite
                         .add(wtxn, docid, &geojson)
                         .map_err(InternalError::CelluliteError)?;
                 }

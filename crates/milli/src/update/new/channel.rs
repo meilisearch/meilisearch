@@ -13,7 +13,6 @@ use bbqueue::framed::{FrameGrantR, FrameProducer};
 use bbqueue::BBBuffer;
 use bytemuck::{checked, CheckedBitPattern, NoUninit};
 use flume::{RecvTimeoutError, SendError};
-use geojson::GeoJson;
 use heed::types::Bytes;
 use heed::{BytesDecode, MdbError};
 use memmap2::{Mmap, MmapMut};
@@ -144,7 +143,7 @@ pub enum ReceiverAction {
     //       The geojson for france made of 63k points takes 594KiB which means with a capacity of 1000,
     //       the absolute maximum amounts of memory we could consume is about 580MiB which is acceptable for this POC.
     // If the geojson is None, it means that the document is being deleted.
-    GeoJson(DocumentId, Option<GeoJson>),
+    GeoJson(DocumentId, Option<Vec<u8>>),
 }
 
 /// An entry that cannot fit in the BBQueue buffers has been
@@ -1154,7 +1153,7 @@ impl GeoSender<'_, '_> {
 pub struct GeoJsonSender<'a, 'b>(&'a ExtractorBbqueueSender<'b>);
 
 impl GeoJsonSender<'_, '_> {
-    pub fn send_geojson(&self, docid: DocumentId, value: GeoJson) -> StdResult<(), SendError<()>> {
+    pub fn send_geojson(&self, docid: DocumentId, value: Vec<u8>) -> StdResult<(), SendError<()>> {
         self.0.sender.send(ReceiverAction::GeoJson(docid, Some(value))).map_err(|_| SendError(()))
     }
     pub fn delete_geojson(&self, docid: DocumentId) -> StdResult<(), SendError<()>> {

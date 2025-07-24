@@ -80,15 +80,8 @@ where
         }
 
         let mut frozen = data.into_inner().freeze()?;
-        for result in frozen.iter_and_clear_removed()? {
-            let (docid, _) = result.map_err(InternalError::SerdeJson)?;
-            geojson_sender.delete_geojson(docid).unwrap();
-        }
-
-        for result in frozen.iter_and_clear_inserted()? {
-            let (docid, geojson) = result.map_err(InternalError::SerdeJson)?;
-            geojson_sender.send_geojson(docid, geojson).unwrap();
-        }
+        frozen.iter_and_clear_removed(geojson_sender)?;
+        frozen.iter_and_clear_inserted(geojson_sender)?;
     }
 
     Ok(())

@@ -120,6 +120,7 @@ twox-hash = { version = "2.1.1", default-features = false, features = [
     "xxhash64",
 ] }
 geo-types = "0.7.16"
+zerometry = "0.1.0"
 
 [dev-dependencies]
 mimalloc = { version = "0.1.47", default-features = false }
