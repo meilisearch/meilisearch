@@ -172,10 +172,8 @@ impl<'extractor> Extractor<'extractor> for GeoJsonExtractor {
                     let docid = deletion.docid();
                     let current = deletion.current(rtxn, index, db_fields_ids_map)?;
 
-                    if let Some(geojson) = current.geojson_field()? {
-                        let geojson = GeoJson::from_str(geojson.get()).map_err(UserError::from)?;
-                        let geometry = Geometry::try_from(geojson).map_err(UserError::from)?;
-                        let buf = ZerometryCodec::bytes_encode(&geometry).unwrap();
+                    if let Some(_geojson) = current.geojson_field()? {
+                        let buf = Vec::new();
 
                         match &mut data_ref.spilled_removed {
                             Some(file) => {
@@ -205,11 +203,8 @@ impl<'extractor> Extractor<'extractor> for GeoJsonExtractor {
                         // If the current and new geo points are different it means that
                         // we need to replace the current by the new point and therefore
                         // delete the current point from cellulite.
-                        if let Some(geojson) = current_geo {
-                            let geojson =
-                                GeoJson::from_str(geojson.get()).map_err(UserError::from)?;
-                            let geometry = Geometry::try_from(geojson).map_err(UserError::from)?;
-                            let buf = ZerometryCodec::bytes_encode(&geometry).unwrap();
+                        if let Some(_geojson) = current_geo {
+                            let buf = Vec::new();
 
                             match &mut data_ref.spilled_removed {
                                 Some(file) => {
