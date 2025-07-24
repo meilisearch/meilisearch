@@ -539,7 +539,6 @@ where
             .map_err(InternalError::from)??;
         }
 
-        tracing::warn!("Building cellulite");
         self.index.cellulite.build(self.wtxn, &Progress::default())?;
 
         self.execute_prefix_databases(
