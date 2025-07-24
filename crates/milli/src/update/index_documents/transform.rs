@@ -820,19 +820,20 @@ impl<'a, 'i> Transform<'a, 'i> {
         let documents_count = documents_ids.len() as usize;
 
         // We initialize the sorter with the user indexing settings.
-        let mut original_sorter = if settings_diff.reindex_vectors() || settings_diff.reindex_geojson() {
-            Some(create_sorter(
-                grenad::SortAlgorithm::Stable,
-                KeepFirst,
-                self.indexer_settings.chunk_compression_type,
-                self.indexer_settings.chunk_compression_level,
-                self.indexer_settings.max_nb_chunks,
-                self.indexer_settings.max_memory.map(|mem| mem / 2),
-                true,
-            ))
-        } else {
-            None
-        };
+        let mut original_sorter =
+            if settings_diff.reindex_vectors() || settings_diff.reindex_geojson() {
+                Some(create_sorter(
+                    grenad::SortAlgorithm::Stable,
+                    KeepFirst,
+                    self.indexer_settings.chunk_compression_type,
+                    self.indexer_settings.chunk_compression_level,
+                    self.indexer_settings.max_nb_chunks,
+                    self.indexer_settings.max_memory.map(|mem| mem / 2),
+                    true,
+                ))
+            } else {
+                None
+            };
 
         let readers: BTreeMap<&str, (ArroyWrapper, &RoaringBitmap)> = settings_diff
             .embedding_config_updates

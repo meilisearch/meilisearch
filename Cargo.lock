@@ -1065,8 +1065,6 @@ dependencies = [
 [[package]]
 name = "cellulite"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "377e81073db1dd0b0f0f297da35717fd799a77117668f2a6c48a3cabe0ef717e"
 dependencies = [
  "geo",
  "geo-types",
@@ -4214,6 +4212,7 @@ dependencies = [
  "url",
  "utoipa",
  "uuid",
+ "zerometry",
 ]
 
 [[package]]

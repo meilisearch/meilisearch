@@ -794,7 +794,8 @@ impl<'a> Filter<'a> {
                         ),
                         Vec::new(),
                     );
-                    let result = index.cellulite
+                    let result = index
+                        .cellulite
                         .in_shape(rtxn, &polygon.into(), &mut |_| ())
                         .map_err(InternalError::CelluliteError)?;
                     // TODO: Remove once we update roaring

@@ -6,7 +6,9 @@ use heed::RoTxn;
 
 use super::FieldsIdsMap;
 use crate::attribute_patterns::{match_field_legacy, PatternMatch};
-use crate::constants::{RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME};
+use crate::constants::{
+    RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME,
+};
 use crate::{
     is_faceted_by, FieldId, FilterableAttributesFeatures, FilterableAttributesRule, Index,
     LocalizedAttributesRule, Result, Weight,

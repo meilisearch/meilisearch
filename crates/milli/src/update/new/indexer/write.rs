@@ -72,18 +72,17 @@ pub fn write_to_db(
                 let embedding = large_vector.read_embedding(*dimensions);
                 writer.add_item_in_store(wtxn, docid, extractor_id, embedding)?;
             }
-            ReceiverAction::GeoJson(docid, geojson) => {
-                match geojson {
-                    Some(geojson) => {
-                        println!("Adding geojson {docid}");
-                        index.cellulite.add(wtxn, docid, &geojson).map_err(InternalError::CelluliteError)?;
-                    }
-                    None => {
-                        println!("Deleting geojson {docid}");
-                        index.cellulite.delete(wtxn, docid).map_err(InternalError::CelluliteError)?;
-                    }
+            ReceiverAction::GeoJson(docid, geojson) => match geojson {
+                Some(geojson) => {
+                    index
+                        .cellulite
+                        .add_raw_zerometry(wtxn, docid, &geojson)
+                        .map_err(InternalError::CelluliteError)?;
                 }
-            }
+                None => {
+                    index.cellulite.delete(wtxn, docid).map_err(InternalError::CelluliteError)?;
+                }
+            },
         }
 
         // Every time the is a message in the channel we search
