@@ -295,6 +295,7 @@ impl<'a> Search<'a> {
             documents_ids,
             degraded,
             used_negative_operator,
+            query_vector: None,
         })
     }
 }
@@ -353,6 +354,7 @@ pub struct SearchResult {
     pub document_scores: Vec<Vec<ScoreDetails>>,
     pub degraded: bool,
     pub used_negative_operator: bool,
+    pub query_vector: Option<Embedding>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -7,7 +7,7 @@ use roaring::RoaringBitmap;
 use crate::score_details::{ScoreDetails, ScoreValue, ScoringStrategy};
 use crate::search::new::{distinct_fid, distinct_single_docid};
 use crate::search::SemanticSearch;
-use crate::vector::SearchQuery;
+use crate::vector::{Embedding, SearchQuery};
 use crate::{Index, MatchingWords, Result, Search, SearchResult};
 
 struct ScoreWithRatioResult {
@@ -16,6 +16,7 @@ struct ScoreWithRatioResult {
     document_scores: Vec<(u32, ScoreWithRatio)>,
     degraded: bool,
     used_negative_operator: bool,
+    query_vector: Option<Embedding>,
 }
 
 type ScoreWithRatio = (Vec<ScoreDetails>, f32);
@@ -85,6 +86,7 @@ impl ScoreWithRatioResult {
             document_scores,
             degraded: results.degraded,
             used_negative_operator: results.used_negative_operator,
+            query_vector: results.query_vector,
         }
     }
 
@@ -186,6 +188,7 @@ impl ScoreWithRatioResult {
                 degraded: vector_results.degraded | keyword_results.degraded,
                 used_negative_operator: vector_results.used_negative_operator
                     | keyword_results.used_negative_operator,
+                query_vector: vector_results.query_vector,
             },
             semantic_hit_count,
         ))
@@ -264,7 +267,7 @@ impl Search<'_> {
         };
 
         search.semantic = Some(SemanticSearch {
-            vector: Some(vector_query),
+            vector: Some(vector_query.clone()),
             embedder_name,
             embedder,
             quantized,
@@ -277,7 +280,7 @@ impl Search<'_> {
         let keyword_results = ScoreWithRatioResult::new(keyword_results, 1.0 - semantic_ratio);
         let vector_results = ScoreWithRatioResult::new(vector_results, semantic_ratio);
 
-        let (merge_results, semantic_hit_count) = ScoreWithRatioResult::merge(
+        let (mut merge_results, semantic_hit_count) = ScoreWithRatioResult::merge(
             vector_results,
             keyword_results,
             self.offset,
@@ -286,6 +289,7 @@ impl Search<'_> {
             search.index,
             search.rtxn,
         )?;
+        merge_results.query_vector = Some(vector_query);
         assert!(merge_results.documents_ids.len() <= self.limit);
         Ok((merge_results, Some(semantic_hit_count)))
     }
@@ -321,6 +325,7 @@ fn return_keyword_results(
         mut document_scores,
         degraded,
         used_negative_operator,
+        query_vector,
     }: SearchResult,
 ) -> (SearchResult, Option<u32>) {
     let (documents_ids, document_scores) = if offset >= documents_ids.len() ||
@@ -347,6 +352,7 @@ fn return_keyword_results(
             document_scores,
             degraded,
             used_negative_operator,
+            query_vector,
         },
         Some(0),
     )

@@ -841,6 +841,8 @@ pub struct SearchHit {
 pub struct SearchResult {
     pub hits: Vec<SearchHit>,
     pub query: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub query_vector: Option<Vec<f32>>,
     pub processing_time_ms: u128,
     #[serde(flatten)]
     pub hits_info: HitsInfo,
@@ -865,6 +867,7 @@ impl fmt::Debug for SearchResult {
         let SearchResult {
             hits,
             query,
+            query_vector,
             processing_time_ms,
             hits_info,
             facet_distribution,
@@ -879,6 +882,9 @@ impl fmt::Debug for SearchResult {
         debug.field("processing_time_ms", &processing_time_ms);
         debug.field("hits", &format!("[{} hits returned]", hits.len()));
         debug.field("query", &query);
+        if query_vector.is_some() {
+            debug.field("query_vector", &"[...]");
+        }
         debug.field("hits_info", &hits_info);
         if *used_negative_operator {
             debug.field("used_negative_operator", used_negative_operator);
@@ -1131,6 +1137,7 @@ pub fn perform_search(
             document_scores,
             degraded,
             used_negative_operator,
+            query_vector,
         },
         semantic_hit_count,
     ) = search_from_kind(index_uid, search_kind, search)?;
@@ -1221,6 +1228,7 @@ pub fn perform_search(
         hits: documents,
         hits_info,
         query: q.unwrap_or_default(),
+        query_vector,
         processing_time_ms: before_search.elapsed().as_millis(),
         facet_distribution,
         facet_stats,
@@ -1730,6 +1738,7 @@ pub fn perform_similar(
         document_scores,
         degraded: _,
         used_negative_operator: _,
+        query_vector: _,
     } = similar.execute().map_err(|err| match err {
         milli::Error::UserError(milli::UserError::InvalidFilter(_)) => {
             ResponseError::from_msg(err.to_string(), Code::InvalidSimilarFilter)

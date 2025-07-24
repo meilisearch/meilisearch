@@ -13,6 +13,7 @@ use meilisearch_types::error::ResponseError;
 use meilisearch_types::features::{Network, Remote};
 use meilisearch_types::milli::order_by_map::OrderByMap;
 use meilisearch_types::milli::score_details::{ScoreDetails, WeightedScoreValue};
+use meilisearch_types::milli::vector::Embedding;
 use meilisearch_types::milli::{self, DocumentId, OrderBy, TimeBudget, DEFAULT_VALUES_PER_FACET};
 use roaring::RoaringBitmap;
 use tokio::task::JoinHandle;
@@ -838,6 +839,7 @@ impl SearchByIndex {
                     document_scores,
                     degraded: query_degraded,
                     used_negative_operator: query_used_negative_operator,
+                    query_vector,
                 } = result;
 
                 candidates |= query_candidates;
