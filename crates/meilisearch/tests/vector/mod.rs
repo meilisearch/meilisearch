@@ -682,7 +682,7 @@ async fn clear_documents() {
     }
     "###);
 
-    // Make sure the arroy DB has been cleared
+    // Make sure the hannoy DB has been cleared
     let (documents, _code) =
         index.search_post(json!({ "vector": [1, 1, 1], "hybrid": {"embedder": "manual"} })).await;
     snapshot!(documents, @r###"

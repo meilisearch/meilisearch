@@ -6,7 +6,7 @@ use roaring::RoaringBitmap;
 use super::ranking_rules::{RankingRule, RankingRuleOutput, RankingRuleQueryTrait};
 use super::VectorStoreStats;
 use crate::score_details::{self, ScoreDetails};
-use crate::vector::{ArroyWrapper, DistributionShift, Embedder};
+use crate::vector::{DistributionShift, Embedder, HannoyWrapper};
 use crate::{DocumentId, Result, SearchContext, SearchLogger};
 
 pub struct VectorSort<Q: RankingRuleQueryTrait> {
@@ -56,7 +56,8 @@ impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
         let target = &self.target;
 
         let before = Instant::now();
-        let reader = ArroyWrapper::new(ctx.index.vector_arroy, self.embedder_index, self.quantized);
+        let reader =
+            HannoyWrapper::new(ctx.index.vector_hannoy, self.embedder_index, self.quantized);
         let results = reader.nns_by_vector(ctx.txn, target, self.limit, Some(vector_candidates))?;
         self.cached_sorted_docids = results.into_iter();
         *ctx.vector_store_stats.get_or_insert_default() += VectorStoreStats {
