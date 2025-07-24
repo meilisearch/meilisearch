@@ -7,7 +7,8 @@ const LILLE: &str = include_str!("assets/lille.geojson");
 async fn basic_add_settings_and_geojson_documents() {
     let server = Server::new_shared();
     let index = server.unique_index();
-    let (task, _status_code) = index.update_settings(json!({"filterableAttributes": ["_geojson"]})).await;
+    let (task, _status_code) =
+        index.update_settings(json!({"filterableAttributes": ["_geojson"]})).await;
     server.wait_task(task.uid()).await.succeeded();
 
     let (response, _) = index.search_get("?filter=_geoPolygon([0,0],[2,0],[2,2],[0,2])").await;
@@ -113,7 +114,6 @@ async fn basic_add_settings_and_geojson_documents() {
     "#);
 }
 
-
 #[actix_rt::test]
 async fn basic_add_geojson_documents_and_settings() {
     let server = Server::new_shared();
@@ -168,7 +168,8 @@ async fn basic_add_geojson_documents_and_settings() {
     }
     "#);
 
-    let (task, _status_code) = index.update_settings(json!({"filterableAttributes": ["_geojson"]})).await;
+    let (task, _status_code) =
+        index.update_settings(json!({"filterableAttributes": ["_geojson"]})).await;
     server.wait_task(task.uid()).await.succeeded();
     let (response, _code) = index.search_get("?filter=_geoPolygon([0,0],[2,0],[2,2],[0,2])").await;
     snapshot!(response,
@@ -212,14 +213,16 @@ async fn add_and_remove_geojson() {
     ]);
     let (task, _status_code) = index.add_documents(documents, None).await;
     server.wait_task(task.uid()).await.succeeded();
-    let (response, _code) = index.search_get("?filter=_geoPolygon([0,0],[0.9,0],[0.9,0.9],[0,0.9])").await;
+    let (response, _code) =
+        index.search_get("?filter=_geoPolygon([0,0],[0.9,0],[0.9,0.9],[0,0.9])").await;
     assert_eq!(response.get("hits").unwrap().as_array().unwrap().len(), 0);
     let (response, _code) = index.search_get("?filter=_geoPolygon([0,0],[2,0],[2,2],[0,2])").await;
     assert_eq!(response.get("hits").unwrap().as_array().unwrap().len(), 1);
 
     let (task, _) = index.delete_document(0).await;
     server.wait_task(task.uid()).await.succeeded();
-    let (response, _code) = index.search_get("?filter=_geoPolygon([0,0],[0.9,0],[0.9,0.9],[0,0.9])").await;
+    let (response, _code) =
+        index.search_get("?filter=_geoPolygon([0,0],[0.9,0],[0.9,0.9],[0,0.9])").await;
     assert_eq!(response.get("hits").unwrap().as_array().unwrap().len(), 0);
     let (response, _code) = index.search_get("?filter=_geoPolygon([0,0],[2,0],[2,2],[0,2])").await;
     assert_eq!(response.get("hits").unwrap().as_array().unwrap().len(), 0);
@@ -233,12 +236,12 @@ async fn add_and_remove_geojson() {
     ]);
     let (task, _status_code) = index.add_documents(documents, None).await;
     server.wait_task(task.uid()).await.succeeded();
-    let (response, _code) = index.search_get("?filter=_geoPolygon([0,0],[0.9,0],[0.9,0.9],[0,0.9])").await;
+    let (response, _code) =
+        index.search_get("?filter=_geoPolygon([0,0],[0.9,0],[0.9,0.9],[0,0.9])").await;
     assert_eq!(response.get("hits").unwrap().as_array().unwrap().len(), 0);
     let (response, _code) = index.search_get("?filter=_geoPolygon([0,0],[2,0],[2,2],[0,2])").await;
     assert_eq!(response.get("hits").unwrap().as_array().unwrap().len(), 1);
 }
-
 
 #[actix_rt::test]
 async fn partial_update_geojson() {
@@ -255,12 +258,12 @@ async fn partial_update_geojson() {
     ]);
     let (task, _status_code) = index.add_documents(documents, None).await;
     server.wait_task(task.uid()).await.succeeded();
-    let (response, _code) = index.search_get("?filter=_geoPolygon([0,0],[0.9,0],[0.9,0.9],[0,0.9])").await;
+    let (response, _code) =
+        index.search_get("?filter=_geoPolygon([0,0],[0.9,0],[0.9,0.9],[0,0.9])").await;
     assert_eq!(response.get("hits").unwrap().as_array().unwrap().len(), 0);
     let (response, _code) = index.search_get("?filter=_geoPolygon([0,0],[2,0],[2,2],[0,2])").await;
     assert_eq!(response.get("hits").unwrap().as_array().unwrap().len(), 1);
 
-    
     let documents = json!([
         {
             "id": 0,
@@ -269,10 +272,12 @@ async fn partial_update_geojson() {
     ]);
     let (task, _status_code) = index.update_documents(documents, None).await;
     server.wait_task(task.uid()).await.succeeded();
-    let (response, _code) = index.search_get("?filter=_geoPolygon([0,0],[0.9,0],[0.9,0.9],[0,0.9])").await;
+    let (response, _code) =
+        index.search_get("?filter=_geoPolygon([0,0],[0.9,0],[0.9,0.9],[0,0.9])").await;
     assert_eq!(response.get("hits").unwrap().as_array().unwrap().len(), 1);
     let (response, _code) = index.search_get("?filter=_geoPolygon([0,0],[2,0],[2,2],[0,2])").await;
     assert_eq!(response.get("hits").unwrap().as_array().unwrap().len(), 1);
-    let (response, _code) = index.search_get("?filter=_geoPolygon([0.9,0.9],[2,0.9],[2,2],[0.9,2])").await;
+    let (response, _code) =
+        index.search_get("?filter=_geoPolygon([0.9,0.9],[2,0.9],[2,2],[0.9,2])").await;
     assert_eq!(response.get("hits").unwrap().as_array().unwrap().len(), 0);
 }

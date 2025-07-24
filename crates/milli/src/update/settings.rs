@@ -1862,7 +1862,10 @@ impl InnerIndexSettingsDiff {
     }
 
     pub fn any_reindexing_needed(&self) -> bool {
-        self.reindex_searchable() || self.reindex_facets() || self.reindex_vectors() || self.reindex_geojson()
+        self.reindex_searchable()
+            || self.reindex_facets()
+            || self.reindex_vectors()
+            || self.reindex_geojson()
     }
 
     pub fn reindex_searchable(&self) -> bool {

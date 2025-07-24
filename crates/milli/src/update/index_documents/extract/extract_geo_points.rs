@@ -179,8 +179,6 @@ fn extract_geojson_field(
                 .map(|v| serde_json::from_slice(v).map_err(InternalError::SerdeJson))
                 .transpose()?)
         }
-        _ => {
-            Ok(None)
-        }
+        _ => Ok(None),
     }
 }
