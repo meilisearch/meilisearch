@@ -779,7 +779,7 @@ async fn vector_filter_missing_fragment() {
         .await;
     snapshot!(value, @r#"
     {
-      "message": "Index `[uuid]`: Vector filter is inconsistent: either specify a fragment name or remove the `fragments` part.\n15:24 _vectors.rest.fragments EXISTS",
+      "message": "The vector filter is missing a fragment name.\n24:31 _vectors.rest.fragments EXISTS",
       "code": "invalid_search_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -981,7 +981,7 @@ async fn vector_filter_specific_fragment_user_provided() {
         .await;
     snapshot!(value, @r#"
     {
-      "message": "Index `[uuid]`: Vector filter cannot have both `fragments` and `userProvided`.\n15:24 _vectors.rest.fragments.other.userProvided EXISTS",
+      "message": "The vector filter has leftover tokens.\n30:50 _vectors.rest.fragments.other.userProvided EXISTS",
       "code": "invalid_search_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -1190,11 +1190,11 @@ async fn vector_filter_regenerate() {
         }))
         .await;
     snapshot!(value, @r#"
-        {
-          "message": "Index `[uuid]`: Vector filter cannot have both `fragments` and `regenerate`.\n15:24 _vectors.rest.fragments.basic.regenerate EXISTS",
-          "code": "invalid_search_filter",
-          "type": "invalid_request",
-          "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
-        }
-        "#);
+    {
+      "message": "The vector filter has leftover tokens.\n30:48 _vectors.rest.fragments.basic.regenerate EXISTS",
+      "code": "invalid_search_filter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+    }
+    "#);
 }

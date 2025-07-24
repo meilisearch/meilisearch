@@ -65,6 +65,9 @@ use nom_locate::LocatedSpan;
 pub(crate) use value::parse_value;
 use value::word_exact;
 
+use crate::condition::{parse_vectors_exists, parse_vectors_not_exists};
+use crate::error::IResultExt;
+
 pub type Span<'a> = LocatedSpan<&'a str, &'a str>;
 
 type IResult<'a, Ret> = nom::IResult<Span<'a>, Ret, Error<'a>>;
@@ -147,12 +150,22 @@ impl<'a> From<&'a str> for Token<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VectorFilter<'a> {
+    Fragment(Token<'a>),
+    DocumentTemplate,
+    UserProvided,
+    Regenerate,
+    None,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FilterCondition<'a> {
     Not(Box<Self>),
     Condition { fid: Token<'a>, op: Condition<'a> },
     In { fid: Token<'a>, els: Vec<Token<'a>> },
     Or(Vec<Self>),
     And(Vec<Self>),
+    VectorExists { fid: Token<'a>, embedder: Option<Token<'a>>, filter: VectorFilter<'a> },
     GeoLowerThan { point: [Token<'a>; 2], radius: Token<'a> },
     GeoBoundingBox { top_right_point: [Token<'a>; 2], bottom_left_point: [Token<'a>; 2] },
 }
@@ -183,7 +196,8 @@ impl<'a> FilterCondition<'a> {
             FilterCondition::Or(seq) | FilterCondition::And(seq) => {
                 seq.iter().find_map(|filter| filter.use_contains_operator())
             }
-            FilterCondition::GeoLowerThan { .. }
+            FilterCondition::VectorExists { .. }
+            | FilterCondition::GeoLowerThan { .. }
             | FilterCondition::GeoBoundingBox { .. }
             | FilterCondition::In { .. } => None,
         }
@@ -191,13 +205,7 @@ impl<'a> FilterCondition<'a> {
 
     pub fn use_vector_filter(&self) -> Option<&Token> {
         match self {
-            FilterCondition::Condition { fid, op: _ } => {
-                if fid.value().starts_with("_vectors.") || fid.value() == "_vectors" {
-                    Some(fid)
-                } else {
-                    None
-                }
-            }
+            FilterCondition::Condition { .. } => None,
             FilterCondition::Not(this) => this.use_vector_filter(),
             FilterCondition::Or(seq) | FilterCondition::And(seq) => {
                 seq.iter().find_map(|filter| filter.use_vector_filter())
@@ -205,6 +213,7 @@ impl<'a> FilterCondition<'a> {
             FilterCondition::GeoLowerThan { .. }
             | FilterCondition::GeoBoundingBox { .. }
             | FilterCondition::In { .. } => None,
+            FilterCondition::VectorExists { fid, .. } => Some(fid),
         }
     }
 
@@ -292,10 +301,7 @@ fn parse_in_body(input: Span) -> IResult<Vec<Token>> {
     let (input, _) = ws(word_exact("IN"))(input)?;
 
     // everything after `IN` can be a failure
-    let (input, _) =
-        cut_with_err(tag("["), |_| Error::new_from_kind(input, ErrorKind::InOpeningBracket))(
-            input,
-        )?;
+    let (input, _) = tag("[")(input).map_cut(ErrorKind::InOpeningBracket)?;
 
     let (input, content) = cut(parse_value_list)(input)?;
 
@@ -529,8 +535,7 @@ fn parse_primary(input: Span, depth: usize) -> IResult<FilterCondition> {
         parse_is_not_null,
         parse_is_empty,
         parse_is_not_empty,
-        parse_exists,
-        parse_not_exists,
+        alt((parse_vectors_exists, parse_vectors_not_exists, parse_exists, parse_not_exists)),
         parse_to,
         parse_contains,
         parse_not_contains,
@@ -585,6 +590,19 @@ impl std::fmt::Display for FilterCondition<'_> {
                     write!(f, "{el}, ")?;
                 }
                 write!(f, "]")
+            }
+            FilterCondition::VectorExists { fid: _, embedder, filter: inner } => {
+                write!(f, "_vectors")?;
+                if let Some(embedder) = embedder {
+                    write!(f, ".{embedder:?}")?;
+                }
+                match inner {
+                    VectorFilter::Fragment(fragment) => write!(f, ".fragments.{fragment:?}"),
+                    VectorFilter::DocumentTemplate => write!(f, ".documentTemplate"),
+                    VectorFilter::UserProvided => write!(f, ".userProvided"),
+                    VectorFilter::Regenerate => write!(f, ".regenerate"),
+                    VectorFilter::None => Ok(()),
+                }
             }
             FilterCondition::GeoLowerThan { point, radius } => {
                 write!(f, "_geoRadius({}, {}, {})", point[0], point[1], radius)

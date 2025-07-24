@@ -7,11 +7,20 @@
 
 use nom::branch::alt;
 use nom::bytes::complete::tag;
+use nom::character::complete::char;
+use nom::character::complete::multispace0;
 use nom::character::complete::multispace1;
 use nom::combinator::cut;
+use nom::combinator::map;
+use nom::combinator::value;
+use nom::sequence::preceded;
 use nom::sequence::{terminated, tuple};
 use Condition::*;
 
+use crate::error::IResultExt;
+use crate::value::parse_vector_value;
+use crate::ErrorKind;
+use crate::VectorFilter;
 use crate::{parse_value, FilterCondition, IResult, Span, Token};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -111,6 +120,57 @@ pub fn parse_not_exists(input: Span) -> IResult<FilterCondition> {
 
     let (input, _) = tuple((tag("NOT"), multispace1, tag("EXISTS")))(input)?;
     Ok((input, FilterCondition::Not(Box::new(FilterCondition::Condition { fid: key, op: Exists }))))
+}
+
+fn parse_vectors(input: Span) -> IResult<(Token, Option<Token>, VectorFilter<'_>)> {
+    let (input, _) = multispace0(input)?;
+    let (input, fid) = tag("_vectors")(input)?;
+
+    if let Ok((input, _)) = multispace1::<_, crate::Error>(input) {
+        return Ok((input, (Token::from(fid), None, VectorFilter::None)));
+    }
+
+    let (input, _) = char('.')(input)?;
+
+    // From this point, we are certain this is a vector filter, so our errors must be final.
+    // We could use nom's `cut`` but it's better to be explicit about the errors
+
+    let (input, embedder_name) = parse_vector_value(input).map_cut(ErrorKind::VectorFilterInvalidEmbedder)?;
+
+    let (input, filter) = alt((
+        map(
+            preceded(tag(".fragments"), |input| {
+                let (input, _) = tag(".")(input).map_cut(ErrorKind::VectorFilterMissingFragment)?;
+                parse_vector_value(input).map_cut(ErrorKind::VectorFilterInvalidFragment)
+            }),
+            VectorFilter::Fragment,
+        ),
+        value(VectorFilter::UserProvided, tag(".userProvided")),
+        value(VectorFilter::DocumentTemplate, tag(".documentTemplate")),
+        value(VectorFilter::Regenerate, tag(".regenerate")),
+        value(VectorFilter::None, nom::combinator::success("")),
+    ))(input)?;
+
+    let (input, _) = multispace1(input).map_cut(ErrorKind::VectorFilterLeftover)?;
+
+    Ok((input, (Token::from(fid), Some(embedder_name), filter)))
+}
+
+/// vectors_exists          = vectors "EXISTS"
+pub fn parse_vectors_exists(input: Span) -> IResult<FilterCondition> {
+    let (input, (fid, embedder, filter)) = terminated(parse_vectors, tag("EXISTS"))(input)?;
+
+    Ok((input, FilterCondition::VectorExists { fid, embedder, filter }))
+}
+/// vectors_not_exists      = vectors "NOT" WS+ "EXISTS"
+pub fn parse_vectors_not_exists(input: Span) -> IResult<FilterCondition> {
+    let (input, (fid, embedder, filter)) = parse_vectors(input)?;
+
+    let (input, _) = tuple((tag("NOT"), multispace1, tag("EXISTS")))(input)?;
+    Ok((
+        input,
+        FilterCondition::Not(Box::new(FilterCondition::VectorExists { fid, embedder, filter })),
+    ))
 }
 
 /// contains        = value "CONTAINS" value
