@@ -124,16 +124,6 @@ impl<'a> Token<'a> {
             Err(Error::new_from_kind(self.span, ErrorKind::NonFiniteFloat))
         }
     }
-
-    /// Split the token by a delimiter and return an iterator of tokens.
-    /// Each token in the iterator will have its own span that corresponds to a slice of the original token's span.
-    pub fn split(&self, delimiter: &'a str) -> impl Iterator<Item = Token<'a>> + '_ {
-        let original_addr = self.value().as_ptr() as usize;
-        self.value().split(delimiter).map(move |part| {
-            let offset = part.as_ptr() as usize - original_addr;
-            Token::new(self.span.slice(offset..offset + part.len()), Some(part.to_string()))
-        })
-    }
 }
 
 impl<'a> From<Span<'a>> for Token<'a> {
@@ -1160,104 +1150,5 @@ pub mod tests {
         let s = "test string that should not be parsed";
         let token: Token = s.into();
         assert_eq!(token.value(), s);
-    }
-
-    #[test]
-    fn split() {
-        let s = "test string that should not be parsed\n newline";
-        let token: Token = s.into();
-        let parts: Vec<_> = token.split(" ").collect();
-        insta::assert_snapshot!(format!("{parts:#?}"), @r#"
-        [
-            Token {
-                span: LocatedSpan {
-                    offset: 0,
-                    line: 1,
-                    fragment: "test",
-                    extra: "test string that should not be parsed\n newline",
-                },
-                value: Some(
-                    "test",
-                ),
-            },
-            Token {
-                span: LocatedSpan {
-                    offset: 5,
-                    line: 1,
-                    fragment: "string",
-                    extra: "test string that should not be parsed\n newline",
-                },
-                value: Some(
-                    "string",
-                ),
-            },
-            Token {
-                span: LocatedSpan {
-                    offset: 12,
-                    line: 1,
-                    fragment: "that",
-                    extra: "test string that should not be parsed\n newline",
-                },
-                value: Some(
-                    "that",
-                ),
-            },
-            Token {
-                span: LocatedSpan {
-                    offset: 17,
-                    line: 1,
-                    fragment: "should",
-                    extra: "test string that should not be parsed\n newline",
-                },
-                value: Some(
-                    "should",
-                ),
-            },
-            Token {
-                span: LocatedSpan {
-                    offset: 24,
-                    line: 1,
-                    fragment: "not",
-                    extra: "test string that should not be parsed\n newline",
-                },
-                value: Some(
-                    "not",
-                ),
-            },
-            Token {
-                span: LocatedSpan {
-                    offset: 28,
-                    line: 1,
-                    fragment: "be",
-                    extra: "test string that should not be parsed\n newline",
-                },
-                value: Some(
-                    "be",
-                ),
-            },
-            Token {
-                span: LocatedSpan {
-                    offset: 31,
-                    line: 1,
-                    fragment: "parsed\n",
-                    extra: "test string that should not be parsed\n newline",
-                },
-                value: Some(
-                    "parsed\n",
-                ),
-            },
-            Token {
-                span: LocatedSpan {
-                    offset: 39,
-                    line: 2,
-                    fragment: "newline",
-                    extra: "test string that should not be parsed\n newline",
-                },
-                value: Some(
-                    "newline",
-                ),
-            },
-        ]
-        "#);
     }
 }
