@@ -133,7 +133,7 @@ fn parse_vectors(input: Span) -> IResult<(Token, Option<Token>, VectorFilter<'_>
     let (input, _) = char('.')(input)?;
 
     // From this point, we are certain this is a vector filter, so our errors must be final.
-    // We could use nom's `cut`` but it's better to be explicit about the errors
+    // We could use nom's `cut` but it's better to be explicit about the errors
 
     let (input, embedder_name) =
         parse_vector_value(input).map_cut(ErrorKind::VectorFilterInvalidEmbedder)?;

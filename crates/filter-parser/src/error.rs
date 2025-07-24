@@ -78,6 +78,10 @@ pub enum ErrorKind<'a> {
     GeoBoundingBox,
     MisusedGeoRadius,
     MisusedGeoBoundingBox,
+    VectorFilterLeftover,
+    VectorFilterInvalidEmbedder,
+    VectorFilterMissingFragment,
+    VectorFilterInvalidFragment,
     InvalidPrimary,
     InvalidEscapedNumber,
     ExpectedEof,
@@ -93,11 +97,6 @@ pub enum ErrorKind<'a> {
     InternalError(error::ErrorKind),
     DepthLimitReached,
     External(String),
-
-    VectorFilterLeftover,
-    VectorFilterInvalidEmbedder,
-    VectorFilterMissingFragment,
-    VectorFilterInvalidFragment,
 }
 
 impl<'a> Error<'a> {
