@@ -38,6 +38,7 @@ pub mod settings;
 mod settings_analytics;
 pub mod similar;
 mod similar_analytics;
+pub mod fields;
 
 #[derive(OpenApi)]
 #[openapi(
@@ -73,6 +74,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
                     .route(web::delete().to(SeqHandler(delete_index))),
             )
             .service(web::resource("/stats").route(web::get().to(SeqHandler(get_index_stats))))
+            .service(web::resource("/fields").route(web::get().to(SeqHandler(fields::get_index_fields))))
             .service(web::scope("/documents").configure(documents::configure))
             .service(web::scope("/search").configure(search::configure))
             .service(web::scope("/facet-search").configure(facet_search::configure))
@@ -110,7 +112,7 @@ impl IndexView {
     }
 }
 
-#[derive(Deserr, Debug, Clone, Copy, IntoParams)]
+#[derive(Deserr, Debug, Clone, IntoParams)]
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 #[into_params(rename_all = "camelCase", parameter_in = Query)]
 pub struct ListIndexes {
@@ -182,7 +184,7 @@ pub async fn list_indexes(
             primary_key: stats.primary_key,
         })
         .collect::<Vec<_>>();
-    let ret = paginate.as_pagination().format_with(total, indexes);
+    let ret = (*paginate).clone().as_pagination().format_with(total, indexes);
 
     debug!(returns = ?ret, "List indexes");
     Ok(HttpResponse::Ok().json(ret))
@@ -580,3 +582,5 @@ pub async fn get_index_stats(
     debug!(returns = ?stats, "Get index stats");
     Ok(HttpResponse::Ok().json(stats))
 }
+
+// Field-related structs, helpers and the `get_index_fields` handler have been moved to `fields.rs`.
