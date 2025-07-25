@@ -3934,7 +3934,7 @@ async fn federation_vector_two_indexes() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r#"
     {
       "hits": [
         {
@@ -4150,9 +4150,20 @@ async fn federation_vector_two_indexes() {
       "limit": 20,
       "offset": 0,
       "estimatedTotalHits": 8,
+      "queryVectors": {
+        "0": [
+          1.0,
+          0.0,
+          0.5
+        ],
+        "1": [
+          -1.0,
+          0.6
+        ]
+      },
       "semanticHitCount": 8
     }
-    "###);
+    "#);
 }
 
 #[actix_rt::test]
