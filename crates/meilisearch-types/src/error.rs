@@ -407,7 +407,9 @@ InvalidChatCompletionSystemPrompt              , InvalidRequest       , BAD_REQU
 InvalidChatCompletionSearchDescriptionPrompt   , InvalidRequest       , BAD_REQUEST ;
 InvalidChatCompletionSearchQueryParamPrompt    , InvalidRequest       , BAD_REQUEST ;
 InvalidChatCompletionSearchIndexUidParamPrompt , InvalidRequest       , BAD_REQUEST ;
-InvalidChatCompletionPreQueryPrompt            , InvalidRequest       , BAD_REQUEST
+InvalidChatCompletionPreQueryPrompt            , InvalidRequest       , BAD_REQUEST ;
+InvalidIndexFieldsSearch                       , InvalidRequest       , BAD_REQUEST ;
+InvalidIndexFieldsFilter                       , InvalidRequest       , BAD_REQUEST
 }
 
 impl ErrorCode for JoinError {

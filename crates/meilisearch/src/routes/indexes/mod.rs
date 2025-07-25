@@ -11,7 +11,7 @@ use meilisearch_types::deserr::{immutable_field_error, DeserrJsonError, DeserrQu
 use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::index_uid::IndexUid;
-use meilisearch_types::milli::{self, FieldDistribution, Index};
+use meilisearch_types::milli::{self, FieldDistribution, Index, LocalizedAttributesRule, FilterableAttributesRule};
 use meilisearch_types::tasks::KindWithContent;
 use serde::Serialize;
 use time::OffsetDateTime;
@@ -28,6 +28,12 @@ use crate::extractors::sequential_extractor::SeqHandler;
 use crate::routes::is_dry_run;
 use crate::Opt;
 
+use meilisearch_types::settings::{settings, SecretPolicy};
+use meilisearch_types::locales::Locale;
+use meilisearch_types::milli::update::Setting;
+use meilisearch_types::facet_values_sort::FacetValuesSort;
+use std::collections::BTreeMap;
+
 pub mod documents;
 pub mod facet_search;
 pub mod search;
@@ -38,6 +44,7 @@ pub mod settings;
 mod settings_analytics;
 pub mod similar;
 mod similar_analytics;
+pub mod fields;
 
 #[derive(OpenApi)]
 #[openapi(
@@ -73,7 +80,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
                     .route(web::delete().to(SeqHandler(delete_index))),
             )
             .service(web::resource("/stats").route(web::get().to(SeqHandler(get_index_stats))))
-            .service(web::resource("/fields").route(web::get().to(SeqHandler(get_index_fields))))
+            .service(web::resource("/fields").route(web::get().to(SeqHandler(fields::get_index_fields))))
             .service(web::scope("/documents").configure(documents::configure))
             .service(web::scope("/search").configure(search::configure))
             .service(web::scope("/facet-search").configure(facet_search::configure))
@@ -111,7 +118,7 @@ impl IndexView {
     }
 }
 
-#[derive(Deserr, Debug, Clone, Copy, IntoParams)]
+#[derive(Deserr, Debug, Clone, IntoParams)]
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 #[into_params(rename_all = "camelCase", parameter_in = Query)]
 pub struct ListIndexes {
@@ -183,7 +190,7 @@ pub async fn list_indexes(
             primary_key: stats.primary_key,
         })
         .collect::<Vec<_>>();
-    let ret = paginate.as_pagination().format_with(total, indexes);
+    let ret = (*paginate).clone().as_pagination().format_with(total, indexes);
 
     debug!(returns = ?ret, "List indexes");
     Ok(HttpResponse::Ok().json(ret))
@@ -582,46 +589,4 @@ pub async fn get_index_stats(
     Ok(HttpResponse::Ok().json(stats))
 }
 
-/// Get fields of index
-///
-/// Get all field names in the index (including nested fields).
-#[utoipa::path(
-    get,
-    path = "/{indexUid}/fields",
-    tag = "Indexes",
-    security(("Bearer" = ["indexes.get", "indexes.*", "*"])),
-    params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
-    responses(
-        (status = OK, description = "The fields of the index", body = Vec<String>, content_type = "application/json", example = json!(
-            ["id", "title", "user.name", "user.email", "metadata.category"]
-        )),
-        (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
-            {
-                "message": "Index `movies` not found.",
-                "code": "index_not_found",
-                "type": "invalid_request",
-                "link": "https://docs.meilisearch.com/errors#index_not_found"
-            }
-        )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
-            {
-                "message": "The Authorization header is missing. It must use the bearer authorization method.",
-                "code": "missing_authorization_header",
-                "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
-            }
-        )),
-    )
-)]
-pub async fn get_index_fields(
-    index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_GET }>, Data<IndexScheduler>>,
-    index_uid: web::Path<String>,
-) -> Result<HttpResponse, ResponseError> {
-    let index_uid = IndexUid::try_from(index_uid.into_inner())?;
-    let index = index_scheduler.index(&index_uid)?;
-    let rtxn = index.read_txn()?;
-    let fields: Vec<String> = index.fields_ids_map(&rtxn)?.names().map(|s| s.to_string()).collect();
-
-    debug!(returns = ?fields, "Get index fields");
-    Ok(HttpResponse::Ok().json(fields))
-}
+// Field-related structs, helpers and the `get_index_fields` handler have been moved to `fields.rs`.

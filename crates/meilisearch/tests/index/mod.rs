@@ -4,3 +4,4 @@ mod errors;
 mod get_index;
 mod stats;
 mod update_index;
+mod fields;

@@ -73,7 +73,8 @@ async fn fields() {
     // Test empty index
     let (response, code) = index.fields().await;
     assert_eq!(code, 200);
-    assert!(response.as_array().unwrap().is_empty());
+    assert_eq!(response["total"], json!(0));
+    assert!(response["results"].as_array().unwrap().is_empty());
 
     // Test with documents containing nested fields
     let documents = json!([
@@ -110,8 +111,8 @@ async fn fields() {
     let (response, code) = index.fields().await;
     assert_eq!(code, 200);
 
-    let fields = response.as_array().unwrap();
-    let field_names: Vec<&str> = fields.iter().map(|f| f.as_str().unwrap()).collect();
+    let fields = response["results"].as_array().unwrap();
+    let field_names: Vec<&str> = fields.iter().map(|f| f["name"].as_str().unwrap()).collect();
 
     // Check that all expected fields are present (including nested fields)
     assert!(field_names.contains(&"id"));
@@ -127,7 +128,7 @@ async fn fields() {
 
     // Verify the response is a simple array of strings
     for field in fields {
-        assert!(field.is_string());
+        assert!(field["name"].is_string());
     }
 }
 
@@ -243,12 +244,13 @@ async fn fields_nested_complex() {
     assert_eq!(code, 202);
     server.wait_task(response.uid()).await.succeeded();
 
-    // Test fields with complex nested structures
-    let (response, code) = index.fields().await;
+    // Test fields with complex nested structures (increase limit to get all nested fields)
+    let url = format!("/indexes/{}/fields?limit=1000", index.uid);
+    let (response, code) = server.service.get(url).await;
     assert_eq!(code, 200);
 
-    let fields = response.as_array().unwrap();
-    let field_names: Vec<&str> = fields.iter().map(|f| f.as_str().unwrap()).collect();
+    let fields = response["results"].as_array().unwrap();
+    let field_names: Vec<&str> = fields.iter().map(|f| f["name"].as_str().unwrap()).collect();
 
     // Test deeply nested fields from the first document
     assert!(field_names.contains(&"product.name"));
@@ -296,7 +298,7 @@ async fn fields_nested_complex() {
 
     // Verify the response is a simple array of strings
     for field in fields {
-        assert!(field.is_string());
+        assert!(field["name"].is_string());
     }
 
     // Test that we have a reasonable number of fields (should be more than just top-level)
