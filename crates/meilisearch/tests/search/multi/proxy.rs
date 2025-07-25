@@ -543,13 +543,13 @@ async fn remote_sharding_retrieve_vectors() {
     let (_response, status_code) = ms2.set_network(network.clone()).await;
     snapshot!(status_code, @"200 OK");
 
-    // perform multi-search
-    let query = "badman returns";
+    // multi vector search: one query per remote
+
     let request = json!({
         "federation": {},
         "queries": [
             {
-                "q": query,
+                "q": "batman",
                 "indexUid": "test",
                 "hybrid": {
                     "semanticRatio": 1.0,
@@ -561,7 +561,7 @@ async fn remote_sharding_retrieve_vectors() {
                 }
             },
             {
-                "q": query,
+                "q": "dark knight",
                 "indexUid": "test",
                 "hybrid": {
                     "semanticRatio": 1.0,
@@ -573,7 +573,7 @@ async fn remote_sharding_retrieve_vectors() {
                 }
             },
             {
-                "q": query,
+                "q": "returns",
                 "indexUid": "test",
                 "hybrid": {
                     "semanticRatio": 1.0,
@@ -598,14 +598,14 @@ async fn remote_sharding_retrieve_vectors() {
       "estimatedTotalHits": 0,
       "queryVectors": {
         "0": [
+          1.0,
           0.0,
-          0.0,
-          0.2
+          0.0
         ],
         "1": [
-          0.0,
-          0.0,
-          0.2
+          0.1,
+          0.2,
+          0.0
         ],
         "2": [
           0.0,
@@ -614,6 +614,300 @@ async fn remote_sharding_retrieve_vectors() {
         ]
       },
       "semanticHitCount": 0,
+      "remoteErrors": {}
+    }
+    "#);
+
+    // multi vector search: two local queries, one remote
+
+    let request = json!({
+        "federation": {},
+        "queries": [
+            {
+                "q": "batman",
+                "indexUid": "test",
+                "hybrid": {
+                    "semanticRatio": 1.0,
+                    "embedder": "rest"
+                },
+                "retrieveVectors": true,
+                "federationOptions": {
+                    "remote": "ms0"
+                }
+            },
+            {
+                "q": "dark knight",
+                "indexUid": "test",
+                "hybrid": {
+                    "semanticRatio": 1.0,
+                    "embedder": "rest"
+                },
+                "retrieveVectors": true,
+                "federationOptions": {
+                    "remote": "ms0"
+                }
+            },
+            {
+                "q": "returns",
+                "indexUid": "test",
+                "hybrid": {
+                    "semanticRatio": 1.0,
+                    "embedder": "rest"
+                },
+                "retrieveVectors": true,
+                "federationOptions": {
+                    "remote": "ms2"
+                }
+            },
+        ]
+    });
+
+    let (response, _status_code) = ms0.multi_search(request.clone()).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r#"
+    {
+      "hits": [],
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 0,
+      "queryVectors": {
+        "0": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "1": [
+          0.1,
+          0.2,
+          0.0
+        ],
+        "2": [
+          0.0,
+          0.0,
+          0.2
+        ]
+      },
+      "semanticHitCount": 0,
+      "remoteErrors": {}
+    }
+    "#);
+
+    // multi vector search: two queries on the same remote
+
+    let request = json!({
+        "federation": {},
+        "queries": [
+            {
+                "q": "batman",
+                "indexUid": "test",
+                "hybrid": {
+                    "semanticRatio": 1.0,
+                    "embedder": "rest"
+                },
+                "retrieveVectors": true,
+                "federationOptions": {
+                    "remote": "ms0"
+                }
+            },
+            {
+                "q": "dark knight",
+                "indexUid": "test",
+                "hybrid": {
+                    "semanticRatio": 1.0,
+                    "embedder": "rest"
+                },
+                "retrieveVectors": true,
+                "federationOptions": {
+                    "remote": "ms1"
+                }
+            },
+            {
+                "q": "returns",
+                "indexUid": "test",
+                "hybrid": {
+                    "semanticRatio": 1.0,
+                    "embedder": "rest"
+                },
+                "retrieveVectors": true,
+                "federationOptions": {
+                    "remote": "ms1"
+                }
+            },
+        ]
+    });
+
+    let (response, _status_code) = ms0.multi_search(request.clone()).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r#"
+    {
+      "hits": [],
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 0,
+      "queryVectors": {
+        "0": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "1": [
+          0.1,
+          0.2,
+          0.0
+        ],
+        "2": [
+          0.0,
+          0.0,
+          0.2
+        ]
+      },
+      "semanticHitCount": 0,
+      "remoteErrors": {}
+    }
+    "#);
+
+    // multi search: two vector, one keyword
+
+    let request = json!({
+        "federation": {},
+        "queries": [
+            {
+                "q": "batman",
+                "indexUid": "test",
+                "hybrid": {
+                    "semanticRatio": 1.0,
+                    "embedder": "rest"
+                },
+                "retrieveVectors": true,
+                "federationOptions": {
+                    "remote": "ms0"
+                }
+            },
+            {
+                "q": "dark knight",
+                "indexUid": "test",
+                "hybrid": {
+                    "semanticRatio": 0.0,
+                    "embedder": "rest"
+                },
+                "retrieveVectors": true,
+                "federationOptions": {
+                    "remote": "ms1"
+                }
+            },
+            {
+                "q": "returns",
+                "indexUid": "test",
+                "hybrid": {
+                    "semanticRatio": 1.0,
+                    "embedder": "rest"
+                },
+                "retrieveVectors": true,
+                "federationOptions": {
+                    "remote": "ms1"
+                }
+            },
+        ]
+    });
+
+    let (response, _status_code) = ms0.multi_search(request.clone()).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r#"
+    {
+      "hits": [],
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 0,
+      "queryVectors": {
+        "0": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "2": [
+          0.0,
+          0.0,
+          0.2
+        ]
+      },
+      "semanticHitCount": 0,
+      "remoteErrors": {}
+    }
+    "#);
+
+    // multi vector search: no local queries, all remote
+
+    let request = json!({
+        "federation": {},
+        "queries": [
+            {
+                "q": "batman",
+                "indexUid": "test",
+                "hybrid": {
+                    "semanticRatio": 1.0,
+                    "embedder": "rest"
+                },
+                "retrieveVectors": true,
+                "federationOptions": {
+                    "remote": "ms1"
+                }
+            },
+            {
+                "q": "dark knight",
+                "indexUid": "test",
+                "hybrid": {
+                    "semanticRatio": 1.0,
+                    "embedder": "rest"
+                },
+                "retrieveVectors": true,
+                "federationOptions": {
+                    "remote": "ms1"
+                }
+            },
+            {
+                "q": "returns",
+                "indexUid": "test",
+                "hybrid": {
+                    "semanticRatio": 1.0,
+                    "embedder": "rest"
+                },
+                "retrieveVectors": true,
+                "federationOptions": {
+                    "remote": "ms1"
+                }
+            },
+        ]
+    });
+
+    let (response, _status_code) = ms0.multi_search(request.clone()).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r#"
+    {
+      "hits": [],
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 0,
+      "queryVectors": {
+        "0": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "1": [
+          0.1,
+          0.2,
+          0.0
+        ],
+        "2": [
+          0.0,
+          0.0,
+          0.2
+        ]
+      },
       "remoteErrors": {}
     }
     "#);
