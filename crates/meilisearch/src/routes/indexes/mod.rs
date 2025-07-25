@@ -11,7 +11,7 @@ use meilisearch_types::deserr::{immutable_field_error, DeserrJsonError, DeserrQu
 use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::index_uid::IndexUid;
-use meilisearch_types::milli::{self, FieldDistribution, Index, LocalizedAttributesRule, FilterableAttributesRule};
+use meilisearch_types::milli::{self, FieldDistribution, Index};
 use meilisearch_types::tasks::KindWithContent;
 use serde::Serialize;
 use time::OffsetDateTime;
@@ -27,12 +27,6 @@ use crate::extractors::authentication::{AuthenticationError, GuardedData};
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::routes::is_dry_run;
 use crate::Opt;
-
-use meilisearch_types::settings::{settings, SecretPolicy};
-use meilisearch_types::locales::Locale;
-use meilisearch_types::milli::update::Setting;
-use meilisearch_types::facet_values_sort::FacetValuesSort;
-use std::collections::BTreeMap;
 
 pub mod documents;
 pub mod facet_search;

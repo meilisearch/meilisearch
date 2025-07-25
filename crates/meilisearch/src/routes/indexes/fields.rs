@@ -21,7 +21,7 @@ use utoipa::{IntoParams, ToSchema};
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 
-use super::{Pagination, PaginationView, PAGINATION_DEFAULT_LIMIT};
+use super::{Pagination, PAGINATION_DEFAULT_LIMIT};
 
 /// Field configuration for a specific field in the index
 #[derive(Debug, Serialize, Clone, ToSchema)]
