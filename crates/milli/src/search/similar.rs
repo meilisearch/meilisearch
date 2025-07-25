@@ -130,6 +130,7 @@ impl<'a> Similar<'a> {
             document_scores,
             degraded: false,
             used_negative_operator: false,
+            query_vector: None,
         })
     }
 }
