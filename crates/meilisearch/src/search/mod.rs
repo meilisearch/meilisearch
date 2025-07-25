@@ -1020,7 +1020,7 @@ pub fn prepare_search<'t>(
                         .map_err(milli::Error::from)?
                 }
             };
-            search.semantic(
+            search.semantic_auto_embedded(
                 embedder_name.clone(),
                 embedder.clone(),
                 *quantized,

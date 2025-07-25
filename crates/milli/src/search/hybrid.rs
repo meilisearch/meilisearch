@@ -230,7 +230,14 @@ impl Search<'_> {
         }
 
         // no embedder, no semantic search
-        let Some(SemanticSearch { vector, embedder_name, embedder, quantized, media }) = semantic
+        let Some(SemanticSearch {
+            vector,
+            mut auto_embedded,
+            embedder_name,
+            embedder,
+            quantized,
+            media,
+        }) = semantic
         else {
             return Ok(return_keyword_results(self.limit, self.offset, keyword_results));
         };
@@ -253,7 +260,10 @@ impl Search<'_> {
                 let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
 
                 match embedder.embed_search(query, Some(deadline)) {
-                    Ok(embedding) => embedding,
+                    Ok(embedding) => {
+                        auto_embedded = true;
+                        embedding
+                    }
                     Err(error) => {
                         tracing::error!(error=%error, "Embedding failed");
                         return Ok(return_keyword_results(
@@ -268,6 +278,7 @@ impl Search<'_> {
 
         search.semantic = Some(SemanticSearch {
             vector: Some(vector_query.clone()),
+            auto_embedded,
             embedder_name,
             embedder,
             quantized,
@@ -280,7 +291,7 @@ impl Search<'_> {
         let keyword_results = ScoreWithRatioResult::new(keyword_results, 1.0 - semantic_ratio);
         let vector_results = ScoreWithRatioResult::new(vector_results, semantic_ratio);
 
-        let (mut merge_results, semantic_hit_count) = ScoreWithRatioResult::merge(
+        let (merge_results, semantic_hit_count) = ScoreWithRatioResult::merge(
             vector_results,
             keyword_results,
             self.offset,
@@ -289,7 +300,6 @@ impl Search<'_> {
             search.index,
             search.rtxn,
         )?;
-        merge_results.query_vector = Some(vector_query);
         assert!(merge_results.documents_ids.len() <= self.limit);
         Ok((merge_results, Some(semantic_hit_count)))
     }

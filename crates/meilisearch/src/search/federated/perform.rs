@@ -47,6 +47,7 @@ pub async fn perform_federated_search(
     let deadline = before_search + std::time::Duration::from_secs(9);
 
     let required_hit_count = federation.limit + federation.offset;
+    let retrieve_vectors = queries.iter().any(|q| q.retrieve_vectors);
 
     let network = index_scheduler.network();
 
@@ -92,6 +93,7 @@ pub async fn perform_federated_search(
         federation,
         mut semantic_hit_count,
         mut results_by_index,
+        mut query_vectors,
         previous_query_data: _,
         facet_order,
     } = search_by_index;
@@ -123,7 +125,26 @@ pub async fn perform_federated_search(
         .map(|hit| hit.hit())
         .collect();
 
-    // 3.3. merge facets
+    // 3.3. merge query vectors
+    let query_vectors = if retrieve_vectors {
+        for remote_results in remote_results.iter_mut() {
+            if let Some(remote_vectors) = remote_results.query_vectors.take() {
+                for (key, value) in remote_vectors.into_iter() {
+                    debug_assert!(
+                        !query_vectors.contains_key(&key),
+                        "Query vector for query {key} already exists"
+                    );
+                    query_vectors.insert(key, value);
+                }
+            }
+        }
+
+        Some(query_vectors)
+    } else {
+        None
+    };
+
+    // 3.4. merge facets
     let (facet_distribution, facet_stats, facets_by_index) =
         facet_order.merge(federation.merge_facets, remote_results, facets);
 
@@ -141,6 +162,7 @@ pub async fn perform_federated_search(
             offset: federation.offset,
             estimated_total_hits,
         },
+        query_vectors,
         semantic_hit_count,
         degraded,
         used_negative_operator,
@@ -409,6 +431,7 @@ fn merge_metadata(
         hits: _,
         processing_time_ms,
         hits_info,
+        query_vectors: _,
         semantic_hit_count: _,
         facet_distribution: _,
         facet_stats: _,
@@ -658,6 +681,7 @@ struct SearchByIndex {
     // Then when merging, we'll update its value if there is any semantic hit
     semantic_hit_count: Option<u32>,
     results_by_index: Vec<SearchResultByIndex>,
+    query_vectors: BTreeMap<usize, Embedding>,
     previous_query_data: Option<(RankingRules, usize, String)>,
     // remember the order and name of first index for each facet when merging with index settings
     // to detect if the order is inconsistent for a facet.
@@ -675,6 +699,7 @@ impl SearchByIndex {
             federation,
             semantic_hit_count: None,
             results_by_index: Vec::with_capacity(index_count),
+            query_vectors: BTreeMap::new(),
             previous_query_data: None,
         }
     }
@@ -841,6 +866,16 @@ impl SearchByIndex {
                     used_negative_operator: query_used_negative_operator,
                     query_vector,
                 } = result;
+
+                if query.retrieve_vectors {
+                    if let Some(query_vector) = query_vector {
+                        debug_assert!(
+                            !self.query_vectors.contains_key(&query_index),
+                            "Query vector for query {query_index} already exists"
+                        );
+                        self.query_vectors.insert(query_index, query_vector);
+                    }
+                }
 
                 candidates |= query_candidates;
                 degraded |= query_degraded;

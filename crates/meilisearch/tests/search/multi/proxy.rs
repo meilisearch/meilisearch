@@ -2,8 +2,9 @@ use std::sync::Arc;
 
 use actix_http::StatusCode;
 use meili_snap::{json_string, snapshot};
-use wiremock::matchers::AnyMatcher;
-use wiremock::{Mock, MockServer, ResponseTemplate};
+use wiremock::matchers::method;
+use wiremock::matchers::{path, AnyMatcher};
+use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
 use crate::common::{Server, Value, SCORE_DOCUMENTS};
 use crate::json;
@@ -413,6 +414,209 @@ async fn remote_sharding() {
       "remoteErrors": {}
     }
     "###);
+}
+
+#[actix_rt::test]
+async fn remote_sharding_retrieve_vectors() {
+    let ms0 = Server::new().await;
+    let ms1 = Server::new().await;
+    let ms2 = Server::new().await;
+    let index0 = ms0.index("test");
+    let index1 = ms1.index("test");
+    let index2 = ms2.index("test");
+
+    // enable feature
+
+    let (response, code) = ms0.set_features(json!({"network": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response["network"]), @"true");
+    let (response, code) = ms1.set_features(json!({"network": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response["network"]), @"true");
+    let (response, code) = ms2.set_features(json!({"network": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response["network"]), @"true");
+
+    // set self
+
+    let (response, code) = ms0.set_network(json!({"self": "ms0"})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response), @r###"
+    {
+      "self": "ms0",
+      "remotes": {}
+    }
+    "###);
+    let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response), @r###"
+    {
+      "self": "ms1",
+      "remotes": {}
+    }
+    "###);
+    let (response, code) = ms2.set_network(json!({"self": "ms2"})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response), @r###"
+    {
+      "self": "ms2",
+      "remotes": {}
+    }
+    "###);
+
+    // setup embedders
+
+    let mock_server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/"))
+        .respond_with(move |req: &Request| {
+            println!("Received request: {:?}", req);
+            let text = req.body_json::<String>().unwrap().to_lowercase();
+            let patterns = [
+                ("batman", [1.0, 0.0, 0.0]),
+                ("dark", [0.0, 0.1, 0.0]),
+                ("knight", [0.1, 0.1, 0.0]),
+                ("returns", [0.0, 0.0, 0.2]),
+                ("part", [0.05, 0.1, 0.0]),
+                ("1", [0.3, 0.05, 0.0]),
+                ("2", [0.2, 0.05, 0.0]),
+            ];
+            let mut embedding = vec![0.; 3];
+            for (pattern, vector) in patterns {
+                if text.contains(pattern) {
+                    for (i, v) in vector.iter().enumerate() {
+                        embedding[i] += v;
+                    }
+                }
+            }
+            ResponseTemplate::new(200).set_body_json(json!({ "data": embedding }))
+        })
+        .mount(&mock_server)
+        .await;
+    let url = mock_server.uri();
+
+    for (server, index) in [(&ms0, &index0), (&ms1, &index1), (&ms2, &index2)] {
+        let (response, code) = index
+            .update_settings(json!({
+                "embedders": {
+                    "rest": {
+                        "source": "rest",
+                        "url": url,
+                        "dimensions": 3,
+                        "request": "{{text}}",
+                        "response": { "data": "{{embedding}}" },
+                        "documentTemplate": "{{doc.name}}",
+                    },
+                },
+            }))
+            .await;
+        snapshot!(code, @"202 Accepted");
+        server.wait_task(response.uid()).await.succeeded();
+    }
+
+    // wrap servers
+    let ms0 = Arc::new(ms0);
+    let ms1 = Arc::new(ms1);
+    let ms2 = Arc::new(ms2);
+
+    let rms0 = LocalMeili::new(ms0.clone()).await;
+    let rms1 = LocalMeili::new(ms1.clone()).await;
+    let rms2 = LocalMeili::new(ms2.clone()).await;
+
+    // set network
+    let network = json!({"remotes": {
+        "ms0": {
+            "url": rms0.url()
+        },
+        "ms1": {
+            "url": rms1.url()
+        },
+        "ms2": {
+            "url": rms2.url()
+        }
+    }});
+
+    let (_response, status_code) = ms0.set_network(network.clone()).await;
+    snapshot!(status_code, @"200 OK");
+    let (_response, status_code) = ms1.set_network(network.clone()).await;
+    snapshot!(status_code, @"200 OK");
+    let (_response, status_code) = ms2.set_network(network.clone()).await;
+    snapshot!(status_code, @"200 OK");
+
+    // perform multi-search
+    let query = "badman returns";
+    let request = json!({
+        "federation": {},
+        "queries": [
+            {
+                "q": query,
+                "indexUid": "test",
+                "hybrid": {
+                    "semanticRatio": 1.0,
+                    "embedder": "rest"
+                },
+                "retrieveVectors": true,
+                "federationOptions": {
+                    "remote": "ms0"
+                }
+            },
+            {
+                "q": query,
+                "indexUid": "test",
+                "hybrid": {
+                    "semanticRatio": 1.0,
+                    "embedder": "rest"
+                },
+                "retrieveVectors": true,
+                "federationOptions": {
+                    "remote": "ms1"
+                }
+            },
+            {
+                "q": query,
+                "indexUid": "test",
+                "hybrid": {
+                    "semanticRatio": 1.0,
+                    "embedder": "rest"
+                },
+                "retrieveVectors": true,
+                "federationOptions": {
+                    "remote": "ms2"
+                }
+            },
+        ]
+    });
+
+    let (response, _status_code) = ms0.multi_search(request.clone()).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r#"
+    {
+      "hits": [],
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 0,
+      "queryVectors": {
+        "0": [
+          0.0,
+          0.0,
+          0.2
+        ],
+        "1": [
+          0.0,
+          0.0,
+          0.2
+        ],
+        "2": [
+          0.0,
+          0.0,
+          0.2
+        ]
+      },
+      "semanticHitCount": 0,
+      "remoteErrors": {}
+    }
+    "#);
 }
 
 #[actix_rt::test]

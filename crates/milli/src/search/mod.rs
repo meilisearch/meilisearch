@@ -32,6 +32,7 @@ pub mod similar;
 #[derive(Debug, Clone)]
 pub struct SemanticSearch {
     vector: Option<Vec<f32>>,
+    auto_embedded: bool,
     media: Option<serde_json::Value>,
     embedder_name: String,
     embedder: Arc<Embedder>,
@@ -97,7 +98,33 @@ impl<'a> Search<'a> {
         vector: Option<Embedding>,
         media: Option<serde_json::Value>,
     ) -> &mut Search<'a> {
-        self.semantic = Some(SemanticSearch { embedder_name, embedder, quantized, vector, media });
+        self.semantic = Some(SemanticSearch {
+            embedder_name,
+            auto_embedded: false,
+            embedder,
+            quantized,
+            vector,
+            media,
+        });
+        self
+    }
+
+    pub fn semantic_auto_embedded(
+        &mut self,
+        embedder_name: String,
+        embedder: Arc<Embedder>,
+        quantized: bool,
+        vector: Option<Embedding>,
+        media: Option<serde_json::Value>,
+    ) -> &mut Search<'a> {
+        self.semantic = Some(SemanticSearch {
+            embedder_name,
+            auto_embedded: true,
+            embedder,
+            quantized,
+            vector,
+            media,
+        });
         self
     }
 
@@ -225,6 +252,7 @@ impl<'a> Search<'a> {
         }
 
         let universe = filtered_universe(ctx.index, ctx.txn, &self.filter)?;
+        let mut query_vector = None;
         let PartialSearchResult {
             located_query_terms,
             candidates,
@@ -235,26 +263,32 @@ impl<'a> Search<'a> {
         } = match self.semantic.as_ref() {
             Some(SemanticSearch {
                 vector: Some(vector),
+                auto_embedded,
                 embedder_name,
                 embedder,
                 quantized,
                 media: _,
-            }) => execute_vector_search(
-                &mut ctx,
-                vector,
-                self.scoring_strategy,
-                universe,
-                &self.sort_criteria,
-                &self.distinct,
-                self.geo_param,
-                self.offset,
-                self.limit,
-                embedder_name,
-                embedder,
-                *quantized,
-                self.time_budget.clone(),
-                self.ranking_score_threshold,
-            )?,
+            }) => {
+                if *auto_embedded {
+                    query_vector = Some(vector.clone());
+                }
+                execute_vector_search(
+                    &mut ctx,
+                    vector,
+                    self.scoring_strategy,
+                    universe,
+                    &self.sort_criteria,
+                    &self.distinct,
+                    self.geo_param,
+                    self.offset,
+                    self.limit,
+                    embedder_name,
+                    embedder,
+                    *quantized,
+                    self.time_budget.clone(),
+                    self.ranking_score_threshold,
+                )?
+            }
             _ => execute_search(
                 &mut ctx,
                 self.query.as_deref(),
@@ -295,7 +329,7 @@ impl<'a> Search<'a> {
             documents_ids,
             degraded,
             used_negative_operator,
-            query_vector: None,
+            query_vector,
         })
     }
 }
