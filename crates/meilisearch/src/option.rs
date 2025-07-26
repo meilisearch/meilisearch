@@ -205,7 +205,7 @@ pub struct Opt {
 
     /// Called whenever a task finishes so a third party can be notified.
     /// Multiple URLs can be specified separated by a space or by repeating the option.
-    #[clap(long, env = MEILI_TASK_WEBHOOK_URL, value_delimiter = ' ')]
+    #[clap(long, env = MEILI_TASK_WEBHOOK_URL, value_delimiter = ',')]
     pub task_webhook_url: Vec<Url>,
 
     /// The Authorization header to send on the webhook URL whenever
