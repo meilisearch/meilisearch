@@ -345,7 +345,7 @@ impl Infos {
             experimental_max_number_of_batched_tasks,
             experimental_limit_batched_tasks_total_size:
                 experimental_limit_batched_tasks_total_size.into(),
-            task_queue_webhook: task_webhook_url.is_some(),
+            task_queue_webhook: !task_webhook_url.is_empty(),
             task_webhook_authorization_header: task_webhook_authorization_header.is_some(),
             log_level: log_level.to_string(),
             max_indexing_memory,
