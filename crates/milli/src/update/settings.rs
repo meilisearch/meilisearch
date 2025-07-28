@@ -10,7 +10,6 @@ use itertools::{merge_join_by, EitherOrBoth, Itertools};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use time::OffsetDateTime;
 
-use super::chat::ChatSearchParams;
 use super::del_add::{DelAdd, DelAddOperation};
 use super::index_documents::{IndexDocumentsConfig, Transform};
 use super::{ChatSettings, IndexerConfig};
@@ -18,16 +17,13 @@ use crate::attribute_patterns::PatternMatch;
 use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::criterion::Criterion;
 use crate::disabled_typos_terms::DisabledTyposTerms;
-use crate::error::UserError::{self, InvalidChatSettingsDocumentTemplateMaxBytes};
+use crate::error::UserError;
 use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
 use crate::filterable_attributes_rules::match_faceted_field;
-use crate::index::{
-    ChatConfig, PrefixSearch, SearchParameters, DEFAULT_MIN_WORD_LEN_ONE_TYPO,
-    DEFAULT_MIN_WORD_LEN_TWO_TYPOS,
-};
+use crate::index::{PrefixSearch, DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS};
 use crate::order_by_map::OrderByMap;
 use crate::progress::{EmbedderStats, Progress};
-use crate::prompt::{default_max_bytes, default_template_text, PromptData};
+use crate::prompt::default_max_bytes;
 use crate::proximity::ProximityPrecision;
 use crate::update::index_documents::IndexDocumentsMethod;
 use crate::update::new::indexer::reindex;
