@@ -190,8 +190,7 @@ test_setting_routes!(
         default_value: {
             "description": "",
             "documentTemplate": "{% for field in fields %}{% if field.is_searchable and field.value != nil %}{{ field.name }}: {{ field.value }}\n{% endif %}{% endfor %}",
-            "documentTemplateMaxBytes": 400,
-            "searchParameters": {}
+            "documentTemplateMaxBytes": 400
         }
     },
 );
