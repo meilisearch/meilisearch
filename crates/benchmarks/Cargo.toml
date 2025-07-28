@@ -51,3 +51,7 @@ harness = false
 [[bench]]
 name = "indexing"
 harness = false
+
+[[bench]]
+name = "filter_starts_with"
+harness = false
