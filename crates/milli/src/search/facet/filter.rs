@@ -427,29 +427,26 @@ impl<'a> Filter<'a> {
 
                 let value = crate::normalize_facet(word.value());
 
-                if value.len() <= 6 {
-                    // 6 is abitrary, but it works well in practice
-                    let mut value2 = value.as_bytes().to_owned();
-                    if let Some(last) = value2.last_mut() {
-                        if *last != 255 {
-                            *last += 1;
-                            if let Ok(value2) = String::from_utf8(value2) {
-                                // The idea here is that "STARTS WITH baba" is the same as "baba <= value < babb".
-                                // We just increase the last letter to find the upper bound.
-                                // The result could be invalid utf8, so it can fallback.
-                                let mut docids = RoaringBitmap::new();
-                                find_docids_of_facet_within_bounds(
-                                    rtxn,
-                                    strings_db,
-                                    field_id,
-                                    &Included(&value),
-                                    &Excluded(&value2),
-                                    universe,
-                                    &mut docids,
-                                )?;
+                let mut value2 = value.as_bytes().to_owned();
+                if let Some(last) = value2.last_mut() {
+                    if *last != 255 {
+                        *last += 1;
+                        if let Ok(value2) = String::from_utf8(value2) {
+                            // The idea here is that "STARTS WITH baba" is the same as "baba <= value < babb".
+                            // We just increase the last letter to find the upper bound.
+                            // The result could be invalid utf8, so it can fallback.
+                            let mut docids = RoaringBitmap::new();
+                            find_docids_of_facet_within_bounds(
+                                rtxn,
+                                strings_db,
+                                field_id,
+                                &Included(&value),
+                                &Excluded(&value2),
+                                universe,
+                                &mut docids,
+                            )?;
 
-                                return Ok(docids);
-                            }
+                            return Ok(docids);
                         }
                     }
                 }
