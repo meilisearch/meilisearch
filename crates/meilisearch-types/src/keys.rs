@@ -233,9 +233,6 @@ pub enum Action {
     #[serde(rename = "*")]
     #[deserr(rename = "*")]
     All = 0,
-    #[serde(rename = "*.get")]
-    #[deserr(rename = "*.get")]
-    AllGet,
     #[serde(rename = "search")]
     #[deserr(rename = "search")]
     Search,
@@ -365,6 +362,9 @@ pub enum Action {
     #[serde(rename = "chatsSettings.update")]
     #[deserr(rename = "chatsSettings.update")]
     ChatsSettingsUpdate,
+    #[serde(rename = "*.get")]
+    #[deserr(rename = "*.get")]
+    AllGet,
 }
 
 impl Action {
@@ -403,6 +403,7 @@ impl Action {
             METRICS_GET => Some(Self::MetricsGet),
             DUMPS_ALL => Some(Self::DumpsAll),
             DUMPS_CREATE => Some(Self::DumpsCreate),
+            SNAPSHOTS_ALL => Some(Self::SnapshotsAll),
             SNAPSHOTS_CREATE => Some(Self::SnapshotsCreate),
             VERSION => Some(Self::Version),
             KEYS_CREATE => Some(Self::KeysAdd),
@@ -411,8 +412,10 @@ impl Action {
             KEYS_DELETE => Some(Self::KeysDelete),
             EXPERIMENTAL_FEATURES_GET => Some(Self::ExperimentalFeaturesGet),
             EXPERIMENTAL_FEATURES_UPDATE => Some(Self::ExperimentalFeaturesUpdate),
+            EXPORT => Some(Self::Export),
             NETWORK_GET => Some(Self::NetworkGet),
             NETWORK_UPDATE => Some(Self::NetworkUpdate),
+            ALL_GET => Some(Self::AllGet),
             _otherwise => None,
         }
     }
@@ -497,6 +500,7 @@ pub mod actions {
     pub const METRICS_GET: u8 = MetricsGet.repr();
     pub const DUMPS_ALL: u8 = DumpsAll.repr();
     pub const DUMPS_CREATE: u8 = DumpsCreate.repr();
+    pub const SNAPSHOTS_ALL: u8 = SnapshotsAll.repr();
     pub const SNAPSHOTS_CREATE: u8 = SnapshotsCreate.repr();
     pub const VERSION: u8 = Version.repr();
     pub const KEYS_CREATE: u8 = KeysAdd.repr();
@@ -518,4 +522,69 @@ pub mod actions {
     pub const CHATS_SETTINGS_ALL: u8 = ChatsSettingsAll.repr();
     pub const CHATS_SETTINGS_GET: u8 = ChatsSettingsGet.repr();
     pub const CHATS_SETTINGS_UPDATE: u8 = ChatsSettingsUpdate.repr();
+}
+
+#[cfg(test)]
+pub(crate) mod test {
+    use super::actions::*;
+    use super::Action::*;
+    use super::*;
+
+    #[test]
+    fn test_action_repr_and_constants() {
+        assert!(All.repr() == 0 && ALL == 0);
+        assert!(Search.repr() == 1 && SEARCH == 1);
+        assert!(DocumentsAll.repr() == 2 && DOCUMENTS_ALL == 2);
+        assert!(DocumentsAdd.repr() == 3 && DOCUMENTS_ADD == 3);
+        assert!(DocumentsGet.repr() == 4 && DOCUMENTS_GET == 4);
+        assert!(DocumentsDelete.repr() == 5 && DOCUMENTS_DELETE == 5);
+        assert!(IndexesAll.repr() == 6 && INDEXES_ALL == 6);
+        assert!(IndexesAdd.repr() == 7 && INDEXES_CREATE == 7);
+        assert!(IndexesGet.repr() == 8 && INDEXES_GET == 8);
+        assert!(IndexesUpdate.repr() == 9 && INDEXES_UPDATE == 9);
+        assert!(IndexesDelete.repr() == 10 && INDEXES_DELETE == 10);
+        assert!(IndexesSwap.repr() == 11 && INDEXES_SWAP == 11);
+        assert!(TasksAll.repr() == 12 && TASKS_ALL == 12);
+        assert!(TasksCancel.repr() == 13 && TASKS_CANCEL == 13);
+        assert!(TasksDelete.repr() == 14 && TASKS_DELETE == 14);
+        assert!(TasksGet.repr() == 15 && TASKS_GET == 15);
+        assert!(SettingsAll.repr() == 16 && SETTINGS_ALL == 16);
+        assert!(SettingsGet.repr() == 17 && SETTINGS_GET == 17);
+        assert!(SettingsUpdate.repr() == 18 && SETTINGS_UPDATE == 18);
+        assert!(StatsAll.repr() == 19 && STATS_ALL == 19);
+        assert!(StatsGet.repr() == 20 && STATS_GET == 20);
+        assert!(MetricsAll.repr() == 21 && METRICS_ALL == 21);
+        assert!(MetricsGet.repr() == 22 && METRICS_GET == 22);
+        assert!(DumpsAll.repr() == 23 && DUMPS_ALL == 23);
+        assert!(DumpsCreate.repr() == 24 && DUMPS_CREATE == 24);
+        assert!(SnapshotsAll.repr() == 25 && SNAPSHOTS_ALL == 25);
+        assert!(SnapshotsCreate.repr() == 26 && SNAPSHOTS_CREATE == 26);
+        assert!(Version.repr() == 27 && VERSION == 27);
+        assert!(KeysAdd.repr() == 28 && KEYS_CREATE == 28);
+        assert!(KeysGet.repr() == 29 && KEYS_GET == 29);
+        assert!(KeysUpdate.repr() == 30 && KEYS_UPDATE == 30);
+        assert!(KeysDelete.repr() == 31 && KEYS_DELETE == 31);
+        assert!(ExperimentalFeaturesGet.repr() == 32 && EXPERIMENTAL_FEATURES_GET == 32);
+        assert!(ExperimentalFeaturesUpdate.repr() == 33 && EXPERIMENTAL_FEATURES_UPDATE == 33);
+        assert!(Export.repr() == 34 && EXPORT == 34);
+        assert!(NetworkGet.repr() == 35 && NETWORK_GET == 35);
+        assert!(NetworkUpdate.repr() == 36 && NETWORK_UPDATE == 36);
+        assert!(ChatCompletions.repr() == 37 && CHAT_COMPLETIONS == 37);
+        assert!(ChatsAll.repr() == 38 && CHATS_ALL == 38);
+        assert!(ChatsGet.repr() == 39 && CHATS_GET == 39);
+        assert!(ChatsDelete.repr() == 40 && CHATS_DELETE == 40);
+        assert!(ChatsSettingsAll.repr() == 41 && CHATS_SETTINGS_ALL == 41);
+        assert!(ChatsSettingsGet.repr() == 42 && CHATS_SETTINGS_GET == 42);
+        assert!(ChatsSettingsUpdate.repr() == 43 && CHATS_SETTINGS_UPDATE == 43);
+        assert!(AllGet.repr() == 44 && ALL_GET == 44);
+    }
+
+    #[test]
+    fn test_from_repr() {
+        for action in enum_iterator::all::<Action>() {
+            let repr = action.repr();
+            let action_from_repr = Action::from_repr(repr);
+            assert_eq!(Some(action), action_from_repr, "Failed for action: {:?}", action);
+        }
+    }
 }
