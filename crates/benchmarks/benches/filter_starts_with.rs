@@ -11,17 +11,11 @@ use utils::Conf;
 static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 fn base_conf(builder: &mut Settings) {
-    let displayed_fields =
-        ["geonameid", "name"]
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
+    let displayed_fields = ["geonameid", "name"].iter().map(|s| s.to_string()).collect();
     builder.set_displayed_fields(displayed_fields);
 
-    let filterable_fields = ["name"]
-        .iter()
-        .map(|s| FilterableAttributesRule::Field(s.to_string()))
-        .collect();
+    let filterable_fields =
+        ["name"].iter().map(|s| FilterableAttributesRule::Field(s.to_string())).collect();
     builder.set_filterable_fields(filterable_fields);
 }
 
